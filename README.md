@@ -241,14 +241,44 @@ il reticolo esagonale bizantino con stelle {6/2}, le stelle {8/3} in quadrato,
 il guilloche di cerchi, il ventaglio egizio, il candelabro pompeiano, la greca
 e la nuvola cinese.
 
-## Il seme
+## Il seme: la configurazione di partenza
 
-Lo scopo è che un pattern qualunque si riduca a un **seme**: una codifica
-che, rieseguita, lo rigenera identico, e in cui ogni curva emerge da una legge
-e non da un disegno a mano. Il seme oggi è la coppia stato + parola: i blocchi
-di spaziotempo con le sorgenti, e il JSON di `src/celle.js` con simmetrie e
-reticolo. È deterministico, leggibile e componibile. Ciò che manca perché sia
-davvero "qualunque pattern" è elencato sotto.
+Per ogni pattern esiste una configurazione iniziale con tutto al suo posto:
+le masse, i campi, gli specchi, i blocchi di spaziotempo, e le particelle già
+orientate nelle loro sorgenti. Da lì **una sola simulazione** genera il
+pattern intero. Questa configurazione è il **seme** (`src/seme.js`).
+
+Le simmetrie e la ripetizione non copiano linee già disegnate. La grammatica
+produce istanze, cioè coppie tratto e trasformazione, e il seme trasforma lo
+**stato** di ogni tratto e lo colloca nella configurazione. La trasformazione
+è fisica. Con una similitudine di scala k la velocità scala di k e il tempo
+resta lo stesso, così ogni accelerazione scala di k e le leggi si adattano da
+sole:
+
+| legge | trasformata |
+|---|---|
+| gravità | M′ = k³·M |
+| campo magnetico | ω′ = ω, cambia verso se c'è uno specchio |
+| attrito, molla | invariati |
+| tempi, passi, dt | invariati |
+| interfacce di rifrazione, versi, semipiani | uno specchio scambia sinistra e destra |
+
+Ogni copia vive nel proprio piano di esistenza, così le copie non si
+disturbano: è la stessa legge in un altro luogo. I piani sono percorsi: un
+elemento del piano `s3` agisce sulle particelle di `s3` e dei suoi sottopiani
+`s3/c`, `s3/cr0`.
+
+Il test `test/test_seme.mjs` fa crescere il seme di dodici piastrelle e
+verifica che dia le stesse linee del calcolo tratto per tratto, con uno
+scarto sotto 1e-10. Tra queste ci sono specchi, rotazioni, il reticolo
+esagonale e una voluta specchiata, dove il campo magnetico deve cambiare
+verso.
+
+La pagina delle piastrelle fa crescere il reticolo dal seme. Il cursore del
+tempo parte dalla configurazione iniziale: masse, specchi e sorgenti
+orientate, piene quelle che partono subito e vuote quelle dei rami che
+nasceranno dopo. Il bottone **scarica il seme** salva la configurazione
+completa in JSON.
 
 Una piastrella intera si legge in una riga, la sua **parola**:
 
@@ -269,7 +299,8 @@ src/app.js         la pagina del motore: sceglie, simula, disegna, esporta il JS
 index.html         la pagina del motore
 src/motivi.js      i tratti dell'alfabeto, ognuno una partitura del motore
 src/catena.js      la catena: ancoraggi → biarchi → blocchi di spaziotempo, volute, rami
-src/grammatica.js  motivo (C_n, D_n), cella (ruoli), reticolo (gruppi), parola
+src/grammatica.js  istanze: motivo (C_n, D_n), cella (ruoli), reticolo (gruppi); parola
+src/seme.js        il seme: lo stato di ogni istanza trasformato, una sola configurazione iniziale
 src/celle.js       le piastrelle di esempio
 src/piastrelle.js  la pagina delle piastrelle
 piastrelle.html    la pagina delle piastrelle

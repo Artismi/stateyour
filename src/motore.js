@@ -95,8 +95,16 @@ export function contiene(reg, pos) {
     default: throw new Error(`regione sconosciuta: ${reg.tipo}`);
   }
 }
+// I piani di esistenza sono percorsi: un elemento del piano "s3" agisce sulle
+// particelle del piano "s3" e di ogni suo sottopiano ("s3/c", "s3/cr0", ...);
+// un elemento senza piano agisce su tutte.
+export function nelPiano(pianoElemento, pianoParticella) {
+  if (pianoElemento == null) return true;
+  if (pianoParticella == null) return false;
+  return pianoParticella === pianoElemento || pianoParticella.startsWith(pianoElemento + '/');
+}
 export function inBlocco(b, pos, t, piano) {
-  if (b.piano != null && b.piano !== piano) return false;
+  if (!nelPiano(b.piano, piano)) return false;
   if (b.tempo && ((b.tempo[0] != null && t < b.tempo[0]) || (b.tempo[1] != null && t > b.tempo[1]))) return false;
   return contiene(b.regione || { tipo: 'tutto' }, pos);
 }
@@ -220,7 +228,7 @@ export function rifrangi(vel, normale, nIn, nOut) {
 // {
 //   nome, G, dt, passi, limiti: [xmin, ymin, xmax, ymax],
 //   blocchi:    [{ id, piano, regione, tempo: [t0, t1], legge }],     (lo stato)
-//   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, regole }],
+//   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, limiti, regole }],
 //   masse:      [{ id, pos, M, acceso }],
 //   interfacce: [{ id, a, b, tipo: 'specchio'|'rifrazione'|'assorbe', n1, n2, acceso }],
 //   campi:      [{ id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett, acceso, ... }],
@@ -289,16 +297,18 @@ export function simulaParticella(em, partitura) {
   const G = partitura.G ?? G_DEFAULT;
   const dt = em.dt ?? partitura.dt ?? 0.05;
   const maxPassi = em.passi ?? partitura.passi ?? 2000;
-  const limiti = partitura.limiti || [-1e4, -1e4, 1e4, 1e4];
-  const masse = partitura.masse || [];
-  const interfacce = partitura.interfacce || [];
-  const campi = partitura.campi || [];
-  // le regole della partitura valgono per tutte le particelle; un emettitore
-  // può averne di proprie
-  const regole = [...(partitura.regole || []), ...(em.regole || [])];
-  const continue_ = regole.map((r) => funzioneEvento(r.quando));
-  const blocchi = partitura.blocchi || [];
+  const limiti = em.limiti || partitura.limiti || [-1e4, -1e4, 1e4, 1e4];
   const piano = em.piano ?? null;
+  // ogni particella vede solo gli elementi del proprio piano di esistenza
+  const mio = (x) => nelPiano(x.piano, piano);
+  const masse = (partitura.masse || []).filter(mio);
+  const interfacce = (partitura.interfacce || []).filter(mio);
+  const campi = (partitura.campi || []).filter(mio);
+  // le regole della partitura valgono per le particelle del loro piano; un
+  // emettitore può averne di proprie
+  const regole = [...(partitura.regole || []).filter(mio), ...(em.regole || [])];
+  const continue_ = regole.map((r) => funzioneEvento(r.quando));
+  const blocchi = (partitura.blocchi || []).filter(mio);
   const insieme = (pos, t) => blocchi.filter((b) => inBlocco(b, pos, t, piano));
   const chiave = (lista) => lista.map((b) => blocchi.indexOf(b)).join(',');
 

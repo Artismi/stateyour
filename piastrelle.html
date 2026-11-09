@@ -31,7 +31,7 @@
 <body>
 <header>
   <h1>stateyour · piastrelle</h1>
-  <span>il motore fisico fa i tratti, la grammatica li compone: motivo → cella → reticolo</span>
+  <span>la grammatica compone lo stato, il seme lo contiene tutto, una sola simulazione lo fa crescere</span>
   <a href="./index.html">← il motore</a>
 </header>
 <main>
@@ -40,6 +40,10 @@
     <div>
       <canvas id="cella" width="300" height="300"></canvas>
       <div class="scomposizione" id="scomposizione"></div>
+    </div>
+    <div style="grid-column: 1 / -1">
+      <label for="tempo">tempo <output id="otempo"></output></label>
+      <input type="range" id="tempo" min="0" max="1" step="0.01" value="1" style="width:100%">
     </div>
     <div id="parola"></div>
   </section>
@@ -53,6 +57,7 @@
       <textarea id="json" spellcheck="false"></textarea>
     </div>
     <button id="genera">genera dalla codifica</button>
+    <button id="scarica" style="background:#fff;color:var(--inchiostro)">scarica il seme (.json)</button>
     <div id="errore"></div>
   </aside>
 </main>

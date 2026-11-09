@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node test/test_onda.mjs && node test/test_ottica.mjs && node test/test_campi.mjs && node test/test_catena.mjs && node test/test_grammatica.mjs",
+    "test": "node test/test_onda.mjs && node test/test_ottica.mjs && node test/test_campi.mjs && node test/test_catena.mjs && node test/test_grammatica.mjs && node test/test_seme.mjs",
     "start": "python3 -m http.server 8000"
   }
 }

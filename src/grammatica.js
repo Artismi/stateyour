@@ -19,7 +19,13 @@
 //            ruotata, slittata) e un RITMO che sceglie il contenuto.
 //
 // Ogni livello è un oggetto JSON; `parola()` lo riassume in una riga di
-// alfabeto leggibile, `componi()` lo trasforma in linee da disegnare.
+// alfabeto leggibile. La grammatica non disegna: produce ISTANZE, cioè
+// coppie (tratto, trasformazione). Da lì si va in due modi:
+//   - `seme()` in seme.js trasforma lo STATO di ogni tratto (blocchi, campi,
+//     specchi, sorgenti) e ne fa un'unica configurazione iniziale da cui una
+//     sola simulazione genera tutto il pattern;
+//   - `cella()` e `reticolo()` qui sotto trasformano le linee già calcolate di
+//     ogni tratto: è la stessa cosa, più veloce, per l'anteprima.
 
 import { simula } from './motore.js';
 import { MOTIVI } from './motivi.js';
@@ -45,15 +51,16 @@ export const T = {
 const catena = (...Ms) => Ms.reduce((acc, M) => T.comp(acc, M), T.id());
 
 // ---------- tratti: dal motore, con cache
-const cacheTratti = new Map();
-export function tratto(nome, parametri = {}) {
-  const chiave = nome + JSON.stringify(parametri);
-  if (cacheTratti.has(chiave)) return cacheTratti.get(chiave);
+// lo stato di un tratto, in coordinate locali
+export function partituraTratto(nome, parametri = {}) {
   const gen = MOTIVI[nome];
   if (!gen) throw new Error(`tratto sconosciuto: ${nome}`);
-  const partitura = gen(parametri);
+  return gen(parametri);
+}
+// dalle tracce alle linee: la penna alzata spezza la linea
+export function lineeDaTracce(tracce) {
   const linee = [];
-  for (const tr of simula(partitura)) {
+  for (const tr of tracce) {
     let corrente = [];
     for (const [x, y, su] of tr.punti) {
       if (su) corrente.push([x, y]);
@@ -62,6 +69,13 @@ export function tratto(nome, parametri = {}) {
     }
     if (corrente.length > 1) linee.push(corrente);
   }
+  return linee;
+}
+const cacheTratti = new Map();
+export function tratto(nome, parametri = {}) {
+  const chiave = nome + JSON.stringify(parametri);
+  if (cacheTratti.has(chiave)) return cacheTratti.get(chiave);
+  const linee = lineeDaTracce(simula(partituraTratto(nome, parametri)));
   cacheTratti.set(chiave, linee);
   return linee;
 }
@@ -87,22 +101,23 @@ export function simmetria(s = { tipo: 'id' }) {
 
 // ---------- motivo
 // { tratto, parametri, simmetria, scala, rotazione, spostamento: [x, y] }
-export function motivo(m) {
+// le istanze: una per ogni copia della simmetria
+export function istanzeMotivo(m, M0 = T.id()) {
   if (!m) return [];
-  const base = tratto(m.tratto, m.parametri || {});
   const locale = catena(T.ruota(m.rotazione ?? 0), T.scala(m.scala ?? 1));
   const posto = T.trasla(...(m.spostamento || [0, 0]));
-  const linee = [];
-  for (const S of simmetria(m.simmetria)) linee.push(...trasforma(base, catena(S, posto, locale)));
-  return linee;
+  return simmetria(m.simmetria).map((S) => ({ tratto: m.tratto, parametri: m.parametri || {}, M: catena(M0, S, posto, locale) }));
 }
+const lineeIstanze = (istanze) => istanze.flatMap((ist) => trasforma(tratto(ist.tratto, ist.parametri), ist.M));
+export function motivo(m) { return lineeIstanze(istanzeMotivo(m)); }
 
 // ---------- cella
-// Restituisce le linee in coordinate locali (centro in 0,0), ognuna col suo ruolo.
-export function cella(c, indiceContenuto = 0) {
+// I posti della cella: per ogni ruolo le istanze dei motivi, in coordinate
+// locali (centro in 0,0).
+export function istanzeCella(c, indiceContenuto = 0) {
   const L = c.lato ?? 120, h = L / 2;
-  const pezzi = [];
-  const metti = (ruolo, m, M) => { if (m) pezzi.push({ ruolo, linee: trasforma(motivo(m), M) }); };
+  const posti = [];
+  const metti = (ruolo, m, M) => { if (m) posti.push({ ruolo, istanze: istanzeMotivo(m, M) }); };
 
   metti('centro', c.centro, T.id());
   metti('contenitore', c.contenitore, T.id());
@@ -150,7 +165,12 @@ export function cella(c, indiceContenuto = 0) {
       if (f.specchia !== false && (e.x ?? 0) !== 0) metti('fusto', e.motivo, catena(T.specchioX(), M));
     }
   }
-  return { lato: L, pezzi };
+  return { lato: L, posti };
+}
+// le linee della cella, ognuna col suo ruolo
+export function cella(c, indiceContenuto = 0) {
+  const { lato, posti } = istanzeCella(c, indiceContenuto);
+  return { lato, pezzi: posti.map((p) => ({ ruolo: p.ruolo, linee: lineeIstanze(p.istanze) })) };
 }
 
 // ---------- reticolo
@@ -176,7 +196,7 @@ export const GRUPPI_ESAGONALI = {
   p31m: (i, j) => catena(T.ruota(120 * (((i + 2 * j) % 3) + 3) % 3), j % 2 ? T.specchioX() : T.id()),
 };
 
-export function reticolo(r) {
+export function istanzeReticolo(r) {
   const c = r.cella, L = c.lato ?? 120;
   const colonne = r.colonne ?? 6, righe = r.righe ?? 4;
   const esagonale = r.tipo === 'esagonale';
@@ -190,18 +210,24 @@ export function reticolo(r) {
       const seq = ritmo.sequenza || [0];
       const idx = ritmo.lungo === 'diagonale' ? i + j : ritmo.lungo === 'colonna' ? j : i + j * colonne;
       const k = seq[idx % seq.length];
-      const celle = cella(c, k);
+      const { posti } = istanzeCella(c, k);
       const dx = (sfalsa && j % 2 ? L / 2 : 0);
       const dy = (!esagonale && r.gruppo === 'pg' && i % 2 ? L / 2 : 0);
       const M = catena(T.trasla(i * L + L / 2 + dx, j * passoRiga + L / 2 + dy), gruppo(i, j));
-      for (const p of celle.pezzi) pezzi.push({ ...p, linee: trasforma(p.linee, M), i, j, k });
+      for (const p of posti) pezzi.push({ ruolo: p.ruolo, istanze: p.istanze.map((ist) => ({ ...ist, M: catena(M, ist.M) })), i, j, k });
     }
   }
   return {
-    pezzi,
+    posti: pezzi,
     larghezza: colonne * L + (sfalsa ? L / 2 : 0),
     altezza: (righe - 1) * passoRiga + L + (!esagonale && r.gruppo === 'pg' ? L / 2 : 0),
   };
+}
+
+// le linee del reticolo, dalle linee già calcolate di ogni tratto
+export function reticolo(r) {
+  const { posti, larghezza, altezza } = istanzeReticolo(r);
+  return { pezzi: posti.map((p) => ({ ruolo: p.ruolo, linee: lineeIstanze(p.istanze), i: p.i, j: p.j, k: p.k })), larghezza, altezza };
 }
 
 // ---------- la parola: la cella e il reticolo riassunti in alfabeto
