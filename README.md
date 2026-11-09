@@ -100,13 +100,46 @@ della `penna`), `staffetta` su una lista, `ferma`.
 Ogni particella porta con sé il proprio stato di accensione: più emettitori
 nella stessa partitura sono indipendenti e deterministici.
 
+## L'alfabeto delle piastrelle
+
+Il motore fisico fa gli elementi. Sopra c'è una **grammatica** che li compone
+e li ripete. Analizzando un pattern lo si scompone sempre negli stessi ruoli,
+e gli stessi ruoli bastano a ricomporlo:
+
+| livello | simbolo | cosa è |
+|---|---|---|
+| **tratto** | `arco`, `uncino`, `onda`, `zigzag`, `ventaglio`, `cerchio`, `goccia`, `segmento`, `quadrato`, `rombo` | una linea del motore, in coordinate locali |
+| **motivo** | `C_n(tratto)`, `D_n(tratto)` | il tratto moltiplicato da una simmetria puntuale: `C_n` ciclica (n copie ruotate, circolare ma non speculare), `D_n` diedrale (n assi di specchio, 2n copie). `D2` sono i quattro spicchi, `D4` gli otto |
+| **cella** | `CELLA L [ … ]` | la piastrella, un quadrato di lato L con ruoli |
+| ↳ `centro` | | il motivo centrale |
+| ↳ `angoli`, `lati` | | i riempitivi che quadrano il cerchio, ai quattro angoli o a metà dei lati |
+| ↳ `corolla` | `n×motivo @r φ` | n copie su un cerchio di raggio r: la cornice ciclica, simmetrica o no |
+| ↳ `contenitore` | | ciò che si ripete uguale in ogni cella |
+| ↳ `contenuto` | `{A, B, C} ritmo ABAC` | ciò che varia, scelto dal ritmo lungo la riga, la colonna o la diagonale |
+| **reticolo** | `RETICOLO gruppo c×r` | la ripetizione: `p1` identica, `pm` specchiata a colonne alterne, `pmm` specchiata in entrambe le direzioni, `p2` ruotata di 180°, `p4` ruotata di 90°, `pg` slittata, `cm` a righe sfalsate |
+
+Una piastrella intera si legge in una riga, la sua **parola**:
+
+```
+CELLA 120 [ centro D4(arco) | angoli 4×uncino | corolla 16×segmento @46 ]  ×  RETICOLO p1 6×4
+CELLA 110 [ contenitore quadrato | contenuto {C6(goccia), cerchio, D2(zigzag), D3(arco)} ritmo ABACABAD riga ]  ×  RETICOLO p1 7×4
+```
+
+La pagina `piastrelle.html` mostra la cella scomposta per ruoli (ogni ruolo
+col suo colore), il reticolo e la parola. La codifica JSON è in `src/celle.js`.
+
 ## Struttura
 
 ```
 src/motore.js      il motore: vettori, RK4, eventi per bisezione, ottica
 src/partiture.js   i generatori: onda, coniche, camera di specchi, lastre, interruttore
-src/app.js         la pagina: sceglie, simula, disegna, esporta il JSON
-index.html         la pagina
+src/app.js         la pagina del motore: sceglie, simula, disegna, esporta il JSON
+index.html         la pagina del motore
+src/motivi.js      i tratti dell'alfabeto, ognuno una partitura del motore
+src/grammatica.js  motivo (C_n, D_n), cella (ruoli), reticolo (gruppi), parola
+src/celle.js       le piastrelle di esempio
+src/piastrelle.js  la pagina delle piastrelle
+piastrelle.html    la pagina delle piastrelle
 test/              i test (node, senza dipendenze)
 ```
 
@@ -126,9 +159,13 @@ rigenera col bottone.
 
 ## Prossimi passi
 
+- reticoli non quadrati: rettangolare, rombico, esagonale, e i restanti
+  gruppi di carta da parati (p3, p6, p4g, p31m…);
+- una cornice attorno al reticolo (il bordo del tappeto) e celle annidate:
+  una cella come tratto di un'altra;
 - un quarto piano di influenza (attrito o campo di velocità) per spirali e
   sinusoidi esatte;
 - emissione di nuove particelle come azione di una regola (ramificazioni);
-- propagazione analitica delle coniche al posto di RK4, per esattezza
-  a qualunque passo;
-- la lettura inversa: da un pattern dato risalire alla partitura.
+- propagazione analitica delle coniche al posto di RK4;
+- la lettura inversa: da un'immagine trovare il reticolo (autocorrelazione),
+  poi la simmetria della cella, poi i ruoli, fino alla parola.

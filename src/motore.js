@@ -145,6 +145,7 @@ function applica(azioni, p, traccia) {
         const k = p.staffette[chiave];
         if (k >= 0) p.acceso[az.lista[k]] = false;
         if (k + 1 < az.lista.length) p.acceso[az.lista[k + 1]] = true;
+        else if (az.allaFine === 'ferma') p.fine = 'fermata';
         p.staffette[chiave] = k + 1;
         break;
       }
