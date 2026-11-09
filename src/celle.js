@@ -38,45 +38,6 @@ export const CELLE = {
     colonne: 10, righe: 6, gruppo: 'p1',
   },
 
-  egizio_ventaglio: {
-    nome: 'egizio: ventaglio di piume su un arco, anelli concentrici, gambo',
-    cella: {
-      lato: 240,
-      corolla: [
-        { n: 15, da: 20, a: 160, raggio: 62, motivo: { tratto: 'ellisse', parametri: { a: 22, b: 5 } }, scala: [0.8, 0.8] },
-        { n: 15, da: 20, a: 160, raggio: 86, motivo: { tratto: 'ellisse', parametri: { a: 14, b: 3.5 } } },
-        { n: 3, da: 20, a: 160, raggio: 0, motivo: { tratto: 'arcoCerchio', parametri: { r: 40, da: 20, a: 160 } }, scala: [1, 1.2] },
-      ],
-      centro: { tratto: 'arcoCerchio', parametri: { r: 106, da: 20, a: 160 } },
-      fusto: {
-        asse: { tratto: 'tratto', parametri: { A: [0, -110], B: [0, 0] } },
-        elementi: [
-          { motivo: { tratto: 'arco', parametri: { r: 6, e: 0.5 } }, x: 10, y: -30, rotazione: 60 },
-          { motivo: { tratto: 'ellisse', parametri: { a: 10, b: 4 } }, x: 0, y: 8 },
-        ],
-      },
-    },
-    colonne: 1, righe: 1, gruppo: 'p1',
-  },
-
-  pompeiano_candelabro: {
-    nome: 'pompeiano: candelabro, asse con coppie di volute (spirali) specchiate',
-    cella: {
-      lato: 220,
-      fusto: {
-        elementi: [
-          { motivo: { tratto: 'spirale', parametri: { r0: 22, rMin: 2, giri: 2.5 } }, x: 24, y: -70, rotazione: 180 },
-          { motivo: { tratto: 'spirale', parametri: { r0: 16, rMin: 1.5, giri: 2 } }, x: 18, y: -20 },
-          { motivo: { tratto: 'spirale', parametri: { r0: 28, rMin: 2, giri: 2.5 } }, x: 30, y: 30, rotazione: 180 },
-          { motivo: { tratto: 'sinusoide', parametri: { lambda: 26, A: 5, periodi: 1 } }, x: 34, y: 62, rotazione: 90 },
-          { motivo: { tratto: 'ellisse', parametri: { a: 9, b: 3 } }, x: 0, y: 92 },
-          { motivo: { tratto: 'arco', parametri: { r: 5, e: 0.6 } }, x: 8, y: -95, rotazione: 120 },
-        ],
-      },
-    },
-    colonne: 1, righe: 1, gruppo: 'p1',
-  },
-
   cinese_greca: {
     nome: 'cinese: fregio a greca, specchi a 45° piegano una sola retta',
     cella: {
@@ -86,15 +47,93 @@ export const CELLE = {
     colonne: 12, righe: 1, gruppo: 'p1',
   },
 
-  cinese_nuvola: {
-    nome: 'cinese: nuvola, coppia di spirali specchiate (D1) con cappello ad arco, pm',
+  // ---------- linee continue per ancoraggi: catene con volute e rami ----------
+
+  girale: {
+    nome: 'girale (rinceau): uno stelo ondulato continuo da cella a cella, viticci che si staccano e si avvolgono; simmetria di slittamento',
     cella: {
-      lato: 90,
-      centro: { tratto: 'spirale', parametri: { r0: 20, rMin: 2, giri: 2 }, simmetria: { tipo: 'D', n: 1, fase: 90 }, spostamento: [20, -10] },
-      lati: { tratto: 'arcoCerchio', parametri: { r: 18, da: 200, a: 340 }, versoCentro: false },
-      contenitore: { tratto: 'sinusoide', parametri: { lambda: 45, A: 6, periodi: 2 }, spostamento: [0, 36] },
+      lato: 120,
+      centro: {
+        tratto: 'catena',
+        parametri: {
+          punti: [[-60, 0], [-45, 13], [-30, 18], [-15, 13], [0, 0], [15, -13], [30, -18], [45, -13], [60, 0]],
+          tangenti: [[1, 0.9], null, null, null, null, null, null, null, [1, 0.9]],
+          rami: [
+            { da: 3, catena: { punti: [[-12, -1], [-24, -6]], tangenti: [[0.55, -1]], voluta: { giri: 1.7, rMin: 0.8, verso: 'destra' } } },
+            { da: 7, catena: { punti: [[48, 1], [36, 6]], tangenti: [[0.55, 1]], voluta: { giri: 1.7, rMin: 0.8, verso: 'sinistra' } } },
+            { da: 1, catena: { punti: [[-52, 30], [-40, 34]], tangenti: [[-0.2, 1]], voluta: { giri: 1.2, rMin: 0.8, verso: 'destra' } } },
+            { da: 5, catena: { punti: [[8, -30], [20, -34]], tangenti: [[-0.2, -1]], voluta: { giri: 1.2, rMin: 0.8, verso: 'sinistra' } } },
+          ],
+        },
+      },
     },
-    colonne: 8, righe: 2, gruppo: 'pm',
+    colonne: 6, righe: 1, gruppo: 'p1',
+  },
+
+  palmetta: {
+    nome: 'palmetta (anthemion): petali a lira con le punte arricciate, a ventaglio su una base a doppia voluta',
+    cella: {
+      lato: 160,
+      corolla: {
+        n: 7, da: 35, a: 145, raggio: 0, orienta: -90,
+        motivo: {
+          tratto: 'catena',
+          parametri: { punti: [[0, 0], [5, 14], [8, 30], [4, 42]], tangenti: [[0.3, 1]], voluta: { giri: 1.4, rMin: 0.7, verso: 'destra' } },
+          simmetria: { tipo: 'D', n: 1, fase: 90 },
+        },
+        scala: 1,
+      },
+      centro: {
+        tratto: 'catena',
+        parametri: { punti: [[0, -2], [14, -14], [34, -12], [40, -26]], tangenti: [[1, -0.4]], voluta: { giri: 2, rMin: 0.9, verso: 'destra' } },
+        simmetria: { tipo: 'D', n: 1, fase: 90 },
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
+  candelabro: {
+    nome: 'candelabro pompeiano: un solo stelo, i rami nascono tangenti ai nodi e finiscono in volute; specchiato sull asse',
+    cella: {
+      lato: 240,
+      centro: {
+        tratto: 'catena',
+        parametri: {
+          punti: [[0, -110], [0, -70], [0, -30], [0, 10], [0, 50], [0, 88]],
+          tangenti: [[0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [0, 1]],
+          rami: [
+            { da: 1, catena: { punti: [[22, -44], [44, -54], [46, -76]], tangenti: [[0.45, 1]], voluta: { giri: 2.2, rMin: 0.9, verso: 'destra' } } },
+            { da: 2, catena: { punti: [[14, -14], [26, -20]], tangenti: [[0.6, 1]], voluta: { giri: 1.8, rMin: 0.8, verso: 'destra' } } },
+            { da: 3, catena: { punti: [[30, 26], [56, 20], [60, 0]], tangenti: [[0.7, 1]], voluta: { giri: 2.4, rMin: 1, verso: 'destra' } } },
+            { da: 4, catena: { punti: [[12, 66], [22, 62]], tangenti: [[0.6, 1]], voluta: { giri: 1.6, rMin: 0.7, verso: 'destra' } } },
+            { da: 5, catena: { punti: [[10, 100], [4, 112], [0, 116]], tangenti: [[0.8, 1]] } },
+            { da: 3, catena: { punti: [[18, -4], [34, 0]], tangenti: [[0.5, -1]], voluta: { giri: 1.5, rMin: 0.7, verso: 'sinistra' } } },
+          ],
+        },
+        simmetria: { tipo: 'D', n: 1, fase: 90 },
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
+  nuvola_ruyi: {
+    nome: 'nuvola ruyi: un contorno continuo con tre lobi, ogni lobo si chiude in una voluta; specchiato, poi in fregio sfalsato',
+    cella: {
+      lato: 110,
+      centro: {
+        tratto: 'catena',
+        parametri: {
+          punti: [[0, 6], [-8, 24], [-26, 26], [-34, 10]],
+          tangenti: [[-0.3, 1]],
+          voluta: { giri: 1.6, rMin: 0.8, verso: 'sinistra' },
+          rami: [
+            { da: 3, catena: { punti: [[-34, -6], [-20, -14], [-8, -6]], tangenti: [[0.1, -1]], voluta: { giri: 1.5, rMin: 0.8, verso: 'sinistra' } } },
+          ],
+        },
+        simmetria: { tipo: 'D', n: 1, fase: 90 },
+      },
+    },
+    colonne: 7, righe: 3, gruppo: 'p1', sfalsa: true,
   },
 
   // ---------- le prime piastrelle ----------

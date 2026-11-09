@@ -2,11 +2,15 @@
 // fisico, in coordinate locali centrate in (0, 0). La grammatica li prende
 // da qui, li moltiplica con le simmetrie e li dispone nelle celle.
 import { velocitaApside, velocitaFuga, velocitaCircolare } from './motore.js';
+import { catena } from './catena.js';
 
 const LIM = [-400, -400, 400, 400];
 const normalizza = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 
 export const MOTIVI = {
+  // una linea continua per punti di ancoraggio, con volute e rami (vedi catena.js)
+  catena: (p = {}) => catena(p),
+
   // una retta lunga l, centrata
   segmento: ({ l = 60 } = {}) => ({
     G: 1, dt: 1, passi: Math.round(l), limiti: LIM,

@@ -156,8 +156,12 @@ export function rifrangi(vel, normale, nIn, nOut) {
 //         { tipo: 'tocca', id }           (un'interfaccia)
 //         { tipo: 'passi', n }            (al passo n)
 //         { tipo: 'ogni', passi: n }      (ogni n passi)
+// Una regola può avere `fase: n`: vale solo quando la particella è nella fase n
+// (parte da 0). Così una catena di archi ha un evento per ogni tratto.
 // fai:    { tipo: 'accendi'|'spegni'|'inverti', id }   (id di massa, interfaccia, campo o 'penna')
 //         { tipo: 'staffetta', lista: [id...], allaFine?: 'ferma' }
+//         { tipo: 'avanza' }                           (fase + 1)
+//         { tipo: 'emetti', id, angolo (relativo alla direzione), v, passi }  (una nuova particella da qui)
 //         { tipo: 'ferma' }
 
 export function statoIniziale(partitura) {
@@ -203,6 +207,20 @@ function applica(azioni, p, traccia) {
         p.staffette[chiave] = k + 1;
         break;
       }
+      case 'avanza': p.fase++; break;
+      case 'emetti': {
+        const dir0 = Math.atan2(p.s.vel[1], p.s.vel[0]) * 180 / Math.PI;
+        // `dir` assoluta, oppure `angolo` relativo alla direzione attuale;
+        // `stato` sovrascrive l'accensione ereditata (le masse del ramo)
+        traccia.figli.push({
+          id: `${traccia.id}/${az.id ?? traccia.figli.length}`,
+          pos: p.s.pos.slice(), v: az.v ?? V.len(p.s.vel),
+          ...(az.dir ? { dir: az.dir } : { angolo: dir0 + (az.angolo ?? 0) }),
+          passi: az.passi, dt: az.dt, regole: az.regole, fase: az.fase ?? 0,
+          acceso: { ...p.acceso, ...(az.stato || {}) },
+        });
+        break;
+      }
       case 'ferma': p.fine = 'fermata'; break;
       default: throw new Error(`azione sconosciuta: ${az.tipo}`);
     }
@@ -227,15 +245,17 @@ export function simulaParticella(em, partitura) {
   const p = {
     s: { pos: em.pos.slice(), vel: V.mul(dir, em.v ?? 1) },
     m: em.m ?? 1,
-    acceso: statoIniziale(partitura),
+    acceso: em.acceso ? { ...em.acceso } : statoIniziale(partitura),
     staffette: {},
+    fase: em.fase ?? 0,
     segni: continue_.map((f) => (f ? segno(f(em.pos)) : 0)),
     penna: em.penna !== false,
     passo: 0,
     fine: null,
     ultimaInterfaccia: null,
   };
-  const traccia = { id: em.id, punti: [[p.s.pos[0], p.s.pos[1], p.penna]], eventi: [], fine: null };
+  const traccia = { id: em.id, punti: [[p.s.pos[0], p.s.pos[1], p.penna]], eventi: [], figli: [], fine: null };
+  const attiva = (r) => r.fase === undefined || r.fase === p.fase;
 
   const dentro = (q) => q[0] >= limiti[0] && q[1] >= limiti[1] && q[0] <= limiti[2] && q[1] <= limiti[3];
   const aggiornaSegni = (pos, forza) => {
@@ -295,7 +315,7 @@ export function simulaParticella(em, partitura) {
       p.ultimaInterfaccia = i.id;
       p.s = da;
       for (const r of regole) {
-        if (r.quando.tipo === 'tocca' && r.quando.id === i.id) applica(r.fai, p, traccia);
+        if (attiva(r) && r.quando.tipo === 'tocca' && r.quando.id === i.id) applica(r.fai, p, traccia);
       }
     }
     if (p.fine) break;
@@ -309,7 +329,7 @@ export function simulaParticella(em, partitura) {
     if (!saltaContinui) {
       let scatto = null;
       continue_.forEach((f, k) => {
-        if (!f || scatto) return;
+        if (!f || scatto || !attiva(regole[k])) return;
         const prima = p.segni[k], dopo = segno(f(s1.pos));
         if (prima !== 0 && dopo !== 0 && prima !== dopo && versoOk(regole[k].quando, dopo)) scatto = k;
       });
@@ -336,6 +356,7 @@ export function simulaParticella(em, partitura) {
 
     // 3. regole a passi
     for (const r of regole) {
+      if (!attiva(r)) continue;
       if (r.quando.tipo === 'passi' && r.quando.n === p.passo) applica(r.fai, p, traccia);
       if (r.quando.tipo === 'ogni' && p.passo % r.quando.passi === 0) applica(r.fai, p, traccia);
     }
@@ -348,9 +369,19 @@ export function simulaParticella(em, partitura) {
 }
 
 export function simula(partitura) {
-  return (partitura.emettitori || [])
-    .filter((e) => e.acceso !== false)
-    .map((e) => simulaParticella(e, partitura));
+  const coda = (partitura.emettitori || []).filter((e) => e.acceso !== false);
+  const tracce = [];
+  let emesse = 0;
+  while (coda.length) {
+    const em = coda.shift();
+    const tr = simulaParticella(em, partitura);
+    tracce.push(tr);
+    for (const f of tr.figli) {
+      if (++emesse > (partitura.maxEmesse ?? 500)) break;
+      coda.push(f);
+    }
+  }
+  return tracce;
 }
 
 // ---------- utilità per le coniche (una massa sola) ----------

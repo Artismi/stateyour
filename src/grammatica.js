@@ -73,9 +73,14 @@ const trasforma = (linee, M) => linee.map((l) => l.map((p) => T.applica(M, p)));
 export function simmetria(s = { tipo: 'id' }) {
   const n = s.n ?? 1, fase = s.fase ?? 0;
   const out = [];
-  if (s.tipo === 'C' || s.tipo === 'D') {
+  if (s.tipo === 'C') {
+    // ciclica: n rotazioni; la fase ruota tutte le copie
     for (let k = 0; k < n; k++) out.push(T.ruota(fase + 360 * k / n));
-    if (s.tipo === 'D') for (let k = 0; k < n; k++) out.push(catena(T.ruota(fase + 360 * k / n), T.specchio(fase)));
+  } else if (s.tipo === 'D') {
+    // diedrale: n rotazioni (il motivo resta dov'è) e n specchi i cui assi sono
+    // a fase, fase + 180/n, ...: la fase dice dove sta il primo asse
+    for (let k = 0; k < n; k++) out.push(T.ruota(360 * k / n));
+    for (let k = 0; k < n; k++) out.push(T.specchio(fase + 180 * k / n));
   } else out.push(T.id());
   return out;
 }

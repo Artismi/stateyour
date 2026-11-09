@@ -57,6 +57,50 @@ regole. La stessa partitura, rieseguita, ridà sempre lo stesso pattern.
 Il caos a più corpi compare solo se due o più masse sono accese **insieme**.
 Con una massa alla volta tutto è esatto e riproducibile.
 
+## La catena: una linea continua per punti di ancoraggio
+
+Gli archi isolati messi uno accanto all'altro non fanno ornamento. La
+**catena** è il tratto principale: si danno i punti per cui la linea deve
+passare, e se si vuole la tangente in ognuno, e il compilatore
+(`src/catena.js`) ricava da solo il campo fisico che la produce.
+
+- **Biarchi.** Tra due ancoraggi consecutivi la linea è fatta di due archi
+  di cerchio che si raccordano con la stessa tangente. Ogni arco è un'orbita
+  circolare attorno a una massa posta sulla normale a distanza r, con
+  M = v²·r/G. Così la velocità resta costante in modulo e la direzione è
+  continua a ogni giunzione.
+- **Fasi.** A ogni fine arco il raggio che passa per il punto d'arrivo,
+  attraversato nel verso giusto, spegne la massa e accende la successiva.
+  Ogni regola vale solo nella sua fase.
+- **Tangenti automatiche.** Dove non sono date, la tangente in un punto
+  interno è la direzione tra il precedente e il successivo.
+- **Voluta.** In fondo si spegne la gravità e si accende un campo magnetico
+  con la stessa curvatura dell'ultimo arco, più un attrito. La spirale
+  logaritmica parte senza salti né di direzione né di curvatura, e si ferma
+  esattamente a distanza rMin dal suo centro asintotico, calcolato in forma
+  chiusa.
+- **Rami.** A un ancoraggio la particella emette una particella figlia con la
+  propria catena e le proprie masse: lo stelo si ramifica e ogni ramo finisce
+  nella sua voluta.
+- **Chiusa.** La linea torna al punto di partenza con la stessa tangente.
+
+Il test `test/test_catena.mjs` verifica che la linea passi per ogni
+ancoraggio con uno scarto sotto 1e-4, che non svolti mai più di 0,02 radianti
+tra due passi, che la voluta si fermi a rMin, che i rami partano dal loro
+ancoraggio.
+
+```json
+{ "tratto": "catena", "parametri": {
+    "punti": [[0, -110], [0, -70], [0, -30], [0, 10]],
+    "tangenti": [[0, 1], [0, 1], [0, 1], [0, 1]],
+    "rami": [{ "da": 1, "catena": { "punti": [[22, -44], [44, -54], [46, -76]],
+               "tangenti": [[0.45, 1]], "voluta": { "giri": 2.2, "rMin": 0.9, "verso": "destra" } } }] },
+  "simmetria": { "tipo": "D", "n": 1, "fase": 90 } }
+```
+
+Con la catena sono costruiti il girale (uno stelo che continua da una cella
+all'altra), la palmetta, il candelabro e la nuvola ruyi in `src/celle.js`.
+
 ## Geometria esatta: dal disegno voluto ai parametri fisici
 
 I tratti dell'alfabeto si chiedono in termini geometrici e il sistema ricava
@@ -141,7 +185,7 @@ e gli stessi ruoli bastano a ricomporlo:
 | livello | simbolo | cosa è |
 |---|---|---|
 | **tratto** | `arco`, `uncino`, `onda`, `zigzag`, `ventaglio`, `cerchio`, `goccia`, `segmento`, `quadrato`, `rombo` | una linea del motore, in coordinate locali |
-| **motivo** | `C_n(tratto)`, `D_n(tratto)` | il tratto moltiplicato da una simmetria puntuale: `C_n` ciclica (n copie ruotate, circolare ma non speculare), `D_n` diedrale (n assi di specchio, 2n copie). `D2` sono i quattro spicchi, `D4` gli otto |
+| **motivo** | `C_n(tratto)`, `D_n(tratto)` | il tratto moltiplicato da una simmetria puntuale: `C_n` ciclica (n copie ruotate, circolare ma non speculare; la fase ruota tutte le copie), `D_n` diedrale (n rotazioni più n assi di specchio, 2n copie; la fase è l'angolo del primo asse). `D1` con fase 90 è lo specchio sull'asse verticale, `D2` sono i quattro spicchi, `D4` gli otto |
 | **cella** | `CELLA L [ … ]` | la piastrella, un quadrato di lato L con ruoli |
 | ↳ `centro` | | il motivo centrale |
 | ↳ `angoli`, `lati` | | i riempitivi che quadrano il cerchio, ai quattro angoli o a metà dei lati |
@@ -184,6 +228,7 @@ src/partiture.js   i generatori: onda, coniche, camera di specchi, lastre, inter
 src/app.js         la pagina del motore: sceglie, simula, disegna, esporta il JSON
 index.html         la pagina del motore
 src/motivi.js      i tratti dell'alfabeto, ognuno una partitura del motore
+src/catena.js      la catena: ancoraggi → biarchi → masse e fasi, volute, rami
 src/grammatica.js  motivo (C_n, D_n), cella (ruoli), reticolo (gruppi), parola
 src/celle.js       le piastrelle di esempio
 src/piastrelle.js  la pagina delle piastrelle
@@ -209,14 +254,12 @@ rigenera col bottone.
 
 - **intrecci**: il sopra/sotto dei nastri (guilloche, nodi) richiede che la
   linea abbia uno spessore e che a ogni incrocio si decida chi passa sopra;
-- **archi tangenti a raggi diversi**: la staffetta tra masse già garantisce la
-  tangenza; serve il calcolo automatico della massa successiva lungo la
-  normale (le nuvole cinesi e i girali);
 - **celle annidate**: una cella come tratto di un'altra, e una cornice attorno
   al reticolo (il bordo del tappeto);
 - i restanti gruppi di carta da parati (p4g, p3m1, p6m) e reticoli rombici;
-- emissione di nuove particelle come azione di una regola (le ramificazioni
-  vegetali del pompeiano);
+- **continuità della curvatura** anche tra un arco e l'altro (oggi è garantita
+  solo all'ingresso della voluta): al posto dei biarchi, spirali di Eulero
+  ottenute con un campo magnetico che cresce lungo il percorso;
 - propagazione analitica delle coniche al posto di RK4;
 - **il seme compatto**: una sola stringa al posto del JSON;
 - **la lettura inversa**: da un'immagine trovare il reticolo
