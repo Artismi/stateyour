@@ -34,15 +34,17 @@
   <input type="file" id="file" accept="image/*">
   <button id="esempio">la tavola greca</button>
   <label>pennello <select id="stile"><option value="pieno">pieno</option><option value="contorno">contorno</option><option value="filo">filo</option></select></label>
+  <label>seme <select id="sorgente"><option value="lingua">dalla lingua</option><option value="letterale">letterale</option></select></label>
   <button id="scarica">scarica il seme (.json)</button>
   <button id="spazio" class="primo">apri nello spaziotempo →</button>
 </div>
 <div class="riga">
   <figure><figcaption>l'immagine</figcaption><canvas id="originale"></canvas></figure>
-  <figure><figcaption>la lettura: inchiostro, scheletro, nodi</figcaption><canvas id="lettura"></canvas></figure>
+  <figure><figcaption>la lettura: inchiostro, scheletro; le parole, i loro assi di simmetria, i reticoli</figcaption><canvas id="lettura"></canvas></figure>
   <figure><figcaption>la ricostruzione: il seme fatto crescere</figcaption><canvas id="ricostruzione"></canvas></figure>
 </div>
 <div id="rapporto">decodifica in corso…</div>
+<pre id="lingua" style="margin: 0 20px 20px; padding: 10px 12px; border: 1px solid var(--riga); background: #fff; font-size: 12px; white-space: pre-wrap;"></pre>
 <script type="module" src="./src/pagina_decodifica.js"></script>
 </body>
 </html>

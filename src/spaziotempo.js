@@ -13,6 +13,7 @@ import { seme } from './seme.js';
 import { CELLE } from './celle.js';
 import { PARTITURE } from './partiture.js';
 import { decodifica, semeDaCodifica } from './decodifica.js';
+import { lingua, semeDaLingua } from './lingua.js';
 import { bordi } from './pennello.js';
 
 const $ = (id) => document.getElementById(id);
@@ -298,9 +299,11 @@ async function scegli(valore) {
       $('nota').textContent = 'decodifico la tavola greca…';
       await new Promise((r) => setTimeout(r, 20));
       const ris = decodifica(await caricaImmagine('./esempi/greco_6.png'));
-      cod = { elementi: ris.elementi };
+      $('nota').textContent = 'leggo la lingua…'; await new Promise((r) => setTimeout(r, 20));
+      cod = { elementi: ris.elementi, lingua: lingua(ris), daLingua: true };
     }
-    prepara(semeDaCodifica(cod), 'la tavola decodificata: ogni linea nasce dal seme ricavato dall\'immagine');
+    if (cod.lingua && cod.daLingua !== false) prepara(semeDaLingua(cod.lingua), 'la tavola decodificata e riscritta nella sua lingua: parole, simmetrie, ripetizioni');
+    else prepara(semeDaCodifica(cod), 'la tavola decodificata: ogni linea nasce dal seme ricavato dall\'immagine');
   } else if (valore.startsWith('cella:')) {
     const r = CELLE[valore.slice(6)];
     prepara(seme({ ...r, colonne: Math.min(r.colonne ?? 1, 3), righe: Math.min(r.righe ?? 1, 2) }), r.nome);

@@ -62,7 +62,9 @@ export function lineeDaTracce(tracce) {
   const linee = [];
   for (const tr of tracce) {
     let corrente = [];
-    for (const [x, y, su, , w] of tr.punti) {
+    for (const [x, y, su, , w, legge] of tr.punti) {
+      // a ogni rimbalzo su uno specchio la linea si spezza: gli angoli restano vivi
+      if (su && legge === 'specchio' && corrente.length) { corrente.push([x, y, w ?? 0]); if (corrente.length > 1) linee.push(corrente); corrente = [[x, y, w ?? 0]]; continue; }
       if (su) corrente.push([x, y, w ?? 0]);
       else if (corrente.length > 1) { linee.push(corrente); corrente = []; }
       else corrente = [];

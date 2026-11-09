@@ -225,15 +225,29 @@ all'originale. I passi:
    spessore per ancoraggio: tra due ancoraggi la particella acquista o perde
    materia e lo spessore cambia linearmente.
 9. **Residuo.** Si fa crescere il seme, si toglie dall'inchiostro ciò che è già
-   coperto, e si rilegge quel che resta.
+   coperto, e quel che resta diventa **campiture** (vedi sotto). Le passate
+   sono tre.
 
-Sulla tavola greca n. 6 la codifica ha 467 catene, 57 petali e 5 dischi:
+Sulla tavola greca n. 6 la codifica ha 250 catene, 16 petali, 1 disco e 263
+campiture:
 
 | misura | valore |
 |---|---|
-| IoU con l'inchiostro | 82,6 % |
-| richiamo | 89,2 % |
-| precisione | 91,7 % |
+| IoU con l'inchiostro | 85,5 % |
+| richiamo | 92,4 % |
+| precisione | 91,9 % |
+
+### Le campiture: biliardi
+
+Una superficie piena è un **biliardo**. Il suo contorno, rientrato di mezza
+penna, è una catena chiusa di specchi; i buchi pure. Dentro, una particella
+con spessore parte con un angolo irrazionale e rimbalza. In un poligono
+generico le traiettorie si infittiscono fino a coprirlo: dopo un cammino
+lungo L la parte coperta è circa 1 − e^(−L·w/A), e con L = 4,5·A/w la
+copertura supera il 98 %. Il tratto `campitura` è disponibile anche
+nell'alfabeto; i contorni si tracciano con l'algoritmo di Moore e si
+semplificano con Douglas e Peucker. A ogni rimbalzo la linea si spezza nel
+disegno, così gli angoli restano vivi.
 
 Un pattern disegnato dal progetto e poi decodificato si ritrova con IoU 82 %.
 La pagina `decodifica.html` mostra l'immagine, la lettura e la ricostruzione;
@@ -246,6 +260,60 @@ node strumenti/decodifica.mjs esempi/greco_6.png seme.json
 
 L'immagine di esempio è la tavola *Greek No. 6* di Owen Jones, *The Grammar
 of Ornament* (1856), di pubblico dominio.
+
+## La lingua: dalla forma alla struttura
+
+`src/lingua.js` legge la struttura di ciò che la decodifica ha riscritto: che
+cosa si ripete, con quale simmetria, dove e come. Il seme diventa
+**vocabolario × frase**: le parole, ognuna scritta una volta sola nel suo
+dominio fondamentale con la sua simmetria, e dove compare ognuna con quale
+trasformazione.
+
+1. **Atomi.** Le figure connesse dell'inchiostro.
+2. **Reticolo.** Una figura grande che si sovrappone a sé stessa spostata è
+   una ripetizione per traslazione. I due spostamenti più corti e non
+   allineati sono i vettori del reticolo; la figura si taglia in celle con i
+   bordi dove passa meno inchiostro, e ogni cella diventa un atomo.
+3. **Simmetria.** Per ogni atomo, specchi (D_n) e rotazioni (C_n) attorno al
+   baricentro, misurati sovrapponendo la figura trasformata a sé stessa.
+4. **Parole.** Atomi uguali a meno di una similitudine (spostamento,
+   rotazione, scala, specchio) sono la stessa parola. La similitudine si
+   cerca sulle sagome e si raffina ai minimi quadrati (Procuste).
+5. **Dominio fondamentale.** Prima la struttura, poi la lettura: di una figura
+   simmetrica si decodifica solo metà, o uno spicchio, e il resto lo genera la
+   simmetria. Se non basta, si cercano le orbite: gli elementi gemelli dove la
+   simmetria li porterebbe.
+6. **Istanze.** Un'istanza è la parola intera trasformata; se non basta,
+   prende solo le parti che ha davvero e scrive per esteso le sue
+   **varianti** (contenitore fisso, contenuto che varia).
+7. **Verifica.** Ogni ipotesi si accetta solo se la figura ricostruita dalla
+   lingua copre l'inchiostro quanto la ricostruzione letterale, entro tre
+   punti (F di precisione e richiamo con un pixel di tolleranza). Altrimenti
+   si prova una simmetria più semplice, poi si scrive la figura per esteso: la
+   descrizione più corta che non perde fedeltà.
+
+Il testo della lingua, sul pattern di prova:
+
+```
+VOCABOLARIO
+  A   D1  [ 4 catene, 7 campiture ]  ×4  (1 originale, 3 identica)
+  B   D1  [ 5 catene, 5 campiture ]  ×3  (1 originale, 1 specchio, 1 identica)
+  ...
+TAVOLA = 4·A + 3·B + 2·C + 2·D + 6·E
+seme: 134 elementi decodificati → 27 nel vocabolario (5.0 volte più corto)
+```
+
+| prova | risultato |
+|---|---|
+| quattro spirali, tre palmette specchiate, due stelle | 5 parole, seme 5 volte più corto, IoU 82,8 % |
+| girale connesso di quattro celle | reticolo con passo 113,3 (atteso 114) |
+| tavola greca n. 6 | 40 parole, 27 simmetriche, seme da 530 a 428 elementi, IoU 83,4 % |
+
+La tavola greca ripete poco: è una raccolta di motivi diversi, e i suoi
+gemelli sono disegnati a mano. Sui pattern ripetitivi la lingua accorcia il
+seme molte volte. La pagina della decodifica mostra il testo della lingua,
+disegna parole, assi e reticoli sulla lettura, e fa crescere a scelta il seme
+letterale o quello della lingua; lo spaziotempo usa quello della lingua.
 
 ## Lo spaziotempo in tre dimensioni
 
@@ -427,7 +495,8 @@ src/catena.js      la catena: ancoraggi → biarchi → blocchi di spaziotempo, 
 src/grammatica.js  istanze: motivo (C_n, D_n), cella (ruoli), reticolo (gruppi); parola
 src/seme.js        il seme: lo stato di ogni istanza trasformato, una sola configurazione iniziale
 src/pennello.js    il pennello: la linea come corpo, pieno, contorno o filo
-src/decodifica.js  la decodifica: immagine → maschera → scheletro → catene, petali, dischi → seme
+src/decodifica.js  la decodifica: immagine → maschera → scheletro → catene, petali, dischi, campiture → seme
+src/lingua.js      la lingua: atomi, reticoli, simmetrie, parole, dominio fondamentale, verifica → vocabolario × frase
 src/spaziotempo.js la vista 3D: linee d'universo, piano del tempo, masse, forze
 decodifica.html    la pagina della decodifica
 spaziotempo.html   la pagina dello spaziotempo
@@ -469,10 +538,10 @@ rigenera col bottone.
 - portare allo stato anche gli esempi che usano ancora le regole (il
   tratteggio della penna, lo specchio che accende la massa, le staffette dei
   motivi di base);
-- **la lettura inversa della grammatica**: la decodifica oggi riscrive ogni
-  tratto, ma non riconosce ancora le simmetrie e le ripetizioni. Il passo
-  successivo è trovare il reticolo (autocorrelazione), la simmetria della
-  cella e i ruoli, e ridurre il seme decodificato a una parola;
+- **la lingua completa**: riconoscere i gruppi di carta da parati per nome,
+  le figure composte come frasi di parole, i ruoli della cella (centro,
+  corolla, angoli), e scrivere la lingua con la stessa parola della grammatica;
+- **più colori**: una maschera per colore, ognuna decodificata come strato;
 - **volute fisiche nella decodifica**: le spirali decodificate oggi sono
   catene di molti ancoraggi; riconoscerle e codificarle come volute (campo
   magnetico e attrito) renderebbe il seme più corto;

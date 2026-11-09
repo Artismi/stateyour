@@ -285,6 +285,32 @@ export const MOTIVI = {
     };
   },
 
+  // campitura: un biliardo. Il contorno (e gli eventuali buchi) sono specchi;
+  // dentro una particella con spessore parte da `inizio` con un angolo
+  // irrazionale e rimbalza. Le traiettorie in un poligono generico si
+  // infittiscono fino a coprirlo: dopo un cammino lungo L la parte coperta è
+  // circa 1 − e^(−L·w/A), quindi con L = copertura·A/w si copre quasi tutto.
+  // Il contorno va dato già rientrato di mezzo spessore, così la penna arriva
+  // esattamente al bordo vero.
+  campitura: ({ contorno = [[-20, -20], [20, -20], [20, 20], [-20, 20]], buchi = [], spessore = 1.5, copertura = 4.5, inizio = null, angolo = null } = {}) => {
+    const area = (P) => { let a = 0; for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; };
+    const A = Math.max(1e-6, area(contorno) - buchi.reduce((s, b) => s + area(b), 0));
+    const interfacce = [];
+    for (const [k, P] of [contorno, ...buchi].entries()) {
+      for (let i = 0; i < P.length; i++) interfacce.push({ id: `s${k}_${i}`, a: P[i], b: P[(i + 1) % P.length], tipo: 'specchio' });
+    }
+    const da = inizio || [contorno.reduce((s, p) => s + p[0], 0) / contorno.length, contorno.reduce((s, p) => s + p[1], 0) / contorno.length];
+    const ang = angolo ?? 2 * Math.PI * 0.6180339887 + 0.1234;
+    const T = copertura * A / spessore, dt = Math.max(0.05, spessore * 0.5);
+    return {
+      G: 1, dt, passi: Math.ceil(T / dt) + 20, limiti: [-1e5, -1e5, 1e5, 1e5],
+      emettitori: [{ id: 'b', pos: da, dir: [Math.cos(ang), Math.sin(ang)], v: 1, spessore, esponente: 0 }],
+      interfacce, masse: [],
+      blocchi: [{ id: 'fine', regione: { tipo: 'tutto' }, tempo: [T, null], legge: { tipo: 'ferma' } }],
+      regole: [],
+    };
+  },
+
   // disco pieno di diametro d: un'orbita magnetica di raggio d/4 con spessore d/2
   disco: ({ d = 6 } = {}) => {
     const rho = d / 4, omega = 1 / rho, giro = 2 * Math.PI / omega;

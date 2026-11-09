@@ -21,7 +21,9 @@
 //   8. codifica    per ogni catena: ancoraggi (Douglas e Peucker), tangenti,
 //                  profilo di spessore, rami agganciati ai loro nodi
 //   9. residuo     si fa crescere il seme, si toglie dall'inchiostro ciò che
-//                  è già coperto e si rilegge quel che resta (seconda passata)
+//                  è già coperto, e quel che resta diventa CAMPITURE: il suo
+//                  contorno è uno specchio chiuso e dentro una particella con
+//                  spessore rimbalza fino a riempirlo (un biliardo)
 //
 // Funziona nel browser e in Node: l'immagine è { larghezza, altezza, canali, dati }.
 
@@ -54,7 +56,7 @@ function kmedie(img, k = 3, campioni = 20000) {
 }
 
 // ---------- utilità di immagine
-function componenti(maschera, W, H, valore = 1) {
+export function componenti(maschera, W, H, valore = 1) {
   const etich = new Int32Array(W * H).fill(-1), comp = [];
   const coda = new Int32Array(W * H);
   for (let s = 0; s < W * H; s++) {
@@ -79,7 +81,7 @@ function componenti(maschera, W, H, valore = 1) {
 }
 
 // trasformata di distanza euclidea esatta (Felzenszwalb e Huttenlocher)
-function distanza(maschera, W, H) {
+export function distanza(maschera, W, H) {
   const INF = 1e20, f = new Float64Array(Math.max(W, H)), d = new Float64Array(W * H);
   const dt1 = (f, n, out) => {
     const v = new Int32Array(n), z = new Float64Array(n + 1); let k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
@@ -259,6 +261,29 @@ function svoltaTotale(pts) {
   return s;
 }
 const mediana = (a) => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+// ---------- contorni: il bordo di una regione, percorso in senso orario (Moore)
+const MOORE = [[-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1]];
+function traccia(fg, W, H, inizio) {
+  const pts = [inizio];
+  const dentro = (p) => p >= 0 && p < W * H && fg(p);
+  let p = inizio, cerca = 0, primo = -1, giri = 0;
+  while (giri++ < 4 * W * H) {
+    const x = p % W, y = (p - x) / W;
+    let d = -1;
+    for (let k = 0; k < 8; k++) {
+      const dd = (cerca + k) % 8, xx = x + MOORE[dd][0], yy = y + MOORE[dd][1];
+      if (xx >= 0 && yy >= 0 && xx < W && yy < H && dentro(yy * W + xx)) { d = dd; break; }
+    }
+    if (d < 0) break; // un pixel solo
+    const q = (y + MOORE[d][1]) * W + x + MOORE[d][0];
+    if (p === inizio && d === primo) break;
+    if (primo < 0) primo = d;
+    p = q; pts.push(p); cerca = (d + 5) % 8;
+  }
+  pts.pop();
+  return pts;
+}
 
 // ---------- la decodifica
 export function decodifica(img, opzioni = {}) {
@@ -518,47 +543,111 @@ export function decodifica(img, opzioni = {}) {
     return { elementi, S, D, G, tratti };
   };
 
-  const prima = leggi(m);
-  let elementi = prima.elementi;
-  const S = Uint8Array.from(prima.S);
-  const passate = opzioni.passate ?? 2;
-  let residuoTotale = 0;
-  for (let n = 1; n < passate; n++) {
-    // il residuo: l'inchiostro che la ricostruzione non copre ancora
-    const linee = lineeDaTracce(simula(semeDaCodifica({ elementi })));
-    const coperto = new Uint8Array(W * H);
-    const timbro = (cx, cy, rr) => {
-      for (let y = Math.max(0, Math.floor(cy - rr)); y <= Math.min(H - 1, Math.ceil(cy + rr)); y++)
-        for (let x = Math.max(0, Math.floor(cx - rr)); x <= Math.min(W - 1, Math.ceil(cx + rr)); x++)
-          if ((x - cx) ** 2 + (y - cy) ** 2 <= rr * rr) coperto[y * W + x] = 1;
-    };
-    const aMaschera = (q) => [(q[0] - rx0) * scala - 0.5, (H0 - q[1] - ry0) * scala - 0.5, (q[2] ?? 0) * scala / 2];
-    for (const l of linee) for (let i = 0; i + 1 < l.length; i++) {
-      const A = aMaschera(l[i]), B = aMaschera(l[i + 1]);
-      const k = Math.max(1, Math.ceil(Math.hypot(B[0] - A[0], B[1] - A[1]) * 2));
-      for (let j = 0; j <= k; j++) { const u = j / k; timbro(A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u, Math.max(0.7, A[2] + (B[2] - A[2]) * u)); }
+  // tutte le passate su una maschera qualunque (della stessa misura): la prima
+  // legge i tratti, le altre riempiono il residuo
+  function passateSu(mm) {
+    const prima = leggi(mm);
+    let elementi = prima.elementi;
+    const S = Uint8Array.from(prima.S);
+    const passate = opzioni.passate ?? 3;
+    let residuoTotale = 0;
+    for (let n = 1; n < passate; n++) {
+      // il residuo: l'inchiostro che la ricostruzione non copre ancora
+      const linee = lineeDaTracce(simula(semeDaCodifica({ elementi })));
+      const coperto = new Uint8Array(W * H);
+      const timbro = (cx, cy, rr) => {
+        for (let y = Math.max(0, Math.floor(cy - rr)); y <= Math.min(H - 1, Math.ceil(cy + rr)); y++)
+          for (let x = Math.max(0, Math.floor(cx - rr)); x <= Math.min(W - 1, Math.ceil(cx + rr)); x++)
+            if ((x - cx) ** 2 + (y - cy) ** 2 <= rr * rr) coperto[y * W + x] = 1;
+      };
+      const aMaschera = (q) => [(q[0] - rx0) * scala - 0.5, (H0 - q[1] - ry0) * scala - 0.5, (q[2] ?? 0) * scala / 2];
+      for (const l of linee) for (let i = 0; i + 1 < l.length; i++) {
+        const A = aMaschera(l[i]), B = aMaschera(l[i + 1]);
+        const k = Math.max(1, Math.ceil(Math.hypot(B[0] - A[0], B[1] - A[1]) * 2));
+        for (let j = 0; j <= k; j++) { const u = j / k; timbro(A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u, Math.max(0.7, A[2] + (B[2] - A[2]) * u)); }
+      }
+      const r = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) r[i] = mm[i] && !coperto[i] ? 1 : 0;
+      // via i bordini: restano le macchie abbastanza spesse e abbastanza grandi
+      const Dr = distanza(r, W, H);
+      for (const c of componenti(r, W, H, 1).comp) {
+        let dmax = 0; for (const q of c) dmax = Math.max(dmax, Dr[q]);
+        if (dmax < 0.9 * scala || c.length < minArea * 1.5) for (const q of c) r[q] = 0;
+      }
+      let quanti = 0; for (let i = 0; i < W * H; i++) quanti += r[i];
+      if (!quanti) break;
+      residuoTotale += quanti;
+      if ((opzioni.residuo ?? 'campiture') === 'tratti') {
+        const dopo = leggi(r);
+        elementi = elementi.concat(dopo.elementi);
+        for (let i = 0; i < W * H; i++) if (dopo.S[i]) S[i] = 1;
+      } else {
+        elementi = elementi.concat(campiture(r));
+      }
     }
-    const r = new Uint8Array(W * H);
-    for (let i = 0; i < W * H; i++) r[i] = m[i] && !coperto[i] ? 1 : 0;
-    // via i bordini: restano le macchie abbastanza spesse e abbastanza grandi
-    const Dr = distanza(r, W, H);
-    for (const c of componenti(r, W, H, 1).comp) {
-      let dmax = 0; for (const q of c) dmax = Math.max(dmax, Dr[q]);
-      if (dmax < 0.9 * scala || c.length < minArea * 1.5) for (const q of c) r[q] = 0;
-    }
-    let quanti = 0; for (let i = 0; i < W * H; i++) quanti += r[i];
-    if (!quanti) break;
-    residuoTotale += quanti;
-    const dopo = leggi(r);
-    elementi = elementi.concat(dopo.elementi);
-    for (let i = 0; i < W * H; i++) if (dopo.S[i]) S[i] = 1;
+    return { elementi, S, prima, residuoTotale };
   }
+  const tutto = passateSu(m);
+  const prima = tutto.prima, S = tutto.S, residuoTotale = tutto.residuoTotale;
+  let elementi = tutto.elementi;
   const D = prima.D, G = prima.G, tratti = prima.tratti;
+
+  // il residuo come CAMPITURE: ogni regione spessa diventa un biliardo. Il suo
+  // contorno, rientrato di mezza penna, è uno specchio chiuso; i buchi pure;
+  // dentro una particella con spessore rimbalza fino a riempirla.
+  function campiture(r) {
+    const penna = opzioni.penna ?? 0.9; // in pixel originali
+    const Dr = distanza(r, W, H);
+    const er = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) er[i] = r[i] && Dr[i] >= (penna / 2) * scala ? 1 : 0;
+    const out = [];
+    const aMondo = (p) => { const x = p % W, y = (p - x) / W; return [(x + 0.5) / scala + rx0, H0 - ((y + 0.5) / scala + ry0)]; };
+    for (const c of componenti(er, W, H, 1).comp) {
+      if (c.length < 3) continue;
+      const set = new Set(c);
+      let inizio = c[0], pm = c[0];
+      for (const p of c) { if (p < inizio) inizio = p; if (Dr[p] > Dr[pm]) pm = p; }
+      const bordo = traccia((p) => set.has(p), W, H, inizio);
+      if (bordo.length < 3) continue;
+      const poligono = (pix) => {
+        const pts = pix.map(aMondo);
+        // un poligono chiuso: lo si spezza anche nel punto più lontano dall'inizio,
+        // altrimenti la corda di riferimento ha lunghezza zero
+        let lontano = 0, dmax = -1;
+        pts.forEach((q, i) => { const d = dist(q, pts[0]); if (d > dmax) { dmax = d; lontano = i; } });
+        const idx = douglasPeucker(pts.concat([pts[0]]), 0.35, new Set([lontano])).filter((i) => i < pts.length);
+        return idx.map((i) => pts[i]);
+      };
+      const contorno = poligono(bordo);
+      if (contorno.length < 3) continue;
+      // i buchi: il fondo nel riquadro che non tocca il bordo del riquadro
+      let x0 = W, y0 = H, x1 = 0, y1 = 0;
+      for (const p of c) { const x = p % W, y = (p - x) / W; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      const bw = x1 - x0 + 3, bh = y1 - y0 + 3, loc = new Uint8Array(bw * bh);
+      for (const p of c) { const x = p % W, y = (p - x) / W; loc[(y - y0 + 1) * bw + (x - x0 + 1)] = 1; }
+      const fuori = new Uint8Array(bw * bh), coda = [0]; fuori[0] = 1;
+      while (coda.length) { const q = coda.pop(), x = q % bw, y = (q - x) / bw; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= bw || yy >= bh) continue; const k = yy * bw + xx; if (!loc[k] && !fuori[k]) { fuori[k] = 1; coda.push(k); } } }
+      const buco = new Uint8Array(bw * bh); let ci = false;
+      for (let i = 0; i < bw * bh; i++) if (!loc[i] && !fuori[i]) { buco[i] = 1; ci = true; }
+      const buchi = [];
+      if (ci) for (const h of componenti(buco, bw, bh, 1).comp) {
+        if (h.length < 2) continue;
+        let s0 = h[0]; for (const p of h) if (p < s0) s0 = p;
+        const hs = new Set(h), bordoH = traccia((p) => hs.has(p), bw, bh, s0);
+        const glob = bordoH.map((p) => { const x = p % bw, y = (p - x) / bw; return (y + y0 - 1) * W + (x + x0 - 1); });
+        if (glob.length >= 3) { const pol = poligono(glob); if (pol.length >= 3) buchi.push(pol); }
+      }
+      out.push({ tipo: 'campitura', contorno, buchi, spessore: penna, inizio: aMondo(pm), area: c.length / (scala * scala) });
+    }
+    return out;
+  }
 
   return {
     elementi,
     misure: { larghezza: W0, altezza: H0, ritaglio: rit, scala, colori: { inchiostro: ink, fondo }, tratti: tratti.length, nodi: G.nodi.length, residuo: residuoTotale / (scala * scala) },
     interni: { maschera: m, scheletro: S, distanza: D, W, H, rit, scala },
+    // per la lingua: decodificare solo una parte (il dominio fondamentale di una figura)
+    decodificaMaschera: (mm) => passateSu(mm).elementi,
   };
 }
 
@@ -582,6 +671,8 @@ export function semeDaCodifica(codifica, opzioni = {}) {
       aggiungi(MOTIVI.petalo({ L: e.L, W: e.W, b: e.b, curva: e.curva }), [c, s, -s, c, e.pos[0], e.pos[1]], prefisso, 'petalo');
     } else if (e.tipo === 'disco') {
       aggiungi(MOTIVI.disco({ d: e.d }), [1, 0, 0, 1, e.pos[0], e.pos[1]], prefisso, 'disco');
+    } else if (e.tipo === 'campitura') {
+      aggiungi(MOTIVI.campitura({ contorno: e.contorno, buchi: e.buchi, spessore: e.spessore, inizio: e.inizio }), [1, 0, 0, 1, 0, 0], prefisso, 'campitura');
     }
   });
   return conf;
