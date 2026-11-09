@@ -4,7 +4,7 @@ import { cella, reticolo, parola, RUOLI } from './grammatica.js';
 import { CELLE } from './celle.js';
 
 const $ = (id) => document.getElementById(id);
-const COLORE = { centro: '#1c1b18', contenitore: '#8a867c', contenuto: '#b8412b', angoli: '#2b5fb8', lati: '#3b7d3a', corolla: '#9a5b1a' };
+const COLORE = { centro: '#1c1b18', contenitore: '#8a867c', contenuto: '#b8412b', angoli: '#2b5fb8', lati: '#3b7d3a', corolla: '#9a5b1a', fusto: '#6b3fa0' };
 
 function linea(ctx, pts, X, Y) {
   ctx.beginPath();

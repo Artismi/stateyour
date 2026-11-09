@@ -4,6 +4,7 @@
 import { velocitaApside, velocitaFuga, velocitaCircolare } from './motore.js';
 
 const LIM = [-400, -400, 400, 400];
+const normalizza = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 
 export const MOTIVI = {
   // una retta lunga l, centrata
@@ -106,6 +107,154 @@ export const MOTIVI = {
       ],
       regole: [],
     };
+  },
+
+  // ---------- geometria esatta: dai dati geometrici ai parametri fisici ----------
+
+  // arco di cerchio di raggio r, da un angolo a un altro (gradi, antiorario),
+  // centro nell'origine. La particella è in orbita circolare; si ferma quando
+  // attraversa il raggio all'angolo `a`, e solo nel verso giusto, così l'arco
+  // può superare i 180°.
+  arcoCerchio: ({ r = 30, da = 0, a = 90, GM = 20000 } = {}) => {
+    const v = velocitaCircolare(GM, r);
+    const d = da * Math.PI / 180, f = a * Math.PI / 180;
+    return {
+      G: 1, dt: Math.min(0.01, 0.2 * r / v), passi: 200000, limiti: LIM,
+      emettitori: [{ id: 'a', pos: [r * Math.cos(d), r * Math.sin(d)], angolo: da + 90, v }],
+      masse: [{ id: 'm', pos: [0, 0], M: GM }],
+      interfacce: [],
+      regole: [{ quando: { tipo: 'attraversa', a: [0, 0], b: [Math.cos(f), Math.sin(f)], verso: 'sinistra' }, fai: [{ tipo: 'ferma' }] }],
+    };
+  },
+
+  // ellisse di semiassi a e b, centrata nell'origine, chiusa esattamente
+  ellisse: ({ a = 40, b = 25, GM = 20000 } = {}) => {
+    const e = Math.sqrt(Math.max(0, 1 - (b * b) / (a * a))), c = a * e;
+    const v = velocitaApside(GM, a - c, a);
+    return {
+      G: 1, dt: Math.min(0.01, 0.1 * (a - c) / v), passi: 400000, limiti: LIM,
+      emettitori: [{ id: 'e', pos: [a, 0], angolo: 90, v }],
+      masse: [{ id: 'm', pos: [c, 0], M: GM }],
+      interfacce: [],
+      regole: [{ quando: { tipo: 'attraversa', a: [0, 0], b: [1, 0], verso: 'sinistra' }, fai: [{ tipo: 'ferma' }] }],
+    };
+  },
+
+  // poligono regolare di n lati (raggio circoscritto r) o stella {n/k}:
+  // una particella per lato, dal vertice i al vertice i+k, fermata esattamente
+  // sulla perpendicolare al vertice d'arrivo.
+  poligono: ({ n = 6, r = 30, k = 1, fase = 90 } = {}) => {
+    const vert = [];
+    for (let i = 0; i < n; i++) {
+      const t = (fase + 360 * i / n) * Math.PI / 180;
+      vert.push([r * Math.cos(t), r * Math.sin(t)]);
+    }
+    const emettitori = [];
+    for (let i = 0; i < n; i++) {
+      const A = vert[i], B = vert[(i + k) % n];
+      const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy);
+      emettitori.push({
+        id: `l${i}`, pos: A, dir: [dx / l, dy / l], v: 1, passi: Math.ceil(l) + 2,
+        // ogni particella ha la propria regola: si ferma sulla perpendicolare al lato nel vertice d'arrivo
+        regole: [{ quando: { tipo: 'attraversa', a: B, b: [B[0] - dy / l, B[1] + dx / l] }, fai: [{ tipo: 'ferma' }] }],
+      });
+    }
+    return { G: 1, dt: 1, passi: Math.ceil(2 * r) + 2, limiti: LIM, emettitori, masse: [], interfacce: [], regole: [] };
+  },
+
+  stella: ({ n = 8, k = 3, r = 30, fase = 90 } = {}) => MOTIVI.poligono({ n, r, k, fase }),
+
+  // segmento da A a B, esatto
+  tratto: ({ A = [-30, 0], B = [30, 0] } = {}) => {
+    const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy);
+    return {
+      G: 1, dt: 1, passi: Math.ceil(l) + 2, limiti: LIM,
+      emettitori: [{ id: 't', pos: A, dir: [dx / l, dy / l], v: 1 }],
+      masse: [], interfacce: [],
+      regole: [{ quando: { tipo: 'attraversa', a: B, b: [B[0] - dy / l, B[1] + dx / l] }, fai: [{ tipo: 'ferma' }] }],
+    };
+  },
+
+  // ---------- i campi: spirale, sinusoide ----------
+
+  // spirale logaritmica: campo magnetico + attrito. Parte dal punto a distanza
+  // r0 dal centro asintotico e si avvolge fino a distanza rMin, in `giri` giri circa.
+  // Il centro asintotico sta in (0,0): la partenza viene calcolata di conseguenza.
+  spirale: ({ r0 = 30, rMin = 2, giri = 2, omega = 1 } = {}) => {
+    // rapporto per giro e^{−2πγ/ω} = rMin/r0 in `giri` giri => γ = −ω ln(rMin/r0) / (2π giri)
+    const gamma = -omega * Math.log(rMin / r0) / (2 * Math.PI * giri);
+    const den = gamma * gamma + omega * omega;
+    // |z − z∞| = v0/√den: scelgo v0 perché la distanza iniziale sia r0
+    const v0 = r0 * Math.sqrt(den);
+    // z0 = z∞ + v0/(iω−γ) = v0·(−γ − iω)/den
+    const z0 = [v0 * (-gamma) / den, v0 * (-omega) / den];
+    const v = v0;
+    return {
+      G: 1, dt: Math.min(0.01, 0.05 * rMin / v), passi: 400000, limiti: LIM,
+      emettitori: [{ id: 's', pos: z0, angolo: 0, v }],
+      masse: [], interfacce: [],
+      campi: [{ id: 'B', tipo: 'magnetico', omega }, { id: 'A', tipo: 'attrito', gamma }],
+      regole: [{ quando: { tipo: 'distanza', da: [0, 0], r: rMin, verso: 'dentro' }, fai: [{ tipo: 'ferma' }] }],
+    };
+  },
+
+  // sinusoide: molla verso l'asse x, `periodi` periodi di lunghezza d'onda lambda e ampiezza A, centrata
+  sinusoide: ({ lambda = 40, A = 10, periodi = 2 } = {}) => {
+    const vx = 10, k = (2 * Math.PI * vx / lambda) ** 2, vy = A * Math.sqrt(k);
+    const x0 = -(periodi * lambda) / 2, x1 = -x0;
+    return {
+      G: 1, dt: Math.min(0.01, lambda / vx / 400), passi: 400000, limiti: LIM,
+      emettitori: [{ id: 'o', pos: [x0, 0], dir: [vx, vy], v: Math.hypot(vx, vy) }],
+      masse: [], interfacce: [],
+      campi: [{ id: 'K', tipo: 'molla', a: [0, 0], b: [1, 0], k }],
+      regole: [{ quando: { tipo: 'attraversa', a: [x1, 0], b: [x1, 1] }, fai: [{ tipo: 'ferma' }] }],
+    };
+  },
+
+  // ---------- gli specchi: spezzate e greche ----------
+
+  // spezzata per punti: a ogni vertice uno specchietto orientato in modo che la
+  // retta si pieghi verso il vertice successivo. La linea è una sola particella.
+  spezzata: ({ punti = [[-30, -10], [-10, 10], [10, -10], [30, 10]], lungo = 6 } = {}) => {
+    const interfacce = [];
+    for (let i = 1; i < punti.length - 1; i++) {
+      const P = punti[i];
+      const d = normalizza([P[0] - punti[i - 1][0], P[1] - punti[i - 1][1]]);
+      const d2 = normalizza([punti[i + 1][0] - P[0], punti[i + 1][1] - P[1]]);
+      // normale dello specchio: lungo d − d'; direzione dello specchio: la sua perpendicolare
+      const n = normalizza([d[0] - d2[0], d[1] - d2[1]]);
+      const s = [-n[1], n[0]];
+      interfacce.push({ id: `v${i}`, a: [P[0] - s[0] * lungo / 2, P[1] - s[1] * lungo / 2], b: [P[0] + s[0] * lungo / 2, P[1] + s[1] * lungo / 2], tipo: 'specchio' });
+    }
+    const A = punti[0], B = punti[punti.length - 1], U = punti[punti.length - 2];
+    const d = normalizza([B[0] - U[0], B[1] - U[1]]);
+    const d0 = normalizza([punti[1][0] - A[0], punti[1][1] - A[1]]);
+    // all'arrivo un assorbitore corto, perpendicolare all'ultimo tratto: locale,
+    // così una spezzata che torna indietro non si ferma prima del tempo
+    interfacce.push({ id: 'fine', a: [B[0] - d[1] * lungo / 2, B[1] + d[0] * lungo / 2], b: [B[0] + d[1] * lungo / 2, B[1] - d[0] * lungo / 2], tipo: 'assorbe' });
+    return {
+      G: 1, dt: 1, passi: 100000, limiti: LIM,
+      emettitori: [{ id: 'z', pos: A, dir: d0, v: 1 }],
+      masse: [], interfacce, regole: [],
+    };
+  },
+
+  // greca: la chiave greca classica come spezzata di specchi a 45°, un modulo largo `l`
+  greca: ({ l = 40, moduli = 1 } = {}) => {
+    const u = l / 5; // la chiave sta in una griglia 5×5
+    const base = [[0, 0], [4, 0], [4, 4], [1, 4], [1, 1], [3, 1], [3, 3], [2, 3], [2, 2]];
+    const punti = [];
+    for (let m = 0; m < moduli; m++) {
+      const off = m * 5 * u - (moduli * 5 * u) / 2;
+      // ogni modulo entra dal basso a sinistra; tra un modulo e l'altro si torna sulla base
+      const seq = m === 0 ? base : base.slice(1);
+      for (const [x, y] of seq) punti.push([off + x * u, y * u - 2 * u]);
+      if (m < moduli - 1) {
+        // uscita dal modulo: dal centro risalgo e riparto a destra sulla base
+        punti.push([off + 2 * u, -2 * u + 5 * u], [off + 5 * u, -2 * u + 5 * u], [off + 5 * u, -2 * u]);
+      }
+    }
+    return MOTIVI.spezzata({ punti, lungo: u * 0.9 });
   },
 
   // quadrato: quattro particelle, una per lato; il contenitore classico

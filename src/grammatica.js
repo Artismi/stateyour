@@ -119,13 +119,30 @@ export function cella(c, indiceContenuto = 0) {
       metti('lati', c.lati, M);
     }
   }
-  if (c.corolla) {
-    const co = c.corolla, n = co.n ?? 8, r = co.raggio ?? h * 0.7, fase = co.fase ?? 0;
+  const corolle = Array.isArray(c.corolla) ? c.corolla : c.corolla ? [c.corolla] : [];
+  for (const co of corolle) {
+    // n copie tra gli angoli `da` e `a` (cerchio intero se mancano): il ventaglio
+    // è una corolla su un arco. `scala` può essere [inizio, fine] e varia lungo l'arco.
+    const n = co.n ?? 8, r = co.raggio ?? h * 0.7;
+    const intero = co.da == null && co.a == null;
+    const da = co.da ?? (co.fase ?? 0), a = co.a ?? da + 360;
     for (let k = 0; k < n; k++) {
-      const a = fase + 360 * k / n;
+      const frazione = intero ? k / n : n > 1 ? k / (n - 1) : 0.5;
+      const ang = da + (a - da) * frazione;
+      const sc = Array.isArray(co.scala) ? co.scala[0] + (co.scala[1] - co.scala[0]) * frazione : (co.scala ?? 1);
       // `alterna` specchia una copia sì e una no: la corolla resta ciclica ma non simmetrica
-      const M = catena(T.ruota(a), T.trasla(r, 0), T.ruota(co.orienta ?? 0), co.alterna && k % 2 ? T.specchioY() : T.id());
+      const M = catena(T.ruota(ang), T.trasla(r, 0), T.ruota(co.orienta ?? 0), T.scala(sc), co.alterna && k % 2 ? T.specchioY() : T.id());
       metti('corolla', co.motivo, M);
+    }
+  }
+  if (c.fusto) {
+    // il candelabro: un asse verticale e coppie di elementi specchiati a varie altezze
+    const f = c.fusto;
+    if (f.asse !== false) metti('fusto', f.asse || { tratto: 'tratto', parametri: { A: [0, -h], B: [0, h] } }, T.id());
+    for (const e of f.elementi || []) {
+      const M = catena(T.trasla(e.x ?? 0, e.y ?? 0), T.ruota(e.rotazione ?? 0), T.scala(e.scala ?? 1));
+      metti('fusto', e.motivo, M);
+      if (f.specchia !== false && (e.x ?? 0) !== 0) metti('fusto', e.motivo, catena(T.specchioX(), M));
     }
   }
   return { lato: L, pezzi };
@@ -144,12 +161,24 @@ export const GRUPPI = {
   cm: (i) => (i % 2 ? T.specchioX() : T.id()),                   // con righe sfalsate
 };
 
+// reticolo esagonale: le celle stanno sui centri di un impaccamento di esagoni
+// di larghezza L (lato a lato); le righe sono sfalsate di L/2 e distano L·√3/2.
+// p3 e p6 ruotano le celle di 120° o 60° a seconda della posizione.
+export const GRUPPI_ESAGONALI = {
+  p1: () => T.id(),
+  p3: (i, j) => T.ruota(120 * (((i + 2 * j) % 3) + 3) % 3),
+  p6: (i, j) => T.ruota(60 * (((i + 2 * j) % 6) + 6) % 6),
+  p31m: (i, j) => catena(T.ruota(120 * (((i + 2 * j) % 3) + 3) % 3), j % 2 ? T.specchioX() : T.id()),
+};
+
 export function reticolo(r) {
   const c = r.cella, L = c.lato ?? 120;
   const colonne = r.colonne ?? 6, righe = r.righe ?? 4;
-  const gruppo = GRUPPI[r.gruppo || 'p1'] || GRUPPI.p1;
+  const esagonale = r.tipo === 'esagonale';
+  const gruppo = esagonale ? (GRUPPI_ESAGONALI[r.gruppo || 'p1'] || GRUPPI_ESAGONALI.p1) : (GRUPPI[r.gruppo || 'p1'] || GRUPPI.p1);
   const ritmo = r.ritmo || { sequenza: [0], lungo: 'riga' };
-  const sfalsa = r.sfalsa || r.gruppo === 'cm';
+  const sfalsa = esagonale || r.sfalsa || r.gruppo === 'cm';
+  const passoRiga = esagonale ? L * Math.sqrt(3) / 2 : L;
   const pezzi = [];
   for (let j = 0; j < righe; j++) {
     for (let i = 0; i < colonne; i++) {
@@ -158,12 +187,16 @@ export function reticolo(r) {
       const k = seq[idx % seq.length];
       const celle = cella(c, k);
       const dx = (sfalsa && j % 2 ? L / 2 : 0);
-      const dy = (r.gruppo === 'pg' && i % 2 ? L / 2 : 0);
-      const M = catena(T.trasla(i * L + L / 2 + dx, j * L + L / 2 + dy), gruppo(i, j));
+      const dy = (!esagonale && r.gruppo === 'pg' && i % 2 ? L / 2 : 0);
+      const M = catena(T.trasla(i * L + L / 2 + dx, j * passoRiga + L / 2 + dy), gruppo(i, j));
       for (const p of celle.pezzi) pezzi.push({ ...p, linee: trasforma(p.linee, M), i, j, k });
     }
   }
-  return { pezzi, larghezza: colonne * L + (sfalsa ? L / 2 : 0), altezza: righe * L + (r.gruppo === 'pg' ? L / 2 : 0) };
+  return {
+    pezzi,
+    larghezza: colonne * L + (sfalsa ? L / 2 : 0),
+    altezza: (righe - 1) * passoRiga + L + (!esagonale && r.gruppo === 'pg' ? L / 2 : 0),
+  };
 }
 
 // ---------- la parola: la cella e il reticolo riassunti in alfabeto
@@ -186,9 +219,14 @@ export function parola(r) {
   }
   if (c.angoli) parti.push(`angoli 4×${nomeMotivo(c.angoli)}`);
   if (c.lati) parti.push(`lati 4×${nomeMotivo(c.lati)}`);
-  if (c.corolla) parti.push(`corolla ${c.corolla.n ?? 8}×${nomeMotivo(c.corolla.motivo)} @${c.corolla.raggio ?? Math.round((c.lato ?? 120) * 0.35)}${c.corolla.fase ? ` φ${c.corolla.fase}°` : ''}${c.corolla.alterna ? ' alternata' : ''}`);
+  const corolle = Array.isArray(c.corolla) ? c.corolla : c.corolla ? [c.corolla] : [];
+  for (const co of corolle) {
+    const arco = co.da != null || co.a != null ? ` ${co.da ?? 0}°→${co.a ?? 360}°` : co.fase ? ` φ${co.fase}°` : '';
+    parti.push(`corolla ${co.n ?? 8}×${nomeMotivo(co.motivo)} @${co.raggio ?? Math.round((c.lato ?? 120) * 0.35)}${arco}${co.alterna ? ' alternata' : ''}`);
+  }
+  if (c.fusto) parti.push(`fusto ${(c.fusto.elementi || []).length} coppie {${(c.fusto.elementi || []).map((e) => nomeMotivo(e.motivo)).join(', ')}}`);
   const gruppo = r.gruppo || 'p1';
-  return `CELLA ${c.lato ?? 120} [ ${parti.join(' | ')} ]  ×  RETICOLO ${gruppo} ${r.colonne ?? 6}×${r.righe ?? 4}${r.sfalsa || gruppo === 'cm' ? ' sfalsato' : ''}`;
+  return `CELLA ${c.lato ?? 120} [ ${parti.join(' | ')} ]  ×  RETICOLO ${r.tipo === 'esagonale' ? 'esagonale ' : ''}${gruppo} ${r.colonne ?? 6}×${r.righe ?? 4}${r.sfalsa || gruppo === 'cm' ? ' sfalsato' : ''}`;
 }
 
-export const RUOLI = ['centro', 'contenitore', 'contenuto', 'angoli', 'lati', 'corolla'];
+export const RUOLI = ['centro', 'contenitore', 'contenuto', 'angoli', 'lati', 'corolla', 'fusto'];

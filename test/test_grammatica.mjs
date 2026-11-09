@@ -85,3 +85,35 @@ for (const [nome, r] of Object.entries(CELLE)) {
   console.log(`ok  ${nome.padEnd(18)} ${w}`);
 }
 console.log('test_grammatica: tutto ok');
+
+// ---- corolla ad arco, fusto, reticolo esagonale ----
+{
+  const c = { lato: 100, corolla: { n: 5, da: 0, a: 180, raggio: 40, motivo: { tratto: 'segmento' } } };
+  const pezzi = cella(c).pezzi.filter((p) => p.ruolo === 'corolla');
+  assert.equal(pezzi.length, 5);
+  // la prima copia è a 0°, l'ultima a 180°: baricentri in (40,0) e (−40,0)
+  const bar = (p) => { const pts = p.linee.flat(); return [pts.reduce((s, q) => s + q[0], 0) / pts.length, pts.reduce((s, q) => s + q[1], 0) / pts.length]; };
+  const b0 = bar(pezzi[0]), b4 = bar(pezzi[4]);
+  assert.ok(vicino(b0[0], 40) && vicino(b0[1], 0), `prima copia in ${b0}`);
+  assert.ok(vicino(b4[0], -40) && vicino(b4[1], 0), `ultima copia in ${b4}`);
+}
+{
+  const c = { lato: 100, fusto: { elementi: [{ motivo: { tratto: 'segmento' }, x: 20, y: 10 }, { motivo: { tratto: 'segmento' }, x: 0, y: 30 }] } };
+  const pezzi = cella(c).pezzi.filter((p) => p.ruolo === 'fusto');
+  // asse + coppia specchiata + elemento sull'asse (non raddoppiato) = 4
+  assert.equal(pezzi.length, 4);
+}
+{
+  const r = { tipo: 'esagonale', cella: { lato: 100, centro: { tratto: 'cerchio', parametri: { r: 5 } } }, colonne: 3, righe: 2, gruppo: 'p1' };
+  const res = reticolo(r);
+  assert.equal(res.pezzi.length, 6);
+  const centro = (p) => { const pts = p.linee.flat(); return [pts.reduce((s, q) => s + q[0], 0) / pts.length, pts.reduce((s, q) => s + q[1], 0) / pts.length]; };
+  const c00 = centro(res.pezzi.find((p) => p.i === 0 && p.j === 0)), c01 = centro(res.pezzi.find((p) => p.i === 0 && p.j === 1));
+  // la seconda riga è sfalsata di L/2 e dista L·√3/2
+  assert.ok(vicino(c01[0] - c00[0], 50) && vicino(c01[1] - c00[1], 100 * Math.sqrt(3) / 2), `righe esagonali in ${c00} ${c01}`);
+  // tre centri vicini formano un triangolo equilatero
+  const c10 = centro(res.pezzi.find((p) => p.i === 1 && p.j === 0));
+  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  assert.ok(vicino(d(c00, c10), 100) && vicino(d(c00, c01), 100) && vicino(d(c10, c01), 100), 'non equilatero');
+}
+console.log('test_grammatica (arco, fusto, esagonale): tutto ok');

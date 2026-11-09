@@ -2,19 +2,27 @@
 //
 // Una realtà 2D (il piano di esistenza) su cui si muovono particelle.
 // Ogni particella è un vettore: posizione, velocità (modulo + direzione), massa.
-// Da sola prosegue in linea retta. Può essere influenzata da due piani:
+// Da sola prosegue in linea retta. Può essere influenzata da tre piani:
 //
 //   1. il piano gravitazionale: masse puntiformi su una griglia 2D che
 //      curvano la traiettoria secondo la gravitazione (una massa attiva
 //      alla volta => conica esatta: cerchio, ellisse, parabola, iperbole);
 //   2. il piano delle interfacce: segmenti perpendicolari al piano di
 //      esistenza che separano due mezzi; la particella viene riflessa
-//      (specchio) o rifratta (legge di Snell), oppure assorbita.
+//      (specchio) o rifratta (legge di Snell), oppure assorbita;
+//   3. il piano dei campi: forze in più dentro una regione.
+//        magnetico (Lorentz): accelerazione perpendicolare alla velocità,
+//          da solo dà un cerchio esatto di raggio v/ω;
+//        attrito (Stokes): accelerazione contraria alla velocità;
+//        magnetico + attrito: la velocità ruota a ritmo costante e cala in
+//          modo esponenziale, la traiettoria è una spirale logaritmica esatta;
+//        molla (Hooke) verso una retta: richiamo proporzionale alla distanza
+//          dall'asse, il moto lungo l'asse resta uniforme: sinusoide esatta.
 //
 // Ogni elemento può essere acceso o spento. L'accensione avviene tramite
-// REGOLE a eventi geometrici (attraverso una linea, tocco un'interfaccia,
-// ogni N passi...). Un pattern è quindi codificato come PARTITURA:
-// elementi + stato iniziale + regole. Questo file non sa nulla di
+// REGOLE a eventi geometrici (attraverso una linea, raggiungo una distanza,
+// tocco un'interfaccia, ogni N passi...). Un pattern è quindi codificato come
+// PARTITURA: elementi + stato iniziale + regole. Questo file non sa nulla di
 // disegno o di browser: gira sia in Node sia nel browser.
 
 export const G_DEFAULT = 1;
@@ -32,8 +40,20 @@ export const V = {
   daAngolo: (gradi) => [Math.cos(gradi * Math.PI / 180), Math.sin(gradi * Math.PI / 180)],
 };
 
-// ---------- gravitazione ----------
-function accelerazione(pos, masse, acceso, G) {
+// ---------- i campi ----------
+// { id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett: [x0,y0,x1,y1], acceso, ... }
+// magnetico: omega   (accelerazione = omega · velocità ruotata di 90°; omega < 0 gira in senso orario)
+// attrito:   gamma   (accelerazione = −gamma · velocità)
+// molla:     a, b, k (accelerazione = −k · distanza con segno dalla retta a→b, lungo la normale)
+function dentroCampo(c, pos) {
+  if (c.rett) return pos[0] >= c.rett[0] && pos[1] >= c.rett[1] && pos[0] <= c.rett[2] && pos[1] <= c.rett[3];
+  if (c.raggio == null) return true;
+  const d = V.sub(pos, c.pos || [0, 0]);
+  return V.len(d) <= c.raggio;
+}
+
+// ---------- gravitazione + attrito ----------
+function accelerazione(pos, vel, masse, campi, acceso, G) {
   let ax = 0, ay = 0;
   for (const m of masse) {
     if (!acceso[m.id]) continue;
@@ -43,18 +63,34 @@ function accelerazione(pos, masse, acceso, G) {
     const k = G * m.M / (r2 * Math.sqrt(r2));
     ax += k * dx; ay += k * dy;
   }
+  for (const c of campi) {
+    if (!acceso[c.id] || !dentroCampo(c, pos)) continue;
+    if (c.tipo === 'attrito') {
+      const g = c.gamma ?? 0.1;
+      ax -= g * vel[0]; ay -= g * vel[1];
+    } else if (c.tipo === 'magnetico') {
+      const w = c.omega ?? 1;
+      ax += -w * vel[1]; ay += w * vel[0];
+    } else if (c.tipo === 'molla') {
+      const a = c.a || [0, 0], b = c.b || [1, 0];
+      const u = V.norm(V.sub(b, a)), n = V.perp(u);
+      const d = V.dot(V.sub(pos, a), n); // distanza con segno dall'asse
+      const k = c.k ?? 0.01;
+      ax -= k * d * n[0]; ay -= k * d * n[1];
+    }
+  }
   return [ax, ay];
 }
 
 // Un passo Runge-Kutta del quarto ordine sullo stato {pos, vel}.
-function rk4(s, dt, masse, acceso, G) {
-  const a1 = accelerazione(s.pos, masse, acceso, G);
+function rk4(s, dt, masse, campi, acceso, G) {
+  const a1 = accelerazione(s.pos, s.vel, masse, campi, acceso, G);
   const p2 = V.add(s.pos, V.mul(s.vel, dt / 2)), v2 = V.add(s.vel, V.mul(a1, dt / 2));
-  const a2 = accelerazione(p2, masse, acceso, G);
+  const a2 = accelerazione(p2, v2, masse, campi, acceso, G);
   const p3 = V.add(s.pos, V.mul(v2, dt / 2)), v3 = V.add(s.vel, V.mul(a2, dt / 2));
-  const a3 = accelerazione(p3, masse, acceso, G);
+  const a3 = accelerazione(p3, v3, masse, campi, acceso, G);
   const p4 = V.add(s.pos, V.mul(v3, dt)), v4 = V.add(s.vel, V.mul(a3, dt));
-  const a4 = accelerazione(p4, masse, acceso, G);
+  const a4 = accelerazione(p4, v4, masse, campi, acceso, G);
   const pos = [
     s.pos[0] + dt / 6 * (s.vel[0] + 2 * v2[0] + 2 * v3[0] + v4[0]),
     s.pos[1] + dt / 6 * (s.vel[1] + 2 * v2[1] + 2 * v3[1] + v4[1]),
@@ -109,25 +145,43 @@ export function rifrangi(vel, normale, nIn, nOut) {
 // ---------- la partitura ----------
 // {
 //   nome, G, dt, passi, limiti: [xmin, ymin, xmax, ymax],
-//   emettitori: [{ id, pos, angolo, v, m, passi, acceso }],
+//   emettitori: [{ id, pos, angolo | dir, v, m, passi, acceso, regole }],
 //   masse:      [{ id, pos, M, acceso }],
 //   interfacce: [{ id, a, b, tipo: 'specchio'|'rifrazione'|'assorbe', n1, n2, acceso }],
+//   campi:      [{ id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett, acceso, ... }],
 //   regole:     [{ quando: {...}, fai: [{...}] }]
 // }
 // quando: { tipo: 'attraversa', a, b, verso?: 'entrambi'|'sinistra'|'destra' }
+//         { tipo: 'distanza', da: [x, y], r, verso?: 'entrambi'|'dentro'|'fuori' }
 //         { tipo: 'tocca', id }           (un'interfaccia)
 //         { tipo: 'passi', n }            (al passo n)
 //         { tipo: 'ogni', passi: n }      (ogni n passi)
-// fai:    { tipo: 'accendi'|'spegni'|'inverti', id }   (id di massa, interfaccia o 'penna')
-//         { tipo: 'staffetta', lista: [id...] }        (spegne l'attuale, accende il prossimo)
+// fai:    { tipo: 'accendi'|'spegni'|'inverti', id }   (id di massa, interfaccia, campo o 'penna')
+//         { tipo: 'staffetta', lista: [id...], allaFine?: 'ferma' }
 //         { tipo: 'ferma' }
 
 export function statoIniziale(partitura) {
   const acceso = {};
   for (const m of partitura.masse || []) acceso[m.id] = m.acceso !== false;
   for (const i of partitura.interfacce || []) acceso[i.id] = i.acceso !== false;
+  for (const c of partitura.campi || []) acceso[c.id] = c.acceso !== false;
   return acceso;
 }
+
+// Gli eventi continui sono funzioni scalari della posizione: l'evento scatta
+// quando cambiano segno, e il punto esatto si trova per bisezione.
+function funzioneEvento(q) {
+  if (q.tipo === 'attraversa') return (pos) => lato(pos, q.a, q.b);
+  if (q.tipo === 'distanza') return (pos) => V.len(V.sub(pos, q.da)) - q.r;
+  return null;
+}
+function versoOk(q, dopo) {
+  const verso = q.verso || 'entrambi';
+  if (verso === 'entrambi') return true;
+  if (q.tipo === 'attraversa') return (verso === 'sinistra' && dopo > 0) || (verso === 'destra' && dopo < 0);
+  return (verso === 'fuori' && dopo > 0) || (verso === 'dentro' && dopo < 0);
+}
+const segno = (v) => (Math.abs(v) < 1e-7 ? 0 : Math.sign(v));
 
 function applica(azioni, p, traccia) {
   for (const az of azioni) {
@@ -163,7 +217,11 @@ export function simulaParticella(em, partitura) {
   const limiti = partitura.limiti || [-1e4, -1e4, 1e4, 1e4];
   const masse = partitura.masse || [];
   const interfacce = partitura.interfacce || [];
-  const regole = partitura.regole || [];
+  const campi = partitura.campi || [];
+  // le regole della partitura valgono per tutte le particelle; un emettitore
+  // può averne di proprie
+  const regole = [...(partitura.regole || []), ...(em.regole || [])];
+  const continue_ = regole.map((r) => funzioneEvento(r.quando));
 
   const dir = em.dir ? V.norm(em.dir) : V.daAngolo(em.angolo ?? 0);
   const p = {
@@ -171,7 +229,7 @@ export function simulaParticella(em, partitura) {
     m: em.m ?? 1,
     acceso: statoIniziale(partitura),
     staffette: {},
-    lati: regole.map((r) => (r.quando.tipo === 'attraversa' ? Math.sign(lato(em.pos, r.quando.a, r.quando.b)) : 0)),
+    segni: continue_.map((f) => (f ? segno(f(em.pos)) : 0)),
     penna: em.penna !== false,
     passo: 0,
     fine: null,
@@ -180,12 +238,19 @@ export function simulaParticella(em, partitura) {
   const traccia = { id: em.id, punti: [[p.s.pos[0], p.s.pos[1], p.penna]], eventi: [], fine: null };
 
   const dentro = (q) => q[0] >= limiti[0] && q[1] >= limiti[1] && q[0] <= limiti[2] && q[1] <= limiti[3];
+  const aggiornaSegni = (pos, forza) => {
+    continue_.forEach((f, k) => {
+      if (!f) return;
+      const s = segno(f(pos));
+      if (forza || s !== 0) p.segni[k] = s;
+    });
+  };
 
   while (p.passo < maxPassi && !p.fine) {
     p.passo++;
     const s0 = p.s;
-    let s1 = rk4(s0, dt, masse, p.acceso, G);
-    let saltaAttraversa = false;
+    let s1 = rk4(s0, dt, masse, campi, p.acceso, G);
+    let saltaContinui = false;
 
     // 1. interfacce: il tratto può toccarne più d'una nello stesso passo
     //    (vicino a un vertice): dopo ogni tocco il resto del passo prosegue
@@ -236,48 +301,33 @@ export function simulaParticella(em, partitura) {
     if (p.fine) break;
     if (colpi > 0) {
       s1 = a;
-      for (const [k, r] of regole.entries()) {
-        if (r.quando.tipo === 'attraversa') p.lati[k] = Math.sign(lato(s1.pos, r.quando.a, r.quando.b));
-      }
-      saltaAttraversa = true;
+      aggiornaSegni(s1.pos, true);
+      saltaContinui = true;
     }
 
-    // 2. attraversamenti di linee: bisezione fino al punto esatto
-    if (!saltaAttraversa) {
-      let fermata = null;
-      for (const [k, r] of regole.entries()) {
-        if (r.quando.tipo !== 'attraversa') continue;
-        const prima = p.lati[k];
-        const dopo = Math.sign(lato(s1.pos, r.quando.a, r.quando.b));
-        if (prima !== 0 && dopo !== 0 && prima !== dopo) {
-          const verso = r.quando.verso || 'entrambi';
-          const ok = verso === 'entrambi' || (verso === 'sinistra' && dopo > 0) || (verso === 'destra' && dopo < 0);
-          if (ok && (fermata === null)) fermata = { k, r };
-        }
-      }
-      if (fermata) {
-        const { k, r } = fermata;
+    // 2. eventi continui (attraversa, distanza): bisezione fino al punto esatto
+    if (!saltaContinui) {
+      let scatto = null;
+      continue_.forEach((f, k) => {
+        if (!f || scatto) return;
+        const prima = p.segni[k], dopo = segno(f(s1.pos));
+        if (prima !== 0 && dopo !== 0 && prima !== dopo && versoOk(regole[k].quando, dopo)) scatto = k;
+      });
+      if (scatto !== null) {
+        const f = continue_[scatto], prima = p.segni[scatto];
         let lo = 0, hi = dt, sHi = s1;
         for (let it = 0; it < 60 && hi - lo > 1e-12; it++) {
           const mid = (lo + hi) / 2;
-          const sMid = rk4(s0, mid, masse, p.acceso, G);
-          if (Math.sign(lato(sMid.pos, r.quando.a, r.quando.b)) === p.lati[k]) lo = mid; else { hi = mid; sHi = sMid; }
+          const sMid = rk4(s0, mid, masse, campi, p.acceso, G);
+          if (Math.sign(f(sMid.pos)) === prima) lo = mid; else { hi = mid; sHi = sMid; }
         }
         s1 = sHi;
         p.s = s1;
-        for (const [j, rr] of regole.entries()) {
-          if (rr.quando.tipo !== 'attraversa') continue;
-          const l = lato(s1.pos, rr.quando.a, rr.quando.b);
-          p.lati[j] = Math.abs(l) < 1e-7 ? 0 : Math.sign(l);
-        }
-        traccia.eventi.push({ passo: p.passo, pos: s1.pos.slice(), attraversa: k });
-        applica(r.fai, p, traccia);
+        aggiornaSegni(s1.pos, true);
+        traccia.eventi.push({ passo: p.passo, pos: s1.pos.slice(), attraversa: scatto });
+        applica(regole[scatto].fai, p, traccia);
       } else {
-        for (const [j, rr] of regole.entries()) {
-          if (rr.quando.tipo !== 'attraversa') continue;
-          const l = lato(s1.pos, rr.quando.a, rr.quando.b);
-          if (Math.abs(l) >= 1e-7) p.lati[j] = Math.sign(l);
-        }
+        aggiornaSegni(s1.pos, false);
       }
     }
 

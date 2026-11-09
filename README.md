@@ -15,6 +15,10 @@ altri piani, sovrapposti al primo:
 |---|---|---|
 | **gravitazionale** | masse puntiformi su una griglia 2D | la curva secondo la gravitazione; con una massa attiva alla volta la traiettoria è una conica esatta |
 | **delle interfacce** | segmenti perpendicolari al piano, che separano due mezzi | la riflette (specchio), la rifrange (legge di Snell) o la assorbe (interrompe) |
+| **dei campi** | regioni (cerchio o rettangolo) con una forza in più | **magnetico** (Lorentz): cerchio esatto di raggio v/ω; **attrito** (Stokes): rallenta; **magnetico + attrito**: spirale logaritmica esatta; **molla** (Hooke) verso una retta: sinusoide esatta |
+
+Nessuna curva è disegnata per formula: ogni tratto è la traiettoria di una
+particella sotto leggi fisiche. Il colore non fa parte del sistema.
 
 Le masse vivono nel loro piano e non si influenzano tra loro: agiscono solo
 sulla particella. Ogni elemento può essere **acceso o spento**, e la
@@ -39,8 +43,36 @@ regole. La stessa partitura, rieseguita, ridà sempre lo stesso pattern.
   raggiungibili in modo esatto.
 - **Linee interrotte**: la penna si alza e si abbassa a passi, o al tocco.
 
+- **Spirali**: campo magnetico più attrito. La velocità ruota a ritmo
+  costante ω e cala come e^(−γt), quindi la traiettoria si avvolge attorno a
+  un centro asintotico con r(θ) = r₀·e^(−(γ/ω)·θ). La voluta pompeiana e il
+  ricciolo della nuvola cinese. L'evento di **distanza** da un punto la ferma
+  esattamente al raggio voluto.
+- **Sinusoidi**: molla verso un asse. Lungo l'asse il moto è uniforme, di
+  traverso oscilla: lunghezza d'onda 2π·v/√k.
+- **Spezzate e greche**: una sola retta piegata da specchietti posti ai
+  vertici. Per girare da una direzione d a una d′ lo specchio ha la normale
+  lungo d − d′: la chiave greca è un raggio tra specchi a 45°.
+
 Il caos a più corpi compare solo se due o più masse sono accese **insieme**.
 Con una massa alla volta tutto è esatto e riproducibile.
+
+## Geometria esatta: dal disegno voluto ai parametri fisici
+
+I tratti dell'alfabeto si chiedono in termini geometrici e il sistema ricava
+da solo massa, velocità e regole di arresto:
+
+| tratto | parametri | come nasce |
+|---|---|---|
+| `arcoCerchio` | r, da, a | orbita circolare, fermata sul raggio all'angolo `a` con verso, così l'arco può superare i 180° |
+| `ellisse` | a, b | e = √(1 − b²/a²), massa nel fuoco, velocità all'apside, chiusa al rientro sull'asse |
+| `poligono`, `stella` | n, r, k | una particella per lato dal vertice i al vertice i+k, ognuna con la propria regola d'arresto |
+| `spirale` | r₀, rMin, giri | γ = −ω·ln(rMin/r₀)/(2π·giri), velocità iniziale e punto di partenza dal centro asintotico |
+| `sinusoide` | λ, A, periodi | k = (2π·v/λ)², velocità trasversale A·√k |
+| `spezzata`, `greca` | punti | uno specchio per vertice, assorbitore all'arrivo |
+
+I test (`test/test_campi.mjs`) confrontano la spirale con la soluzione
+analitica e controllano gli zeri e l'ampiezza della sinusoide.
 
 ## L'onda
 
@@ -113,10 +145,26 @@ e gli stessi ruoli bastano a ricomporlo:
 | **cella** | `CELLA L [ … ]` | la piastrella, un quadrato di lato L con ruoli |
 | ↳ `centro` | | il motivo centrale |
 | ↳ `angoli`, `lati` | | i riempitivi che quadrano il cerchio, ai quattro angoli o a metà dei lati |
-| ↳ `corolla` | `n×motivo @r φ` | n copie su un cerchio di raggio r: la cornice ciclica, simmetrica o no |
+| ↳ `corolla` | `n×motivo @r φ` oppure `@r da°→a°` | n copie su un cerchio di raggio r, o su un arco tra due angoli (il ventaglio): la cornice ciclica, simmetrica o no; la scala può variare lungo l'arco |
+| ↳ `fusto` | `n coppie {…}` | un asse verticale con coppie di elementi specchiati a varie altezze (il candelabro) |
 | ↳ `contenitore` | | ciò che si ripete uguale in ogni cella |
 | ↳ `contenuto` | `{A, B, C} ritmo ABAC` | ciò che varia, scelto dal ritmo lungo la riga, la colonna o la diagonale |
 | **reticolo** | `RETICOLO gruppo c×r` | la ripetizione: `p1` identica, `pm` specchiata a colonne alterne, `pmm` specchiata in entrambe le direzioni, `p2` ruotata di 180°, `p4` ruotata di 90°, `pg` slittata, `cm` a righe sfalsate |
+| | `RETICOLO esagonale p1\|p3\|p6\|p31m c×r` | le celle sui centri di un impaccamento di esagoni: righe sfalsate di L/2 a distanza L·√3/2 |
+
+Dalle tavole della *Grammar of Ornament* sono ricostruite in `src/celle.js`:
+il reticolo esagonale bizantino con stelle {6/2}, le stelle {8/3} in quadrato,
+il guilloche di cerchi, il ventaglio egizio, il candelabro pompeiano, la greca
+e la nuvola cinese.
+
+## Il seme
+
+Lo scopo è che un pattern qualunque si riduca a un **seme**: una codifica
+che, rieseguita, lo rigenera identico, e in cui ogni curva emerge da una legge
+e non da un disegno a mano. Il seme oggi è la coppia partitura + parola, cioè
+il JSON di `src/celle.js`: elementi, stato iniziale, regole, simmetrie,
+reticolo. È deterministico, leggibile e componibile. Ciò che manca perché sia
+davvero "qualunque pattern" è elencato sotto.
 
 Una piastrella intera si legge in una riga, la sua **parola**:
 
@@ -131,7 +179,7 @@ col suo colore), il reticolo e la parola. La codifica JSON è in `src/celle.js`.
 ## Struttura
 
 ```
-src/motore.js      il motore: vettori, RK4, eventi per bisezione, ottica
+src/motore.js      il motore: vettori, RK4, gravità, campi (Lorentz, Stokes, Hooke), ottica, eventi per bisezione
 src/partiture.js   i generatori: onda, coniche, camera di specchi, lastre, interruttore
 src/app.js         la pagina del motore: sceglie, simula, disegna, esporta il JSON
 index.html         la pagina del motore
@@ -159,13 +207,18 @@ rigenera col bottone.
 
 ## Prossimi passi
 
-- reticoli non quadrati: rettangolare, rombico, esagonale, e i restanti
-  gruppi di carta da parati (p3, p6, p4g, p31m…);
-- una cornice attorno al reticolo (il bordo del tappeto) e celle annidate:
-  una cella come tratto di un'altra;
-- un quarto piano di influenza (attrito o campo di velocità) per spirali e
-  sinusoidi esatte;
-- emissione di nuove particelle come azione di una regola (ramificazioni);
+- **intrecci**: il sopra/sotto dei nastri (guilloche, nodi) richiede che la
+  linea abbia uno spessore e che a ogni incrocio si decida chi passa sopra;
+- **archi tangenti a raggi diversi**: la staffetta tra masse già garantisce la
+  tangenza; serve il calcolo automatico della massa successiva lungo la
+  normale (le nuvole cinesi e i girali);
+- **celle annidate**: una cella come tratto di un'altra, e una cornice attorno
+  al reticolo (il bordo del tappeto);
+- i restanti gruppi di carta da parati (p4g, p3m1, p6m) e reticoli rombici;
+- emissione di nuove particelle come azione di una regola (le ramificazioni
+  vegetali del pompeiano);
 - propagazione analitica delle coniche al posto di RK4;
-- la lettura inversa: da un'immagine trovare il reticolo (autocorrelazione),
-  poi la simmetria della cella, poi i ruoli, fino alla parola.
+- **il seme compatto**: una sola stringa al posto del JSON;
+- **la lettura inversa**: da un'immagine trovare il reticolo
+  (autocorrelazione), poi la simmetria della cella, poi i ruoli, fino alla
+  parola.

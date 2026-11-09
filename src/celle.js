@@ -2,6 +2,103 @@
 // Ognuna è { cella, colonne, righe, gruppo, ritmo, sfalsa }.
 
 export const CELLE = {
+  // ---------- dalle tavole della Grammar of Ornament ----------
+
+  bizantino_esagoni: {
+    nome: 'bizantino: reticolo esagonale, esagono con stella {6/2} e cerchio',
+    cella: {
+      lato: 80,
+      contenitore: { tratto: 'poligono', parametri: { n: 6, r: 80 / Math.sqrt(3), fase: 30 } },
+      centro: { tratto: 'stella', parametri: { n: 6, k: 2, r: 30, fase: 90 } },
+      contenuto: [{ tratto: 'cerchio', parametri: { r: 13 } }, { tratto: 'poligono', parametri: { n: 3, r: 14, fase: 90 } }],
+    },
+    tipo: 'esagonale', colonne: 9, righe: 6, gruppo: 'p1',
+    ritmo: { sequenza: [0, 1], lungo: 'diagonale' },
+  },
+
+  bizantino_stelle: {
+    nome: 'bizantino: stella {8/3} in quadrato, ottagoni agli angoli, pmm',
+    cella: {
+      lato: 100,
+      contenitore: { tratto: 'quadrato', parametri: { l: 100 } },
+      centro: { tratto: 'stella', parametri: { n: 8, k: 3, r: 42, fase: 90 } },
+      angoli: { tratto: 'poligono', parametri: { n: 8, r: 14, fase: 22.5 }, versoCentro: false },
+      contenuto: [{ tratto: 'poligono', parametri: { n: 4, r: 14, fase: 45 } }],
+    },
+    colonne: 7, righe: 5, gruppo: 'pmm',
+  },
+
+  bizantino_intreccio: {
+    nome: 'bizantino: cerchi che si sovrappongono (il guilloche), cerchietto al centro',
+    cella: {
+      lato: 70,
+      centro: { tratto: 'cerchio', parametri: { r: 46 } },
+      contenuto: [{ tratto: 'cerchio', parametri: { r: 11 } }],
+    },
+    colonne: 10, righe: 6, gruppo: 'p1',
+  },
+
+  egizio_ventaglio: {
+    nome: 'egizio: ventaglio di piume su un arco, anelli concentrici, gambo',
+    cella: {
+      lato: 240,
+      corolla: [
+        { n: 15, da: 20, a: 160, raggio: 62, motivo: { tratto: 'ellisse', parametri: { a: 22, b: 5 } }, scala: [0.8, 0.8] },
+        { n: 15, da: 20, a: 160, raggio: 86, motivo: { tratto: 'ellisse', parametri: { a: 14, b: 3.5 } } },
+        { n: 3, da: 20, a: 160, raggio: 0, motivo: { tratto: 'arcoCerchio', parametri: { r: 40, da: 20, a: 160 } }, scala: [1, 1.2] },
+      ],
+      centro: { tratto: 'arcoCerchio', parametri: { r: 106, da: 20, a: 160 } },
+      fusto: {
+        asse: { tratto: 'tratto', parametri: { A: [0, -110], B: [0, 0] } },
+        elementi: [
+          { motivo: { tratto: 'arco', parametri: { r: 6, e: 0.5 } }, x: 10, y: -30, rotazione: 60 },
+          { motivo: { tratto: 'ellisse', parametri: { a: 10, b: 4 } }, x: 0, y: 8 },
+        ],
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
+  pompeiano_candelabro: {
+    nome: 'pompeiano: candelabro, asse con coppie di volute (spirali) specchiate',
+    cella: {
+      lato: 220,
+      fusto: {
+        elementi: [
+          { motivo: { tratto: 'spirale', parametri: { r0: 22, rMin: 2, giri: 2.5 } }, x: 24, y: -70, rotazione: 180 },
+          { motivo: { tratto: 'spirale', parametri: { r0: 16, rMin: 1.5, giri: 2 } }, x: 18, y: -20 },
+          { motivo: { tratto: 'spirale', parametri: { r0: 28, rMin: 2, giri: 2.5 } }, x: 30, y: 30, rotazione: 180 },
+          { motivo: { tratto: 'sinusoide', parametri: { lambda: 26, A: 5, periodi: 1 } }, x: 34, y: 62, rotazione: 90 },
+          { motivo: { tratto: 'ellisse', parametri: { a: 9, b: 3 } }, x: 0, y: 92 },
+          { motivo: { tratto: 'arco', parametri: { r: 5, e: 0.6 } }, x: 8, y: -95, rotazione: 120 },
+        ],
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
+  cinese_greca: {
+    nome: 'cinese: fregio a greca, specchi a 45° piegano una sola retta',
+    cella: {
+      lato: 40,
+      centro: { tratto: 'greca', parametri: { l: 40 } },
+    },
+    colonne: 12, righe: 1, gruppo: 'p1',
+  },
+
+  cinese_nuvola: {
+    nome: 'cinese: nuvola, coppia di spirali specchiate (D1) con cappello ad arco, pm',
+    cella: {
+      lato: 90,
+      centro: { tratto: 'spirale', parametri: { r0: 20, rMin: 2, giri: 2 }, simmetria: { tipo: 'D', n: 1, fase: 90 }, spostamento: [20, -10] },
+      lati: { tratto: 'arcoCerchio', parametri: { r: 18, da: 200, a: 340 }, versoCentro: false },
+      contenitore: { tratto: 'sinusoide', parametri: { lambda: 45, A: 6, periodi: 2 }, spostamento: [0, 36] },
+    },
+    colonne: 8, righe: 2, gruppo: 'pm',
+  },
+
+  // ---------- le prime piastrelle ----------
+
   rosone: {
     nome: 'rosone: centro D4, angoli che quadrano il cerchio, corolla',
     cella: {
