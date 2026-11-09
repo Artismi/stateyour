@@ -3,6 +3,7 @@
 // da qui, li moltiplica con le simmetrie e li dispone nelle celle.
 import { velocitaApside, velocitaFuga, velocitaCircolare } from './motore.js';
 import { catena } from './catena.js';
+import { blocchiOnda } from './partiture.js';
 
 const LIM = [-400, -400, 400, 400];
 const normalizza = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
@@ -63,18 +64,14 @@ export const MOTIVI = {
     };
   },
 
-  // onda: n mezze ellissi a staffetta, centrata
+  // onda: n mezze ellissi, centrata; ogni massa agisce nel suo blocco
   onda: ({ L = 30, f = 10, n = 2, GM = 5000 } = {}) => {
     const x0 = -(n * L) / 2;
-    const masse = [];
-    for (let i = 0; i < n; i++) masse.push({ id: `m${i}`, pos: [x0 + i * L + (i % 2 ? L - f : f), 0], M: GM, acceso: i === 0 });
+    const { blocchi } = blocchiOnda({ L, f, n, GM, x0, y0: 0, fine: true });
     return {
       G: 1, dt: 0.005, passi: 60000, limiti: LIM,
       emettitori: [{ id: 'o', pos: [x0, 0], angolo: 90, v: velocitaApside(GM, f, L / 2) }],
-      masse, interfacce: [],
-      regole: [
-        { quando: { tipo: 'attraversa', a: [x0, 0], b: [x0 + 1, 0] }, fai: [{ tipo: 'staffetta', lista: masse.map((m) => m.id), allaFine: 'ferma' }] },
-      ],
+      blocchi, masse: [], interfacce: [], regole: [],
     };
   },
 

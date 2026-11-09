@@ -64,9 +64,9 @@ function misura(tr, ancoraggi) {
   const { mancati, svoltaMax } = misura(tr, punti);
   mancati.forEach((m, i) => assert.ok(m < 1e-4, `ancoraggio ${i} mancato di ${m}`));
   assert.ok(svoltaMax < 0.02, `angolo nella linea: ${svoltaMax} rad`);
-  const regola = p.emettitori[0].regole.find((r) => r.quando.tipo === 'distanza');
+  const fine = p.blocchi.find((b) => b.id === 'c:fine');
   const u = tr.punti[tr.punti.length - 1];
-  assert.ok(Math.abs(dist(u, regola.quando.da) - 1.5) < 1e-6, `voluta fermata a ${dist(u, regola.quando.da)}`);
+  assert.ok(Math.abs(dist(u, fine.regione.centro) - 1.5) < 1e-6, `voluta fermata a ${dist(u, fine.regione.centro)}`);
   console.log(`ok  voluta: raccordo continuo, fermata a rMin = 1.5 dal centro asintotico`);
 }
 
@@ -107,4 +107,40 @@ function misura(tr, ancoraggi) {
   assert.ok(Math.abs(Math.atan2(Math.sin(t1 - t0), Math.cos(t1 - t0))) < 0.02, 'si chiude con un angolo');
   console.log('ok  chiusa: si richiude tangente');
 }
+
+// 6. è uno stato: nessuna regola, nessuna azione; solo blocchi e sorgenti
+{
+  const p = catena({ punti: [[0, 0], [40, 10], [80, 0]], v: 10, voluta: { giri: 1.5, rMin: 1 }, rami: [{ da: 1, catena: { punti: [[50, 30], [40, 40]], voluta: { giri: 1, rMin: 1 } } }] });
+  assert.equal(p.regole.length, 0);
+  for (const e of p.emettitori) assert.ok(!e.regole || e.regole.length === 0, 'una sorgente con regole');
+  for (const b of p.blocchi) assert.ok(b.regione && b.legge && b.piano, 'blocco incompleto');
+  console.log(`ok  stato: ${p.blocchi.length} blocchi, ${p.emettitori.length} sorgenti, nessuna regola`);
+}
+
+// 7. il tempo separa: una linea che ripassa per lo stesso luogo non confonde i blocchi
+{
+  const punti = [[0, 0], [30, 20], [45, 0], [30, -16], [12, 0], [20, 22], [50, 30]];
+  const p = catena({ punti, v: 10 });
+  const [tr] = simula(p);
+  const { mancati, svoltaMax } = misura(tr, punti);
+  mancati.forEach((m, i) => assert.ok(m < 1e-4, `ancoraggio ${i} mancato di ${m}`));
+  assert.ok(svoltaMax < 0.02, `angolo nella linea: ${svoltaMax}`);
+  // la linea si incrocia: due tratti distanti nel tempo passano vicini nello spazio
+  const pts = tr.punti;
+  let incrocio = false;
+  for (let i = 0; i < pts.length && !incrocio; i += 5) for (let j = i + 200; j < pts.length; j += 5) if (dist(pts[i], pts[j]) < 1) { incrocio = true; break; }
+  assert.ok(incrocio, 'la prova non si incrocia');
+  console.log('ok  tempo: la linea si incrocia e ogni tratto sente solo il proprio blocco');
+}
 console.log('test_catena: tutto ok');
+
+// 8. una linea tutta dritta si ferma esattamente nel suo punto d'arrivo
+{
+  const punti = [[0, 0], [0, 40], [0, 90]];
+  const p = catena({ punti, tangenti: [[0, 1], [0, 1], [0, 1]], v: 30 });
+  const [tr] = simula(p);
+  assert.equal(tr.fine, 'fermata');
+  const u = tr.punti[tr.punti.length - 1];
+  assert.ok(dist(u, [0, 90]) < 1e-6, `si ferma in ${u}`);
+  console.log('ok  dritta: si ferma esattamente all\'ultimo ancoraggio');
+}

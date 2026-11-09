@@ -41,12 +41,15 @@
 <body>
 <header>
   <h1>stateyour</h1>
-  <span>una particella, un piano di masse, un piano di specchi: le regole accendono e spengono, la linea disegna il pattern</span>
+  <span>uno stato di blocchi di spaziotempo, ognuno con la sua legge: la linea è il percorso della particella attraverso lo stato</span>
   <a href="./piastrelle.html" style="color:var(--grigio);margin-left:auto">le piastrelle →</a>
 </header>
 <main>
   <section>
     <div class="quadro"><canvas id="tela" width="1000" height="600"></canvas></div>
+    <div class="legenda" id="riga-tempo" style="display:none">
+      <label style="flex:1">tempo <output id="otempo"></output><input type="range" id="tempo" min="0" max="1" step="0.01" value="1" style="width:100%"></label>
+    </div>
     <div class="legenda">
       <span><i class="e"></i>emettitore</span>
       <span><i class="m"></i>massa accesa all'inizio</span>
@@ -55,6 +58,9 @@
       <span><i class="r"></i>interfaccia di rifrazione</span>
       <span><i class="a"></i>assorbe</span>
       <span><i></i>traiettoria</span>
+      <span><i style="background:rgba(184,65,43,.35);height:8px"></i>blocco con gravità</span>
+      <span><i style="background:rgba(43,95,184,.35);height:8px"></i>blocco magnetico + attrito</span>
+      <span><i style="background:rgba(60,60,60,.35);height:8px"></i>blocco che ferma</span>
     </div>
   </section>
   <aside>

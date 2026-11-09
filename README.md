@@ -21,13 +21,46 @@ Nessuna curva è disegnata per formula: ogni tratto è la traiettoria di una
 particella sotto leggi fisiche. Il colore non fa parte del sistema.
 
 Le masse vivono nel loro piano e non si influenzano tra loro: agiscono solo
-sulla particella. Ogni elemento può essere **acceso o spento**, e la
-particella stessa ha una **penna** che si può alzare. Le accensioni avvengono
-tramite **regole a eventi geometrici**: la particella attraversa una linea,
-tocca un'interfaccia, compie N passi.
+sulla particella.
 
-Un pattern è quindi codificato come **partitura**: elementi, stato iniziale,
-regole. La stessa partitura, rieseguita, ridà sempre lo stesso pattern.
+## Lo stato: blocchi di spaziotempo
+
+Un pattern non è una sequenza di comandi ma la **descrizione di uno stato**.
+Lo stato è un insieme di **blocchi**, e ogni blocco è una regione di spazio
+per un intervallo di tempo, con la sua legge fisica:
+
+```json
+{ "piano": "c", "regione": { "tipo": "settore", "centro": [12, -40], "r": [9, 15], "da": 1.2, "ampiezza": 0.9 },
+  "tempo": [3.1, 4.6], "legge": { "tipo": "gravita", "pos": [12, -40], "M": 1200 } }
+```
+
+In ogni istante la particella sente le leggi dei blocchi che contengono la
+sua posizione e il suo tempo, nel suo **piano di esistenza**. Nessuno accende
+o spegne niente: quando la particella passa da un blocco al successivo, il
+punto esatto del passaggio si trova per bisezione, e la legge cambia perché
+è cambiato il luogo. La linea è la linea d'universo della particella
+attraverso lo stato.
+
+- **Regioni**: cerchio, settore d'anello, semipiano, poligono, tutto il piano.
+- **Leggi**: gravità di una massa, campo magnetico, attrito, molla, ferma, oppure
+  più leggi insieme.
+- **Tempo**: un blocco può esistere solo in un intervallo. Due tratti della
+  stessa linea che passano per lo stesso luogo in tempi diversi sentono
+  ognuno il proprio blocco.
+- **Piani di esistenza**: ogni linea vive nel suo piano, e i blocchi di un
+  piano agiscono solo sulle particelle di quel piano. Uno stelo e il suo ramo
+  possono partire dallo stesso punto senza disturbarsi.
+- **Sorgenti**: le particelle nascono in un punto e in un istante, con una
+  direzione e una velocità. Un ramo è una sorgente posta nel punto e
+  nell'istante in cui la linea madre passa per il suo ancoraggio.
+
+La pagina del motore disegna i blocchi e ha un **cursore del tempo**: mostra
+quali blocchi esistono in quell'istante e dove si trova la particella.
+
+Restano, per i primi esempi, gli elementi accendibili (masse, interfacce,
+campi), la **penna** che si può alzare e le **regole a eventi** (attraversa,
+distanza, tocca, ogni N passi) con le loro azioni. Gli specchi e le lastre
+di rifrazione sono già stato: superfici fisse nello spazio.
 
 ## Cosa si può disegnare
 
@@ -37,8 +70,8 @@ regole. La stessa partitura, rieseguita, ridà sempre lo stesso pattern.
   intero (gruppi di fregio e di carta da parati).
 - **Coniche**: una massa, velocità diverse all'emissione: cerchio, ellisse,
   parabola (velocità di fuga), iperbole.
-- **Spline di coniche**: accendendo le masse a staffetta, una alla volta, la
-  linea è una catena di archi di conica con tangente continua. Un arco di
+- **Spline di coniche**: con una massa per blocco, la linea è una catena di
+  archi di conica con tangente continua. Un arco di
   parabola è una Bézier quadratica: i contorni dei font TrueType sono
   raggiungibili in modo esatto.
 - **Linee interrotte**: la penna si alza e si abbassa a passi, o al tocco.
@@ -69,24 +102,30 @@ passare, e se si vuole la tangente in ognuno, e il compilatore
   circolare attorno a una massa posta sulla normale a distanza r, con
   M = v²·r/G. Così la velocità resta costante in modulo e la direzione è
   continua a ogni giunzione.
-- **Fasi.** A ogni fine arco il raggio che passa per il punto d'arrivo,
-  attraversato nel verso giusto, spegne la massa e accende la successiva.
-  Ogni regola vale solo nella sua fase.
+- **Blocchi.** Ogni arco è un blocco: una fascia ad anello attorno al suo
+  centro, tra il raggio che passa per il punto di partenza e quello che passa
+  per il punto d'arrivo, valida nell'intervallo di tempo in cui la linea la
+  percorre più un margine. Due archi consecutivi hanno i centri sulla stessa
+  normale, quindi i loro blocchi confinano lungo quella retta: il passaggio
+  avviene esattamente nel punto di giunzione.
 - **Tangenti automatiche.** Dove non sono date, la tangente in un punto
   interno è la direzione tra il precedente e il successivo.
-- **Voluta.** In fondo si spegne la gravità e si accende un campo magnetico
-  con la stessa curvatura dell'ultimo arco, più un attrito. La spirale
+- **Voluta.** In fondo c'è un disco attorno al centro asintotico della
+  spirale con un campo magnetico della stessa curvatura dell'ultimo arco, più
+  un attrito, e un disco più piccolo che ferma. La spirale
   logaritmica parte senza salti né di direzione né di curvatura, e si ferma
   esattamente a distanza rMin dal suo centro asintotico, calcolato in forma
   chiusa.
-- **Rami.** A un ancoraggio la particella emette una particella figlia con la
-  propria catena e le proprie masse: lo stelo si ramifica e ogni ramo finisce
-  nella sua voluta.
+- **Rami.** Un ramo è una sorgente nel punto e nell'istante in cui lo stelo
+  passa per l'ancoraggio, con i propri blocchi nel proprio piano di
+  esistenza: lo stelo si ramifica e ogni ramo finisce nella sua voluta.
 - **Chiusa.** La linea torna al punto di partenza con la stessa tangente.
 
 Il test `test/test_catena.mjs` verifica che la linea passi per ogni
 ancoraggio con uno scarto sotto 1e-4, che non svolti mai più di 0,02 radianti
-tra due passi, che la voluta si fermi a rMin, che i rami partano dal loro
+tra due passi, che la descrizione non contenga nessuna regola, che una linea
+che si incrocia non confonda i propri blocchi, che la voluta si fermi a rMin,
+che i rami partano dal loro
 ancoraggio.
 
 ```json
@@ -120,8 +159,9 @@ analitica e controllano gli zeri e l'ampiezza della sinusoide.
 
 ## L'onda
 
-Masse in fila sulla riga `y = y0`, accese a staffetta quando la particella
-attraversa la riga. La particella attraversa la riga in un apside, cioè con la
+Masse in fila sulla riga `y = y0`. Ogni massa agisce solo nel suo blocco: il
+rettangolo sopra (o sotto) la riga tra un attraversamento e il successivo. La
+particella passa da un blocco all'altro quando attraversa la riga. La particella attraversa la riga in un apside, cioè con la
 velocità perpendicolare alla riga, quindi per la massa successiva è di nuovo in
 un apside: parte una nuova mezza ellisse dall'altro lato, con tangente continua.
 
@@ -148,7 +188,7 @@ test `test/test_onda.mjs` verifica che gli attraversamenti cadano in
 `x0 + i·L`, che l'ampiezza sia `b` entro l'1 %, e che senza il rapporto delle
 masse l'onda si rompa.
 
-## La codifica
+## La codifica con regole (i primi esempi)
 
 ```json
 {
@@ -205,8 +245,8 @@ e la nuvola cinese.
 
 Lo scopo è che un pattern qualunque si riduca a un **seme**: una codifica
 che, rieseguita, lo rigenera identico, e in cui ogni curva emerge da una legge
-e non da un disegno a mano. Il seme oggi è la coppia partitura + parola, cioè
-il JSON di `src/celle.js`: elementi, stato iniziale, regole, simmetrie,
+e non da un disegno a mano. Il seme oggi è la coppia stato + parola: i blocchi
+di spaziotempo con le sorgenti, e il JSON di `src/celle.js` con simmetrie e
 reticolo. È deterministico, leggibile e componibile. Ciò che manca perché sia
 davvero "qualunque pattern" è elencato sotto.
 
@@ -223,12 +263,12 @@ col suo colore), il reticolo e la parola. La codifica JSON è in `src/celle.js`.
 ## Struttura
 
 ```
-src/motore.js      il motore: vettori, RK4, gravità, campi (Lorentz, Stokes, Hooke), ottica, eventi per bisezione
+src/motore.js      il motore: blocchi di spaziotempo, vettori, RK4, gravità, campi (Lorentz, Stokes, Hooke), ottica, passaggi per bisezione
 src/partiture.js   i generatori: onda, coniche, camera di specchi, lastre, interruttore
 src/app.js         la pagina del motore: sceglie, simula, disegna, esporta il JSON
 index.html         la pagina del motore
 src/motivi.js      i tratti dell'alfabeto, ognuno una partitura del motore
-src/catena.js      la catena: ancoraggi → biarchi → masse e fasi, volute, rami
+src/catena.js      la catena: ancoraggi → biarchi → blocchi di spaziotempo, volute, rami
 src/grammatica.js  motivo (C_n, D_n), cella (ruoli), reticolo (gruppi), parola
 src/celle.js       le piastrelle di esempio
 src/piastrelle.js  la pagina delle piastrelle
@@ -246,7 +286,7 @@ npm test
 npm start
 ```
 
-poi apri `http://localhost:8000`. I cursori dell'onda mostrano in diretta le
+poi apri `http://localhost:8000`. Il cursore del tempo scorre lo stato. I cursori dell'onda mostrano in diretta le
 formule e rigenerano la partitura; il JSON nel pannello è modificabile e si
 rigenera col bottone.
 
@@ -262,6 +302,9 @@ rigenera col bottone.
   ottenute con un campo magnetico che cresce lungo il percorso;
 - propagazione analitica delle coniche al posto di RK4;
 - **il seme compatto**: una sola stringa al posto del JSON;
+- portare allo stato anche gli esempi che usano ancora le regole (il
+  tratteggio della penna, lo specchio che accende la massa, le staffette dei
+  motivi di base);
 - **la lettura inversa**: da un'immagine trovare il reticolo
   (autocorrelazione), poi la simmetria della cella, poi i ruoli, fino alla
   parola.

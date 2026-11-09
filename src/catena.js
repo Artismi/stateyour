@@ -9,19 +9,20 @@
 //     attorno a una massa posta sulla normale, a distanza r, con
 //     M = v²·r / G: la velocità resta la stessa in modulo su tutta la linea,
 //     la direzione è continua a ogni giunzione (continuità G1);
-//   - a ogni fine arco un evento geometrico (il raggio che passa per il
-//     punto d'arrivo, attraversato nel verso giusto) spegne la massa e
-//     accende la successiva: una staffetta per fasi;
+//   - ogni arco è un BLOCCO DI SPAZIOTEMPO: una fascia ad anello attorno al
+//     suo centro, valida nell'intervallo di tempo in cui la linea la percorre,
+//     con dentro la gravità della sua massa. Due blocchi consecutivi confinano
+//     lungo la normale comune: lì la particella passa dall'uno all'altro;
 //   - in fondo, se richiesta, una VOLUTA: si spegne la gravità e si accende
 //     un campo magnetico con la stessa curvatura dell'ultimo arco (continuità
-//     anche della curvatura, G2) più un attrito. La particella si avvolge in
-//     una spirale logaritmica e si ferma quando arriva a distanza rMin dal
-//     centro asintotico, calcolato in forma chiusa;
-//   - RAMI: a un ancoraggio la particella emette una particella figlia che
-//     segue la propria catena, con le proprie masse.
+//     anche della curvatura, G2) più un attrito: è un disco attorno al centro
+//     asintotico della spirale, calcolato in forma chiusa. Un disco più
+//     piccolo, di raggio rMin, ferma la particella;
+//   - RAMI: una sorgente nel punto e nell'istante in cui la linea madre passa
+//     per l'ancoraggio; il ramo vive nel proprio piano di esistenza.
 //
-// Il risultato è una partitura del motore: nessuna curva è disegnata, tutte
-// sono traiettorie.
+// Il risultato è uno STATO: nessuna azione, nessuna fase. Nessuna curva è
+// disegnata, tutte sono traiettorie attraverso i blocchi.
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
@@ -106,124 +107,117 @@ function rapportoVoluta(R, rMin, giri) {
   return (lo + hi) / 2;
 }
 
-// Compila una catena in una lista di archi + masse + regole a fasi.
-// opzioni: { punti, tangenti?, chiusa?, voluta?: { giri, rMin, verso?: 'sinistra'|'destra', R? }, rami?: [{ da, catena }] }
-function compila(c, prefisso, v, G) {
+// Compila una catena in BLOCCHI DI SPAZIOTEMPO, senza regole né azioni.
+// Ogni arco curvo è un blocco: una fascia ad anello attorno al suo centro,
+// tra il raggio che passa per il punto di partenza e quello che passa per il
+// punto d'arrivo, valida nell'intervallo di tempo in cui la particella lo
+// percorre (più un margine). Dentro c'è la gravità della sua massa.
+// Due archi consecutivi hanno i centri sulla stessa normale: i loro blocchi
+// confinano lungo quella retta, e il passaggio avviene esattamente lì.
+// Il tempo separa i tratti della linea che passano per lo stesso luogo.
+function compila(c, piano, v, G, t0) {
   const punti = c.punti.slice();
   if (c.chiusa) punti.push(punti[0]);
   const tang = tangentiAuto(c.chiusa ? c.punti : punti, !!c.chiusa, c.tangenti || []);
   if (c.chiusa) tang.push(tang[0]);
 
-  const archi = [], fineAncoraggio = []; // fineAncoraggio[i] = indice dell'arco che arriva al punto i
+  const archi = [], tempoAncoraggio = [t0];
+  let t = t0;
   for (let i = 0; i < punti.length - 1; i++) {
-    const [a1, a2] = biarco(punti[i], tang[i], punti[i + 1], tang[i + 1]);
-    for (const a of [a1, a2]) if (a.lunghezza > 1e-9) archi.push(a);
-    fineAncoraggio[i + 1] = archi.length - 1;
+    for (const a of biarco(punti[i], tang[i], punti[i + 1], tang[i + 1])) {
+      if (a.lunghezza <= 1e-9) continue;
+      a.t0 = t; t += a.lunghezza / v; a.t1 = t;
+      archi.push(a);
+    }
+    tempoAncoraggio[i + 1] = t;
   }
 
-  const masse = [], regole = [], campi = [];
-  const ids = archi.map((a, k) => (a.dritto ? null : `${prefisso}m${k}`));
-  archi.forEach((a, k) => { if (!a.dritto) masse.push({ id: ids[k], pos: a.centro, M: v * v * Math.abs(a.r) / G, acceso: false }); });
-
-  let rMinCurv = Infinity, lunghezza = 0;
-  for (const a of archi) { if (!a.dritto) rMinCurv = Math.min(rMinCurv, Math.abs(a.r)); lunghezza += a.lunghezza; }
-
-  // gli eventi: per ogni arco la linea che passa per il punto d'arrivo
+  const blocchi = [];
+  let rMinCurv = Infinity;
+  const durata = (k) => (archi[k] ? archi[k].t1 - archi[k].t0 : Infinity);
   archi.forEach((a, k) => {
-    let la, lb;
-    if (a.dritto) { la = a.q; lb = add(a.q, sinistra(a.tq)); }
-    else { la = a.centro; lb = a.q; }
-    const verso = cross(sub(lb, la), a.tq) > 0 ? 'sinistra' : 'destra';
-    const fai = [];
-    if (ids[k]) fai.push({ tipo: 'spegni', id: ids[k] });
-    if (k + 1 < archi.length && ids[k + 1]) fai.push({ tipo: 'accendi', id: ids[k + 1] });
-    regole.push({ fase: k, quando: { tipo: 'attraversa', a: la, b: lb, verso }, fai });
+    if (a.dritto) return; // tra due blocchi curvi la particella va dritta da sola
+    const R = Math.abs(a.r);
+    rMinCurv = Math.min(rMinCurv, R);
+    const margine = 0.25 * Math.min(durata(k - 1), durata(k), durata(k + 1));
+    const w = Math.min(0.5 * R, c.spessore ?? 3);
+    const aP = Math.atan2(a.p[1] - a.centro[1], a.p[0] - a.centro[0]);
+    const aQ = Math.atan2(a.q[1] - a.centro[1], a.q[0] - a.centro[0]);
+    blocchi.push({
+      id: `${piano}:${k}`, piano,
+      regione: { tipo: 'settore', centro: a.centro, r: [R - w, R + w], da: a.r > 0 ? aP : aQ, ampiezza: a.ampiezza },
+      tempo: [a.t0 - margine, a.t1 + margine],
+      legge: { tipo: 'gravita', pos: a.centro, M: v * v * R / G },
+    });
   });
 
   const ultimo = archi[archi.length - 1];
-  const fineFai = regole[regole.length - 1].fai;
-  let passiVoluta = 0, omega = 0;
+  const E = ultimo.q, tE = ultimo.t1, tq = ultimo.tq;
+  const margineFine = 0.25 * durata(archi.length - 1);
+  let tFine = tE, omega = 0;
   if (c.voluta) {
     const vo = c.voluta;
     const R = vo.R ?? (ultimo.dritto ? (vo.r0 ?? 10) : Math.abs(ultimo.r));
     const segnoArco = ultimo.dritto ? 1 : Math.sign(ultimo.r);
     const segnoV = vo.verso === 'sinistra' ? 1 : vo.verso === 'destra' ? -1 : segnoArco;
     omega = segnoV * v / R;
-    const q = rapportoVoluta(R, vo.rMin ?? R / 10, vo.giri ?? 2);
+    const rMin = vo.rMin ?? R / 10;
+    const q = rapportoVoluta(R, rMin, vo.giri ?? 2);
     const gamma = q * Math.abs(omega);
-    // centro asintotico: z∞ = z0 − v0/(iω − γ)
-    const E = ultimo.q, t = ultimo.tq;
-    const vx = v * t[0], vy = v * t[1], den = gamma * gamma + omega * omega;
+    // centro asintotico: z∞ = z0 − v0/(iω − γ); distanza iniziale r0 = v/√(ω²+γ²)
+    const vx = v * tq[0], vy = v * tq[1], den = gamma * gamma + omega * omega;
     const zinf = [E[0] - (-gamma * vx + omega * vy) / den, E[1] - (-omega * vx - gamma * vy) / den];
-    campi.push({ id: `${prefisso}B`, tipo: 'magnetico', omega, acceso: false });
-    campi.push({ id: `${prefisso}A`, tipo: 'attrito', gamma, acceso: false });
-    fineFai.push({ tipo: 'accendi', id: `${prefisso}B` }, { tipo: 'accendi', id: `${prefisso}A` }, { tipo: 'avanza' });
-    regole.push({ fase: archi.length, quando: { tipo: 'distanza', da: zinf, r: vo.rMin ?? R / 10, verso: 'dentro' }, fai: [{ tipo: 'ferma' }] });
+    const r0 = v / Math.sqrt(den);
+    blocchi.push({
+      id: `${piano}:voluta`, piano,
+      regione: { tipo: 'cerchio', centro: zinf, r: r0 * (1 + 1e-7) + 1e-7 },
+      tempo: [tE - margineFine, null],
+      legge: [{ tipo: 'magnetico', omega }, { tipo: 'attrito', gamma }],
+    });
+    blocchi.push({ id: `${piano}:fine`, piano, regione: { tipo: 'cerchio', centro: zinf, r: rMin }, tempo: [tE, null], legge: { tipo: 'ferma' } });
     rMinCurv = Math.min(rMinCurv, R);
-    passiVoluta = 2 * Math.PI * (vo.giri ?? 2) * 1.3;
+    // il tempo per raggiungere rMin: la distanza dal centro cala come e^(−γt)
+    tFine = tE + (gamma > 0 ? Math.log(r0 / rMin) / gamma : 2 * Math.PI * (vo.giri ?? 2) / Math.abs(omega));
   } else {
-    fineFai.push({ tipo: 'ferma' });
+    // un piccolo disco appena oltre il punto d'arrivo: la particella vi entra esattamente in E
+    const h = Math.min(1, 0.5 * (ultimo.lunghezza || 1));
+    blocchi.push({ id: `${piano}:fine`, piano, regione: { tipo: 'cerchio', centro: [E[0] + tq[0] * h, E[1] + tq[1] * h], r: h }, tempo: [tE - margineFine, null], legge: { tipo: 'ferma' } });
+    // il passo non deve poter scavalcare il disco
+    rMinCurv = Math.min(rMinCurv, 50 * h);
   }
-  // tutte le altre regole di fine arco avanzano di fase
-  regole.forEach((r, k) => { if (k < archi.length - 1) r.fai.push({ tipo: 'avanza' }); });
-
-  return { punti, tang, archi, fineAncoraggio, masse, campi, regole, ids, rMinCurv, lunghezza, passiVoluta, omega };
+  const lunghezza = archi.reduce((s, a) => s + a.lunghezza, 0);
+  return { punti, tang, archi, tempoAncoraggio, blocchi, rMinCurv, lunghezza, tFine };
 }
 
-// La partitura completa, con i rami. `v` è la velocità (costante) delle particelle.
+// La descrizione completa: blocchi di spaziotempo e sorgenti. Ogni linea vive
+// nel proprio piano di esistenza; un ramo è una sorgente posta nel punto e
+// nell'istante in cui la linea madre passa per il suo ancoraggio.
 export function catena(opzioni = {}) {
   // senza punti: un'onda con una voluta, come esempio
   if (!opzioni.punti) opzioni = { ...opzioni, punti: [[-30, 0], [-15, 10], [0, 0], [15, -10]], voluta: opzioni.voluta ?? { giri: 1.5, rMin: 1 } };
   const v = opzioni.v ?? 10, G = opzioni.G ?? 1;
   const precisione = opzioni.precisione ?? 0.004; // radianti per passo
-  const tutteMasse = [], tuttiCampi = [], emettitori = [];
+  const blocchi = [], emettitori = [], linee = [];
 
-  // compila ricorsivamente: ritorna l'emettitore (o la definizione del figlio)
-  function costruisci(c, prefisso) {
-    const k = compila(c, prefisso, v, G);
-    tutteMasse.push(...k.masse); tuttiCampi.push(...k.campi);
+  function costruisci(c, piano, t0) {
+    const k = compila(c, piano, v, G, t0);
+    blocchi.push(...k.blocchi);
     const dt = Math.min(precisione * k.rMinCurv / v, 0.5);
-    const passi = Math.ceil((k.lunghezza / v) / dt * 1.2 + (k.passiVoluta ? k.passiVoluta / (Math.abs(k.omega) * dt) : 0)) + 50;
-    const primo = k.ids[0];
-    const nodo = { k, dt, passi, primo, figli: [] };
+    const passi = Math.ceil(((k.tFine - t0) / dt) * 1.2) + 50;
+    emettitori.push({ id: piano, piano, pos: k.punti[0], dir: k.tang[0], v, t0, dt, passi });
+    linee.push({ piano, archi: k.archi, punti: k.punti, tempoAncoraggio: k.tempoAncoraggio });
     (c.rami || []).forEach((ramo, j) => {
-      const sub = costruisci({ ...ramo.catena, punti: [k.punti[ramo.da], ...ramo.catena.punti] }, `${prefisso}r${j}`);
-      nodo.figli.push({ da: ramo.da, sub });
+      costruisci({ ...ramo.catena, punti: [k.punti[ramo.da], ...ramo.catena.punti] }, `${piano}r${j}`, k.tempoAncoraggio[ramo.da]);
     });
-    return nodo;
+    return k;
   }
-  const radice = costruisci(opzioni, 'c');
-
-  // l'accensione di partenza di ogni particella: tutto spento tranne la sua prima massa
-  const tuttoSpento = Object.fromEntries([...tutteMasse, ...tuttiCampi].map((x) => [x.id, false]));
-
-  function collega(nodo) {
-    const regole = nodo.k.regole.map((r) => ({ ...r, fai: r.fai.slice() }));
-    for (const { da, sub } of nodo.figli) {
-      const sotto = collega(sub);
-      const stato = { ...tuttoSpento };
-      if (sub.primo) stato[sub.primo] = true;
-      const emissione = { tipo: 'emetti', dir: sub.k.tang[0], v, dt: sub.dt, passi: sub.passi, regole: sotto, fase: 0, stato };
-      if (da === 0) {
-        emettitori.push({ id: `ramo${emettitori.length}`, pos: sub.k.punti[0], dir: sub.k.tang[0], v, dt: sub.dt, passi: sub.passi, regole: sotto, acceso: stato });
-      } else {
-        // si emette alla fine dell'arco che arriva all'ancoraggio `da`, prima di avanzare
-        const k = nodo.k.fineAncoraggio[da];
-        regole[k].fai.unshift(emissione);
-      }
-    }
-    return regole;
-  }
-  const regoleRadice = collega(radice);
-  const statoRadice = { ...tuttoSpento };
-  if (radice.primo) statoRadice[radice.primo] = true;
-  emettitori.unshift({ id: 'catena', pos: radice.k.punti[0], dir: radice.k.tang[0], v, dt: radice.dt, passi: radice.passi, regole: regoleRadice, acceso: statoRadice });
+  const radice = costruisci(opzioni, 'c', opzioni.t0 ?? 0);
 
   return {
-    G, dt: radice.dt, passi: radice.passi, limiti: opzioni.limiti || [-1e4, -1e4, 1e4, 1e4],
-    emettitori, masse: tutteMasse, campi: tuttiCampi, interfacce: [], regole: [],
+    G, dt: emettitori[0].dt, passi: emettitori[0].passi, limiti: opzioni.limiti || [-1e4, -1e4, 1e4, 1e4],
+    blocchi, emettitori, masse: [], campi: [], interfacce: [], regole: [],
     // per i test e la lettura: la geometria attesa
-    _archi: radice.k.archi, _punti: radice.k.punti,
+    _archi: radice.archi, _punti: radice.punti, _linee: linee,
   };
 }
 

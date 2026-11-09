@@ -6,7 +6,7 @@ import { generaOnda } from '../src/partiture.js';
 function analizza(partitura, L, f, x0, y0, n) {
   const [tr] = simula(partitura);
   // 1. gli attraversamenti della riga cadono in x0 + i·L
-  const attr = tr.eventi.filter((e) => e.attraversa !== undefined);
+  const attr = tr.eventi.filter((e) => e.cambio);
   assert.equal(attr.length, n, `attesi ${n} attraversamenti, trovati ${attr.length}`);
   attr.forEach((e, i) => {
     const xAtteso = x0 + (i + 1) * L;
@@ -46,9 +46,9 @@ for (const c of casi) {
 // 4. controprova: masse uguali con offset costante NON danno l'onda (velocità discontinua)
 {
   const p = generaOnda({ L: 120, f: 40, n: 5, alterna: false, x0: 80, y0: 300 });
-  p.masse.forEach((m) => (m.M = 30000));
+  p.blocchi.forEach((b) => (b.legge.M = 30000));
   const [tr] = simula(p);
-  const attr = tr.eventi.filter((e) => e.attraversa !== undefined);
+  const attr = tr.eventi.filter((e) => e.cambio);
   const fuoriPosto = attr.some((e, i) => Math.abs(e.pos[0] - (80 + (i + 1) * 120)) > 0.5);
   assert.ok(fuoriPosto || attr.length < 5, 'con masse uguali e offset costante l\'onda non dovrebbe chiudersi');
   console.log('ok  controprova: senza il rapporto delle masse l\'onda si rompe');

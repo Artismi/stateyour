@@ -1,33 +1,54 @@
 // partiture.js — pattern codificati come partiture, e i generatori che li scrivono.
 import { velocitaApside, velocitaCircolare, velocitaFuga } from './motore.js';
+import { catena } from './catena.js';
 
 const LIMITI = [0, 0, 1000, 600];
 
-// ---------- L'onda: masse in fila, accese a staffetta ----------
+// ---------- L'onda: masse in fila, ognuna padrona del suo blocco ----------
 // Attraversamenti della riga in x0 + i·L. La massa i sta a distanza f_i
 // dall'attraversamento di sinistra. Con `alterna` l'offset è f, L-f, f, ...
-// e tutte le masse sono uguali: a ogni scambio la particella dista L-f dalla
-// massa che lascia e L-f da quella che prende, quindi la velocità è continua.
+// e tutte le masse sono uguali: a ogni passaggio la particella dista L-f dalla
+// massa che lascia e L-f da quella che trova, quindi la velocità è continua.
 // Con offset costante f le masse devono scalare di (f/(L-f))² a ogni passo.
 // Ampiezza dell'onda: b = sqrt(f·(L-f)). Con f = L/2: semicerchi.
-export function generaOnda({ L = 120, f = 40, n = 7, GM = 30000, x0 = 80, y0 = 300, alterna = true, dt = 0.02 } = {}) {
-  const masse = [];
+//
+// È uno STATO: la massa i agisce solo nel suo blocco, il rettangolo sopra
+// (i pari) o sotto (i dispari) la riga tra x0 + i·L e x0 + (i+1)·L. Nessuno
+// accende o spegne niente: la particella passa da un blocco al successivo
+// attraversando la riga.
+export function blocchiOnda({ L, f, n, GM, x0, y0, alterna = true, piano = null, fine = false }) {
+  const blocchi = [], masse = [];
   let M = GM;
+  const m = 0.25 * L, H = L;
   for (let i = 0; i < n; i++) {
     const fi = alterna ? (i % 2 === 0 ? f : L - f) : f;
-    masse.push({ id: `m${i}`, pos: [x0 + i * L + fi, y0], M, acceso: i === 0 });
+    const pos = [x0 + i * L + fi, y0];
+    masse.push({ pos, M });
+    const xa = x0 + i * L - m, xb = x0 + (i + 1) * L + m;
+    const ya = i % 2 === 0 ? y0 : y0 - H, yb = i % 2 === 0 ? y0 + H : y0;
+    blocchi.push({
+      id: `onda${i}`, piano,
+      regione: { tipo: 'poligono', punti: [[xa, ya], [xb, ya], [xb, yb], [xa, yb]] },
+      legge: { tipo: 'gravita', pos, M },
+    });
     if (!alterna) M *= (f / (L - f)) ** 2;
   }
+  if (fine) {
+    // un piccolo disco oltre l'ultimo attraversamento: la particella vi entra esattamente lì
+    const h = 0.1 * L, giu = n % 2 === 1 ? -1 : 1;
+    blocchi.push({ id: 'onda:fine', piano, regione: { tipo: 'cerchio', centro: [x0 + n * L, y0 + giu * h], r: h }, legge: { tipo: 'ferma' } });
+  }
+  return { blocchi, masse };
+}
+
+export function generaOnda({ L = 120, f = 40, n = 7, GM = 30000, x0 = 80, y0 = 300, alterna = true, dt = 0.02 } = {}) {
+  const { blocchi } = blocchiOnda({ L, f, n, GM, x0, y0, alterna });
   const v0 = velocitaApside(GM, f, L / 2);
   return {
     nome: alterna ? 'onda di ellissi' : 'onda a masse decrescenti',
     G: 1, dt, passi: 20000, limiti: LIMITI,
     emettitori: [{ id: 'p', pos: [x0, y0], angolo: 90, v: v0 }],
-    masse,
-    interfacce: [],
-    regole: [
-      { quando: { tipo: 'attraversa', a: [x0, y0], b: [x0 + 1, y0] }, fai: [{ tipo: 'staffetta', lista: masse.map((m) => m.id) }] },
-    ],
+    blocchi, masse: [], interfacce: [], regole: [],
   };
 }
 
@@ -119,7 +140,36 @@ export function generaInterruttore() {
   };
 }
 
+// ---------- Lo stato di una catena, sulla tela ----------
+// porta una catena (punti, volute, rami) in scala k e la sposta in (ox, oy)
+function scalaCatena(c, k, ox, oy) {
+  return {
+    ...c,
+    punti: c.punti.map(([x, y]) => [x * k + ox, y * k + oy]),
+    voluta: c.voluta ? { ...c.voluta, rMin: (c.voluta.rMin ?? 1) * k, ...(c.voluta.R ? { R: c.voluta.R * k } : {}) } : undefined,
+    rami: (c.rami || []).map((r) => ({ ...r, catena: scalaCatena(r.catena, k, ox, oy) })),
+    spessore: (c.spessore ?? 3) * k,
+  };
+}
+export function generaCandelabroStato() {
+  const half = {
+    punti: [[0, -110], [0, -70], [0, -30], [0, 10], [0, 50], [0, 88]],
+    tangenti: [[0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [0, 1]],
+    rami: [
+      { da: 1, catena: { punti: [[22, -44], [44, -54], [46, -76]], tangenti: [[0.45, 1]], voluta: { giri: 2.2, rMin: 0.9, verso: 'destra' } } },
+      { da: 2, catena: { punti: [[14, -14], [26, -20]], tangenti: [[0.6, 1]], voluta: { giri: 1.8, rMin: 0.8, verso: 'destra' } } },
+      { da: 3, catena: { punti: [[30, 26], [56, 20], [60, 0]], tangenti: [[0.7, 1]], voluta: { giri: 2.4, rMin: 1, verso: 'destra' } } },
+      { da: 4, catena: { punti: [[12, 66], [22, 62]], tangenti: [[0.6, 1]], voluta: { giri: 1.6, rMin: 0.7, verso: 'destra' } } },
+      { da: 3, catena: { punti: [[18, -4], [34, 0]], tangenti: [[0.5, -1]], voluta: { giri: 1.5, rMin: 0.7, verso: 'sinistra' } } },
+    ],
+  };
+  const p = catena({ ...scalaCatena(half, 2.4, 420, 290), v: 30, limiti: [0, 0, 1000, 600] });
+  p.nome = 'il candelabro come stato: blocchi di spaziotempo, nessuna regola';
+  return p;
+}
+
 export const PARTITURE = {
+  candelabro_stato: () => generaCandelabroStato(),
   onda_ellissi: () => generaOnda(),
   onda_semicerchi: () => { const p = generaOnda({ f: 60 }); p.nome = 'onda di semicerchi (f = L/2)'; return p; },
   onda_decrescente: () => generaOnda({ alterna: false, n: 6, f: 50 }),

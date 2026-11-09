@@ -1,5 +1,5 @@
 // app.js — la pagina: sceglie una partitura, la simula, la disegna.
-import { simula } from './motore.js';
+import { simula, inBlocco } from './motore.js';
 import { PARTITURE, generaOnda } from './partiture.js';
 
 const tela = document.getElementById('tela');
@@ -12,7 +12,43 @@ const COLORI = ['#1c1b18', '#b8412b', '#2b5fb8', '#3b7d3a', '#9a5b1a', '#6b3fa0'
 const W = tela.width, H = tela.height;
 const X = (x) => x, Y = (y) => H - y;
 
-function disegna(partitura, tracce) {
+// i blocchi di spaziotempo: regioni colorate secondo la legge; quelli che
+// esistono nell'istante t sono pieni, gli altri appena accennati
+const COLORE_LEGGE = { gravita: '184,65,43', magnetico: '43,95,184', attrito: '43,95,184', molla: '59,125,58', ferma: '60,60,60', vuoto: '140,135,124' };
+function leggePrincipale(b) { const l = Array.isArray(b.legge) ? b.legge[0] : b.legge; return (l && l.tipo) || 'vuoto'; }
+function attivoIn(b, t) { return !b.tempo || ((b.tempo[0] == null || t >= b.tempo[0]) && (b.tempo[1] == null || t <= b.tempo[1])); }
+function tracciaRegione(reg) {
+  ctx.beginPath();
+  if (reg.tipo === 'cerchio') ctx.arc(X(reg.centro[0]), Y(reg.centro[1]), reg.r, 0, Math.PI * 2);
+  else if (reg.tipo === 'settore') {
+    const [cx, cy] = reg.centro, a0 = reg.da, a1 = reg.da + reg.ampiezza;
+    // y del mondo verso l'alto: sulla tela gli angoli cambiano segno
+    ctx.arc(X(cx), Y(cy), reg.r[1], -a0, -a1, true);
+    ctx.arc(X(cx), Y(cy), Math.max(reg.r[0], 0), -a1, -a0, false);
+    ctx.closePath();
+  } else if (reg.tipo === 'poligono') {
+    reg.punti.forEach((q, i) => (i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))));
+    ctx.closePath();
+  } else if (reg.tipo === 'tutto') ctx.rect(0, 0, W, H);
+}
+function disegnaBlocchi(partitura, t) {
+  for (const b of partitura.blocchi || []) {
+    if (!b.regione || b.regione.tipo === 'semipiano') continue;
+    const vivo = t == null || attivoIn(b, t);
+    const c = COLORE_LEGGE[leggePrincipale(b)] || COLORE_LEGGE.vuoto;
+    tracciaRegione(b.regione);
+    ctx.fillStyle = `rgba(${c},${vivo ? 0.16 : 0.035})`; ctx.fill();
+    ctx.strokeStyle = `rgba(${c},${vivo ? 0.55 : 0.12})`; ctx.lineWidth = 0.8; ctx.stroke();
+    for (const l of Array.isArray(b.legge) ? b.legge : [b.legge]) {
+      if (l && l.tipo === 'gravita') {
+        ctx.fillStyle = `rgba(${COLORE_LEGGE.gravita},${vivo ? 0.9 : 0.25})`;
+        ctx.beginPath(); ctx.arc(X(l.pos[0]), Y(l.pos[1]), vivo ? 2.6 : 1.6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+}
+
+function disegna(partitura, tracce, tempo = null) {
   ctx.clearRect(0, 0, W, H);
   // griglia leggera
   ctx.strokeStyle = '#ebe7dc'; ctx.lineWidth = 1;
@@ -28,6 +64,8 @@ function disegna(partitura, tracce) {
     ctx.save(); ctx.setLineDash([2, 6]); ctx.strokeStyle = '#b9b3a4'; ctx.beginPath();
     ctx.moveTo(X(a[0] - u[0]), Y(a[1] - u[1])); ctx.lineTo(X(a[0] + u[0]), Y(a[1] + u[1])); ctx.stroke(); ctx.restore();
   }
+
+  disegnaBlocchi(partitura, tempo);
 
   // interfacce
   for (const i of partitura.interfacce || []) {
@@ -60,17 +98,32 @@ function disegna(partitura, tracce) {
   // traiettorie
   tracce.forEach((tr, k) => {
     ctx.strokeStyle = COLORI[k % COLORI.length]; ctx.lineWidth = tr.eventi.length > 80 ? 0.8 : 1.4; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    let penna = false;
-    for (const [x, y, su] of tr.punti) {
-      if (su && !penna) { ctx.moveTo(X(x), Y(y)); penna = true; }
-      else if (su) ctx.lineTo(X(x), Y(y));
-      else penna = false;
-    }
-    ctx.stroke();
+    // con il tempo: la linea percorsa fino a t è piena, il resto è un'ombra
+    const traccia = (fino) => {
+      ctx.beginPath();
+      let penna = false, ultimo = null;
+      for (const [x, y, su, t] of tr.punti) {
+        if (fino != null && t != null && t > fino) break;
+        if (su && !penna) { ctx.moveTo(X(x), Y(y)); penna = true; }
+        else if (su) ctx.lineTo(X(x), Y(y));
+        else penna = false;
+        ultimo = [x, y];
+      }
+      ctx.stroke();
+      return ultimo;
+    };
+    if (tempo != null) {
+      ctx.save(); ctx.globalAlpha = 0.18; traccia(null); ctx.restore();
+      const qui = traccia(tempo);
+      const t0 = tr.punti[0][3] ?? 0;
+      if (qui && tempo >= t0 && tr.punti[tr.punti.length - 1][3] >= tempo) {
+        ctx.fillStyle = COLORI[k % COLORI.length];
+        ctx.beginPath(); ctx.arc(X(qui[0]), Y(qui[1]), 4, 0, Math.PI * 2); ctx.fill();
+      }
+    } else traccia(null);
     // gli eventi: piccoli segni
     for (const e of tr.eventi) {
-      if (e.attraversa !== undefined || e.tocca) {
+      if ((e.attraversa !== undefined || e.tocca || e.cambio) && (tempo == null || e.t == null || e.t <= tempo)) {
         ctx.fillStyle = COLORI[k % COLORI.length];
         ctx.beginPath(); ctx.arc(X(e.pos[0]), Y(e.pos[1]), 2.2, 0, Math.PI * 2); ctx.fill();
       }
@@ -86,7 +139,7 @@ function disegna(partitura, tracce) {
   }
 }
 
-let corrente = null;
+let corrente = null, tracceCorrenti = [], tMax = 0;
 
 function mostra(partitura) {
   corrente = partitura;
@@ -94,10 +147,27 @@ function mostra(partitura) {
   let tracce;
   try { tracce = simula(partitura); }
   catch (err) { $('errore').textContent = String(err); return; }
-  disegna(partitura, tracce);
+  tracceCorrenti = tracce;
+  tMax = Math.max(0, ...tracce.map((tr) => tr.punti[tr.punti.length - 1][3] ?? 0));
+  const haBlocchi = (partitura.blocchi || []).length > 0;
+  $('riga-tempo').style.display = haBlocchi ? '' : 'none';
+  $('tempo').max = String(tMax); $('tempo').step = String(tMax / 1000 || 0.01); $('tempo').value = String(tMax);
+  ridisegna();
   const righe = tracce.map((t) => `${t.id}: ${t.passi} passi, ${t.eventi.length} eventi, fine: ${t.fine}`);
-  $('nota').textContent = `${partitura.nome || ''}\n${righe.join('\n')}`;
+  const stato = haBlocchi ? `stato: ${partitura.blocchi.length} blocchi di spaziotempo, ${(partitura.regole || []).length} regole\n` : '';
+  $('nota').textContent = `${partitura.nome || ''}\n${stato}${righe.join('\n')}`;
 }
+function ridisegna() {
+  if (!corrente) return;
+  const haBlocchi = (corrente.blocchi || []).length > 0;
+  const t = haBlocchi ? Number($('tempo').value) : null;
+  if (haBlocchi) {
+    const vivi = (corrente.blocchi || []).filter((b) => attivoIn(b, t)).length;
+    $('otempo').value = `t = ${t.toFixed(2)} · ${vivi} blocchi esistono ora`;
+  }
+  disegna(corrente, tracceCorrenti, haBlocchi && t < tMax ? t : (haBlocchi ? tMax : null));
+}
+$('tempo').addEventListener('input', ridisegna);
 
 function scriviJson(partitura) {
   $('json').value = JSON.stringify(partitura, (k, v) => (typeof v === 'number' ? Number(v.toFixed(6)) : v), 1)
@@ -143,7 +213,7 @@ function scegli(nome) {
   $('cursori').style.display = eOnda ? '' : 'none';
   if (eOnda) {
     // riporto i cursori ai valori della partitura scelta
-    const masse = p.masse; const x0 = p.emettitori[0].pos[0];
+    const masse = (p.blocchi || []).filter((b) => b.legge && b.legge.tipo === 'gravita').map((b) => b.legge); const x0 = p.emettitori[0].pos[0];
     const f = masse[0].pos[0] - x0;
     const alterna = nome !== 'onda_decrescente';
     if (masse.length > 1) {
@@ -170,5 +240,5 @@ $('scarica').addEventListener('click', () => {
 });
 
 const iniziale = location.hash.slice(1);
-sel.value = PARTITURE[iniziale] ? iniziale : 'onda_ellissi';
+sel.value = PARTITURE[iniziale] ? iniziale : 'candelabro_stato';
 scegli(sel.value);

@@ -19,11 +19,21 @@
 //        molla (Hooke) verso una retta: richiamo proporzionale alla distanza
 //          dall'asse, il moto lungo l'asse resta uniforme: sinusoide esatta.
 //
-// Ogni elemento può essere acceso o spento. L'accensione avviene tramite
-// REGOLE a eventi geometrici (attraverso una linea, raggiungo una distanza,
-// tocco un'interfaccia, ogni N passi...). Un pattern è quindi codificato come
-// PARTITURA: elementi + stato iniziale + regole. Questo file non sa nulla di
-// disegno o di browser: gira sia in Node sia nel browser.
+// LO SPAZIOTEMPO. Il modo principale di descrivere un pattern è uno STATO,
+// non una sequenza di comandi: un insieme di BLOCCHI, ognuno una regione
+// di spazio per un intervallo di tempo con la sua legge fisica:
+//
+//   { piano, regione, tempo: [t0, t1], legge }
+//
+// La particella in ogni istante sente le leggi dei blocchi che contengono
+// la sua posizione e il suo tempo, nel suo piano di esistenza. Quando passa
+// da un blocco all'altro il punto esatto del passaggio si trova per
+// bisezione. Non ci sono azioni né fasi: la linea è la linea d'universo
+// della particella attraverso lo stato.
+//
+// Restano, per i primi esempi, gli elementi accendibili e le REGOLE a eventi
+// (attraversa, distanza, tocca, ogni N passi) con le loro azioni.
+// Questo file non sa nulla di disegno o di browser.
 
 export const G_DEFAULT = 1;
 
@@ -52,9 +62,73 @@ function dentroCampo(c, pos) {
   return V.len(d) <= c.raggio;
 }
 
+// ---------- lo spaziotempo: regioni, tempi, leggi ----------
+// regione: { tipo: 'tutto' }
+//          { tipo: 'cerchio', centro, r }
+//          { tipo: 'settore', centro, r: [r0, r1], da, ampiezza }   (radianti, antiorario da `da`)
+//          { tipo: 'semipiano', a, b }                              (a sinistra di a→b)
+//          { tipo: 'poligono', punti }
+// legge:   { tipo: 'gravita', pos, M } | { tipo: 'magnetico', omega } | { tipo: 'attrito', gamma }
+//          { tipo: 'molla', a, b, k } | { tipo: 'ferma' } | { tipo: 'vuoto' }
+//          oppure una lista di leggi che valgono insieme
+const DUE_PI = 2 * Math.PI;
+export function contiene(reg, pos) {
+  switch (reg.tipo) {
+    case 'tutto': return true;
+    case 'cerchio': return V.len(V.sub(pos, reg.centro)) <= reg.r;
+    case 'settore': {
+      const d = V.sub(pos, reg.centro), r = V.len(d);
+      if (r < reg.r[0] || r > reg.r[1]) return false;
+      let a = Math.atan2(d[1], d[0]) - reg.da;
+      a = ((a % DUE_PI) + DUE_PI) % DUE_PI;
+      return a <= reg.ampiezza;
+    }
+    case 'semipiano': return lato(pos, reg.a, reg.b) >= 0;
+    case 'poligono': {
+      const P = reg.punti; let dentro = false;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        if ((P[i][1] > pos[1]) !== (P[j][1] > pos[1]) &&
+            pos[0] < (P[j][0] - P[i][0]) * (pos[1] - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) dentro = !dentro;
+      }
+      return dentro;
+    }
+    default: throw new Error(`regione sconosciuta: ${reg.tipo}`);
+  }
+}
+export function inBlocco(b, pos, t, piano) {
+  if (b.piano != null && b.piano !== piano) return false;
+  if (b.tempo && ((b.tempo[0] != null && t < b.tempo[0]) || (b.tempo[1] != null && t > b.tempo[1]))) return false;
+  return contiene(b.regione || { tipo: 'tutto' }, pos);
+}
+const leggiDi = (b) => (Array.isArray(b.legge) ? b.legge : [b.legge || { tipo: 'vuoto' }]);
+export const ferma = (b) => leggiDi(b).some((l) => l.tipo === 'ferma');
+
+function forzaLegge(l, pos, vel, G) {
+  switch (l.tipo) {
+    case 'gravita': {
+      const dx = l.pos[0] - pos[0], dy = l.pos[1] - pos[1];
+      const r2 = dx * dx + dy * dy;
+      if (r2 < 1e-12) return [0, 0];
+      const k = G * l.M / (r2 * Math.sqrt(r2));
+      return [k * dx, k * dy];
+    }
+    case 'magnetico': { const w = l.omega ?? 1; return [-w * vel[1], w * vel[0]]; }
+    case 'attrito': { const g = l.gamma ?? 0.1; return [-g * vel[0], -g * vel[1]]; }
+    case 'molla': {
+      const u = V.norm(V.sub(l.b, l.a)), n = V.perp(u);
+      const d = V.dot(V.sub(pos, l.a), n), k = l.k ?? 0.01;
+      return [-k * d * n[0], -k * d * n[1]];
+    }
+    default: return [0, 0];
+  }
+}
+
 // ---------- gravitazione + attrito ----------
-function accelerazione(pos, vel, masse, campi, acceso, G) {
+function accelerazione(pos, vel, masse, campi, acceso, G, attivi = []) {
   let ax = 0, ay = 0;
+  for (const b of attivi) {
+    for (const l of leggiDi(b)) { const f = forzaLegge(l, pos, vel, G); ax += f[0]; ay += f[1]; }
+  }
   for (const m of masse) {
     if (!acceso[m.id]) continue;
     const dx = m.pos[0] - pos[0], dy = m.pos[1] - pos[1];
@@ -83,14 +157,14 @@ function accelerazione(pos, vel, masse, campi, acceso, G) {
 }
 
 // Un passo Runge-Kutta del quarto ordine sullo stato {pos, vel}.
-function rk4(s, dt, masse, campi, acceso, G) {
-  const a1 = accelerazione(s.pos, s.vel, masse, campi, acceso, G);
+function rk4(s, dt, masse, campi, acceso, G, attivi) {
+  const a1 = accelerazione(s.pos, s.vel, masse, campi, acceso, G, attivi);
   const p2 = V.add(s.pos, V.mul(s.vel, dt / 2)), v2 = V.add(s.vel, V.mul(a1, dt / 2));
-  const a2 = accelerazione(p2, v2, masse, campi, acceso, G);
+  const a2 = accelerazione(p2, v2, masse, campi, acceso, G, attivi);
   const p3 = V.add(s.pos, V.mul(v2, dt / 2)), v3 = V.add(s.vel, V.mul(a2, dt / 2));
-  const a3 = accelerazione(p3, v3, masse, campi, acceso, G);
+  const a3 = accelerazione(p3, v3, masse, campi, acceso, G, attivi);
   const p4 = V.add(s.pos, V.mul(v3, dt)), v4 = V.add(s.vel, V.mul(a3, dt));
-  const a4 = accelerazione(p4, v4, masse, campi, acceso, G);
+  const a4 = accelerazione(p4, v4, masse, campi, acceso, G, attivi);
   const pos = [
     s.pos[0] + dt / 6 * (s.vel[0] + 2 * v2[0] + 2 * v3[0] + v4[0]),
     s.pos[1] + dt / 6 * (s.vel[1] + 2 * v2[1] + 2 * v3[1] + v4[1]),
@@ -145,7 +219,8 @@ export function rifrangi(vel, normale, nIn, nOut) {
 // ---------- la partitura ----------
 // {
 //   nome, G, dt, passi, limiti: [xmin, ymin, xmax, ymax],
-//   emettitori: [{ id, pos, angolo | dir, v, m, passi, acceso, regole }],
+//   blocchi:    [{ id, piano, regione, tempo: [t0, t1], legge }],     (lo stato)
+//   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, regole }],
 //   masse:      [{ id, pos, M, acceso }],
 //   interfacce: [{ id, a, b, tipo: 'specchio'|'rifrazione'|'assorbe', n1, n2, acceso }],
 //   campi:      [{ id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett, acceso, ... }],
@@ -156,12 +231,8 @@ export function rifrangi(vel, normale, nIn, nOut) {
 //         { tipo: 'tocca', id }           (un'interfaccia)
 //         { tipo: 'passi', n }            (al passo n)
 //         { tipo: 'ogni', passi: n }      (ogni n passi)
-// Una regola può avere `fase: n`: vale solo quando la particella è nella fase n
-// (parte da 0). Così una catena di archi ha un evento per ogni tratto.
 // fai:    { tipo: 'accendi'|'spegni'|'inverti', id }   (id di massa, interfaccia, campo o 'penna')
 //         { tipo: 'staffetta', lista: [id...], allaFine?: 'ferma' }
-//         { tipo: 'avanza' }                           (fase + 1)
-//         { tipo: 'emetti', id, angolo (relativo alla direzione), v, passi }  (una nuova particella da qui)
 //         { tipo: 'ferma' }
 
 export function statoIniziale(partitura) {
@@ -207,20 +278,6 @@ function applica(azioni, p, traccia) {
         p.staffette[chiave] = k + 1;
         break;
       }
-      case 'avanza': p.fase++; break;
-      case 'emetti': {
-        const dir0 = Math.atan2(p.s.vel[1], p.s.vel[0]) * 180 / Math.PI;
-        // `dir` assoluta, oppure `angolo` relativo alla direzione attuale;
-        // `stato` sovrascrive l'accensione ereditata (le masse del ramo)
-        traccia.figli.push({
-          id: `${traccia.id}/${az.id ?? traccia.figli.length}`,
-          pos: p.s.pos.slice(), v: az.v ?? V.len(p.s.vel),
-          ...(az.dir ? { dir: az.dir } : { angolo: dir0 + (az.angolo ?? 0) }),
-          passi: az.passi, dt: az.dt, regole: az.regole, fase: az.fase ?? 0,
-          acceso: { ...p.acceso, ...(az.stato || {}) },
-        });
-        break;
-      }
       case 'ferma': p.fine = 'fermata'; break;
       default: throw new Error(`azione sconosciuta: ${az.tipo}`);
     }
@@ -240,6 +297,10 @@ export function simulaParticella(em, partitura) {
   // può averne di proprie
   const regole = [...(partitura.regole || []), ...(em.regole || [])];
   const continue_ = regole.map((r) => funzioneEvento(r.quando));
+  const blocchi = partitura.blocchi || [];
+  const piano = em.piano ?? null;
+  const insieme = (pos, t) => blocchi.filter((b) => inBlocco(b, pos, t, piano));
+  const chiave = (lista) => lista.map((b) => blocchi.indexOf(b)).join(',');
 
   const dir = em.dir ? V.norm(em.dir) : V.daAngolo(em.angolo ?? 0);
   const p = {
@@ -247,15 +308,16 @@ export function simulaParticella(em, partitura) {
     m: em.m ?? 1,
     acceso: em.acceso ? { ...em.acceso } : statoIniziale(partitura),
     staffette: {},
-    fase: em.fase ?? 0,
+    t: em.t0 ?? 0,
     segni: continue_.map((f) => (f ? segno(f(em.pos)) : 0)),
     penna: em.penna !== false,
     passo: 0,
     fine: null,
     ultimaInterfaccia: null,
   };
-  const traccia = { id: em.id, punti: [[p.s.pos[0], p.s.pos[1], p.penna]], eventi: [], figli: [], fine: null };
-  const attiva = (r) => r.fase === undefined || r.fase === p.fase;
+  p.attivi = insieme(p.s.pos, p.t);
+  const traccia = { id: em.id, piano, punti: [[p.s.pos[0], p.s.pos[1], p.penna, p.t]], eventi: [], fine: null };
+  if (p.attivi.some(ferma)) p.fine = 'fermata';
 
   const dentro = (q) => q[0] >= limiti[0] && q[1] >= limiti[1] && q[0] <= limiti[2] && q[1] <= limiti[3];
   const aggiornaSegni = (pos, forza) => {
@@ -269,8 +331,8 @@ export function simulaParticella(em, partitura) {
   while (p.passo < maxPassi && !p.fine) {
     p.passo++;
     const s0 = p.s;
-    let s1 = rk4(s0, dt, masse, campi, p.acceso, G);
-    let saltaContinui = false;
+    let s1 = rk4(s0, dt, masse, campi, p.acceso, G, p.attivi);
+    let saltaContinui = false, durata = dt;
 
     // 1. interfacce: il tratto può toccarne più d'una nello stesso passo
     //    (vicino a un vertice): dopo ogni tocco il resto del passo prosegue
@@ -302,12 +364,12 @@ export function simulaParticella(em, partitura) {
         velNuova = r.vel; nota = r.totale ? 'riflessione totale' : 'rifrazione';
       } else if (i.tipo === 'assorbe') {
         p.s = { pos: punto, vel: velArrivo };
-        traccia.punti.push([punto[0], punto[1], p.penna]);
+        traccia.punti.push([punto[0], punto[1], p.penna, p.t + dt * t]);
         p.fine = 'assorbita';
       }
       traccia.eventi.push({ passo: p.passo, pos: punto.slice(), tocca: i.id, nota });
       if (p.fine) break;
-      traccia.punti.push([punto[0], punto[1], p.penna]);
+      traccia.punti.push([punto[0], punto[1], p.penna, p.t + (dt - resto) + resto * t]);
       resto = resto * (1 - t);
       da = { pos: punto, vel: velNuova };
       a = { pos: V.add(punto, V.mul(velNuova, resto)), vel: velNuova };
@@ -315,7 +377,7 @@ export function simulaParticella(em, partitura) {
       p.ultimaInterfaccia = i.id;
       p.s = da;
       for (const r of regole) {
-        if (attiva(r) && r.quando.tipo === 'tocca' && r.quando.id === i.id) applica(r.fai, p, traccia);
+        if (r.quando.tipo === 'tocca' && r.quando.id === i.id) applica(r.fai, p, traccia);
       }
     }
     if (p.fine) break;
@@ -325,11 +387,32 @@ export function simulaParticella(em, partitura) {
       saltaContinui = true;
     }
 
-    // 2. eventi continui (attraversa, distanza): bisezione fino al punto esatto
+    // 2. passaggio da un blocco di spaziotempo all'altro: bisezione sul tempo
+    //    fino all'istante esatto in cui cambia l'insieme dei blocchi
+    if (!saltaContinui && blocchi.length) {
+      const k0 = chiave(p.attivi);
+      if (chiave(insieme(s1.pos, p.t + dt)) !== k0) {
+        let lo = 0, hi = dt, sHi = s1;
+        for (let it = 0; it < 80 && hi - lo > 1e-13; it++) {
+          const mid = (lo + hi) / 2;
+          const sMid = rk4(s0, mid, masse, campi, p.acceso, G, p.attivi);
+          if (chiave(insieme(sMid.pos, p.t + mid)) === k0) lo = mid; else { hi = mid; sHi = sMid; }
+        }
+        s1 = sHi; durata = hi;
+        const prima = p.attivi;
+        p.attivi = insieme(s1.pos, p.t + hi);
+        traccia.eventi.push({ passo: p.passo, t: p.t + hi, pos: s1.pos.slice(), cambio: true, da: prima.map((b) => b.id ?? blocchi.indexOf(b)), a: p.attivi.map((b) => b.id ?? blocchi.indexOf(b)) });
+        if (p.attivi.some(ferma)) p.fine = 'fermata';
+        aggiornaSegni(s1.pos, true);
+        saltaContinui = true;
+      }
+    }
+
+    // 3. eventi continui (attraversa, distanza): bisezione fino al punto esatto
     if (!saltaContinui) {
       let scatto = null;
       continue_.forEach((f, k) => {
-        if (!f || scatto || !attiva(regole[k])) return;
+        if (!f || scatto) return;
         const prima = p.segni[k], dopo = segno(f(s1.pos));
         if (prima !== 0 && dopo !== 0 && prima !== dopo && versoOk(regole[k].quando, dopo)) scatto = k;
       });
@@ -338,10 +421,10 @@ export function simulaParticella(em, partitura) {
         let lo = 0, hi = dt, sHi = s1;
         for (let it = 0; it < 60 && hi - lo > 1e-12; it++) {
           const mid = (lo + hi) / 2;
-          const sMid = rk4(s0, mid, masse, campi, p.acceso, G);
+          const sMid = rk4(s0, mid, masse, campi, p.acceso, G, p.attivi);
           if (Math.sign(f(sMid.pos)) === prima) lo = mid; else { hi = mid; sHi = sMid; }
         }
-        s1 = sHi;
+        s1 = sHi; durata = hi;
         p.s = s1;
         aggiornaSegni(s1.pos, true);
         traccia.eventi.push({ passo: p.passo, pos: s1.pos.slice(), attraversa: scatto });
@@ -352,11 +435,16 @@ export function simulaParticella(em, partitura) {
     }
 
     p.s = s1;
-    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna]);
+    p.t += durata;
+    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna, p.t]);
+    // un blocco può cominciare o finire nel tempo anche se la particella sta ferma nello spazio
+    if (blocchi.length && !p.fine) {
+      const ora = insieme(s1.pos, p.t);
+      if (chiave(ora) !== chiave(p.attivi)) { p.attivi = ora; if (ora.some(ferma)) p.fine = 'fermata'; }
+    }
 
-    // 3. regole a passi
+    // 4. regole a passi
     for (const r of regole) {
-      if (!attiva(r)) continue;
       if (r.quando.tipo === 'passi' && r.quando.n === p.passo) applica(r.fai, p, traccia);
       if (r.quando.tipo === 'ogni' && p.passo % r.quando.passi === 0) applica(r.fai, p, traccia);
     }
@@ -369,19 +457,9 @@ export function simulaParticella(em, partitura) {
 }
 
 export function simula(partitura) {
-  const coda = (partitura.emettitori || []).filter((e) => e.acceso !== false);
-  const tracce = [];
-  let emesse = 0;
-  while (coda.length) {
-    const em = coda.shift();
-    const tr = simulaParticella(em, partitura);
-    tracce.push(tr);
-    for (const f of tr.figli) {
-      if (++emesse > (partitura.maxEmesse ?? 500)) break;
-      coda.push(f);
-    }
-  }
-  return tracce;
+  return (partitura.emettitori || [])
+    .filter((e) => e.acceso !== false)
+    .map((e) => simulaParticella(e, partitura));
 }
 
 // ---------- utilità per le coniche (una massa sola) ----------
