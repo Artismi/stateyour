@@ -166,6 +166,41 @@ export const CELLE = {
     colonne: 7, righe: 3, gruppo: 'p1', sfalsa: true,
   },
 
+  // ---------- dalla tavola greca n. 6 ----------
+
+  palmetta_greca: {
+    nome: 'palmetta greca: nove petali a spatola (una molla che respinge: gambo sottile, punta larga e tonda), un cuore pieno',
+    cella: {
+      lato: 120,
+      centro: { tratto: 'disco', parametri: { d: 9 }, spostamento: [0, -2] },
+      corolla: {
+        n: 9, da: 8, a: 172, raggio: 0, orienta: -90, simmetrica: true,
+        motivo: { tratto: 'petalo', parametri: { L: 42, W: 8, b: 1, curva: -0.35 }, spostamento: [0, 3] },
+        scala: [0.6, 0.76, 0.88, 0.97, 1, 0.97, 0.88, 0.76, 0.6],
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
+  spirali_greche: {
+    nome: "spirali greche: due viticci di sezione costante (filo di metallo) che finiscono con l'occhio pieno, e una palmetta che nasce tra loro",
+    cella: {
+      lato: 104,
+      centro: {
+        tratto: 'catena',
+        parametri: { punti: [[0, -38], [26, -34], [44, -12], [38, 12]], tangenti: [[1, 0]], voluta: { giri: 2.1, rMin: 2.2, verso: 'sinistra', occhio: 6 }, spessore: 2.4, esponente: 0 },
+        simmetria: { tipo: 'D', n: 1, fase: 90 },
+      },
+      corolla: {
+        n: 7, da: 15, a: 165, raggio: 0, orienta: -90, simmetrica: true, centro: [0, -34],
+        motivo: { tratto: 'petalo', parametri: { L: 34, W: 7, b: 0.9, curva: -0.3 } },
+        scala: [0.62, 0.8, 0.94, 1, 0.94, 0.8, 0.62],
+      },
+      contenuto: [{ tratto: 'disco', parametri: { d: 7 }, spostamento: [0, -36] }],
+    },
+    colonne: 3, righe: 1, gruppo: 'p1',
+  },
+
   // ---------- le prime piastrelle ----------
 
   rosone: {

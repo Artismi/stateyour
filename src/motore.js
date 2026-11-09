@@ -64,18 +64,18 @@ function dentroCampo(c, pos) {
 
 // ---------- lo spaziotempo: regioni, tempi, leggi ----------
 // regione: { tipo: 'tutto' }
-//          { tipo: 'cerchio', centro, r }
+//          { tipo: 'cerchio', centro, r, fuori? }                  (fuori: tutto ciò che sta oltre il cerchio)
 //          { tipo: 'settore', centro, r: [r0, r1], da, ampiezza }   (radianti, antiorario da `da`)
 //          { tipo: 'semipiano', a, b }                              (a sinistra di a→b)
 //          { tipo: 'poligono', punti }
 // legge:   { tipo: 'gravita', pos, M } | { tipo: 'magnetico', omega } | { tipo: 'attrito', gamma }
-//          { tipo: 'molla', a, b, k } | { tipo: 'ferma' } | { tipo: 'vuoto' }
+//          { tipo: 'molla', a, b, k } | { tipo: 'molla', centro, k } | { tipo: 'ferma' } | { tipo: 'vuoto' }
 //          oppure una lista di leggi che valgono insieme
 const DUE_PI = 2 * Math.PI;
 export function contiene(reg, pos) {
   switch (reg.tipo) {
     case 'tutto': return true;
-    case 'cerchio': return V.len(V.sub(pos, reg.centro)) <= reg.r;
+    case 'cerchio': { const d = V.len(V.sub(pos, reg.centro)); return reg.fuori ? d >= reg.r : d <= reg.r; }
     case 'settore': {
       const d = V.sub(pos, reg.centro), r = V.len(d);
       if (r < reg.r[0] || r > reg.r[1]) return false;
@@ -123,6 +123,8 @@ function forzaLegge(l, pos, vel, G) {
     case 'magnetico': { const w = l.omega ?? 1; return [-w * vel[1], w * vel[0]]; }
     case 'attrito': { const g = l.gamma ?? 0.1; return [-g * vel[0], -g * vel[1]]; }
     case 'molla': {
+      // verso un punto: a = −k·(x − centro); con k < 0 la molla respinge
+      if (l.centro) { const k = l.k ?? 0.01; return [-k * (pos[0] - l.centro[0]), -k * (pos[1] - l.centro[1])]; }
       const u = V.norm(V.sub(l.b, l.a)), n = V.perp(u);
       const d = V.dot(V.sub(pos, l.a), n), k = l.k ?? 0.01;
       return [-k * d * n[0], -k * d * n[1]];
@@ -230,10 +232,14 @@ export function rifrangi(vel, normale, nIn, nOut) {
 //   blocchi:    [{ id, piano, regione, tempo: [t0, t1], legge }],     (lo stato)
 //   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, limiti, regole,
 //                  spessore, assottiglia, cessioni: [{ t, quota }] }],
-//   Lo spessore della linea in ogni punto è spessore · |v| / |v₀|: dove la
-//   particella rallenta la linea si stringe. `assottiglia` (β) lo fa calare
+//   Lo spessore della linea in ogni punto è spessore · (|v| / |v₀|)^esponente:
+//   con esponente 1 (il pennello) dove la particella rallenta la linea si
+//   stringe e dove accelera si allarga; con esponente 0 (il filo di metallo)
+//   la sezione resta costante. `assottiglia` (β) lo fa calare
 //   come e^(−βt); a ogni cessione la particella cede la quota q della sezione
-//   a un ramo e continua con spessore · √(1−q), raccordando nella `durata`.
+//   a un ramo e continua con spessore · √(1−q), raccordando nella `durata`;
+//   una voce { t, fattore, durata } è invece un accrescimento o una perdita di
+//   materia: lo spessore passa linearmente da w a w·fattore nella durata.
 //   masse:      [{ id, pos, M, acceso }],
 //   interfacce: [{ id, a, b, tipo: 'specchio'|'rifrazione'|'assorbe', n1, n2, acceso }],
 //   campi:      [{ id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett, acceso, ... }],
@@ -334,7 +340,7 @@ export function simulaParticella(em, partitura) {
   // lo spessore: funzione del tempo e della velocità. Ogni cessione avviene
   // gradualmente nella sua `durata` (raccordo morbido), come il ramo che
   // prende sezione allo stelo dopo il nodo.
-  const w0 = em.spessore ?? 0, tIniz = p.t;
+  const w0 = em.spessore ?? 0, tIniz = p.t, esponente = em.esponente ?? 1;
   const v0 = V.len(p.s.vel) || 1, beta = em.assottiglia ?? 0;
   const cessioni = (em.cessioni || []).slice().sort((a, b) => a.t - b.t);
   const larghezza = (vel, t) => {
@@ -343,11 +349,25 @@ export function simulaParticella(em, partitura) {
     for (const c of cessioni) {
       if (t <= c.t) break;
       const u = c.durata ? Math.min(1, (t - c.t) / c.durata) : 1;
-      w *= Math.sqrt(Math.max(0, 1 - c.quota * u * u * (3 - 2 * u)));
+      // accrescimento (fattore, lineare nel suo tratto) oppure cessione a un ramo (quota, raccordata)
+      if (c.fattore != null) w *= 1 + (c.fattore - 1) * u;
+      else w *= Math.sqrt(Math.max(0, 1 - c.quota * u * u * (3 - 2 * u)));
     }
-    return w * V.len(vel) / v0;
+    return esponente === 0 ? w : w * Math.pow(V.len(vel) / v0, esponente);
   };
-  const traccia = { id: em.id, piano, punti: [[p.s.pos[0], p.s.pos[1], p.penna, p.t, larghezza(p.s.vel, p.t)]], eventi: [], fine: null };
+  // quale legge agisce ora: serve a vedere nello spaziotempo quale forza genera ogni tratto
+  const legge = () => {
+    if (p.attivi.length) {
+      const tipi = new Set();
+      for (const b of p.attivi) for (const l of leggiDi(b)) if (l.tipo !== 'vuoto' && l.tipo !== 'ferma') tipi.add(l.tipo);
+      if (tipi.size) return [...tipi].sort().join('+');
+    }
+    const tipi = new Set();
+    for (const m of masse) if (p.acceso[m.id]) tipi.add('gravita');
+    for (const c of campi) if (p.acceso[c.id] && dentroCampo(c, p.s.pos)) tipi.add(c.tipo);
+    return tipi.size ? [...tipi].sort().join('+') : 'libero';
+  };
+  const traccia = { id: em.id, piano, punti: [[p.s.pos[0], p.s.pos[1], p.penna, p.t, larghezza(p.s.vel, p.t), legge()]], eventi: [], fine: null };
   if (p.attivi.some(ferma)) p.fine = 'fermata';
 
   const dentro = (q) => q[0] >= limiti[0] && q[1] >= limiti[1] && q[0] <= limiti[2] && q[1] <= limiti[3];
@@ -395,12 +415,12 @@ export function simulaParticella(em, partitura) {
         velNuova = r.vel; nota = r.totale ? 'riflessione totale' : 'rifrazione';
       } else if (i.tipo === 'assorbe') {
         p.s = { pos: punto, vel: velArrivo };
-        traccia.punti.push([punto[0], punto[1], p.penna, p.t + dt * t, larghezza(velArrivo, p.t + dt * t)]);
+        traccia.punti.push([punto[0], punto[1], p.penna, p.t + dt * t, larghezza(velArrivo, p.t + dt * t), i.tipo]);
         p.fine = 'assorbita';
       }
       traccia.eventi.push({ passo: p.passo, pos: punto.slice(), tocca: i.id, nota });
       if (p.fine) break;
-      traccia.punti.push([punto[0], punto[1], p.penna, p.t + (dt - resto) + resto * t, larghezza(velArrivo, p.t + (dt - resto) + resto * t)]);
+      traccia.punti.push([punto[0], punto[1], p.penna, p.t + (dt - resto) + resto * t, larghezza(velArrivo, p.t + (dt - resto) + resto * t), i.tipo]);
       resto = resto * (1 - t);
       da = { pos: punto, vel: velNuova };
       a = { pos: V.add(punto, V.mul(velNuova, resto)), vel: velNuova };
@@ -467,7 +487,7 @@ export function simulaParticella(em, partitura) {
 
     p.s = s1;
     p.t += durata;
-    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna, p.t, larghezza(s1.vel, p.t)]);
+    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna, p.t, larghezza(s1.vel, p.t), legge()]);
     // un blocco può cominciare o finire nel tempo anche se la particella sta ferma nello spazio
     if (blocchi.length && !p.fine) {
       const ora = insieme(s1.pos, p.t);

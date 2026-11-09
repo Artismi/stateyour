@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stateyour — decodifica: dall'immagine al seme</title>
+<style>
+  :root { --carta: #f4f1ea; --inchiostro: #1c1b18; --grigio: #8a867c; --riga: #d8d3c6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); }
+  header { padding: 14px 20px 6px; border-bottom: 1px solid var(--riga); display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header span { color: var(--grigio); }
+  header nav { margin-left: auto; display: flex; gap: 14px; }
+  header a { color: var(--grigio); }
+  .riga { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 14px 20px; }
+  figure { margin: 0; }
+  figcaption { color: var(--grigio); font-size: 12px; margin-bottom: 4px; }
+  canvas { width: 100%; height: auto; display: block; background: #fbfaf6; image-rendering: auto; }
+  .comandi { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 0 20px 10px; }
+  button, input[type=file], select { font: inherit; border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 6px 10px; border-radius: 3px; cursor: pointer; }
+  button.primo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  #rapporto { margin: 0 20px 20px; padding: 10px 12px; border: 1px solid var(--riga); background: #fff; white-space: pre-wrap; font-size: 13px; }
+  @media (max-width: 900px) { .riga { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>stateyour · decodifica</h1>
+  <span>l'immagine letta e riscritta come stato fisico: catene, rami, petali, dischi</span>
+  <nav><a href="./index.html">il motore</a><a href="./piastrelle.html">le piastrelle</a><a href="./spaziotempo.html">lo spaziotempo</a></nav>
+</header>
+<div class="comandi">
+  <input type="file" id="file" accept="image/*">
+  <button id="esempio">la tavola greca</button>
+  <label>pennello <select id="stile"><option value="pieno">pieno</option><option value="contorno">contorno</option><option value="filo">filo</option></select></label>
+  <button id="scarica">scarica il seme (.json)</button>
+  <button id="spazio" class="primo">apri nello spaziotempo →</button>
+</div>
+<div class="riga">
+  <figure><figcaption>l'immagine</figcaption><canvas id="originale"></canvas></figure>
+  <figure><figcaption>la lettura: inchiostro, scheletro, nodi</figcaption><canvas id="lettura"></canvas></figure>
+  <figure><figcaption>la ricostruzione: il seme fatto crescere</figcaption><canvas id="ricostruzione"></canvas></figure>
+</div>
+<div id="rapporto">decodifica in corso…</div>
+<script type="module" src="./src/pagina_decodifica.js"></script>
+</body>
+</html>

@@ -39,7 +39,7 @@ function trasformaRegione(reg, M, S) {
   if (!reg) return reg;
   switch (reg.tipo) {
     case 'tutto': return reg;
-    case 'cerchio': return { tipo: 'cerchio', centro: punto(M, reg.centro), r: reg.r * S.k };
+    case 'cerchio': return { tipo: 'cerchio', centro: punto(M, reg.centro), r: reg.r * S.k, ...(reg.fuori ? { fuori: true } : {}) };
     case 'settore': {
       // senza specchio l'intervallo d'angolo ruota; con lo specchio si ribalta
       const da = S.specchio ? S.theta - (reg.da + reg.ampiezza) : reg.da + S.theta;
@@ -61,7 +61,7 @@ function trasformaLegge(l, M, S, G) {
     case 'gravita': return { tipo: 'gravita', pos: punto(M, l.pos), M: l.M * G * S.k ** 3 };
     case 'magnetico': return { ...l, omega: (l.omega ?? 1) * (S.specchio ? -1 : 1) };
     case 'attrito': return { ...l };
-    case 'molla': return { ...l, a: punto(M, l.a || [0, 0]), b: punto(M, l.b || [1, 0]) };
+    case 'molla': return l.centro ? { ...l, centro: punto(M, l.centro) } : { ...l, a: punto(M, l.a || [0, 0]), b: punto(M, l.b || [1, 0]) };
     default: return { ...l };
   }
 }
@@ -130,7 +130,7 @@ export function trasformaPartitura(part, M, prefisso) {
       t0: e.t0 ?? 0, dt: e.dt ?? part.dt ?? 0.05, passi: e.passi ?? part.passi ?? 2000,
       limiti: limitiNuovi, penna: e.penna,
     };
-    if (e.spessore) { nuovo.spessore = e.spessore * S.k; nuovo.assottiglia = e.assottiglia; nuovo.cessioni = e.cessioni; }
+    if (e.spessore) { nuovo.spessore = e.spessore * S.k; nuovo.assottiglia = e.assottiglia; nuovo.cessioni = e.cessioni; nuovo.esponente = e.esponente; }
     if (e.regole) nuovo.regole = e.regole.map((r) => trasformaRegola(r, M, S, nome));
     if (e.acceso) nuovo.acceso = Object.fromEntries(Object.entries(e.acceso).map(([id, v]) => [nome(id), v]));
     return nuovo;

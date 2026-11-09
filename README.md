@@ -177,6 +177,94 @@ nodo, l'assenza di salti, lo spessore finale della voluta uguale a
 w·rMin/r₀, la voluta pura e che il ramo simile sia la radice in scala nella
 lunghezza, nella corda e nello spessore.
 
+## Gli elementi greci: petali, dischi, occhi, fili
+
+Dalla tavola greca n. 6 della *Grammar of Ornament* vengono quattro elementi,
+tutti da leggi fisiche.
+
+- **Petalo** (`petalo`). La particella parte dalla base con velocità 1 da un
+  centro che la respinge con una molla, cioè la legge di Hooke con rigidità
+  negativa. L'energia dà v² = 1 + k·s², quindi la velocità resta quasi
+  costante all'inizio e poi cresce con la distanza. Col pennello lo spessore
+  segue la velocità: gambo sottile e punta larga e tonda, la spatola dei petali
+  greci. Un campo magnetico lo incurva. Si chiede con lunghezza L, larghezza in
+  punta W, larghezza alla base b e curva.
+- **Disco** (`disco`). Un'orbita magnetica di raggio d/4 tracciata con
+  spessore d/2: un disco pieno di diametro d.
+- **Occhio della voluta** (`voluta.occhio`). Quando la spirale arriva al suo
+  centro asintotico nasce lì un disco pieno, nel proprio piano.
+- **Filo di sezione costante** (`esponente: 0`). Lo spessore vale
+  spessore · (|v|/|v₀|)^esponente. Con 1 è il pennello che si stringe dove la
+  particella rallenta; con 0 è il filo di metallo dei viticci greci.
+
+La corolla accetta un profilo di scale, una per petalo, e `simmetrica` per
+specchiare le copie oltre la metà. Accetta anche `centro` per spostare la
+palmetta. Le piastrelle `palmetta_greca` e `spirali_greche` le usano.
+
+## La decodifica: dall'immagine al seme
+
+`src/decodifica.js` legge un'immagine di ornamento e la riscrive nel linguaggio
+del progetto, poi fa crescere il seme e misura quanto la ricostruzione somiglia
+all'originale. I passi:
+
+1. **Colori.** Tre gruppi di colore (k-medie). L'inchiostro è il più scuro, il
+   fondo è il più frequente al centro, e si ritaglia il campo del fondo, così
+   cornice e titoli restano fuori.
+2. **Maschera.** Ogni pixel misura quanto sta dalla parte dell'inchiostro;
+   l'immagine si ingrandisce prima della soglia per avere bordi lisci.
+3. **Distanza.** La trasformata di distanza euclidea esatta dà lo spessore.
+4. **Scheletro.** Assottigliamento di Zhang e Suen, poi via i pixel ridondanti.
+5. **Grafo.** Estremi, nodi, tratti; via i rametti che restano dentro il disco
+   del loro nodo.
+6. **Buona continuazione.** Dagli estremi si cammina scegliendo a ogni nodo la
+   via più diritta; ciò che resta diventa un ramo agganciato al suo nodo.
+7. **Figure.** Una macchia tonda è un disco. Un tratto corto e libero che si
+   allarga con regolarità verso una punta è un petalo. Il resto è una catena.
+8. **Codifica.** Per ogni catena: ancoraggi (Douglas e Peucker), tangenti,
+   profilo di spessore misurato lontano dai nodi, rami. Il **profilo** è uno
+   spessore per ancoraggio: tra due ancoraggi la particella acquista o perde
+   materia e lo spessore cambia linearmente.
+9. **Residuo.** Si fa crescere il seme, si toglie dall'inchiostro ciò che è già
+   coperto, e si rilegge quel che resta.
+
+Sulla tavola greca n. 6 la codifica ha 467 catene, 57 petali e 5 dischi:
+
+| misura | valore |
+|---|---|
+| IoU con l'inchiostro | 82,6 % |
+| richiamo | 89,2 % |
+| precisione | 91,7 % |
+
+Un pattern disegnato dal progetto e poi decodificato si ritrova con IoU 82 %.
+La pagina `decodifica.html` mostra l'immagine, la lettura e la ricostruzione;
+accetta qualunque immagine e porta il seme nello spaziotempo. Da riga di
+comando:
+
+```bash
+node strumenti/decodifica.mjs esempi/greco_6.png seme.json
+```
+
+L'immagine di esempio è la tavola *Greek No. 6* di Owen Jones, *The Grammar
+of Ornament* (1856), di pubblico dominio.
+
+## Lo spaziotempo in tre dimensioni
+
+`spaziotempo.html` mostra il pattern come insieme di avvenimenti. Il piano
+orizzontale è il piano di esistenza, l'asse verticale è il tempo, e ogni
+particella lascia una **linea d'universo** che sale. La proiezione a terra è
+il pattern.
+
+- Ogni tratto di linea d'universo ha il colore della legge che lo genera in
+  quell'istante (il motore registra la legge attiva in ogni punto): gravità,
+  magnetico, magnetico con attrito, molla, retta libera.
+- Il **piano del tempo** sale col cursore e mostra lo stato nell'istante t:
+  il pattern cresciuto fin lì, le particelle in viaggio, i blocchi che
+  esistono ora.
+- Le **masse** sono fili verticali che durano quanto il loro blocco; le
+  **forze** sono frecce nel piano all'altezza dell'istante in cui agiscono.
+- Si ruota trascinando, si avvicina con la rotella, si sposta col maiuscolo.
+  Mostra la tavola decodificata, ogni piastrella e ogni esempio del motore.
+
 ## Geometria esatta: dal disegno voluto ai parametri fisici
 
 I tratti dell'alfabeto si chiedono in termini geometrici e il sistema ricava
@@ -339,6 +427,12 @@ src/catena.js      la catena: ancoraggi → biarchi → blocchi di spaziotempo, 
 src/grammatica.js  istanze: motivo (C_n, D_n), cella (ruoli), reticolo (gruppi); parola
 src/seme.js        il seme: lo stato di ogni istanza trasformato, una sola configurazione iniziale
 src/pennello.js    il pennello: la linea come corpo, pieno, contorno o filo
+src/decodifica.js  la decodifica: immagine → maschera → scheletro → catene, petali, dischi → seme
+src/spaziotempo.js la vista 3D: linee d'universo, piano del tempo, masse, forze
+decodifica.html    la pagina della decodifica
+spaziotempo.html   la pagina dello spaziotempo
+strumenti/         il lettore PNG per Node e la decodifica da riga di comando
+esempi/            la tavola greca n. 6
 src/celle.js       le piastrelle di esempio
 src/piastrelle.js  la pagina delle piastrelle
 piastrelle.html    la pagina delle piastrelle
@@ -375,6 +469,11 @@ rigenera col bottone.
 - portare allo stato anche gli esempi che usano ancora le regole (il
   tratteggio della penna, lo specchio che accende la massa, le staffette dei
   motivi di base);
-- **la lettura inversa**: da un'immagine trovare il reticolo
-  (autocorrelazione), poi la simmetria della cella, poi i ruoli, fino alla
-  parola.
+- **la lettura inversa della grammatica**: la decodifica oggi riscrive ogni
+  tratto, ma non riconosce ancora le simmetrie e le ripetizioni. Il passo
+  successivo è trovare il reticolo (autocorrelazione), la simmetria della
+  cella e i ruoli, e ridurre il seme decodificato a una parola;
+- **volute fisiche nella decodifica**: le spirali decodificate oggi sono
+  catene di molti ancoraggi; riconoscerle e codificarle come volute (campo
+  magnetico e attrito) renderebbe il seme più corto;
+- **risoluzione**: con immagini più grandi i petali piccoli si separano meglio.

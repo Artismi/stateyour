@@ -258,6 +258,47 @@ export const MOTIVI = {
     return MOTIVI.spezzata({ punti, lungo: u * 0.9 });
   },
 
+  // ---------- foglie e dischi: corpi pieni ----------
+
+  // petalo: una particella parte dalla base con velocità 1, lungo l'asse, da
+  // un centro che la RESPINGE con una molla (legge di Hooke con rigidità
+  // negativa: a = |k|·distanza). L'energia dà v² = 1 + |k|·s²: all'inizio la
+  // velocità resta quasi 1, poi cresce in proporzione alla distanza. Col
+  // pennello lo spessore segue la velocità: gambo sottile e punta larga, la
+  // spatola dei petali greci, chiusa tonda. Un campo magnetico la incurva di
+  // `curva` radianti. Si ferma esattamente alla distanza L, fuori dal cerchio.
+  // L lunghezza, W larghezza in punta, b larghezza alla base.
+  petalo: ({ L = 30, W = 8, b = 1, curva = 0 } = {}) => {
+    const F = Math.max(W / b, 1.0001);
+    const k = (F * F - 1) / (L * L);
+    const T = Math.asinh(Math.sqrt(k) * L) / Math.sqrt(k); // tempo per percorrere L
+    const leggi = [{ tipo: 'molla', centro: [0, 0], k: -k }];
+    if (curva) leggi.push({ tipo: 'magnetico', omega: curva / T });
+    return {
+      G: 1, dt: T / 800, passi: 4000, limiti: LIM,
+      emettitori: [{ id: 'p', pos: [0, 0], dir: [0, 1], v: 1, spessore: b }],
+      blocchi: [
+        { id: 'campo', regione: { tipo: 'tutto' }, legge: leggi },
+        { id: 'fine', regione: { tipo: 'cerchio', centro: [0, 0], r: L, fuori: true }, legge: { tipo: 'ferma' } },
+      ],
+      masse: [], interfacce: [], regole: [],
+    };
+  },
+
+  // disco pieno di diametro d: un'orbita magnetica di raggio d/4 con spessore d/2
+  disco: ({ d = 6 } = {}) => {
+    const rho = d / 4, omega = 1 / rho, giro = 2 * Math.PI / omega;
+    return {
+      G: 1, dt: giro / 400, passi: 500, limiti: LIM,
+      emettitori: [{ id: 'd', pos: [rho, 0], dir: [0, 1], v: 1, spessore: d / 2, esponente: 0 }],
+      blocchi: [
+        { id: 'orbita', regione: { tipo: 'tutto' }, tempo: [0, giro], legge: { tipo: 'magnetico', omega } },
+        { id: 'fine', regione: { tipo: 'tutto' }, tempo: [giro, null], legge: { tipo: 'ferma' } },
+      ],
+      masse: [], interfacce: [], regole: [],
+    };
+  },
+
   // quadrato: quattro particelle, una per lato; il contenitore classico
   quadrato: ({ l = 100 } = {}) => ({
     G: 1, dt: 1, passi: Math.round(l), limiti: LIM,

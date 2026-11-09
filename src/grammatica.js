@@ -153,9 +153,15 @@ export function istanzeCella(c, indiceContenuto = 0) {
     for (let k = 0; k < n; k++) {
       const frazione = intero ? k / n : n > 1 ? k / (n - 1) : 0.5;
       const ang = da + (a - da) * frazione;
-      const sc = Array.isArray(co.scala) ? co.scala[0] + (co.scala[1] - co.scala[0]) * frazione : (co.scala ?? 1);
-      // `alterna` specchia una copia sì e una no: la corolla resta ciclica ma non simmetrica
-      const M = catena(T.ruota(ang), T.trasla(r, 0), T.ruota(co.orienta ?? 0), T.scala(sc), co.alterna && k % 2 ? T.specchioY() : T.id());
+      // la scala: un numero, [inizio, fine] interpolati, oppure un profilo con un valore per copia
+      const sc = Array.isArray(co.scala)
+        ? (co.scala.length === n && n !== 2 ? co.scala[k] : co.scala[0] + (co.scala[1] - co.scala[0]) * frazione)
+        : (co.scala ?? 1);
+      // `alterna` specchia una copia sì e una no: la corolla resta ciclica ma non simmetrica;
+      // `simmetrica` specchia sul proprio asse le copie oltre la metà, come i petali di una palmetta
+      const specchio = co.alterna && k % 2 ? T.specchioY() : co.simmetrica && frazione > 0.5 + 1e-9 ? T.specchioX() : T.id();
+      // `centro` sposta tutta la corolla: la palmetta sopra le spirali, non al centro della cella
+      const M = catena(T.trasla(...(co.centro || [0, 0])), T.ruota(ang), T.trasla(r, 0), T.ruota(co.orienta ?? 0), T.scala(sc), specchio);
       metti('corolla', co.motivo, M);
     }
   }

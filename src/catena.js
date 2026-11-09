@@ -156,7 +156,7 @@ function compila(c, piano, v, G, t0) {
   const ultimo = archi[archi.length - 1] || { dritto: true, q: punti[0], t1: t0, tq: norm(tang[0]), lunghezza: 0 };
   const E = ultimo.q, tE = ultimo.t1, tq = ultimo.tq;
   const margineFine = archi.length ? 0.25 * durata(archi.length - 1) : 0;
-  let tFine = tE, omega = 0;
+  let tFine = tE, omega = 0, occhio = null;
   if (c.voluta) {
     const vo = c.voluta;
     const R = vo.R ?? (ultimo.dritto ? (vo.r0 ?? 10) : Math.abs(ultimo.r));
@@ -180,6 +180,7 @@ function compila(c, piano, v, G, t0) {
     rMinCurv = Math.min(rMinCurv, R);
     // il tempo per raggiungere rMin: la distanza dal centro cala come e^(−γt)
     tFine = tE + (gamma > 0 ? Math.log(r0 / rMin) / gamma : 2 * Math.PI * (vo.giri ?? 2) / Math.abs(omega));
+    if (vo.occhio) occhio = { centro: zinf, d: vo.occhio, t: tFine };
   } else if (archi.length) {
     // un piccolo disco appena oltre il punto d'arrivo: la particella vi entra esattamente in E
     const h = Math.min(1, 0.5 * (ultimo.lunghezza || 1));
@@ -188,7 +189,7 @@ function compila(c, piano, v, G, t0) {
     rMinCurv = Math.min(rMinCurv, 50 * h);
   }
   const lunghezza = archi.reduce((s, a) => s + a.lunghezza, 0);
-  return { punti, tang, archi, tempoAncoraggio, blocchi, rMinCurv, lunghezza, tFine };
+  return { punti, tang, archi, tempoAncoraggio, blocchi, rMinCurv, lunghezza, tFine, occhio };
 }
 
 // ---------- trasformare una catena con una similitudine ----------
@@ -216,6 +217,7 @@ function applicaDef(def, M) {
       ...def.voluta,
       rMin: def.voluta.rMin != null ? def.voluta.rMin * k : undefined,
       R: def.voluta.R != null ? def.voluta.R * k : undefined,
+      occhio: def.voluta.occhio != null ? def.voluta.occhio * k : undefined,
       r0: def.voluta.r0 != null ? def.voluta.r0 * k : undefined,
       verso: sp ? flip(def.voluta.verso) : def.voluta.verso,
     } : undefined,
@@ -301,10 +303,29 @@ export function catena(opzioni = {}) {
       if (cede && w0 > 0) { cessioni.push({ t, quota: q, durata: 4 * wRamo / v }); fattore *= Math.sqrt(1 - q); }
       figli.push({ r, j, t, wRamo });
     }
+    // il profilo: uno spessore per ancoraggio; tra due ancoraggi la particella
+    // acquista o perde materia e lo spessore passa linearmente dall'uno all'altro
+    if (Array.isArray(c.profilo) && c.profilo.length === c.punti.length && w0 > 0) {
+      for (let i = 1; i < c.profilo.length; i++) {
+        const a = Math.max(c.profilo[i - 1], 1e-6), b = Math.max(c.profilo[i], 1e-6);
+        const ta = k.tempoAncoraggio[i - 1], tb = k.tempoAncoraggio[i];
+        if (tb > ta && Math.abs(b / a - 1) > 1e-3) cessioni.push({ t: ta, fattore: b / a, durata: tb - ta });
+      }
+      cessioni.sort((x, y) => x.t - y.t);
+    }
     emettitori.push({
       id: piano, piano, pos: k.punti[0], dir: k.tang[0], v, t0, dt, passi,
-      ...(w0 > 0 ? { spessore: w0, assottiglia: beta, cessioni } : {}),
+      ...(w0 > 0 ? { spessore: w0, assottiglia: beta, cessioni, ...(c.esponente != null ? { esponente: c.esponente } : {}) } : {}),
     });
+    // l'occhio della voluta: un disco pieno, tracciato da una piccola orbita
+    // magnetica nel proprio piano, che comincia quando la spirale arriva al centro
+    if (k.occhio) {
+      const { centro, d, t: tO } = k.occhio;
+      const rho = d / 4, omega = v / rho, giro = 2 * Math.PI / omega, po = `${piano}o`;
+      blocchi.push({ id: `${po}:orbita`, piano: po, regione: { tipo: 'tutto' }, tempo: [tO, tO + giro], legge: { tipo: 'magnetico', omega } });
+      blocchi.push({ id: `${po}:fine`, piano: po, regione: { tipo: 'tutto' }, tempo: [tO + giro, null], legge: { tipo: 'ferma' } });
+      emettitori.push({ id: po, piano: po, pos: [centro[0] + rho, centro[1]], dir: [0, 1], v, t0: tO, dt: giro / 400, passi: 500, spessore: d / 2, esponente: 0 });
+    }
     linee.push({ piano, archi: k.archi, punti: k.punti, tempoAncoraggio: k.tempoAncoraggio });
 
     for (const { r, j, t, wRamo } of figli) {
@@ -315,7 +336,7 @@ export function catena(opzioni = {}) {
         def.punti[0] = k.punti[r.da];
         costruisci(def, `${piano}r${j}`, t, Mf, profondita - 1, wRamo);
       } else {
-        costruisci({ rastremazione: c.rastremazione, ...r.catena, punti: [k.punti[r.da], ...r.catena.punti] }, `${piano}r${j}`, t, Mc, 0, wRamo);
+        costruisci({ rastremazione: c.rastremazione, esponente: c.esponente, ...r.catena, punti: [k.punti[r.da], ...r.catena.punti] }, `${piano}r${j}`, t, Mc, 0, wRamo);
       }
     }
     return k;

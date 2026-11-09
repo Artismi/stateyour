@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stateyour — lo spaziotempo: la forma come avvenimenti</title>
+<style>
+  :root { --carta: #f4f1ea; --inchiostro: #1c1b18; --grigio: #8a867c; --riga: #d8d3c6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); }
+  header { padding: 14px 20px 6px; border-bottom: 1px solid var(--riga); display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header span { color: var(--grigio); }
+  header nav { margin-left: auto; display: flex; gap: 14px; }
+  header a { color: var(--grigio); }
+  main { display: grid; grid-template-columns: 1fr 330px; min-height: calc(100vh - 48px); }
+  #scena { width: 100%; height: calc(100vh - 140px); display: block; background: #15140f; cursor: grab; touch-action: none; }
+  #scena:active { cursor: grabbing; }
+  .sotto { padding: 8px 16px; display: flex; gap: 12px; align-items: center; }
+  .sotto input[type=range] { flex: 1; }
+  aside { border-left: 1px solid var(--riga); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  label { display: block; color: var(--grigio); font-size: 12px; }
+  select, button { font: inherit; width: 100%; border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 6px 8px; border-radius: 3px; cursor: pointer; }
+  .sotto button { width: auto; }
+  .spunte label { color: var(--inchiostro); font-size: 13px; display: flex; gap: 8px; align-items: center; margin: 3px 0; }
+  .legenda div { display: flex; gap: 8px; align-items: center; font-size: 12px; margin: 2px 0; }
+  .legenda i { display: inline-block; width: 18px; height: 3px; }
+  #nota { color: var(--grigio); font-size: 12px; white-space: pre-wrap; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid var(--riga); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>stateyour · spaziotempo</h1>
+  <span>ogni punto del pattern è un avvenimento: dove e quando la particella è passata. Il tempo sale.</span>
+  <nav><a href="./index.html">il motore</a><a href="./piastrelle.html">le piastrelle</a><a href="./decodifica.html">la decodifica</a></nav>
+</header>
+<main>
+  <section>
+    <canvas id="scena"></canvas>
+    <div class="sotto">
+      <button id="gioca">▶</button>
+      <input type="range" id="tempo" min="0" max="1" step="0.001" value="1">
+      <output id="otempo"></output>
+    </div>
+  </section>
+  <aside>
+    <div>
+      <label for="scelta">che cosa</label>
+      <select id="scelta"></select>
+    </div>
+    <div class="spunte">
+      <label><input type="checkbox" id="vLinee" checked> linee d'universo, colorate per legge</label>
+      <label><input type="checkbox" id="vPianta" checked> pianta: il pattern proiettato a terra</label>
+      <label><input type="checkbox" id="vTaglio" checked> piano del tempo: lo stato nell'istante t</label>
+      <label><input type="checkbox" id="vForze"> vettori delle forze</label>
+      <label><input type="checkbox" id="vMasse"> masse e centri: fili verticali nel loro tempo</label>
+      <label><input type="checkbox" id="vCampi" checked> i blocchi che esistono nell'istante t</label>
+    </div>
+    <div class="legenda" id="legenda"></div>
+    <button id="vista">rimetti la vista</button>
+    <div id="nota"></div>
+  </aside>
+</main>
+<script type="module" src="./src/spaziotempo.js"></script>
+</body>
+</html>
