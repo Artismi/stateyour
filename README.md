@@ -3,6 +3,45 @@
 Scomposizione e codifica dei pattern: la loro origine e la loro replica
 tramite regole di generazione geometrica.
 
+## Lo studio
+
+`index.html` è il programma: un solo seme al centro di tutto.
+
+- **Da un'immagine.** Si carica un'immagine e lo studio la ricostruisce: la
+  decodifica e la lingua girano in un processo a parte, e ne esce un seme di
+  parole, simmetrie e istanze. Funziona con qualunque immagine d'inchiostro su
+  fondo uniforme; la tavola greca è solo l'esempio pronto.
+- **Giocare col seme.** Si tocca una linea per scegliere la sua parola e il
+  suo elemento. Si trascinano gli ancoraggi; si cambiano spessore, sezione,
+  voluta, occhio, petali, dischi, campiture; si cambia la simmetria della
+  parola (specchi D o rotazioni C, ordine, asse, centro); si spostano,
+  ruotano, scalano, specchiano, duplicano le istanze; si ripete una parola su
+  un reticolo (p1, pm, pmm, p2, p4, cm, esagonale).
+- **Il caso.** Un numero inventa un pattern intero dalla grammatica: parole
+  (volute, palmette, rosette, stelle, macchie), simmetrie e una disposizione
+  (reticolo, fregio, rosone, figura singola). Lo stesso numero ridà sempre lo
+  stesso pattern. «Muta» sposta i parametri di un seme qualunque, anche di uno
+  ricostruito, con l'intensità scelta.
+- **Da zero.** Strumenti per disegnare catene a clic, petali trascinando,
+  dischi, campiture per vertici, e per fissare il centro di simmetria.
+- **Due viste.** Il piano che cresce col cursore del tempo, nei tre stili del
+  pennello, e lo spaziotempo in 3D.
+- **Il seme** si copia, si incolla e si scarica in JSON; annulla e rifai.
+
+Per disegnare in fretta ogni elemento si simula una volta sola e le sue
+traiettorie si spostano con le trasformazioni; il test dello studio verifica
+che coincidano con la fisica del seme compilato (scarto sotto 1e-11).
+
+| file | che cosa fa |
+|---|---|
+| `src/studio/modello.js` | il seme: parole, frase, gruppi di simmetria, compilazione, cache, inventa, muta, reticoli |
+| `src/studio/app.js` | lo studio: viste, strumenti, pannello, cronologia |
+| `src/studio/lavoratore.js` | la decodifica in un processo a parte |
+| `src/vista3d.js` | lo spaziotempo come vista riusabile |
+
+Le altre pagine (motore, piastrelle, decodifica, spaziotempo) restano come
+laboratorio, collegate allo studio.
+
 ## Il modello
 
 Una realtà 2D, il **piano di esistenza**, su cui si muovono **particelle**.
@@ -518,7 +557,7 @@ npm test
 npm start
 ```
 
-poi apri `http://localhost:8000`. Il cursore del tempo scorre lo stato. I cursori dell'onda mostrano in diretta le
+poi apri `http://localhost:8000`: si apre lo studio. Il cursore del tempo scorre lo stato. I cursori dell'onda mostrano in diretta le
 formule e rigenerano la partitura; il JSON nel pannello è modificabile e si
 rigenera col bottone.
 
