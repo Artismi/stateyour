@@ -49,8 +49,31 @@ export const CELLE = {
 
   // ---------- linee continue per ancoraggi: catene con volute e rami ----------
 
+  acanto: {
+    nome: "acanto: una sola voluta ricorsiva, tre livelli di volute simili, spessore che si conserva ai nodi (regola di Leonardo); specchiata sull'asse",
+    cella: {
+      lato: 230,
+      centro: {
+        tratto: 'catena',
+        parametri: {
+          punti: [[0, 0], [30, 24], [64, 28], [88, 10]],
+          tangenti: [[0.55, 1.2]],
+          voluta: { giri: 1.8, rMin: 0.6, verso: 'destra' },
+          spessore: 7, rastremazione: 0.55, profondita: 3,
+          rami: [
+            { da: 1, simile: { scala: 0.5, angolo: 24, specchia: true } },
+            { da: 2, simile: { scala: 0.34, angolo: -40 } },
+          ],
+        },
+        simmetria: { tipo: 'D', n: 1, fase: 90 },
+        spostamento: [0, -25],
+      },
+    },
+    colonne: 1, righe: 1, gruppo: 'p1',
+  },
+
   girale: {
-    nome: 'girale (rinceau): uno stelo ondulato continuo da cella a cella, viticci che si staccano e si avvolgono; simmetria di slittamento',
+    nome: 'girale (rinceau): uno stelo ondulato di spessore costante da cella a cella; i viticci prendono sezione, si avvolgono e si assottigliano',
     cella: {
       lato: 120,
       centro: {
@@ -58,11 +81,14 @@ export const CELLE = {
         parametri: {
           punti: [[-60, 0], [-45, 13], [-30, 18], [-15, 13], [0, 0], [15, -13], [30, -18], [45, -13], [60, 0]],
           tangenti: [[1, 0.9], null, null, null, null, null, null, null, [1, 0.9]],
+          spessore: 4, cedeSpessore: false,
           rami: [
-            { da: 3, catena: { punti: [[-12, -1], [-24, -6]], tangenti: [[0.55, -1]], voluta: { giri: 1.7, rMin: 0.8, verso: 'destra' } } },
-            { da: 7, catena: { punti: [[48, 1], [36, 6]], tangenti: [[0.55, 1]], voluta: { giri: 1.7, rMin: 0.8, verso: 'sinistra' } } },
-            { da: 1, catena: { punti: [[-52, 30], [-40, 34]], tangenti: [[-0.2, 1]], voluta: { giri: 1.2, rMin: 0.8, verso: 'destra' } } },
-            { da: 5, catena: { punti: [[8, -30], [20, -34]], tangenti: [[-0.2, -1]], voluta: { giri: 1.2, rMin: 0.8, verso: 'sinistra' } } },
+            { da: 3, quota: 0.3, catena: { punti: [[-12, -1], [-24, -6]], tangenti: [[0.55, -1]], voluta: { giri: 1.7, rMin: 0.5, verso: 'destra' },
+              rami: [{ da: 1, quota: 0.3, catena: { punti: [], tangenti: [[-0.9, -0.6]], voluta: { R: 4, giri: 1.3, rMin: 0.35, verso: 'sinistra' } } }] } },
+            { da: 7, quota: 0.3, catena: { punti: [[48, 1], [36, 6]], tangenti: [[0.55, 1]], voluta: { giri: 1.7, rMin: 0.5, verso: 'sinistra' },
+              rami: [{ da: 1, quota: 0.3, catena: { punti: [], tangenti: [[-0.9, 0.6]], voluta: { R: 4, giri: 1.3, rMin: 0.35, verso: 'destra' } } }] } },
+            { da: 1, quota: 0.15, catena: { punti: [[-52, 30], [-40, 34]], tangenti: [[-0.2, 1]], voluta: { giri: 1.2, rMin: 0.5, verso: 'destra' } } },
+            { da: 5, quota: 0.15, catena: { punti: [[8, -30], [20, -34]], tangenti: [[-0.2, -1]], voluta: { giri: 1.2, rMin: 0.5, verso: 'sinistra' } } },
           ],
         },
       },
@@ -71,21 +97,21 @@ export const CELLE = {
   },
 
   palmetta: {
-    nome: 'palmetta (anthemion): petali a lira con le punte arricciate, a ventaglio su una base a doppia voluta',
+    nome: 'palmetta (anthemion): petali a lira che si assottigliano verso la punta arricciata, a ventaglio su una base a doppia voluta',
     cella: {
       lato: 160,
       corolla: {
         n: 7, da: 35, a: 145, raggio: 0, orienta: -90,
         motivo: {
           tratto: 'catena',
-          parametri: { punti: [[0, 0], [5, 14], [8, 30], [4, 42]], tangenti: [[0.3, 1]], voluta: { giri: 1.4, rMin: 0.7, verso: 'destra' } },
+          parametri: { punti: [[0, 0], [3, 14], [5, 30], [2.5, 42]], tangenti: [[0.18, 1]], voluta: { giri: 1.4, rMin: 0.45, verso: 'destra' }, spessore: 2.6, rastremazione: 0.4 },
           simmetria: { tipo: 'D', n: 1, fase: 90 },
         },
         scala: 1,
       },
       centro: {
         tratto: 'catena',
-        parametri: { punti: [[0, -2], [14, -14], [34, -12], [40, -26]], tangenti: [[1, -0.4]], voluta: { giri: 2, rMin: 0.9, verso: 'destra' } },
+        parametri: { punti: [[0, -2], [14, -14], [34, -12], [40, -26]], tangenti: [[1, -0.4]], voluta: { giri: 2, rMin: 0.6, verso: 'destra' }, spessore: 4.5, rastremazione: 0.6 },
         simmetria: { tipo: 'D', n: 1, fase: 90 },
       },
     },
@@ -93,7 +119,7 @@ export const CELLE = {
   },
 
   candelabro: {
-    nome: 'candelabro pompeiano: un solo stelo, i rami nascono tangenti ai nodi e finiscono in volute; specchiato sull asse',
+    nome: "candelabro pompeiano: uno stelo che si assottiglia salendo; a ogni nodo un ramo prende sezione e finisce in voluta; specchiato sull'asse",
     cella: {
       lato: 240,
       centro: {
@@ -101,13 +127,16 @@ export const CELLE = {
         parametri: {
           punti: [[0, -110], [0, -70], [0, -30], [0, 10], [0, 50], [0, 88]],
           tangenti: [[0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [0, 1]],
+          spessore: 8, rastremazione: 0.45,
           rami: [
-            { da: 1, catena: { punti: [[22, -44], [44, -54], [46, -76]], tangenti: [[0.45, 1]], voluta: { giri: 2.2, rMin: 0.9, verso: 'destra' } } },
-            { da: 2, catena: { punti: [[14, -14], [26, -20]], tangenti: [[0.6, 1]], voluta: { giri: 1.8, rMin: 0.8, verso: 'destra' } } },
-            { da: 3, catena: { punti: [[30, 26], [56, 20], [60, 0]], tangenti: [[0.7, 1]], voluta: { giri: 2.4, rMin: 1, verso: 'destra' } } },
-            { da: 4, catena: { punti: [[12, 66], [22, 62]], tangenti: [[0.6, 1]], voluta: { giri: 1.6, rMin: 0.7, verso: 'destra' } } },
-            { da: 5, catena: { punti: [[10, 100], [4, 112], [0, 116]], tangenti: [[0.8, 1]] } },
-            { da: 3, catena: { punti: [[18, -4], [34, 0]], tangenti: [[0.5, -1]], voluta: { giri: 1.5, rMin: 0.7, verso: 'sinistra' } } },
+            { da: 1, catena: { punti: [[22, -44], [44, -54], [46, -76]], tangenti: [[0.45, 1]], voluta: { giri: 2.2, rMin: 0.7, verso: 'destra' },
+              rami: [{ da: 1, quota: 0.3, catena: { punti: [], tangenti: [[0.2, 1]], voluta: { R: 6, giri: 1.4, rMin: 0.4, verso: 'sinistra' } } }] } },
+            { da: 2, quota: 0.15, catena: { punti: [[14, -14], [26, -20]], tangenti: [[0.6, 1]], voluta: { giri: 1.8, rMin: 0.6, verso: 'destra' } } },
+            { da: 3, catena: { punti: [[30, 26], [56, 20], [60, 0]], tangenti: [[0.7, 1]], voluta: { giri: 2.4, rMin: 0.8, verso: 'destra' },
+              rami: [{ da: 1, quota: 0.3, catena: { punti: [], tangenti: [[0.3, 1]], voluta: { R: 7, giri: 1.4, rMin: 0.4, verso: 'sinistra' } } }] } },
+            { da: 4, quota: 0.15, catena: { punti: [[12, 66], [22, 62]], tangenti: [[0.6, 1]], voluta: { giri: 1.6, rMin: 0.5, verso: 'destra' } } },
+            { da: 5, quota: 0.2, catena: { punti: [[10, 100], [4, 112], [0, 116]], tangenti: [[0.8, 1]] } },
+            { da: 3, quota: 0.12, catena: { punti: [[18, -4], [34, 0]], tangenti: [[0.5, -1]], voluta: { giri: 1.5, rMin: 0.5, verso: 'sinistra' } } },
           ],
         },
         simmetria: { tipo: 'D', n: 1, fase: 90 },
@@ -117,7 +146,7 @@ export const CELLE = {
   },
 
   nuvola_ruyi: {
-    nome: 'nuvola ruyi: un contorno continuo con tre lobi, ogni lobo si chiude in una voluta; specchiato, poi in fregio sfalsato',
+    nome: 'nuvola ruyi: un contorno continuo con tre lobi, ogni lobo si chiude in una voluta che si assottiglia; specchiato, poi in fregio sfalsato',
     cella: {
       lato: 110,
       centro: {
@@ -125,9 +154,10 @@ export const CELLE = {
         parametri: {
           punti: [[0, 6], [-8, 24], [-26, 26], [-34, 10]],
           tangenti: [[-0.3, 1]],
-          voluta: { giri: 1.6, rMin: 0.8, verso: 'sinistra' },
+          voluta: { giri: 1.6, rMin: 0.5, verso: 'sinistra' },
+          spessore: 3.2,
           rami: [
-            { da: 3, catena: { punti: [[-34, -6], [-20, -14], [-8, -6]], tangenti: [[0.1, -1]], voluta: { giri: 1.5, rMin: 0.8, verso: 'sinistra' } } },
+            { da: 3, quota: 0.45, catena: { punti: [[-34, -6], [-20, -14], [-8, -6]], tangenti: [[0.1, -1]], voluta: { giri: 1.5, rMin: 0.5, verso: 'sinistra' } } },
           ],
         },
         simmetria: { tipo: 'D', n: 1, fase: 90 },

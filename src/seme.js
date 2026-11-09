@@ -130,6 +130,7 @@ export function trasformaPartitura(part, M, prefisso) {
       t0: e.t0 ?? 0, dt: e.dt ?? part.dt ?? 0.05, passi: e.passi ?? part.passi ?? 2000,
       limiti: limitiNuovi, penna: e.penna,
     };
+    if (e.spessore) { nuovo.spessore = e.spessore * S.k; nuovo.assottiglia = e.assottiglia; nuovo.cessioni = e.cessioni; }
     if (e.regole) nuovo.regole = e.regole.map((r) => trasformaRegola(r, M, S, nome));
     if (e.acceso) nuovo.acceso = Object.fromEntries(Object.entries(e.acceso).map(([id, v]) => [nome(id), v]));
     return nuovo;

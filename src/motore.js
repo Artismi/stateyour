@@ -228,7 +228,12 @@ export function rifrangi(vel, normale, nIn, nOut) {
 // {
 //   nome, G, dt, passi, limiti: [xmin, ymin, xmax, ymax],
 //   blocchi:    [{ id, piano, regione, tempo: [t0, t1], legge }],     (lo stato)
-//   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, limiti, regole }],
+//   emettitori: [{ id, piano, pos, angolo | dir, v, t0, dt, passi, limiti, regole,
+//                  spessore, assottiglia, cessioni: [{ t, quota }] }],
+//   Lo spessore della linea in ogni punto è spessore · |v| / |v₀|: dove la
+//   particella rallenta la linea si stringe. `assottiglia` (β) lo fa calare
+//   come e^(−βt); a ogni cessione la particella cede la quota q della sezione
+//   a un ramo e continua con spessore · √(1−q), raccordando nella `durata`.
 //   masse:      [{ id, pos, M, acceso }],
 //   interfacce: [{ id, a, b, tipo: 'specchio'|'rifrazione'|'assorbe', n1, n2, acceso }],
 //   campi:      [{ id, tipo: 'magnetico'|'attrito'|'molla', pos, raggio, rett, acceso, ... }],
@@ -326,7 +331,23 @@ export function simulaParticella(em, partitura) {
     ultimaInterfaccia: null,
   };
   p.attivi = insieme(p.s.pos, p.t);
-  const traccia = { id: em.id, piano, punti: [[p.s.pos[0], p.s.pos[1], p.penna, p.t]], eventi: [], fine: null };
+  // lo spessore: funzione del tempo e della velocità. Ogni cessione avviene
+  // gradualmente nella sua `durata` (raccordo morbido), come il ramo che
+  // prende sezione allo stelo dopo il nodo.
+  const w0 = em.spessore ?? 0, tIniz = p.t;
+  const v0 = V.len(p.s.vel) || 1, beta = em.assottiglia ?? 0;
+  const cessioni = (em.cessioni || []).slice().sort((a, b) => a.t - b.t);
+  const larghezza = (vel, t) => {
+    if (!(w0 > 0)) return 0;
+    let w = w0 * Math.exp(-beta * (t - tIniz));
+    for (const c of cessioni) {
+      if (t <= c.t) break;
+      const u = c.durata ? Math.min(1, (t - c.t) / c.durata) : 1;
+      w *= Math.sqrt(Math.max(0, 1 - c.quota * u * u * (3 - 2 * u)));
+    }
+    return w * V.len(vel) / v0;
+  };
+  const traccia = { id: em.id, piano, punti: [[p.s.pos[0], p.s.pos[1], p.penna, p.t, larghezza(p.s.vel, p.t)]], eventi: [], fine: null };
   if (p.attivi.some(ferma)) p.fine = 'fermata';
 
   const dentro = (q) => q[0] >= limiti[0] && q[1] >= limiti[1] && q[0] <= limiti[2] && q[1] <= limiti[3];
@@ -374,12 +395,12 @@ export function simulaParticella(em, partitura) {
         velNuova = r.vel; nota = r.totale ? 'riflessione totale' : 'rifrazione';
       } else if (i.tipo === 'assorbe') {
         p.s = { pos: punto, vel: velArrivo };
-        traccia.punti.push([punto[0], punto[1], p.penna, p.t + dt * t]);
+        traccia.punti.push([punto[0], punto[1], p.penna, p.t + dt * t, larghezza(velArrivo, p.t + dt * t)]);
         p.fine = 'assorbita';
       }
       traccia.eventi.push({ passo: p.passo, pos: punto.slice(), tocca: i.id, nota });
       if (p.fine) break;
-      traccia.punti.push([punto[0], punto[1], p.penna, p.t + (dt - resto) + resto * t]);
+      traccia.punti.push([punto[0], punto[1], p.penna, p.t + (dt - resto) + resto * t, larghezza(velArrivo, p.t + (dt - resto) + resto * t)]);
       resto = resto * (1 - t);
       da = { pos: punto, vel: velNuova };
       a = { pos: V.add(punto, V.mul(velNuova, resto)), vel: velNuova };
@@ -446,7 +467,7 @@ export function simulaParticella(em, partitura) {
 
     p.s = s1;
     p.t += durata;
-    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna, p.t]);
+    traccia.punti.push([s1.pos[0], s1.pos[1], p.penna, p.t, larghezza(s1.vel, p.t)]);
     // un blocco può cominciare o finire nel tempo anche se la particella sta ferma nello spazio
     if (blocchi.length && !p.fine) {
       const ora = insieme(s1.pos, p.t);

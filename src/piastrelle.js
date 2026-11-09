@@ -6,15 +6,12 @@ import { cella, parola, RUOLI, lineeDaTracce } from './grammatica.js';
 import { simula } from './motore.js';
 import { seme, contaSeme, pianoRadice } from './seme.js';
 import { CELLE } from './celle.js';
+import { pennellaTutte } from './pennello.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORE = { centro: '#1c1b18', contenitore: '#8a867c', contenuto: '#b8412b', angoli: '#2b5fb8', lati: '#3b7d3a', corolla: '#9a5b1a', fusto: '#6b3fa0' };
 
-function linea(ctx, pts, X, Y) {
-  ctx.beginPath();
-  pts.forEach((p, k) => (k ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1]))));
-  ctx.stroke();
-}
+const stile = () => ($('stile') ? $('stile').value : 'pieno');
 
 // ---- il seme e la sua crescita
 let corrente = null; // { r, conf, tracce, tMax }
@@ -35,20 +32,22 @@ function disegnaReticolo(t) {
   const ox = (W - conf.larghezza * k) / 2, oy = (H - conf.altezza * k) / 2;
   const X = (x) => ox + x * k, Y = (y) => H - (oy + y * k);
   ctx.lineWidth = 1; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  const tutto = t >= tMax;
+  const tutto = t >= tMax * (1 - 1e-3); // il cursore arrotonda al suo passo
+  // le linee fino all'istante t, col loro spessore; la penna alzata le spezza
+  const voci = [], teste = [];
   for (const tr of tracce) {
-    // la linea fino all'istante t; la penna alzata la spezza
-    ctx.strokeStyle = '#1c1b18';
-    ctx.beginPath();
-    let su = false, testa = null;
-    for (const [x, y, penna, tp] of tr.punti) {
+    let pezzo = [], testa = null;
+    for (const [x, y, penna, tp, w] of tr.punti) {
       if (!tutto && tp > t) break;
-      if (penna && !su) { ctx.moveTo(X(x), Y(y)); su = true; }
-      else if (penna) ctx.lineTo(X(x), Y(y));
-      else su = false;
+      if (penna) pezzo.push([x, y, w ?? 0]);
+      else { voci.push({ punti: pezzo }); pezzo = []; }
       testa = [x, y];
     }
-    ctx.stroke();
+    voci.push({ punti: pezzo });
+    teste.push([tr, testa]);
+  }
+  pennellaTutte(ctx, voci, X, Y, k, stile());
+  for (const [tr, testa] of teste) {
     // la particella in viaggio
     if (!tutto && testa && (tr.punti[0][3] ?? 0) <= t && tr.punti[tr.punti.length - 1][3] > t) {
       const ruolo = (conf.piani[pianoRadice(tr.piano)] || {}).ruolo;
@@ -92,13 +91,13 @@ function disegnaCella(r) {
   const X = (x) => W / 2 + x * k, Y = (y) => H / 2 - y * k;
   ctx.strokeStyle = '#d8d3c6'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
   ctx.strokeRect(X(-c.lato / 2), Y(c.lato / 2), c.lato * k, c.lato * k); ctx.setLineDash([]);
-  ctx.lineWidth = 1.5;
   const presenti = new Set();
+  const voci = [];
   for (const p of c.pezzi) {
     presenti.add(p.ruolo);
-    ctx.strokeStyle = COLORE[p.ruolo] || '#000';
-    for (const l of p.linee) linea(ctx, l, X, Y);
+    for (const l of p.linee) voci.push({ punti: l, colore: COLORE[p.ruolo] || '#000' });
   }
+  pennellaTutte(ctx, voci, X, Y, k, stile());
   $('scomposizione').innerHTML = RUOLI.filter((ru) => presenti.has(ru))
     .map((ru) => `<div><i style="background:${COLORE[ru]}"></i>${ru}${ru === 'contenuto' && r.cella.contenuto ? ` (${r.cella.contenuto.length} varianti)` : ''}</div>`).join('');
 }
@@ -117,6 +116,7 @@ function mostra(r) {
   } catch (err) { $('errore').textContent = String(err); console.error(err); }
 }
 $('tempo').addEventListener('input', () => corrente && disegnaReticolo(Number($('tempo').value)));
+$('stile').addEventListener('change', () => { if (!corrente) return; disegnaCella(corrente.r); disegnaReticolo(Number($('tempo').value)); });
 $('scarica').addEventListener('click', () => {
   if (!corrente) return;
   const { piani, larghezza, altezza, ...stato } = corrente.conf;

@@ -62,8 +62,8 @@ export function lineeDaTracce(tracce) {
   const linee = [];
   for (const tr of tracce) {
     let corrente = [];
-    for (const [x, y, su] of tr.punti) {
-      if (su) corrente.push([x, y]);
+    for (const [x, y, su, , w] of tr.punti) {
+      if (su) corrente.push([x, y, w ?? 0]);
       else if (corrente.length > 1) { linee.push(corrente); corrente = []; }
       else corrente = [];
     }
@@ -80,7 +80,11 @@ export function tratto(nome, parametri = {}) {
   return linee;
 }
 
-const trasforma = (linee, M) => linee.map((l) => l.map((p) => T.applica(M, p)));
+// i punti sono [x, y, spessore]: lo spessore scala con la trasformazione
+const trasforma = (linee, M) => {
+  const k = Math.sqrt(Math.abs(M[0] * M[3] - M[1] * M[2]));
+  return linee.map((l) => l.map((p) => [...T.applica(M, p), (p[2] ?? 0) * k]));
+};
 
 // ---------- simmetrie puntuali
 // { tipo: 'C'|'D'|'id', n, fase }  ->  lista di matrici

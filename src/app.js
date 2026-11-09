@@ -1,6 +1,7 @@
 // app.js — la pagina: sceglie una partitura, la simula, la disegna.
 import { simula, inBlocco } from './motore.js';
 import { PARTITURE, generaOnda } from './partiture.js';
+import { pennella } from './pennello.js';
 
 const tela = document.getElementById('tela');
 const ctx = tela.getContext('2d');
@@ -99,9 +100,22 @@ function disegna(partitura, tracce, tempo = null) {
   tracce.forEach((tr, k) => {
     ctx.strokeStyle = COLORI[k % COLORI.length]; ctx.lineWidth = tr.eventi.length > 80 ? 0.8 : 1.4; ctx.lineJoin = 'round';
     // con il tempo: la linea percorsa fino a t è piena, il resto è un'ombra
+    const spessa = tr.punti.some((q) => (q[4] ?? 0) > 0);
     const traccia = (fino) => {
+      let ultimo = null;
+      if (spessa) {
+        // la linea col suo spessore
+        let pezzo = [];
+        for (const [x, y, su, t, w] of tr.punti) {
+          if (fino != null && t != null && t > fino) break;
+          if (su) pezzo.push([x, y, w ?? 0]); else { pennella(ctx, pezzo, X, Y, 1, 'pieno', ctx.strokeStyle); pezzo = []; }
+          ultimo = [x, y];
+        }
+        pennella(ctx, pezzo, X, Y, 1, 'pieno', ctx.strokeStyle);
+        return ultimo;
+      }
       ctx.beginPath();
-      let penna = false, ultimo = null;
+      let penna = false;
       for (const [x, y, su, t] of tr.punti) {
         if (fino != null && t != null && t > fino) break;
         if (su && !penna) { ctx.moveTo(X(x), Y(y)); penna = true; }

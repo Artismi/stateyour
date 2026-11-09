@@ -148,7 +148,8 @@ function scalaCatena(c, k, ox, oy) {
     punti: c.punti.map(([x, y]) => [x * k + ox, y * k + oy]),
     voluta: c.voluta ? { ...c.voluta, rMin: (c.voluta.rMin ?? 1) * k, ...(c.voluta.R ? { R: c.voluta.R * k } : {}) } : undefined,
     rami: (c.rami || []).map((r) => ({ ...r, catena: scalaCatena(r.catena, k, ox, oy) })),
-    spessore: (c.spessore ?? 3) * k,
+    fascia: (c.fascia ?? 3) * k,
+    ...(c.spessore != null ? { spessore: c.spessore * k } : {}),
   };
 }
 export function generaCandelabroStato() {
@@ -163,7 +164,7 @@ export function generaCandelabroStato() {
       { da: 3, catena: { punti: [[18, -4], [34, 0]], tangenti: [[0.5, -1]], voluta: { giri: 1.5, rMin: 0.7, verso: 'sinistra' } } },
     ],
   };
-  const p = catena({ ...scalaCatena(half, 2.4, 420, 290), v: 30, limiti: [0, 0, 1000, 600] });
+  const p = catena({ ...scalaCatena({ ...half, spessore: 7, rastremazione: 0.45 }, 2.4, 420, 290), v: 30, limiti: [0, 0, 1000, 600] });
   p.nome = 'il candelabro come stato: blocchi di spaziotempo, nessuna regola';
   return p;
 }

@@ -123,6 +123,7 @@ function compila(c, piano, v, G, t0) {
 
   const archi = [], tempoAncoraggio = [t0];
   let t = t0;
+  if (punti.length === 1 && !tang[0]) tang[0] = [1, 0];
   for (let i = 0; i < punti.length - 1; i++) {
     for (const a of biarco(punti[i], tang[i], punti[i + 1], tang[i + 1])) {
       if (a.lunghezza <= 1e-9) continue;
@@ -140,7 +141,7 @@ function compila(c, piano, v, G, t0) {
     const R = Math.abs(a.r);
     rMinCurv = Math.min(rMinCurv, R);
     const margine = 0.25 * Math.min(durata(k - 1), durata(k), durata(k + 1));
-    const w = Math.min(0.5 * R, c.spessore ?? 3);
+    const w = Math.min(0.5 * R, c.fascia ?? 3);
     const aP = Math.atan2(a.p[1] - a.centro[1], a.p[0] - a.centro[0]);
     const aQ = Math.atan2(a.q[1] - a.centro[1], a.q[0] - a.centro[0]);
     blocchi.push({
@@ -151,9 +152,10 @@ function compila(c, piano, v, G, t0) {
     });
   });
 
-  const ultimo = archi[archi.length - 1];
+  // senza archi (un solo punto) la voluta parte dal punto stesso
+  const ultimo = archi[archi.length - 1] || { dritto: true, q: punti[0], t1: t0, tq: norm(tang[0]), lunghezza: 0 };
   const E = ultimo.q, tE = ultimo.t1, tq = ultimo.tq;
-  const margineFine = 0.25 * durata(archi.length - 1);
+  const margineFine = archi.length ? 0.25 * durata(archi.length - 1) : 0;
   let tFine = tE, omega = 0;
   if (c.voluta) {
     const vo = c.voluta;
@@ -178,7 +180,7 @@ function compila(c, piano, v, G, t0) {
     rMinCurv = Math.min(rMinCurv, R);
     // il tempo per raggiungere rMin: la distanza dal centro cala come e^(−γt)
     tFine = tE + (gamma > 0 ? Math.log(r0 / rMin) / gamma : 2 * Math.PI * (vo.giri ?? 2) / Math.abs(omega));
-  } else {
+  } else if (archi.length) {
     // un piccolo disco appena oltre il punto d'arrivo: la particella vi entra esattamente in E
     const h = Math.min(1, 0.5 * (ultimo.lunghezza || 1));
     blocchi.push({ id: `${piano}:fine`, piano, regione: { tipo: 'cerchio', centro: [E[0] + tq[0] * h, E[1] + tq[1] * h], r: h }, tempo: [tE - margineFine, null], legge: { tipo: 'ferma' } });
@@ -189,29 +191,136 @@ function compila(c, piano, v, G, t0) {
   return { punti, tang, archi, tempoAncoraggio, blocchi, rMinCurv, lunghezza, tFine };
 }
 
+// ---------- trasformare una catena con una similitudine ----------
+// M = [a, b, c, d, e, f] come in grammatica.js
+const applicaM = (M, p) => [M[0] * p[0] + M[2] * p[1] + M[4], M[1] * p[0] + M[3] * p[1] + M[5]];
+const linM = (M, v) => [M[0] * v[0] + M[2] * v[1], M[1] * v[0] + M[3] * v[1]];
+const componiM = (A, B) => [
+  A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1],
+  A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3],
+  A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5],
+];
+const ID = [1, 0, 0, 1, 0, 0];
+function scalaDi(M) { return Math.sqrt(Math.abs(M[0] * M[3] - M[1] * M[2])); }
+function specchiaDi(M) { return M[0] * M[3] - M[1] * M[2] < 0; }
+
+// la definizione di una catena portata da M: punti, tangenti, voluta, rami espliciti
+function applicaDef(def, M) {
+  const k = scalaDi(M), sp = specchiaDi(M);
+  const flip = (v) => (v === 'sinistra' ? 'destra' : v === 'destra' ? 'sinistra' : v);
+  return {
+    ...def,
+    punti: def.punti.map((p) => applicaM(M, p)),
+    tangenti: (def.tangenti || []).map((t) => (t ? norm(linM(M, t)) : t)),
+    voluta: def.voluta ? {
+      ...def.voluta,
+      rMin: def.voluta.rMin != null ? def.voluta.rMin * k : undefined,
+      R: def.voluta.R != null ? def.voluta.R * k : undefined,
+      r0: def.voluta.r0 != null ? def.voluta.r0 * k : undefined,
+      verso: sp ? flip(def.voluta.verso) : def.voluta.verso,
+    } : undefined,
+    fascia: (def.fascia ?? 3) * k,
+    rami: (def.rami || []).map((r) => (r.catena ? { ...r, catena: applicaDef(r.catena, M) } : r)),
+  };
+}
+
+// La similitudine di un ramo simile, nel riferimento della catena radice: porta
+// il punto di partenza della radice sull'ancoraggio `da`, la sua tangente sulla
+// tangente dell'ancoraggio ruotata di `angolo`, scala di `scala`, e se
+// `specchia` ribalta la copia attorno alla propria tangente.
+function matriceRamo(def, tang, r) {
+  const P0 = def.punti[0], t0 = tang[0];
+  const A = def.punti[r.da], tA = tang[r.da];
+  const s = r.simile.scala ?? 0.5;
+  const a0 = Math.atan2(t0[1], t0[0]);
+  const aA = Math.atan2(tA[1], tA[0]) + (r.simile.angolo ?? 0) * Math.PI / 180;
+  // F: specchio attorno alla retta per l'origine con direzione t0
+  const F = r.simile.specchia ? [Math.cos(2 * a0), Math.sin(2 * a0), Math.sin(2 * a0), -Math.cos(2 * a0), 0, 0] : ID;
+  const th = aA - a0, c = Math.cos(th) * s, si = Math.sin(th) * s;
+  const R = [c, si, -si, c, 0, 0];
+  const lineare = componiM(R, F);
+  const centrato = componiM(lineare, [1, 0, 0, 1, -P0[0], -P0[1]]);
+  return componiM([1, 0, 0, 1, A[0], A[1]], centrato);
+}
+
 // La descrizione completa: blocchi di spaziotempo e sorgenti. Ogni linea vive
 // nel proprio piano di esistenza; un ramo è una sorgente posta nel punto e
 // nell'istante in cui la linea madre passa per il suo ancoraggio.
+//
+// SPESSORE. Ogni particella porta uno spessore. Il disegno lo moltiplica per
+// il rapporto tra la velocità attuale e quella di partenza, quindi nella
+// voluta, dove l'attrito frena, la linea si stringe da sola verso l'occhio.
+// Lungo la linea lo spessore cala come e^(−βt) (la `rastremazione` è il
+// rapporto tra lo spessore alla fine e all'inizio della catena). A ogni ramo la
+// linea madre cede una quota q della sezione: il ramo parte con spessore
+// w·√q e la madre continua con w·√(1−q), la regola di Leonardo per gli alberi
+// (la somma dei quadrati degli spessori si conserva). Per un ramo simile di
+// scala s la quota è s², così il ramo è davvero una copia in scala.
+//
+// RAMI SIMILI. Un ramo `{ da, simile: { scala, angolo, specchia } }` è una
+// copia della catena radice, con i suoi rami, portata sull'ancoraggio:
+// la ricorsione si ferma dopo `profondita` livelli.
 export function catena(opzioni = {}) {
   // senza punti: un'onda con una voluta, come esempio
   if (!opzioni.punti) opzioni = { ...opzioni, punti: [[-30, 0], [-15, 10], [0, 0], [15, -10]], voluta: opzioni.voluta ?? { giri: 1.5, rMin: 1 } };
   const v = opzioni.v ?? 10, G = opzioni.G ?? 1;
   const precisione = opzioni.precisione ?? 0.004; // radianti per passo
+  const profonditaMax = opzioni.profondita ?? 2;
+  const radiceDef = opzioni;
+  const tangRadice = tangentiAuto(radiceDef.punti, !!radiceDef.chiusa, radiceDef.tangenti || []);
+  if (radiceDef.punti.length === 1 && !tangRadice[0]) tangRadice[0] = [1, 0];
   const blocchi = [], emettitori = [], linee = [];
 
-  function costruisci(c, piano, t0) {
+  // c: la definizione già nel mondo; Mc: da radice a mondo; w0: spessore di partenza
+  function costruisci(c, piano, t0, Mc, profondita, w0) {
     const k = compila(c, piano, v, G, t0);
     blocchi.push(...k.blocchi);
     const dt = Math.min(precisione * k.rMinCurv / v, 0.5);
     const passi = Math.ceil(((k.tFine - t0) / dt) * 1.2) + 50;
-    emettitori.push({ id: piano, piano, pos: k.punti[0], dir: k.tang[0], v, t0, dt, passi });
-    linee.push({ piano, archi: k.archi, punti: k.punti, tempoAncoraggio: k.tempoAncoraggio });
-    (c.rami || []).forEach((ramo, j) => {
-      costruisci({ ...ramo.catena, punti: [k.punti[ramo.da], ...ramo.catena.punti] }, `${piano}r${j}`, k.tempoAncoraggio[ramo.da]);
+    const tLinea = Math.max(k.tempoAncoraggio[k.tempoAncoraggio.length - 1] - t0, 1e-9);
+    const beta = c.rastremazione && c.rastremazione < 1 ? -Math.log(c.rastremazione) / tLinea : 0;
+    const cede = c.cedeSpessore !== false;
+
+    // i rami, in ordine di tempo: espliciti e simili
+    const rami = [];
+    (c.rami || []).forEach((r, j) => {
+      if (r.simile && profondita <= 0) return;
+      rami.push({ r, j, t: k.tempoAncoraggio[r.da] });
     });
+    rami.sort((x, y) => x.t - y.t);
+
+    // lo spessore della madre all'istante t, con le cessioni già avvenute
+    let fattore = 1;
+    const cessioni = [];
+    const figli = [];
+    for (const { r, j, t } of rami) {
+      const wQui = w0 * Math.exp(-beta * (t - t0)) * fattore;
+      const q = Math.min(0.9, r.quota ?? (r.simile ? Math.min(0.5, (r.simile.scala ?? 0.5) ** 2) : 0.25));
+      const wRamo = r.spessore ?? wQui * Math.sqrt(q);
+      // la madre cede la sezione lungo un tratto di circa quattro spessori del ramo
+      if (cede && w0 > 0) { cessioni.push({ t, quota: q, durata: 4 * wRamo / v }); fattore *= Math.sqrt(1 - q); }
+      figli.push({ r, j, t, wRamo });
+    }
+    emettitori.push({
+      id: piano, piano, pos: k.punti[0], dir: k.tang[0], v, t0, dt, passi,
+      ...(w0 > 0 ? { spessore: w0, assottiglia: beta, cessioni } : {}),
+    });
+    linee.push({ piano, archi: k.archi, punti: k.punti, tempoAncoraggio: k.tempoAncoraggio });
+
+    for (const { r, j, t, wRamo } of figli) {
+      if (r.simile) {
+        const Mf = componiM(Mc, matriceRamo(radiceDef, tangRadice, r));
+        const def = applicaDef(radiceDef, Mf);
+        // la copia parte esattamente dall'ancoraggio della madre
+        def.punti[0] = k.punti[r.da];
+        costruisci(def, `${piano}r${j}`, t, Mf, profondita - 1, wRamo);
+      } else {
+        costruisci({ rastremazione: c.rastremazione, ...r.catena, punti: [k.punti[r.da], ...r.catena.punti] }, `${piano}r${j}`, t, Mc, 0, wRamo);
+      }
+    }
     return k;
   }
-  const radice = costruisci(opzioni, 'c', opzioni.t0 ?? 0);
+  const radice = costruisci(opzioni, 'c', opzioni.t0 ?? 0, ID, profonditaMax, opzioni.spessore ?? 0);
 
   return {
     G, dt: emettitori[0].dt, passi: emettitori[0].passi, limiti: opzioni.limiti || [-1e4, -1e4, 1e4, 1e4],

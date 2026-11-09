@@ -140,6 +140,43 @@ ancoraggio.
 Con la catena sono costruiti il girale (uno stelo che continua da una cella
 all'altra), la palmetta, il candelabro e la nuvola ruyi in `src/celle.js`.
 
+## Spessore e ricorsione: il corpo della linea
+
+Nelle tavole ogni linea è un corpo che si ingrossa e si assottiglia, e un
+girale è ricorsivo. Tutti e due nascono dalle proprietà della particella.
+
+- **Spessore.** Ogni particella porta uno spessore. Nel disegno vale
+  spessore · |v| / |v₀|, quindi dove la particella rallenta la linea si
+  stringe. Nella voluta l'attrito frena e la velocità è proporzionale alla
+  distanza dall'occhio: la linea si assottiglia da sola fino al punto.
+- **Rastremazione.** Lungo la catena lo spessore cala come e^(−βt). Il
+  parametro `rastremazione` è il rapporto tra lo spessore alla fine e
+  all'inizio.
+- **Regola di Leonardo.** A ogni ramo la linea madre cede una quota q della
+  sezione: il ramo parte con w·√q e la madre continua con w·√(1−q), quindi la
+  somma dei quadrati degli spessori si conserva come nei rami degli alberi.
+  La cessione è graduale, su un tratto di circa quattro spessori del ramo, e
+  il nodo si raccorda senza gradino. Con `cedeSpessore: false` lo stelo resta
+  costante, come nel girale che continua da una cella all'altra.
+- **Rami simili.** Un ramo `{ da, simile: { scala, angolo, specchia } }` è una
+  copia della catena radice, con i suoi rami, portata sull'ancoraggio e
+  ruotata, scalata, eventualmente specchiata. La quota è scala², così la copia
+  è in scala anche nello spessore. La ricorsione si ferma dopo `profondita`
+  livelli. L'acanto in `src/celle.js` ha tre livelli di volute simili da una
+  sola definizione di quattro punti.
+- **Voluta pura.** Una catena di un solo punto parte direttamente nella
+  voluta, con raggio iniziale `R`: è il riccio che spunta da un ramo.
+
+Il **pennello** (`src/pennello.js`) fa della linea un corpo spostando ogni
+punto lungo la normale di metà spessore. Ha tre stili: **pieno**, il tratto
+riempito; **contorno**, il doppio filo che segue l'unione dei corpi come nelle
+incisioni; **filo**, la linea senza spessore.
+
+Il test `test/test_spessore.mjs` verifica la conservazione della sezione al
+nodo, l'assenza di salti, lo spessore finale della voluta uguale a
+w·rMin/r₀, la voluta pura e che il ramo simile sia la radice in scala nella
+lunghezza, nella corda e nello spessore.
+
 ## Geometria esatta: dal disegno voluto ai parametri fisici
 
 I tratti dell'alfabeto si chiedono in termini geometrici e il sistema ricava
@@ -301,6 +338,7 @@ src/motivi.js      i tratti dell'alfabeto, ognuno una partitura del motore
 src/catena.js      la catena: ancoraggi → biarchi → blocchi di spaziotempo, volute, rami
 src/grammatica.js  istanze: motivo (C_n, D_n), cella (ruoli), reticolo (gruppi); parola
 src/seme.js        il seme: lo stato di ogni istanza trasformato, una sola configurazione iniziale
+src/pennello.js    il pennello: la linea come corpo, pieno, contorno o filo
 src/celle.js       le piastrelle di esempio
 src/piastrelle.js  la pagina delle piastrelle
 piastrelle.html    la pagina delle piastrelle
@@ -323,8 +361,9 @@ rigenera col bottone.
 
 ## Prossimi passi
 
-- **intrecci**: il sopra/sotto dei nastri (guilloche, nodi) richiede che la
-  linea abbia uno spessore e che a ogni incrocio si decida chi passa sopra;
+- **intrecci**: ora che la linea ha spessore, il sopra/sotto dei nastri
+  (guilloche, nodi): a ogni incrocio la linea che passa sotto si interrompe;
+- **foglie**: lobi pieni attorno ai nodi, come le guaine d'acanto;
 - **celle annidate**: una cella come tratto di un'altra, e una cornice attorno
   al reticolo (il bordo del tappeto);
 - i restanti gruppi di carta da parati (p4g, p3m1, p6m) e reticoli rombici;
