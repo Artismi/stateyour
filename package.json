@@ -1,0 +1,11 @@
+{
+  "name": "stateyour",
+  "version": "0.1.0",
+  "description": "Scomposizione e codifica dei pattern: particelle, piano gravitazionale, piano delle interfacce, regole a eventi.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node test/test_onda.mjs && node test/test_ottica.mjs",
+    "start": "python3 -m http.server 8000"
+  }
+}

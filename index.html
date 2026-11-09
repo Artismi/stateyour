@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stateyour — pattern da particelle, gravità e specchi</title>
+<style>
+  :root { --carta: #f4f1ea; --inchiostro: #1c1b18; --grigio: #8a867c; --riga: #d8d3c6; --rosso: #b8412b; --blu: #2b5fb8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); }
+  header { padding: 14px 20px 6px; border-bottom: 1px solid var(--riga); display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  header span { color: var(--grigio); }
+  main { display: grid; grid-template-columns: 1fr 380px; gap: 0; min-height: calc(100vh - 48px); }
+  #tela { display: block; width: 100%; height: auto; background: #fbfaf6; }
+  .quadro { padding: 14px 20px; }
+  aside { border-left: 1px solid var(--riga); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  label { display: block; color: var(--grigio); font-size: 12px; margin-bottom: 3px; }
+  select, textarea, button, input[type=number] { font: inherit; width: 100%; border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 6px 8px; border-radius: 3px; }
+  textarea { height: 300px; resize: vertical; font-size: 12px; line-height: 1.35; white-space: pre; }
+  button { cursor: pointer; background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  button.secondario { background: #fff; color: var(--inchiostro); }
+  .riga { display: flex; gap: 8px; }
+  .riga > * { flex: 1; }
+  .cursori { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 10px; border: 1px dashed var(--riga); border-radius: 3px; }
+  .cursori input[type=range] { width: 100%; }
+  .cursori output { color: var(--grigio); font-size: 12px; margin-left: 4px; }
+  #nota { color: var(--grigio); font-size: 12px; white-space: pre-wrap; }
+  #errore { color: var(--rosso); font-size: 12px; white-space: pre-wrap; }
+  .legenda { display: flex; gap: 14px; color: var(--grigio); font-size: 12px; padding: 6px 20px 12px; flex-wrap: wrap; }
+  .legenda i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; background: var(--inchiostro); }
+  .legenda i.m { width: 10px; height: 10px; border-radius: 50%; background: var(--rosso); }
+  .legenda i.mo { width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 1.5px solid var(--rosso); }
+  .legenda i.s { background: var(--blu); height: 3px; }
+  .legenda i.r { background: repeating-linear-gradient(90deg, var(--blu) 0 4px, transparent 4px 7px); height: 3px; }
+  .legenda i.a { background: #333; height: 4px; }
+  .legenda i.e { width: 0; height: 0; border-left: 8px solid var(--inchiostro); border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid var(--riga); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>stateyour</h1>
+  <span>una particella, un piano di masse, un piano di specchi: le regole accendono e spengono, la linea disegna il pattern</span>
+</header>
+<main>
+  <section>
+    <div class="quadro"><canvas id="tela" width="1000" height="600"></canvas></div>
+    <div class="legenda">
+      <span><i class="e"></i>emettitore</span>
+      <span><i class="m"></i>massa accesa all'inizio</span>
+      <span><i class="mo"></i>massa spenta all'inizio</span>
+      <span><i class="s"></i>specchio</span>
+      <span><i class="r"></i>interfaccia di rifrazione</span>
+      <span><i class="a"></i>assorbe</span>
+      <span><i></i>traiettoria</span>
+    </div>
+  </section>
+  <aside>
+    <div>
+      <label for="scelta">partitura</label>
+      <select id="scelta"></select>
+    </div>
+    <div class="cursori" id="cursori">
+      <div><label>L · lunghezza mezza onda <output id="oL"></output></label><input type="range" id="L" min="40" max="200" step="1" value="120"></div>
+      <div><label>f · offset della massa <output id="of"></output></label><input type="range" id="f" min="5" max="195" step="1" value="40"></div>
+      <div><label>n · quante masse <output id="on"></output></label><input type="range" id="n" min="1" max="12" step="1" value="7"></div>
+      <div><label>G·M <output id="oGM"></output></label><input type="range" id="GM" min="5000" max="80000" step="500" value="30000"></div>
+      <div style="grid-column: 1 / -1"><label><input type="checkbox" id="alterna" checked style="width:auto"> alterna l'offset (masse uguali) — altrimenti masse decrescenti</label></div>
+      <div style="grid-column: 1 / -1" id="formule"></div>
+    </div>
+    <div>
+      <label for="json">codifica (JSON, modificabile)</label>
+      <textarea id="json" spellcheck="false"></textarea>
+    </div>
+    <div class="riga">
+      <button id="genera">genera dalla codifica</button>
+      <button id="scarica" class="secondario">scarica .json</button>
+    </div>
+    <div id="errore"></div>
+    <div id="nota"></div>
+  </aside>
+</main>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
