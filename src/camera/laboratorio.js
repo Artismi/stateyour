@@ -57,7 +57,7 @@ function coloriTraccia(cella, tr) {
 }
 
 // ---------- lo stato
-let comp = COMPOSIZIONI['fiori e riempitivi']();
+let comp = compBiblioteca(1856);
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
@@ -79,7 +79,15 @@ const cel = () => el().cella;
 
 // ---------- simulazione, con la memoria per elemento
 const memoria = new Map();
-const chiave = (cella) => JSON.stringify({ ...cella, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
+// l'impronta di una cella per la memoria; per le immagini lette (enormi) le esposizioni si
+// contano soltanto: non si modificano a mano
+const impronteGrandi = new WeakMap();
+const chiave = (cella) => {
+  if (!cella.esposizioni) return JSON.stringify({ ...cella, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
+  let base = impronteGrandi.get(cella.esposizioni);
+  if (!base) { base = `${cella.esposizioni.length}|${cella.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0)}|${(cella.sagome || []).length}|${Math.random()}`; impronteGrandi.set(cella.esposizioni, base); }
+  return base + JSON.stringify({ ...cella, esposizioni: undefined, sagome: undefined, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
+};
 function tracceDi(e) {
   const k = chiave(e.cella);
   let m = memoria.get(k);
@@ -426,6 +434,17 @@ function disegnaCampi() {
     // tante esposizioni: si mostrano solo i corridoi della linea sotto il cursore (o scelta)
     const id = sonda ? sonda.tr : sel?.tipo === 'traccia' ? sel.i : null, tr = id != null ? tracce.find((t) => t.id === id) : null;
     if (!tr) return;
+    const esp = c.esposizioni[tr.esposizione];
+    if (esp?.mappa && vedi('magnetico') && leggeOra('magnetico')) {
+      // la mappa del campo liscio di questa esposizione: blu dove B esce dal foglio, rosso-blu dove entra
+      const m = esp.mappa; let n = -1, max = 1e-9;
+      for (let i = 1; i < m.sparsa.length; i += 2) max = Math.max(max, Math.abs(m.sparsa[i]));
+      for (let i = 0; i < m.sparsa.length; i += 2) {
+        n += m.sparsa[i]; const v = m.sparsa[i + 1], x = m.x0 + (n % m.nx) * m.h, y = m.y0 + Math.floor(n / m.nx) * m.h;
+        ctx.fillStyle = v > 0 ? rgb(FORZE.magnetico.col, 0.05 + 0.4 * Math.min(1, Math.abs(v) / max)) : rgb([120, 80, 200], 0.05 + 0.4 * Math.min(1, Math.abs(v) / max));
+        ctx.fillRect(x - m.h / 2, y - m.h / 2, m.h, m.h);
+      }
+    }
     for (const d of corridoiDella(tr)) {
       forma(d.forma);
       if (d.B && vedi('magnetico')) { ctx.fillStyle = rgb(FORZE.magnetico.col, 0.18); ctx.fill('evenodd'); }
@@ -726,7 +745,8 @@ function pannelloElemento(h) {
     if (!c.finestra) h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo o materia), una massa, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
     if (c.esposizioni) {
       const ds = c.esposizioni.flatMap((e) => e.domini), so = c.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0);
-      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra, ${(c.sagome || []).length} sagome.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; alla fine del tratto decade in particelle neutre, invisibili (la sua vita è il tempo per percorrerlo). Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Passa sopra una linea per vedere i suoi corridoi.</p>`);
+      const lisce = c.esposizioni.filter((e) => e.mappa).length;
+      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${lisce ? `un campo magnetico liscio in ${lisce} esposizioni` : `${ds.length} corridoi di campo in ${c.esposizioni.length} esposizioni`}, ${(c.sagome || []).length} sagome.</p><p class="nota">${lisce ? "Ogni linea è una particella che attraversa un campo magnetico liscio, continuo, senza bordi: dove serve è più forte, e lontano dalle tracce si spegne. Dove la linea fa uno spigolo la particella decade, e la figlia riparte nella nuova direzione (un «ginocchio», come un pione che diventa muone). Alla fine del tratto l'ultima decade in particelle neutre, invisibili. Le linee che si incrociano stanno su esposizioni diverse della stessa lastra, perché in un punto il campo è uno solo. Passa sopra una linea per vedere il campo della sua esposizione." : "Ogni linea è una particella che percorre corridoi di campo magnetico tagliati sulla sua curva; alla fine decade in particelle neutre, invisibili. Passa sopra una linea per vedere i suoi corridoi."}</p>`);
       h.push(lastra(c));
       h.push(`<h2>le specie (che cosa sono le particelle)</h2><p class="nota">La carica decide lo spessore della traccia.</p><div class="elenco">`);
       for (const nome of Object.keys(c.specie)) h.push(`<div data-specie="${nome}">◦ <b>${nome}</b> ${descriviSpecie(c.specie[nome])}</div>`);
@@ -930,11 +950,12 @@ function mostraSchede() {
     conta.gravita = c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'nessuna';
     const tuttiDomini = [...c.domini, ...(c.esposizioni || []).flatMap((e) => e.domini)];
     const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length;
-    const naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length;
-    conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, c.onde?.B?.length && 'campo naturale', (c.cristalli || []).length && `${c.cristalli.length} cristalli`].filter(Boolean).join(', ') : 'nessuno';
+    const lisce = (c.esposizioni || []).filter((e) => e.mappa).length, naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length + lisce;
+    conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, (c.onde?.B?.length || lisce) && 'campo liscio', (c.cristalli || []).length && `${c.cristalli.length} cristalli`].filter(Boolean).join(', ') : 'nessuno';
     conta.materia = zK || c.nubi ? [zK && `${zK} ${zK === 1 ? 'zona' : 'zone'}`, c.nubi && 'nubi'].filter(Boolean).join(', ') : 'nessuna';
     const dec = Object.values(c.specie).filter((s) => s.vita != null || s.vitaMedia != null).length;
-    conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'niente';
+    const ginocchi = (c.esposizioni || []).reduce((n, e) => n + e.sorgenti.filter((so) => so.vita != null).length, 0);
+    conta.decadimento = dec || ginocchi ? [dec && `${dec} specie`, ginocchi && `${ginocchi} particelle con la loro vita`].filter(Boolean).join(', ') : 'niente';
   }
   // ogni scheda: il nome (clic: vista «solo questa forza») e l'interruttore ⏻ (la legge agisce o no)
   schede.classList.toggle('legenda', !c);
@@ -1078,7 +1099,6 @@ function apriNuovo() {
     `<button data-carta="biblioteca" class="grande"><b>La biblioteca</b><span>un universo naturale estratto da un numero: masse, campi, nubi, cristalli, raggi cosmici. Il pattern non si costruisce, si trova: una finestra e una fetta di tempo</span></button>`,
     `<button data-carta="immagine"><b>Un'immagine…</b><span>dal computer: viene pulita, letta e rifatta con la fisica, tratto per tratto</span></button>`,
     `<button data-carta="esempio"><b>Esempio: tavola greca</b><span>Owen Jones, «Grammar of Ornament», 1856: la stessa lettura, già pronta da provare</span></button>`,
-    ...Object.entries(COMPOSIZIONI).map(([k, f]) => `<button data-carta="modello" data-nome="${k}"><b>${k}</b><span>composto a mano: ${f().nota}</span></button>`),
     `<button data-carta="vuoto"><b>Vuoto</b><span>una cella con una sola particella in un campo: da qui si costruisce tutto</span></button>`,
   ];
   $('carte').innerHTML = carte.join('');
@@ -1125,8 +1145,8 @@ async function daImmagine(src, nome) {
     if (m.fatto) {
       passoLettura(5);
       const { cella, conta, fedelta: f, misure: mi } = m;
-      const nota = `${conta.tratti} tratti, ${conta.petali} petali, ${conta.dischi} dischi, ${conta.campiture} campiture (sagome impresse da un lampo); ${conta.pezzi} archi di campo in ${conta.esposizioni} esposizioni. La fisica rifà l'immagine al ${Math.round(f.iou * 100)}%.`;
-      const nuovo = { nome, nota, reticolo: { a: [mi.larghezza, 0], b: [0, mi.altezza] }, elementi: [{ nome: "l'immagine", nota: `ogni linea è una particella vera: ${nota}`, posti: [{ pos: [mi.larghezza / 2, mi.altezza / 2], rot: 0 }], cella }] };
+      const nota = `${conta.tratti} particelle (${conta.ginocchi ?? 0} nate da un ginocchio), un campo magnetico liscio in ${conta.esposizioni} esposizioni, ${conta.petali} petali, ${conta.dischi} dischi, ${conta.campiture} campiture (sagome impresse da un lampo). La fisica rifà l'immagine al ${Math.round(f.iou * 100)}%.`;
+      const nuovo = { nome, nota, reticolo: { a: [mi.larghezza, 0], b: [0, mi.altezza] }, elementi: [{ nome: "l'immagine", nota: `la pagina della biblioteca che contiene l'immagine: un universo di soli ingredienti naturali. ${nota}`, posti: [{ pos: [mi.larghezza / 2, mi.altezza / 2], rot: 0 }], cella }] };
       // le tracce calcolate nel lettore: niente da rifare
       let r = 4; for (const t of m.tracce) for (const p of t.punti) if (p[2]) r = Math.max(r, Math.hypot(p[0] - mi.larghezza / 2, p[1] - mi.altezza / 2));
       memoria.set(chiave(cella), { tracce: m.tracce, raggio: r, sprite: new Map() });

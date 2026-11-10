@@ -18,9 +18,9 @@ self.onmessage = (ev) => {
     } else passo(1, "l'immagine è già pulita");
     passo(2, 'leggo i tratti: colori, scheletro, spessori, campiture…');
     const ris = decodifica(img);
-    passo(3, `${ris.linee.length} tratti letti; cerco per ognuno la particella che lo disegna…`);
+    passo(3, `${ris.linee.length} tratti letti; cerco per ognuno la particella e il campo liscio che lo disegnano…`);
     const { cella, conta } = tracciaFisica(ris);
-    passo(4, `${conta.pezzi} archi di campo in ${conta.esposizioni} esposizioni; verifico rifacendo l'immagine con la fisica…`);
+    passo(4, `${conta.tratti} particelle, ${conta.ginocchi} ginocchi, un campo liscio in ${conta.esposizioni} esposizioni; verifico rifacendo l'immagine con la fisica…`);
     const tracce = simulaMondo(cella);
     const f = fedelta(tracce, mascheraOriginale(ris), ris.misure.larghezza, ris.misure.altezza, ris.misure.ritaglio);
     self.postMessage({

@@ -94,15 +94,30 @@ export function generatore(seme) {
   let a = seme >>> 0 || 1;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+// una mappa si può scrivere compatta: «sparsa» = [scarto d'indice, valore, ...]
+const mappeDense = new WeakMap();
+function densa(m) {
+  if (m.B) return m.B;
+  let d = mappeDense.get(m);
+  if (!d) { d = new Float32Array(m.nx * m.ny); let n = -1; for (let i = 0; i < m.sparsa.length; i += 2) { n += m.sparsa[i]; d[n] = m.sparsa[i + 1]; } mappeDense.set(m, d); }
+  return d;
+}
 // i campi continui: onde (campi che variano dolcemente) e cristalli (campi periodici)
 export function campiContinui(mondo) {
-  const ondeB = mondo.onde?.B || [], nubi = mondo.nubi || null, cristalli = mondo.cristalli || [];
+  const ondeB = mondo.onde?.B || [], nubi = mondo.nubi || null, cristalli = mondo.cristalli || [], mappa = mondo.mappa || null;
   const ondeK = nubi?.modi || [];
   let lambdaOnde = Infinity;
   for (const o of [...ondeB, ...ondeK]) lambdaOnde = Math.min(lambdaOnde, (2 * Math.PI) / Math.hypot(...o.k));
   // la lunghezza su cui il campo cambia, qui: fitta dentro un cristallo, larga fuori
-  const lambda = (x, y) => { let l = lambdaOnde; for (const c of cristalli) if (Math.hypot(x - c.centro[0], y - c.centro[1]) < c.r + c.passo) l = Math.min(l, c.passo); return l; };
-  if (!ondeB.length && !ondeK.length && !cristalli.length) return null;
+  // la MAPPA: un campo dato su una griglia fine e interpolato con continuità (bilineare)
+  const dentroMappa = (x, y) => mappa && x >= mappa.x0 && y >= mappa.y0 && x <= mappa.x0 + (mappa.nx - 1) * mappa.h && y <= mappa.y0 + (mappa.ny - 1) * mappa.h;
+  const M = mappa ? densa(mappa) : null;
+  const valoreMappa = (x, y) => {
+    const fx = (x - mappa.x0) / mappa.h, fy = (y - mappa.y0) / mappa.h, i = Math.min(mappa.nx - 2, Math.floor(fx)), j = Math.min(mappa.ny - 2, Math.floor(fy)), u = fx - i, v = fy - j, n = mappa.nx;
+    return M[j * n + i] * (1 - u) * (1 - v) + M[j * n + i + 1] * u * (1 - v) + M[(j + 1) * n + i] * (1 - u) * v + M[(j + 1) * n + i + 1] * u * v;
+  };
+  const lambda = (x, y) => { let l = lambdaOnde; for (const c of cristalli) if (Math.hypot(x - c.centro[0], y - c.centro[1]) < c.r + c.passo) l = Math.min(l, c.passo); if (dentroMappa(x, y)) l = Math.min(l, mappa.h * 2); return l; };
+  if (!ondeB.length && !ondeK.length && !cristalli.length && !mappa) return null;
   const B = (x, y) => {
     let b = 0;
     for (const o of ondeB) b += o.a * Math.cos(o.k[0] * x + o.k[1] * y + o.fi);
@@ -115,6 +130,7 @@ export function campiContinui(mondo) {
       for (let j = 0; j < 3; j++) { const an = c.angolo + (j * Math.PI) / 3; somma += Math.cos(g * (dx * Math.cos(an) + dy * Math.sin(an))); }
       b += (c.a * sfuma * somma) / 3;
     }
+    if (dentroMappa(x, y)) b += valoreMappa(x, y);
     return b;
   };
   const K = (x, y) => {
@@ -168,7 +184,7 @@ export function simulaMondo(mondo, opzioni = {}) {
     for (const s of sagomeImpresse(mondo)) tutte.push({ ...s, id: tutte.length, esposizione: -1 });
     lista.forEach((e, k) => {
       if (!e.sorgenti || !e.sorgenti.length) return;
-      const tr = simulaMondo({ ...mondo, esposizioni: undefined, sagome: undefined, domini: e.domini || [], masse: e.masse || [], sorgenti: e.sorgenti, tempo: e.tempo ?? mondo.tempo }, opzioni);
+      const tr = simulaMondo({ ...mondo, esposizioni: undefined, sagome: undefined, domini: e.domini || [], masse: e.masse || [], mappa: e.mappa, sorgenti: e.sorgenti, tempo: e.tempo ?? mondo.tempo }, opzioni);
       for (const t of tr) tutte.push({ ...t, id: tutte.length, esposizione: k - 1 });
       for (const d of tr.decadimenti) decadimenti.push({ ...d, esposizione: k - 1 });
     });
@@ -336,7 +352,7 @@ export function simulaMondo(mondo, opzioni = {}) {
 // Restituisce le accelerazioni che ogni legge dà a una particella di quella
 // specie che passa in (x, y) con velocità (vx, vy), e il dominio dove si trova.
 export function forze(mondo, specie, x, y, vx, vy, esposizione = -1, t = 0) {
-  if (esposizione >= 0 && mondo.esposizioni) { const e = mondo.esposizioni[esposizione]; mondo = { ...mondo, domini: e.domini || [], masse: e.masse || [] }; }
+  if (esposizione >= 0 && mondo.esposizioni) { const e = mondo.esposizioni[esposizione]; mondo = { ...mondo, domini: e.domini || [], masse: e.masse || [], mappa: e.mappa }; }
   const leggi = {}; for (const k of Object.keys(LEGGI)) leggi[k] = leggeA((mondo.leggi || {})[k] ?? true, t);
   mondo = { ...mondo, domini: (mondo.domini || []).filter((d) => accesoA(d, t)), masse: leggi.gravita ? (mondo.masse || []).filter((m) => accesoA(m, t)) : [],
     fondo: { ...(mondo.fondo || {}), B: leggi.magnetico ? mondo.fondo?.B : 0, K: leggi.materia ? mondo.fondo?.K : 0 } };

@@ -104,21 +104,31 @@ mostrati mentre avvengono:
    senza pulizia la lettura falliva.
 2. **Lettura dei tratti**: la decodifica (scheletro, spessori, petali, dischi,
    campiture).
-3. **Ricerca della fisica** (`src/camera/inversa.js`): per ogni tratto la
-   particella che lo percorre, a pezzi di curvatura costante entro mezzo pixel
-   (due giri di spirale logaritmica: 6 archi), ognuno un corridoio di campo con
-   B = κ·m·v/q; lo spessore è la carica; alla fine del tratto la particella
-   decade in neutri invisibili. Un petalo è una carica che frena nella materia,
-   un disco una che si ferma subito, una campitura una sagoma impressa dal
-   lampo. Le linee che si incrociano vanno su esposizioni diverse della stessa
-   lastra.
-4. **Verifica**: la tavola greca, 327 tratti e 3332 archi di campo in 59
-   esposizioni, è rifatta dalla sola fisica al 76%.
+3. **Ricerca della fisica** (`src/camera/inversa.js`): l'immagine si ritrova
+   come pagina della biblioteca, cioè come un universo di soli ingredienti
+   naturali. Per ogni tratto si trova la particella che lo percorre. La sua
+   curvatura varia con continuità, come in una traiettoria vera (l'angolo di
+   ogni svolta si conserva); dove la linea fa uno **spigolo**, la particella
+   decade e la figlia riparte nella nuova direzione: un *ginocchio*, come un
+   pione che diventa muone. Il campo magnetico è una **mappa liscia**, continua
+   e senza bordi: intorno a ogni traccia vale ciò che piega la particella sulla
+   sua linea, uniforme di traverso (così la traiettoria è stabile) e lontano
+   sfuma a zero, come un fascio di flusso. Lo spessore è la carica; alla fine
+   del tratto la particella decade in neutri invisibili. Un petalo è una carica
+   che frena nella materia, un disco una che si ferma subito, una campitura una
+   sagoma impressa dal lampo. Le linee che si incrociano vanno su esposizioni
+   diverse della stessa lastra, perché in un punto il campo è uno solo.
+4. **Verifica**: la tavola greca è 2603 particelle (2276 nate da un ginocchio)
+   in un campo liscio su 63 esposizioni, rifatta dalla sola fisica al 74%
+   (ritrova l'85% del disegno; l'85% di ciò che traccia sta sul disegno). La
+   versione precedente, con 3332 corridoi di campo tagliati a spigolo vivo,
+   arrivava al 75,7%: quasi la stessa fedeltà, ma con un artificio.
+   (`tracciaFisica(ris, { campo: 'corridoi' })` la rifà ancora, per confronto.)
 
-Va detto con onestà: questa ricostruzione è fedele ma **costruita**. I suoi
-corridoi di campo sono tagliati su misura, tratto per tratto: è un indirizzo
-lungo quanto l'immagine. Cercare la stessa immagine nella biblioteca, con
-campi naturali, è il problema aperto.
+Come vuole Borges, l'indirizzo di questa pagina è lungo: la mappa del campo ha
+circa 320.000 valori diversi da zero. Una forma precisa è nella biblioteca, ma
+il suo indirizzo contiene la forma. Sfogliare a caso non la troverebbe mai: si
+calcola, risolvendo il problema inverso.
 
 ### Come programma sul computer (Electron)
 

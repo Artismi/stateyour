@@ -24,6 +24,9 @@
 // mondo (il campo è uno solo per punto): si mettono in ESPOSIZIONI diverse
 // della stessa lastra, come nelle camere a bolle vere.
 
+import { simulaMondo } from './mondo.js';
+
+let OPZ = {}; // le opzioni dell'ultima chiamata (per i campioni)
 const V = 10; // la velocità di tutte le cariche dei tratti
 const PELLICOLA = { w0: 1, saturazione: 4, vRif: V };
 
@@ -142,22 +145,151 @@ function riquadroForma(f) {
 }
 const tocca = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 
+// ---------- il campo liscio: la mappa più dolce che piega ogni particella sulla sua linea
+// I campioni lungo il percorso: dove passa la particella, e il campo che serve lì (B = κ·m·v/q)
+function campioniTratto(fit, q, m, passo = 0.5, tubo = [0], sigma = OPZ.sigma ?? 1.2) {
+  // la curvatura lungo il percorso, a passi fini, ammorbidita (l'integrale, cioè l'angolo
+  // di ogni svolta, resta lo stesso): una traiettoria vera ha la curvatura continua
+  const ds = 0.25, kap = [];
+  for (const { k, L } of fit.pezzi) for (let n = Math.max(1, Math.round(L / ds)), i = 0; i < n; i++) kap.push(k * (L / n) / ds);
+  const R = Math.ceil((3 * sigma) / ds), g = []; let gs = 0;
+  for (let i = -R; i <= R; i++) { const w = Math.exp(-0.5 * ((i * ds) / sigma) ** 2); g.push(w); gs += w; }
+  const liscia = kap.map((_, i) => { let v = 0, w = 0; for (let j = -R; j <= R; j++) { const t = i + j; if (t < 0 || t >= kap.length) continue; v += kap[t] * g[j + R]; w += g[j + R]; } return v / w; });
+  // si rifà la traccia con la curvatura ammorbidita
+  const asse = []; let x = fit.inizio.pos[0], y = fit.inizio.pos[1], th = fit.inizio.dir;
+  liscia.forEach((k, i) => {
+    asse.push([x, y, th, k, i * ds]);
+    const fi = k * ds, f = Math.abs(fi) > 1e-9 ? Math.sin(fi / 2) / (fi / 2) : 1;
+    x += ds * f * Math.cos(th + fi / 2); y += ds * f * Math.sin(th + fi / 2); th += fi;
+  });
+  asse.push([x, y, th, liscia[liscia.length - 1] ?? 0, liscia.length * ds]);
+  // lo spazio libero intorno, per il tubo
+  const pts = asse.map((a) => a), libero = (i) => { let d = Infinity; const a = pts[i]; for (let j = 0; j < pts.length; j += 2) { if (Math.abs(pts[j][4] - a[4]) < 6) continue; d = Math.min(d, Math.hypot(pts[j][0] - a[0], pts[j][1] - a[1])); } return d; };
+  const out = [], ogni = Math.max(1, Math.round(passo / ds));
+  for (let i = 0; i < asse.length; i += ogni) {
+    const [ax, ay, ath, k, s] = asse[i], b = (k * m * V) / q, nx = -Math.sin(ath), ny = Math.cos(ath);
+    const lim = Math.min(0.7 / Math.max(Math.abs(k), 1e-9), 0.45 * libero(i));
+    for (const d of tubo.filter((d) => Math.abs(d) <= lim + 1e-9)) out.push([ax + nx * d, ay + ny * d, b, s, d, Math.max(1.2, Math.min(1.6, lim))]);
+  }
+  return out;
+}
+// minimi quadrati con levigatezza: dati lungo i tratti, il campo altrove il più dolce
+// possibile e che si spegne lontano (gradiente coniugato, senza matrici)
+function mappaLiscia(campioni, opzioni = {}, partenza = null) {
+  const h = opzioni.griglia ?? 1.5, lam = opzioni.levigatezza ?? 0.15, mu = opzioni.spegnimento ?? 2e-3, margine = 5 * h;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const c of campioni) { x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]); }
+  x0 = Math.floor((x0 - margine) / h) * h; y0 = Math.floor((y0 - margine) / h) * h;
+  const nx = Math.ceil((x1 + margine - x0) / h) + 1, ny = Math.ceil((y1 + margine - y0) / h) + 1, N = nx * ny, S = campioni.length;
+  const idx = new Int32Array(S * 4), pes = new Float64Array(S * 4), dati = new Float64Array(S);
+  campioni.forEach((c, k) => {
+    const fx = (c[0] - x0) / h, fy = (c[1] - y0) / h, i = Math.min(nx - 2, Math.floor(fx)), j = Math.min(ny - 2, Math.floor(fy)), u = fx - i, v = fy - j;
+    idx.set([j * nx + i, j * nx + i + 1, (j + 1) * nx + i, (j + 1) * nx + i + 1], 4 * k);
+    pes.set([(1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v], 4 * k);
+    dati[k] = c[2];
+  });
+  const A = (x, y) => {
+    y.fill(0);
+    for (let k = 0; k < S; k++) { let s = 0; for (let r = 0; r < 4; r++) s += pes[4 * k + r] * x[idx[4 * k + r]]; for (let r = 0; r < 4; r++) y[idx[4 * k + r]] += pes[4 * k + r] * s; }
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const n = j * nx + i; let d = 0, sum = 0;
+      if (i > 0) { d++; sum += x[n - 1]; } if (i < nx - 1) { d++; sum += x[n + 1]; } if (j > 0) { d++; sum += x[n - nx]; } if (j < ny - 1) { d++; sum += x[n + nx]; }
+      y[n] += lam * (d * x[n] - sum) + mu * x[n];
+    }
+  };
+  const b = new Float64Array(N);
+  for (let k = 0; k < S; k++) for (let r = 0; r < 4; r++) b[idx[4 * k + r]] += pes[4 * k + r] * dati[k];
+  const x = new Float64Array(N), Ax = new Float64Array(N);
+  if (partenza && partenza.nx === nx && partenza.ny === ny && partenza.x0 === x0 && partenza.y0 === y0) x.set(partenza.B);
+  A(x, Ax);
+  const r = b.map((v, n) => v - Ax[n]), p = r.slice(), Ap = new Float64Array(N);
+  let rr = r.reduce((a, v) => a + v * v, 0); const r0 = rr;
+  for (let it = 0; it < (opzioni.iterazioni ?? 600) && rr > 1e-16 * r0; it++) {
+    A(p, Ap); let pAp = 0; for (let n = 0; n < N; n++) pAp += p[n] * Ap[n];
+    const a = rr / pAp; let rr2 = 0;
+    for (let n = 0; n < N; n++) { x[n] += a * p[n]; r[n] -= a * Ap[n]; rr2 += r[n] * r[n]; }
+    const be = rr2 / rr; rr = rr2;
+    for (let n = 0; n < N; n++) p[n] = r[n] + be * p[n];
+  }
+  return { x0, y0, h, nx, ny, B: Array.from(x, (v) => +v.toPrecision(5)) };
+}
+
+// il campo per costruzione: ogni nodo vicino a una traccia prende il campo del punto di
+// traccia più vicino (uniforme di traverso: stabile), e sfuma con continuità a zero
+// fuori dal tubo. Un campo continuo, senza spigoli: un fascio di flusso.
+function mappaTubi(campioni, opzioni = {}) {
+  const h = opzioni.griglia ?? 0.75, sfuma = opzioni.sfumatura ?? 2, margine = 3 + sfuma;
+  const asse = campioni.filter((c) => !c[4]);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const c of asse) { x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]); }
+  x0 = Math.floor((x0 - margine) / h) * h; y0 = Math.floor((y0 - margine) / h) * h;
+  const nx = Math.ceil((x1 + margine - x0) / h) + 1, ny = Math.ceil((y1 + margine - y0) / h) + 1, B = new Float64Array(nx * ny), dist = new Float64Array(nx * ny).fill(Infinity);
+  for (const c of asse) {
+    const r0 = c[5] ?? 1.5, r1 = r0 + sfuma, i0 = Math.max(0, Math.floor((c[0] - r1 - x0) / h)), i1 = Math.min(nx - 1, Math.ceil((c[0] + r1 - x0) / h)), j0 = Math.max(0, Math.floor((c[1] - r1 - y0) / h)), j1 = Math.min(ny - 1, Math.ceil((c[1] + r1 - y0) / h));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const n = j * nx + i, d = Math.hypot(x0 + i * h - c[0], y0 + j * h - c[1]);
+      if (d >= dist[n]) continue;
+      dist[n] = d;
+      const w = d <= r0 ? 1 : d >= r1 ? 0 : 0.5 + 0.5 * Math.cos((Math.PI * (d - r0)) / sfuma);
+      B[n] = c[2] * w;
+    }
+  }
+  const sparsa = []; let ultimo = -1;
+  for (let n = 0; n < B.length; n++) if (B[n]) { sparsa.push(n - ultimo, +B[n].toPrecision(4)); ultimo = n; }
+  return { x0: +x0.toFixed(3), y0: +y0.toFixed(3), h, nx, ny, sparsa };
+}
+
+// i ginocchi: dove il tratto piega di colpo, la particella decade e la figlia riparte nella
+// nuova direzione (come un pione che diventa muone). Il tratto si spezza in segmenti lisci;
+// l'arco brevissimo dello spigolo diventa un angolo vivo, nel punto dove si incontrano le tangenti.
+function spezzaAiGinocchi(fit, opzioni = {}) {
+  const angoloMin = opzioni.ginocchio ?? 0.35, lungMax = opzioni.ginocchioLungo ?? 2.5;
+  const segmenti = []; let corrente = { inizio: { ...fit.inizio, pos: fit.inizio.pos.slice() }, pezzi: [] };
+  let p = fit.inizio.pos.slice(), th = fit.inizio.dir;
+  for (const z of fit.pezzi) {
+    const fi = z.k * z.L, f = Math.abs(fi) > 1e-9 ? Math.sin(fi / 2) / (fi / 2) : 1;
+    const fine = [p[0] + z.L * f * Math.cos(th + fi / 2), p[1] + z.L * f * Math.sin(th + fi / 2)];
+    if (Math.abs(fi) >= angoloMin && z.L <= lungMax && Math.abs(fi) < 2.6) {
+      // la tangente lunga R·tan(φ/2): fin lì dritto, poi l'angolo, poi dritto fino alla fine dell'arco
+      const t = Math.abs(Math.tan(fi / 2) / z.k), spigolo = [p[0] + t * Math.cos(th), p[1] + t * Math.sin(th)];
+      corrente.pezzi.push({ k: 0, L: t });
+      segmenti.push(corrente);
+      corrente = { inizio: { pos: spigolo, dir: th + fi }, pezzi: [{ k: 0, L: t }] };
+    } else corrente.pezzi.push(z);
+    p = fine; th += fi;
+  }
+  segmenti.push(corrente);
+  return segmenti.filter((g) => g.pezzi.reduce((a, z) => a + z.L, 0) > 0.5).map((g) => ({ ...g, lunghezza: g.pezzi.reduce((a, z) => a + z.L, 0), larghezza: fit.larghezza }));
+}
+
 // ---------- l'intera immagine
 // ris: il risultato di decodifica() (coordinate del mondo con y verso l'alto)
 export function tracciaFisica(ris, opzioni = {}) {
+  opzioni = { distanza: 10, separa: false, griglia: 0.5, ginocchio: 0.2, ginocchioLungo: 4, ...opzioni };
+  OPZ = opzioni;
   const W = ris.misure.larghezza, H = ris.misure.altezza, giu = (p) => [p[0], H - p[1], p[2] ?? 0];
   const oggetti = [], specie = {}, sagome = [];
   const nomeSpecie = (q, m, extra = '') => { const n = `${extra || 'tratto'} ${arr(q)}`; if (!specie[n]) specie[n] = { q: arr(q), m }; return n; };
-  let pezzi = 0;
+  let pezzi = 0, ginocchi = 0;
   // i tratti
   for (const l of ris.linee || []) {
     const fit = adattaTratto(l.punti.map(giu), opzioni);
     if (!fit || fit.lunghezza < 1) continue;
     const q = Math.max(0.5, Math.round(fit.larghezza * 4) / 4), hw = Math.max(2, q * 0.6 + 1.5);
-    const { domini, fine } = corridoi(fit, q, 1, hw);
+    const liscio = opzioni.campo !== 'corridoi';
+    if (liscio) {
+      // segmenti lisci tra un ginocchio e l'altro: ognuno una particella, nata dal decadimento della precedente
+      spezzaAiGinocchi(fit, opzioni).forEach((g, n) => {
+        const campioni = campioniTratto(g, q, 1, 0.5, opzioni.tubo ?? [0, -0.8, 0.8, -1.6, 1.6]);
+        oggetti.push({ tipo: 'tratto', domini: [], campioni, pareti: [], ginocchio: n > 0, sorgenti: [{ pos: g.inizio.pos.map(cifre), dir: cifre(g.inizio.dir), v: V, vita: cifre(g.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: g.lunghezza / V + 1, pezzi: g.pezzi.length });
+        ginocchi += n > 0 ? 1 : 0;
+      });
+      pezzi += fit.pezzi.length;
+      continue;
+    }
+    const domini = corridoi(fit, q, 1, hw).domini, campioni = null;
     // alla fine del tratto la particella decade: la sua vita è il tempo per percorrerlo
-    void fine;
-    oggetti.push({ tipo: 'tratto', domini, pareti: [], sorgenti: [{ pos: fit.inizio.pos.map(cifre), dir: cifre(fit.inizio.dir), v: V, vita: cifre(fit.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: fit.lunghezza / V + 1, pezzi: fit.pezzi.length });
+    oggetti.push({ tipo: 'tratto', domini, campioni, pareti: [], sorgenti: [{ pos: fit.inizio.pos.map(cifre), dir: cifre(fit.inizio.dir), v: V, vita: cifre(fit.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: fit.lunghezza / V + 1, pezzi: fit.pezzi.length });
     pezzi += fit.pezzi.length;
   }
   for (const e of ris.elementi) {
@@ -179,7 +311,10 @@ export function tracciaFisica(ris, opzioni = {}) {
   }
   // le esposizioni: due oggetti che si toccano vanno su lastre diverse
   for (const o of oggetti) {
-    o.scatole = [...o.domini.map((d) => riquadroForma(d.forma)), ...o.pareti.map((p) => [Math.min(p.a[0], p.b[0]) - 0.5, Math.min(p.a[1], p.b[1]) - 0.5, Math.max(p.a[0], p.b[0]) + 0.5, Math.max(p.a[1], p.b[1]) + 0.5])];
+    const sc = [];
+    // un tratto col campo liscio occupa una striscia intorno ai suoi campioni
+    if (o.campioni) for (let i = 0; i < o.campioni.length; i += 12) { const g = o.campioni.slice(i, i + 13), m = opzioni.distanza ?? 8; sc.push([Math.min(...g.map((c) => c[0])) - m, Math.min(...g.map((c) => c[1])) - m, Math.max(...g.map((c) => c[0])) + m, Math.max(...g.map((c) => c[1])) + m]); }
+    o.scatole = [...sc, ...o.domini.map((d) => riquadroForma(d.forma)), ...o.pareti.map((p) => [Math.min(p.a[0], p.b[0]) - 0.5, Math.min(p.a[1], p.b[1]) - 0.5, Math.max(p.a[0], p.b[0]) + 0.5, Math.max(p.a[1], p.b[1]) + 0.5])];
     o.tutto = o.scatole.reduce((t, b) => [Math.min(t[0], b[0]), Math.min(t[1], b[1]), Math.max(t[2], b[2]), Math.max(t[3], b[3])], [Infinity, Infinity, -Infinity, -Infinity]);
   }
   const lastre = [];
@@ -190,16 +325,76 @@ export function tracciaFisica(ris, opzioni = {}) {
     if (!lastra) { lastra = { oggetti: [] }; lastre.push(lastra); }
     lastra.oggetti.push(o);
   }
-  const esposizioni = lastre.map((L) => ({
-    domini: L.oggetti.flatMap((o) => o.domini), pareti: L.oggetti.flatMap((o) => o.pareti), sorgenti: L.oggetti.flatMap((o) => o.sorgenti),
-    tempo: Math.max(...L.oggetti.map((o) => o.tempo)),
-  }));
+  const espone = (L) => {
+    const campioni = L.oggetti.flatMap((o) => o.campioni || []);
+    return {
+      domini: L.oggetti.flatMap((o) => o.domini), pareti: L.oggetti.flatMap((o) => o.pareti), sorgenti: L.oggetti.flatMap((o) => o.sorgenti),
+      tempo: Math.max(...L.oggetti.map((o) => o.tempo)),
+      ...(campioni.length ? { mappa: opzioni.campo === 'minimi' ? mappaLiscia(campioni, { ...opzioni, ...(L.fine ? { griglia: opzioni.grigliaFine ?? 0.75 } : {}) }) : mappaTubi(campioni, opzioni) } : {}),
+    };
+  };
+  let esposizioni = lastre.map(espone);
+  // quanto ogni particella di una lastra si scosta dal suo tratto
+  const scostamenti = (e) => {
+    const L = lastre[e], out = new Map(); if (!esposizioni[e].mappa) return out;
+    const tr = simulaMondo({ larghezza: W, altezza: H, c: 30, G: 1, tempo: esposizioni[e].tempo, specie, pellicola: { ...PELLICOLA }, sorgenti: esposizioni[e].sorgenti, domini: esposizioni[e].domini, mappa: esposizioni[e].mappa });
+    for (const t of tr) {
+      const o = L.oggetti[t.sorgente]; if (!o || !o.campioni) continue;
+      const C = o.campioni.filter((c) => !c[4]), P = t.punti; let j = 0, peggio = 0;
+      for (let k = 0; k < C.length; k += 2) {
+        const tt = P[0][3] + C[k][3] / V; while (j < P.length - 2 && P[j + 1][3] < tt) j++;
+        const a = P[j], b = P[j + 1] || a, u = b[3] > a[3] ? Math.min(1, Math.max(0, (tt - a[3]) / (b[3] - a[3]))) : 0;
+        peggio = Math.max(peggio, Math.hypot(a[0] + (b[0] - a[0]) * u - C[k][0], a[1] + (b[1] - a[1]) * u - C[k][1]));
+      }
+      out.set(o, peggio);
+    }
+    return out;
+  };
+  // i tratti che non vengono seguiti vanno da soli, su una lastra loro con una mappa più fine
+  if (opzioni.campo !== 'corridoi' && opzioni.separa !== false) {
+    const soli = [];
+    lastre.forEach((L, e) => { const sc = scostamenti(e); if (L.oggetti.length < 2) return; L.oggetti = L.oggetti.filter((o) => { if ((sc.get(o) ?? 0) > (opzioni.soglia ?? 1.5)) { soli.push(o); return false; } return true; }); });
+    for (const o of soli) lastre.push({ oggetti: [o], fine: true });
+    esposizioni = lastre.filter((L) => L.oggetti.length).map(espone);
+    for (let i = lastre.length - 1; i >= 0; i--) if (!lastre[i].oggetti.length) lastre.splice(i, 1);
+  }
+  // la mira: si simula, si misura quanto ogni particella si scosta dal disegno,
+  // si corregge il campo poco prima di dove si scosta, si rifà la mappa
+  const giri = opzioni.campo === 'corridoi' ? 0 : opzioni.correzioni ?? 0, guadagno = opzioni.guadagno ?? 0.8, avanti = opzioni.anticipo ?? 6;
+  const scarti = [];
+  for (let giro = 0; giro <= giri; giro++) {
+    let peggio = 0, somma = 0, n = 0;
+    lastre.forEach((L, e) => {
+      if (!esposizioni[e].mappa) return;
+      const tr = simulaMondo({ larghezza: W, altezza: H, c: 30, G: 1, tempo: esposizioni[e].tempo, specie, pellicola: { ...PELLICOLA }, sorgenti: esposizioni[e].sorgenti, domini: esposizioni[e].domini, mappa: esposizioni[e].mappa });
+      let cambiato = false;
+      for (const t of tr) {
+        const o = L.oggetti[t.sorgente]; if (!o || !o.campioni) continue;
+        const C = o.campioni.filter((c) => !c[4]), P = t.punti, q = specie[o.sorgenti[0].specie].q, err = new Float64Array(C.length);
+        let j = 0;
+        for (let k = 0; k < C.length; k++) {
+          const tt = P[0][3] + C[k][3] / V; while (j < P.length - 2 && P[j + 1][3] < tt) j++;
+          const a = P[j], b = P[j + 1] || a, u = b[3] > a[3] ? Math.min(1, Math.max(0, (tt - a[3]) / (b[3] - a[3]))) : 0;
+          const x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u;
+          const k2 = Math.min(C.length - 1, k + 1), k1 = Math.max(0, k - 1), tx = C[k2][0] - C[k1][0], ty = C[k2][1] - C[k1][1], tl = Math.hypot(tx, ty) || 1;
+          err[k] = (tx * (y - C[k][1]) - ty * (x - C[k][0])) / tl; // a sinistra: positivo
+          peggio = Math.max(peggio, Math.abs(err[k])); somma += Math.abs(err[k]); n++;
+        }
+        if (giro === giri) continue;
+        // a sinistra del disegno: la curva verso sinistra era troppa poco prima
+        const D = Math.round(avanti / 0.5);
+        for (let k = 0; k < C.length; k++) { const e2 = err[Math.min(C.length - 1, k + D)]; if (Math.abs(e2) > 0.05) { C[k][2] -= (guadagno * e2 * V) / (q * avanti * avanti); cambiato = true; } }
+      }
+      if (cambiato && giro < giri) esposizioni[e].mappa = mappaTubi(L.oggetti.flatMap((o) => o.campioni || []), opzioni);
+    });
+    scarti.push({ giro, peggio: +peggio.toFixed(2), medio: +(somma / Math.max(1, n)).toFixed(3) });
+  }
   // la lastra è materia densa: i corridoi sono canali vuoti. Una particella
   // che sfugge al suo canale si ferma subito, invece di tirare una riga
-  const cella = { larghezza: W, altezza: H, c: 30, G: 1, bordo: 'aperto', tempo: Math.max(1, ...esposizioni.map((e) => e.tempo)), fondo: { B: 0, K: 40000, n: 1 }, domini: [], masse: [], pareti: [], sorgenti: [], pellicola: { ...PELLICOLA }, specie, esposizioni, sagome };
-  const numeri = esposizioni.reduce((n, e) => n + e.domini.length * 6 + e.pareti.length * 4 + e.sorgenti.length * 4, 0) + sagome.reduce((n, g) => n + 2 * (g.contorno.length + g.buchi.reduce((m, h) => m + h.length, 0)), 0);
-  const conta = { tratti: oggetti.filter((o) => o.tipo === 'tratto').length, petali: oggetti.filter((o) => o.tipo === 'petalo').length, dischi: oggetti.filter((o) => o.tipo === 'disco').length, campiture: sagome.length, pezzi, esposizioni: esposizioni.length, numeri };
-  return { cella, conta };
+  const cella = { larghezza: W, altezza: H, c: 30, G: 1, bordo: 'aperto', tempo: Math.max(1, ...esposizioni.map((e) => e.tempo)), fondo: { B: 0, K: opzioni.campo === 'corridoi' ? 40000 : 0 }, domini: [], masse: [], pareti: [], sorgenti: [], pellicola: { ...PELLICOLA }, specie, esposizioni, sagome };
+  const numeri = esposizioni.reduce((n, e) => n + e.domini.length * 6 + e.pareti.length * 4 + e.sorgenti.length * 4 + (e.mappa ? (e.mappa.sparsa ? e.mappa.sparsa.length / 2 : e.mappa.B.filter((v) => Math.abs(v) > 1e-4).length) : 0), 0) + sagome.reduce((n, g) => n + 2 * (g.contorno.length + g.buchi.reduce((m, h) => m + h.length, 0)), 0);
+  const conta = { tratti: oggetti.filter((o) => o.tipo === 'tratto').length, petali: oggetti.filter((o) => o.tipo === 'petalo').length, dischi: oggetti.filter((o) => o.tipo === 'disco').length, campiture: sagome.length, pezzi, ginocchi, esposizioni: esposizioni.length, numeri };
+  return { cella, conta, scarti };
 }
 
 // riempie dei poligoni (pari e dispari: i buchi restano vuoti)
