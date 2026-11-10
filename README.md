@@ -47,8 +47,11 @@ le loro vite medie. Un universo si simula in circa un decimo di secondo.
 Il pattern non si costruisce: **si trova**. Nell'app (File → Nuovo → la
 biblioteca) si sfogliano gli universi (◀ ▶, il dado, o un numero), si sposta e
 si ingrandisce la **finestra** sull'universo, e con la barra del tempo e la
-fetta si sceglie **quando** guardare. Il Pattern mostra la sezione così com'è,
-senza copie né montaggi.
+fetta si sceglie **quando** guardare. Il Pattern è questa finestra ripetuta, e
+nient'altro: a specchio (ogni copia riflette la vicina, così le linee che
+toccano il bordo continuano nella loro immagine), a giro (quattro copie girano
+di un quarto intorno a un angolo), affiancata, o da sola. Nessun montaggio: il
+motivo è un pezzo di universo, la ripetizione è quella della finestra.
 
 **Da che angolo.** L'universo è un piano più il tempo: uno spaziotempo. La
 lastra «da sopra» guarda lungo il tempo e vede solo il piano. Ma la sezione si
@@ -67,8 +70,24 @@ finestra), simmetria (specchi e mezzo giro), ripetizione (il motivo che torna),
 curve (le linee che girano) e ordine (pochi motivi forti invece di tante linee
 scollegate). In tre secondi trova sezioni che valgono in media tre volte quelle
 prese a caso. «✨ più bella qui» cerca solo nuove inquadrature dell'universo che
-si sta guardando. Per avere cose belle da trovare, gli universi hanno anche le
-**stelle nucleari** delle emulsioni fotografiche: un nucleo colpito si spezza in
+si sta guardando. La misura conta anche la **pulizia**: i frammenti, pezzi di
+linea corti che attraversano la finestra senza fare niente, sembrano rumore.
+
+**Gli universi vicini.** Una sezione quasi bella ha spesso una linea a caso,
+spezzata, storta. Ma nella biblioteca accanto a ogni universo ce ne sono
+infiniti quasi uguali (`src/camera/vicini.js`): lo stesso campo un poco più
+forte o ruotato, la stessa nube più densa, la stessa massa un poco più in là,
+lo stesso raggio cosmico arrivato un istante dopo, da un'altra direzione, o mai
+arrivato. In qualcuno di questi la linea storta non c'è, o va dove deve.
+Perfezionare una sezione è camminare tra i vicini, un passo alla volta, verso
+il più bello (una salita con un poco di caso, per non fermarsi al primo
+poggio). Il dado ora fa le due cose: trova una sezione quasi bella, poi cerca
+il vicino migliore (da 0.57 a 0.69, da 0.59 a 0.73 nelle prove); «✦ un
+universo vicino più pulito» fa solo la seconda, sulla sezione che si sta
+guardando. Il vicino non è più estraibile dal solo numero: si salva nel seme.
+
+Per avere cose belle da trovare, gli universi hanno anche le
+**stelle nucleari**: un raggio cosmico colpisce un nucleo, che si spezza in
 una raggiera di particelle che, nel campo, si arricciano in rosette.
 
 Una cosa va detta, perché è il cuore dell'idea di Borges: nella biblioteca c'è
@@ -84,11 +103,15 @@ Un menu **File** (nuovo, apri un'immagine, apri e salva il seme, esporta
 l'immagine), due viste (**Pattern** ed **Elemento**, con il piano o lo
 spaziotempo), annulla e rifai, e una riga in basso che dice sempre dove sei e
 che cosa puoi fare. «Da dove partiamo?» offre la biblioteca, un'immagine,
-l'esempio della tavola greca, alcuni modelli composti a mano e il vuoto.
+l'esempio della tavola greca e il vuoto.
 
-- **Il pattern.** Per la biblioteca, la sezione dell'universo. Per i modelli
-  composti a mano, una piastrella che si ripete all'infinito, con i suoi
-  elementi messi nei loro posti.
+- **Il pattern.** Per la biblioteca, la finestra dell'universo ripetuta
+  all'infinito (a specchio, a giro, affiancata, o da sola). Clic: la finestra.
+  Per un'immagine letta, la piastrella che si ripete con i suoi elementi.
+- **La finestra.** La sezione da sola, grande. Clic: il suo **spaziotempo**, il
+  blocco di universo che sta dentro la finestra e la fetta di tempo, con le
+  linee d'universo che salgono; la sezione è questo blocco guardato da un
+  angolo. **L'universo** mostra tutto l'universo con la cornice da spostare.
 - **L'elemento.** Un evento solo, con le cose che lo producono sulla scena: le
   sorgenti (frecce verdi), le zone di campo e di materia, le masse; in un
   universo, la mappa del suo campo (⊙ ⊗ più o meno intensi), le sue nubi

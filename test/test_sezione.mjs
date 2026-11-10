@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { proiettore, segmentiSezione, bellezza } from '../src/camera/sezione.js';
 import { cercaSezione } from '../src/camera/cercatore.js';
 import { universo } from '../src/camera/biblioteca.js';
-import { simulaMondo } from '../src/camera/mondo.js';
+import { simulaMondo, generatore } from '../src/camera/mondo.js';
+import { vicino, perfeziona } from '../src/camera/vicini.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -35,6 +36,18 @@ prova('il dado trova sezioni molto più belle del caso puro', () => {
   assert.ok(m.bellezza.totale > 2 * media, `${m.bellezza.totale} contro ${media}`);
   // e la stessa ricerca, con lo stesso seme, ritrova la stessa sezione
   assert.equal(JSON.stringify(cercaSezione({ da: 300, universi: 8, inquadrature: 12, seme: 7 }).finestra), JSON.stringify(m.finestra));
+});
+
+prova('gli universi vicini: quasi uguali, e tra loro uno più bello', () => {
+  const u = universo(321), caso = generatore(4);
+  const v = vicino(u.cella, 1, caso);
+  assert.equal(v.seme, u.cella.seme); assert.equal(v.vicino, 1);
+  const diff = JSON.stringify(v) !== JSON.stringify({ ...u.cella, vicino: 1 }); assert.ok(diff, 'un vicino è diverso');
+  assert.ok(Math.abs(JSON.stringify(v).length - JSON.stringify(u.cella).length) < 400, 'ma di poco');
+  const m = cercaSezione({ solo: 321, inquadrature: 4, seme: 2 });
+  const p = perfeziona({ cella: u.cella, finestra: m.finestra, vista: m.vista, sezione: m.sezione }, { passi: 14, seme: 3 });
+  assert.ok(p.bellezza.totale >= m.bellezza.totale - 1e-9, `la salita non scende: ${p.bellezza.totale} contro ${m.bellezza.totale}`);
+  assert.ok(p.bellezza.pulizia >= 0 && p.bellezza.pulizia <= 1);
 });
 
 console.log(`sezione: ${ok} prove, tutto ok`);

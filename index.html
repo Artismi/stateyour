@@ -60,11 +60,13 @@
   .aggiungi button { text-align: left; border-left: 4px solid var(--c); background: rgba(255,255,255,0.9); padding: 4px 8px; font-size: 12px; }
   .aggiungi button.attivo { background: var(--c); color: #fff; }
   /* in alto a destra, solo nell'elemento: piano o spaziotempo */
-  .modo { position: absolute; right: 10px; top: 8px; display: flex; }
+  .modo { position: absolute; right: 10px; bottom: 10px; display: flex; }
   .modo button { border-radius: 0; margin-left: -1px; font-size: 12px; padding: 3px 9px; }
   .modo button:first-child { border-radius: 4px 0 0 4px; } .modo button:last-child { border-radius: 0 4px 4px 0; }
   .modo button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
   body.in-pattern .aggiungi, body.in-pattern .modo, body.in-pattern .sotto { display: none; }
+  body.in-finestra .aggiungi { display: none; }
+  .riga-bottoni.scelta button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
 
   .sotto { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--riga); }
   .sotto input[type=range] { flex: 1; }
@@ -168,7 +170,7 @@
         <button data-strumento="materia" style="--c:rgb(150,104,50)" title="una zona dove le cariche frenano">▒ materia</button>
         <button data-strumento="massa" style="--c:rgb(214,84,52)" title="un corpo fermo che curva lo spazio">● una massa</button>
       </div>
-      <div class="modo"><button data-modo="piano" class="attivo">piano</button><button data-modo="spaziotempo" title="il tempo sale: le linee d'universo">spaziotempo</button></div>
+      <div class="modo"><button data-modo="finestra" title="la sezione da sola: clic per il suo spaziotempo">la finestra</button><button data-modo="piano" class="attivo" title="tutto l'universo, con la cornice della finestra da spostare">piano</button><button data-modo="spaziotempo" title="il tempo sale: le linee d'universo">spaziotempo</button></div>
     </div>
     <div class="sotto">
       <button id="gioca" title="guarda l'evento accadere">▶</button>

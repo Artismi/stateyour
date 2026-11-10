@@ -98,6 +98,9 @@ export function bellezza(segmenti, lato) {
   for (const sg of segmenti) perTraccia.set(sg[5], (perTraccia.get(sg[5]) || 0) + Math.hypot(sg[2] - sg[0], sg[3] - sg[1]) * Math.max(0.5, sg[4]));
   const pesi = [...perTraccia.values()].sort((a, b) => b - a), tutto = pesi.reduce((a, b) => a + b, 0);
   const sOrdine = tutto ? pesi.slice(0, 4).reduce((a, b) => a + b, 0) / tutto : 0;
-  const totale = sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip) * (0.4 + 0.6 * sCurve) * (0.3 + 0.7 * sOrdine);
-  return { totale, pieno, equilibrio: sEq, simmetria: sSim, ripetizione: sRip, curve: sCurve, ordine: sOrdine };
+  // pulizia: i frammenti (pezzi di linea brevi dentro la finestra) sembrano rumore
+  let frammenti = 0; for (const w of perTraccia.values()) if (w < 0.15 * lato) frammenti += w;
+  const sPulizia = tutto ? 1 - frammenti / tutto : 0;
+  const totale = sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip) * (0.4 + 0.6 * sCurve) * (0.3 + 0.7 * sOrdine) * (0.4 + 0.6 * sPulizia);
+  return { totale, pieno, equilibrio: sEq, simmetria: sSim, ripetizione: sRip, curve: sCurve, ordine: sOrdine, pulizia: sPulizia };
 }

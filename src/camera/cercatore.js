@@ -5,6 +5,7 @@
 import { universo } from './biblioteca.js';
 import { simulaMondo, generatore } from './mondo.js';
 import { segmentiSezione, bellezza } from './sezione.js';
+import { perfeziona } from './vicini.js';
 
 export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = null, seme = 1 }, avanza = () => {}) {
   const caso = generatore(seme), tra = (a, b) => a + caso() * (b - a);
@@ -33,8 +34,16 @@ export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = 
 if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof window === 'undefined') {
   self.onmessage = (ev) => {
     try {
-      const m = cercaSezione(ev.data, (frazione, migliore) => self.postMessage({ frazione, migliore }));
-      self.postMessage({ fatto: true, migliore: m });
+      const d = ev.data;
+      // 1. il dado: molti universi, molte inquadrature (se non si parte già da una sezione)
+      let st = d.stato;
+      if (!st) {
+        const m = cercaSezione(d, (frazione, migliore) => self.postMessage({ fase: 'cerca', frazione, migliore }));
+        st = { cella: { ...universo(m.numero).cella }, finestra: m.finestra, vista: m.vista, sezione: m.sezione, numero: m.numero };
+      }
+      // 2. i vicini: si cammina verso l'universo vicino più bello
+      const p = perfeziona(st, { passi: d.passi ?? 45, seme: d.seme ?? 1 }, (frazione, b) => self.postMessage({ fase: 'perfeziona', frazione, bellezza: b }));
+      self.postMessage({ fatto: true, migliore: { ...p, numero: st.numero ?? st.cella.seme } });
     } catch (err) { self.postMessage({ errore: String((err && err.stack) || err) }); }
   };
 }

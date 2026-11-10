@@ -13,7 +13,7 @@
 //     sciami di particelle;
 //   · DECADIMENTI spontanei di particelle neutre, qua e là;
 //   · qualche STELLA NUCLEARE: un nucleo colpito si spezza in una raggiera di
-//     particelle (le «stelle» delle emulsioni fotografiche): nel campo le
+//     particelle (una «stella»): nel campo le
 //     cariche positive e negative si arricciano in versi opposti, in rosette.
 // Le particelle sono quelle di un piccolo catalogo naturale, con le loro vite
 // medie: ognuna decade quando capita.

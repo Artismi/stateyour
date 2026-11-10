@@ -117,10 +117,10 @@ function aggiorna({ pannello: p = true } = {}) { simula(); aggiornaTempo(); dise
 
 // ---------- disegno: smistamento
 function disegna() {
-  if (vista === 'spaziotempo') { v3.tempo(Math.min(tempo, v3.tMax())); return; }
+  if (vista === 'spaziotempo') { v3.tempo(cel().finestra ? v3.tMax() : Math.min(tempo, v3.tMax())); return; }
   const dpr = devicePixelRatio || 1;
   tela.width = tela.clientWidth * dpr; tela.height = tela.clientHeight * dpr;
-  if (vista === 'pattern') disegnaPattern(); else disegnaElemento();
+  if (vista === 'pattern') disegnaPattern(); else if (vista === 'finestra') disegnaFinestra(); else disegnaElemento();
 }
 
 // =================================================================== IL PATTERN
@@ -157,22 +157,70 @@ function piastrelleVisibili(margine) {
   const out = []; for (let j = v0; j <= v1; j++) for (let i = u0; i <= u1; i++) out.push([i, j, i * a[0] + j * b[0], i * a[1] + j * b[1]]);
   return out;
 }
-function disegnaSezione() {
-  const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, e = comp.elementi[0], f = e.cella.finestra, l = f.lato;
-  const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z;
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#e4dfd3'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = CARTA; ctx.fillRect(X(0), Y(0), l * z, l * z);
-  ctx.save(); ctx.beginPath(); ctx.rect(X(0), Y(0), l * z, l * z); ctx.clip();
-  // la sezione: le linee d'universo proiettate secondo la vista, nella fetta di tempo
+// la sezione (le linee d'universo proiettate secondo la vista, nella fetta di tempo),
+// disegnata in coordinate della finestra su un contesto già trasformato
+function tracciaSezione(c2, e, z) {
   const m = tracceDi(e), perId = new Map(m.tracce.map((t) => [t.id, t]));
-  ctx.setTransform(z, 0, 0, z, X(0), Y(0)); ctx.lineCap = 'round';
+  c2.lineCap = 'round';
   for (const [a, b, c, d, w, id, i] of segmentiSezione(m.tracce, e.cella)) {
     const tr = perId.get(id);
-    ctx.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i] || [28, 27, 24]) : INK; ctx.lineWidth = Math.max(0.6 / z, w);
-    ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke();
+    c2.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i] || [28, 27, 24]) : INK; c2.lineWidth = Math.max(0.6 / z, w);
+    c2.beginPath(); c2.moveTo(a, b); c2.lineTo(c, d); c2.stroke();
   }
-  ctx.restore();
 }
+// la sezione in un'immagine, alla scala dello schermo: poi si ripete
+function spriteSezione(e, z) {
+  const c = e.cella, l = c.finestra.lato, S = Math.max(8, Math.min(2400, Math.ceil(l * Math.pow(2, Math.ceil(Math.log2(z) * 2) / 2))));
+  const m = tracceDi(e), k = `sez|${JSON.stringify([c.finestra, c.sezione, c.vista])}|${S}|${coloriForze}`;
+  let sp = m.sprite.get(k); if (sp) return sp;
+  sp = document.createElement('canvas'); sp.width = sp.height = S;
+  const c2 = sp.getContext('2d'); c2.fillStyle = CARTA; c2.fillRect(0, 0, S, S); c2.setTransform(S / l, 0, 0, S / l, 0, 0);
+  tracciaSezione(c2, e, S / l);
+  m.sprite.set(k, sp); if (m.sprite.size > 8) m.sprite.delete(m.sprite.keys().next().value);
+  return sp;
+}
+// come si ripete la finestra per fare il pattern
+const RIPETI = {
+  specchio: { nome: 'a specchio', spiega: 'ogni copia è la riflessione della vicina: le linee che toccano il bordo continuano nella loro immagine' },
+  rotazione: { nome: 'a giro', spiega: 'quattro copie girano di un quarto intorno a un angolo comune' },
+  traslazione: { nome: 'affiancata', spiega: 'la stessa finestra, copiata accanto a sé' },
+  una: { nome: 'una sola', spiega: 'la sezione da sola, senza ripetizione' },
+};
+const posaCopia = (modo, i, j) => {
+  const pi = ((i % 2) + 2) % 2, pj = ((j % 2) + 2) % 2;
+  if (modo === 'specchio') return { giro: 0, sx: pi ? -1 : 1, sy: pj ? -1 : 1 };
+  if (modo === 'rotazione') return { giro: [[0, 3], [1, 2]][pi][pj] * (Math.PI / 2), sx: 1, sy: 1 };
+  return { giro: 0, sx: 1, sy: 1 };
+};
+function disegnaSezione() {
+  const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, e = comp.elementi[0], l = e.cella.finestra.lato, modo = comp.ripeti || 'specchio';
+  const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = modo === 'una' ? '#e4dfd3' : CARTA; ctx.fillRect(0, 0, W, H);
+  const sp = spriteSezione(e, z), L = l * z;
+  const i0 = modo === 'una' ? 0 : Math.floor((pat.cx - W / 2 / z) / l), i1 = modo === 'una' ? 0 : Math.floor((pat.cx + W / 2 / z) / l);
+  const j0 = modo === 'una' ? 0 : Math.floor((pat.cy - H / 2 / z) / l), j1 = modo === 'una' ? 0 : Math.floor((pat.cy + H / 2 / z) / l);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 6000) { scrivi('troppo lontano: avvicinati con la rotella', 14 * dpr, 24 * dpr, ACCENTO); return; }
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const { giro, sx, sy } = posaCopia(modo, i, j);
+    ctx.setTransform(1, 0, 0, 1, X((i + 0.5) * l), Y((j + 0.5) * l)); ctx.rotate(giro); ctx.scale(sx, sy);
+    ctx.drawImage(sp, -L / 2 - 0.25, -L / 2 - 0.25, L + 0.5, L + 0.5);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // la finestra d'origine, appena accennata
+  if (modo !== 'una') { ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.strokeStyle = 'rgba(28,27,24,0.28)'; ctx.lineWidth = dpr; ctx.strokeRect(X(0), Y(0), L, L); ctx.setLineDash([]); }
+}
+// la vista «la finestra»: la sezione da sola, grande; un clic porta al suo spaziotempo
+function disegnaFinestra() {
+  const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, e = el(), l = e.cella.finestra.lato;
+  const L = Math.min(W * 0.9, H * 0.84), x0 = (W - L) / 2, y0 = (H - L) / 2 + 8 * dpr, z = L / l;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#e4dfd3'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = CARTA; ctx.fillRect(x0, y0, L, L);
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, L, L); ctx.clip(); ctx.setTransform(z, 0, 0, z, x0, y0);
+  tracciaSezione(ctx, e, z); ctx.restore();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.strokeStyle = sopraFinestra ? ACCENTO : 'rgba(28,27,24,0.5)'; ctx.lineWidth = (sopraFinestra ? 2 : 1) * dpr; ctx.strokeRect(x0, y0, L, L);
+  if (sopraFinestra) { ctx.fillStyle = ACCENTO; ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillText('clic: lo spaziotempo di questa finestra', x0, y0 - 6 * dpr); }
+}
+let sopraFinestra = false;
 function disegnaPattern() {
   if (!comp.reticolo) return disegnaSezione();
   const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, { a, b } = comp.reticolo;
@@ -244,7 +292,7 @@ function maniglia(x, y) {
   return null;
 }
 function entra(e) {
-  corrente = e; vista = 'dettaglio'; sel = null; sonda = null; tempo = Infinity; fetta = 0;
+  corrente = e; vista = comp.elementi[e]?.cella.finestra ? 'finestra' : 'dettaglio'; sel = null; sonda = null; tempo = Infinity; fetta = 0;
   // un universo ricorda la sua fetta di tempo
   const sez = cel().sezione;
   if (sez) { tempo = sez.fine; fetta = sez.durata < sez.fine - 1e-9 ? sez.durata : 0; }
@@ -253,7 +301,10 @@ function entra(e) {
 }
 function salvaSezione() { const c = cel(); if (!c?.sezione) return; const fine = Math.min(tempo, tMax()); c.sezione = { fine, durata: fetta ? Math.min(fetta, fine) : fine }; }
 function adattaPattern() {
-  if (!comp.reticolo) { const l = comp.elementi[0].cella.finestra.lato; pat.cx = l / 2; pat.cy = l / 2; pat.z = Math.min(tela.clientWidth, tela.clientHeight) / (1.08 * l); return; }
+  if (!comp.reticolo) {
+    const l = comp.elementi[0].cella.finestra.lato, una = comp.ripeti === 'una';
+    pat.cx = una ? l / 2 : l; pat.cy = una ? l / 2 : l; pat.z = Math.min(tela.clientWidth, tela.clientHeight) / ((una ? 1.08 : 3.3) * l); return;
+  }
   const { a, b } = comp.reticolo, L = Math.max(Math.hypot(...a), Math.hypot(...b), 1);
   if (immagine) { pat.cx = immagine.W / 2; pat.cy = immagine.H / 2; pat.z = Math.min(tela.clientWidth / immagine.W, tela.clientHeight / immagine.H) * 0.9; return; }
   pat.cx = (a[0] + b[0]) / 2; pat.cy = (a[1] + b[1]) / 2; pat.z = Math.min(tela.clientWidth, tela.clientHeight) / (3.2 * L);
@@ -575,6 +626,7 @@ tela.addEventListener('pointerdown', (e) => {
     else presa = { tipo: 'vista', sx: e.clientX, sy: e.clientY, ux: e.clientX, uy: e.clientY, cx: pat.cx, cy: pat.cy };
     return;
   }
+  if (vista === 'finestra') { presa = { tipo: 'clicFinestra', sx: e.clientX, sy: e.clientY }; return; }
   const [x, y] = aMondo(e), c = cel();
   if (strumento !== 'seleziona') { aggiungi(strumento, x, y); return; }
   const fh = colpisciFinestra(x, y);
@@ -607,6 +659,12 @@ tela.addEventListener('pointermove', (e) => {
     }
     return;
   }
+  if (vista === 'finestra') {
+    const r = tela.getBoundingClientRect(), W = r.width, H = r.height, L = Math.min(W * 0.9, H * 0.84), x0 = (W - L) / 2, y0 = (H - L) / 2 + 8;
+    const mx = e.clientX - r.left, my = e.clientY - r.top, s = mx >= x0 && mx <= x0 + L && my >= y0 && my <= y0 + L;
+    tela.style.cursor = s ? 'pointer' : 'default'; if (s !== sopraFinestra) { sopraFinestra = s; disegna(); }
+    return;
+  }
   const [x, y] = aMondo(e);
   if (presa?.tipo === 'finestra') {
     const f = cel().finestra, g = presa.orig;
@@ -632,7 +690,8 @@ tela.addEventListener('pointermove', (e) => {
   }
   arrotonda(o); simula(); disegna();
 });
-tela.addEventListener('pointerup', () => {
+tela.addEventListener('pointerup', (e) => {
+  if (presa?.tipo === 'clicFinestra') { const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null; if (fermo && sopraFinestra) { sopraFinestra = false; vista = 'spaziotempo'; aggiornaVista(); } return; }
   if (vista === 'pattern' && presa) {
     if (presa.tipo === 'posto' && !presa.mosso) { scelto = { e: presa.e, p: presa.p }; presa = null; entra(scelto.e); return; }
     if (presa.tipo === 'vista' && !comp.reticolo && Math.hypot(presa.ux - presa.sx, presa.uy - presa.sy) < 5) { presa = null; entra(0); return; }
@@ -717,7 +776,7 @@ function mostraPannello() {
 const controlliUniverso = (c) => {
   c.vista ??= { ...VISTA_SOPRA };
   return `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button></div>`
-    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button></div>`
+    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button><button data-cerca="vicini" title="cerca, tra gli universi quasi uguali a questo, quello in cui la sezione non ha linee a caso, spezzate o storte">✦ un universo vicino più pulito</button></div>`
     + `<p class="nota" id="cercaStato"></p>`
     + `<h2>da dove la guardi</h2>`
     + cursore('inclinazione', c.vista, 'inclinazione', 0, 85, 1, 'inclinazione (gradi)')
@@ -727,9 +786,11 @@ const controlliUniverso = (c) => {
 function pannelloPattern(h) {
   if (!comp.reticolo) {
     const c = comp.elementi[0].cella;
+    const modo = comp.ripeti || 'specchio';
     h.push(`<h2>la sezione</h2>`, controlliUniverso(c), `<p class="nota">${comp.elementi[0].nota}</p>`);
-    h.push(`<p class="aiuto">Questo è il pattern: la finestra e la fetta di tempo scelte dentro l'universo n. ${c.seme}, così come sono. Nessuna copia e nessun montaggio. Sfoglia gli universi con le frecce o il dado; <b>clic sulla sezione</b> per entrare nell'universo e cercare un'altra inquadratura.</p>`);
-    h.push(`<div class="riga-bottoni"><button class="primo" data-entra="0">entra nell'universo →</button></div>`);
+    h.push(`<h2>come si ripete</h2><div class="riga-bottoni scelta">${Object.entries(RIPETI).map(([k, r]) => `<button data-ripeti="${k}" class="${k === modo ? 'attivo' : ''}" title="${r.spiega}">${r.nome}</button>`).join('')}</div><p class="nota">${RIPETI[modo].spiega}.</p>`);
+    h.push(`<p class="aiuto">Il pattern è una finestra dell'universo n. ${c.seme}, in una fetta di tempo, guardata da un angolo: nessun montaggio, solo la sua ripetizione. <b>Clic sul pattern</b> per vedere la finestra da sola, e da lì il suo spaziotempo.</p>`);
+    h.push(`<div class="riga-bottoni"><button class="primo" data-entra="0">la finestra →</button></div>`);
     return;
   }
   h.push(`<h2>${comp.nome}</h2><p class="nota">${comp.nota || ''}</p>`);
@@ -758,7 +819,7 @@ function pannelloElemento(h) {
   if (c.finestra && !sel) {
     h.push(controlliUniverso(c));
     h.push(`<p class="nota">${el().nota || ''}</p>`);
-    h.push(`<p class="aiuto">Un universo intero, estratto dal suo numero: nessuno l'ha costruito. La cornice arancione è la <b>sezione</b>: trascinane il bordo per spostarla, l'angolo per ingrandirla. La barra del tempo dice <b>fino a quando</b> guardare, la fetta <b>per quanto</b>. Il Pattern mostra solo la sezione, così com'è: niente copie, quello che si ripete si ripete in natura (i cristalli).</p>`);
+    h.push(`<p class="aiuto">Un universo intero, estratto dal suo numero: nessuno l'ha costruito. La cornice arancione è la <b>sezione</b>: trascinane il bordo per spostarla, l'angolo per ingrandirla. La barra del tempo dice <b>fino a quando</b> guardare, la fetta <b>per quanto</b>. Il Pattern ripete questa finestra, nient'altro. In basso a destra: <b>la finestra</b> (la sezione da sola; clic per il suo spaziotempo), <b>l'universo</b> (qui), <b>spaziotempo</b>.</p>`);
   }
   if (!sel) {
     if (!c.finestra) h.push(`<p class="nota">${el().nota || ''}</p>`);
@@ -936,7 +997,8 @@ pannello.addEventListener('click', (e) => {
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
-  if (d.cerca) return cercaBella(d.cerca === 'qui');
+  if (d.cerca) return cercaBella(d.cerca);
+  if (d.ripeti) { ricorda(); comp.ripeti = d.ripeti; adattaPattern(); aggiornaVista(); return; }
   if (d.togliScatti) {
     const [tipo, i] = d.togliScatti.split(':');
     if (tipo === 'legge') leggi[i] = true; else { ricorda(); const o = { sorgente: cel().sorgenti, dominio: cel().domini, massa: cel().masse }[tipo][+i]; delete o.interruttori; }
@@ -1029,17 +1091,38 @@ schede.addEventListener('pointerleave', () => { if (fuoco) { fuoco = null; $('sp
 function scegliStrumento(st) { strumento = st; document.querySelectorAll('[data-strumento]').forEach((b) => b.classList.toggle('attivo', b.dataset.strumento === st)); tela.style.cursor = st === 'seleziona' ? 'default' : 'crosshair'; dove(); }
 document.querySelectorAll('[data-strumento]').forEach((b) => b.addEventListener('click', () => scegliStrumento(strumento === b.dataset.strumento ? 'seleziona' : b.dataset.strumento)));
 document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.vista === 'pattern') { vista = 'pattern'; sonda = null; aggiornaVista(); } else entra(corrente); }));
-document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { vista = b.dataset.modo === 'spaziotempo' ? 'spaziotempo' : 'dettaglio'; aggiornaVista(); }));
+document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { vista = { spaziotempo: 'spaziotempo', finestra: 'finestra' }[b.dataset.modo] || 'dettaglio'; aggiornaVista(); }));
 const v3 = creaVista3D(tela3d, { spunte: () => ({ linee: true, pianta: true, taglio: true, forze: false, masse: true, campi: true }) });
 function imposta3D() {
   const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }].filter(Boolean) }));
-  v3.imposta({ masse: c.masse, blocchi }, tracce);
+  if (!c.finestra) { v3.imposta({ masse: c.masse, blocchi }, tracce); return; }
+  v3.imposta({ masse: c.masse.filter((m) => dentroBlocco(c, m.pos[0], m.pos[1])), blocchi: [] }, bloccoFinestra(c, tracce));
+}
+// le linee d'universo dentro la finestra e la fetta di tempo; il tempo parte dall'inizio della fetta
+const dentroBlocco = (c, x, y) => Math.abs(x - c.finestra.centro[0]) <= c.finestra.lato / 2 && Math.abs(y - c.finestra.centro[1]) <= c.finestra.lato / 2;
+function bloccoFinestra(c, tracce) {
+  const z = c.sezione || { fine: tMax(), durata: tMax() }, t0 = z.fine - z.durata, t1 = z.fine, l = c.finestra.lato / 2, [cx, cy] = c.finestra.centro, out = [];
+  for (const tr of tracce) {
+    if (tr.sagoma) continue;
+    const P = []; let dentro = false;
+    for (const p of tr.punti) {
+      const ok = p[2] && p[3] >= t0 && p[3] <= t1 && dentroBlocco(c, p[0], p[1]);
+      if (ok) { P.push([p[0], p[1], p[2], p[3] - t0, p[4], p[5]]); dentro = true; }
+      else if (dentro) { const q = P[P.length - 1]; P.push([q[0], q[1], 0, q[3], q[4], q[5]]); dentro = false; }
+    }
+    if (P.length > 1) out.push({ ...tr, punti: P, colori: undefined });
+  }
+  // gli spigoli del blocco, invisibili: la scatola è la finestra
+  out.push({ id: -1, punti: [[cx - l, cy - l, 0, 0, 0], [cx + l, cy + l, 0, t1 - t0, 0]] });
+  return out;
 }
 // la riga in basso: dove sei e che cosa puoi fare
 function dove() {
   const t = vista === 'pattern'
-    ? (!comp.reticolo ? `La sezione dell'universo n. ${comp.elementi[0].cella.seme}: clic per entrare nell'universo e cambiare inquadratura; ◀ ▶ 🎲 per sfogliare la biblioteca.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
+    ? (!comp.reticolo ? `Il pattern: la finestra dell'universo n. ${comp.elementi[0].cella.seme}, ${comp.ripeti === 'una' ? 'da sola' : `ripetuta ${RIPETI[comp.ripeti || 'specchio'].nome}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
+    : vista === 'finestra' ? `La finestra: la sezione dell'universo n. ${el().cella.seme} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
+    : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra: il tempo sale dall'inizio della fetta alla sua fine. La sezione è questo blocco guardato da un angolo. Trascina per ruotare, rotella per avvicinarti.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
     : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
     : solo ? `Vedi solo ${FORZE[solo].art}: ${solo === 'decadimento' ? 'in verde le particelle nate da un decadimento, le stelle dove avviene' : 'le linee si accendono dove questa forza le piega, tanto più quanto più conta'}. Clic di nuovo sul nome per tornare a tutto.`
@@ -1050,7 +1133,9 @@ function dove() {
 function aggiornaVista() {
   const inPattern = vista === 'pattern';
   document.querySelectorAll('[data-vista]').forEach((b) => b.classList.toggle('attivo', (b.dataset.vista === 'pattern') === inPattern));
-  document.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('attivo', (b.dataset.modo === 'spaziotempo') === (vista === 'spaziotempo')));
+  const conFinestra = !!el()?.cella.finestra, modoOra = { spaziotempo: 'spaziotempo', finestra: 'finestra' }[vista] || 'piano';
+  document.querySelectorAll('[data-modo]').forEach((b) => { b.classList.toggle('attivo', b.dataset.modo === modoOra); if (b.dataset.modo === 'finestra') b.hidden = !conFinestra; if (b.dataset.modo === 'piano') b.textContent = conFinestra ? "l'universo" : 'piano'; });
+  document.body.classList.toggle('in-finestra', vista === 'finestra' || vista === 'spaziotempo');
   document.body.classList.toggle('in-pattern', inPattern);
   tela.hidden = vista === 'spaziotempo'; tela3d.hidden = vista !== 'spaziotempo';
   $('nomeElemento').textContent = el() ? `: ${el().nome}` : '';
@@ -1110,25 +1195,33 @@ function compBiblioteca(n, finestra, sezione, vistaS) {
   return { nome: u.nome, nota: u.nota, reticolo: null, elementi: [{ nome: u.nome, nota: u.nota, cella: u.cella, posti: [{ pos: [0, 0], rot: 0 }] }] };
 }
 let cercatore = null;
-function cercaBella(qui) {
+// «ovunque»: molti universi e inquadrature, poi i vicini; «qui»: inquadrature in questo universo, poi i vicini;
+// «vicini»: solo il cammino tra gli universi vicini a questo
+function cercaBella(come = 'ovunque') {
   if (cercatore) cercatore.terminate();
   const c = comp.elementi[0].cella, stato = (t) => { const el = $('cercaStato'); if (el) el.textContent = t; $('dove').textContent = t; };
-  stato(qui ? `cerco un'inquadratura più bella nell'universo n. ${c.seme}…` : 'sfoglio la biblioteca: molti universi, molte inquadrature…');
+  stato(come === 'vicini' ? `cammino tra gli universi vicini al n. ${c.seme}…` : come === 'qui' ? `cerco un'inquadratura più bella nell'universo n. ${c.seme}…` : 'sfoglio la biblioteca: molti universi, molte inquadrature…');
   cercatore = new Worker(new URL('./cercatore.js', import.meta.url), { type: 'module' });
-  const da = 1 + Math.floor(Math.random() * 999000);
+  const seme = Math.floor(Math.random() * 1e9), ripeti = comp.ripeti;
   cercatore.onmessage = (ev) => {
     const m = ev.data;
     if (m.errore) { stato(`la ricerca non è riuscita: ${m.errore.split('\n')[0]}`); console.error(m.errore); return; }
-    if (m.frazione != null && !m.fatto) stato(`${qui ? 'provo inquadrature' : 'sfoglio la biblioteca'}… ${Math.round(m.frazione * 100)}% · la più bella finora: ${m.migliore ? m.migliore.bellezza.totale.toFixed(2) : '–'}`);
+    if (!m.fatto && m.fase === 'cerca') stato(`${come === 'qui' ? 'provo inquadrature' : 'sfoglio la biblioteca'}… ${Math.round(m.frazione * 100)}% · la più bella finora: ${m.migliore ? m.migliore.bellezza.totale.toFixed(2) : '–'}`);
+    if (!m.fatto && m.fase === 'perfeziona') stato(`quasi bella: cerco tra gli universi vicini quello senza linee a caso… ${Math.round(m.frazione * 100)}% · ${m.bellezza.totale.toFixed(2)}`);
     if (m.fatto) {
       const b = m.migliore; cercatore.terminate(); cercatore = null;
-      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista); corrente = 0; sel = null; scelto = null;
+      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista); comp.ripeti = ripeti;
+      // l'universo vicino: lo stesso numero, appena diverso
+      if (b.cella.vicino) { const e = comp.elementi[0]; e.cella = { ...b.cella, finestra: b.finestra, sezione: b.sezione, vista: b.vista }; e.nome = comp.nome = `${e.nome}, vicino ${b.cella.vicino}`; }
+      corrente = 0; sel = null; scelto = null;
       vista = 'pattern'; adattaPattern(); aggiornaVista();
       const x = b.bellezza;
-      stato(`trovata: universo n. ${b.numero}, ${x.totale.toFixed(2)} di bellezza (pieno ${x.pieno.toFixed(2)}, equilibrio ${x.equilibrio.toFixed(2)}, simmetria ${x.simmetria.toFixed(2)}, ripetizione ${x.ripetizione.toFixed(2)}, curve ${x.curve.toFixed(2)}, ordine ${(x.ordine ?? 0).toFixed(2)})${inclinata(b.vista) ? `, guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
+      stato(`trovata: universo n. ${b.numero}${b.cella.vicino ? ` (un vicino, ${b.cella.vicino} passi più in là)` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · pieno ${x.pieno.toFixed(2)}, equilibrio ${x.equilibrio.toFixed(2)}, simmetria ${x.simmetria.toFixed(2)}, ripetizione ${x.ripetizione.toFixed(2)}, curve ${x.curve.toFixed(2)}, ordine ${(x.ordine ?? 0).toFixed(2)}, pulizia ${(x.pulizia ?? 0).toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
     }
   };
-  cercatore.postMessage(qui ? { solo: c.seme, inquadrature: 24, seme: Math.floor(Math.random() * 1e9) } : { da, universi: 24, inquadrature: 16, seme: Math.floor(Math.random() * 1e9) });
+  const da = 1 + Math.floor(Math.random() * 999000);
+  cercatore.postMessage(come === 'vicini' ? { stato: { cella: clona(c), finestra: c.finestra, vista: c.vista, sezione: c.sezione, numero: c.seme }, passi: 60, seme }
+    : come === 'qui' ? { solo: c.seme, inquadrature: 24, seme } : { da, universi: 24, inquadrature: 16, seme });
 }
 function cambiaUniverso(n) {
   // stessa inquadratura, stessa fetta di tempo: un altro universo
@@ -1153,7 +1246,7 @@ $('carte').addEventListener('click', (e) => {
   const b = e.target.closest('[data-carta]'); if (!b) return;
   $('nuovo').close();
   const k = b.dataset.carta;
-  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); cercaBella(false); }
+  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); cercaBella('ovunque'); }
   else if (k === 'immagine') $('fileImmagine').click();
   else if (k === 'esempio') daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6');
   else if (k === 'modello') { ricorda(); carica(COMPOSIZIONI[b.dataset.nome]()); }
