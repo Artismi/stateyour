@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 *.log
 _scratch/
+stateyour.bundle
+stateyour.zip
