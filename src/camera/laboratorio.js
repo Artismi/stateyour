@@ -17,6 +17,8 @@ import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
 import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
+import { conteggioVero, fmtGrande } from './nebbia.js';
+import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
@@ -246,6 +248,8 @@ let sopraFinestra = false;
 let camMappa = null, sopraMappa = null, volo = null, rotella = 0;
 const indirizzoOra = () => (vista === 'pattern' ? comp.elementi[0] : el())?.cella.indirizzo || null;
 const evidenzaMappa = () => { const a = indirizzoOra(); return a ? { ...a, sorgenti: (el()?.cella.sorgenti || []).map((s) => s.origine).filter(Boolean) } : null; };
+let animazione = 0;
+function anima() { if (vista !== 'cosmo' || camMappa?.livello !== 3) { animazione = 0; return; } if (!volo) disegna(); animazione = requestAnimationFrame(anima); }
 function apriCosmo() {
   const a = indirizzoOra(); if (!a) return;
   const dpr = devicePixelRatio || 1; camMappa = camSuRegione(a, tela.clientWidth * dpr, tela.clientHeight * dpr);
@@ -396,6 +400,19 @@ const px = (n) => (n * vt.dpr) / vt.s;
 function scrivi(testo, x, y, colore = GRIGIO, dim = 12) { ctx.fillStyle = colore; ctx.font = `${dim * (devicePixelRatio || 1)}px ui-monospace, monospace`; ctx.fillText(testo, x, y); }
 function scriviMondo(testo, x, y, colore, dim = 11) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const [sx, sy] = [vt.ox + x * vt.s, vt.oy + y * vt.s]; ctx.font = `${dim * vt.dpr}px ui-monospace, monospace`; const w = ctx.measureText(testo).width; ctx.fillStyle = 'rgba(243,239,230,0.85)'; ctx.fillRect(sx - 3 * vt.dpr, sy - dim * vt.dpr, w + 6 * vt.dpr, (dim + 5) * vt.dpr); ctx.fillStyle = colore; ctx.fillText(testo, sx, sy); ctx.restore(); }
 
+// la nebbia nella regione: tutte le particelle che ci sono e non si seguono una per una, come puntini
+// fitti quanto la fascia in ogni punto (il disegno resta fisso: è la lastra in un istante)
+function disegnaNebbiaRegione(c) {
+  const a = c.indirizzo, d = c.dipoli?.[0]; if (!a || !d) return;
+  const P = sistemaDi(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], Pl = pianetaDi(a.cosmo, a.galassia, a.stella, a.pianeta);
+  let s = (c.seme * 7919 + (a.zoom || []).length * 104729) % 2147483647 || 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const px = 1.2 / vt.s;
+  ctx.fillStyle = 'rgba(110,90,200,0.35)';
+  for (let i = 0; i < 6000; i++) {
+    const x = caso() * c.larghezza, y = caso() * c.altezza, r = Math.hypot(x - d.centro[0], y - d.centro[1]) / d.R, f = fasciaDi(P, Pl, r) / 0.17 + 0.6 * Pl.densitaAnello(r) / 2;
+    if (caso() < f) ctx.fillRect(x, y, px, px);
+  }
+}
 function disegnaElemento() {
   adattaElemento();
   const W = tela.width, H = tela.height, c = cel(), T = Math.min(tempo, tMax());
@@ -403,6 +420,7 @@ function disegnaElemento() {
   ctx.setTransform(vt.s, 0, 0, vt.s, vt.ox, vt.oy);
   ctx.fillStyle = CARTA; ctx.fillRect(0, 0, c.larghezza, c.altezza);
   disegnaCampi();
+  disegnaNebbiaRegione(c);
   if (vedi('gravita')) campoGravita();
   for (let i = 0; i < c.masse.length; i++) disegnaMassa(c.masse[i], sel?.tipo === 'massa' && sel.i === i);
   if (prima) disegnaTracce(prima, Infinity, true);
@@ -803,7 +821,7 @@ tela.addEventListener('wheel', (e) => {
     const r = tela.getBoundingClientRect(), dpr = devicePixelRatio || 1;
     const esito = zoomMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, Math.exp(-e.deltaY * 0.0015), tela.width, tela.height);
     if (esito?.entra) { entraRegione(esito.entra); return; }
-    sopraMappa = null; disegna(); dove(); mostraPannello(); return;
+    sopraMappa = null; disegna(); dove(); mostraPannello(); if (!animazione) animazione = requestAnimationFrame(anima); return;
   }
   if (vista === 'finestra' || vista === 'dettaglio') {
     e.preventDefault(); rotella += e.deltaY;
@@ -938,6 +956,8 @@ function pannelloElemento(h) {
   if (c.finestra && !sel) {
     h.push(controlliUniverso(c));
     h.push(`<p class="nota">${el().nota || ''}</p>`);
+    const cv = conteggioVero(c);
+    if (cv) h.push(`<p class="nota"><b>La nebbia.</b> In ogni istante, in uno strato spesso un metro, qui ci sono circa ${fmtGrande(cv.raggi)} raggi cosmici${cv.fascia >= 1 ? ` e ${fmtGrande(cv.fascia)} particelle della fascia` : ''}: sono la nebbia di puntini. Le linee sono le ${cv.disegnate} che si seguono una per una; avvicinandoti (rotella) ne compaiono altre.</p>`);
     h.push(`<p class="aiuto">Un universo intero, estratto dal suo numero: nessuno l'ha costruito. La cornice arancione è la <b>sezione</b>: trascinane il bordo per spostarla, l'angolo per ingrandirla. La barra del tempo dice <b>fino a quando</b> guardare, la fetta <b>per quanto</b>. Il Pattern ripete questa finestra, nient'altro. In basso a destra: <b>la finestra</b> (la sezione da sola; clic per il suo spaziotempo), <b>l'universo</b> (qui), <b>spaziotempo</b>.</p>`);
   }
   if (!sel) {
@@ -1266,6 +1286,7 @@ function aggiornaVista() {
   simula(); aggiornaTempo(); mostraSchede(); dove();
   if (vista === 'spaziotempo') imposta3D();
   disegna(); mostraPannello();
+  if (vista === 'cosmo' && !animazione) animazione = requestAnimationFrame(anima);
 }
 function carica(nuova, { tieniImmagine = false } = {}) {
   comp = nuova; corrente = 0; scelto = null; sopra = null; sel = null; tempo = Infinity; gioca = false; $('gioca').textContent = '▶'; confronto = null; if (!tieniImmagine) immagine = null;

@@ -172,6 +172,19 @@ allontanati mentre perdeva massa. Sulla mappa la fascia di radiazione è fatta
 dei suoi protoni, cerchi della loro grandezza vera: avvicinandosi a una regione
 si vedono le stesse cose più grandi, non un foglio sovrapposto.
 
+**La nebbia: tutte le particelle, senza simularle tutte** (`src/camera/nebbia.js`).
+In una regione, in ogni istante, in uno strato spesso un metro, ci sono
+centinaia di milioni di raggi cosmici e, in una fascia, decine di migliaia di
+miliardi di particelle: la lastra vera sarebbe nera. Da lontano sono una nebbia,
+con la sua densità e il suo moto medio: sulla mappa la fascia è un campione fisso
+di particelle che scivolano attorno al pianeta (i protoni in un verso, gli
+elettroni nell'altro, con la velocità di deriva vera) e l'anello sono granelli
+che girano con la velocità di Keplero (la massa del pianeta viene dal suo raggio
+e da che cosa è fatto). Avvicinandosi, quando il giro di una particella diventa
+visibile, il puntino diventa il suo cerchio; dentro una regione la nebbia resta
+come sfondo e le linee sono quelle che si seguono una per una, con il conteggio
+vero nella scheda.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al

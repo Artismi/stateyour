@@ -11,6 +11,7 @@
 
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
+import { nebbiaPianeta, ACCELERA } from './nebbia.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -82,7 +83,7 @@ function passaggi(cam, W, H) {
     }
     // fuori: il livello è diventato piccolo sullo schermo
     const g = nelGenitore(cam);
-    if (g && cam.z * (cam.livello === 3 ? 3 : cam.livello === 2 ? 1.3 : 1.1) < 0.3 * m) {
+    if (g && cam.z * (cam.livello === 3 ? 6 : cam.livello === 2 ? 1.3 : 1.1) < 0.3 * m) {
       cam.cx = g.pos[0] + cam.cx * g.scala; cam.cy = g.pos[1] + cam.cy * g.scala; cam.z /= g.scala; cam.livello--;
       const v = { ...cam.via }; delete v[['galassia', 'stella', 'pianeta'][cam.livello]]; cam.via = v;
       continue;
@@ -200,7 +201,7 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
     const mpp = metriPerUnita(cam.livello, v) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
     const L = passo / mpp, x0 = 18 * dpr, y0 = H - 22 * dpr;
     ctx.strokeStyle = 'rgba(235,230,215,0.85)'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x0, y0 - 5 * dpr); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0); ctx.lineTo(x0 + L, y0 - 5 * dpr); ctx.stroke();
-    ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(235,230,215,0.9)'; ctx.fillText(fmtLunghezza(passo), x0 + L + 8 * dpr, y0);
+    ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(235,230,215,0.9)'; ctx.fillText(fmtLunghezza(passo), x0 + L + 8 * dpr, y0); if (cam.livello === 3) ctx.fillText(`il tempo scorre ${ACCELERA} volte più in fretta`, x0, y0 - 20 * dpr);
   }
   if (sopra) {
     ctx.strokeStyle = 'rgba(255,200,120,0.9)'; ctx.lineWidth = 1.2 * dpr;
@@ -264,21 +265,18 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
   ctx.strokeStyle = `rgba(110,150,255,${0.08 + 0.18 * P.campo})`; ctx.lineWidth = dpr;
   for (const L of [1.6, 2.2, 3, 4]) { ctx.beginPath(); for (let t = 0; t <= 64; t++) { const th = (t / 64) * 2 * Math.PI, r = L * Math.cos(th) ** 2; const x = X(r * Math.cos(th)), y = Y(r * Math.sin(th)); t ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
   // l'anello: le sue fasce, disegnate con la stessa densità che usa la fisica delle regioni
-  if (Pl.anello) for (let r = Pl.anello[0]; r < Pl.anello[1]; r += 0.01) { const d = Pl.densitaAnello(r); ctx.strokeStyle = rgb(P.colore, Math.min(0.5, 0.25 * d)); ctx.lineWidth = Math.max(1, 0.011 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
-  // la fascia di radiazione: lo stesso profilo che riempie le regioni, e i suoi protoni come cerchi
-  // della loro grandezza vera (il giro di un protone nel campo di quel punto), come dentro le regioni
-  for (let r = 1.16; r < 6; r += 0.04) { const f = fascia(P, Pl, r) / 0.17; if (f < 0.02) continue; ctx.strokeStyle = `rgba(150,140,255,${Math.min(0.12, 0.12 * f)})`; ctx.lineWidth = Math.max(1, 0.042 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
-  {
-    let sd = 977 + v.pianeta * 31 + v.stella * 7; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-    ctx.strokeStyle = 'rgba(200,190,255,0.45)'; ctx.lineWidth = dpr;
-    for (let i = 0; i < 1400; i++) {
-      const r = 1.15 + caso() * 4.85, an = caso() * 2 * Math.PI, E = 10 * Math.pow(30, caso()), u = caso();
-      if (u * 1.0 > fascia(P, Pl, r) / 0.17) continue;
-      const B = P.B0 / r ** 3, rg = (Math.sqrt(E * E + 2 * E * 938.27) * 3.336e-3) / B / P.raggioM; // in raggi del pianeta
-      const cx = r * Math.cos(an), cy = r * Math.sin(an), R = rg * z;
-      if (R < 0.6 * dpr || X(cx) + R < 0 || Y(cy) + R < 0 || X(cx) - R > ctx.canvas.width || Y(cy) - R > ctx.canvas.height) continue;
-      ctx.beginPath(); ctx.arc(X(cx) + R, Y(cy), R, 0, 7); ctx.stroke();
-    }
+  if (Pl.anello) for (let r = Pl.anello[0]; r < Pl.anello[1]; r += 0.01) { const d = Pl.densitaAnello(r); ctx.strokeStyle = rgb(P.colore, Math.min(0.25, 0.12 * d)); ctx.lineWidth = Math.max(1, 0.011 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
+  // LA NEBBIA: la fascia e l'anello come particelle che scorrono (lo stesso campione, sempre). Da
+  // lontano sono puntini; quando il giro di una particella diventa abbastanza grande da vedersi,
+  // il puntino diventa il suo cerchio vero.
+  const neb = nebbiaPianeta(v.cosmo, v.galassia, v.stella, v.pianeta), t = (performance.now() / 1000) * ACCELERA;
+  for (const g of neb.anello) { const f = g.fi + g.omega * t; ctx.fillStyle = rgb(P.colore, 0.55); ctx.fillRect(X(g.r * Math.cos(f)), Y(g.r * Math.sin(f)), dpr, dpr); }
+  for (const q of neb.fascia) {
+    const f = q.fi + q.omega * t, cx = q.r * Math.cos(f), cy = q.r * Math.sin(f), R = q.rg * z, x = X(cx), y = Y(cy);
+    if (x < -R - 2 || y < -R - 2 || x > ctx.canvas.width + R + 2 || y > ctx.canvas.height + R + 2) continue;
+    const col = q.elettrone ? '150,210,255' : '200,170,255', cerchio = Math.min(1, Math.max(0, (R - 2 * dpr) / (4 * dpr)));
+    if (cerchio < 1) { ctx.fillStyle = `rgba(${col},${0.7 * (1 - cerchio)})`; ctx.fillRect(x, y, 1.3 * dpr, 1.3 * dpr); }
+    if (cerchio > 0) { ctx.strokeStyle = `rgba(${col},${0.5 * cerchio})`; ctx.lineWidth = dpr; ctx.beginPath(); ctx.arc(x + R, y, R, 0, 7); ctx.stroke(); }
   }
   // i raggi cosmici nel campo del pianeta: le orbite di Størmer, calcolate davvero
   ctx.strokeStyle = 'rgba(255,196,120,0.5)'; ctx.lineWidth = dpr;
