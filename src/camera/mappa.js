@@ -12,6 +12,7 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
+import { superficiePianeta, immagineSuperficie } from './geologia.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -283,6 +284,8 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
   ctx.strokeStyle = 'rgba(255,196,120,0.5)'; ctx.lineWidth = dpr;
   for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
   disegnaCorpo(ctx, P, X(0), Y(0), z, S.stella, v, dpr, P.pos);
+  // la sua superficie, vista da sopra l'equatore: la stessa mappa del pannello, avvolta sulla sfera
+  const disco = discoPianeta(v, P); if (disco) { ctx.save(); ctx.beginPath(); ctx.arc(X(0), Y(0), z, 0, 7); ctx.clip(); ctx.drawImage(disco, X(0) - z, Y(0) - z, 2 * z, 2 * z); ctx.restore(); }
   // la direzione della stella
   const ds = Math.atan2(-P.pos[1], -P.pos[0]); alone(ctx, X(Math.cos(ds) * 6), Y(Math.sin(ds) * 6), 40 * dpr, S.stella.colore, 0.25);
   // le regioni: gli universi della camera
@@ -302,4 +305,23 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
     }
   }
   void evidenzia;
+}
+
+// la superficie di un pianeta solido proiettata sul disco (proiezione ortografica), con la luce della stella
+const dischi = new Map();
+export function discoPianeta(v, P) {
+  if (P.tipo === 'gassoso' || !P.interno) return null;
+  const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
+  const sf = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), px = immagineSuperficie(sf, P.clima.T), N = 256;
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
+  const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = (x + 0.5) / N * 2 - 1, w = (y + 0.5) / N * 2 - 1, r2 = u * u + w * w; if (r2 > 1) continue;
+    const zz = Math.sqrt(1 - r2), lat = Math.asin(-w), lon = Math.atan2(u, zz);
+    const i = Math.floor(((lon + Math.PI) / (2 * Math.PI)) * sf.W) % sf.W, j = Math.min(sf.H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * sf.H)), q = (j * sf.W + i) * 4;
+    const ill = Math.max(0.12, 0.25 + 0.75 * (u * lx + w * ly + 0.3 * zz)), o = (y * N + x) * 4;
+    im.data[o] = px[q] * ill; im.data[o + 1] = px[q + 1] * ill; im.data[o + 2] = px[q + 2] * ill; im.data[o + 3] = 255;
+  }
+  c.putImageData(im, 0, 0); dischi.set(k, cv); if (dischi.size > 6) dischi.delete(dischi.keys().next().value);
+  return cv;
 }

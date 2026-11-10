@@ -92,4 +92,12 @@ prova('le leggi: età del cosmo, Chandrasekhar, il clima della Terra, la soglia 
   assert.ok(F.convezione({ g: 9.8, q, d: 0.01 }).epsilon < 0 && F.convezione({ g: 9.8, q, d: 0.03 }).epsilon > 0, 'sotto una soglia fermo, sopra si muove');
 });
 
+const GE = await import('../src/camera/geologia.js');
+prova('l\'interno: la Terra ha la dinamo e le placche, Marte ha il nucleo congelato', () => {
+  const t = GE.interno({ tipo: 'roccioso', massaKg: 5.97e24, raggioM: 6.371e6, composizione: { ferro: 0.32, acqua: 0.02 } }, { eta: 4.5e9, Z: 1 });
+  assert.ok(t.dinamo && Math.abs(t.B0 - 3.1e-5) < 1e-5 && t.tettonica === 'a placche' && Math.abs(t.nucleo - 0.55) < 0.05);
+  const m = GE.interno({ tipo: 'roccioso', massaKg: 6.4e23, raggioM: 3.39e6, composizione: { ferro: 0.25, acqua: 0.01 } }, { eta: 4.5e9, Z: 1 });
+  assert.ok(!m.dinamo && m.tettonica !== 'a placche');
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);

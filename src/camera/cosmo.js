@@ -21,6 +21,7 @@
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
 import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima } from './leggi.js';
+import { interno } from './geologia.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
@@ -199,7 +200,10 @@ export const sistema = memo((n, gid, sid) => {
   const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = (viva ? stellaVera(S.massa).L : S.stato === 'nana bianca' ? 1e-3 : 0) * LSOLE;
   for (const p of pianeti) {
     const rho = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 }[p.tipo], massaKg = (4 / 3) * Math.PI * p.raggioM ** 3 * rho;
-    p.massaKg = massaKg; p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
+    // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
+    p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
+    p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.01; // quasi tutta l'acqua resta nel mantello; un centesimo in superficie
+    p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
   }
   return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });

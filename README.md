@@ -200,6 +200,19 @@ la tensione della superficie e vengono esagoni (Bénard), più in profondità la
 gravità e vengono rulli e labirinti (l'equazione di Swift-Hohenberg, ricavata da
 quelle dei fluidi, con i numeri di Rayleigh e Marangoni veri).
 
+**L'interno e la superficie** (`geologia.js`). Il ferro scende e fa il nucleo
+(quanto, dalla composizione); il calore dell'interno viene dalla radioattività
+(più metalli nella stella, più calore) e cala con l'età. Il campo magnetico ora
+emerge: c'è solo se il nucleo è ancora liquido e rimescolato (la dinamo), con la
+legge di scala delle dinamo tarata sulla Terra (3,0·10⁻⁵ T contro 3,1); un
+pianeta piccolo o vecchio ha il nucleo congelato e nessun campo (Marte), e
+allora non ha nemmeno la fascia di radiazione. Se il mantello spinge abbastanza
+e l'acqua indebolisce la crosta, la crosta si rompe in placche: dove si
+scontrano si alzano montagne, dove si separano dorsali e vulcani. Il mare riempie
+i punti più bassi con l'acqua che il pianeta ha; la pioggia scende lungo la
+pendenza più ripida e fa i fiumi; il ghiaccio sta dove fa freddo. La mappa è nel
+pannello e avvolta sulla sfera del pianeta.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al

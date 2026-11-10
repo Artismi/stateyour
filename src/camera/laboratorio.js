@@ -19,6 +19,7 @@ import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, desc
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle, flussoInterno } from './fluidi.js';
+import { superficiePianeta, immagineSuperficie } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
@@ -66,7 +67,7 @@ function coloriTraccia(cella, tr) {
 
 // ---------- lo stato
 // all'avvio: un ornamento trovato dal dado: raggi cosmici nel campo di un pianeta, in un ramo dove alcuni eventi sono andati diversamente
-let comp = compBiblioteca(17280429, {"centro":[938.193,98.516],"lato":230.773}, {"fine":100.803,"durata":91.266}, {"inclinazione":0,"rotazione":0,"scalaTempo":4.839}, {"gruppo":"esagoni","angolo":215.159}, { rami: {"0":4970158,"f9":1058580,"f1":3463938}, separato: null });
+let comp = compBiblioteca(4567469, {"centro":[464.325,76.758],"lato":202.607}, {"fine":111.494,"durata":111.652}, {"inclinazione":0,"rotazione":0,"scalaTempo":4.315}, {"gruppo":"quadrati","angolo":89.868}, { rami: {"7":3878829,"9":1950251,"10":903848,"12":1900946}, separato: null });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
@@ -964,6 +965,13 @@ function pannelloCosmo(h) {
     if (camMappa.livello === 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
+      const it = P.interno;
+      if (it) h.push(`<h2>l'interno</h2><p class="nota">${P.tipo === 'gassoso' ? `idrogeno metallico in profondità: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT.` : `un nucleo di ferro largo ${Math.round(it.nucleo * 100)}% del raggio, ${it.dinamo ? `ancora liquido: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT` : 'congelato: nessuna dinamo, nessun campo magnetico'}; il calore che esce dall'interno ${it.q.toFixed(3)} W/m²; la crosta ${it.tettonica === 'a placche' ? 'si è rotta in placche (il mantello spinge e l\'acqua la indebolisce)' : it.tettonica === 'ferma' ? 'è un guscio unico e fermo' : 'è un guscio unico, bucato dai vulcani'}.`}</p>`);
+      if (it && P.tipo !== 'gassoso') {
+        const sf = superficiePianeta(JSON.stringify(camMappa.via), P, it, 7 + camMappa.via.stella * 31 + camMappa.via.pianeta), px = immagineSuperficie(sf, cl.T);
+        const cv = document.createElement('canvas'); cv.width = sf.W; cv.height = sf.H; cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
+        h.push(`<h2>la superficie</h2><img src="${cv.toDataURL()}" style="width:100%;border-radius:3px;image-rendering:auto" alt="la mappa del pianeta"><p class="nota">${sf.placche > 1 ? `${sf.placche} placche: dove si scontrano si alzano montagne, dove si separano dorsali` : 'una crosta sola'}; ${isFinite(sf.mare) ? 'il mare riempie i punti più bassi con l\'acqua che il pianeta ha' : 'niente mari'}; i fiumi scendono lungo la pendenza più ripida; in rosso i vulcani (${sf.vulcani.length}). Nessuno l'ha disegnata: viene dalla massa, dalla composizione e dall'età.</p>`);
+      }
       if (cl.acqua === 'liquida') {
         const sf = superficie(camMappa.via);
         h.push(`<h2>la superficie: una pozza</h2><p class="nota">Il calore dell'interno (${sf.q.toFixed(3)} W/m²) attraversa una pozza profonda ${(sf.d * 100).toFixed(1)} cm: Rayleigh ${Math.round(sf.c.Ra)}, Marangoni ${Math.round(sf.c.Ma)} → ${sf.c.regime}.</p>${sf.url ? `<img src="${sf.url}" style="width:100%;image-rendering:auto;border-radius:3px" alt="la convezione nella pozza">` : ''}<p class="nota">Nessuno disegna le celle: l'acqua calda sale e quella fredda scende, e si organizzano da sole. Negli strati sottili vince la tensione della superficie e vengono esagoni (le celle di Bénard); più in profondità la gravità, e vengono rulli e labirinti.</p>`);
