@@ -18,6 +18,7 @@
 // i punti più bassi (mari e laghi emergono da quanta acqua c'è); dove piove l'acqua
 // scende lungo la pendenza più ripida e si raccoglie: i fiumi e le loro valli.
 
+import { celle } from './fluidi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -36,7 +37,7 @@ export function interno(P, stella) {
   const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) : 1e-9;
   const acqua = (P.composizione.acqua ?? 0) > 0.005 || P.tipo === 'ghiacciato';
   const tettonica = q > 0.05 && acqua && M > 0.3 * TERRA.M ? 'a placche' : q > 0.02 ? 'coperchio unico, con vulcani' : 'ferma';
-  return { nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0 };
+  return { eta, nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0 };
 }
 
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
@@ -47,25 +48,43 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const sfera = (i, j) => { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI; return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)]; };
   const casuale = () => { const z = 2 * caso() - 1, a = caso() * 2 * Math.PI, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  // le placche: tante quante le celle di convezione del mantello (più il mantello è sottile rispetto al pianeta, più sono)
-  const placche = int.tettonica === 'a placche' ? 6 + Math.floor(caso() * 9) : 1;
-  const centri = Array.from({ length: placche }, () => ({ c: casuale(), polo: casuale(), v: (0.5 + caso()) * (int.q / 0.087), continente: caso() < 0.4 }));
-  const alt = new Float32Array(W * H), quale = new Int16Array(W * H);
+  // LE PLACCHE EMERGONO DAL MANTELLO. Il mantello scaldato dal basso si organizza da solo in celle (la
+  // stessa equazione della pozza, fluidi.js): la loro larghezza viene dallo spessore del mantello, il loro
+  // vigore dal calore dell'interno. Dove il mantello sale la crosta si apre (dorsali); dove scende la crosta
+  // converge e si accartoccia (catene di montagne), e lì la crosta leggera dei continenti si accumula. Forma,
+  // numero e bordi delle placche non sono scelti: sono il disegno che la convezione ha preso.
+  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), cont = new Uint8Array(W * H);
+  const aPlacche = int.tettonica === 'a placche';
+  let placche = 1, manto = null;
+  if (aPlacche) {
+    const Dm = P.raggioM * (1 - int.nucleo), ondeM = Math.max(3, Math.min(11, Math.round((2 * Math.PI * P.raggioM) / (3 * Dm))));
+    // (regime a celle: pennacchi che salgono, circondati da una rete di discese, come le fosse; i difetti vengono da soli)
+    const c = celle({ epsilon: Math.max(0.15, Math.min(0.8, 0.35 * (int.q / 0.087))), esagoni: true }, { N: 256, onde: ondeM, passi: 150, seme });
+    let mx = 1e-9; for (const v of c.u) mx = Math.max(mx, Math.abs(v));
+    manto = new Float32Array(W * H); for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) manto[jj * W + ii] = c.u[jj * 256 + ii] / mx; // metà del quadrato: stesse proporzioni della mappa
+    // la crosta dei continenti si raccoglie sopra le discese del mantello: la media, su una zona larga, di quanto scende
+    const R = 5, liscio = new Float32Array(W * H);
+    for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) { let a = 0, n = 0; for (let dj = -R; dj <= R; dj += 2) { const y = jj + dj; if (y < 0 || y >= H) continue; for (let di = -R; di <= R; di += 2) { a -= manto[y * W + ((ii + di + W) % W)]; n++; } } liscio[jj * W + ii] = a / n; }
+    // quanta crosta continentale c'è: si separa lentamente dal mantello, cresce con l'età (sulla Terra, un terzo in 4,5 miliardi di anni)
+    // (lungo la rete delle discese la crosta non si raccoglie ovunque uguale: dipende da dove il mantello ne ha portata di più)
+    const grandi = Array.from({ length: 6 }, () => ({ d: casuale(), f: 1 + caso() * 2.5, fi: caso() * 6.28 }));
+    for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) { const p = sfera(ii, jj); let g = 0; for (const o of grandi) g += Math.sin(o.f * dot(p, o.d) * 2 + o.fi); liscio[jj * W + ii] += 0.09 * g; }
+    const fraz = Math.min(0.45, 0.08 + 0.055 * ((int.eta ?? 4.5e9) / 1e9)), soglia = Float32Array.from(liscio).sort()[Math.floor((1 - fraz) * W * H)];
+    for (let k = 0; k < W * H; k++) cont[k] = liscio[k] > soglia ? 1 : 0;
+    placche = Math.round((ondeM * ondeM) / 2);
+  }
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(), f: 2 + k * 0.7, fi: caso() * 6.28, a: 1 / (1 + k * 0.35) }));
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const p = sfera(i, j); let b = -1, d1 = -2, d2 = -2, b2 = -1;
-    centri.forEach((c, k) => { const d = dot(p, c.c); if (d > d1) { d2 = d1; b2 = b; d1 = d; b = k; } else if (d > d2) { d2 = d; b2 = k; } });
-    quale[j * W + i] = b;
-    let h = centri[b].continente ? 400 : -3800;
-    if (b2 >= 0 && placche > 1) {
-      // il moto relativo delle due placche al confine: convergono (montagne) o divergono (dorsali)
-      const va = cross(centri[b].polo, p).map((x) => x * centri[b].v), vb = cross(centri[b2].polo, p).map((x) => x * centri[b2].v), n = centri[b2].c.map((x, k) => x - centri[b].c[k]);
-      const conv = dot(va.map((x, k) => x - vb[k]), n), vicino = Math.exp(-(d1 - d2) * 60);
-      h += vicino * (conv > 0 ? 3500 * Math.min(1.5, conv) * (centri[b].continente || centri[b2].continente ? 1 : 0.6) : 1800 * Math.min(1, -conv));
+    const p = sfera(i, j), k = j * W + i; let h = -1500;
+    if (manto) {
+      const u = manto[k];
+      h = cont[k] ? 350 : -3800;
+      h += 3600 * Math.max(0, -u - 0.3) * (cont[k] ? 1 : 0.45); // dove il mantello scende: la crosta si accartoccia
+      h += 1700 * Math.max(0, u - 0.5) * (cont[k] ? 0.4 : 1); // dove sale: le dorsali
     }
-    let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi); h += r * 260;
-    alt[j * W + i] = h;
+    let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi); h += r * (manto ? 260 : 700);
+    alt[k] = h;
   }
   // i vulcani: sopra i pennacchi caldi del mantello e lungo i confini che si aprono
   const vulcani = [];
@@ -83,7 +102,9 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const jj = j + dj; if (jj < 0 || jj >= H || (!di && !dj)) continue; const kk = jj * W + ((i + di + W) % W); if (alt[kk] < bh) { bh = alt[kk]; best = kk; } }
     giu[k] = best; if (best >= 0 && alt[k] > mare) flusso[best] += flusso[k];
   }
-  const out = { W, H, alt, mare, flusso, vulcani, placche, quale };
+  // di che cosa è fatta la superficie: crosta leggera (continenti) o basalto; quanto ferro, e se l'acqua l'ha ossidato
+  const materiali = { ferro: P.composizione.ferro ?? 0.1, ghiacciato: P.tipo === 'ghiacciato', ossidato: (int.acquaKg || 0) > 0 || (isFinite(P.clima?.pressione) && P.clima.pressione > 100) };
+  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
@@ -102,7 +123,15 @@ export function immagineSuperficie(sf, T, cl = null) {
     const gelo = cl ? Math.min(1, Math.max(0, campo(cl.freddo, i, j), h >= mare ? (268 - Tloc) / 12 : 0)) : Tloc < 265 ? 1 : 0;
     let c;
     if (h < mare || (sf.lago && sf.lago[k] > 0)) { const d = Math.min(1, ((h < mare ? mare - h : sf.lago[k] * 3)) / 5000); c = [20 + 30 * (1 - d), 60 + 60 * (1 - d), 110 + 80 * (1 - d)]; }
-    else { const e = Math.min(1, (h - Math.max(0, mare)) / 4000); c = Tloc > 310 ? [190 - 40 * e, 150 - 40 * e, 100 - 20 * e] : [70 + 120 * e, 110 + 60 * e - 30 * e * e, 60 + 70 * e]; if (flusso[k] > (sf.passiErosione ? 18 * Math.pow(4, sf.livello || 0) : 60) && gelo < 0.5) c = [60, 110, 170]; }
+    else {
+      // il colore è quello dei materiali: basalto scuro (crosta nuova, vulcanica), roccia chiara dei continenti,
+      // il rosso del ferro ossidato dall'acqua e dall'aria, il ghiaccio sporco dei mondi ghiacciati, i sedimenti
+      // pallidi dove i fiumi depositano. Nessun verde: la vegetazione ci sarà solo se la vita emergerà.
+      const e = Math.min(1, (h - Math.max(0, mare)) / 4000), mat = sf.materiali || { ferro: 0.25, ossidato: true }, continente = sf.cont ? sf.cont[k] : 1;
+      c = mat.ghiacciato ? [172, 180, 186] : continente ? [148, 138, 124] : [84, 80, 76];
+      if (mat.ossidato && !mat.ghiacciato) { const r = Math.min(0.65, Math.max(0, (mat.ferro - 0.12) * 2.4)); c = [c[0] + (170 - c[0]) * r, c[1] + (98 - c[1]) * r, c[2] + (66 - c[2]) * r]; }
+      if (flusso[k] > 6 * Math.pow(4, sf.livello || 0) && e < 0.25) c = [c[0] * 0.75 + 46, c[1] * 0.75 + 42, c[2] * 0.75 + 34]; // sedimenti
+      c = c.map((x) => x * (0.82 + 0.3 * e)); if (flusso[k] > (sf.passiErosione ? 18 * Math.pow(4, sf.livello || 0) : 60) && gelo < 0.5) c = [60, 110, 170]; }
     // il ghiaccio copre in proporzione a quanta parte dell'anno quel punto passa sotto lo zero: bordi sfumati
     const g = Math.pow(gelo, 0.7), ice = [232, 238, 244];
     const ombra = h >= mare ? Math.max(0.6, Math.min(1.25, 1 + (alt[j * W + ((i + W - 1) % W)] - alt[k] + alt[Math.max(0, j - 1) * W + i] - alt[k]) / divOmbra)) : 1;
@@ -261,7 +290,8 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   }
   const e = erosione(k, { W, H, alt, mare, rett, vulcani: [] }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L });
   for (let c = 0; c < W * H; c++) if (livelloLago[c] > e.alt[c]) e.lago[c] = Math.max(e.lago[c], livelloLago[c] - e.alt[c]);
-  const out = { ...e, rett, livello: L, vulcani: [] };
+  const cont = new Uint8Array(W * H); if (m.cont) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) cont[j * W + i] = m.cont[Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))];
+  const out = { ...e, rett, livello: L, vulcani: [], cont, materiali: m.materiali };
   memoTessere.set(k, out); if (memoTessere.size > 48) memoTessere.delete(memoTessere.keys().next().value);
   return out;
 }

@@ -239,6 +239,17 @@ molta scava, in proporzione alla portata e alla pendenza; i pendii si sgretolano
 Le reti di fiumi, le valli e i laghi emergono da qui; la neve sui monti si
 calcola dalla quota vera di ogni punto.
 
+**Le placche emergono dal mantello.** Il mantello scaldato dal basso si organizza
+da solo in celle (la stessa equazione della pozza): pennacchi che salgono,
+circondati da una rete di discese. La larghezza delle celle viene dallo spessore
+del mantello, il vigore dal calore dell'interno. Dove sale la crosta si apre,
+dove scende si accartoccia e raccoglie la crosta leggera dei continenti, tanta
+quanta l'età del pianeta ne ha separata. Forma e bordi non sono scelti. I colori
+della superficie sono quelli dei materiali: basalto, roccia continentale, il
+rosso del ferro ossidato dove c'è acqua o aria, sedimenti lungo i fiumi; nessun
+verde, perché la vegetazione ci sarà solo se la vita emergerà. (Resta una
+fotografia: le placche non si spostano ancora nel tempo.)
+
 **La risoluzione continua della superficie** (`tessera` in `geologia.js`).
 Avvicinandosi al disco di un pianeta solido si scende sulla sua superficie, e
 avvicinandosi ancora ogni tessera si divide in 4 × 4 tessere più fini, fino a
