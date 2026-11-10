@@ -8,13 +8,13 @@ import { segmentiSezione } from './sezione.js';
 import { bellezzaPattern } from './pattern.js';
 import { perfeziona } from './vicini.js';
 
-export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = null, seme = 1, gruppo = null }, avanza = () => {}) {
+export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = null, seme = 1, gruppo = null, cella: cellaData = null }, avanza = () => {}) {
   const caso = generatore(seme), tra = (a, b) => a + caso() * (b - a);
   let migliore = null;
   // numeri sparsi: regioni di pianeti e stelle diverse (numeri vicini sono regioni dello stesso pianeta)
   const numeri = solo != null ? [solo] : Array.from({ length: universi }, (_, i) => da + i * 7919);
   numeri.forEach((n, k) => {
-    const u = universo(n), cella = u.cella, tracce = simulaMondo(cella);
+    const cella = cellaData || universo(n).cella, tracce = simulaMondo(cella);
     // i posti interessanti: dove nascono le stelle e gli sciami, e dove c'è inchiostro
     const centri = cella.sorgenti.filter((s) => s.specie.startsWith('stella') || s.specie === 'kaone0').map((s) => s.pos);
     for (const t of tracce) if (t.punti.length > 30) { const p = t.punti[Math.floor(caso() * t.punti.length)]; centri.push([p[0], p[1]]); }
@@ -42,10 +42,11 @@ if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typ
       let st = d.stato;
       if (!st) {
         const m = cercaSezione(d, (frazione, migliore) => self.postMessage({ fase: 'cerca', frazione, migliore }));
-        st = { cella: { ...universo(m.numero).cella }, finestra: m.finestra, vista: m.vista, sezione: m.sezione, ripeti: m.ripeti, numero: m.numero };
+        st = { cella: d.cella ? { ...d.cella } : { ...universo(m.numero).cella }, finestra: m.finestra, vista: m.vista, sezione: m.sezione, ripeti: m.ripeti, numero: m.numero };
       }
       // 2. i vicini: si cammina verso l'universo vicino più bello
-      const p = perfeziona(st, { passi: d.passi ?? 45, seme: d.seme ?? 1 }, (frazione, b) => self.postMessage({ fase: 'perfeziona', frazione, bellezza: b }));
+      // (dentro una bolla dello zoom niente rami: le sue particelle vengono dalla regione, e un ramo andrebbe scelto lassù)
+      const p = perfeziona(st, { passi: d.cella ? 0 : d.passi ?? 45, seme: d.seme ?? 1 }, (frazione, b) => self.postMessage({ fase: 'perfeziona', frazione, bellezza: b }));
       self.postMessage({ fatto: true, migliore: { ...p, numero: st.numero ?? st.cella.seme } });
     } catch (err) { self.postMessage({ errore: String((err && err.stack) || err) }); }
   };

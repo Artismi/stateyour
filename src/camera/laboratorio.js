@@ -15,7 +15,8 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
-import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi } from './cosmo.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo } from './cosmo.js';
+import { fmtLunghezza } from './unita.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
@@ -257,15 +258,30 @@ function entraRegione(a) {
   entra(0); vista = 'dettaglio'; aggiornaVista();
 }
 // la rotella che, oltre un limite, porta alla vista accanto nella catena
-function passaVista(verso) {
+// lo zoom dentro una regione: una bolla di spaziotempo dieci volte più piccola (cosmo.js, cellaDi)
+function compZoom(a) {
+  const c = cellaDi(a), z = a.zoom || [], nome = `universo n. ${numeroDi(a)}${z.length ? ' › ' + z.map(([i, j]) => `${i + 1},${j + 1}`).join(' › ') : ''}`;
+  return { nome, nota: `${descriviIndirizzo(a)}${z.length ? `, ${z.length === 1 ? 'dieci' : `${10 ** z.length}`} volte più vicino: una bolla di spaziotempo larga ${fmtLunghezza(c.scala.latoM)}, lunga ${(c.scala.secondi * 1000).toLocaleString('it-IT', { maximumFractionDigits: 3 })} ms. Le particelle che la attraversano sono le stesse della regione, con lo stesso caso; in più si vedono gli elettroni più fini della fascia` : ''}.`, reticolo: null, elementi: [{ nome, nota: '', cella: { ...c, vista: { ...VISTA_SOPRA }, ripeti: { ...RIPETI_BASE } }, posti: [{ pos: [0, 0], rot: 0 }] }] };
+}
+function zoomQui(verso, punto) {
+  const a = indirizzoOra(); if (!a) return false;
+  const z = a.zoom || [];
+  if (verso > 0) { if (z.length >= 3) return false; const [x, y] = punto; ricorda(); comp = compZoom({ ...a, zoom: [...z, [Math.max(0, Math.min(9, Math.floor(x / 100))), Math.max(0, Math.min(9, Math.floor(y / 100)))]] }); }
+  else { if (!z.length) return false; ricorda(); comp = compZoom({ ...a, zoom: z.slice(0, -1) }); }
+  corrente = 0; sel = null; scelto = null; entra(0); vista = 'dettaglio'; aggiornaVista(); return true;
+}
+function passaVista(verso, punto = null) {
   rotella = 0;
   const conIndirizzo = !!indirizzoOra();
   if (verso < 0) { // indietro: più lontano
     if (vista === 'pattern' && !comp.reticolo) { entra(0); return true; }
     if (vista === 'finestra') { vista = 'dettaglio'; aggiornaVista(); return true; }
-    if (vista === 'dettaglio' && conIndirizzo) { apriCosmo(); return true; }
+    if (vista === 'dettaglio' && conIndirizzo) { if (zoomQui(-1)) return true; apriCosmo(); return true; }
   } else { // avanti: più vicino
-    if (vista === 'dettaglio' && el()?.cella.finestra) { vista = 'finestra'; aggiornaVista(); return true; }
+    // sulla cornice della sezione: la finestra; altrove: dentro la regione, dieci volte più vicino
+    const f = el()?.cella.finestra, inCornice = f && punto && Math.abs(punto[0] - f.centro[0]) <= f.lato / 2 && Math.abs(punto[1] - f.centro[1]) <= f.lato / 2;
+    if (vista === 'dettaglio' && conIndirizzo && punto && !inCornice && zoomQui(1, punto)) return true;
+    if (vista === 'dettaglio' && f) { vista = 'finestra'; aggiornaVista(); return true; }
     if (vista === 'finestra') { vista = 'pattern'; adattaPattern(); aggiornaVista(); return true; }
   }
   return false;
@@ -791,7 +807,7 @@ tela.addEventListener('wheel', (e) => {
   }
   if (vista === 'finestra' || vista === 'dettaglio') {
     e.preventDefault(); rotella += e.deltaY;
-    if (Math.abs(rotella) > 260) passaVista(rotella > 0 ? -1 : 1);
+    if (Math.abs(rotella) > 260) passaVista(rotella > 0 ? -1 : 1, vista === 'dettaglio' ? aMondo(e) : null);
     return;
   }
   if (vista !== 'pattern') return;
@@ -1100,6 +1116,7 @@ pannello.addEventListener('click', (e) => {
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
+  if (d.cerca === 'vicini' && (indirizzoOra()?.zoom || []).length) { $('cercaStato').textContent = "I rami si scelgono al livello della regione (torna su con la rotella): qui dentro le particelle sono le stesse di lassù, e un ramo deve cambiarle a ogni livello insieme."; return; }
   if (d.cerca) return cercaBella(d.cerca);
   if (d.ripeti) { ricorda(); const c = comp.elementi[0].cella; c.ripeti = { ...ripetiDi(c), gruppo: d.ripeti }; adattaPattern(); aggiornaVista(); return; }
   if (d.togliScatti) {
@@ -1134,11 +1151,11 @@ const schede = $('forze');
 function mostraSchede() {
   const c = vista === 'pattern' ? null : cel(), conta = {};
   if (c) {
-    conta.gravita = c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'nessuna';
+    conta.gravita = c.masse.filter((m) => m.M).length ? `${c.masse.filter((m) => m.M).length} ${c.masse.filter((m) => m.M).length === 1 ? 'massa' : 'masse'}` : c.masse.length && c.dipoli?.length ? 'trascurabile' : c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'nessuna';
     const tuttiDomini = [...c.domini, ...(c.esposizioni || []).flatMap((e) => e.domini)];
     const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length;
-    const lisce = (c.esposizioni || []).filter((e) => e.mappa).length, naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length + lisce;
-    conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, (c.onde?.B?.length || lisce) && 'campo liscio', (c.cristalli || []).length && `${c.cristalli.length} cristalli`].filter(Boolean).join(', ') : 'nessuno';
+    const lisce = (c.esposizioni || []).filter((e) => e.mappa).length, naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length + lisce + (c.dipoli || []).length;
+    conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, (c.onde?.B?.length || lisce) && 'campo liscio', (c.cristalli || []).length && `${c.cristalli.length} cristalli`, (c.dipoli || []).length && 'il campo del pianeta'].filter(Boolean).join(', ') : 'nessuno';
     const nubiLisce = (c.esposizioni || []).filter((e) => e.mappa?.sparsaK).length;
     conta.materia = zK || c.nubi || nubiLisce ? [zK && `${zK} ${zK === 1 ? 'zona' : 'zone'}`, (c.nubi || nubiLisce) && 'nubi lisce'].filter(Boolean).join(', ') : 'nessuna';
     const dec = Object.values(c.specie).filter((s) => s.vita != null || s.vitaMedia != null).length;
@@ -1321,7 +1338,9 @@ function cercaBella(come = 'ovunque') {
     if (m.fatto) {
       const b = m.migliore; cercatore.terminate(); cercatore = null;
       // il ramo trovato: lo stesso universo, con alcuni decadimenti andati diversamente
-      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista, b.ripeti, { rami: b.cella.rami, separato: b.cella.separato });
+      ricorda();
+      if ((b.cella.indirizzo?.zoom || []).length) { comp = compZoom(b.cella.indirizzo); Object.assign(comp.elementi[0].cella, { finestra: b.finestra, sezione: b.sezione, vista: b.vista, ripeti: b.ripeti }); }
+      else comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista, b.ripeti, { rami: b.cella.rami, separato: b.cella.separato });
       corrente = 0; sel = null; scelto = null;
       vista = 'pattern'; adattaPattern(); aggiornaVista();
       const x = b.bellezza;
@@ -1330,7 +1349,7 @@ function cercaBella(come = 'ovunque') {
   };
   const da = 1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length * 0.98);
   cercatore.postMessage(come === 'vicini' ? { stato: { cella: clona(c), finestra: c.finestra, vista: c.vista, sezione: c.sezione, ripeti: ripetiDi(c), numero: c.seme }, passi: 60, seme }
-    : come === 'qui' ? { solo: c.seme, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme });
+    : come === 'qui' ? { solo: c.seme, cella: (c.indirizzo?.zoom || []).length ? clona(c) : undefined, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme });
 }
 function cambiaUniverso(n) {
   // stessa inquadratura, stessa fetta di tempo: un altro universo

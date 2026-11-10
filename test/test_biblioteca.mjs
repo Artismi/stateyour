@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { universo } from '../src/camera/biblioteca.js';
 import { simulaMondo, campiContinui } from '../src/camera/mondo.js';
-import { indirizzoDi, numeroDi, regione, cosmo, galassia, sistema, pianeta } from '../src/camera/cosmo.js';
+import { indirizzoDi, numeroDi, regione, cosmo, galassia, sistema, pianeta, cellaDi } from '../src/camera/cosmo.js';
 import { unita, catalogoVero, velocita } from '../src/camera/unita.js';
 
 let ok = 0;
@@ -19,8 +19,8 @@ prova('dentro ci sono solo cose naturali, e ogni raggio ha una sorgente vera nel
     const a = indirizzoDi(n), c = regione(a).cella, Gx = galassia(a.cosmo, a.galassia);
     assert.ok(!c.domini.length && !c.cristalli && !c.onde, 'niente zone o campi messi a mano');
     for (const s of c.sorgenti) {
-      assert.equal(s.specie, 'protone');
-      assert.ok(s.origine.startsWith('il fondo') || Gx.sorgenti.some((g) => s.origine.startsWith(g.nome)), `da dove viene: ${s.origine}`);
+      if (s.specie === 'protone') assert.ok(s.origine.startsWith('il fondo') || Gx.sorgenti.some((g) => s.origine.startsWith(g.nome)), `da dove viene: ${s.origine}`);
+      else assert.ok(s.origine.startsWith('un neutrone uscito dal pianeta'), `la fascia: ${s.origine}`);
     }
   }
 });
@@ -47,7 +47,7 @@ prova('una magnetosfera forte è schermata: vicino ai giganti non arriva nessun 
   for (let n = 1; n < 4000 && viste < 6; n += 97) {
     const a = indirizzoDi(n), P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], R = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta).regioni[a.regione];
     if ((P.B0 * P.raggioM) / (R.r * R.r) < 2000) continue;
-    viste++; if (regione(a).cella.sorgenti.length === 0) schermate++;
+    viste++; if (regione(a).cella.sorgenti.filter((s) => s.specie === 'protone').length === 0) schermate++;
   }
   assert.ok(viste > 0 && schermate === viste, `${schermate} schermate su ${viste}`);
 });
@@ -66,6 +66,18 @@ prova('il cosmo: ogni numero è un indirizzo, e un ramo cambia quando un raggio 
   const c = regione(indirizzoDi(13)).cella;
   const t1 = simulaMondo(c).find((t) => t.evento === '0'), t2 = simulaMondo({ ...c, rami: { 0: 7 } }).find((t) => t.evento === '0');
   assert.notEqual(t1.punti[0][3], t2.punti[0][3]);
+});
+
+prova('lo zoom: dieci volte più vicino, le stesse particelle nello stesso posto; in più solo il dettaglio fine', () => {
+  // una particella che passa nella regione mentre la bolla dura (il primo decimo del tempo)
+  const a = indirizzoDi(13), t0 = simulaMondo(cellaDi(a)), dentro = (q) => q[3] < 12 && q[0] > 50 && q[0] < 950 && q[1] > 50 && q[1] < 950;
+  const tr = t0.find((t) => t.punti.filter(dentro).length > 3), p = tr.punti.filter(dentro)[1], ij = [Math.floor(p[0] / 100), Math.floor(p[1] / 100)];
+  const t1 = simulaMondo(cellaDi({ ...a, zoom: [ij] })), tz = t1.find((t) => t.evento === tr.evento);
+  assert.ok(tz, 'la particella che attraversa il quadratino c\'è anche dentro');
+  for (const q of tz.punti.filter((_, i) => i % 5 === 0)) {
+    const T = q[3] / 10, X = q[0] / 10 + ij[0] * 100, Y = q[1] / 10 + ij[1] * 100;
+    for (let i = 1; i < tr.punti.length; i++) { const A = tr.punti[i - 1], B = tr.punti[i]; if (A[3] <= T && B[3] >= T) { const f = (T - A[3]) / (B[3] - A[3] || 1); assert.ok(Math.hypot(A[0] + (B[0] - A[0]) * f - X, A[1] + (B[1] - A[1]) * f - Y) < 0.5, 'stessa strada ai due livelli'); break; } }
+  }
 });
 
 console.log(`biblioteca: ${ok} prove, tutto ok`);

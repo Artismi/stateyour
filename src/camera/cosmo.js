@@ -19,7 +19,7 @@
 // cifre: numeri vicini sono posti vicini dello stesso universo.
 
 import { generatore, simulaMondo } from './mondo.js';
-import { unita, catalogoVero, velocita, fmtLunghezza } from './unita.js';
+import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
 
 export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
 
@@ -218,6 +218,39 @@ export const magnetosfera = memo((n, gid, sid, pid) => {
   return tracce.map((t) => t.punti.filter((_, i) => i % 2 === 0 || i === t.punti.length - 1).map((p) => [(p[0] - MONDO_P / 2) / R_P, (p[1] - MONDO_P / 2) / R_P]));
 });
 
+// ---------- le FASCE DI RADIAZIONE. I raggi cosmici che colpiscono il pianeta (e il suo anello)
+// ne fanno uscire neutroni; un neutrone non sente il campo, vola via, e ogni tanto decade in
+// un protone e un elettrone proprio dentro la magnetosfera: lì il campo li intrappola. In
+// anni si accumula una fascia. Quanto è piena a una distanza r: i neutroni si diradano
+// allontanandosi (1/r), le particelle restano intrappolate solo se il campo le tiene (il loro
+// giro è piccolo rispetto alla distanza), e l'anello le assorbe dove è denso.
+// p in MeV/c, B in tesla → raggio del giro in metri
+const raggioGiro = (pMeV, B) => (pMeV * 3.336e-3) / Math.max(B, 1e-15);
+export const fascia = (P, Pl, r) => {
+  if (r < 1.15) return 0;
+  const B = P.B0 / r ** 3, tiene = raggioGiro(450, B) < 0.1 * r * P.raggioM ? 1 : 0; // un protone da 100 MeV
+  return (tiene * Math.max(0, 1 - 1.12 / r) * Math.exp(-25 * Pl.densitaAnello(r))) / r;
+};
+const FASCIA_MAX = 0.17;
+// le particelle di una fascia in un quadrato (coordinate del motore), con le energie dei neutroni che decadono
+function particelleFascia(P, Pl, r, u, lato, quante, caso, prefisso, { fini = false } = {}) {
+  const out = [], B = P.B0 / r ** 3, f = fascia(P, Pl, r) / FASCIA_MAX;
+  const n = Math.round(quante * Math.min(1, f));
+  for (let i = 0; i < n; i++) {
+    // alla scala della regione i protoni (il loro giro si vede); gli elettroni nascono al livello in cui il loro giro si vede
+    const protone = !fini;
+    // i più fini (visibili solo da vicino): elettroni il cui giro è grande quanto un decimo della finestra
+    let pMeV;
+    if (fini) { const rg = (0.03 + 0.12 * caso()) * u.metri(lato); pMeV = (rg * B) / 3.336e-3; }
+    else if (protone) { const E = 10 * Math.pow(30, caso()); pMeV = Math.sqrt(E * E + 2 * E * 938.27); }
+    else { const E = 0.05 + 0.73 * caso(); pMeV = Math.sqrt(E * E + 2 * E * ME_MEV); }
+    const m = protone ? 1836.15 : 1;
+    out.push({ pos: [caso() * lato, caso() * lato], dir: caso() * 2 * Math.PI, v: velocita(pMeV, m), t0: 0, specie: protone ? 'protone lento' : 'elettrone', ev: `${prefisso}${i}`,
+      origine: "un neutrone uscito dal pianeta (colpito da un raggio cosmico) e decaduto qui: la fascia di radiazione lo tiene" });
+  }
+  return out;
+}
+
 // ---------- una regione: un pezzo della magnetosfera (o dell'anello) del pianeta
 export const descriviIndirizzo = (a) => {
   const G = cosmo(a.cosmo).galassie[a.galassia], P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta];
@@ -257,6 +290,9 @@ export function regione(a) {
   }
   // la materia dell'anello: la stessa densità che si vede sulla mappa. Un raggio che la
   // attraversa può urtare un granello di ghiaccio: ne esce uno sciame.
+  // la fascia di radiazione, se il campo la tiene
+  const fascia0 = particelleFascia(P, Pl, R.r, u, LATO, 18, caso, 'f');
+  sorgenti.push(...fascia0);
   const tau = Pl.densitaAnello(R.r), urtoProtone = tau > 0.05 ? (0.9 * LATO) / tau : Infinity;
   const specie = catalogoVero(u, { urtoProtone, urtoFotone: urtoProtone * 0.55 });
   const centroP = [(MONDO_P / 2 - x0) * k, (MONDO_P / 2 - y0) * k], RPr = R_P * k;
@@ -265,9 +301,62 @@ export function regione(a) {
     fondo: { B: 0, K: 0 }, domini: [], masse: [{ pos: centroP, M: 0, R: RPr }], dipoli: [{ centro: centroP, B0: u.B(P.B0), R: RPr }],
     pellicola: { w0: 0.8, saturazione: 4, vRif: 5 }, specie, sorgenti,
     finestra: { centro: [LATO / 2, LATO / 2], lato: 400 }, sezione: { fine: 140, durata: 140 },
-    scala: { latoM, secondi: 140 * u.tu },
+    scala: { latoM, secondi: 140 * u.tu, urtoProtone, r: R.r },
   };
   const Breg = P.B0 / R.r ** 3;
-  const descrizione = [`il campo del pianeta, ${(Breg * 1e9).toLocaleString('it-IT', { maximumFractionDigits: 0 })} nT`, `${sorgenti.length} raggi cosmici arrivati fin qui (${vietate} strade all'indietro finivano contro il pianeta: da lì non arriva niente)`, tau > 0.05 ? `la polvere dell'anello (spessore ottico ${tau.toFixed(2)})` : 'niente materia'].join(', ');
+  const descrizione = [`il campo del pianeta, ${(Breg * 1e9).toLocaleString('it-IT', { maximumFractionDigits: 0 })} nT`, `${sorgenti.length} raggi cosmici arrivati fin qui (${vietate} strade all'indietro finivano contro il pianeta: da lì non arriva niente)`, tau > 0.05 ? `la polvere dell'anello (spessore ottico ${tau.toFixed(2)})` : 'niente materia', fascia0.length ? `${fascia0.length} particelle della fascia di radiazione` : null].filter(Boolean).join(', ');
   return { nome: `universo n. ${numero}`, nota: `${descriviIndirizzo(a)}, a ${R.r.toFixed(2)} raggi dal centro; la regione è larga ${fmtLunghezza(latoM)}, l'esposizione dura ${(140 * u.tu * 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} ms. ${descrizione}. Nessuno l'ha costruito: ogni cosa ha una causa più in là.`, cella };
+}
+
+// ---------- lo ZOOM DENTRO UNA REGIONE: una bolla di spaziotempo dieci volte più piccola, nello
+// spazio e nel tempo (comincia all'inizio della fetta scelta sopra), calcolata da quella grande. Le particelle che la attraversano sono le stesse, con lo stesso stato e lo stesso caso
+// (il loro indirizzo, il tempo proprio e la strada già fatti): decadono dove decadevano lassù.
+// In più compare solo ciò che da lontano non si vedeva: gli elettroni più fini della fascia.
+// a.zoom = [[i, j], ...]: il quadratino (su una griglia 10 × 10) a ogni livello.
+const tracceMemo = new Map();
+const tracceDi = (cella, chiave) => { if (!tracceMemo.has(chiave)) { if (tracceMemo.size > 6) tracceMemo.delete(tracceMemo.keys().next().value); tracceMemo.set(chiave, simulaMondo(cella)); } return tracceMemo.get(chiave); };
+export function cellaDi(a, rami = null) {
+  const zoom = a.zoom || [];
+  if (!zoom.length) { const c = regione(a).cella; return rami ? { ...c, rami } : c; }
+  const padre = cellaDi({ ...a, zoom: zoom.slice(0, -1) }, rami), [i, j] = zoom[zoom.length - 1];
+  const tracce = tracceDi(padre, JSON.stringify([a.cosmo, a.galassia, a.stella, a.pianeta, a.regione, zoom.slice(0, -1), rami]));
+  const L = padre.larghezza / 10, x0 = i * L, y0 = j * L, k = 10, dentro = (p) => p[0] >= x0 && p[0] <= x0 + L && p[1] >= y0 && p[1] <= y0 + L;
+  const ts = padre.sezione ? Math.max(0, padre.sezione.fine - padre.sezione.durata) : 0, te = ts + padre.tempo / k;
+  const visibili = new Set(tracce.map((t) => t.evento));
+  const sorgenti = [];
+  for (const tr of tracce) {
+    if (tr.sagoma || !tr.evento) continue;
+    const P = tr.punti, src = tr.madre == null ? padre.sorgenti[tr.sorgente] : null;
+    let tp = src?.tp0 ?? 0, strada = src?.percorso0 ?? 0;
+    const nome = tr.specie.nome, entra = (q, d, vx, vy) => sorgenti.push({ pos: [Math.min(999.99, Math.max(0.01, (q[0] - x0) * k)), Math.min(999.99, Math.max(0.01, (q[1] - y0) * k))], dir: Math.atan2(vy, vx), v: Math.hypot(vx, vy), t0: (q[3] - ts) * k, nascita: (P[0][3] - ts) * k, specie: nome, ev: tr.evento, tp0: d.tp * k, percorso0: d.strada * k, generazione: tr.generazione, origine: src?.origine });
+    // nata qui dentro (nella bolla) da una madre che non lascia traccia (la luce, le neutre): comincia qui
+    if (dentro(P[0]) && P[0][3] >= ts && P[0][3] <= te && (tr.madre == null || !visibili.has(tr.madre.evento)) && P.length > 1) { const dt = P[1][3] - P[0][3] || 1e-9; entra(P[0], { tp, strada }, (P[1][0] - P[0][0]) / dt, (P[1][1] - P[0][1]) / dt); }
+    for (let n = 1; n < P.length; n++) {
+      const a0 = P[n - 1], b = P[n], dt = b[3] - a0[3], ds = Math.hypot(b[0] - a0[0], b[1] - a0[1]);
+      if (!(dt > 0)) continue;
+      const v = Math.min(0.999 * padre.c, ds / dt), dtp = padre.relativita ? dt * Math.sqrt(1 - (v / padre.c) ** 2) : dt;
+      if (b[3] > te) break;
+      // già dentro quando la bolla comincia: continua dal suo stato in quell'istante
+      if (a0[3] < ts && b[3] >= ts && a0[2]) {
+        const f = (ts - a0[3]) / dt, q = [a0[0] + (b[0] - a0[0]) * f, a0[1] + (b[1] - a0[1]) * f, true, ts];
+        if (dentro(q)) entra(q, { tp: tp + dtp * f, strada: strada + ds * f }, (b[0] - a0[0]) / dt, (b[1] - a0[1]) / dt);
+      }
+      tp += dtp; strada += ds;
+      // ogni volta che entra nel quadratino durante la bolla, continua da lì
+      if (b[3] >= ts && !dentro(a0) && dentro(b) && a0[2] && a0[3] >= ts) entra(b, { tp, strada }, (b[0] - a0[0]) / dt, (b[1] - a0[1]) / dt);
+    }
+  }
+  const latoM = padre.scala.latoM / 10, u = unita(latoM), r = padre.scala.r;
+  const Sx = sistema(a.cosmo, a.galassia, a.stella), Px = Sx.pianeti[a.pianeta], Pl = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta);
+  const { c: caso } = casoDi('zoom', a.cosmo, a.galassia, a.stella, a.pianeta, a.regione, JSON.stringify(zoom));
+  sorgenti.push(...particelleFascia(Px, Pl, r, u, 1000, 14, caso, `z${zoom.length}.${i}.${j}.f`, { fini: true }));
+  const urto = padre.scala.urtoProtone * k;
+  return {
+    ...padre, larghezza: 1000, altezza: 1000, tempo: padre.tempo, indirizzo: { ...a, zoom },
+    masse: padre.masse.map((m) => ({ ...m, pos: [(m.pos[0] - x0) * k, (m.pos[1] - y0) * k], R: m.R * k })),
+    dipoli: padre.dipoli.map((d) => ({ ...d, centro: [(d.centro[0] - x0) * k, (d.centro[1] - y0) * k], R: d.R * k, B0: d.B0 / k })),
+    specie: catalogoVero(u, { urtoProtone: urto, urtoFotone: urto * 0.55 }), sorgenti,
+    finestra: { centro: [500, 500], lato: 400 }, sezione: { fine: padre.tempo, durata: padre.tempo },
+    scala: { ...padre.scala, latoM, secondi: padre.tempo * u.tu, urtoProtone: urto },
+  };
 }

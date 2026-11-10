@@ -271,7 +271,9 @@ export function simulaMondo(mondo, opzioni = {}) {
     const specie = risolviSpecie(s.specie, catalogo), v = specie.luce ? C : s.v;
     // «vita» sulla sorgente: l'istante in cui QUESTA particella decade (le particelle di una
     // stessa specie decadono ognuna a un istante diverso; la specie ne dà solo la media)
-    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null, vita: s.vita, ev: `${i}` };
+    // una particella può anche CONTINUARE da un livello più grande: con il suo indirizzo (ev), il tempo
+    // proprio e la strada già fatti; così il suo caso è lo stesso, e decade dove decadeva lassù
+    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.nascita ?? s.t0 ?? 0, sorgente: i, generazione: s.generazione ?? 0, madre: null, vita: s.vita, ev: s.ev ?? `${i}`, tp0: s.tp0 ?? 0, percorso0: s.percorso0 ?? 0 };
   }).filter(Boolean);
   let nate = 0;
 
@@ -285,7 +287,7 @@ export function simulaMondo(mondo, opzioni = {}) {
     // un mezzo (camminoLibero: l'urto con la materia, contato nel tempo del laboratorio)
     const vita = p.vita ?? sp.vita ?? (sp.vitaMedia != null ? -sp.vitaMedia * Math.log(1 - caso()) : Infinity);
     const urto = sp.camminoLibero != null ? -sp.camminoLibero * Math.log(1 - caso()) : Infinity; // in unità di lunghezza
-    let tp = 0, percorso = 0; // il tempo proprio e la strada fatta
+    let tp = p.tp0 ?? 0, percorso = p.percorso0 ?? 0; // il tempo proprio e la strada fatta
     statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? q !== 0;
     const larghezza = (v) => (!visibile ? 0 : q ? pel.w0 * Math.abs(q) * Math.min(pel.saturazione, pel.vRif / Math.max(v, 1e-9)) : pel.w0 * 0.35);

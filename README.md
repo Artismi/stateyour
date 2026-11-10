@@ -122,6 +122,22 @@ come quelle dei giganti, sono schermate davvero. Negli anelli, con la stessa
 densità che si vede sulla mappa, un raggio può urtare un granello di ghiaccio:
 ne esce uno sciame, i cui elettroni e positroni girano in riccioli opposti.
 
+**Le fasce di radiazione.** I raggi che colpiscono il pianeta ne fanno uscire
+neutroni; un neutrone non sente il campo, vola via e ogni tanto decade in un
+protone e un elettrone dentro la magnetosfera, dove il campo li intrappola. Le
+regioni hanno la loro fascia, quanto il campo la tiene e l'anello non la
+assorbe (lo stesso profilo disegnato sulla mappa).
+
+**Lo zoom dentro una regione.** Con la rotella su un punto della regione si
+entra in una bolla di spaziotempo dieci volte più piccola, nello spazio e nel
+tempo (fino a tre livelli: da 1000 km a 1 km). È calcolata dalla regione: le
+particelle che la attraversano sono le stesse, con il loro indirizzo, il tempo
+proprio e la strada già fatti, quindi lo stesso caso (decadono dove decadevano
+lassù; tra i due livelli la stessa strada coincide entro pochi centesimi). In
+più compare solo ciò che da lontano non si vedeva: una popolazione nasce al
+primo livello in cui il suo giro si vede (alla scala della regione i protoni
+della fascia, più vicino gli elettroni). Rotella indietro: si risale.
+
 Una conseguenza onesta: le spirali strette delle camere a bolle in natura quasi
 non ci sono (servono campi da laboratorio). A questa scala la natura disegna
 archi e piccoli riccioli; nel caleidoscopio diventano ornamenti geometrici di
