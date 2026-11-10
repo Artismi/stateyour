@@ -53,7 +53,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // vigore dal calore dell'interno. Dove il mantello sale la crosta si apre (dorsali); dove scende la crosta
   // converge e si accartoccia (catene di montagne), e lì la crosta leggera dei continenti si accumula. Forma,
   // numero e bordi delle placche non sono scelti: sono il disegno che la convezione ha preso.
-  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), cont = new Uint8Array(W * H);
+  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), cont = new Uint8Array(W * H), spinta = new Float32Array(W * H);
   const aPlacche = int.tettonica === 'a placche';
   let placche = 1, manto = null;
   if (aPlacche) {
@@ -85,6 +85,20 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     }
     let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi); h += r * (manto ? 260 : 700);
     alt[k] = h;
+    // l'OROGENESI: la spinta che continua nel tempo, dove il mantello scende sotto la crosta
+    if (manto) spinta[k] = Math.max(0, -manto[k] - 0.3) * (cont[k] ? 1 : 0.45);
+  }
+  // GLI IMPATTI. Per tutta la sua vita il pianeta è colpito: moltissimo da giovane, poi sempre meno; molti
+  // crateri piccoli e pochi grandi; un'atmosfera densa brucia i corpi piccoli. Quanti se ne vedono ancora
+  // dipende da quanto la superficie si rinnova: un mondo fermo e senz'aria li conserva tutti (la Luna), uno
+  // con tettonica, vulcani e pioggia li cancella quasi tutti (la Terra). L'erosione, dopo, fa il resto.
+  const etaG = (int.eta ?? 4.5e9) / 1e9, aria = isFinite(P.clima?.pressione) ? P.clima.pressione / 1e5 : 100;
+  const rinnovo = (aPlacche ? 3 : int.vulcani > 0 ? 1 : 0) + (aria > 0.01 && (int.acquaKg || 0) > 0 ? 1.5 : 0);
+  const conservati = Math.exp(-rinnovo * Math.min(4, etaG) * 0.9), nCrateri = Math.round(900 * (1 - Math.exp(-etaG / 1.2)) * conservati);
+  for (let n = 0; n < nCrateri; n++) {
+    const raggio = Math.min(22, 1.2 * Math.pow(1 - caso() * 0.985, -1 / 1.8)); if (raggio < 2.2 && aria > 0.5) { caso(); caso(); continue; } // (in celle; i piccoli bruciano nell'aria)
+    const ci = Math.floor(caso() * W), cj = Math.floor(caso() * H), prof = 180 * raggio, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI));
+    for (let dj = -R2; dj <= R2; dj++) { const y = cj + dj; if (y < 0 || y >= H) continue; for (let di = -Math.ceil(R2 * allarga); di <= R2 * allarga; di++) { const d = Math.hypot(di / allarga, dj) / raggio; if (d > 1.6) continue; const k = y * W + ((ci + di + W * 4) % W); alt[k] += d < 1 ? -prof * (1 - d * d) + (raggio > 9 && d < 0.18 ? prof * 0.5 : 0) : prof * 0.28 * Math.exp(-(d - 1) * 5); } }
   }
   // i vulcani: sopra i pennacchi caldi del mantello e lungo i confini che si aprono
   const vulcani = [];
@@ -104,7 +118,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   }
   // di che cosa è fatta la superficie: crosta leggera (continenti) o basalto; quanto ferro, e se l'acqua l'ha ossidato
   const materiali = { ferro: P.composizione.ferro ?? 0.1, ghiacciato: P.tipo === 'ghiacciato', ossidato: (int.acquaKg || 0) > 0 || (isFinite(P.clima?.pressione) && P.clima.pressione > 100) };
-  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali };
+  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: nCrateri, crateriConservati: conservati };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
@@ -120,7 +134,7 @@ export function immagineSuperficie(sf, T, cl = null) {
     // la temperatura del punto: quella del clima, corretta per la sua quota vera (6,5 °C ogni km): la neve sui monti
     const su = cl && h >= mare ? (Math.max(h, mare) - Math.max(campo(cl.quota, i, j), mare)) / 1000 : 0;
     const Tloc = cl ? campo(cl.media, i, j) - 6.5 * su : T - 0.45 * lat - Math.max(0, h) * 0.0065;
-    const gelo = cl ? Math.min(1, Math.max(0, campo(cl.freddo, i, j), h >= mare ? (268 - Tloc) / 12 : 0)) : Tloc < 265 ? 1 : 0;
+    const gelo = cl ? Math.min(1, Math.max(0, campo(cl.freddo, i, j), h >= mare ? ((cl.neve ?? 1) * (268 - Tloc)) / 12 : 0)) : Tloc < 265 ? 1 : 0;
     let c;
     if (h < mare || (sf.lago && sf.lago[k] > 0)) { const d = Math.min(1, ((h < mare ? mare - h : sf.lago[k] * 3)) / 5000); c = [20 + 30 * (1 - d), 60 + 60 * (1 - d), 110 + 80 * (1 - d)]; }
     else {
@@ -130,7 +144,7 @@ export function immagineSuperficie(sf, T, cl = null) {
       const e = Math.min(1, (h - Math.max(0, mare)) / 4000), mat = sf.materiali || { ferro: 0.25, ossidato: true }, continente = sf.cont ? sf.cont[k] : 1;
       c = mat.ghiacciato ? [172, 180, 186] : continente ? [148, 138, 124] : [84, 80, 76];
       if (mat.ossidato && !mat.ghiacciato) { const r = Math.min(0.65, Math.max(0, (mat.ferro - 0.12) * 2.4)); c = [c[0] + (170 - c[0]) * r, c[1] + (98 - c[1]) * r, c[2] + (66 - c[2]) * r]; }
-      if (flusso[k] > 6 * Math.pow(4, sf.livello || 0) && e < 0.25) c = [c[0] * 0.75 + 46, c[1] * 0.75 + 42, c[2] * 0.75 + 34]; // sedimenti
+      if (sf.depositato && sf.depositato[k] > 3) { const d = Math.min(0.6, sf.depositato[k] / 60); c = [c[0] + (196 - c[0]) * d, c[1] + (182 - c[1]) * d, c[2] + (150 - c[2]) * d]; } // sedimenti: pianure e delta
       c = c.map((x) => x * (0.82 + 0.3 * e)); if (flusso[k] > (sf.passiErosione ? 18 * Math.pow(4, sf.livello || 0) : 60) && gelo < 0.5) c = [60, 110, 170]; }
     // il ghiaccio copre in proporzione a quanta parte dell'anno quel punto passa sotto lo zero: bordi sfumati
     const g = Math.pow(gelo, 0.7), ice = [232, 238, 244];
@@ -165,7 +179,8 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
   // dove c'è acqua che evapora e un'atmosfera che la tiene si formano le nuvole, che riflettono la luce
   let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
-  const acquaPerGhiaccio = Math.min(1, 0.15 + 2.5 * mareFraz), nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
+  // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta
+  const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
   const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.55 * (1 - suolo); };
   const luce = (j, i, f) => {
     const ph = lat(j);
@@ -191,7 +206,9 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
   const quotaMedia = quota; // la quota media della cella del clima: la neve in quota si calcola punto per punto
   let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
-  const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a };
+  const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio,
+    // quanto in fretta i pendii si consumano: con la pioggia molto, con il solo vento poco, senz'aria quasi niente
+    sgretola: piove ? 0.05 : isFinite(P.clima.pressione) && P.clima.pressione > 1000 ? 0.015 : 0.002 };
   memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);
   return out;
 }
@@ -210,7 +227,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1];
     const ci = Math.min(cl.W - 1, Math.floor((u0 + (i / W) * (u1 - u0)) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((v0 + (j / H) * (v1 - v0)) * cl.H)), k = cj * cl.W + ci;
-    pioggia[j * W + i] = Math.max(0, Math.min(1, (cl.media[k] - 255) / 40)) * (1 - cl.freddo[k]);
+    pioggia[j * W + i] = cl.piove === false ? 0 : Math.max(0, Math.min(1, (cl.media[k] - 255) / 40)) * (1 - cl.freddo[k]);
   }
   const vicini = (k, f) => { const i = k % W, j = (k - i) / W; for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue; for (let di = -1; di <= 1; di++) if (di || dj) f(jj * W + ((i + di + W) % W), di && dj ? 1.414 : 1); } };
   // la coda per altezza (heap), per l'inondazione dal mare verso l'interno
@@ -218,7 +235,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   const push = (k, v) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (heapV[p] <= v) break; heapK[i] = heapK[p]; heapV[i] = heapV[p]; i = p; } heapK[i] = k; heapV[i] = v; };
   const pop = () => { const k = heapK[0], lk = heapK[--hn], lv = heapV[hn]; let i = 0; for (;;) { let c = 2 * i + 1; if (c >= hn) break; if (c + 1 < hn && heapV[c + 1] < heapV[c]) c++; if (heapV[c] >= lv) break; heapK[i] = heapK[c]; heapV[i] = heapV[c]; i = c; } heapK[i] = lk; heapV[i] = lv; return k; };
   const pieno = new Float32Array(N), ricevente = new Int32Array(N), ordine = new Int32Array(N), visto = new Uint8Array(N), area = new Float32Array(N), dist = new Float32Array(N);
-  let laghi = 0;
+  let laghi = 0; const eroso = new Float32Array(N), sedimento = new Float32Array(N), depositato = new Float32Array(N);
   for (let it = 0; it < passi; it++) {
     // inondazione: dal mare (o dal punto più basso, se non c'è mare) verso l'interno; chi resta sotto il
     // livello di chi lo precede sta in una conca: lì c'è un lago
@@ -232,18 +249,27 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
       vicini(c, (q, d) => { if (visto[q]) return; visto[q] = 1; ricevente[q] = c; dist[q] = d; pieno[q] = Math.max(alt[q], pieno[c] + 0.01); push(q, pieno[q]); });
     }
     // la portata: la pioggia raccolta da monte a valle
-    for (let k = 0; k < N; k++) area[k] = 0.2 + pioggia[k] + (afflusso ? afflusso[k] : 0);
+    const secco = cl.piove === false ? 0 : 0.2; for (let k = 0; k < N; k++) area[k] = secco + pioggia[k] + (afflusso ? afflusso[k] : 0);
     for (let x = n - 1; x > 0; x--) { const k = ordine[x], r = ricevente[k]; if (r >= 0) area[r] += area[k]; }
     // lo scavo (implicito, da valle a monte) dove l'acqua scorre e non ristagna; la crescita dei monti
     for (let x = 0; x < n; x++) {
       const k = ordine[x], r = ricevente[k]; if (r < 0 || alt[k] < mare) continue;
-      if (crescita) alt[k] += 0.004 * Math.max(0, alt0[k]) / 4; // le placche continuano a spingere
+      if (crescita) alt[k] += sf.spinta ? 9 * sf.spinta[k] : 0.001 * Math.max(0, alt0[k]); // l'orogenesi: il mantello continua a spingere
       if (pieno[k] > alt[k] + 0.5) continue; // nel lago non si scava: si deposita
       const F = (0.0009 * Math.sqrt(area[k])) / dist[k];
-      if (alt[r] < alt[k]) alt[k] = (alt[k] + F * alt[r]) / (1 + F);
+      if (alt[r] < alt[k]) { const prima = alt[k]; alt[k] = (alt[k] + F * alt[r]) / (1 + F); eroso[k] = prima - alt[k]; }
+    }
+    // I SEDIMENTI: ciò che è stato scavato scende con l'acqua (da monte a valle) e si deposita dove l'acqua
+    // rallenta, nei laghi e sulle coste: le conche si riempiono, nascono pianure e delta. Tutto tende a livellarsi.
+    for (let x = n - 1; x > 0; x--) {
+      const k = ordine[x], r = ricevente[k]; if (r < 0) continue;
+      let carico = sedimento[k] + eroso[k]; sedimento[k] = 0; eroso[k] = 0;
+      const spazio = alt[r] < mare ? mare - alt[r] : pieno[r] - alt[r];
+      if (spazio > 0.5) { const dep = Math.min(carico, spazio * 0.5); alt[r] += dep; carico -= dep; depositato[r] += dep; }
+      sedimento[r] += carico;
     }
     // i pendii si sgretolano
-    if (it % 4 === 0) for (let k = 0; k < N; k++) { if (alt[k] < mare) continue; let s = 0, m = 0; vicini(k, (q) => { s += alt[q]; m++; }); alt[k] += 0.05 * (s / m - alt[k]); }
+    if (it % 4 === 0) for (let k = 0; k < N; k++) { if (alt[k] < mare) continue; let s = 0, m = 0; vicini(k, (q) => { s += alt[q]; m++; }); alt[k] += (cl.sgretola ?? 0.05) * (s / m - alt[k]); }
   }
   // una conca diventa lago solo se l'acqua che le arriva supera quella che evapora (più fa caldo, più
   // evapora); altrimenti resta asciutta, una piana di sale
@@ -256,7 +282,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     if (area[k] > evapora * scala) { lago[k] = pieno[k] - alt[k]; laghi++; }
   }
   const flusso = new Float32Array(N); for (let k = 0; k < N; k++) flusso[k] = area[k];
-  const out = { ...sf, alt, flusso, lago, celleLago: laghi, passiErosione: passi };
+  const out = { ...sf, alt, flusso, lago, depositato, celleLago: laghi, passiErosione: passi };
   memoErosione.set(chiave, out); if (memoErosione.size > 6) memoErosione.delete(memoErosione.keys().next().value);
   return out;
 }

@@ -250,6 +250,17 @@ rosso del ferro ossidato dove c'è acqua o aria, sedimenti lungo i fiumi; nessun
 verde, perché la vegetazione ci sarà solo se la vita emergerà. (Resta una
 fotografia: le placche non si spostano ancora nel tempo.)
 
+**Impatti, sedimenti, orogenesi.** Per tutta la sua vita un pianeta è colpito
+(molto da giovane, poi sempre meno; molti crateri piccoli e pochi grandi; l'aria
+densa brucia i corpi piccoli): quanti crateri restano dipende da quanto la
+superficie si rinnova, così un mondo fermo e senz'aria li conserva tutti e uno
+con placche, vulcani e pioggia li cancella. I monti crescono dove il mantello
+scende, e continuano a crescere mentre l'erosione li consuma. Ciò che l'acqua
+scava non sparisce: scende a valle e si deposita nei laghi e sulle coste
+(pianure e delta, più chiari), e tutto tende a livellarsi. Senza acqua non c'è
+neve e non piove; i pendii si consumano in fretta con la pioggia, poco con il
+solo vento, quasi per niente senz'aria.
+
 **La risoluzione continua della superficie** (`tessera` in `geologia.js`).
 Avvicinandosi al disco di un pianeta solido si scende sulla sua superficie, e
 avvicinandosi ancora ogni tessera si divide in 4 × 4 tessere più fini, fino a
