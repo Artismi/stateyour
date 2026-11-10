@@ -34,30 +34,10 @@ prova('gravità: leggera e pesante cadono uguali (equivalenza), orbita chiusa', 
 
 prova('gravità sulla luce: deflessione 4·G·M/(b·c²), il doppio di Newton', () => {
   const M = 200, b = 40, C = 30;
-  const [tr] = simulaMondo({ larghezza: 4000, altezza: 4000, c: C, masse: [{ pos: [2000, 2000], M, R: 5 }], tempo: 4000 / C, sorgenti: [{ pos: [0, 2000 + b], dir: 0, specie: { luce: true } }] }, { passo: 2 });
+  const [tr] = simulaMondo({ larghezza: 4000, altezza: 4000, c: C, masse: [{ pos: [2000, 2000], M, R: 5 }], tempo: 4000 / C, sorgenti: [{ pos: [0, 2000 + b], dir: 0, specie: { luce: true, visibile: true } }] }, { passo: 2 });
   const P = tr.punti, a = P.at(-1), z = P.at(-30), ang = -Math.atan2(a[1] - z[1], a[0] - z[0]);
   assert.ok(Math.abs(ang - deflessioneLuce(1, M, b, C)) / deflessioneLuce(1, M, b, C) < 0.05, `${ang}`);
   assert.ok(Math.abs(dist(a, z) / (a[3] - z[3]) - C) < 1e-6);
-});
-
-prova('luce e mezzi: una lente sferica mette a fuoco, Snell al bordo', () => {
-  const tr = simulaMondo({ larghezza: 400, altezza: 400, c: 30, domini: [{ forma: { tipo: 'cerchio', centro: [200, 200], r: 80 }, n: 1.5 }], tempo: 30, sorgenti: [-40, 40].map((o) => ({ pos: [0, 200 + o], dir: 0, specie: { luce: true } })) });
-  // i due raggi si incrociano sull'asse dietro la lente
-  assert.ok(tr[0].punti.at(-1)[1] > 200 && tr[1].punti.at(-1)[1] < 200);
-  // al primo bordo: sin(i) = n·sin(r)
-  const P = tr[0].punti, k = P.findIndex((p) => p[5] === 'rifrazione');
-  const r = Math.atan2(P[k + 1][1] - P[k][1], P[k + 1][0] - P[k][0]), N = Math.atan2(P[k][1] - 200, P[k][0] - 200) + Math.PI;
-  const i = Math.asin(Math.abs(Math.sin(0 - N))), rr = Math.asin(Math.abs(Math.sin(r - N)));
-  assert.ok(Math.abs(Math.sin(i) - 1.5 * Math.sin(rr)) < 1e-3);
-});
-
-prova('specchi: la luce esce con lo stesso angolo con cui entra; una carica li attraversa', () => {
-  const mondo = { larghezza: 400, altezza: 400, c: 10, pareti: [{ a: [300, 0], b: [300, 400], tipo: 'specchio' }], tempo: 30 };
-  const [tr] = simulaMondo({ ...mondo, sorgenti: [{ pos: [100, 100], dir: Math.PI / 6, specie: { luce: true } }] });
-  const u = tr.punti.at(-1), d = Math.atan2(u[1] - tr.punti.at(-2)[1], u[0] - tr.punti.at(-2)[0]);
-  assert.ok(Math.abs(d - (Math.PI - Math.PI / 6)) < 1e-9);
-  const [c] = simulaMondo({ ...mondo, sorgenti: [{ pos: [100, 100], dir: Math.PI / 6, v: 10, specie: { q: 1 } }] });
-  assert.ok(c.punti.every((p) => p[5] !== 'specchio') && c.punti.at(-1)[0] > 300, 'le cariche non sentono gli specchi');
 });
 
 prova('decadimento: il fotone si converte in una coppia; storia in parole', () => {
@@ -88,7 +68,7 @@ prova('tutti gli esperimenti di partenza girano in fretta', () => {
 });
 
 prova('la stessa storia in un mondo k volte più grande: B/k, K/k, M·k, e la forma è identica', () => {
-  for (const nome of ['voluta', 'fiore', 'lente']) {
+  for (const nome of ['voluta', 'fiore', 'orbita']) {
     const c = PRESET[nome]().cella, k = 0.37, a = simulaMondo(c), b = simulaMondo(scalaCella(c, k));
     assert.equal(a.length, b.length, nome);
     a.forEach((t, i) => { const p = t.punti.at(-1), q = b[i].punti.at(-1); assert.ok(Math.hypot(p[0] * k - q[0], p[1] * k - q[1]) < 1e-6 * c.larghezza, `${nome} ${i}`); assert.ok(Math.abs(p[4] * k - q[4]) < 1e-9); });
@@ -117,9 +97,8 @@ prova('le composizioni di partenza: ogni elemento ha posti e si simula', () => {
 });
 
 prova('le leggi e gli oggetti si spengono: la fisica li ignora davvero', () => {
-  const l = PRESET.lente().cella, con = simulaMondo(l)[0].punti.at(-1), senza = simulaMondo({ ...l, leggi: { gravita: false } })[0].punti.at(-1);
-  assert.ok(Math.abs(con[1] - senza[1]) > 1, 'senza gravità la luce non si piega');
-  assert.ok(Math.abs(senza[1] - l.sorgenti[0].pos[1]) < 1e-9, 'senza gravità va dritta');
+  const l = PRESET.orbita().cella, con = simulaMondo(l)[0].punti.at(-1), senza = simulaMondo({ ...l, leggi: { gravita: false } })[0].punti.at(-1);
+  assert.ok(Math.hypot(con[0] - senza[0], con[1] - senza[1]) > 5, 'senza gravità niente orbita');
   const m = structuredClone(l); m.masse[0].spento = true;
   assert.deepEqual(simulaMondo(m)[0].punti.at(-1), senza, 'una massa spenta è come la gravità spenta');
   const f = PRESET.fiore().cella;

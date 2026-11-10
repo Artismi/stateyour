@@ -11,7 +11,8 @@
 //   SPAZIOTEMPO   l'elemento con il tempo che sale: le linee d'universo.
 // Tutto quello che cambi nell'elemento cambia subito in tutte le sue copie.
 
-import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA } from './mondo.js';
+import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, campiContinui } from './mondo.js';
+import { universo } from './biblioteca.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -24,32 +25,30 @@ export const FORZE = {
   gravita: { nome: 'gravità', art: 'la gravità', col: [214, 84, 52], simbolo: '●', frase: 'le masse ferme curvano lo spazio: chi passa cade verso di loro, uguale se leggero o pesante; la luce si piega il doppio. Nessuno sposta le masse.' },
   magnetico: { nome: 'magnetismo', art: 'il magnetismo', col: [52, 104, 214], simbolo: '⊙', frase: 'dove c\'è campo B le cariche girano: + da una parte, − dall\'altra. Raggio m·v/(q·B): più campo, curve più strette; più massa o velocità, più larghe.' },
   materia: { nome: 'materia', art: 'la materia', col: [150, 104, 50], simbolo: '▒', frase: 'la materia frena le cariche, e più sono lente più frenano: la curva si stringe in spirale e finisce in una macchia tonda (l\'occhio).' },
-  luce: { nome: 'ottica', art: "l'ottica", col: [196, 142, 0], simbolo: '◇', frase: 'vale solo per la luce: va dritta a velocità c/n, si rifrange entrando in un vetro (Snell), si riflette sugli specchi. Le cariche non sentono né specchi né vetri.' },
   decadimento: { nome: 'decadimento', art: 'il decadimento', col: [36, 140, 76], simbolo: '✳', frase: 'dopo la sua vita una particella si divide nelle sue figlie: è il punto da cui partono i petali, le forcelle, i ventagli.' },
 };
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-const PARTI = { gravita: 'gravita', magnetico: 'magnetico', materia: 'materia', luce: 'luce', specchio: 'luce', rifrazione: 'luce' };
+const PARTI = { gravita: 'gravita', magnetico: 'magnetico', materia: 'materia' };
+const LUCE = [196, 142, 0]; // il colore dei fotoni (quando si vedono)
 const haForza = (legge, f) => String(legge || '').split('+').some((p) => PARTI[p] === f);
 // il colore di ogni punto di una linea: le forze che agiscono lì, pesate per
 // quanto sono forti. Una spirale passa dal blu (il campo la piega) al marrone
 // (la materia la frena) man mano che rallenta.
 function coloriTraccia(cella, tr) {
   const P = tr.punti, out = new Array(P.length), luce = !!tr.specie.luce, quote = (tr.quote = new Array(P.length));
-  const nessuna = { gravita: 0, magnetico: 0, materia: 0, luce: 0 };
+  const nessuna = { gravita: 0, magnetico: 0, materia: 0 };
   cella = { ...cella, leggi };
   for (let i = 0; i < P.length; i++) {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dt = b[3] - a[3];
     quote[i] = nessuna;
-    if (/specchio|rifrazione/.test(P[i][5])) { out[i] = FORZE.luce.col; quote[i] = { ...nessuna, luce: 1 }; continue; }
-    if (!(dt > 0)) { out[i] = out[i - 1] || (luce ? FORZE.luce.col : [28, 27, 24]); quote[i] = quote[i - 1] || nessuna; continue; }
+    if (!(dt > 0)) { out[i] = out[i - 1] || (luce ? LUCE : [28, 27, 24]); quote[i] = quote[i - 1] || nessuna; continue; }
     const F = forze(cella, tr.specie, P[i][0], P[i][1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, tr.esposizione ?? -1, P[i][3]);
     const pesi = { gravita: F.gravita ? Math.hypot(...F.gravita) : 0, magnetico: F.magnetico ? Math.hypot(...F.magnetico) : 0, materia: F.materia ? Math.hypot(...F.materia) : 0 };
     // la luce e chi va dritto: il colore della luce o l'inchiostro, ma la gravità si vede quando piega davvero
     const curva = (pesi.gravita + pesi.magnetico) / ((F.v * F.v) || 1), soglia = 1 / (4 * Math.max(cella.larghezza, cella.altezza));
-    if (luce) pesi.luce = soglia * F.v * F.v;
-    const tot = pesi.gravita + pesi.magnetico + pesi.materia + (pesi.luce || 0);
-    if (!tot || (!luce && curva < soglia * 0.25 && pesi.materia < soglia * F.v * F.v * 0.25)) { out[i] = luce ? FORZE.luce.col : [28, 27, 24]; if (luce) quote[i] = { ...nessuna, luce: 1 }; continue; }
-    quote[i] = { gravita: pesi.gravita / tot, magnetico: pesi.magnetico / tot, materia: pesi.materia / tot, luce: (pesi.luce || 0) / tot };
+    const tot = pesi.gravita + pesi.magnetico + pesi.materia;
+    if (!tot || (!luce && curva < soglia * 0.25 && pesi.materia < soglia * F.v * F.v * 0.25)) { out[i] = luce ? LUCE : [28, 27, 24]; continue; }
+    quote[i] = { gravita: pesi.gravita / tot, magnetico: pesi.magnetico / tot, materia: pesi.materia / tot };
     const c = [0, 0, 0];
     for (const [k, w] of Object.entries(pesi)) if (w) for (let j = 0; j < 3; j++) c[j] += (FORZE[k].col[j] * w) / tot;
     out[i] = c.map(Math.round);
@@ -80,7 +79,7 @@ const cel = () => el().cella;
 
 // ---------- simulazione, con la memoria per elemento
 const memoria = new Map();
-const chiave = (cella) => JSON.stringify(cella) + JSON.stringify(leggi);
+const chiave = (cella) => JSON.stringify({ ...cella, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
 function tracceDi(e) {
   const k = chiave(e.cella);
   let m = memoria.get(k);
@@ -95,6 +94,7 @@ function tracceDi(e) {
   return m;
 }
 function simula() {
+  if (vista === 'pattern' && !comp.reticolo) { const c = comp.elementi[0].cella; $('misure').textContent = `universo n. ${c.seme} · sezione di lato ${fmt(c.finestra.lato)} · tempo da ${fmt(c.sezione.fine - c.sezione.durata)} a ${fmt(c.sezione.fine)}`; return; }
   if (vista === 'pattern') { const ne = comp.elementi.length, np = comp.elementi.reduce((n, e) => n + e.posti.length, 0); $('misure').textContent = `${ne} ${ne === 1 ? 'elemento' : 'elementi'} · ${np} ${np === 1 ? 'posto' : 'posti'} per piastrella`; return; }
   const t0 = performance.now();
   try { tracce = tracceDi(el()).tracce; $('errore').textContent = ''; } catch (e) { tracce = []; $('errore').textContent = e.message; }
@@ -117,7 +117,8 @@ function disegna() {
 // =================================================================== IL PATTERN
 function spriteDi(e, s) {
   // l'elemento disegnato una volta in un'immagine, alla scala dello schermo
-  const m = tracceDi(e), q = Math.pow(2, Math.round(Math.log2(s) * 2) / 2), chiave = `${q}|${coloriForze}`;
+  const sez = e.cella.sezione, t0s = sez ? sez.fine - sez.durata : -Infinity, t1s = sez ? sez.fine : Infinity;
+  const m = tracceDi(e), q = Math.pow(2, Math.round(Math.log2(s) * 2) / 2), chiave = `${q}|${coloriForze}|${t0s}|${t1s}`;
   let sp = m.sprite.get(chiave);
   if (sp) return sp;
   const W = e.cella.larghezza, H = e.cella.altezza, k = Math.min(q, 3000 / Math.max(W, H));
@@ -127,7 +128,7 @@ function spriteDi(e, s) {
     const P = tr.punti;
     if (tr.sagoma) { c.fillStyle = INK; tracciaSagoma(c, tr); c.fill('evenodd'); continue; }
     for (let i = 1; i < P.length; i++) {
-      const a = P[i - 1], b = P[i]; if (!a[2] || !b[2]) continue;
+      const a = P[i - 1], b = P[i]; if (!a[2] || !b[2] || b[3] < t0s || a[3] > t1s) continue;
       c.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i]) : INK; c.lineWidth = Math.max(0.6 / k, (a[4] + b[4]) / 2);
       c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
     }
@@ -147,7 +148,17 @@ function piastrelleVisibili(margine) {
   const out = []; for (let j = v0; j <= v1; j++) for (let i = u0; i <= u1; i++) out.push([i, j, i * a[0] + j * b[0], i * a[1] + j * b[1]]);
   return out;
 }
+function disegnaSezione() {
+  const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, e = comp.elementi[0], f = e.cella.finestra, l = f.lato;
+  const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z, ox = f.centro[0] - l / 2, oy = f.centro[1] - l / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#e4dfd3'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = CARTA; ctx.fillRect(X(0), Y(0), l * z, l * z);
+  ctx.save(); ctx.beginPath(); ctx.rect(X(0), Y(0), l * z, l * z); ctx.clip();
+  ctx.setTransform(z, 0, 0, z, X(-ox), Y(-oy)); ctx.drawImage(spriteDi(e, z), 0, 0, e.cella.larghezza, e.cella.altezza);
+  ctx.restore();
+}
 function disegnaPattern() {
+  if (!comp.reticolo) return disegnaSezione();
   const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, { a, b } = comp.reticolo;
   const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = CARTA; ctx.fillRect(0, 0, W, H);
@@ -195,6 +206,7 @@ function disegnaPattern() {
 }
 const aPattern = (e) => { const r = tela.getBoundingClientRect(); return [pat.cx + (e.clientX - r.left - r.width / 2) / pat.z, pat.cy + (e.clientY - r.top - r.height / 2) / pat.z]; };
 function colpisciPattern(x, y) {
+  if (!comp.reticolo) return null;
   const { a, b } = comp.reticolo, det = a[0] * b[1] - a[1] * b[0]; let best = null;
   comp.elementi.forEach((e, ei) => {
     const R = tracceDi(e).raggio;
@@ -209,13 +221,23 @@ function colpisciPattern(x, y) {
   return best;
 }
 function maniglia(x, y) {
+  if (!comp.reticolo) return null;
   const { a, b } = comp.reticolo, r = 9 / pat.z;
   if (Math.hypot(x - a[0], y - a[1]) < r) return 'a';
   if (Math.hypot(x - b[0], y - b[1]) < r) return 'b';
   return null;
 }
-function entra(e) { corrente = e; vista = 'dettaglio'; sel = null; sonda = null; tempo = Infinity; aggiornaVista(); }
+function entra(e) {
+  corrente = e; vista = 'dettaglio'; sel = null; sonda = null; tempo = Infinity; fetta = 0;
+  // un universo ricorda la sua fetta di tempo
+  const sez = cel().sezione;
+  if (sez) { tempo = sez.fine; fetta = sez.durata < sez.fine - 1e-9 ? sez.durata : 0; }
+  aggiornaVista();
+  $('fetta').value = fetta / tMax(); $('ofetta').textContent = fetta ? `fetta ${fmt(fetta)}` : 'tutta la storia';
+}
+function salvaSezione() { const c = cel(); if (!c?.sezione) return; const fine = Math.min(tempo, tMax()); c.sezione = { fine, durata: fetta ? Math.min(fetta, fine) : fine }; }
 function adattaPattern() {
+  if (!comp.reticolo) { const l = comp.elementi[0].cella.finestra.lato; pat.cx = l / 2; pat.cy = l / 2; pat.z = Math.min(tela.clientWidth, tela.clientHeight) / (1.08 * l); return; }
   const { a, b } = comp.reticolo, L = Math.max(Math.hypot(...a), Math.hypot(...b), 1);
   if (immagine) { pat.cx = immagine.W / 2; pat.cy = immagine.H / 2; pat.z = Math.min(tela.clientWidth / immagine.W, tela.clientHeight / immagine.H) * 0.9; return; }
   pat.cx = (a[0] + b[0]) / 2; pat.cy = (a[1] + b[1]) / 2; pat.z = Math.min(tela.clientWidth, tela.clientHeight) / (3.2 * L);
@@ -242,7 +264,6 @@ function disegnaElemento() {
   disegnaCampi();
   if (vedi('gravita')) campoGravita();
   for (let i = 0; i < c.masse.length; i++) disegnaMassa(c.masse[i], sel?.tipo === 'massa' && sel.i === i);
-  c.pareti.forEach((p, i) => disegnaParete(p, sel?.tipo === 'parete' && sel.i === i));
   if (prima) disegnaTracce(prima, Infinity, true);
   else if (confronto) disegnaTracce(confronto, Infinity, true);
   const tante = tracce.length > 60 || tracce.reduce((n, t) => n + t.punti.length, 0) > 40000;
@@ -254,6 +275,14 @@ function disegnaElemento() {
   c.sorgenti.forEach((so, i) => disegnaSorgente(so, sel?.tipo === 'sorgente' && sel.i === i));
   if (sel?.tipo === 'dominio') maniglieDominio(c.domini[sel.i]);
   if (sonda) disegnaSonda();
+  if (c.finestra) {
+    // fuori dalla finestra l'universo si attenua: dentro c'è la sezione, il pattern
+    const f = c.finestra, l = f.lato, x0 = f.centro[0] - l / 2, y0 = f.centro[1] - l / 2;
+    ctx.fillStyle = 'rgba(228,223,211,0.62)'; ctx.beginPath(); ctx.rect(-5000, -5000, 10000 + c.larghezza, 10000 + c.altezza); ctx.rect(x0, y0, l, l); ctx.fill('evenodd');
+    ctx.strokeStyle = ACCENTO; ctx.lineWidth = px(2); ctx.strokeRect(x0, y0, l, l);
+    manigliaQ(x0 + l, y0 + l);
+    scriviMondo(`la sezione · lato ${fmt(l)} · trascina il bordo per spostarla, l'angolo per ingrandirla`, x0, y0 - px(6), ACCENTO);
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 function evidente(tr) {
@@ -337,7 +366,7 @@ function disegnaTeste(T) {
     const a = P[i], b = P[i + 1], dt = b[3] - a[3] || 1e-9, u = (T - a[3]) / dt, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u;
     frecceForze(tr, x, y, (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, false, T);
     const q = tr.specie.q ?? 0;
-    ctx.fillStyle = tr.specie.luce ? rgb(FORZE.luce.col) : '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = px(1.2);
+    ctx.fillStyle = tr.specie.luce ? rgb(LUCE) : '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(x, y, px(5), 0, 7); ctx.fill(); ctx.stroke();
     if (!tr.specie.luce && q) { ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.moveTo(x - px(3), y); ctx.lineTo(x + px(3), y); if (q > 0) { ctx.moveTo(x, y - px(3)); ctx.lineTo(x, y + px(3)); } ctx.stroke(); }
   }
@@ -373,8 +402,26 @@ function corridoiDella(tr) {
   for (let i = 0; i < tr.punti.length; i += 3) { const p = tr.punti[i]; e.domini.forEach((d, k) => { if (!usati.has(k) && dentro(d.forma, p[0], p[1])) usati.add(k); }); }
   return [...usati].map((k) => e.domini[k]);
 }
+function disegnaCampiNaturali(c) {
+  const cc = campiContinui(c); if (!cc) return;
+  const passo = px(30), punti = [];
+  let bMax = 1e-9, kMax = 1e-9;
+  for (let y = passo / 2; y < c.altezza; y += passo) for (let x = passo / 2; x < c.larghezza; x += passo) { const B = cc.B(x, y), K = cc.K(x, y); punti.push([x, y, B, K]); bMax = Math.max(bMax, Math.abs(B)); kMax = Math.max(kMax, K); }
+  for (const [x, y, B, K] of punti) {
+    if (K > 0 && vedi('materia') && leggeOra('materia')) { ctx.fillStyle = rgb(FORZE.materia.col, 0.08 + 0.3 * (K / kMax)); ctx.beginPath(); ctx.arc(x, y, px(1.2 + 2.5 * (K / kMax)), 0, 7); ctx.fill(); }
+    if (Math.abs(B) > 0.08 * bMax && vedi('magnetico') && leggeOra('magnetico')) {
+      const r = px(3), col = rgb(FORZE.magnetico.col, 0.08 + 0.5 * (Math.abs(B) / bMax));
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = px(1);
+      ctx.beginPath(); ctx.arc(x + passo / 2, y + passo / 2, r, 0, 7); ctx.stroke();
+      if (B > 0) { ctx.beginPath(); ctx.arc(x + passo / 2, y + passo / 2, px(1), 0, 7); ctx.fill(); }
+      else { const X = x + passo / 2, Y = y + passo / 2; ctx.beginPath(); ctx.moveTo(X - r * 0.7, Y - r * 0.7); ctx.lineTo(X + r * 0.7, Y + r * 0.7); ctx.moveTo(X + r * 0.7, Y - r * 0.7); ctx.lineTo(X - r * 0.7, Y + r * 0.7); ctx.stroke(); }
+    }
+  }
+  if (vedi('magnetico')) for (const k of c.cristalli || []) { ctx.setLineDash([px(3), px(3)]); ctx.strokeStyle = rgb(FORZE.magnetico.col, 0.6); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(k.centro[0], k.centro[1], k.r, 0, 7); ctx.stroke(); ctx.setLineDash([]); scriviMondo(`cristallo · passo ${fmt(k.passo)}`, k.centro[0] - k.r * 0.6, k.centro[1] - k.r - px(4), rgb(FORZE.magnetico.col)); }
+}
 function disegnaCampi() {
   const c = cel();
+  disegnaCampiNaturali(c);
   if (c.esposizioni) {
     // tante esposizioni: si mostrano solo i corridoi della linea sotto il cursore (o scelta)
     const id = sonda ? sonda.tr : sel?.tipo === 'traccia' ? sel.i : null, tr = id != null ? tracce.find((t) => t.id === id) : null;
@@ -386,7 +433,6 @@ function disegnaCampi() {
       ctx.strokeStyle = rgb(d.B ? FORZE.magnetico.col : d.K ? FORZE.materia.col : [28, 27, 24], 0.6); ctx.lineWidth = px(1); ctx.stroke();
     }
     const e = c.esposizioni[tr.esposizione];
-    if (e && vedi('luce')) e.pareti.forEach((p) => { if (tr.punti.some((q, i) => i % 4 === 0 && Math.hypot(q[0] - p.a[0], q[1] - p.a[1]) < 30)) disegnaParete(p, false); });
     return;
   }
   const lista = [{ forma: { tipo: 'tutto' }, ...c.fondo, fondo: true }, ...c.domini];
@@ -398,10 +444,9 @@ function disegnaCampi() {
       const f = dm.forma; if (f.centro) scriviMondo(`${dm.nome || 'zona'}: spenta`, f.centro[0] - px(30), f.centro[1], GRIGIO);
       return;
     }
-    dm = { ...dm, B: leggeOra('magnetico') ? dm.B : 0, K: leggeOra('materia') ? dm.K : 0, n: leggeOra('luce') ? dm.n : 1 };
+    dm = { ...dm, B: leggeOra('magnetico') ? dm.B : 0, K: leggeOra('materia') ? dm.K : 0 };
     if (dm.B && vedi('magnetico')) { forma(dm.forma); ctx.fillStyle = rgb(FORZE.magnetico.col, Math.min(0.16, 0.04 + Math.abs(dm.B) * 0.25)); ctx.fill('evenodd'); etichetta.push([`${dm.B > 0 ? '⊙' : '⊗'} campo ${fmt(dm.B)}`, FORZE.magnetico.col]); }
     if (dm.K && vedi('materia')) { puntini(dm.forma, rgb(FORZE.materia.col, Math.min(0.5, 0.15 + dm.K / 150)), px(Math.max(5, 14 - dm.K / 8))); etichetta.push([`▒ materia ${fmt(dm.K)}`, FORZE.materia.col]); }
-    if ((dm.n ?? 1) !== 1 && vedi('luce')) { forma(dm.forma); ctx.fillStyle = rgb([90, 170, 200], Math.min(0.3, (dm.n - 1) * 0.4)); ctx.fill('evenodd'); etichetta.push([`◇ vetro n ${fmt(dm.n)}`, [40, 120, 150]]); }
     if (!dm.fondo) { forma(dm.forma); ctx.setLineDash(scelto ? [] : [px(5), px(4)]); ctx.strokeStyle = scelto ? ACCENTO : 'rgba(28,27,24,0.35)'; ctx.lineWidth = px(scelto ? 2 : 1); ctx.stroke(); ctx.setLineDash([]); }
     // il cartellino: dice che cosa c'è in questa zona
     if (etichetta.length) {
@@ -453,16 +498,6 @@ function disegnaMassa(m, scelta) {
   if (scelta) { ctx.strokeStyle = ACCENTO; ctx.lineWidth = px(2); ctx.stroke(); }
   if (vedi('gravita')) scriviMondo(`● massa ${fmt(m.M)}`, m.pos[0] + R + px(4), m.pos[1] - px(4), rgb(col));
 }
-function disegnaParete(p, scelta) {
-  const pSpenta = !accesoOra(p) || !leggeOra('luce');
-  ctx.lineCap = 'round'; ctx.globalAlpha = pSpenta ? 0.3 : vedi('luce') ? 1 : 0.4;
-  if (pSpenta) ctx.setLineDash([px(4), px(4)]);
-  ctx.strokeStyle = scelta ? ACCENTO : p.tipo === 'assorbe' ? '#111' : rgb(FORZE.luce.col); ctx.lineWidth = px(p.tipo === 'assorbe' ? 4 : 3.5);
-  ctx.beginPath(); ctx.moveTo(...p.a); ctx.lineTo(...p.b); ctx.stroke();
-  if (p.tipo !== 'assorbe' && !pSpenta) { ctx.strokeStyle = '#fff8dc'; ctx.lineWidth = px(1); ctx.stroke(); }
-  ctx.globalAlpha = 1; ctx.setLineDash([]);
-  if (scelta) { manigliaQ(...p.a); manigliaQ(...p.b); }
-}
 const specieDi = (so) => (typeof so.specie === 'string' ? { nome: so.specie, ...cel().specie[so.specie] } : so.specie);
 function puntaFreccia(so) {
   const sp = specieDi(so), L = sp?.luce ? 22 : 6 + (so.v ?? 0) * 2.2;
@@ -496,12 +531,6 @@ function colpisci(x, y) {
   }
   if (sel?.tipo === 'dominio') { const f = c.domini[sel.i]?.forma; if (f?.tipo === 'cerchio') { if (Math.hypot(x - f.centro[0] - f.r, y - f.centro[1]) < r) return { tipo: 'dominio', i: sel.i, parte: 'raggio' }; if (Math.hypot(x - f.centro[0], y - f.centro[1]) < r) return { tipo: 'dominio', i: sel.i, parte: 'centro' }; } }
   for (let i = c.masse.length - 1; i >= 0; i--) { const m = c.masse[i]; if (Math.hypot(x - m.pos[0], y - m.pos[1]) < Math.max(r, m.R ?? 0)) return { tipo: 'massa', i, parte: 'corpo' }; }
-  for (let i = c.pareti.length - 1; i >= 0; i--) {
-    const p = c.pareti[i];
-    if (Math.hypot(x - p.a[0], y - p.a[1]) < r) return { tipo: 'parete', i, parte: 'a' };
-    if (Math.hypot(x - p.b[0], y - p.b[1]) < r) return { tipo: 'parete', i, parte: 'b' };
-    if (distSeg(x, y, p.a, p.b) < r * 0.7) return { tipo: 'parete', i, parte: 'tutta' };
-  }
   const t = vicinoTraccia(x, y, 7); if (t) return { tipo: 'traccia', i: t.tr };
   for (let i = c.domini.length - 1; i >= 0; i--) if (c.domini[i].forma.tipo !== 'tutto' && dentro(c.domini[i].forma, x, y)) return { tipo: 'dominio', i, parte: 'centro' };
   for (let i = c.domini.length - 1; i >= 0; i--) if (c.domini[i].forma.tipo === 'tutto') return { tipo: 'dominio', i, parte: 'nessuna' };
@@ -516,16 +545,18 @@ tela.addEventListener('pointerdown', (e) => {
     const [x, y] = aPattern(e), m = maniglia(x, y), h = m ? null : colpisciPattern(x, y);
     if (m) { ricorda(); presa = { tipo: 'reticolo', v: m }; }
     else if (h) presa = { tipo: 'posto', ...h, x0: x, y0: y, sx: e.clientX, sy: e.clientY, orig: comp.elementi[h.e].posti[h.p].pos.slice(), mosso: false };
-    else presa = { tipo: 'vista', sx: e.clientX, sy: e.clientY, cx: pat.cx, cy: pat.cy };
+    else presa = { tipo: 'vista', sx: e.clientX, sy: e.clientY, ux: e.clientX, uy: e.clientY, cx: pat.cx, cy: pat.cy };
     return;
   }
   const [x, y] = aMondo(e), c = cel();
   if (strumento !== 'seleziona') { aggiungi(strumento, x, y); return; }
+  const fh = colpisciFinestra(x, y);
+  if (fh) { ricorda(); presa = { tipo: 'finestra', parte: fh, x, y, orig: clona(c.finestra) }; return; }
   const h = colpisci(x, y);
   sel = h ? { tipo: h.tipo, i: h.i } : null;
   if (h && h.parte && h.parte !== 'nessuna' && h.tipo !== 'traccia') {
     ricorda(); prima = tracce;
-    const o = h.tipo === 'sorgente' ? c.sorgenti[h.i] : h.tipo === 'massa' ? c.masse[h.i] : h.tipo === 'parete' ? c.pareti[h.i] : c.domini[h.i];
+    const o = h.tipo === 'sorgente' ? c.sorgenti[h.i] : h.tipo === 'massa' ? c.masse[h.i] : c.domini[h.i];
     presa = { ...h, o, x, y, orig: clona(o) };
   }
   disegna(); mostraPannello();
@@ -535,11 +566,11 @@ tela.addEventListener('pointermove', (e) => {
     const [x, y] = aPattern(e);
     if (!presa) {
       const h = colpisciPattern(x, y), prec = sopra; sopra = h ? { e: h.e, p: h.p } : null;
-      tela.style.cursor = maniglia(x, y) ? 'move' : h ? 'pointer' : 'grab';
+      tela.style.cursor = !comp.reticolo ? 'pointer' : maniglia(x, y) ? 'move' : h ? 'pointer' : 'grab';
       if (JSON.stringify(prec) !== JSON.stringify(sopra)) disegna();
       return;
     }
-    if (presa.tipo === 'vista') { pat.cx = presa.cx - (e.clientX - presa.sx) / pat.z; pat.cy = presa.cy - (e.clientY - presa.sy) / pat.z; disegna(); }
+    if (presa.tipo === 'vista') { presa.ux = e.clientX; presa.uy = e.clientY; pat.cx = presa.cx - (e.clientX - presa.sx) / pat.z; pat.cy = presa.cy - (e.clientY - presa.sy) / pat.z; disegna(); }
     else if (presa.tipo === 'reticolo') { comp.reticolo[presa.v] = [Math.round(x), Math.round(y)]; disegna(); }
     else if (presa.tipo === 'posto') {
       if (!presa.mosso && Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5) return;
@@ -550,6 +581,13 @@ tela.addEventListener('pointermove', (e) => {
     return;
   }
   const [x, y] = aMondo(e);
+  if (presa?.tipo === 'finestra') {
+    const f = cel().finestra, g = presa.orig;
+    if (presa.parte === 'bordo') f.centro = [Math.round(g.centro[0] + x - presa.x), Math.round(g.centro[1] + y - presa.y)];
+    else f.lato = Math.round(Math.max(20, 2 * Math.max(Math.abs(x - f.centro[0]), Math.abs(y - f.centro[1]))));
+    disegna(); return;
+  }
+  if (!presa && colpisciFinestra(x, y)) { tela.style.cursor = colpisciFinestra(x, y) === 'angolo' ? 'nwse-resize' : 'move'; return; }
   if (!presa) {
     // la sonda: passando sopra una linea si vedono le forze che agiscono lì
     const prec = sonda; sonda = strumento === 'seleziona' ? vicinoTraccia(x, y, 9) : null;
@@ -561,7 +599,6 @@ tela.addEventListener('pointermove', (e) => {
   if (presa.tipo === 'sorgente' && presa.parte === 'corpo') o.pos = [g.pos[0] + dx, g.pos[1] + dy];
   if (presa.tipo === 'sorgente' && presa.parte === 'freccia') { o.dir = Math.atan2(y - o.pos[1], x - o.pos[0]); if (!specieDi(o)?.luce) o.v = Math.max(0, (Math.hypot(x - o.pos[0], y - o.pos[1]) / px(1.6) - 6) / 2.2); }
   if (presa.tipo === 'massa') o.pos = [g.pos[0] + dx, g.pos[1] + dy];
-  if (presa.tipo === 'parete') { if (presa.parte !== 'b') o.a = [g.a[0] + dx, g.a[1] + dy]; if (presa.parte !== 'a') o.b = [g.b[0] + dx, g.b[1] + dy]; }
   if (presa.tipo === 'dominio' && o.forma.tipo === 'cerchio') {
     if (presa.parte === 'raggio') o.forma.r = Math.max(2, Math.hypot(x - o.forma.centro[0], y - o.forma.centro[1]));
     else o.forma.centro = [g.forma.centro[0] + dx, g.forma.centro[1] + dy];
@@ -571,10 +608,18 @@ tela.addEventListener('pointermove', (e) => {
 tela.addEventListener('pointerup', () => {
   if (vista === 'pattern' && presa) {
     if (presa.tipo === 'posto' && !presa.mosso) { scelto = { e: presa.e, p: presa.p }; presa = null; entra(scelto.e); return; }
+    if (presa.tipo === 'vista' && !comp.reticolo && Math.hypot(presa.ux - presa.sx, presa.uy - presa.sy) < 5) { presa = null; entra(0); return; }
     presa = null; mostraPannello(); disegna(); return;
   }
   if (presa) { presa = null; prima = null; aggiornaTempo(); disegna(); mostraPannello(); }
 });
+function colpisciFinestra(x, y) {
+  const f = cel()?.finestra; if (!f) return null;
+  const l = f.lato / 2, dx = x - f.centro[0], dy = y - f.centro[1], r = px(8);
+  if (Math.hypot(dx - l, dy - l) < r * 1.5) return 'angolo';
+  const fuori = Math.max(Math.abs(dx), Math.abs(dy));
+  return Math.abs(fuori - l) < r ? 'bordo' : null;
+}
 tela.addEventListener('pointerleave', () => { if (sopra || sonda) { sopra = null; sonda = null; disegna(); } });
 tela.addEventListener('wheel', (e) => {
   if (vista !== 'pattern') return;
@@ -591,15 +636,13 @@ function aggiungi(cosa, x, y) {
     c.sorgenti.push({ pos: [x, y], dir: 0, v: 8, specie: nome }); sel = { tipo: 'sorgente', i: c.sorgenti.length - 1 };
   } else if (cosa === 'campo') { c.domini.push({ nome: 'campo', forma: { tipo: 'cerchio', centro: [x, y], r: 40 }, B: 0.3, K: 0, n: 1 }); sel = { tipo: 'dominio', i: c.domini.length - 1 }; }
   else if (cosa === 'materia') { c.domini.push({ nome: 'materia', forma: { tipo: 'cerchio', centro: [x, y], r: 40 }, B: c.fondo.B, K: 20, n: 1 }); sel = { tipo: 'dominio', i: c.domini.length - 1 }; }
-  else if (cosa === 'vetro') { c.domini.push({ nome: 'vetro', forma: { tipo: 'cerchio', centro: [x, y], r: 30 }, B: 0, K: 0, n: 1.5 }); sel = { tipo: 'dominio', i: c.domini.length - 1 }; }
   else if (cosa === 'massa') { c.masse.push({ pos: [x, y], M: 300, R: 5 }); sel = { tipo: 'massa', i: c.masse.length - 1 }; }
-  else if (cosa === 'specchio') { c.pareti.push({ a: [x - 25, y], b: [x + 25, y], tipo: 'specchio' }); sel = { tipo: 'parete', i: c.pareti.length - 1 }; }
   scegliStrumento('seleziona'); aggiorna();
 }
 function elimina() {
   if (vista === 'pattern') { if (scelto) togliPosto(scelto.e, scelto.p); return; }
   if (!sel) return; const c = cel(); ricorda();
-  const lista = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse, parete: c.pareti }[sel.tipo];
+  const lista = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse }[sel.tipo];
   if (lista) lista.splice(sel.i, 1);
   sel = null; aggiorna();
 }
@@ -615,7 +658,7 @@ const SPIEGA = {
   massa: "massa m: l'inerzia. Alla stessa velocità, più pesante = curva più larga (r = m·v/(q·B)) e più strada. Ma chi nasce da un decadimento riceve una spinta fissa: lì più pesante = più lenta, e si ferma prima. La gravità invece la fa cadere uguale, leggera o pesante.",
   energia: 'energia: per la luce fa le veci della massa. Decide quanta spinta hanno le figlie quando il fotone si converte.',
   vita: 'vita: dopo quanto tempo decade nelle sue figlie (✳ verde sulla scena).',
-  visibile: 'visibile: se lascia traccia sulla pellicola. Nelle camere a bolle le neutre e la luce non lasciano bolle.',
+  visibile: 'visibile: se lascia traccia sulla lastra. Nelle camere a bolle le neutre e la luce non lasciano bolle.',
   angolo: 'angolo: la direzione della figlia rispetto a quella della madre, in gradi.',
   quota: 'quota: quale parte della spinta (quantità di moto) della madre si porta via. Più spinta, più veloce: curva più larga, più strada.',
   vInizio: 'velocità alla nascita: più veloce, curva più larga e più strada prima di fermarsi. La freccia sulla scena è la stessa cosa: trascinala.',
@@ -623,12 +666,10 @@ const SPIEGA = {
   t0: 'partenza: in che istante la sorgente emette.',
   B: 'campo magnetico B (blu): perpendicolare al foglio. Fa girare le cariche: raggio m·v/(q·B), più campo = curve più strette. Il segno sceglie il verso (⊙ esce dal foglio, ⊗ entra).',
   K: 'materia K (marrone, a puntini): quanto è denso il mezzo. Frena le cariche, e più sono lente più frenano: la curva si stringe in spirale fino all\'occhio. Zero: vuoto.',
-  n: 'indice n (azzurro): per la luce, quanto è lento il mezzo (vetro 1,5, acqua 1,33). Al bordo la luce si rifrange; da un mezzo lento a uno veloce può riflettersi tutta.',
   raggioDominio: 'raggio: fin dove arriva questa zona. Trascina il quadratino sul bordo.',
   M: 'massa M (rossa): quanto curva lo spazio intorno. Le particelle cadono verso di lei con G·M/r², la luce si piega il doppio. Nessuno la sposta: resta ferma.',
   R: 'raggio R: il corpo della massa. Chi lo tocca ci cade dentro e si ferma.',
-  tipoParete: 'specchio: riflette la luce, con l\'angolo di uscita uguale a quello di entrata. Schermo: la ferma. Le cariche non sentono né l\'uno né l\'altro.',
-  c: 'velocità della luce c in questo universo: il limite. La luce va a c/n.',
+  c: 'velocità della luce c in questo universo: il limite di ogni velocità.',
   tempo: 'durata dell\'esposizione: quanto a lungo la pellicola registra.',
   w0: 'spessore base della pellicola: quanto è grossa la bolla di una carica unitaria veloce.',
   saturazione: 'saturazione: quanto può ingrossare la traccia quando la particella rallenta (l\'occhio finale).',
@@ -643,7 +684,15 @@ function mostraPannello() {
   if (vista === 'pattern') pannelloPattern(h); else pannelloElemento(h);
   pannello.innerHTML = h.join('');
 }
+const controlliUniverso = (c) => `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button><button data-univ="dado" title="un universo a caso">🎲</button></div>`;
 function pannelloPattern(h) {
+  if (!comp.reticolo) {
+    const c = comp.elementi[0].cella;
+    h.push(`<h2>la sezione</h2>`, controlliUniverso(c), `<p class="nota">${comp.elementi[0].nota}</p>`);
+    h.push(`<p class="aiuto">Questo è il pattern: la finestra e la fetta di tempo scelte dentro l'universo n. ${c.seme}, così come sono. Nessuna copia e nessun montaggio. Sfoglia gli universi con le frecce o il dado; <b>clic sulla sezione</b> per entrare nell'universo e cercare un'altra inquadratura.</p>`);
+    h.push(`<div class="riga-bottoni"><button class="primo" data-entra="0">entra nell'universo →</button></div>`);
+    return;
+  }
   h.push(`<h2>${comp.nome}</h2><p class="nota">${comp.nota || ''}</p>`);
   h.push(`<p class="aiuto">Il pattern: la piastrella tratteggiata si ripete all'infinito. Ogni motivo è un <b>elemento</b>, un evento fisico. Passa sopra un motivo: si accendono tutte le sue copie. <b>Clic per entrarci</b> e cambiarne la fisica. Trascina un motivo per spostarlo (con tutte le sue copie); trascina il fondo per muoverti, rotella per lo zoom; i pallini a e b cambiano la piastrella.</p>`);
   h.push(`<h2>gli elementi (le parole)</h2>`);
@@ -667,9 +716,14 @@ function pannelloPattern(h) {
 function pannelloElemento(h) {
   const c = cel();
   h.push(`<div class="briciole"><button data-vista-p>← il pattern</button> <b>${el().nome}</b></div>`);
-  if (!sel) {
+  if (c.finestra && !sel) {
+    h.push(controlliUniverso(c));
     h.push(`<p class="nota">${el().nota || ''}</p>`);
-    h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo, materia, vetro), una massa, uno specchio, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
+    h.push(`<p class="aiuto">Un universo intero, estratto dal suo numero: nessuno l'ha costruito. La cornice arancione è la <b>sezione</b>: trascinane il bordo per spostarla, l'angolo per ingrandirla. La barra del tempo dice <b>fino a quando</b> guardare, la fetta <b>per quanto</b>. Il Pattern mostra solo la sezione, così com'è: niente copie, quello che si ripete si ripete in natura (i cristalli).</p>`);
+  }
+  if (!sel) {
+    if (!c.finestra) h.push(`<p class="nota">${el().nota || ''}</p>`);
+    if (!c.finestra) h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo o materia), una massa, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
     if (c.esposizioni) {
       const ds = c.esposizioni.flatMap((e) => e.domini), so = c.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0);
       h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra, ${(c.sagome || []).length} sagome.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; alla fine del tratto decade in particelle neutre, invisibili (la sua vita è il tempo per percorrerlo). Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Passa sopra una linea per vedere i suoi corridoi.</p>`);
@@ -685,9 +739,12 @@ function pannelloElemento(h) {
       gravita: c.masse.map((m, i) => riga('massa', i, m, `${m.nome || `massa ${i + 1}`} · M ${fmt(m.M)}, raggio ${fmt(m.R ?? 0)}`)),
       magnetico: c.domini.map((d, i) => (d.B ? riga('dominio', i, d, `${d.nome || `zona ${i + 1}`} · B ${fmt(d.B)} ${d.B > 0 ? '⊙' : '⊗'}`) : '')).filter(Boolean).concat(c.fondo.B ? [`<div class="ogg"><span>tutta la cella · B ${fmt(c.fondo.B)} (il fondo, sotto)</span></div>`] : []),
       materia: c.domini.map((d, i) => (d.K ? riga('dominio', i, d, `${d.nome || `zona ${i + 1}`} · densità ${fmt(d.K)}`) : '')).filter(Boolean).concat(c.fondo.K ? [`<div class="ogg"><span>tutta la cella · densità ${fmt(c.fondo.K)}</span></div>`] : []),
-      luce: [...c.domini.map((d, i) => ((d.n ?? 1) !== 1 ? riga('dominio', i, d, `${d.nome || `vetro ${i + 1}`} · indice ${fmt(d.n)}`) : '')).filter(Boolean), ...c.pareti.map((p, i) => riga('parete', i, p, `${p.tipo} ${i + 1}`))],
-      decadimento: Object.entries(c.specie).filter(([, sp]) => sp.vita != null && sp.figli?.length).map(([n, sp]) => `<div class="ogg"><span data-specie="${n}">${n} → ${[...new Set(sp.figli.map((f) => f.specie))].join(' + ')} dopo ${fmt(sp.vita)}</span></div>`),
+      decadimento: Object.entries(c.specie).filter(([, sp]) => (sp.vita ?? sp.vitaMedia) != null && sp.figli?.length).map(([n, sp]) => `<div class="ogg"><span data-specie="${n}">${n} → ${[...new Set(sp.figli.map((f) => f.specie))].join(' + ')} ${sp.vitaMedia != null ? `dopo ${fmt(sp.vitaMedia)} in media` : `dopo ${fmt(sp.vita)}`}</span></div>`),
     };
+    // i campi naturali di un universo: non sono oggetti messi, sono il suo clima
+    if (c.onde?.B?.length) gruppi.magnetico.push(`<div class="ogg"><span>il campo dell'universo: ${c.onde.B.length} onde lunghe</span></div>`);
+    (c.cristalli || []).forEach((k, i) => gruppi.magnetico.push(`<div class="ogg"><span>cristallo ${i + 1} · passo ${fmt(k.passo)}, raggio ${fmt(k.r)}</span></div>`));
+    if (c.nubi) gruppi.materia.push(`<div class="ogg"><span>nubi di materia · densità fino a ${fmt(c.nubi.K)}</span></div>`);
     h.push(`<h2>le leggi e gli oggetti</h2><p class="nota">⏻ spegne una legge o un oggetto nella fisica: la scena si rifà e in grigio resta com'era. «solo» mostra soltanto quella forza.</p>`);
     for (const [k, f] of Object.entries(FORZE)) {
       const righe = gruppi[k];
@@ -709,7 +766,7 @@ function pannelloElemento(h) {
     h.push(cursore('w0', c.pellicola, 'w0', 0.05, 4, 0.05, 'spessore base'));
     h.push(cursore('saturazione', c.pellicola, 'saturazione', 1, 10, 0.1));
     h.push(cursore('vRif', c.pellicola, 'vRif', 0.5, 30, 0.5, 'velocità di riferimento'));
-    h.push(`<label class="riga">bordo <select data-bordo>${['aperto', 'periodico', 'specchio'].map((b) => `<option ${c.bordo === b ? 'selected' : ''}>${b}</option>`).join('')}</select></label>`);
+    h.push(`<label class="riga">bordo <select data-bordo>${['aperto', 'periodico'].map((b) => `<option ${c.bordo === b ? 'selected' : ''}>${b}</option>`).join('')}</select></label>`);
     return;
   }
   if (sel.tipo === 'traccia') {
@@ -735,7 +792,6 @@ function pannelloElemento(h) {
     if (d.forma.tipo === 'cerchio') h.push(cursore('raggioDominio', d.forma, 'r', 2, 300, 0.5, 'raggio'));
     h.push(cursore('B', d, 'B', -1, 1, 0.005, 'campo magnetico B'));
     h.push(cursore('K', d, 'K', 0, 120, 0.5, 'materia K'));
-    h.push(cursore('n', d, 'n', 1, 2.5, 0.01, 'indice n'));
     h.push(misureDominio(d));
   } else if (sel.tipo === 'massa') {
     const m = c.masse[sel.i];
@@ -743,11 +799,6 @@ function pannelloElemento(h) {
     h.push(interruttore('massa', sel.i, m));
     h.push(cursore('M', m, 'M', 0, 4000, 5, 'massa M'));
     h.push(cursore('R', m, 'R', 0, 40, 0.5, 'raggio R'));
-  } else if (sel.tipo === 'parete') {
-    const p = c.pareti[sel.i];
-    h.push(`<h2>${p.tipo === 'assorbe' ? 'schermo' : 'specchio'} ${sel.i + 1}</h2><p class="nota">un segmento perpendicolare al piano, per la luce. Trascina gli estremi o il centro.</p>`);
-    h.push(interruttore('parete', sel.i, p));
-    h.push(`<label class="riga">tipo <select data-parete>${[['specchio', 'specchio'], ['assorbe', 'schermo nero']].map(([f, n]) => `<option value="${f}" ${p.tipo === f ? 'selected' : ''}>${n}</option>`).join('')}</select></label><p class="spiega">${SPIEGA.tipoParete}</p>`);
   }
   h.push(`<div class="riga-bottoni">${['traccia', 'specie'].includes(sel.tipo) ? '' : '<button data-azione="elimina">elimina</button>'}<button data-azione="chiudi">chiudi</button></div>`);
 }
@@ -756,8 +807,8 @@ function pannelloElemento(h) {
 const lastra = (c) => `<h2>la lastra</h2><div class="legge" style="--c:rgb(28,27,24)"><div class="testa"><label><input type="checkbox" data-lampo ${c.lampo === false ? '' : 'checked'}> <b>■ il lampo: ${(c.sagome || []).length} sagome</b></label></div><p class="spiega">Le campiture sono sagome di corpi opachi appoggiati sulla lastra: un lampo di luce uniforme, all'istante zero, ne imprime la forma piena, come in una radiografia. Non è una forza: è un modo in cui la lastra registra.</p></div>`;
 const interruttore = (tipo, i, o) => `<label class="riga interr"><span><b>acceso</b> — agisce sulla fisica${scattiTesto(o.interruttori, `${tipo}:${i}`)}</span><input type="checkbox" data-acceso="${tipo}:${i}" ${accesoOra(o) ? 'checked' : ''}></label>`;
 const scattiTesto = (ev, chi) => (ev && ev.length ? ` <span class="scatti">${ev.map((e) => `${e.acceso ? 'acceso' : 'spento'} a t ${fmt(e.t)}`).join(', ')} <button class="piccolo" data-togli-scatti="${chi}" title="togli gli scatti nel tempo">✕</button></span>` : '');
-function descriviDominio(d) { const p = []; if (d.B) p.push(`campo ${fmt(d.B)}`); if (d.K) p.push(`materia ${fmt(d.K)}`); if ((d.n ?? 1) !== 1) p.push(`vetro n ${fmt(d.n)}`); return p.join(', ') || 'vuoto'; }
-function descriviSpecie(s) { if (s.luce) return `luce${s.vita != null ? `, si converte dopo ${fmt(s.vita)}` : ''}`; return `q ${fmt(s.q ?? 0)}, m ${fmt(s.m ?? 1)}${s.vita != null ? `, decade dopo ${fmt(s.vita)}` : ''}`; }
+function descriviDominio(d) { const p = []; if (d.B) p.push(`campo ${fmt(d.B)}`); if (d.K) p.push(`materia ${fmt(d.K)}`); return p.join(', ') || 'vuoto'; }
+function descriviSpecie(s) { const v = s.vita != null ? `dopo ${fmt(s.vita)}` : s.vitaMedia != null ? `in media dopo ${fmt(s.vitaMedia)}` : null; if (s.luce) return `luce${v ? `, si converte ${v}` : ''}`; return `q ${fmt(s.q ?? 0)}, m ${fmt(s.m ?? 1)}${v ? `, decade ${v}` : ''}`; }
 function misureDominio(d) {
   const righe = [];
   for (const [nome, s] of Object.entries(cel().specie)) {
@@ -776,7 +827,7 @@ function pannelloSpecie(nome) {
   else { h.push(cursore('carica', s, 'q', -3, 3, 0.1, 'carica q', nome)); h.push(cursore('massa', s, 'm', 0.1, 40, 0.1, 'massa m', nome)); }
   h.push(`<label class="riga"><span>stabile</span><input type="checkbox" data-stabile="${nome}" ${s.vita == null ? 'checked' : ''}></label>`);
   if (s.vita != null) h.push(cursore('vita', s, 'vita', 0.001, 40, 0.01, 'vita', nome));
-  h.push(`<label class="riga"><span>visibile</span><input type="checkbox" data-visibile="${nome}" ${(s.visibile ?? (s.luce || (s.q ?? 0) !== 0)) ? 'checked' : ''}></label><p class="spiega">${SPIEGA.visibile}</p>`);
+  h.push(`<label class="riga"><span>visibile</span><input type="checkbox" data-visibile="${nome}" ${(s.visibile ?? (s.q ?? 0) !== 0) ? 'checked' : ''}></label><p class="spiega">${SPIEGA.visibile}</p>`);
   if (s.vita != null && s.figli?.length) {
     h.push(`<div class="nota">quando decade (✳) nasce:</div>`);
     s.figli.forEach((f, k) => {
@@ -817,6 +868,7 @@ pannello.addEventListener('change', (e) => {
   const t = e.target;
   if (registro.has(t.dataset.per || t.id)) { prima = null; disegna(); return; }
   if (t.id === 'nuovoChi' || t.id === 'nuovoK') return;
+  if (t.dataset.univN != null) { const n = parseInt(t.value); if (n > 0) cambiaUniverso(n); return; }
   if (t.dataset.acceso) { const [tipo, i] = t.dataset.acceso.split(':'); cambiaOggetto(tipo, +i, t.checked); return; }
   if (t.dataset.legge) { cambiaLegge(t.dataset.legge, t.checked); return; }
   if (t.dataset.lampo != null) { ricorda(); confronta(t.checked ? 'com\'era senza il lampo' : 'com\'era con il lampo'); if (t.checked) delete cel().lampo; else cel().lampo = false; aggiorna(); return; }
@@ -827,7 +879,6 @@ pannello.addEventListener('change', (e) => {
     const c = cel();
     if (t.dataset.bordo != null) c.bordo = t.value;
     if (t.dataset.forma != null) { const d = c.domini[sel.i]; d.forma = t.value === 'tutto' ? { tipo: 'tutto' } : { tipo: 'cerchio', centro: [c.larghezza / 2, c.altezza / 2], r: c.larghezza * 0.3 }; }
-    if (t.dataset.parete != null) c.pareti[sel.i].tipo = t.value;
     if (t.dataset.specieSorgente != null) c.sorgenti[sel.i].specie = t.value;
     if (t.dataset.stabile) { const s = c.specie[t.dataset.stabile]; if (t.checked) delete s.vita; else s.vita = 2; }
     if (t.dataset.visibile) c.specie[t.dataset.visibile].visibile = t.checked;
@@ -844,9 +895,10 @@ pannello.addEventListener('click', (e) => {
   const t = e.target.closest('button,[data-sel],[data-specie]'); if (!t) return;
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
+  if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(d.univ === 'dado' ? 1 + Math.floor(Math.random() * 999999) : Math.max(1, n + +d.univ)); }
   if (d.togliScatti) {
     const [tipo, i] = d.togliScatti.split(':');
-    if (tipo === 'legge') leggi[i] = true; else { ricorda(); const o = { sorgente: cel().sorgenti, dominio: cel().domini, massa: cel().masse, parete: cel().pareti }[tipo][+i]; delete o.interruttori; }
+    if (tipo === 'legge') leggi[i] = true; else { ricorda(); const o = { sorgente: cel().sorgenti, dominio: cel().domini, massa: cel().masse }[tipo][+i]; delete o.interruttori; }
     return aggiorna();
   }
   if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
@@ -876,14 +928,12 @@ function mostraSchede() {
   const c = vista === 'pattern' ? null : cel(), conta = {};
   if (c) {
     conta.gravita = c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'nessuna';
-    const tuttiDomini = [...c.domini, ...(c.esposizioni || []).flatMap((e) => e.domini)], tuttePareti = [...c.pareti, ...(c.esposizioni || []).flatMap((e) => e.pareti)];
-    const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length, zn = tuttiDomini.filter((d) => (d.n ?? 1) !== 1).length;
-    conta.magnetico = zB ? `${zB} ${zB === 1 ? 'zona' : 'zone'}` : 'nessuno';
-    conta.materia = zK ? `${zK} ${zK === 1 ? 'zona' : 'zone'}` : 'nessuna';
-    const luci = Object.values(c.specie).filter((s) => s.luce).length;
-    const specchi = tuttePareti.filter((p) => p.tipo === 'specchio').length;
-    conta.luce = specchi || zn || luci ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
-    const dec = Object.values(c.specie).filter((s) => s.vita != null).length;
+    const tuttiDomini = [...c.domini, ...(c.esposizioni || []).flatMap((e) => e.domini)];
+    const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length;
+    const naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length;
+    conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, c.onde?.B?.length && 'campo naturale', (c.cristalli || []).length && `${c.cristalli.length} cristalli`].filter(Boolean).join(', ') : 'nessuno';
+    conta.materia = zK || c.nubi ? [zK && `${zK} ${zK === 1 ? 'zona' : 'zone'}`, c.nubi && 'nubi'].filter(Boolean).join(', ') : 'nessuna';
+    const dec = Object.values(c.specie).filter((s) => s.vita != null || s.vitaMedia != null).length;
     conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'niente';
   }
   // ogni scheda: il nome (clic: vista «solo questa forza») e l'interruttore ⏻ (la legge agisce o no)
@@ -904,8 +954,8 @@ function cambiaLegge(k, acceso) {
   aggiorna(); mostraSchede();
 }
 function cambiaOggetto(tipo, i, acceso) {
-  const c = cel(), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse, parete: c.pareti }[tipo]?.[i]; if (!o) return;
-  const chi = o.nome || ({ sorgente: 'questa sorgente', dominio: 'questa zona', massa: 'questa massa', parete: 'questo specchio' })[tipo];
+  const c = cel(), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse }[tipo]?.[i]; if (!o) return;
+  const chi = o.nome || ({ sorgente: 'questa sorgente', dominio: 'questa zona', massa: 'questa massa' })[tipo];
   ricorda();
   if (aMeta() && tipo !== 'sorgente') {
     // l'interruttore scatta adesso: prima di questo istante non cambia niente, dopo sì
@@ -939,14 +989,15 @@ document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('cli
 document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { vista = b.dataset.modo === 'spaziotempo' ? 'spaziotempo' : 'dettaglio'; aggiornaVista(); }));
 const v3 = creaVista3D(tela3d, { spunte: () => ({ linee: true, pianta: true, taglio: true, forze: false, masse: true, campi: true }) });
 function imposta3D() {
-  const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }, (d.n ?? 1) !== 1 && { tipo: 'luce' }].filter(Boolean) }));
+  const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }].filter(Boolean) }));
   v3.imposta({ masse: c.masse, blocchi }, tracce);
 }
 // la riga in basso: dove sei e che cosa puoi fare
 function dove() {
   const t = vista === 'pattern'
-    ? `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`
-    : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', specchio: 'lo specchio', vetro: 'il vetro' })[strumento]} (Esc per annullare).`
+    ? (!comp.reticolo ? `La sezione dell'universo n. ${comp.elementi[0].cella.seme}: clic per entrare nell'universo e cambiare inquadratura; ◀ ▶ 🎲 per sfogliare la biblioteca.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
+    : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
+    : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
     : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
     : solo ? `Vedi solo ${FORZE[solo].art}: ${solo === 'decadimento' ? 'in verde le particelle nate da un decadimento, le stelle dove avviene' : 'le linee si accendono dove questa forza le piega, tanto più quanto più conta'}. Clic di nuovo sul nome per tornare a tutto.`
     : aMeta() ? `t ${fmt(ora())}: ora ogni ⏻ scatta in questo istante, e le traiettorie cambiano da qui in poi (le tacche sulla linea del tempo). Porta il tempo alla fine per accendere o spegnere per tutta la storia.`
@@ -1007,12 +1058,27 @@ $('fileSeme').addEventListener('change', async (ev) => {
 $('usaSeme').addEventListener('click', () => { try { const n = JSON.parse($('testoSeme').value); if (!n.elementi || !n.reticolo) throw new Error('mancano gli elementi o la piastrella'); ricorda(); carica(n); $('dialogoSeme').close(); } catch (e) { alert(`Il seme non si legge: ${e.message}`); } });
 $('chiudiSeme').addEventListener('click', () => $('dialogoSeme').close());
 
+// ---------- la biblioteca: un universo per ogni numero
+function compBiblioteca(n, finestra, sezione) {
+  const u = universo(n);
+  if (finestra) u.cella.finestra = clona(finestra);
+  if (sezione) u.cella.sezione = clona(sezione);
+  return { nome: u.nome, nota: u.nota, reticolo: null, elementi: [{ nome: u.nome, nota: u.nota, cella: u.cella, posti: [{ pos: [0, 0], rot: 0 }] }] };
+}
+function cambiaUniverso(n) {
+  // stessa inquadratura, stessa fetta di tempo: un altro universo
+  const c = comp.elementi[0].cella, nuova = compBiblioteca(n, c.finestra, c.sezione);
+  ricorda(); comp = nuova; corrente = 0; sel = null; scelto = null;
+  if (vista === 'pattern') { adattaPattern(); aggiornaVista(); } else entra(0);
+}
+
 // ---------- «Da dove partiamo?»: un'immagine, l'esempio, un modello, il vuoto
 function apriNuovo() {
   const carte = [
-    `<button data-carta="immagine" class="grande"><b>Un'immagine…</b><span>dal computer: viene pulita, letta e rifatta con la fisica, tratto per tratto</span></button>`,
+    `<button data-carta="biblioteca" class="grande"><b>La biblioteca</b><span>un universo naturale estratto da un numero: masse, campi, nubi, cristalli, raggi cosmici. Il pattern non si costruisce, si trova: una finestra e una fetta di tempo</span></button>`,
+    `<button data-carta="immagine"><b>Un'immagine…</b><span>dal computer: viene pulita, letta e rifatta con la fisica, tratto per tratto</span></button>`,
     `<button data-carta="esempio"><b>Esempio: tavola greca</b><span>Owen Jones, «Grammar of Ornament», 1856: la stessa lettura, già pronta da provare</span></button>`,
-    ...Object.entries(COMPOSIZIONI).map(([k, f]) => `<button data-carta="modello" data-nome="${k}"><b>${k}</b><span>${f().nota}</span></button>`),
+    ...Object.entries(COMPOSIZIONI).map(([k, f]) => `<button data-carta="modello" data-nome="${k}"><b>${k}</b><span>composto a mano: ${f().nota}</span></button>`),
     `<button data-carta="vuoto"><b>Vuoto</b><span>una cella con una sola particella in un campo: da qui si costruisce tutto</span></button>`,
   ];
   $('carte').innerHTML = carte.join('');
@@ -1023,13 +1089,14 @@ $('carte').addEventListener('click', (e) => {
   const b = e.target.closest('[data-carta]'); if (!b) return;
   $('nuovo').close();
   const k = b.dataset.carta;
-  if (k === 'immagine') $('fileImmagine').click();
+  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); entra(0); }
+  else if (k === 'immagine') $('fileImmagine').click();
   else if (k === 'esempio') daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6');
   else if (k === 'modello') { ricorda(); carica(COMPOSIZIONI[b.dataset.nome]()); }
   else if (k === 'vuoto') {
     ricorda();
     carica({ nome: 'nuovo', nota: 'una particella in un campo magnetico: aggiungi campi, materia, masse, specchi', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [{ nome: 'elemento 1', nota: '', posti: [{ pos: [0, 0], rot: 0 }], cella: {
-      larghezza: 200, altezza: 200, c: 30, G: 1, bordo: 'aperto', tempo: 40, fondo: { B: 0.15, K: 0, n: 1 }, domini: [], masse: [], pareti: [],
+      larghezza: 200, altezza: 200, c: 30, G: 1, bordo: 'aperto', tempo: 40, fondo: { B: 0.15, K: 0 }, domini: [], masse: [],
       pellicola: { w0: 1, saturazione: 4, vRif: 8 }, specie: { carica: { q: 1, m: 1 } }, sorgenti: [{ pos: [60, 100], dir: 0, v: 8, specie: 'carica' }] } }] });
     entra(0);
   }
@@ -1085,17 +1152,17 @@ function aggiornaTempo() {
   const m = tMax(), t = Math.min(tempo, m); cursoreT.value = t / m; $('otempo').textContent = `t ${fmt(t)} / ${fmt(m)}`;
   // le tacche sulla linea del tempo: dove scatta un interruttore
   const c = cel(), tacche = [];
-  for (const [lista, col] of [[c.domini, null], [c.masse, FORZE.gravita.col], [c.pareti, FORZE.luce.col]]) for (const o of lista) for (const e of o.interruttori || []) tacche.push({ t: e.t, acceso: e.acceso, col: col || (o.B ? FORZE.magnetico.col : o.K ? FORZE.materia.col : FORZE.luce.col), chi: o.nome || 'un oggetto' });
+  for (const [lista, col] of [[c.domini, null], [c.masse, FORZE.gravita.col]]) for (const o of lista) for (const e of o.interruttori || []) tacche.push({ t: e.t, acceso: e.acceso, col: col || (o.B ? FORZE.magnetico.col : FORZE.materia.col), chi: o.nome || 'un oggetto' });
   for (const [k, v] of Object.entries(leggi)) if (Array.isArray(v)) for (const e of v) tacche.push({ t: e.t, acceso: e.acceso, col: FORZE[k].col, chi: FORZE[k].art });
   const firma = JSON.stringify(tacche) + m;
   if (firma !== firmaScatti) { firmaScatti = firma; $('scatti').innerHTML = tacche.map((e) => `<i class="${e.acceso ? '' : 'spento'}" style="left:${(100 * e.t) / m}%;background:${rgb(e.col)}" title="t ${fmt(e.t)}: ${e.acceso ? 'si accende' : 'si spegne'} ${e.chi}"></i>`).join(''); }
   // gli interruttori mostrano lo stato di adesso
-  document.querySelectorAll('[data-acceso]').forEach((el) => { const [tipo, i] = el.dataset.acceso.split(':'), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse, parete: c.pareti }[tipo]?.[+i]; if (!o) return; const a = tipo === 'sorgente' ? accesoA(o, o.t0 ?? 0) : accesoOra(o); el.checked = a; el.closest('.ogg')?.classList.toggle('spento', !a); });
+  document.querySelectorAll('[data-acceso]').forEach((el) => { const [tipo, i] = el.dataset.acceso.split(':'), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse }[tipo]?.[+i]; if (!o) return; const a = tipo === 'sorgente' ? accesoA(o, o.t0 ?? 0) : accesoOra(o); el.checked = a; el.closest('.ogg')?.classList.toggle('spento', !a); });
   document.querySelectorAll('[data-legge]').forEach((el) => { const a = leggeOra(el.dataset.legge); el.checked = a; el.closest('.scheda, .legge')?.classList.toggle('spenta', !a); });
   dove();
 }
-cursoreT.addEventListener('input', () => { if (vista === 'pattern') return; tempo = +cursoreT.value >= 0.999 ? Infinity : +cursoreT.value * tMax(); gioca = false; $('gioca').textContent = '▶'; aggiornaTempo(); disegna(); });
-$('fetta').addEventListener('input', () => { fetta = +$('fetta').value * tMax(); $('ofetta').textContent = fetta ? `fetta ${fmt(fetta)}` : 'tutta la storia'; disegna(); });
+cursoreT.addEventListener('input', () => { if (vista === 'pattern') return; tempo = +cursoreT.value >= 0.999 ? Infinity : +cursoreT.value * tMax(); gioca = false; $('gioca').textContent = '▶'; salvaSezione(); aggiornaTempo(); disegna(); });
+$('fetta').addEventListener('input', () => { fetta = +$('fetta').value * tMax(); $('ofetta').textContent = fetta ? `fetta ${fmt(fetta)}` : 'tutta la storia'; salvaSezione(); disegna(); });
 $('gioca').addEventListener('click', () => { if (vista === 'pattern') return; gioca = !gioca; $('gioca').textContent = gioca ? '❚❚' : '▶'; if (gioca && tempo >= tMax()) tempo = 0; if (gioca) passo(); });
 let ultimo = 0;
 function passo(adesso = performance.now()) {

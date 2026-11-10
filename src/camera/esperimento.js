@@ -50,8 +50,6 @@ export function storia(tr, esp) {
   if (leggi.has('magnetico')) cosa.push('il campo magnetico lo fa girare');
   if (leggi.has('materia')) cosa.push('la materia lo frena e la curva si stringe');
   if (leggi.has('gravita')) cosa.push(s.luce ? 'una massa piega il suo cammino' : 'una massa lo attira');
-  if (leggi.has('specchio')) cosa.push('si riflette su uno specchio');
-  if (leggi.has('rifrazione')) cosa.push('cambia mezzo e si rifrange');
   if (!cosa.length) cosa.push('nessuna forza: va dritto');
   const FINI = { ferma: 'si ferma: la macchia tonda in fondo è il picco di Bragg', decade: s.figli?.length ? 'decade: qui nascono le sue figlie' : 'decade in particelle neutre, invisibili: la linea finisce qui', fuori: 'esce dalla cella', tempo: 'la pellicola smette di registrare', assorbita: 'uno schermo nero lo ferma', caduta: 'cade sul corpo di una massa' };
   const lung = P.reduce((L, p, i) => (i && P[i - 1][2] && p[2] ? L + Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]) : L), 0);
@@ -80,8 +78,8 @@ export function fiore(N = 6) {
     nota: 'un nucleo decade in fotoni a raggiera; ogni fotone diventa una coppia + e −, che il campo magnetico richiude in un petalo',
     cella: {
       larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 12,
-      fondo: { B: 0, K: 0, n: 1 },
-      domini: [{ nome: 'il campo del fiore', forma: { tipo: 'cerchio', centro: [100, 100], r: 92 }, B: 0.32, K: 42, n: 1 }],
+      fondo: { B: 0, K: 0, },
+      domini: [{ nome: 'il campo del fiore', forma: { tipo: 'cerchio', centro: [100, 100], r: 92 }, B: 0.32, K: 42, }],
       masse: [], pareti: [],
       pellicola: { w0: 0.9, saturazione: 4, vRif: 9 },
       specie: {
@@ -106,8 +104,8 @@ export function voluta() {
     nota: 'una neutra decade in + e −: girano in versi opposti e si avvolgono finché la materia le ferma',
     cella: {
       larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 90,
-      fondo: { B: 0, K: 0, n: 1 },
-      domini: [{ nome: 'il campo', forma: { tipo: 'tutto' }, B: 0.3, K: 4, n: 1 }],
+      fondo: { B: 0, K: 0, },
+      domini: [{ nome: 'il campo', forma: { tipo: 'tutto' }, B: 0.3, K: 4, }],
       masse: [], pareti: [],
       pellicola: { w0: 1.1, saturazione: 4.5, vRif: 7 },
       specie: {
@@ -120,46 +118,21 @@ export function voluta() {
   };
 }
 
-// LA LENTE GRAVITAZIONALE. Una massa al centro; raggi di luce paralleli le
-// passano accanto e si piegano verso di lei (il doppio di quanto farebbe un
-// sasso), incrociandosi dietro: una caustica. Una particella lenta le orbita
-// attorno: l'ellisse che ruota (con un filo di campo magnetico) è la rosetta.
-export function lente() {
-  const sorgenti = [];
-  for (let k = -9; k <= 9; k++) if (k) sorgenti.push({ pos: [0, 100 + k * 9.5], dir: 0, specie: 'luce' });
-  sorgenti.push({ pos: [100, 52], dir: 0, v: 4.4, specie: 'satellite' });
+// L'ORBITA. Una massa ferma, e alcune cariche lente che le passano accanto: la
+// gravità le trattiene, un filo di campo magnetico fa ruotare l'ellisse. Ne
+// esce la rosetta, la stessa figura delle orbite che precedono.
+export function orbita() {
+  const sorgenti = [[100, 52, 4.4], [100, 30, 3.6], [100, 66, 5.2]].map(([x, y, v]) => ({ pos: [x, y], dir: 0, v, specie: 'satellite' }));
   return {
-    nome: 'la lente',
-    nota: 'una massa ferma piega la luce che le passa accanto e trattiene in orbita una carica lenta',
+    nome: "l'orbita",
+    nota: 'una massa ferma trattiene alcune cariche lente; un campo debole fa ruotare le loro ellissi in rosette',
     cella: {
-      larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 60,
-      fondo: { B: 0.012, K: 0, n: 1 },
-      domini: [], pareti: [],
+      larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 90,
+      fondo: { B: 0.012, K: 0 },
+      domini: [],
       masse: [{ nome: 'la massa', pos: [100, 100], M: 900, R: 7 }],
-      pellicola: { w0: 0.8, saturazione: 3, vRif: 5 },
-      specie: { luce: { luce: true, m: 1 }, satellite: { q: 0.4, m: 1, visibile: true } },
-      sorgenti,
-    },
-    ripetizione: { tipo: 'quadrato', colonne: 3, righe: 2 },
-  };
-}
-
-// LA GOCCIA. Raggi di sole paralleli attraversano una goccia di vetro: entrando
-// e uscendo si rifrangono (Snell) e si incrociano dietro di lei in una caustica,
-// la stessa luce concentrata che fa una goccia d'acqua su un tavolo.
-export function goccia() {
-  const sorgenti = [];
-  for (let k = -12; k <= 12; k++) sorgenti.push({ pos: [0, 100 + k * 3.6], dir: 0, specie: 'luce' });
-  return {
-    nome: 'la goccia',
-    nota: 'raggi paralleli attraversano una goccia di vetro, si rifrangono e si incrociano in una caustica',
-    cella: {
-      larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 12,
-      fondo: { B: 0, K: 0, n: 1 },
-      domini: [{ nome: 'la goccia di vetro', forma: { tipo: 'cerchio', centro: [70, 100], r: 46 }, B: 0, K: 0, n: 1.5 }],
-      masse: [], pareti: [],
-      pellicola: { w0: 0.9, saturazione: 3, vRif: 10 },
-      specie: { luce: { luce: true, m: 1 } },
+      pellicola: { w0: 0.6, saturazione: 3, vRif: 5 },
+      specie: { satellite: { q: 0.4, m: 1 } },
       sorgenti,
     },
     ripetizione: { tipo: 'quadrato', colonne: 3, righe: 2 },
@@ -176,8 +149,8 @@ export function palmetta(N = 7) {
     nota: 'una neutra decade in un ventaglio di cariche: quelle a sinistra sono negative e girano verso sinistra, quelle a destra positive e girano verso destra',
     cella: {
       larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 60,
-      fondo: { B: 0, K: 0, n: 1 },
-      domini: [{ nome: 'il campo', forma: { tipo: 'tutto' }, B: 0.22, K: 7, n: 1 }],
+      fondo: { B: 0, K: 0, },
+      domini: [{ nome: 'il campo', forma: { tipo: 'tutto' }, B: 0.22, K: 7, }],
       masse: [], pareti: [],
       pellicola: { w0: 1, saturazione: 4, vRif: 7 },
       specie: {
@@ -190,7 +163,7 @@ export function palmetta(N = 7) {
   };
 }
 
-export const PRESET = { fiore, voluta, palmetta, lente, goccia };
+export const PRESET = { fiore, voluta, palmetta, orbita };
 
 // ---------- la stessa storia in un mondo più grande (o più piccolo)
 // Una similitudine della fisica: le lunghezze e i tempi si moltiplicano per k,
@@ -250,18 +223,13 @@ export const COMPOSIZIONI = {
     fi.posti.push({ pos: [100, 80], rot: 0 });
     return { nome: 'palmette sfalsate', nota: 'palmette su un reticolo sfalsato, un bocciolo tra l\'una e l\'altra', reticolo: { a: [200, 0], b: [100, 160] }, elementi: [pa, fi] };
   },
-  'lenti': () => {
-    const le = elemento(lente());
-    le.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 90 });
-    return { nome: 'lenti', nota: 'masse che piegano la luce, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [le] };
-  },
-  'gocce': () => {
-    const go = elemento(goccia());
-    go.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 180 });
-    return { nome: 'gocce', nota: 'gocce di vetro che concentrano la luce, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [go] };
+  'orbite': () => {
+    const or = elemento(orbita());
+    or.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 90 });
+    return { nome: 'orbite', nota: 'rosette di cariche intorno a masse ferme, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [or] };
   },
 };
-export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, lente, goccia };
+export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, orbita };
 export const nuovoElemento = (chi, k = 1) => elemento(ELEMENTI[chi](), k);
 
 // spostare tutto un mondo non cambia la sua fisica: si porta il centro del

@@ -5,176 +5,125 @@ tramite regole di generazione geometrica.
 
 ## La camera: il pattern come sezione di un universo possibile
 
-`index.html` è la camera. Ogni motivo è la fotografia di un evento fisico in
-una cella di spaziotempo: in uno dei tanti universi possibili, le masse, i
-campi e i mezzi stanno esattamente dove servono perché, guardato da qui,
-quell'evento abbia la forma del motivo.
+`index.html` è l'app (anche come programma da scrivania, vedi sotto). Ogni
+motivo è la fotografia di un evento fisico: particelle che attraversano uno
+spazio dove la natura ha messo masse, campi e materia. Niente oggetti
+costruiti: niente specchi, vetri, schermi o fasci di luce.
 
-**Il seme è la storia: le condizioni iniziali.** La piastrella e i posti
-degli elementi; per ogni elemento dove stanno le masse, dove
-c'è campo magnetico, dove c'è materia, dove c'è vetro, dove sono gli specchi,
-che cosa sono le particelle (carica, massa, vita, in che cosa decadono) e dove
-nascono, verso dove, a che velocità. Le leggi sono fisse; ogni linea, ogni
-spessore, ogni occhio è conseguenza.
-
-Le leggi (`src/camera/mondo.js`) sono cinque, quelle del nostro universo:
+### Le quattro leggi (`src/camera/mondo.js`)
 
 | legge | che cosa fa | che forma dà |
 |---|---|---|
-| gravità | masse ferme curvano lo spazio; chi passa segue la curvatura ma non sposta la massa. Le particelle cadono con a = G·M/r², uguale per tutte (equivalenza); la luce si piega il doppio, come in un vetro di indice n = 1 + 2GM/(rc²) | orbite, rosette, lenti, caustiche |
-| magnetismo | nei domini con campo B una carica gira con ω = qB/m | archi di cerchio, versi opposti per + e − |
-| materia | nei domini con densità K una carica frena (Bethe, dv/dt = −Kq²/(mv²)) e si ferma dopo m·v⁴/(4Kq²) | la spirale che si stringe, l'occhio (picco di Bragg) |
-| ottica | solo per la luce: va a c/n; al confine tra mezzi si rifrange (Snell) o si riflette tutta; gli specchi la riflettono, gli schermi la fermano. Le cariche non sentono né specchi né vetri | fuochi, caustiche, raggi spezzati |
-| decadimento | dopo la sua vita una particella si divide nelle figlie della sua specie | il centro da cui partono i petali, le forcelle, i ventagli |
+| gravità | masse ferme curvano lo spazio; chi passa segue la curvatura ma non sposta la massa. Le particelle cadono con a = G·M/r², uguale per tutte (equivalenza); la luce si piega il doppio | orbite, rosette |
+| magnetismo | dove c'è campo B (a zone, o continuo come in natura: onde lunghe, cristalli) una carica gira con ω = qB/m | archi, spirali, trocoidi, versi opposti per + e − |
+| materia | dove c'è materia (a zone o a nubi) una carica frena (Bethe, dv/dt = −Kq²/(mv²)) e si ferma dopo m·v⁴/(4Kq²) | la spirale che si stringe, l'occhio (picco di Bragg) |
+| decadimento | una particella instabile si divide nelle figlie della sua specie; ognuna decade quando capita (la specie dà la vita media; angoli e quote possono essere a caso in un intervallo, ripetibili dal seme) | centri, forcelle, ventagli, sciami |
 
-La **lastra** registra: le cariche come bolle, con lo spessore che cresce
-quando la particella rallenta; la luce come un filo; le neutre non si vedono.
-E registra le **sagome**: corpi opachi appoggiati sopra, impressi da un lampo
-di luce all'istante zero. La lastra non è una forza: è ciò su cui l'evento
-resta scritto, e ha il suo interruttore (il lampo).
-Le particelle sono corpi di prova: non spostano le masse né si attirano tra
-loro, quindi non c'è problema a molti corpi e il calcolo è leggero (ogni
-evento di partenza si simula in pochi millisecondi). Dentro un dominio senza
-masse il passo è esatto (rotazione, Bethe in forma chiusa, corda dell'arco).
+Le particelle sono corpi di prova: non spostano le masse e non si attirano
+tra loro, quindi niente problema a molti corpi e calcolo leggero. Dove il campo
+è uniforme il passo è esatto (rotazione, Bethe in forma chiusa, corda
+dell'arco); vicino alle masse la gravità entra con mezzi calci (Verlet); nei
+campi continui il passo resta piccolo rispetto alla loro lunghezza d'onda.
 
-**Il laboratorio** (`src/camera/laboratorio.js`) ha tre livelli, sempre
-collegati:
+**La lastra** non è una legge: è ciò su cui l'evento resta scritto. Registra
+le cariche come bolle, con lo spessore che cresce quando la particella
+rallenta; le neutre e la luce non lasciano traccia. Per le immagini lette
+registra anche le **sagome**: corpi opachi appoggiati sopra, impressi da un
+lampo all'istante zero (le campiture), con il loro interruttore.
 
-- **Il pattern.** La piastrella (due vettori a e b) si ripete all'infinito.
-  Ogni motivo è un *elemento*: un evento fisico nella sua cella, messo in uno o
-  più *posti* della piastrella (con una rotazione, e forse a specchio). Le
-  parole ripetute e i riempitivi sono tutti elementi. Passando sopra un motivo
-  si accendono tutte le sue copie; un clic entra nell'elemento; trascinandolo
-  si sposta con tutte le copie; il fondo si trascina, la rotella fa lo zoom, i
-  pallini a e b cambiano la piastrella. Ogni elemento si simula una volta sola
-  e si disegna in ogni copia: la copia ruotata è lo stesso evento in un
-  universo ruotato, quella a specchio è l'universo riflesso con B rovesciato.
-- **L'elemento.** Un evento solo, con le cose che lo producono sulla scena e
-  trascinabili: la freccia verde (dove nasce la particella, verso dove, a che
-  velocità), le zone (campo, materia, vetro; si spostano dal centro e si
-  allargano dal quadratino), le masse, gli specchi. Il pannello mostra solo la
-  cosa scelta, con la frase che dice che cosa fa ogni numero; mentre la cambi,
-  in grigio resta com'era prima. Clic su una linea: la sua storia (chi è, da
-  chi nasce, quali forze la piegano, perché finisce).
+### La biblioteca (`src/camera/biblioteca.js`)
+
+Come la biblioteca di Babele di Borges, che contiene tutti i libri possibili,
+la biblioteca contiene tutti gli universi possibili: ognuno ha un indirizzo, un
+numero. Dal numero il caso (ripetibile) mette nello spazio solo ciò che la
+natura ci mette: masse sparse (poche grandi, molte piccole), un campo
+magnetico che varia dolcemente (una somma di onde lunghe), nubi di materia,
+qualche cristallo (dove il campo si ripete con il passo del reticolo: l'unica
+ripetizione che non è una copia), una pioggia di raggi cosmici dai bordi e
+decadimenti spontanei qua e là. Le particelle sono quelle di un piccolo
+catalogo naturale (protoni, pioni, muoni, elettroni, fotoni, kaoni neutri) con
+le loro vite medie. Un universo si simula in circa un decimo di secondo.
+
+Il pattern non si costruisce: **si trova**. Nell'app (File → Nuovo → la
+biblioteca) si sfogliano gli universi (◀ ▶, il dado, o un numero), si sposta e
+si ingrandisce la **finestra** sull'universo, e con la barra del tempo e la
+fetta si sceglie **quando** guardare. Il Pattern mostra la sezione così com'è,
+senza copie né montaggi.
+
+Una cosa va detta, perché è il cuore dell'idea di Borges: nella biblioteca c'è
+tutto, ma l'indirizzo di un libro qualunque è lungo quanto il libro. Un
+universo con un indirizzo corto può contenere solo forme naturali: spirali,
+rosette, forcelle, sciami, ripetizioni cristalline. Una forma arbitraria c'è,
+ma trovarla costa quanto disegnarla. È anche il criterio di naturalezza: una
+forma è naturale quanto è corto il suo indirizzo.
+
+### L'app
+
+Un menu **File** (nuovo, apri un'immagine, apri e salva il seme, esporta
+l'immagine), due viste (**Pattern** ed **Elemento**, con il piano o lo
+spaziotempo), annulla e rifai, e una riga in basso che dice sempre dove sei e
+che cosa puoi fare. «Da dove partiamo?» offre la biblioteca, un'immagine,
+l'esempio della tavola greca, alcuni modelli composti a mano e il vuoto.
+
+- **Il pattern.** Per la biblioteca, la sezione dell'universo. Per i modelli
+  composti a mano, una piastrella che si ripete all'infinito, con i suoi
+  elementi messi nei loro posti.
+- **L'elemento.** Un evento solo, con le cose che lo producono sulla scena: le
+  sorgenti (frecce verdi), le zone di campo e di materia, le masse; in un
+  universo, la mappa del suo campo (⊙ ⊗ più o meno intensi), le sue nubi
+  (puntini marroni), i suoi cristalli, e la cornice della sezione. Il pannello
+  mostra solo la cosa scelta, con la frase che dice che cosa fa ogni numero.
+  Clic su una linea: la sua storia. Passando sopra una linea: le frecce delle
+  forze in quel punto.
 - **Lo spaziotempo.** L'elemento con il tempo che sale: le linee d'universo.
-  La luce, velocissima, sta quasi orizzontale (il cono di luce), le particelle
-  lente salgono ripide, le masse sono colonne ferme.
 
-**Le cinque leggi si vedono** (tre forze che piegano le linee, il decadimento che
-le fa nascere e finire, l'ottica della luce), ognuna col suo colore e il suo segno, nelle
-schede sopra la scena (clic: mostra o nasconde i suoi segni; passandoci sopra,
-la sua frase e le linee dove agisce):
+**Le leggi si vedono e si spengono.** Le schede in alto (gravità rossa,
+magnetismo blu, materia marrone, decadimento verde) e il pannello «le leggi e
+gli oggetti». Ogni linea ha il colore delle forze che agiscono lì, pesate per
+quanto sono forti (una spirale nasce blu e diventa marrone verso l'occhio).
+Clic sul nome di una legge: si vede solo lei. ⏻ spegne una legge o un oggetto
+nella fisica: la scena si rifà e in grigio resta com'era. Se il tempo è fermo
+a metà o sta scorrendo, l'interruttore **scatta in quell'istante**: prima nulla
+cambia, dopo le particelle proseguono nel mondo nuovo, e in grigio resta come
+sarebbe andata; gli scatti sono tacche sulla linea del tempo. Nel seme un
+oggetto porta `spento` e `interruttori` (`{ t, acceso }`); una legge è `true`,
+`false` o una lista di scatti.
 
-| forza | colore | segno sulla scena |
-|---|---|---|
-| gravità | rosso | la massa, gli anelli, le frecce del campo che puntano verso di lei |
-| magnetismo | blu | la zona tinta, ⊙ (B esce dal foglio) o ⊗ (entra), il cartellino col valore |
-| materia | marrone | la zona a puntini, più fitti dove è più densa |
-| ottica | giallo | i vetri azzurri, gli specchi dorati, i raggi di luce |
-| decadimento | verde | le sorgenti e le stelle ✳ dove una particella si divide |
+### Da un'immagine
 
-Ogni tratto di linea ha il colore delle forze che agiscono lì, pesate per
-quanto sono forti: una spirale nasce blu (il campo la piega) e diventa marrone
-verso l'occhio (la materia la frena). **Passando sopra una linea** compaiono
-le frecce delle forze in quel punto (velocità nera, gravità rossa, magnetismo
-blu, materia marrone) con il loro valore. Il tempo è una fetta: scorrendolo si
-vedono le particelle vive (+, −, luce) con le loro frecce; la seconda barra
-restringe la fetta a un intervallo.
-
-**Accendere e spegnere.** Ogni forza ha il suo interruttore ⏻ (nelle schede
-sopra la scena e nel pannello «le leggi e gli oggetti»), e ogni oggetto il suo:
-una massa, una zona di campo o di materia, un vetro, uno specchio, una
-sorgente. Spento, la fisica lo ignora davvero: la scena si rifà e in grigio
-resta com'era. Se il tempo è alla fine, l'interruttore vale per tutta la
-storia; se il tempo è fermo a metà o sta scorrendo, **scatta in
-quell'istante**: prima nulla cambia, dopo le particelle proseguono nel mondo
-nuovo (come un elettromagnete spento a metà esposizione), e in grigio resta
-come sarebbe andata. Gli scatti sono tacche sulla linea del tempo e si tolgono
-con ✕. Nel seme, un oggetto porta `spento` e la lista `interruttori`
-(`{ t, acceso }`); una legge è `true`, `false` o una lista di scatti.
-
-**Una forza alla volta.** Clic sul nome di una forza: si vede solo lei, i
-suoi oggetti e le parti di linea che piega, accese tanto più quanto più conta
-lì; per il decadimento, in verde le particelle nate da un decadimento.
-
-**Da un'immagine** (File → Apri un'immagine, oppure File → Nuovo → la tavola
-greca di esempio). La lettura ha quattro passi, che l'app mostra mentre
-avvengono:
+File → Apri un'immagine (o l'esempio della tavola greca). Quattro passi,
+mostrati mentre avvengono:
 
 1. **Pulizia** (`src/preparazione.js`), solo se serve: immagine sporca o
    sfumata, luce non uniforme, disegno più chiaro del fondo, disegno che si
-   distingue solo per il colore. Il colore del fondo si misura zona per zona
-   (l'ombra cambia la luce, non la tinta) e si divide via; il disegno è tutto
-   ciò che si allontana dal fondo, in luce o in colore; un filtro mediano toglie
-   il rumore rispettando le linee sottili; la soglia è di Otsu, dentro il campo
-   (fuori c'è la cornice). Su versioni rovinate della tavola greca il disegno si
-   ritrova al 68% (foto con ombra, rumore forte e dominante gialla), 82%
-   (negativo) e 79% (stessa luminosità, solo colore), dove senza pulizia la
-   lettura falliva (44%, 0%, 0%).
+   distingue solo per il colore. Il fondo si misura zona per zona (l'ombra
+   cambia la luce, non la tinta) e si divide via; il disegno è ciò che si
+   allontana dal fondo; un mediano toglie il rumore; la soglia è di Otsu nel
+   campo. Su versioni rovinate della tavola greca il disegno si ritrova al 68%
+   (foto con ombra e rumore forte), 82% (negativo) e 79% (solo colore), dove
+   senza pulizia la lettura falliva.
 2. **Lettura dei tratti**: la decodifica (scheletro, spessori, petali, dischi,
    campiture).
 3. **Ricerca della fisica** (`src/camera/inversa.js`): per ogni tratto la
-   particella che lo percorre. Il tratto si divide in pezzi a curvatura
-   costante, ognuno l'arco che una carica fa in un campo uniforme; si allunga il
-   pezzo finché resta entro mezzo pixel dal disegno, e il pezzo dopo parte dallo
-   stato in cui il primo finisce: la traccia è continua e liscia come quella di
-   una particella vera (due giri di spirale logaritmica: 6 archi). Ogni pezzo
-   diventa un corridoio di campo lungo l'arco, largo quanto lo spazio libero
-   intorno, con B = κ·m·v/q; lo spessore è la carica; alla fine del tratto la
-   particella decade in neutri invisibili (le particelle di una specie decadono
-   ognuna a un istante diverso: la sua vita è il tempo per percorrere il tratto). Un petalo è una carica che frena nella materia (si
-   allarga verso la punta), un disco una carica pesante che si ferma subito, una
-   campitura una **sagoma**: un corpo opaco appoggiato sulla lastra, impresso da
-   un lampo di luce uniforme all'istante zero (un fotogramma, come una
-   radiografia o i «rayogrammi» di Man Ray): esatta, piena, e senza allungare il
-   tempo dell'evento. La lastra è materia
-   densa e i corridoi canali vuoti: una particella che sfuggisse si fermerebbe
-   subito. Le linee che si incrociano vanno su esposizioni diverse della stessa
-   lastra (in un punto il campo è uno solo), come nelle camere a bolle vere.
-4. **Verifica**: si rifà l'immagine con la sola fisica e la si confronta con
-   il disegno letto. La tavola greca: 327 tratti, 3332 archi di campo, 60
-   esposizioni, rifatta al 75% (ritrova l'85% del disegno; l'87% di ciò che
-   traccia sta sul disegno). La ricostruzione geometrica, più libera, arrivava
-   all'85%: la differenza è ciò che queste leggi non spiegano ancora, soprattutto
-   i tratti che si assottigliano ai due capi (una carica può solo ingrossare
-   verso la fine) e la forma esatta dei petali.
+   particella che lo percorre, a pezzi di curvatura costante entro mezzo pixel
+   (due giri di spirale logaritmica: 6 archi), ognuno un corridoio di campo con
+   B = κ·m·v/q; lo spessore è la carica; alla fine del tratto la particella
+   decade in neutri invisibili. Un petalo è una carica che frena nella materia,
+   un disco una che si ferma subito, una campitura una sagoma impressa dal
+   lampo. Le linee che si incrociano vanno su esposizioni diverse della stessa
+   lastra.
+4. **Verifica**: la tavola greca, 327 tratti e 3332 archi di campo in 59
+   esposizioni, è rifatta dalla sola fisica al 76%.
 
-Il risultato è un pattern con un elemento, l'immagine, con l'originale sotto
-per confronto; entrando, passando sopra una linea si vedono i suoi corridoi di
-campo e le forze che la piegano.
+Va detto con onestà: questa ricostruzione è fedele ma **costruita**. I suoi
+corridoi di campo sono tagliati su misura, tratto per tratto: è un indirizzo
+lungo quanto l'immagine. Cercare la stessa immagine nella biblioteca, con
+campi naturali, è il problema aperto.
 
-Gli elementi di partenza (`src/camera/esperimento.js`): il fiore (un nucleo
-decade in fotoni a raggiera, ogni fotone si converte in una coppia + −, il
-campo richiude la coppia in un petalo), la stellina (lo stesso evento con
-quattro fotoni), la voluta (una neutra decade in + e −, due spirali opposte
-fino all'occhio), la palmetta (un ventaglio di cariche), la lente (una massa
-piega la luce e trattiene una carica in orbita), la goccia (raggi di luce
-paralleli che attraversano una goccia di vetro e si incrociano in una caustica).
-Le composizioni: fiori e riempitivi, volute a specchio, palmette sfalsate,
-lenti, gocce.
+### Come programma sul computer (Electron)
 
-**È sempre possibile creare qualunque forma?** In linea di principio sì: con
-abbastanza domini piccoli una carica segue a pezzi di cerchio qualunque curva
-liscia, e gli specchi danno gli spigoli. Ma la domanda giusta è quanto costa
-il seme. Una forma è naturale per questo universo se il suo seme è corto: un
-fiore a sei petali sono una sorgente, un campo e cinque specie. Uno
-scarabocchio qualunque richiede un seme lungo quanto il disegno. Ci sono poi
-vincoli veri, che sono anche il carattere delle forme: una traccia è continua,
-gira solo dove c'è campo, si ingrossa solo quando rallenta, e finisce con
-l'occhio.
-
-L'app è `index.html`: un menu **File** (nuovo, apri un'immagine, apri e salva
-il seme, esporta l'immagine), due viste (**Pattern** ed **Elemento**, con il
-piano o lo spaziotempo), annulla e rifai. Le altre pagine (`studio.html`,
-`decodifica.html`, `spaziotempo.html`, `piastrelle.html`, `motore.html`) sono
-pagine di laboratorio delle fasi precedenti: restano nel progetto per lo
-sviluppo, ma non fanno parte dell'app.
-
-### Come applicazione sul computer (Electron)
-
-stateyour gira anche come programma da scrivania, in una cartella locale,
-senza server e senza rete. Serve [Node.js](https://nodejs.org) (la versione
-LTS). Nella cartella del progetto, una volta sola:
+Serve [Node.js](https://nodejs.org) (LTS). Nella cartella del progetto, una
+volta sola:
 
 ```bash
 npm install
@@ -186,20 +135,21 @@ e poi ogni volta:
 npm run app
 ```
 
-Per farne un programma da installare come gli altri (`.dmg` su Mac, `.exe` su
-Windows, AppImage su Linux), sullo stesso tipo di computer:
+Per un programma da installare (`.dmg` su Mac, `.exe` su Windows, AppImage su
+Linux), sullo stesso tipo di computer:
 
 ```bash
 npm run installabile
 ```
 
-Il risultato è nella cartella `dist/`. Su Mac l'app non è firmata: la prima
-volta si apre con clic destro → Apri.
+L'app (`electron/main.cjs`) serve le pagine con il protocollo
+`app://stateyour/` (i moduli e il processo della lettura vogliono un'origine
+vera) e legge solo i file del progetto. Il lavoro si salva da solo e si ritrova
+alla riapertura.
 
-L'app (`electron/main.cjs`) serve le stesse pagine con un protocollo proprio,
-`app://stateyour/`, perché i moduli e il processo della decodifica funzionano
-solo da un'origine vera; legge solo i file della cartella del progetto. Il
-lavoro nella camera si salva da solo e si ritrova alla riapertura.
+Le altre pagine (`studio.html`, `decodifica.html`, `spaziotempo.html`,
+`piastrelle.html`, `motore.html`) sono pagine di laboratorio delle fasi
+precedenti: restano nel progetto per lo sviluppo, ma non fanno parte dell'app.
 
 ## Lo studio (vecchio)
 
