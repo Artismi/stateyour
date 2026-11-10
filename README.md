@@ -239,6 +239,16 @@ molta scava, in proporzione alla portata e alla pendenza; i pendii si sgretolano
 Le reti di fiumi, le valli e i laghi emergono da qui; la neve sui monti si
 calcola dalla quota vera di ogni punto.
 
+**La risoluzione continua della superficie** (`tessera` in `geologia.js`).
+Avvicinandosi al disco di un pianeta solido si scende sulla sua superficie, e
+avvicinandosi ancora ogni tessera si divide in 4 × 4 tessere più fini, fino a
+celle di una decina di metri (dal pianeta intero al paesaggio: sette livelli).
+Una tessera figlia nasce dalla madre: le sue quote, più il dettaglio che da
+lontano non si vedeva (uguale da qualunque parte ci si arrivi), poi l'erosione
+alla sua scala, con i fiumi della madre che entrano con la loro portata e i
+laghi che restano al loro livello. Si calcola solo ciò che si guarda, una
+tessera per fotogramma; passando sopra un punto si leggono quota e temperatura.
+
 Il pannello del pianeta racconta **perché è fatto così**, risalendo la catena
 delle cause con i suoi numeri: le fluttuazioni dell'inizio (quelle della
 radiazione cosmica di fondo) in quel punto, quando la galassia ha cominciato a

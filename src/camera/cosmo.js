@@ -158,7 +158,8 @@ export const metriPerUnita = (livello, via) => {
   if (livello === 0) return TORO_M;
   if (livello === 1) { const G = cosmo(via.cosmo).galassie[via.galassia]; return (G.tipo === 'ellittica' ? 6e20 : 4.5e20) * (0.7 + 0.15 * Math.min(4, G.peso)); }
   if (livello === 2) return 30 * 1.496e11;
-  return sistema(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
+  const R = sistema(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
+  return livello === 4 ? 2 * Math.PI * R : R; // sulla superficie l'unità è il giro dell'equatore
 };
 
 // ---------- un sistema: la stella e i suoi pianeti

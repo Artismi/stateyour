@@ -121,4 +121,16 @@ prova('l\'erosione: l\'acqua scende sempre, e scava', () => {
   assert.ok(n > 0 && d / n > 0, `le valli si incassano: ${d / n} m in media`);
 });
 
+prova('le tessere: più vicino è lo stesso terreno con più dettaglio, e lo stesso posto dà la stessa tessera', () => {
+  const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5 } };
+  const it = GE.interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 0.9e21;
+  const sf = GE.superficiePianeta('prova-ts', P, it, 21), cl = GE.climaSuperficie('prova-ts', P, sf), se = GE.erosione('prova-ts', sf, cl, { passi: 60 });
+  const t = GE.tessera('prova-ts', se, cl, 2, 9, 5, 21), W = se.W, H = se.H;
+  // la media della tessera (1/16 × 1/16 della mappa) contro la media dello stesso pezzo della mappa intera
+  let a = 0; for (const h of t.alt) a += h; a /= t.alt.length;
+  let b = 0, n = 0; for (let j = Math.floor((5 / 16) * H); j < Math.floor((6 / 16) * H); j++) for (let i = Math.floor((9 / 16) * W); i < Math.floor((10 / 16) * W); i++) { b += se.alt[j * W + i]; n++; }
+  assert.ok(Math.abs(a - b / n) < 250, `media della tessera ${a}, della madre ${b / n}`);
+  assert.equal(GE.tessera('prova-ts', se, cl, 2, 9, 5, 21), t);
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);

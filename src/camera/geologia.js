@@ -92,7 +92,8 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
 export function immagineSuperficie(sf, T, cl = null) {
   const { W, H, alt, mare, flusso } = sf, px = new Uint8ClampedArray(W * H * 4);
   // il clima (a risoluzione più bassa) interpolato dolcemente sulla mappa
-  const campo = (arr, i, j) => { if (!cl) return null; const x = ((i + 0.5) / W) * cl.W - 0.5, y = Math.min(cl.H - 1.001, Math.max(0, ((j + 0.5) / H) * cl.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => arr[yy * cl.W + ((xx % cl.W) + cl.W) % cl.W]; return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
+  const [ru0, rv0, ru1, rv1] = sf.rett || [0, 0, 1, 1], divOmbra = Math.max(6, 900 * Math.pow(0.36, sf.livello || 0));
+  const campo = (arr, i, j) => { if (!cl) return null; const x = (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * cl.W - 0.5, y = Math.min(cl.H - 1.001, Math.max(0, (rv0 + ((j + 0.5) / H) * (rv1 - rv0)) * cl.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => arr[yy * cl.W + ((xx % cl.W) + cl.W) % cl.W]; return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, h = alt[k], lat = Math.abs(90 - ((j + 0.5) / H) * 180);
     // la temperatura del punto: quella del clima, corretta per la sua quota vera (6,5 °C ogni km): la neve sui monti
@@ -101,10 +102,10 @@ export function immagineSuperficie(sf, T, cl = null) {
     const gelo = cl ? Math.min(1, Math.max(0, campo(cl.freddo, i, j), h >= mare ? (268 - Tloc) / 12 : 0)) : Tloc < 265 ? 1 : 0;
     let c;
     if (h < mare || (sf.lago && sf.lago[k] > 0)) { const d = Math.min(1, ((h < mare ? mare - h : sf.lago[k] * 3)) / 5000); c = [20 + 30 * (1 - d), 60 + 60 * (1 - d), 110 + 80 * (1 - d)]; }
-    else { const e = Math.min(1, (h - Math.max(0, mare)) / 4000); c = Tloc > 310 ? [190 - 40 * e, 150 - 40 * e, 100 - 20 * e] : [70 + 120 * e, 110 + 60 * e - 30 * e * e, 60 + 70 * e]; if (flusso[k] > (sf.passiErosione ? 18 : 60) && gelo < 0.5) c = [60, 110, 170]; }
+    else { const e = Math.min(1, (h - Math.max(0, mare)) / 4000); c = Tloc > 310 ? [190 - 40 * e, 150 - 40 * e, 100 - 20 * e] : [70 + 120 * e, 110 + 60 * e - 30 * e * e, 60 + 70 * e]; if (flusso[k] > (sf.passiErosione ? 18 * Math.pow(4, sf.livello || 0) : 60) && gelo < 0.5) c = [60, 110, 170]; }
     // il ghiaccio copre in proporzione a quanta parte dell'anno quel punto passa sotto lo zero: bordi sfumati
     const g = Math.pow(gelo, 0.7), ice = [232, 238, 244];
-    const ombra = h >= mare ? Math.max(0.6, Math.min(1.25, 1 + (alt[j * W + ((i + W - 1) % W)] - alt[k] + alt[Math.max(0, j - 1) * W + i] - alt[k]) / 900)) : 1;
+    const ombra = h >= mare ? Math.max(0.6, Math.min(1.25, 1 + (alt[j * W + ((i + W - 1) % W)] - alt[k] + alt[Math.max(0, j - 1) * W + i] - alt[k]) / divOmbra)) : 1;
     px.set([(c[0] + (ice[0] - c[0]) * g) * ombra, (c[1] + (ice[1] - c[1]) * g) * ombra, (c[2] + (ice[2] - c[2]) * g) * ombra, 255], k * 4);
   }
   for (const [i, j] of sf.vulcani) px.set([200, 60, 30, 255], (j * W + i) * 4);
@@ -172,13 +173,14 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
 // fino a traboccare (un LAGO); dove se ne raccoglie molta scava, in proporzione alla portata e alla
 // pendenza (le VALLI); i pendii si sgretolano lentamente. Mari, laghi, valli e fiumi vengono da qui.
 const memoErosione = new Map();
-export function erosione(chiave, sf, cl, { passi = 160 } = {}) {
+export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso = null, crescita = true, scala = 1 } = {}) {
   if (memoErosione.has(chiave)) return memoErosione.get(chiave);
   const { W, H, mare } = sf, N = W * H, alt = Float32Array.from(sf.alt), alt0 = sf.alt;
   // la pioggia: dove fa abbastanza caldo e non c'è ghiaccio (dal clima simulato)
   const pioggia = new Float32Array(N);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const ci = Math.min(cl.W - 1, Math.floor((i / W) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((j / H) * cl.H)), k = cj * cl.W + ci;
+    const [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1];
+    const ci = Math.min(cl.W - 1, Math.floor((u0 + (i / W) * (u1 - u0)) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((v0 + (j / H) * (v1 - v0)) * cl.H)), k = cj * cl.W + ci;
     pioggia[j * W + i] = Math.max(0, Math.min(1, (cl.media[k] - 255) / 40)) * (1 - cl.freddo[k]);
   }
   const vicini = (k, f) => { const i = k % W, j = (k - i) / W; for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue; for (let di = -1; di <= 1; di++) if (di || dj) f(jj * W + ((i + di + W) % W), di && dj ? 1.414 : 1); } };
@@ -193,18 +195,20 @@ export function erosione(chiave, sf, cl, { passi = 160 } = {}) {
     // livello di chi lo precede sta in una conca: lì c'è un lago
     hn = 0; visto.fill(0); let n = 0;
     let fonti = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { push(k, alt[k]); visto[k] = 1; ricevente[k] = -1; pieno[k] = alt[k]; fonti++; }
+    // una tessera ha i bordi aperti: l'acqua esce verso le tessere vicine
+    if (aperto) for (let k = 0; k < N; k++) { const i = k % W, j = (k - i) / W; if ((i === 0 || j === 0 || i === W - 1 || j === H - 1) && !visto[k]) { push(k, alt[k]); visto[k] = 1; ricevente[k] = -1; pieno[k] = alt[k]; fonti++; } }
     if (!fonti) { let m = 0; for (let k = 1; k < N; k++) if (alt[k] < alt[m]) m = k; push(m, alt[m]); visto[m] = 1; ricevente[m] = -1; pieno[m] = alt[m]; }
     while (hn) {
       const c = pop(); ordine[n++] = c;
       vicini(c, (q, d) => { if (visto[q]) return; visto[q] = 1; ricevente[q] = c; dist[q] = d; pieno[q] = Math.max(alt[q], pieno[c] + 0.01); push(q, pieno[q]); });
     }
     // la portata: la pioggia raccolta da monte a valle
-    for (let k = 0; k < N; k++) area[k] = 0.2 + pioggia[k];
+    for (let k = 0; k < N; k++) area[k] = 0.2 + pioggia[k] + (afflusso ? afflusso[k] : 0);
     for (let x = n - 1; x > 0; x--) { const k = ordine[x], r = ricevente[k]; if (r >= 0) area[r] += area[k]; }
     // lo scavo (implicito, da valle a monte) dove l'acqua scorre e non ristagna; la crescita dei monti
     for (let x = 0; x < n; x++) {
       const k = ordine[x], r = ricevente[k]; if (r < 0 || alt[k] < mare) continue;
-      alt[k] += 0.004 * Math.max(0, alt0[k]) / 4; // le placche continuano a spingere
+      if (crescita) alt[k] += 0.004 * Math.max(0, alt0[k]) / 4; // le placche continuano a spingere
       if (pieno[k] > alt[k] + 0.5) continue; // nel lago non si scava: si deposita
       const F = (0.0009 * Math.sqrt(area[k])) / dist[k];
       if (alt[r] < alt[k]) alt[k] = (alt[k] + F * alt[r]) / (1 + F);
@@ -217,12 +221,47 @@ export function erosione(chiave, sf, cl, { passi = 160 } = {}) {
   const lago = new Float32Array(N);
   for (let k = 0; k < N; k++) {
     if (alt[k] < mare || pieno[k] <= alt[k] + 1) continue;
-    const ci = Math.min(cl.W - 1, Math.floor(((k % W) / W) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((Math.floor(k / W) / H) * cl.H)), T = cl.media[cj * cl.W + ci];
+    const [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1];
+    const ci = Math.min(cl.W - 1, Math.floor((u0 + ((k % W) / W) * (u1 - u0)) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((v0 + (Math.floor(k / W) / H) * (v1 - v0)) * cl.H)), T = cl.media[cj * cl.W + ci];
     const evapora = 4 + 30 * Math.max(0, Math.min(1, (T - 260) / 50));
-    if (area[k] > evapora) { lago[k] = pieno[k] - alt[k]; laghi++; }
+    if (area[k] > evapora * scala) { lago[k] = pieno[k] - alt[k]; laghi++; }
   }
   const flusso = new Float32Array(N); for (let k = 0; k < N; k++) flusso[k] = area[k];
   const out = { ...sf, alt, flusso, lago, celleLago: laghi, passiErosione: passi };
   memoErosione.set(chiave, out); if (memoErosione.size > 6) memoErosione.delete(memoErosione.keys().next().value);
+  return out;
+}
+
+// ---------- LE TESSERE: la risoluzione continua. Avvicinandosi, ogni tessera si divide in 4 × 4 tessere
+// più fini. Una tessera figlia nasce dalla madre: le sue quote (interpolate), più il dettaglio che da
+// lontano non si vedeva (rumore su coordinate globali: uguale da qualunque parte ci si arrivi), poi
+// l'erosione alla sua scala, con i bordi aperti e i fiumi della madre che entrano con la loro portata;
+// i laghi della madre restano al loro livello. Lo stesso posto dà sempre la stessa tessera.
+const memoTessere = new Map();
+const hashReticolo = (ix, iy, seme) => { let h = (ix * 374761393 + iy * 668265263 + seme * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const rumore = (x, y, seme) => { const x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v); return (hashReticolo(x0, y0, seme) * (1 - su) + hashReticolo(x0 + 1, y0, seme) * su) * (1 - sv) + (hashReticolo(x0, y0 + 1, seme) * (1 - su) + hashReticolo(x0 + 1, y0 + 1, seme) * su) * sv - 0.5; };
+export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
+  if (L === 0) return radice.rett ? radice : Object.assign(radice, { rett: [0, 0, 1, 1], livello: 0 });
+  const k = `${chiave}|${L}|${tx}|${ty}`; if (memoTessere.has(k)) return memoTessere.get(k);
+  const m = tessera(chiave, radice, cl, L - 1, tx >> 2, ty >> 2, seme), { W, H, mare } = m, qx = tx & 3, qy = ty & 3, n = 4 ** L;
+  const rett = [tx / n, ty / n, (tx + 1) / n, (ty + 1) / n], alt = new Float32Array(W * H), afflusso = new Float32Array(W * H), livelloLago = new Float32Array(W * H);
+  const bil = (arr, fx, fy) => { const x = Math.max(0, Math.min(W - 1.001, fx)), y = Math.max(0, Math.min(H - 1.001, fy)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0; return arr[y0 * W + x0] * (1 - u) * (1 - v) + arr[y0 * W + x0 + 1] * u * (1 - v) + arr[(y0 + 1) * W + x0] * (1 - u) * v + arr[(y0 + 1) * W + x0 + 1] * u * v; };
+  const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const fx = (qx + (i + 0.5) / W) * (W / 4) - 0.5, fy = (qy + (j + 0.5) / H) * (H / 4) - 0.5, c = j * W + i;
+    const gu = rett[0] + ((i + 0.5) / W) * (rett[2] - rett[0]), gv = rett[1] + ((j + 0.5) / H) * (rett[3] - rett[1]);
+    alt[c] = bil(m.alt, fx, fy) + amp * (rumore(gu * f1, gv * f1 * 0.5, seme + L) + 0.45 * rumore(gu * f2, gv * f2 * 0.5, seme + 31 * L));
+    const pm = Math.min(H - 1, Math.max(0, Math.round(fy))) * W + Math.min(W - 1, Math.max(0, Math.round(fx)));
+    if (i === 0 || j === 0 || i === W - 1 || j === H - 1) afflusso[c] = m.flusso[pm] * 4; // la portata dei fiumi che entrano
+    if (m.lago) { // il lago della madre: la sua superficie è piatta, la riva la decide il terreno fine
+      const x0 = Math.max(0, Math.min(W - 2, Math.floor(fx))), y0 = Math.max(0, Math.min(H - 2, Math.floor(fy))); let lev = 0;
+      for (const q of [y0 * W + x0, y0 * W + x0 + 1, (y0 + 1) * W + x0, (y0 + 1) * W + x0 + 1]) if (m.lago[q] > 0) lev = Math.max(lev, m.alt[q] + m.lago[q]);
+      livelloLago[c] = lev;
+    }
+  }
+  const e = erosione(k, { W, H, alt, mare, rett, vulcani: [] }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L });
+  for (let c = 0; c < W * H; c++) if (livelloLago[c] > e.alt[c]) e.lago[c] = Math.max(e.lago[c], livelloLago[c] - e.alt[c]);
+  const out = { ...e, rett, livello: L, vulcani: [] };
+  memoTessere.set(k, out); if (memoTessere.size > 48) memoTessere.delete(memoTessere.keys().next().value);
   return out;
 }

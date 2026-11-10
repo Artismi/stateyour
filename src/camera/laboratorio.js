@@ -251,7 +251,7 @@ let camMappa = null, sopraMappa = null, volo = null, rotella = 0;
 const indirizzoOra = () => (vista === 'pattern' ? comp.elementi[0] : el())?.cella.indirizzo || null;
 const evidenzaMappa = () => { const a = indirizzoOra(); return a ? { ...a, sorgenti: (el()?.cella.sorgenti || []).map((s) => s.origine).filter(Boolean) } : null; };
 let animazione = 0;
-function anima() { if (vista !== 'cosmo' || camMappa?.livello !== 3) { animazione = 0; return; } if (!volo) disegna(); animazione = requestAnimationFrame(anima); }
+function anima() { if (vista !== 'cosmo' || !(camMappa?.livello >= 3)) { animazione = 0; return; } if (!volo) disegna(); animazione = requestAnimationFrame(anima); }
 function apriCosmo() {
   const a = indirizzoOra(); if (!a) return;
   const dpr = devicePixelRatio || 1; camMappa = camSuRegione(a, tela.clientWidth * dpr, tela.clientHeight * dpr);
@@ -797,7 +797,7 @@ tela.addEventListener('pointerup', (e) => {
     const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null;
     if (fermo && sopraMappa) {
       if (sopraMappa.tipo === 'regione') { entraRegione(sopraMappa.via); return; }
-      if (sopraMappa.tipo !== 'buco') { volo = { pos: sopraMappa.pos, scala: sopraMappa.scala, livello: camMappa.livello, passi: 0 }; requestAnimationFrame(passoVolo); }
+      if (sopraMappa.tipo !== 'buco' && sopraMappa.tipo !== 'punto') { volo = { pos: sopraMappa.pos, scala: sopraMappa.scala, livello: camMappa.livello, passi: 0 }; requestAnimationFrame(passoVolo); }
     }
     return;
   }
@@ -962,7 +962,7 @@ function pannelloCosmo(h) {
   if (a && c) {
     const raggi = c.sorgenti.filter((s) => s.origine);
     const conta = {}; for (const s of raggi) conta[s.origine] = (conta[s.origine] || 0) + 1;
-    if (camMappa.livello === 3) {
+    if (camMappa.livello >= 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
       // PERCHÉ È FATTO COSÌ: la catena delle cause, dall'inizio al suo nucleo
@@ -1312,7 +1312,7 @@ function dove() {
   const t = vista === 'pattern'
     ? (!comp.reticolo ? `Il pattern: la finestra dell'universo n. ${comp.elementi[0].cella.seme}, ${ripetiDi(comp.elementi[0].cella).gruppo === 'una' ? 'da sola' : `ripetuta ${GRUPPI[comp.elementi[0].cella.ripeti.gruppo].nome.replace(/^caleidoscopio/, 'nel caleidoscopio')}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
-    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo.' : ''}`
+    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo; avvicinati al pianeta per scendere sulla sua superficie.' : camMappa.livello === 4 ? 'La superficie: avvicinandoti il terreno si calcola sempre più fine, dai continenti alle valli (fino a celle di una decina di metri). Passa sopra un punto per quota e temperatura.' : ''}`
     : vista === 'finestra' ? `La finestra: la sezione dell'universo n. ${el().cella.seme} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
     : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra, guardato all'inizio dallo stesso angolo della sezione: è il pattern. Trascina per ruotarlo e vedere le linee d'universo nel blocco (il tempo sale); i punti arancio sono dove entrano i raggi e da dove vengono, le stelle verdi dove una particella si spezza. Tasto A: torna allineato.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`

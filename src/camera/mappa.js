@@ -12,7 +12,7 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
-import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
+import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -51,6 +51,19 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
 function passaggi(cam, W, H) {
   const m = minimo(W, H);
   for (let giro = 0; giro < 4; giro++) {
+    // LA SUPERFICIE (livello 4): la mappa del pianeta, x = longitudine (0..1, si richiude), y = latitudine (0..0,5)
+    if (cam.livello === 4) {
+      cam.cx = ((cam.cx % 1) + 1) % 1; cam.cy = Math.max(0, Math.min(0.5, cam.cy)); cam.z = Math.min(cam.z, 6e6);
+      if (cam.z < 0.9 * m) { cam.livello = 3; cam.cx = 0; cam.cy = 0; cam.z /= 2 * Math.PI; continue; }
+      break;
+    }
+    if (cam.livello === 3 && cam.z > 0.8 * m && Math.hypot(cam.cx, cam.cy) < 0.95) {
+      const P = sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella).pianeti[cam.via.pianeta];
+      if (P.tipo !== 'gassoso' && P.interno) { // sopra il disco di un pianeta solido: si scende sulla superficie, nel punto che si guardava
+        const u = cam.cx, w = cam.cy / (1 - (P.schiacciamento || 0)), zz = Math.sqrt(Math.max(0, 1 - u * u - w * w)), lat = Math.asin(Math.max(-1, Math.min(1, -w))), lon = Math.atan2(u, zz);
+        cam.livello = 4; cam.cx = (lon + Math.PI) / (2 * Math.PI); cam.cy = ((Math.PI / 2 - lat) / Math.PI) * 0.5; cam.z *= 2 * Math.PI; continue;
+      }
+    }
     if (cam.livello === 0) { cam.cx = ((cam.cx % 1) + 1) % 1; cam.cy = ((cam.cy % 1) + 1) % 1; cam.z = Math.max(cam.z, m / 1.25); }
     // dentro: un figlio che riempie lo schermo e contiene il centro
     if (cam.livello < 3) {
@@ -97,6 +110,13 @@ function passaggi(cam, W, H) {
 // ---------- che cosa c'è sotto il cursore
 export function colpisciMappa(cam, sx, sy, W, H) {
   const x = cam.cx + (sx - W / 2) / cam.z, y = cam.cy + (sy - H / 2) / cam.z, px = 9 / cam.z;
+  if (cam.livello === 4) { // sulla superficie: la quota e la temperatura del punto
+    const S = superficieDi(cam.via), L = livelloTessere(cam.z), n = 4 ** L, u = ((x % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, y * 2));
+    const t = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (!t) return null;
+    const i = Math.floor((u * n - Math.floor(u * n)) * t.sf.W), j = Math.floor((v * n - Math.floor(v * n)) * t.sf.H), c = j * t.sf.W + i, h = t.sf.alt[c];
+    const T = S.cl.media[Math.min(S.cl.H - 1, Math.floor(v * S.cl.H)) * S.cl.W + Math.min(S.cl.W - 1, Math.floor(u * S.cl.W))];
+    return { tipo: 'punto', pos: [x, y], scala: 0, testo: `${h < S.se.mare ? `mare, profondo ${Math.round(S.se.mare - h)} m` : t.sf.lago[c] > 0 ? `lago, profondo ${Math.round(t.sf.lago[c])} m` : `${Math.round(h - Math.max(S.se.mare, -1e9))} m sul mare`} · ${Math.round(T - 273.15)} °C in media · lat ${(90 - v * 180).toFixed(2)}°` };
+  }
   if (cam.livello === 3) {
     const P = pianeta(cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta);
     for (const R of P.regioni) if (Math.abs(x - R.pos[0]) < LATO_REGIONE / 2 && Math.abs(y - R.pos[1]) < LATO_REGIONE / 2) { const a = { ...cam.via, regione: R.id }; return { tipo: 'regione', pos: R.pos, scala: LATO_REGIONE / 2, testo: `regione ${R.id + 1}${R.nellAnello ? ", nell'anello" : ''} · universo n. ${numeroDi(a)} · clic per entrare`, via: a }; }
@@ -139,6 +159,7 @@ export function percorso(cam) {
   if (cam.livello >= 1) out.push(`galassia ${v.galassia + 1}`);
   if (cam.livello >= 2) out.push(`stella ${v.stella + 1}`);
   if (cam.livello >= 3) out.push(`pianeta ${v.pianeta + 1}`);
+  if (cam.livello >= 4) out.push('la superficie');
   return out;
 }
 
@@ -195,6 +216,8 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
     }
   } else if (cam.livello === 2) {
     disegnaSistema(ctx, sistema(v.cosmo, v.galassia, v.stella), X, Y, z, dpr, v);
+  } else if (cam.livello === 4) {
+    disegnaSuperficie(ctx, W, H, cam, dpr);
   } else {
     disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia);
   }
@@ -326,4 +349,37 @@ export function discoPianeta(v, P) {
   }
   c.putImageData(im, 0, 0); dischi.set(k, cv); if (dischi.size > 6) dischi.delete(dischi.keys().next().value);
   return cv;
+}
+
+// ---------- la superficie esplorabile: tessere sempre più fini mentre ci si avvicina (geologia.js, tessera)
+const superfici = new Map(), tessereFatte = new Map();
+function superficieDi(v) {
+  const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
+  const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], seme = 7 + v.stella * 31 + v.pianeta;
+  const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
+  const out = { k, P, cl, se, seme }; superfici.set(k, out); if (superfici.size > 4) superfici.delete(superfici.keys().next().value);
+  return out;
+}
+const livelloTessere = (z) => Math.max(0, Math.min(7, Math.floor(Math.log(z / 420) / Math.log(4))));
+export let tessereInAttesa = 0;
+function disegnaSuperficie(ctx, W, H, cam, dpr) {
+  const S = superficieDi(cam.via), z = cam.z, Lmax = livelloTessere(z);
+  const x0 = cam.cx - W / 2 / z, x1 = cam.cx + W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), y1 = Math.min(0.5, cam.cy + H / 2 / z);
+  ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0;
+  // dal più grosso al più fine: si disegna quello che c'è, e si calcola una tessera nuova per fotogramma
+  for (let L = Math.max(0, Lmax - 2); L <= Lmax; L++) {
+    const n = 4 ** L;
+    for (let ty = Math.floor(y0 * 2 * n); ty <= Math.min(n - 1, Math.floor(y1 * 2 * n)); ty++) for (let txg = Math.floor(x0 * n); txg <= Math.floor(x1 * n); txg++) {
+      const tx = ((txg % n) + n) % n, k = `${S.k}|${L}|${tx}|${ty}`; let t = tessereFatte.get(k);
+      if (!t) {
+        if (nuove >= 1 && L > 0) { tessereInAttesa++; continue; }
+        const sf = tessera(S.k, S.se, S.cl, L, tx, ty, S.seme), px = immagineSuperficie(sf, S.P.clima.T, S.cl);
+        const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(sf.W, sf.H) : Object.assign(document.createElement('canvas'), { width: sf.W, height: sf.H });
+        cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
+        t = { cv, sf }; tessereFatte.set(k, t); if (tessereFatte.size > 60) tessereFatte.delete(tessereFatte.keys().next().value); nuove++;
+      }
+      const px0 = W / 2 + (txg / n - cam.cx) * z, py0 = H / 2 + ((ty / n) * 0.5 - cam.cy) * z;
+      ctx.drawImage(t.cv, px0, py0, z / n + 0.5, (0.5 * z) / n + 0.5);
+    }
+  }
 }
