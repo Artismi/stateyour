@@ -100,4 +100,14 @@ prova('l\'interno: la Terra ha la dinamo e le placche, Marte ha il nucleo congel
   assert.ok(!m.dinamo && m.tettonica !== 'a placche');
 });
 
+prova('il clima simulato: la Terra temperata con poco ghiaccio, Marte gelido e secco', () => {
+  const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5 } };
+  const it = GE.interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 1.4e21;
+  const t = GE.climaSuperficie('prova-terra', P, GE.superficiePianeta('prova-terra', P, it, 11));
+  assert.ok(t.Tglobale > 273 && t.Tglobale < 308 && t.ghiaccio < 0.4, `la Terra a ${t.Tglobale - 273.15} °C, ghiaccio ${t.ghiaccio}`);
+  const M = { ...P, raggioM: 3.39e6, aM: 1.52 * 1.496e11, anno: 5.9e7, obliquita: 25, clima: { Teq: 210, pressione: 600 } };
+  const m = GE.climaSuperficie('prova-marte', M, GE.superficiePianeta('prova-marte', M, { ...it, acquaKg: 1e15 }, 12));
+  assert.ok(m.Tglobale < 233, `Marte a ${m.Tglobale - 273.15} °C`);
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);

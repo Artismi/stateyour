@@ -89,16 +89,75 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
 }
 
 // i colori: profondità del mare, terre secondo quota e temperatura, ghiaccio dove fa freddo, fiumi
-export function immagineSuperficie(sf, T) {
+export function immagineSuperficie(sf, T, cl = null) {
   const { W, H, alt, mare, flusso } = sf, px = new Uint8ClampedArray(W * H * 4);
+  // il clima (a risoluzione più bassa) interpolato dolcemente sulla mappa
+  const campo = (arr, i, j) => { if (!cl) return null; const x = ((i + 0.5) / W) * cl.W - 0.5, y = Math.min(cl.H - 1.001, Math.max(0, ((j + 0.5) / H) * cl.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => arr[yy * cl.W + ((xx % cl.W) + cl.W) % cl.W]; return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const k = j * W + i, h = alt[k], lat = Math.abs(90 - ((j + 0.5) / H) * 180), Tloc = T - 0.45 * lat * (T > 200 ? 1 : 0.3) - Math.max(0, h) * 0.0065;
+    const k = j * W + i, h = alt[k], lat = Math.abs(90 - ((j + 0.5) / H) * 180);
+    const Tloc = cl ? campo(cl.media, i, j) : T - 0.45 * lat - Math.max(0, h) * 0.0065, gelo = cl ? Math.min(1, Math.max(0, campo(cl.freddo, i, j))) : Tloc < 265 ? 1 : 0;
     let c;
-    if (h < mare) { const d = Math.min(1, (mare - h) / 5000); c = Tloc < 271 ? [220, 232, 240] : [20 + 30 * (1 - d), 60 + 60 * (1 - d), 110 + 80 * (1 - d)]; }
-    else if (Tloc < 263) c = [235, 238, 242];
-    else { const e = Math.min(1, (h - Math.max(0, mare)) / 4000); c = Tloc > 320 ? [190 - 40 * e, 150 - 40 * e, 100 - 20 * e] : [70 + 120 * e, 110 + 60 * e - 30 * e * e, 60 + 70 * e]; if (flusso[k] > 60 && h >= mare) c = [60, 110, 170]; }
-    px.set([c[0], c[1], c[2], 255], k * 4);
+    if (h < mare) { const d = Math.min(1, (mare - h) / 5000); c = [20 + 30 * (1 - d), 60 + 60 * (1 - d), 110 + 80 * (1 - d)]; }
+    else { const e = Math.min(1, (h - Math.max(0, mare)) / 4000); c = Tloc > 310 ? [190 - 40 * e, 150 - 40 * e, 100 - 20 * e] : [70 + 120 * e, 110 + 60 * e - 30 * e * e, 60 + 70 * e]; if (flusso[k] > 60 && gelo < 0.5) c = [60, 110, 170]; }
+    // il ghiaccio copre in proporzione a quanta parte dell'anno quel punto passa sotto lo zero: bordi sfumati
+    const g = Math.pow(gelo, 0.7), ice = [232, 238, 244];
+    px.set([c[0] + (ice[0] - c[0]) * g, c[1] + (ice[1] - c[1]) * g, c[2] + (ice[2] - c[2]) * g, 255], k * 4);
   }
   for (const [i, j] of sf.vulcani) px.set([200, 60, 30, 255], (j * W + i) * 4);
   return px;
+}
+
+// ---------- IL CLIMA come equilibrio di energia che evolve nel tempo (modello di Budyko-Sellers, su una
+// griglia sulla sfera). In ogni punto: C·∂T/∂t = luce assorbita − luce irradiata + calore portato dai vicini.
+//   · la luce: quella della stella a quella latitudine e in quella stagione (l'asse è inclinato); se il
+//     pianeta è bloccato, sempre la stessa faccia al sole e mai le stagioni;
+//   · irradiata: σT⁴, trattenuta dall'effetto serra della sua atmosfera;
+//   · il ghiaccio riflette più luce dell'acqua e della roccia: dove fa freddo si raffredda ancora (il
+//     ghiaccio si fa avanzare da sé); il mare si scalda e si raffredda lentamente, la terra in fretta;
+//   · il calore scorre dal caldo al freddo, tanto più quanto più l'atmosfera è densa.
+// Si parte caldo, come un pianeta appena nato, e si lascia evolvere per molti anni: quello che resta è il suo clima
+// (se il ghiaccio, riflettendo, prende il sopravvento, il pianeta scivola in una glaciazione totale).
+const memoClima = new Map();
+export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, passiAnno = 240 } = {}) {
+  if (memoClima.has(chiave)) return memoClima.get(chiave);
+  const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = isFinite(P.clima.pressione) ? 0.8 * Math.pow(P.clima.pressione / 1e5, 0.6) : 2;
+  const D = isFinite(P.clima.pressione) ? 0.6 * Math.pow(Math.max(1e-4, P.clima.pressione / 1e5), 0.5) : 1, kx = sf.W / W, ky = sf.H / H;
+  const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
+  const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
+  // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo
+  const T = new Float32Array(W * H).fill(Math.max(P.clima.Teq, 310)), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
+  const C = (k) => (terra[k] ? 1e7 : 1e8), anno = P.anno, dt = anno / passiAnno, eps = (P.obliquita * Math.PI) / 180;
+  // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
+  // dove c'è acqua che evapora e un'atmosfera che la tiene si formano le nuvole, che riflettono la luce
+  let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
+  const acquaPerGhiaccio = Math.min(1, 0.15 + 2.5 * mareFraz), nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
+  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.55 * (1 - suolo); };
+  const luce = (j, i, f) => {
+    const ph = lat(j);
+    if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
+    const del = eps * Math.sin(2 * Math.PI * f), x = -Math.tan(ph) * Math.tan(del), h0 = x >= 1 ? 0 : x <= -1 ? Math.PI : Math.acos(x);
+    return (S0 / Math.PI) * (h0 * Math.sin(ph) * Math.sin(del) + Math.cos(ph) * Math.cos(del) * Math.sin(h0));
+  };
+  const totale = anni * passiAnno;
+  for (let n = 0; n < totale; n++) {
+    const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno;
+    for (let j = 0; j < H; j++) {
+      const ph = lat(j), cj = Math.max(0.25, Math.cos(ph)), jn = Math.max(0, j - 1), js = Math.min(H - 1, j + 1), cn = Math.max(0.25, Math.cos(lat(j) + dphi / 2)), cs = Math.max(0.25, Math.cos(lat(j) - dphi / 2));
+      for (let i = 0; i < W; i++) {
+        const k = j * W + i, t = T[k], ie = (i + 1) % W, iw = (i + W - 1) % W;
+        const lap = (cn * (T[jn * W + i] - t) + cs * (T[js * W + i] - t)) / (cj * dphi * dphi) + (T[j * W + ie] + T[j * W + iw] - 2 * t) / (cj * cj * dlam * dlam);
+        const dT = (luce(j, i, f) * (1 - albedo(k, t)) - (sigma * t ** 4) / (1 + 0.75 * tau) + D * lap) / C(k);
+        nuovo[k] = Math.max(3, t + dt * Math.max(-50 / dt, Math.min(50 / dt, dT)));
+        if (ultimo) { media[k] += nuovo[k] / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; }
+      }
+    }
+    T.set(nuovo);
+  }
+  // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
+  for (let k = 0; k < W * H; k++) if (terra[k]) { const su = Math.max(0, quota[k] - Math.max(0, sf.mare)) / 1000; media[k] -= 6.5 * su; if (su > 0) freddo[k] = Math.min(1, freddo[k] + su * 0.25); }
+  let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
+  const out = { W, H, media, freddo, Tglobale: gm / a, ghiaccio: gg / a };
+  memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);
+  return out;
 }

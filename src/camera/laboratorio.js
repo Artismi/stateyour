@@ -19,7 +19,7 @@ import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, desc
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle, flussoInterno } from './fluidi.js';
-import { superficiePianeta, immagineSuperficie } from './geologia.js';
+import { superficiePianeta, immagineSuperficie, climaSuperficie } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
@@ -980,11 +980,13 @@ function pannelloCosmo(h) {
       const it = P.interno;
       if (it) h.push(`<h2>l'interno</h2><p class="nota">${P.tipo === 'gassoso' ? `idrogeno metallico in profondità: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT.` : `un nucleo di ferro largo ${Math.round(it.nucleo * 100)}% del raggio, ${it.dinamo ? `ancora liquido: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT` : 'congelato: nessuna dinamo, nessun campo magnetico'}; il calore che esce dall'interno ${it.q.toFixed(3)} W/m²; la crosta ${it.tettonica === 'a placche' ? 'si è rotta in placche (il mantello spinge e l\'acqua la indebolisce)' : it.tettonica === 'ferma' ? 'è un guscio unico e fermo' : 'è un guscio unico, bucato dai vulcani'}.`}</p>`);
       if (it && P.tipo !== 'gassoso') {
-        const sf = superficiePianeta(JSON.stringify(camMappa.via), P, it, 7 + camMappa.via.stella * 31 + camMappa.via.pianeta), px = immagineSuperficie(sf, cl.T);
+        const sf = superficiePianeta(JSON.stringify(camMappa.via), P, it, 7 + camMappa.via.stella * 31 + camMappa.via.pianeta), clm = climaSuperficie(JSON.stringify(camMappa.via), P, sf), px = immagineSuperficie(sf, cl.T, clm);
+        h.push(`<h2>il clima</h2><p class="nota">${P.bloccato ? `Le maree della stella lo hanno frenato: le mostra sempre la stessa faccia (il giorno dura quanto l'anno, ${(P.anno / 86400).toFixed(0)} giorni terrestri).` : `Gira in ${(P.giorno / 3600).toFixed(0)} ore, con l'asse inclinato di ${Math.round(P.obliquita)}° (le stagioni); l'anno dura ${(P.anno / 86400).toFixed(0)} giorni terrestri; la rotazione lo schiaccia ai poli del ${(P.schiacciamento * 100).toFixed(1)}%.`} Simulato per molti anni (luce che arriva, calore irradiato e trattenuto dall'atmosfera, calore portato dall'aria e dal mare, ghiaccio che riflette la luce): in media ${Math.round(clm.Tglobale - 273.15)} °C, ghiaccio sul ${Math.round(clm.ghiaccio * 100)}%${clm.ghiaccio > 0.97 ? ': il ghiaccio, riflettendo la luce, ha raffreddato il pianeta fino a coprirlo tutto' : P.bloccato && clm.ghiaccio > 0.2 ? ': mare aperto sotto la stella, ghiaccio sul lato in ombra' : ''}.</p>`);
         const cv = document.createElement('canvas'); cv.width = sf.W; cv.height = sf.H; cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
         h.push(`<h2>la superficie</h2><img src="${cv.toDataURL()}" style="width:100%;border-radius:3px;image-rendering:auto" alt="la mappa del pianeta"><p class="nota">${sf.placche > 1 ? `${sf.placche} placche: dove si scontrano si alzano montagne, dove si separano dorsali` : 'una crosta sola'}; ${isFinite(sf.mare) ? 'il mare riempie i punti più bassi con l\'acqua che il pianeta ha' : 'niente mari'}; i fiumi scendono lungo la pendenza più ripida; in rosso i vulcani (${sf.vulcani.length}). Nessuno l'ha disegnata: viene dalla massa, dalla composizione e dall'età.</p>`);
       }
-      if (cl.acqua === 'liquida') {
+      const climaSim = it && P.tipo !== 'gassoso' ? climaSuperficie(JSON.stringify(camMappa.via), P, superficiePianeta(JSON.stringify(camMappa.via), P, it, 7 + camMappa.via.stella * 31 + camMappa.via.pianeta)) : null;
+      if (cl.acqua === 'liquida' && climaSim && climaSim.ghiaccio < 0.97) {
         const sf = superficie(camMappa.via);
         h.push(`<h2>la superficie: una pozza</h2><p class="nota">Il calore dell'interno (${sf.q.toFixed(3)} W/m²) attraversa una pozza profonda ${(sf.d * 100).toFixed(1)} cm: Rayleigh ${Math.round(sf.c.Ra)}, Marangoni ${Math.round(sf.c.Ma)} → ${sf.c.regime}.</p>${sf.url ? `<img src="${sf.url}" style="width:100%;image-rendering:auto;border-radius:3px" alt="la convezione nella pozza">` : ''}<p class="nota">Nessuno disegna le celle: l'acqua calda sale e quella fredda scende, e si organizzano da sole. Negli strati sottili vince la tensione della superficie e vengono esagoni (le celle di Bénard); più in profondità la gravità, e vengono rulli e labirinti.</p>`);
       }

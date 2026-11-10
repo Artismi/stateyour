@@ -213,6 +213,22 @@ i punti più bassi con l'acqua che il pianeta ha; la pioggia scende lungo la
 pendenza più ripida e fa i fiumi; il ghiaccio sta dove fa freddo. La mappa è nel
 pannello e avvolta sulla sfera del pianeta.
 
+**Il clima come equilibrio che evolve** (`climaSuperficie` in `geologia.js`,
+modello di Budyko-Sellers su una griglia sulla sfera). In ogni punto la luce
+della stella secondo latitudine e stagione (l'asse è inclinato; un pianeta
+bloccato mostra sempre la stessa faccia), il calore irradiato e trattenuto
+dall'atmosfera, il calore portato dall'aria e dal mare (il mare si scalda
+lentamente, la terra in fretta), il ghiaccio che riflette la luce (e ha bisogno
+di acqua), le nuvole dove l'acqua evapora. Il pianeta parte caldo, come appena
+nato, e si lascia evolvere per molti anni. Ne emergono, senza disegnarli: le
+calotte con i bordi sfumati (quanta parte dell'anno un punto passa sotto lo
+zero), i pianeti bloccati con il mare aperto solo sotto la stella (il «pianeta
+occhio» delle nane rosse), le glaciazioni totali quando il ghiaccio prende il
+sopravvento. Verificato sulla Terra (temperata, poco ghiaccio) e su Marte
+(−69 °C contro −63). La rotazione viene dalla formazione; le maree della stella
+la frenano fino a bloccarla se il pianeta è vicino; la rotazione schiaccia il
+pianeta ai poli (5/4·ω²R³/GM), e la forma si vede sulla mappa.
+
 Il pannello del pianeta racconta **perché è fatto così**, risalendo la catena
 delle cause con i suoi numeri: le fluttuazioni dell'inizio (quelle della
 radiazione cosmica di fondo) in quel punto, quando la galassia ha cominciato a

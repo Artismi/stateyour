@@ -201,6 +201,18 @@ export const sistema = memo((n, gid, sid) => {
   for (const p of pianeti) {
     const rho = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 }[p.tipo], massaKg = (4 / 3) * Math.PI * p.raggioM ** 3 * rho;
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
+    // la ROTAZIONE viene dalla formazione (gli urti che l'hanno messo a girare: un giorno di qualche ora,
+    // l'asse inclinato a caso, di solito poco); le maree della stella la frenano finché il pianeta le mostra
+    // sempre la stessa faccia: succede se è vicino (il tempo cresce come la distanza alla sesta) e la stella
+    // è pesante; allora il giorno dura quanto l'anno (Keplero)
+    const Mst = (S.massaNascita || S.massa) * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
+    const eta = (S.eta ?? 5e9) + (S.morta ?? 0), bloccato = aM < 0.4 * UA * Math.cbrt(Mst / 1.989e30) * Math.pow(eta / 4.5e9, 1 / 6) && p.tipo !== 'gassoso';
+    const giorno = bloccato ? anno : (p.tipo === 'gassoso' ? tra(9, 16) : tra(10, 40)) * 3600;
+    const omega = (2 * Math.PI) / giorno;
+    Object.assign(p, { aM, Lw, Mstella: Mst, anno, giorno, bloccato, obliquita: bloccato ? 0 : Math.min(85, Math.abs((c() + c() + c() - 1.5) * 30) + (c() < 0.08 ? tra(30, 90) : 0)) });
+    // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
+    // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
+    p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
     p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
     p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.01; // quasi tutta l'acqua resta nel mantello; un centesimo in superficie
     p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });

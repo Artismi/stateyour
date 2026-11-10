@@ -12,7 +12,7 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
-import { superficiePianeta, immagineSuperficie } from './geologia.js';
+import { superficiePianeta, immagineSuperficie, climaSuperficie } from './geologia.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -285,7 +285,9 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
   for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
   disegnaCorpo(ctx, P, X(0), Y(0), z, S.stella, v, dpr, P.pos);
   // la sua superficie, vista da sopra l'equatore: la stessa mappa del pannello, avvolta sulla sfera
-  const disco = discoPianeta(v, P); if (disco) { ctx.save(); ctx.beginPath(); ctx.arc(X(0), Y(0), z, 0, 7); ctx.clip(); ctx.drawImage(disco, X(0) - z, Y(0) - z, 2 * z, 2 * z); ctx.restore(); }
+  // la sua forma (schiacciata ai poli dalla rotazione) e la sua superficie vista dall'equatore
+  const disco = discoPianeta(v, P), fz = 1 - (P.schiacciamento || 0);
+  if (disco) { ctx.save(); ctx.beginPath(); ctx.ellipse(X(0), Y(0), z, z * fz, 0, 0, 7); ctx.clip(); ctx.drawImage(disco, X(0) - z, Y(0) - z * fz, 2 * z, 2 * z * fz); ctx.restore(); }
   // la direzione della stella
   const ds = Math.atan2(-P.pos[1], -P.pos[0]); alone(ctx, X(Math.cos(ds) * 6), Y(Math.sin(ds) * 6), 40 * dpr, S.stella.colore, 0.25);
   // le regioni: gli universi della camera
@@ -312,7 +314,7 @@ const dischi = new Map();
 export function discoPianeta(v, P) {
   if (P.tipo === 'gassoso' || !P.interno) return null;
   const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
-  const sf = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), px = immagineSuperficie(sf, P.clima.T), N = 256;
+  const sf = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), cl = climaSuperficie(k, P, sf), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
