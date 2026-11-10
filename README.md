@@ -47,11 +47,22 @@ le loro vite medie. Un universo si simula in circa un decimo di secondo.
 Il pattern non si costruisce: **si trova**. Nell'app (File → Nuovo → la
 biblioteca) si sfogliano gli universi (◀ ▶, il dado, o un numero), si sposta e
 si ingrandisce la **finestra** sull'universo, e con la barra del tempo e la
-fetta si sceglie **quando** guardare. Il Pattern è questa finestra ripetuta, e
-nient'altro: a specchio (ogni copia riflette la vicina, così le linee che
-toccano il bordo continuano nella loro immagine), a giro (quattro copie girano
-di un quarto intorno a un angolo), affiancata, o da sola. Nessun montaggio: il
-motivo è un pezzo di universo, la ripetizione è quella della finestra.
+fetta si sceglie **quando** guardare.
+
+**Il caleidoscopio.** Un ornamento vero non è una figura copiata accanto a sé:
+è un pezzo piccolo di piano ripetuto da un gruppo di simmetrie che riempie il
+piano (i diciassette gruppi delle carte da parati, quelli dei pavimenti arabi e
+delle tavole di Owen Jones). Nei caleidoscopi il pezzo è un triangolo e le
+simmetrie sono specchi lungo i suoi lati: ogni linea che tocca un lato continua
+nella sua immagine, e intorno ai vertici nascono stelle e rosoni
+(`src/camera/pattern.js`). Qui il pezzo è un triangolo della sezione
+dell'universo: la natura disegna il triangolo, gli specchi della ripetizione
+fanno il resto, come nei cristalli e nei fiocchi di neve. Le ripetizioni:
+caleidoscopio a sei (dodici copie fanno un esagono, stelle a sei punte),
+caleidoscopio a quattro (otto copie fanno un quadrato, stelle a quattro e a
+otto punte), a specchio, a giro, affiancata, da sola. Il «giro del triangolo»
+sceglie quale spicchio della finestra entra nel caleidoscopio. Nella vista **la
+finestra** il triangolo è segnato in arancione e il resto è velato.
 
 **Da che angolo.** L'universo è un piano più il tempo: uno spaziotempo. La
 lastra «da sopra» guarda lungo il tempo e vede solo il piano. Ma la sezione si
@@ -62,7 +73,15 @@ di anelli come un cordone di fregio; un elettrone che gira e deriva nel campo
 disegna un guilloché.
 
 **Il dado che porta a cose belle.** Sfogliare a caso dà quasi sempre sezioni
-generiche. Il dado (`src/camera/cercatore.js`, in un processo a parte) prova
+generiche. Ora il dado sceglie anche il caleidoscopio e il giro del triangolo, e
+misura il **pattern finito**, non la finestra: un ornamento ha abbastanza
+inchiostro ma non troppo, divide il fondo in **celle** di grandezza media (le
+maglie di un intreccio, i petali di un rosone) invece che in buchi minuscoli o
+grandi vuoti, è **nitido** (pochi ritagli minuscoli dove tante linee si
+incrociano quasi nello stesso punto), ha linee **distese** (non spirali
+strette: i riccioli ripetuti sono ondulamenti, non ornamenti) e pochi
+frammenti. La misura descritta qui sotto è quella di prima, per la sezione da
+sola. Il dado (`src/camera/cercatore.js`, in un processo a parte) prova
 molti universi e, per ognuno, molte inquadrature (dove, quanto larga, da che
 angolo, quale fetta di tempo), e tiene la più bella secondo una misura
 dichiarata: pieno (né vuota né satura), equilibrio (il disegno sparso nella

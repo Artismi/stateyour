@@ -10,7 +10,8 @@
 // bello (una salita, con un poco di caso per non fermarsi al primo poggio).
 
 import { simulaMondo, generatore } from './mondo.js';
-import { segmentiSezione, bellezza } from './sezione.js';
+import { segmentiSezione } from './sezione.js';
+import { bellezzaPattern, RIPETI_BASE } from './pattern.js';
 
 const clona = (o) => JSON.parse(JSON.stringify(o));
 
@@ -49,15 +50,16 @@ export function inquadraturaVicina(st, forza, caso) {
     finestra: { centro: f.centro.map((x) => x + g() * 0.06 * f.lato * forza), lato: f.lato * Math.exp(g() * 0.06 * forza) },
     vista: { inclinazione: Math.max(0, Math.min(85, v.inclinazione + (v.inclinazione ? g() * 4 * forza : 0))), rotazione: v.rotazione + (v.inclinazione ? g() * 6 * forza : 0), scalaTempo: Math.max(1, v.scalaTempo * Math.exp(g() * 0.08 * forza)) },
     sezione: { fine: Math.max(1, z.fine + g() * 3 * forza), durata: Math.max(1, Math.min(z.fine, z.durata * Math.exp(g() * 0.08 * forza))) },
+    ripeti: { ...(st.ripeti || RIPETI_BASE), angolo: ((st.ripeti?.angolo ?? 0) + (st.ripeti?.gruppo === 'specchio' ? 0 : g() * 6 * forza)) },
   };
 }
 
-const misura = (cella, tracce, st) => bellezza(segmentiSezione(tracce, { ...cella, ...st }), st.finestra.lato);
+const misura = (cella, tracce, st) => bellezzaPattern(segmentiSezione(tracce, { ...cella, ...st }), st.ripeti || RIPETI_BASE, st.finestra.lato);
 
 // la salita: stato = { cella, finestra, vista, sezione }
 export function perfeziona(stato, { passi = 50, seme = 1 } = {}, avanza = () => {}) {
   const caso = generatore(seme);
-  let cella = stato.cella, tracce = simulaMondo(cella), st = { finestra: stato.finestra, vista: stato.vista, sezione: stato.sezione };
+  let cella = stato.cella, tracce = simulaMondo(cella), st = { finestra: stato.finestra, vista: stato.vista, sezione: stato.sezione, ripeti: stato.ripeti || RIPETI_BASE };
   let b = misura(cella, tracce, st);
   const partenza = b.totale;
   let meglio = { cella, ...st, bellezza: b };
