@@ -262,12 +262,6 @@ export const COMPOSIZIONI = {
 export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, lente, biliardo };
 export const nuovoElemento = (chi, k = 1) => elemento(ELEMENTI[chi](), k);
 
-// ---------- da un'immagine: lo schema della lingua diventa una composizione
-// Ogni parola trovata dalla decodifica (con la sua simmetria, la sua taglia e
-// i posti dove compare) diventa un evento fisico con la stessa simmetria e la
-// stessa taglia: un fiore a n petali per una simmetria di ordine n ≥ 2, una
-// voluta per una simmetria a specchio o nessuna. È una prima bozza: lo stesso
-// schema, con parole fisiche al posto di quelle disegnate.
 // spostare tutto un mondo non cambia la sua fisica: si porta il centro del
 // disegno nel centro della cella, così il posto cade dove cade il motivo
 export function centraCella(cella) {
@@ -280,34 +274,4 @@ export function centraCella(cella) {
   for (const p of c.pareti || []) { p.a = T(p.a); p.b = T(p.b); }
   for (const s of c.sorgenti || []) s.pos = T(s.pos);
   return { cella: c, raggio: Math.max(x1 - x0, y1 - y0) / 2 };
-}
-const naturali = new Map();
-function base(chi) {
-  if (!naturali.has(chi)) { const esp = chi.startsWith('fiore') ? fiore(+chi.slice(5)) : ELEMENTI[chi](), { cella, raggio } = centraCella(esp.cella); naturali.set(chi, { esp: { ...esp, cella }, raggio }); }
-  return naturali.get(chi);
-}
-export function daSchema(schema, misure) {
-  const W = misure.larghezza, H = misure.altezza;
-  let a = [W, 0], b = [0, H], ret = schema.reticolo;
-  if (ret && ret.v2) { a = [ret.v1[0], -ret.v1[1]]; b = [ret.v2[0], -ret.v2[1]]; }
-  const det = a[0] * b[1] - a[1] * b[0];
-  const ridotto = (p) => { if (!ret || !ret.v2) return p; const u = (b[1] * p[0] - b[0] * p[1]) / det, v = (-a[1] * p[0] + a[0] * p[1]) / det, fu = u - Math.floor(u), fv = v - Math.floor(v); return [fu * a[0] + fv * b[0], fu * a[1] + fv * b[1]]; };
-  const elementi = [];
-  for (const w of schema.parole) {
-    const n = w.simmetria.n ?? 1, tipo = w.simmetria.tipo;
-    const chi = n >= 2 ? `fiore${Math.min(12, n)}` : 'voluta';
-    const { esp: b0, raggio: r0 } = base(chi);
-    const k = Math.max(0.05, w.raggio / r0);
-    const el = elemento({ ...b0, nome: `parola ${w.nome}`, nota: `${tipo === 'D' ? `simmetria D${n}` : tipo === 'C' ? `simmetria C${n}` : 'nessuna simmetria'}, ${w.istanze.length} volte nell'immagine, raggio ${fmt(w.raggio)}: ${b0.nota}` }, k);
-    // l'asse dello specchio della parola (nell'immagine) sull'asse della voluta
-    const asse = tipo === 'D' && w.simmetria.asse != null ? (w.simmetria.asse * 180) / Math.PI : 90;
-    const rot0 = chi === 'voluta' ? asse - 90 : 0;
-    for (const ist of w.istanze) {
-      const pos = ridotto(ist.pos);
-      if (el.posti.some((p) => Math.hypot(p.pos[0] - pos[0], p.pos[1] - pos[1]) < w.raggio * 0.4)) continue;
-      el.posti.push({ pos: pos.map((x) => Math.round(x * 100) / 100), rot: Math.round((rot0 + ist.rot) * 10) / 10, specchio: !!ist.specchio });
-    }
-    elementi.push(el);
-  }
-  return { nome: 'dall\'immagine', nota: `${schema.parole.length} parole lette dall'immagine, ognuna sostituita da un evento fisico con la stessa simmetria e la stessa taglia. Prima bozza: entra in ogni parola e regola la fisica.`, reticolo: { a, b }, elementi, finita: !(ret && ret.v2) };
 }

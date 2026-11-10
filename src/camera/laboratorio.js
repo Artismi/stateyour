@@ -12,7 +12,7 @@
 // Tutto quello che cambi nell'elemento cambia subito in tutte le sue copie.
 
 import { simulaMondo, dentro, raggio, gittata, forze } from './mondo.js';
-import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto, daSchema } from './esperimento.js';
+import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
 const $ = (id) => document.getElementById(id);
@@ -39,7 +39,7 @@ function coloriTraccia(cella, tr) {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dt = b[3] - a[3];
     if (/specchio|rifrazione/.test(P[i][5])) { out[i] = FORZE.luce.col; continue; }
     if (!(dt > 0)) { out[i] = out[i - 1] || (luce ? FORZE.luce.col : [28, 27, 24]); continue; }
-    const F = forze(cella, tr.specie, P[i][0], P[i][1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt);
+    const F = forze(cella, tr.specie, P[i][0], P[i][1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, tr.esposizione ?? -1);
     const pesi = { gravita: F.gravita ? Math.hypot(...F.gravita) : 0, magnetico: F.magnetico ? Math.hypot(...F.magnetico) : 0, materia: F.materia ? Math.hypot(...F.materia) : 0 };
     // la luce e chi va dritto: il colore della luce o l'inchiostro, ma la gravità si vede quando piega davvero
     const curva = (pesi.gravita + pesi.magnetico) / ((F.v * F.v) || 1), soglia = 1 / (4 * Math.max(cella.larghezza, cella.altezza));
@@ -81,11 +81,11 @@ function tracceDi(e) {
   return m;
 }
 function simula() {
-  if (vista === 'pattern') { $('misure').textContent = `${comp.elementi.length} elementi · ${comp.elementi.reduce((n, e) => n + e.posti.length, 0)} posti per piastrella`; return; }
+  if (vista === 'pattern') { const ne = comp.elementi.length, np = comp.elementi.reduce((n, e) => n + e.posti.length, 0); $('misure').textContent = `${ne} ${ne === 1 ? 'elemento' : 'elementi'} · ${np} ${np === 1 ? 'posto' : 'posti'} per piastrella`; return; }
   const t0 = performance.now();
-  try { tracce = simulaMondo(cel()); $('errore').textContent = ''; } catch (e) { tracce = []; $('errore').textContent = e.message; }
+  try { tracce = tracceDi(el()).tracce; $('errore').textContent = ''; } catch (e) { tracce = []; $('errore').textContent = e.message; }
   const ms = performance.now() - t0, punti = tracce.reduce((n, t) => n + t.punti.length, 0);
-  $('misure').textContent = `${el().nome}: ${tracce.length} linee · ${punti} punti · ${ms.toFixed(0)} ms`;
+  $('misure').textContent = `${tracce.length} linee · ${punti} punti · ${ms.toFixed(0)} ms`;
   if (vista === 'spaziotempo') imposta3D();
 }
 const tMax = () => { let m = 0; for (const t of tracce) m = Math.max(m, t.punti[t.punti.length - 1][3]); return m || cel().tempo || 1; };
@@ -177,7 +177,6 @@ function disegnaPattern() {
     ctx.beginPath(); ctx.arc(X(v[0]), Y(v[1]), 6 * dpr, 0, 7); ctx.fill(); ctx.stroke();
     scrivi(n, X(v[0]) + 9 * dpr, Y(v[1]) - 6 * dpr, INK);
   }
-  scrivi('la piastrella tratteggiata si ripete all\'infinito · trascina il fondo per muoverti, rotella per lo zoom', 12 * dpr, H - 12 * dpr);
 }
 const aPattern = (e) => { const r = tela.getBoundingClientRect(); return [pat.cx + (e.clientX - r.left - r.width / 2) / pat.z, pat.cy + (e.clientY - r.top - r.height / 2) / pat.z]; };
 function colpisciPattern(x, y) {
@@ -230,14 +229,16 @@ function disegnaElemento() {
   for (let i = 0; i < c.masse.length; i++) disegnaMassa(c.masse[i], sel?.tipo === 'massa' && sel.i === i);
   c.pareti.forEach((p, i) => disegnaParete(p, sel?.tipo === 'parete' && sel.i === i));
   if (prima) disegnaTracce(prima, Infinity, true);
-  disegnaTracce(tracce, T, false);
+  const tante = tracce.length > 60 || tracce.reduce((n, t) => n + t.punti.length, 0) > 40000;
+  if (tante && T >= tMax() && !fetta && !fuoco && !evidenzia && !(sel && ['traccia', 'specie', 'sorgente'].includes(sel.tipo))) ctx.drawImage(spriteDi(el(), vt.s), 0, 0, c.larghezza, c.altezza);
+  else disegnaTracce(tracce, T, false);
+  if (sonda || sel?.tipo === 'traccia') { const id = sonda ? sonda.tr : sel.i, tr = tracce.find((t) => t.id === id); if (tr && tante) disegnaTracce([tr], T, false); }
   if (strati.decadimento) for (const dk of tracce.decadimenti || []) if (dk.t <= T) disegnaDecadimento(dk);
   if (T < tMax()) disegnaTeste(T);
   c.sorgenti.forEach((so, i) => disegnaSorgente(so, sel?.tipo === 'sorgente' && sel.i === i));
   if (sel?.tipo === 'dominio') maniglieDominio(c.domini[sel.i]);
   if (sonda) disegnaSonda();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  scrivi(`${el().nome} · una cella dello spaziotempo · passa sopra una linea per vedere le forze`, 12 * vt.dpr, H - 12 * vt.dpr);
 }
 function evidente(tr) {
   if (sel?.tipo === 'traccia') return tr.id === sel.i;
@@ -276,7 +277,7 @@ function freccia(x, y, dx, dy, colore, larghezza = 2) {
 }
 // le frecce delle forze su una particella: lunghezza come la radice dell'intensità
 function frecceForze(tr, x, y, vx, vy, etichette) {
-  const F = forze(cel(), tr.specie, x, y, vx, vy), v = F.v, c = cel();
+  const F = forze(cel(), tr.specie, x, y, vx, vy, tr.esposizione ?? -1), v = F.v, c = cel();
   const aRif = (v * v) / (0.12 * Math.max(c.larghezza, c.altezza)) || 1;
   const lun = (a) => Math.min(px(70), px(34) * Math.sqrt(Math.hypot(...a) / aRif));
   const lv = Math.min(px(60), px(14) + px(4) * v);
@@ -330,8 +331,29 @@ function puntini(f, colore, passo) {
   for (let y = passo / 2, r = 0; y < c.altezza; y += passo, r++) for (let x = (r % 2 ? passo : passo / 2); x < c.larghezza; x += passo) { ctx.beginPath(); ctx.arc(x, y, px(0.9), 0, 7); ctx.fill(); }
   ctx.restore();
 }
+function corridoiDella(tr) {
+  const e = cel().esposizioni?.[tr.esposizione]; if (!e) return [];
+  const usati = new Set();
+  for (let i = 0; i < tr.punti.length; i += 3) { const p = tr.punti[i]; e.domini.forEach((d, k) => { if (!usati.has(k) && dentro(d.forma, p[0], p[1])) usati.add(k); }); }
+  return [...usati].map((k) => e.domini[k]);
+}
 function disegnaCampi() {
-  const c = cel(), lista = [{ forma: { tipo: 'tutto' }, ...c.fondo, fondo: true }, ...c.domini];
+  const c = cel();
+  if (c.esposizioni) {
+    // tante esposizioni: si mostrano solo i corridoi della linea sotto il cursore (o scelta)
+    const id = sonda ? sonda.tr : sel?.tipo === 'traccia' ? sel.i : null, tr = id != null ? tracce.find((t) => t.id === id) : null;
+    if (!tr) return;
+    for (const d of corridoiDella(tr)) {
+      forma(d.forma);
+      if (d.B && strati.magnetico) { ctx.fillStyle = rgb(FORZE.magnetico.col, 0.18); ctx.fill('evenodd'); }
+      if (d.K && strati.materia) { ctx.fillStyle = rgb(FORZE.materia.col, 0.25); ctx.fill('evenodd'); }
+      ctx.strokeStyle = rgb(d.B ? FORZE.magnetico.col : d.K ? FORZE.materia.col : [28, 27, 24], 0.6); ctx.lineWidth = px(1); ctx.stroke();
+    }
+    const e = c.esposizioni[tr.esposizione];
+    if (e && strati.luce) e.pareti.forEach((p) => { if (tr.punti.some((q, i) => i % 4 === 0 && Math.hypot(q[0] - p.a[0], q[1] - p.a[1]) < 30)) disegnaParete(p, false); });
+    return;
+  }
+  const lista = [{ forma: { tipo: 'tutto' }, ...c.fondo, fondo: true }, ...c.domini];
   lista.forEach((dm, k) => {
     const scelto = sel?.tipo === 'dominio' && sel.i === k - 1, etichetta = [];
     if (dm.B && strati.magnetico) { forma(dm.forma); ctx.fillStyle = rgb(FORZE.magnetico.col, Math.min(0.16, 0.04 + Math.abs(dm.B) * 0.25)); ctx.fill('evenodd'); etichetta.push([`${dm.B > 0 ? '⊙' : '⊗'} campo ${fmt(dm.B)}`, FORZE.magnetico.col]); }
@@ -594,6 +616,14 @@ function pannelloElemento(h) {
   if (!sel) {
     h.push(`<p class="nota">${el().nota || ''}</p>`);
     h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo, materia, vetro), una massa, uno specchio, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
+    if (c.esposizioni) {
+      const ds = c.esposizioni.flatMap((e) => e.domini), so = c.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0);
+      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; una parete nera la ferma alla fine. Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Passa sopra una linea per vedere i suoi corridoi.</p>`);
+      h.push(`<h2>le specie (che cosa sono le particelle)</h2><p class="nota">La carica decide lo spessore della traccia.</p><div class="elenco">`);
+      for (const nome of Object.keys(c.specie)) h.push(`<div data-specie="${nome}">◦ <b>${nome}</b> ${descriviSpecie(c.specie[nome])}</div>`);
+      h.push('</div>');
+      return;
+    }
     h.push(`<h2>che cosa c'è in questa cella</h2><div class="elenco">`);
     c.sorgenti.forEach((so, i) => h.push(`<div data-sel="sorgente:${i}"><i style="color:${rgb(FORZE.decadimento.col)}">→</i> sorgente ${i + 1}: <b>${specieDi(so).nome}</b> ${specieDi(so).luce ? 'luce' : `v ${fmt(so.v ?? 0)}`}</div>`));
     c.domini.forEach((d, i) => h.push(`<div data-sel="dominio:${i}"><i style="color:${rgb(d.B ? FORZE.magnetico.col : d.K ? FORZE.materia.col : [40, 120, 150])}">▒</i> ${d.nome || 'zona'}: ${descriviDominio(d)}</div>`));
@@ -758,19 +788,22 @@ const schede = $('forze');
 function mostraSchede() {
   const c = vista === 'pattern' ? null : cel(), conta = {};
   if (c) {
-    conta.gravita = c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'qui nessuna';
-    const zB = [c.fondo, ...c.domini].filter((d) => d.B).length, zK = [c.fondo, ...c.domini].filter((d) => d.K).length, zn = c.domini.filter((d) => (d.n ?? 1) !== 1).length;
-    conta.magnetico = zB ? `${zB} ${zB === 1 ? 'zona' : 'zone'}` : 'qui nessuno';
-    conta.materia = zK ? `${zK} ${zK === 1 ? 'zona' : 'zone'}` : 'qui nessuna';
+    conta.gravita = c.masse.length ? `${c.masse.length} ${c.masse.length === 1 ? 'massa' : 'masse'}` : 'nessuna';
+    const tuttiDomini = [...c.domini, ...(c.esposizioni || []).flatMap((e) => e.domini)], tuttePareti = [...c.pareti, ...(c.esposizioni || []).flatMap((e) => e.pareti)];
+    const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length, zn = tuttiDomini.filter((d) => (d.n ?? 1) !== 1).length;
+    conta.magnetico = zB ? `${zB} ${zB === 1 ? 'zona' : 'zone'}` : 'nessuno';
+    conta.materia = zK ? `${zK} ${zK === 1 ? 'zona' : 'zone'}` : 'nessuna';
     const luci = Object.values(c.specie).filter((s) => s.luce).length;
-    conta.luce = c.pareti.length || zn || luci ? [c.pareti.length && `${c.pareti.length} specchi`, zn && `${zn} vetri`, luci && 'luce'].filter(Boolean).join(', ') : 'qui niente';
+    const specchi = tuttePareti.filter((p) => p.tipo === 'specchio').length;
+    conta.luce = specchi || zn || luci ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
     const dec = Object.values(c.specie).filter((s) => s.vita != null).length;
-    conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'qui niente';
+    conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'niente';
   }
-  schede.innerHTML = Object.entries(FORZE).map(([k, f]) => `<button data-forza="${k}" class="${strati[k] ? 'acceso' : ''}" style="--c:${rgb(f.col)}"><i>${f.simbolo}</i> ${f.nome}${conta[k] ? ` <small>${conta[k]}</small>` : ''}</button>`).join('') +
+  schede.classList.toggle('legenda', !c);
+  schede.innerHTML = Object.entries(FORZE).map(([k, f]) => `<button data-forza="${k}" class="${strati[k] || !c ? 'acceso' : ''}" style="--c:${rgb(f.col)}"><i>${f.simbolo}</i> ${f.nome}${conta[k] ? ` <small>${conta[k]}</small>` : ''}</button>`).join('') +
     `<label class="colori"><input type="checkbox" id="coloriForze" ${coloriForze ? 'checked' : ''}> linee colorate per forza</label>`;
 }
-schede.addEventListener('click', (e) => { const b = e.target.closest('[data-forza]'); if (!b) return; strati[b.dataset.forza] = !strati[b.dataset.forza]; mostraSchede(); disegna(); });
+schede.addEventListener('click', (e) => { const b = e.target.closest('[data-forza]'); if (!b || vista === 'pattern') return; strati[b.dataset.forza] = !strati[b.dataset.forza]; mostraSchede(); disegna(); });
 schede.addEventListener('change', (e) => { if (e.target.id === 'coloriForze') { coloriForze = e.target.checked; disegna(); } });
 schede.addEventListener('pointerover', (e) => {
   const b = e.target.closest('[data-forza]'), f = b ? b.dataset.forza : null;
@@ -778,32 +811,41 @@ schede.addEventListener('pointerover', (e) => {
 });
 schede.addEventListener('pointerleave', () => { if (fuoco) { fuoco = null; $('spiegaForza').innerHTML = ''; disegna(); } });
 
-// ---------- barra: strumenti, viste, composizioni, immagini, seme
-function scegliStrumento(s) { strumento = s; document.querySelectorAll('[data-strumento]').forEach((b) => b.classList.toggle('attivo', b.dataset.strumento === s)); }
-document.querySelectorAll('[data-strumento]').forEach((b) => b.addEventListener('click', () => { if (vista !== 'dettaglio') entra(corrente); scegliStrumento(b.dataset.strumento); }));
-document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => { vista = b.dataset.vista; if (vista === 'pattern') sonda = null; aggiornaVista(); }));
+// ---------- gli strumenti (solo nell'elemento) e le viste
+function scegliStrumento(st) { strumento = st; document.querySelectorAll('[data-strumento]').forEach((b) => b.classList.toggle('attivo', b.dataset.strumento === st)); tela.style.cursor = st === 'seleziona' ? 'default' : 'crosshair'; dove(); }
+document.querySelectorAll('[data-strumento]').forEach((b) => b.addEventListener('click', () => scegliStrumento(strumento === b.dataset.strumento ? 'seleziona' : b.dataset.strumento)));
+document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.vista === 'pattern') { vista = 'pattern'; sonda = null; aggiornaVista(); } else entra(corrente); }));
+document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { vista = b.dataset.modo === 'spaziotempo' ? 'spaziotempo' : 'dettaglio'; aggiornaVista(); }));
 const v3 = creaVista3D(tela3d, { spunte: () => ({ linee: true, pianta: true, taglio: true, forze: false, masse: true, campi: true }) });
 function imposta3D() {
   const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }, (d.n ?? 1) !== 1 && { tipo: 'luce' }].filter(Boolean) }));
   v3.imposta({ masse: c.masse, blocchi }, tracce);
 }
+// la riga in basso: dove sei e che cosa puoi fare
+function dove() {
+  const t = vista === 'pattern'
+    ? `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`
+    : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', specchio: 'lo specchio', vetro: 'il vetro' })[strumento]} (Esc per annullare).`
+    : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
+    : `«${el().nome}»: passa sopra una linea per vedere le forze che la piegano; tocca una cosa per cambiarla.`;
+  $('dove').textContent = t;
+}
 function aggiornaVista() {
-  document.querySelectorAll('[data-vista]').forEach((b) => b.classList.toggle('attivo', b.dataset.vista === vista));
-  document.body.classList.toggle('in-pattern', vista === 'pattern');
+  const inPattern = vista === 'pattern';
+  document.querySelectorAll('[data-vista]').forEach((b) => b.classList.toggle('attivo', (b.dataset.vista === 'pattern') === inPattern));
+  document.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('attivo', (b.dataset.modo === 'spaziotempo') === (vista === 'spaziotempo')));
+  document.body.classList.toggle('in-pattern', inPattern);
   tela.hidden = vista === 'spaziotempo'; tela3d.hidden = vista !== 'spaziotempo';
-  $('nomeElemento').textContent = vista === 'pattern' ? '' : el().nome;
-  simula(); aggiornaTempo(); mostraSchede();
+  $('nomeElemento').textContent = el() ? `: ${el().nome}` : '';
+  if (inPattern) scegliStrumento('seleziona');
+  simula(); aggiornaTempo(); mostraSchede(); dove();
   if (vista === 'spaziotempo') imposta3D();
   disegna(); mostraPannello();
 }
-const scelta = $('composizione');
-for (const k of Object.keys(COMPOSIZIONI)) scelta.insertAdjacentHTML('beforeend', `<option value="${k}">${k}</option>`);
-scelta.addEventListener('change', () => { if (!COMPOSIZIONI[scelta.value]) return; ricorda(); carica(COMPOSIZIONI[scelta.value]()); });
 function carica(nuova, { tieniImmagine = false } = {}) {
   comp = nuova; corrente = 0; scelto = null; sopra = null; sel = null; tempo = Infinity; if (!tieniImmagine) immagine = null;
   vista = 'pattern'; adattaPattern(); aggiornaVista();
 }
-$('elimina').addEventListener('click', elimina);
 $('annulla').addEventListener('click', annulla); $('rifai').addEventListener('click', rifai);
 function ripristina(s) { const o = JSON.parse(s); comp = o.comp; corrente = Math.min(o.corrente, comp.elementi.length - 1); sel = null; scelto = null; aggiornaVista(); }
 function annulla() { if (!indietro.length) return; avanti.push(JSON.stringify({ comp, corrente })); ripristina(indietro.pop()); }
@@ -812,42 +854,103 @@ addEventListener('keydown', (e) => {
   if (e.target.matches('input, textarea, select')) return;
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? rifai() : annulla(); }
   else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); rifai(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); salvaSeme(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); $('fileImmagine').click(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') elimina();
-  else if (e.key === 'Escape') { if (vista !== 'pattern' && !sel) { vista = 'pattern'; aggiornaVista(); return; } sel = null; scelto = null; scegliStrumento('seleziona'); disegna(); mostraPannello(); }
+  else if (e.key === 'Escape') {
+    if (strumento !== 'seleziona') { scegliStrumento('seleziona'); return; }
+    if (vista !== 'pattern' && !sel) { vista = 'pattern'; aggiornaVista(); return; }
+    sel = null; scelto = null; disegna(); mostraPannello();
+  }
 });
-// il seme
-$('seme').addEventListener('click', () => { $('testoSeme').value = JSON.stringify(comp, null, 1); $('dialogo').showModal(); });
-$('usaSeme').addEventListener('click', () => { try { const n = JSON.parse($('testoSeme').value); if (!n.elementi || !n.reticolo) throw new Error('mancano elementi o reticolo'); ricorda(); carica(n); $('dialogo').close(); } catch (e) { alert('il seme non si legge: ' + e.message); } });
-$('chiudiSeme').addEventListener('click', () => $('dialogo').close());
-$('scarica').addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(comp, null, 1)], { type: 'application/json' })); a.download = `${(comp.nome || 'seme').replace(/\W+/g, '_')}.json`; a.click(); });
 
-// ---------- un'immagine: decodifica, lingua, e la composizione fisica
-let lavoratore = null;
+// ---------- il menu File
+const menu = $('menuFile');
+$('apriMenu').addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('aperto'); });
+addEventListener('click', () => menu.classList.remove('aperto'));
+menu.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-file]'); if (!b) return;
+  menu.classList.remove('aperto');
+  ({ nuovo: apriNuovo, immagine: () => $('fileImmagine').click(), apri: () => $('fileSeme').click(), salva: salvaSeme, png: esportaPNG, testo: () => { $('testoSeme').value = JSON.stringify(comp, null, 1); $('dialogoSeme').showModal(); } })[b.dataset.file]();
+});
+const scarica = (blob, nome) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
+const nomeFile = (est) => `${(comp.nome || 'stateyour').replace(/[^\p{L}\p{N}]+/gu, '_')}.${est}`;
+function salvaSeme() { scarica(new Blob([JSON.stringify(comp, null, 1)], { type: 'application/json' }), nomeFile('json')); }
+function esportaPNG() { if (vista === 'spaziotempo') tela3d.toBlob((b) => scarica(b, nomeFile('png'))); else { disegna(); tela.toBlob((b) => scarica(b, nomeFile('png'))); } }
+$('fileSeme').addEventListener('change', async (ev) => {
+  const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+  try { const n = JSON.parse(await f.text()); if (!n.elementi || !n.reticolo) throw new Error('non è un seme di stateyour'); ricorda(); carica(n); } catch (e) { alert(`Il file non si legge: ${e.message}`); }
+});
+$('usaSeme').addEventListener('click', () => { try { const n = JSON.parse($('testoSeme').value); if (!n.elementi || !n.reticolo) throw new Error('mancano gli elementi o la piastrella'); ricorda(); carica(n); $('dialogoSeme').close(); } catch (e) { alert(`Il seme non si legge: ${e.message}`); } });
+$('chiudiSeme').addEventListener('click', () => $('dialogoSeme').close());
+
+// ---------- «Da dove partiamo?»: un'immagine, l'esempio, un modello, il vuoto
+function apriNuovo() {
+  const carte = [
+    `<button data-carta="immagine" class="grande"><b>Un'immagine…</b><span>dal computer: viene pulita, letta e rifatta con la fisica, tratto per tratto</span></button>`,
+    `<button data-carta="esempio"><b>Esempio: tavola greca</b><span>Owen Jones, «Grammar of Ornament», 1856: la stessa lettura, già pronta da provare</span></button>`,
+    ...Object.entries(COMPOSIZIONI).map(([k, f]) => `<button data-carta="modello" data-nome="${k}"><b>${k}</b><span>${f().nota}</span></button>`),
+    `<button data-carta="vuoto"><b>Vuoto</b><span>una cella con una sola particella in un campo: da qui si costruisce tutto</span></button>`,
+  ];
+  $('carte').innerHTML = carte.join('');
+  $('nuovo').showModal();
+}
+$('chiudiNuovo').addEventListener('click', () => $('nuovo').close());
+$('carte').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-carta]'); if (!b) return;
+  $('nuovo').close();
+  const k = b.dataset.carta;
+  if (k === 'immagine') $('fileImmagine').click();
+  else if (k === 'esempio') daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6');
+  else if (k === 'modello') { ricorda(); carica(COMPOSIZIONI[b.dataset.nome]()); }
+  else if (k === 'vuoto') {
+    ricorda();
+    carica({ nome: 'nuovo', nota: 'una particella in un campo magnetico: aggiungi campi, materia, masse, specchi', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [{ nome: 'elemento 1', nota: '', posti: [{ pos: [0, 0], rot: 0 }], cella: {
+      larghezza: 200, altezza: 200, c: 30, G: 1, bordo: 'aperto', tempo: 40, fondo: { B: 0.15, K: 0, n: 1 }, domini: [], masse: [], pareti: [],
+      pellicola: { w0: 1, saturazione: 4, vRif: 8 }, specie: { carica: { q: 1, m: 1 } }, sorgenti: [{ pos: [60, 100], dir: 0, v: 8, specie: 'carica' }] } }] });
+    entra(0);
+  }
+});
+
+// ---------- leggere un'immagine: pulizia, tratti, fisica, verifica
+let lettore = null;
+function passoLettura(n, testo) {
+  document.querySelectorAll('#passi li').forEach((li) => { const k = +li.dataset.passo; li.className = k < n ? 'fatto' : k === n ? 'ora' : ''; if (k === n && testo) li.querySelector('small').textContent = testo; });
+}
 async function daImmagine(src, nome) {
-  $('misure').textContent = `carico ${nome}…`; $('errore').textContent = '';
+  $('letturaTitolo').textContent = `Leggo ${nome}`; $('letturaEsito').innerHTML = ''; $('letturaOk').hidden = true; $('letturaAnnulla').textContent = 'annulla';
+  document.querySelectorAll('#passi li').forEach((li) => { li.className = ''; });
+  $('lettura').showModal();
   const img = new Image(); img.src = src; await img.decode();
   const lato = Math.max(img.naturalWidth, img.naturalHeight), k = Math.min(1, 900 / lato);
   const cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
   const x = cv.getContext('2d'); x.drawImage(img, 0, 0, cv.width, cv.height);
   const dati = x.getImageData(0, 0, cv.width, cv.height).data;
-  if (lavoratore) lavoratore.terminate();
-  lavoratore = new Worker(new URL('../studio/lavoratore.js', import.meta.url), { type: 'module' });
-  lavoratore.onmessage = (ev) => {
+  if (lettore) lettore.terminate();
+  lettore = new Worker(new URL('./lettore.js', import.meta.url), { type: 'module' });
+  lettore.onmessage = (ev) => {
     const m = ev.data;
-    if (m.stato) $('misure').textContent = m.stato;
-    if (m.errore) { $('errore').textContent = `la decodifica non è riuscita: ${m.errore.split('\n')[0]}`; console.error(m.errore); }
+    if (m.passo) passoLettura(m.passo, m.testo);
+    if (m.errore) { $('letturaEsito').innerHTML = `<p style="color:#b8412b">La lettura non è riuscita: ${m.errore.split('\n')[0]}</p>`; $('letturaAnnulla').textContent = 'chiudi'; console.error(m.errore); lettore.terminate(); lettore = null; }
     if (m.fatto) {
-      ricorda();
-      immagine = { img, W: m.misure.larghezza, H: m.misure.altezza };
-      carica(daSchema(m.schema, m.misure), { tieniImmagine: true });
-      $('misure').textContent = `${nome}: letta in ${((m.tempi.lettura + m.tempi.lingua) / 1000).toFixed(1)} s · ${m.schema.parole.length} parole → ${comp.elementi.length} elementi fisici`;
-      lavoratore.terminate(); lavoratore = null;
+      passoLettura(5);
+      const { cella, conta, fedelta: f, misure: mi } = m;
+      const nota = `${conta.tratti} tratti, ${conta.petali} petali, ${conta.dischi} dischi, ${conta.campiture} campiture; ${conta.pezzi} archi di campo in ${conta.esposizioni} esposizioni. La fisica rifà l'immagine al ${Math.round(f.iou * 100)}%.`;
+      const nuovo = { nome, nota, reticolo: { a: [mi.larghezza, 0], b: [0, mi.altezza] }, elementi: [{ nome: "l'immagine", nota: `ogni linea è una particella vera: ${nota}`, posti: [{ pos: [mi.larghezza / 2, mi.altezza / 2], rot: 0 }], cella }] };
+      // le tracce calcolate nel lettore: niente da rifare
+      let r = 4; for (const t of m.tracce) for (const p of t.punti) if (p[2]) r = Math.max(r, Math.hypot(p[0] - mi.larghezza / 2, p[1] - mi.altezza / 2));
+      memoria.set(JSON.stringify(cella), { tracce: m.tracce, raggio: r, sprite: new Map() });
+      $('letturaEsito').innerHTML = `<p><span class="numero">${Math.round(f.iou * 100)}%</span> dell'immagine rifatto dalla fisica <span class="nota">(ritrova il ${Math.round(f.richiamo * 100)}% del disegno; il ${Math.round(f.precisione * 100)}% di ciò che traccia sta sul disegno)</span></p>
+        <p class="nota">${m.preparata ? `Prima l'ho pulita: ${m.motivi.join(', ')}. ` : ''}${nota} Il seme è di ${conta.numeri} numeri. ${m.secondi.toFixed(0)} secondi.</p>`;
+      $('letturaOk').hidden = false; $('letturaAnnulla').textContent = 'chiudi';
+      $('letturaOk').onclick = () => { $('lettura').close(); ricorda(); immagine = { img, W: mi.larghezza, H: mi.altezza }; mostraOriginale = true; carica(nuovo, { tieniImmagine: true }); };
+      lettore.terminate(); lettore = null;
     }
   };
-  lavoratore.postMessage({ img: { larghezza: cv.width, altezza: cv.height, canali: 4, dati } });
+  lettore.postMessage({ img: { larghezza: cv.width, altezza: cv.height, canali: 4, dati } });
 }
-$('file').addEventListener('change', (ev) => { const f = ev.target.files[0]; if (f) daImmagine(URL.createObjectURL(f), f.name); });
-$('esempio').addEventListener('click', () => daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6'));
+$('letturaAnnulla').addEventListener('click', () => { if (lettore) { lettore.terminate(); lettore = null; } $('lettura').close(); });
+$('fileImmagine').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) daImmagine(URL.createObjectURL(f), f.name.replace(/\.[^.]+$/, '')); });
 
 // ---------- il tempo: la fetta
 const cursoreT = $('tempo');
@@ -872,7 +975,7 @@ function passo(ora = performance.now()) {
 addEventListener('resize', disegna);
 // il lavoro resta: si salva da solo e si ritrova alla prossima apertura
 const CHIAVE = 'stateyour:camera';
-try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.reticolo) { comp = s; scelta.value = COMPOSIZIONI[s.nome] ? s.nome : ''; } } catch { /* un salvataggio rotto si ignora */ }
+try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.reticolo) comp = s; } catch { /* un salvataggio rotto si ignora */ }
 let salvato = '';
 setInterval(() => { const j = JSON.stringify(comp); if (j !== salvato) { try { localStorage.setItem(CHIAVE, j); salvato = j; } catch { /* spazio finito */ } } }, 1500);
 adattaPattern(); aggiornaVista();

@@ -1,7 +1,7 @@
 // test_camera.mjs — le cinque leggi della camera danno quello che la fisica prevede
 import assert from 'node:assert/strict';
 import { simulaMondo, raggio, gittata, deflessioneLuce, forze } from '../src/camera/mondo.js';
-import { PRESET, copie, storia, scalaCella, trasformaPosto, COMPOSIZIONI, daSchema, centraCella } from '../src/camera/esperimento.js';
+import { PRESET, copie, storia, scalaCella, trasformaPosto, COMPOSIZIONI, centraCella } from '../src/camera/esperimento.js';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 let ok = 0;
@@ -111,21 +111,6 @@ prova('i posti: il centro della cella cade sul posto, ruotato e riflesso', () =>
 
 prova('le composizioni di partenza: ogni elemento ha posti e si simula', () => {
   for (const [k, f] of Object.entries(COMPOSIZIONI)) { const c = f(); assert.ok(c.elementi.length && c.reticolo.a && c.reticolo.b, k); for (const e of c.elementi) { assert.ok(e.posti.length, k); assert.ok(simulaMondo(e.cella).length, `${k} ${e.nome}`); } }
-});
-
-prova("dall'immagine: le parole diventano eventi con la stessa simmetria, taglia e posti", () => {
-  const schema = { parole: [
-    { nome: 'A', raggio: 40, simmetria: { tipo: 'D', n: 6, asse: 0 }, istanze: [{ pos: [100, 100], rot: 0, specchio: false }, { pos: [300, 100], rot: 0, specchio: false }] },
-    { nome: 'B', raggio: 15, simmetria: { tipo: 'D', n: 1, asse: Math.PI / 2 }, istanze: [{ pos: [200, 200], rot: 0, specchio: false }] },
-  ], reticolo: null };
-  const comp = daSchema(schema, { larghezza: 400, altezza: 300 });
-  assert.equal(comp.elementi.length, 2);
-  assert.equal(comp.elementi[0].posti.length, 2);
-  assert.equal(comp.elementi[0].cella.specie.nucleo.figli.filter((f) => f.specie === 'fotone').length, 6);
-  // la taglia: il disegno dell'elemento sta in un cerchio di raggio circa 40 attorno al centro della cella
-  const { raggio: r } = centraCella(comp.elementi[0].cella);
-  assert.ok(Math.abs(r - 40) / 40 < 0.05, `${r}`);
-  assert.deepEqual(comp.reticolo, { a: [400, 0], b: [0, 300] });
 });
 
 console.log(`camera: ${ok} prove, tutto ok`);

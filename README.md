@@ -77,14 +77,47 @@ blu, materia marrone) con il loro valore. Il tempo è una fetta: scorrendolo si
 vedono le particelle vive (+, −, luce) con le loro frecce; la seconda barra
 restringe la fetta a un intervallo.
 
-**Da un'immagine.** La decodifica e la lingua (in un processo a parte) leggono
-le parole, la loro simmetria, la loro taglia e i loro posti; ogni parola
-diventa un evento fisico con la stessa simmetria e la stessa taglia (un fiore
-a n petali per l'ordine n ≥ 2, una voluta per lo specchio), centrato e scalato
-con la similitudine della fisica (`scalaCella`: lunghezze e tempi ×k, B/k,
-K/k, M·k, velocità uguali: la forma è identica). L'originale resta sotto per
-confronto. È una prima bozza: lo schema è quello dell'immagine, la fisica di
-ogni parola va poi regolata entrando nell'elemento.
+**Da un'immagine** (File → Apri un'immagine, oppure File → Nuovo → la tavola
+greca di esempio). La lettura ha quattro passi, che l'app mostra mentre
+avvengono:
+
+1. **Pulizia** (`src/preparazione.js`), solo se serve: immagine sporca o
+   sfumata, luce non uniforme, disegno più chiaro del fondo, disegno che si
+   distingue solo per il colore. Il colore del fondo si misura zona per zona
+   (l'ombra cambia la luce, non la tinta) e si divide via; il disegno è tutto
+   ciò che si allontana dal fondo, in luce o in colore; un filtro mediano toglie
+   il rumore rispettando le linee sottili; la soglia è di Otsu, dentro il campo
+   (fuori c'è la cornice). Su versioni rovinate della tavola greca il disegno si
+   ritrova al 68% (foto con ombra, rumore forte e dominante gialla), 82%
+   (negativo) e 79% (stessa luminosità, solo colore), dove senza pulizia la
+   lettura falliva (44%, 0%, 0%).
+2. **Lettura dei tratti**: la decodifica (scheletro, spessori, petali, dischi,
+   campiture).
+3. **Ricerca della fisica** (`src/camera/inversa.js`): per ogni tratto la
+   particella che lo percorre. Il tratto si divide in pezzi a curvatura
+   costante, ognuno l'arco che una carica fa in un campo uniforme; si allunga il
+   pezzo finché resta entro mezzo pixel dal disegno, e il pezzo dopo parte dallo
+   stato in cui il primo finisce: la traccia è continua e liscia come quella di
+   una particella vera (due giri di spirale logaritmica: 6 archi). Ogni pezzo
+   diventa un corridoio di campo lungo l'arco, largo quanto lo spazio libero
+   intorno, con B = κ·m·v/q; lo spessore è la carica; una parete nera ferma la
+   particella alla fine. Un petalo è una carica che frena nella materia (si
+   allarga verso la punta), un disco una carica pesante che si ferma subito, una
+   campitura un biliardo tra gli specchi del suo contorno. La lastra è materia
+   densa e i corridoi canali vuoti: una particella che sfuggisse si fermerebbe
+   subito. Le linee che si incrociano vanno su esposizioni diverse della stessa
+   lastra (in un punto il campo è uno solo), come nelle camere a bolle vere.
+4. **Verifica**: si rifà l'immagine con la sola fisica e la si confronta con
+   il disegno letto. La tavola greca: 327 tratti, 3332 archi di campo, 60
+   esposizioni, rifatta al 75% (ritrova l'85% del disegno; l'87% di ciò che
+   traccia sta sul disegno). La ricostruzione geometrica, più libera, arrivava
+   all'85%: la differenza è ciò che queste leggi non spiegano ancora, soprattutto
+   i tratti che si assottigliano ai due capi (una carica può solo ingrossare
+   verso la fine) e la forma esatta dei petali.
+
+Il risultato è un pattern con un elemento, l'immagine, con l'originale sotto
+per confronto; entrando, passando sopra una linea si vedono i suoi corridoi di
+campo e le forze che la piegano.
 
 Gli elementi di partenza (`src/camera/esperimento.js`): il fiore (un nucleo
 decade in fotoni a raggiera, ogni fotone si converte in una coppia + −, il
@@ -105,7 +138,12 @@ vincoli veri, che sono anche il carattere delle forme: una traccia è continua,
 gira solo dove c'è campo, si ingrossa solo quando rallenta, e finisce con
 l'occhio.
 
-Il vecchio studio (a parole, frasi e blocchi) è in `studio.html`.
+L'app è `index.html`: un menu **File** (nuovo, apri un'immagine, apri e salva
+il seme, esporta l'immagine), due viste (**Pattern** ed **Elemento**, con il
+piano o lo spaziotempo), annulla e rifai. Le altre pagine (`studio.html`,
+`decodifica.html`, `spaziotempo.html`, `piastrelle.html`, `motore.html`) sono
+pagine di laboratorio delle fasi precedenti: restano nel progetto per lo
+sviluppo, ma non fanno parte dell'app.
 
 ### Come applicazione sul computer (Electron)
 

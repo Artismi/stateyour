@@ -127,6 +127,20 @@ export function risolviSpecie(s, catalogo = {}) {
 // angolo delle figlie in gradi, relativo alla direzione della madre. Per la luce
 // m è la sua energia (in unità di massa): la sua quantità di moto è m·c.
 export function simulaMondo(mondo, opzioni = {}) {
+  // più esposizioni sulla stessa lastra: ognuna con i suoi campi, le sue masse,
+  // i suoi specchi e le sue sorgenti; le specie, la pellicola e c sono comuni
+  if (mondo.esposizioni) {
+    const tutte = [], decadimenti = [];
+    const lista = [{ domini: mondo.domini, masse: mondo.masse, pareti: mondo.pareti, sorgenti: mondo.sorgenti }, ...mondo.esposizioni];
+    lista.forEach((e, k) => {
+      if (!e.sorgenti || !e.sorgenti.length) return;
+      const tr = simulaMondo({ ...mondo, esposizioni: undefined, domini: e.domini || [], masse: e.masse || [], pareti: e.pareti || [], sorgenti: e.sorgenti, tempo: e.tempo ?? mondo.tempo }, opzioni);
+      for (const t of tr) tutte.push({ ...t, id: tutte.length, esposizione: k - 1 });
+      for (const d of tr.decadimenti) decadimenti.push({ ...d, esposizione: k - 1 });
+    });
+    tutte.decadimenti = decadimenti;
+    return tutte;
+  }
   const W = mondo.larghezza, H = mondo.altezza, T = mondo.tempo ?? 200;
   const G = mondo.G ?? 1, C = mondo.c ?? 30;
   const fondo = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) };
@@ -302,7 +316,8 @@ export function simulaMondo(mondo, opzioni = {}) {
 // ---------- le forze in un punto, separate per legge (per vederle)
 // Restituisce le accelerazioni che ogni legge dà a una particella di quella
 // specie che passa in (x, y) con velocità (vx, vy), e il dominio dove si trova.
-export function forze(mondo, specie, x, y, vx, vy) {
+export function forze(mondo, specie, x, y, vx, vy, esposizione = -1) {
+  if (esposizione >= 0 && mondo.esposizioni) { const e = mondo.esposizioni[esposizione]; mondo = { ...mondo, domini: e.domini || [], masse: e.masse || [] }; }
   const fondo = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) }, G = mondo.G ?? 1;
   let d = { ...fondo, i: -1 };
   (mondo.domini || []).forEach((dm, i) => { if (dentro(dm.forma, x, y)) d = { B: dm.B ?? fondo.B, K: dm.K ?? fondo.K, n: dm.n ?? fondo.n, i }; });

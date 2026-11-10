@@ -482,7 +482,7 @@ export function decodifica(img, opzioni = {}) {
       const base = pts[0], dirB = tangente(pts, 0, Math.max(2, Math.floor(pts.length / 4)));
       // la punta tonda sporge di mezza larghezza oltre lo scheletro
       elementi.push({ tipo: 'petalo', pos: [base[0], base[1]], dir: dirB, L: L + Wmax / 2, W: Wmax, b: Math.max(Math.min(testa, coda), 0.5 * pxMondo), curva: svoltaTotale(pts) });
-      codificati.set(t.id, { petalo: true });
+      codificati.set(t.id, { petalo: true, linea: pts });
       continue;
     }
     // una catena: ancoraggi, tangenti, spessore
@@ -511,7 +511,7 @@ export function decodifica(img, opzioni = {}) {
     const tangenti = idx.map((i) => tangente(pts, i, Math.max(2, Math.round(1.5 * scala))));
     const larghezzaInizio = mediana(larghezze.slice(0, n5)), larghezzaFine = mediana(larghezze.slice(-n5));
     const profilo = idx.map((i) => Math.max(pts[i][2], 0.5 * pxMondo));
-    codificati.set(t.id, { punti, tangenti, idx, attacchi, larghezzaInizio, larghezzaFine, profilo, chiuso: !!t.chiuso });
+    codificati.set(t.id, { punti, tangenti, idx, attacchi, larghezzaInizio, larghezzaFine, profilo, chiuso: !!t.chiuso, linea: pts });
   }
   // le catene con i loro rami: i figli diventano rami agganciati all'ancoraggio
   const defCatena = (t) => {
@@ -540,7 +540,9 @@ export function decodifica(img, opzioni = {}) {
     if (def && def.punti.length >= 2) elementi.push({ tipo: 'catena', def });
   }
 
-    return { elementi, S, D, G, tratti };
+    // le linee dense (centro e spessore, nel mondo): servono alla decodifica fisica
+    const linee = tratti.map((t) => codificati.get(t.id)).filter((c) => c && c.linea && !c.petalo).map((c) => ({ punti: c.linea, chiuso: c.chiuso }));
+    return { elementi, S, D, G, tratti, linee };
   };
 
   // tutte le passate su una maschera qualunque (della stessa misura): la prima
@@ -644,6 +646,7 @@ export function decodifica(img, opzioni = {}) {
 
   return {
     elementi,
+    linee: prima.linee,
     misure: { larghezza: W0, altezza: H0, ritaglio: rit, scala, colori: { inchiostro: ink, fondo }, tratti: tratti.length, nodi: G.nodi.length, residuo: residuoTotale / (scala * scala) },
     interni: { maschera: m, scheletro: S, distanza: D, W, H, rit, scala },
     // per la lingua: decodificare solo una parte (il dominio fondamentale di una figura)

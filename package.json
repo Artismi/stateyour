@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "app": "electron .",
-    "test": "node test/test_camera.mjs && node test/test_onda.mjs && node test/test_ottica.mjs && node test/test_campi.mjs && node test/test_catena.mjs && node test/test_grammatica.mjs && node test/test_seme.mjs && node test/test_spessore.mjs && node test/test_greco.mjs && node test/test_decodifica.mjs && node test/test_lingua.mjs && node test/test_studio.mjs",
+    "test": "node test/test_camera.mjs && node test/test_inversa.mjs && node test/test_preparazione.mjs && node test/test_onda.mjs && node test/test_ottica.mjs && node test/test_campi.mjs && node test/test_catena.mjs && node test/test_grammatica.mjs && node test/test_seme.mjs && node test/test_spessore.mjs && node test/test_greco.mjs && node test/test_decodifica.mjs && node test/test_lingua.mjs && node test/test_studio.mjs",
     "start": "python3 -m http.server 8000",
     "pacchetto": "electron-builder --dir",
     "installabile": "electron-builder"

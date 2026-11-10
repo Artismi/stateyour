@@ -3,33 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>stateyour — la camera</title>
+<title>stateyour</title>
 <style>
   :root { --carta: #f4f1ea; --inchiostro: #1c1b18; --grigio: #8a867c; --riga: #d8d3c6; --accento: #d0532f; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); height: 100vh; display: flex; flex-direction: column; }
-  header { padding: 7px 12px; border-bottom: 1px solid var(--riga); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  header h1 { font-size: 15px; margin: 0 8px 0 0; }
-  .gruppo { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid var(--riga); }
-  .gruppo:last-of-type { border-right: 0; }
-  nav { margin-left: auto; display: flex; gap: 10px; font-size: 12px; } nav a { color: var(--grigio); }
+  body { margin: 0; font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); height: 100vh; display: flex; flex-direction: column; }
   button, select, input { font: inherit; }
-  button { border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 4px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  button { border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 5px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
   button:hover { border-color: var(--inchiostro); }
-  button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  button.primo { background: var(--accento); color: #fff; border-color: var(--accento); }
+  input[type=number] { width: 72px; padding: 3px; border: 1px solid var(--riga); border-radius: 3px; }
   select { padding: 3px; border: 1px solid var(--riga); border-radius: 3px; background: #fff; }
-  input[type=number] { width: 64px; padding: 3px; border: 1px solid var(--riga); border-radius: 3px; }
+
+  /* la barra in alto: il file, dove sei, annulla */
+  header { padding: 6px 12px; border-bottom: 1px solid var(--riga); display: flex; gap: 10px; align-items: center; }
+  header h1 { font-size: 15px; margin: 0 6px 0 0; letter-spacing: .02em; }
+  .menu { position: relative; }
+  .menu > div { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; background: #fff; border: 1px solid var(--riga); border-radius: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.12); min-width: 260px; padding: 4px; }
+  .menu.aperto > div { display: block; }
+  .menu > div button { display: block; width: 100%; text-align: left; border: 0; padding: 7px 10px; }
+  .menu > div button:hover { background: var(--carta); }
+  .menu > div small { display: block; color: var(--grigio); font-size: 11px; }
+  .menu > div hr { border: 0; border-top: 1px solid var(--riga); margin: 4px 0; }
+  .schede { display: flex; gap: 0; margin: 0 auto; }
+  .schede button { border-radius: 0; margin-left: -1px; min-width: 150px; }
+  .schede button:first-child { border-radius: 4px 0 0 4px; }
+  .schede button:last-child { border-radius: 0 4px 4px 0; }
+  .schede button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  .schede button:disabled { color: var(--grigio); cursor: default; }
+
   main { flex: 1; display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
   .scena { display: flex; flex-direction: column; min-height: 0; }
   .tele { flex: 1; position: relative; min-height: 0; }
   .tele canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   .tele canvas[hidden] { display: none; }
   #tela3d { background: #15140f; }
+
+  /* sopra la scena: le cinque forze */
+  .sopra { position: absolute; left: 10px; top: 8px; right: 210px; pointer-events: none; }
+  .forze { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; pointer-events: auto; }
+  .forze button { border: 1px solid var(--c); color: var(--c); background: rgba(255,255,255,0.8); padding: 3px 9px; border-radius: 14px; font-size: 12px; }
+  .forze button i { font-style: normal; }
+  .forze button small { color: var(--grigio); font-size: 10.5px; }
+  .forze button.acceso { background: var(--c); color: #fff; }
+  .forze button.acceso small { color: rgba(255,255,255,0.85); }
+  .forze.legenda button { cursor: default; }
+  .forze .colori { font-size: 11.5px; color: var(--grigio); background: rgba(243,239,230,0.85); padding: 2px 6px; border-radius: 3px; }
+  #spiegaForza { margin-top: 6px; max-width: 640px; font-size: 12px; background: rgba(255,255,255,0.95); border-radius: 3px; }
+  #spiegaForza:not(:empty) { padding: 6px 8px; border: 1px solid var(--riga); }
+  /* a sinistra, solo nell'elemento: che cosa si può aggiungere */
+  .aggiungi { position: absolute; left: 10px; top: 76px; display: flex; flex-direction: column; gap: 4px; }
+  .aggiungi .titolo { font-size: 11px; color: var(--grigio); text-transform: uppercase; letter-spacing: .08em; }
+  .aggiungi button { text-align: left; border-left: 4px solid var(--c); background: rgba(255,255,255,0.9); padding: 4px 8px; font-size: 12px; }
+  .aggiungi button.attivo { background: var(--c); color: #fff; }
+  /* in alto a destra, solo nell'elemento: piano o spaziotempo */
+  .modo { position: absolute; right: 10px; top: 8px; display: flex; }
+  .modo button { border-radius: 0; margin-left: -1px; font-size: 12px; padding: 3px 9px; }
+  .modo button:first-child { border-radius: 4px 0 0 4px; } .modo button:last-child { border-radius: 0 4px 4px 0; }
+  .modo button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  body.in-pattern .aggiungi, body.in-pattern .modo, body.in-pattern .sotto { display: none; }
+
   .sotto { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--riga); }
   .sotto input[type=range] { flex: 1; }
   .sotto #fetta { flex: 0 0 140px; }
-  .stato { color: var(--grigio); font-size: 12px; padding: 0 12px 6px; display: flex; gap: 14px; }
+  .sotto .nota { margin: 0; }
+  .stato { font-size: 12px; padding: 6px 12px; border-top: 1px solid var(--riga); display: flex; gap: 14px; align-items: baseline; }
+  #dove { color: var(--inchiostro); }
+  #misure { color: var(--grigio); margin-left: auto; }
   #errore { color: #b8412b; }
+
   aside { border-left: 1px solid var(--riga); overflow-y: auto; overflow-x: hidden; padding: 8px 12px 40px; }
   aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--grigio); margin: 16px 0 6px; font-weight: 600; }
   aside h2:first-child { margin-top: 4px; }
@@ -38,7 +80,7 @@
   .storia { background: #fff; border-left: 3px solid var(--accento); padding: 8px 10px; margin: 6px 0; }
   .elenco div { padding: 3px 6px; border-radius: 3px; cursor: pointer; border: 1px solid transparent; }
   .elenco div:hover { border-color: var(--riga); background: #fff; }
-  .cursore { display: grid; grid-template-columns: 1fr 70px; gap: 2px 6px; align-items: center; margin: 8px 0 2px; padding: 4px 6px; border-radius: 3px; }
+  .cursore { display: grid; grid-template-columns: 1fr 74px; gap: 2px 6px; align-items: center; margin: 8px 0 2px; padding: 4px 6px; border-radius: 3px; }
   .cursore:hover { background: #fff; }
   .cursore label { grid-column: 1 / -1; font-weight: 600; font-size: 12px; }
   .cursore input[type=range] { width: 100%; }
@@ -47,80 +89,109 @@
   .figlia { border-left: 2px solid var(--riga); padding-left: 6px; margin: 8px 0; }
   .piccolo { padding: 0 6px; font-size: 11px; }
   .misure { font-size: 12px; margin-top: 8px; }
-  .riga-bottoni { display: flex; gap: 4px; margin-top: 8px; }
-  label.file { border: 1px solid var(--riga); background: #fff; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
-  label.file input { display: none; }
-  body.in-pattern .strumenti { opacity: 0.45; }
-  .sotto.spento { opacity: 0.45; }
-  .sopra { position: absolute; left: 10px; top: 8px; right: 10px; pointer-events: none; }
-  .forze { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; pointer-events: auto; }
-  .forze button { border: 1px solid var(--c); color: var(--c); background: rgba(255,255,255,0.75); padding: 3px 8px; border-radius: 14px; font-size: 12px; }
-  .forze button i { font-style: normal; }
-  .forze button small { color: var(--grigio); font-size: 10.5px; }
-  .forze button.acceso { background: var(--c); color: #fff; }
-  .forze button.acceso small { color: rgba(255,255,255,0.85); }
-  .forze .colori { font-size: 11.5px; color: var(--grigio); margin-left: 6px; background: rgba(243,239,230,0.8); padding: 2px 6px; border-radius: 3px; }
-  #spiegaForza { margin-top: 6px; max-width: 640px; font-size: 12px; background: rgba(255,255,255,0.92); border-radius: 3px; pointer-events: none; }
-  #spiegaForza:not(:empty) { padding: 6px 8px; border: 1px solid var(--riga); }
+  .riga-bottoni { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
   .elemento { border: 1px solid var(--riga); border-radius: 4px; padding: 6px 8px; margin: 6px 0; background: #fffdf8; }
   .elemento.scelto { border-color: var(--accento); }
   .elemento .testa { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
   .briciole { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; }
-  button.primo { background: var(--accento); color: #fff; border-color: var(--accento); }
-  .riga-bottoni { flex-wrap: wrap; }
-  dialog { border: 1px solid var(--riga); border-radius: 4px; width: min(720px, 92vw); }
+  .numero { font-size: 22px; font-weight: 600; }
+
+  dialog { border: 1px solid var(--riga); border-radius: 6px; width: min(860px, 94vw); padding: 18px 20px; background: var(--carta); }
+  dialog::backdrop { background: rgba(20,19,15,.35); }
+  dialog h2 { margin: 0 0 4px; font-size: 16px; }
   dialog textarea { width: 100%; height: 360px; font: 11px ui-monospace, monospace; }
+  .carte { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 14px 0; }
+  .carte button { text-align: left; white-space: normal; padding: 10px 12px; min-height: 92px; display: flex; flex-direction: column; gap: 4px; }
+  .carte button b { font-size: 13px; }
+  .carte button span { color: var(--grigio); font-size: 11.5px; }
+  .carte button.grande { border: 1.5px solid var(--accento); }
+  .passi { list-style: none; padding: 0; margin: 14px 0; }
+  .passi li { padding: 6px 0 6px 26px; position: relative; color: var(--grigio); }
+  .passi li::before { content: '○'; position: absolute; left: 4px; }
+  .passi li.ora { color: var(--inchiostro); } .passi li.ora::before { content: '◔'; color: var(--accento); }
+  .passi li.fatto { color: var(--inchiostro); } .passi li.fatto::before { content: '●'; color: #2a8c55; }
+  .passi li small { display: block; color: var(--grigio); }
 </style>
 </head>
-<body>
+<body class="in-pattern">
 <header>
-  <h1>stateyour · la camera</h1>
-  <div class="gruppo">
-    <select id="composizione" title="un pattern di partenza"></select>
-    <label class="file" title="decodifica un'immagine: le sue parole diventano eventi fisici">immagine…<input type="file" id="file" accept="image/*"></label>
-    <button id="esempio">tavola greca</button>
+  <h1>stateyour</h1>
+  <div class="menu" id="menuFile">
+    <button id="apriMenu">File ▾</button>
+    <div>
+      <button data-file="nuovo">Nuovo…<small>un esempio, un modello o un'immagine</small></button>
+      <button data-file="immagine">Apri un'immagine…<small>la legge e la ricostruisce con la fisica</small></button>
+      <hr>
+      <button data-file="apri">Apri un seme…<small>un file .json salvato prima</small></button>
+      <button data-file="salva">Salva il seme<small>le condizioni iniziali: tutto il resto ne è conseguenza</small></button>
+      <button data-file="png">Esporta l'immagine (.png)</button>
+      <hr>
+      <button data-file="testo">Mostra il seme come testo</button>
+    </div>
   </div>
-  <div class="gruppo viste">
-    <button data-vista="pattern" class="attivo" title="tutti gli elementi sulla griglia infinita">▦ il pattern</button>
-    <button data-vista="dettaglio" title="un elemento solo: la sua fisica">◉ l'elemento <span id="nomeElemento"></span></button>
-    <button data-vista="spaziotempo" title="l'elemento con il tempo che sale">⧗ spaziotempo</button>
-  </div>
-  <div class="gruppo strumenti">
-    <button data-strumento="seleziona" class="attivo" title="tocca e trascina le cose sulla scena">✋ tocca</button>
-    <button data-strumento="sorgente" title="clicca dove far nascere una particella">+ sorgente</button>
-    <button data-strumento="campo" title="una zona con campo magnetico">+ campo</button>
-    <button data-strumento="materia" title="una zona di materia che frena">+ materia</button>
-    <button data-strumento="massa" title="una massa ferma che curva lo spazio">+ massa</button>
-    <button data-strumento="specchio">+ specchio</button>
-    <button data-strumento="vetro" title="una zona di vetro che rifrange la luce">+ vetro</button>
-  </div>
-  <div class="gruppo">
-    <button id="elimina" title="elimina la cosa scelta (Canc)">✕</button>
-    <button id="annulla" title="annulla (Ctrl+Z)">↶</button><button id="rifai" title="rifai (Ctrl+Y)">↷</button>
-    <button id="seme" title="il seme: le condizioni iniziali, tutto il resto è conseguenza">il seme</button>
-    <button id="scarica">scarica</button>
-  </div>
-  <nav><a href="./studio.html">lo studio (vecchio)</a><a href="./decodifica.html">decodifica</a><a href="./spaziotempo.html">spaziotempo</a></nav>
+  <nav class="schede">
+    <button data-vista="pattern" class="attivo" title="tutti gli elementi, ripetuti all'infinito">▦ Pattern</button>
+    <button data-vista="dettaglio" title="un elemento solo e la fisica che lo produce">◉ Elemento<span id="nomeElemento"></span></button>
+  </nav>
+  <button id="annulla" title="annulla (Ctrl+Z)">↶</button><button id="rifai" title="rifai (Ctrl+Y)">↷</button>
 </header>
 <main>
   <section class="scena">
-    <div class="tele"><canvas id="tela"></canvas><canvas id="tela3d" hidden></canvas><div class="sopra"><div id="forze" class="forze"></div><div id="spiegaForza"></div></div></div>
+    <div class="tele">
+      <canvas id="tela"></canvas><canvas id="tela3d" hidden></canvas>
+      <div class="sopra"><div id="forze" class="forze"></div><div id="spiegaForza"></div></div>
+      <div class="aggiungi">
+        <span class="titolo">aggiungi</span>
+        <button data-strumento="sorgente" style="--c:rgb(36,140,76)" title="clicca sulla scena dove nasce la particella">→ una particella</button>
+        <button data-strumento="campo" style="--c:rgb(52,104,214)" title="una zona dove le cariche girano">⊙ un campo</button>
+        <button data-strumento="materia" style="--c:rgb(150,104,50)" title="una zona dove le cariche frenano">▒ materia</button>
+        <button data-strumento="massa" style="--c:rgb(214,84,52)" title="un corpo fermo che curva lo spazio">● una massa</button>
+        <button data-strumento="specchio" style="--c:rgb(196,142,0)" title="riflette tutto ciò che lo tocca">— uno specchio</button>
+        <button data-strumento="vetro" style="--c:rgb(70,150,180)" title="rifrange la luce">◇ un vetro</button>
+      </div>
+      <div class="modo"><button data-modo="piano" class="attivo">piano</button><button data-modo="spaziotempo" title="il tempo sale: le linee d'universo">spaziotempo</button></div>
+    </div>
     <div class="sotto">
       <button id="gioca" title="guarda l'evento accadere">▶</button>
       <input type="range" id="tempo" min="0" max="1" step="0.001" value="1" title="il tempo">
       <output id="otempo"></output>
+      <span class="nota">fetta</span>
       <input type="range" id="fetta" min="0" max="0.5" step="0.005" value="0" title="lo spessore della fetta di tempo: 0 = tutta la storia">
       <output id="ofetta">tutta la storia</output>
     </div>
-    <div class="stato"><span id="misure"></span><span id="errore"></span></div>
+    <div class="stato"><span id="dove"></span><span id="errore"></span><span id="misure"></span></div>
   </section>
   <aside id="pannello"></aside>
 </main>
-<dialog id="dialogo">
-  <p><b>il seme</b>: il pattern intero. La piastrella (a, b), gli elementi e i loro posti; per ogni elemento le condizioni iniziali della sua cella di spaziotempo, dove stanno le masse, i campi, i mezzi, gli specchi, che cosa sono le particelle e dove nascono. Le leggi sono fisse; tutto il resto, ogni linea, ogni spessore, è conseguenza.</p>
-  <textarea id="testoSeme" spellcheck="false"></textarea>
-  <div class="riga-bottoni"><button id="usaSeme" class="attivo">usa questo seme</button><button id="chiudiSeme">chiudi</button></div>
+
+<dialog id="nuovo">
+  <h2>Da dove partiamo?</h2>
+  <p class="nota">Ogni pattern è la fotografia di eventi fisici: particelle, campi, materia, masse, specchi. Si può partire da un'immagine, che viene letta e ricostruita con la fisica, oppure da un modello da modificare.</p>
+  <div class="carte" id="carte"></div>
+  <div class="riga-bottoni"><button id="chiudiNuovo">chiudi</button></div>
 </dialog>
+
+<dialog id="lettura">
+  <h2 id="letturaTitolo">Leggo l'immagine</h2>
+  <ol class="passi" id="passi">
+    <li data-passo="1">Pulizia<small>ombre, rumore, colori: resta il disegno sul fondo</small></li>
+    <li data-passo="2">Lettura dei tratti<small>scheletro, spessori, petali, dischi, campiture</small></li>
+    <li data-passo="3">Ricerca della fisica<small>per ogni tratto la particella e i campi che lo disegnano</small></li>
+    <li data-passo="4">Verifica<small>si rifà l'immagine con la fisica e si confronta</small></li>
+  </ol>
+  <div id="letturaEsito"></div>
+  <div class="riga-bottoni"><button id="letturaOk" class="primo" hidden>guarda il risultato</button><button id="letturaAnnulla">annulla</button></div>
+</dialog>
+
+<dialog id="dialogoSeme">
+  <h2>Il seme</h2>
+  <p class="nota">Le condizioni iniziali di tutto il pattern: la piastrella, gli elementi e i loro posti; per ogni elemento dove stanno le masse, i campi, la materia, gli specchi, che cosa sono le particelle e dove nascono. Le leggi sono fisse: ogni linea e ogni spessore ne sono la conseguenza.</p>
+  <textarea id="testoSeme" spellcheck="false"></textarea>
+  <div class="riga-bottoni"><button id="usaSeme" class="primo">usa questo seme</button><button id="chiudiSeme">chiudi</button></div>
+</dialog>
+
+<input type="file" id="fileImmagine" accept="image/*" hidden>
+<input type="file" id="fileSeme" accept=".json,application/json" hidden>
 <script type="module" src="./src/camera/laboratorio.js"></script>
 </body>
 </html>
