@@ -229,6 +229,16 @@ sopravvento. Verificato sulla Terra (temperata, poco ghiaccio) e su Marte
 la frenano fino a bloccarla se il pianeta è vicino; la rotazione schiaccia il
 pianeta ai poli (5/4·ω²R³/GM), e la forma si vede sulla mappa.
 
+**L'erosione: il paesaggio che evolve** (`erosione` in `geologia.js`, il modello
+dei geomorfologi: potenza dei fiumi più pendii). A ogni passo le montagne
+crescono dove le placche spingono; piove dove il clima simulato lo permette (non
+sul ghiaccio); l'acqua scende lungo la pendenza più ripida; dove resta intrappolata
+riempie la conca fino a traboccare, ma diventa lago solo se l'acqua che arriva
+supera quella che evapora (altrimenti è una piana di sale); dove se ne raccoglie
+molta scava, in proporzione alla portata e alla pendenza; i pendii si sgretolano.
+Le reti di fiumi, le valli e i laghi emergono da qui; la neve sui monti si
+calcola dalla quota vera di ogni punto.
+
 Il pannello del pianeta racconta **perché è fatto così**, risalendo la catena
 delle cause con i suoi numeri: le fluttuazioni dell'inizio (quelle della
 radiazione cosmica di fondo) in quel punto, quando la galassia ha cominciato a

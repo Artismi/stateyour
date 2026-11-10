@@ -12,7 +12,7 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
-import { superficiePianeta, immagineSuperficie, climaSuperficie } from './geologia.js';
+import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -314,7 +314,7 @@ const dischi = new Map();
 export function discoPianeta(v, P) {
   if (P.tipo === 'gassoso' || !P.interno) return null;
   const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
-  const sf = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), cl = climaSuperficie(k, P, sf), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
+  const sf0 = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), cl = climaSuperficie(k, P, sf0), sf = erosione(k, sf0, cl), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {

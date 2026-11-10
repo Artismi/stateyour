@@ -110,4 +110,15 @@ prova('il clima simulato: la Terra temperata con poco ghiaccio, Marte gelido e s
   assert.ok(m.Tglobale < 233, `Marte a ${m.Tglobale - 273.15} °C`);
 });
 
+prova('l\'erosione: l\'acqua scende sempre, e scava', () => {
+  const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5 } };
+  const it = GE.interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 0.9e21;
+  const sf = GE.superficiePianeta('prova-er', P, it, 21), cl = GE.climaSuperficie('prova-er', P, sf), se = GE.erosione('prova-er', sf, cl, { passi: 60 });
+  // dove l'acqua si raccoglie molto, il terreno si è abbassato
+  // una valle: dove scorre molta acqua il terreno diventa più incassato rispetto ai vicini
+  const W = sf.W, incasso = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= sf.H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
+  let d = 0, n = 0; for (let k = 0; k < se.alt.length; k++) if (sf.alt[k] > sf.mare && se.lago[k] === 0 && se.flusso[k] > 30) { d += incasso(se.alt, k) - incasso(sf.alt, k); n++; }
+  assert.ok(n > 0 && d / n > 0, `le valli si incassano: ${d / n} m in media`);
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);
