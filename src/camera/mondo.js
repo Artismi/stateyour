@@ -92,7 +92,7 @@ function riquadro(forma) {
 }
 
 // una griglia per trovare in fretta i domini che contengono un punto
-function indiceDomini(domini, larghezza, altezza) {
+function indiceDomini(domini, larghezza, altezza, vivo = () => true) {
   const N = 48, cw = larghezza / N, ch = altezza / N, celle = Array.from({ length: N * N }, () => []), ovunque = [];
   domini.forEach((d, i) => {
     const [x0, y0, x1, y1] = riquadro(d.forma);
@@ -105,11 +105,20 @@ function indiceDomini(domini, larghezza, altezza) {
     const gx = Math.floor(x / cw), gy = Math.floor(y / ch);
     const lista = gx >= 0 && gy >= 0 && gx < N && gy < N ? celle[gy * N + gx] : [];
     let best = -1;
-    for (const i of ovunque) if (i > best && dentro(domini[i].forma, x, y)) best = i;
-    for (const i of lista) if (i > best && dentro(domini[i].forma, x, y)) best = i;
+    for (const i of ovunque) if (i > best && vivo(i) && dentro(domini[i].forma, x, y)) best = i;
+    for (const i of lista) if (i > best && vivo(i) && dentro(domini[i].forma, x, y)) best = i;
     return best;
   };
 }
+
+// le cinque leggi, tutte accese se non si dice altrimenti (mondo.leggi)
+export const LEGGI = { gravita: true, magnetico: true, materia: true, luce: true, decadimento: true };
+
+// gli interruttori nel tempo: un oggetto parte acceso (o spento, se «spento») e
+// cambia stato a ogni scatto { t, acceso } della sua lista «interruttori».
+// Una legge è true, false, oppure una lista di scatti (parte accesa).
+export function accesoA(o, t) { let a = !o.spento; for (const e of o.interruttori || []) if (e.t <= t) a = e.acceso; return a; }
+export const leggeA = (v, t) => (Array.isArray(v) ? v.reduce((a, e) => (e.t <= t ? e.acceso : a), true) : v !== false);
 
 // le specie si possono scrivere per nome: mondo.specie = { elettrone: {...}, ... }
 export function risolviSpecie(s, catalogo = {}) {
@@ -126,15 +135,28 @@ export function risolviSpecie(s, catalogo = {}) {
 //           sorgenti: [{ pos, dir, v, t0, specie }] }
 // angolo delle figlie in gradi, relativo alla direzione della madre. Per la luce
 // m è la sua energia (in unità di massa): la sua quantità di moto è m·c.
+// le SAGOME: corpi opachi appoggiati sulla lastra. Un lampo di luce uniforme,
+// all'istante zero, ne imprime la forma piena (un fotogramma, come una
+// radiografia). Sono le campiture: esatte, istantanee, senza riempimenti.
+function sagomeImpresse(mondo) {
+  const luce = leggeA({ ...LEGGI, ...(mondo.leggi || {}) }.luce, 0);
+  if (!luce) return [];
+  return (mondo.sagome || []).filter((s) => accesoA(s, 0)).map((s, i) => ({
+    sagoma: true, indice: i, contorno: s.contorno, buchi: s.buchi || [], fine: 'lampo', specie: { nome: 'lampo', luce: true }, sorgente: -1, generazione: 0,
+    punti: [...s.contorno, s.contorno[0]].map((p) => [p[0], p[1], true, 0, 0, 'luce']),
+  }));
+}
+
 export function simulaMondo(mondo, opzioni = {}) {
   // più esposizioni sulla stessa lastra: ognuna con i suoi campi, le sue masse,
   // i suoi specchi e le sue sorgenti; le specie, la pellicola e c sono comuni
   if (mondo.esposizioni) {
     const tutte = [], decadimenti = [];
     const lista = [{ domini: mondo.domini, masse: mondo.masse, pareti: mondo.pareti, sorgenti: mondo.sorgenti }, ...mondo.esposizioni];
+    for (const s of sagomeImpresse(mondo)) tutte.push({ ...s, id: tutte.length, esposizione: -1 });
     lista.forEach((e, k) => {
       if (!e.sorgenti || !e.sorgenti.length) return;
-      const tr = simulaMondo({ ...mondo, esposizioni: undefined, domini: e.domini || [], masse: e.masse || [], pareti: e.pareti || [], sorgenti: e.sorgenti, tempo: e.tempo ?? mondo.tempo }, opzioni);
+      const tr = simulaMondo({ ...mondo, esposizioni: undefined, sagome: undefined, domini: e.domini || [], masse: e.masse || [], pareti: e.pareti || [], sorgenti: e.sorgenti, tempo: e.tempo ?? mondo.tempo }, opzioni);
       for (const t of tr) tutte.push({ ...t, id: tutte.length, esposizione: k - 1 });
       for (const d of tr.decadimenti) decadimenti.push({ ...d, esposizione: k - 1 });
     });
@@ -143,15 +165,31 @@ export function simulaMondo(mondo, opzioni = {}) {
   }
   const W = mondo.larghezza, H = mondo.altezza, T = mondo.tempo ?? 200;
   const G = mondo.G ?? 1, C = mondo.c ?? 30;
-  const fondo = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) };
-  const domini = mondo.domini || [], pareti = mondo.pareti || [], masse = mondo.masse || [];
+  // le leggi si possono spegnere, gli oggetti pure: per vedere che cosa fa ognuno
+  // e anche nel tempo: un interruttore che scatta a metà cambia le traiettorie da lì in poi
+  const leggiIn = { ...LEGGI, ...(mondo.leggi || {}) };
+  const f0 = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) };
+  const domini = mondo.domini || [], tuttePareti = mondo.pareti || [], tutteMasse = mondo.masse || [];
+  const scatti = [...new Set([...domini, ...tuttePareti, ...tutteMasse].flatMap((o) => (o.interruttori || []).map((e) => e.t)).concat(Object.values(leggiIn).flatMap((v) => (Array.isArray(v) ? v.map((e) => e.t) : []))))].sort((a, b) => a - b);
+  const prossimoScatto = (t) => { for (const x of scatti) if (x > t + 1e-12) return x; return Infinity; };
+  let S, masse, pareti; // lo stato del mondo adesso: tra due scatti non cambia
+  const statoA = (t) => {
+    const L = {}; for (const k of Object.keys(LEGGI)) L[k] = leggeA(leggiIn[k], t);
+    S = { L, fondo: { B: L.magnetico ? f0.B : 0, K: L.materia ? f0.K : 0, n: L.luce ? f0.n : 1 }, dom: domini.map((d) => accesoA(d, t)) };
+    masse = L.gravita ? tutteMasse.filter((m) => accesoA(m, t)) : [];
+    pareti = L.luce ? tuttePareti.filter((p) => accesoA(p, t)) : [];
+  };
+  statoA(0);
   const catalogo = mondo.specie || {};
   const pel = { w0: 1, saturazione: 4, vRif: 10, ...(mondo.pellicola || {}) };
   const bordo = mondo.bordo || 'aperto';
-  const quale = indiceDomini(domini, W, H);
+  const quale = indiceDomini(domini, W, H, (i) => S.dom[i]);
   const campoIn = (x, y) => {
     const i = quale(x, y);
-    return i < 0 ? { B: fondo.B, K: fondo.K, n: fondo.n, i } : { B: domini[i].B ?? fondo.B, K: domini[i].K ?? fondo.K, n: domini[i].n ?? fondo.n, i };
+    const f = S.fondo, L = S.L;
+    if (i < 0) return { B: f.B, K: f.K, n: f.n, i };
+    const d = domini[i];
+    return { B: L.magnetico ? d.B ?? f0.B : 0, K: L.materia ? d.K ?? f0.K : 0, n: L.luce ? d.n ?? f0.n : 1, i };
   };
   // la gravità delle masse: accelerazione di caduta e distanza dalla superficie più vicina
   const gravita = (x, y) => {
@@ -165,14 +203,16 @@ export function simulaMondo(mondo, opzioni = {}) {
   const maxParticelle = opzioni.maxParticelle ?? 20000;
   const tracce = [], decadimenti = [];
   const coda = (mondo.sorgenti || []).map((s, i) => {
+    if (!accesoA(s, s.t0 ?? 0)) return null;
     const specie = risolviSpecie(s.specie, catalogo), v = specie.luce ? C / campoIn(...s.pos).n : s.v;
     return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null };
-  });
+  }).filter(Boolean);
   let nate = 0;
 
   while (coda.length && nate < maxParticelle) {
     const p = coda.shift(); nate++;
     const sp = p.specie, luce = !!sp.luce, q = luce ? 0 : sp.q ?? 0, m = sp.m ?? 1, vita = sp.vita ?? Infinity;
+    statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? (luce || q !== 0);
     const larghezza = (v) => (!visibile ? 0 : q ? pel.w0 * Math.abs(q) * Math.min(pel.saturazione, pel.vRif / Math.max(v, 1e-9)) : pel.w0 * 0.35);
     let [x, y] = p.pos, [vx, vy] = p.vel, t = p.t;
@@ -192,7 +232,9 @@ export function simulaMondo(mondo, opzioni = {}) {
     while (t < T && guardia++ < 200000) {
       const v = Math.hypot(vx, vy);
       if (v < 1e-9) { fine = 'ferma'; break; }
-      if (t >= p.nascita + vita) { fine = 'decade'; break; }
+      // un interruttore scatta: il mondo cambia qui, la particella prosegue nel mondo nuovo
+      if (t >= scatto - 1e-12) { statoA(t); scatto = prossimoScatto(t); c = campoIn(x, y); }
+      if (S.L.decadimento && t >= p.nascita + vita) { fine = 'decade'; break; }
       const w = q ? (q * c.B) / m : 0, kq = q ? (c.K * q * q) / m : 0;
       // l'accelerazione di gravità: per la luce solo la parte trasversale, doppia, divisa per n²
       const accel = (px, py, ux, uy) => {
@@ -204,7 +246,7 @@ export function simulaMondo(mondo, opzioni = {}) {
       };
       const [ax, ay] = accel(x, y, vx / v, vy / v);
       // il passo: piccolo abbastanza per la svolta, per il rallentamento, vicino alle masse
-      let dt = Math.min(passoMax / v, T - t, p.nascita + vita - t);
+      let dt = Math.min(passoMax / v, T - t, S.L.decadimento ? p.nascita + vita - t : Infinity, scatto - t);
       if (masse.length) { const L = lontano(x, y), a = Math.hypot(ax, ay) + 1e-12; dt = Math.min(dt, (0.02 * L) / v, 0.1 * Math.sqrt(L / a)); }
       if (w) dt = Math.min(dt, 0.06 / Math.abs(w));
       if (kq) dt = Math.min(dt, (0.15 * v * v * v) / (3 * kq) + 1e-12);
@@ -309,6 +351,7 @@ export function simulaMondo(mondo, opzioni = {}) {
       decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione });
     }
   }
+  for (const s of sagomeImpresse(mondo)) tracce.push({ ...s, id: tracce.length });
   tracce.decadimenti = decadimenti;
   return tracce;
 }
@@ -316,8 +359,12 @@ export function simulaMondo(mondo, opzioni = {}) {
 // ---------- le forze in un punto, separate per legge (per vederle)
 // Restituisce le accelerazioni che ogni legge dà a una particella di quella
 // specie che passa in (x, y) con velocità (vx, vy), e il dominio dove si trova.
-export function forze(mondo, specie, x, y, vx, vy, esposizione = -1) {
+export function forze(mondo, specie, x, y, vx, vy, esposizione = -1, t = 0) {
   if (esposizione >= 0 && mondo.esposizioni) { const e = mondo.esposizioni[esposizione]; mondo = { ...mondo, domini: e.domini || [], masse: e.masse || [] }; }
+  const leggi = {}; for (const k of Object.keys(LEGGI)) leggi[k] = leggeA((mondo.leggi || {})[k] ?? true, t);
+  mondo = { ...mondo, domini: (mondo.domini || []).filter((d) => accesoA(d, t)), masse: leggi.gravita ? (mondo.masse || []).filter((m) => accesoA(m, t)) : [],
+    fondo: { ...(mondo.fondo || {}), B: leggi.magnetico ? mondo.fondo?.B : 0, K: leggi.materia ? mondo.fondo?.K : 0 } };
+  if (!leggi.magnetico || !leggi.materia || !leggi.luce) mondo.domini = mondo.domini.map((d) => ({ ...d, B: leggi.magnetico ? d.B : 0, K: leggi.materia ? d.K : 0, n: leggi.luce ? d.n : 1 }));
   const fondo = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) }, G = mondo.G ?? 1;
   let d = { ...fondo, i: -1 };
   (mondo.domini || []).forEach((dm, i) => { if (dentro(dm.forma, x, y)) d = { B: dm.B ?? fondo.B, K: dm.K ?? fondo.K, n: dm.n ?? fondo.n, i }; });

@@ -77,6 +77,22 @@ blu, materia marrone) con il loro valore. Il tempo è una fetta: scorrendolo si
 vedono le particelle vive (+, −, luce) con le loro frecce; la seconda barra
 restringe la fetta a un intervallo.
 
+**Accendere e spegnere.** Ogni forza ha il suo interruttore ⏻ (nelle schede
+sopra la scena e nel pannello «le leggi e gli oggetti»), e ogni oggetto il suo:
+una massa, una zona di campo o di materia, un vetro, uno specchio, una
+sorgente. Spento, la fisica lo ignora davvero: la scena si rifà e in grigio
+resta com'era. Se il tempo è alla fine, l'interruttore vale per tutta la
+storia; se il tempo è fermo a metà o sta scorrendo, **scatta in
+quell'istante**: prima nulla cambia, dopo le particelle proseguono nel mondo
+nuovo (come un elettromagnete spento a metà esposizione), e in grigio resta
+come sarebbe andata. Gli scatti sono tacche sulla linea del tempo e si tolgono
+con ✕. Nel seme, un oggetto porta `spento` e la lista `interruttori`
+(`{ t, acceso }`); una legge è `true`, `false` o una lista di scatti.
+
+**Una forza alla volta.** Clic sul nome di una forza: si vede solo lei, i
+suoi oggetti e le parti di linea che piega, accese tanto più quanto più conta
+lì; per il decadimento, in verde le particelle nate da un decadimento.
+
 **Da un'immagine** (File → Apri un'immagine, oppure File → Nuovo → la tavola
 greca di esempio). La lettura ha quattro passi, che l'app mostra mentre
 avvengono:
@@ -103,7 +119,10 @@ avvengono:
    intorno, con B = κ·m·v/q; lo spessore è la carica; una parete nera ferma la
    particella alla fine. Un petalo è una carica che frena nella materia (si
    allarga verso la punta), un disco una carica pesante che si ferma subito, una
-   campitura un biliardo tra gli specchi del suo contorno. La lastra è materia
+   campitura una **sagoma**: un corpo opaco appoggiato sulla lastra, impresso da
+   un lampo di luce uniforme all'istante zero (un fotogramma, come una
+   radiografia o i «rayogrammi» di Man Ray): esatta, piena, e senza allungare il
+   tempo dell'evento. La lastra è materia
    densa e i corridoi canali vuoti: una particella che sfuggisse si fermerebbe
    subito. Le linee che si incrociano vanno su esposizioni diverse della stessa
    lastra (in un punto il campo è uno solo), come nelle camere a bolle vere.
@@ -124,9 +143,10 @@ decade in fotoni a raggiera, ogni fotone si converte in una coppia + −, il
 campo richiude la coppia in un petalo), la stellina (lo stesso evento con
 quattro fotoni), la voluta (una neutra decade in + e −, due spirali opposte
 fino all'occhio), la palmetta (un ventaglio di cariche), la lente (una massa
-piega la luce e trattiene una carica in orbita), il biliardo (un raggio tra
-specchi e una goccia di vetro). Le composizioni: fiori e riempitivi, volute a
-specchio, palmette sfalsate, lenti, biliardi.
+piega la luce e trattiene una carica in orbita), la goccia (raggi di luce
+paralleli che attraversano una goccia di vetro e si incrociano in una caustica).
+Le composizioni: fiori e riempitivi, volute a specchio, palmette sfalsate,
+lenti, gocce.
 
 **È sempre possibile creare qualunque forma?** In linea di principio sì: con
 abbastanza domini piccoli una carica segue a pezzi di cerchio qualunque curva

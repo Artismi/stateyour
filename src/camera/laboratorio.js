@@ -11,7 +11,7 @@
 //   SPAZIOTEMPO   l'elemento con il tempo che sale: le linee d'universo.
 // Tutto quello che cambi nell'elemento cambia subito in tutte le sue copie.
 
-import { simulaMondo, dentro, raggio, gittata, forze } from './mondo.js';
+import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA } from './mondo.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -21,11 +21,11 @@ const INK = '#1c1b18', GRIGIO = '#8a867c', ACCENTO = '#d0532f', CARTA = '#f3efe6
 
 // ---------- le cinque forze: un colore, un simbolo, una frase
 export const FORZE = {
-  gravita: { nome: 'gravità', col: [214, 84, 52], simbolo: '●', frase: 'le masse ferme curvano lo spazio: chi passa cade verso di loro, uguale se leggero o pesante; la luce si piega il doppio. Nessuno sposta le masse.' },
-  magnetico: { nome: 'magnetismo', col: [52, 104, 214], simbolo: '⊙', frase: 'dove c\'è campo B le cariche girano: + da una parte, − dall\'altra. Raggio m·v/(q·B): più campo, curve più strette; più massa o velocità, più larghe.' },
-  materia: { nome: 'materia', col: [150, 104, 50], simbolo: '▒', frase: 'la materia frena le cariche, e più sono lente più frenano: la curva si stringe in spirale e finisce in una macchia tonda (l\'occhio).' },
-  luce: { nome: 'luce, specchi, vetri', col: [196, 142, 0], simbolo: '◇', frase: 'la luce va dritta a velocità c/n; si rifrange entrando in un vetro, rimbalza sugli specchi. Gli specchi riflettono anche le particelle.' },
-  decadimento: { nome: 'decadimento', col: [36, 140, 76], simbolo: '✳', frase: 'dopo la sua vita una particella si divide nelle sue figlie: è il punto da cui partono i petali, le forcelle, i ventagli.' },
+  gravita: { nome: 'gravità', art: 'la gravità', col: [214, 84, 52], simbolo: '●', frase: 'le masse ferme curvano lo spazio: chi passa cade verso di loro, uguale se leggero o pesante; la luce si piega il doppio. Nessuno sposta le masse.' },
+  magnetico: { nome: 'magnetismo', art: 'il magnetismo', col: [52, 104, 214], simbolo: '⊙', frase: 'dove c\'è campo B le cariche girano: + da una parte, − dall\'altra. Raggio m·v/(q·B): più campo, curve più strette; più massa o velocità, più larghe.' },
+  materia: { nome: 'materia', art: 'la materia', col: [150, 104, 50], simbolo: '▒', frase: 'la materia frena le cariche, e più sono lente più frenano: la curva si stringe in spirale e finisce in una macchia tonda (l\'occhio).' },
+  luce: { nome: 'luce, specchi, vetri', art: 'la luce, gli specchi e i vetri', col: [196, 142, 0], simbolo: '◇', frase: 'la luce va dritta a velocità c/n; si rifrange entrando in un vetro, rimbalza sugli specchi. Gli specchi riflettono anche le particelle.' },
+  decadimento: { nome: 'decadimento', art: 'il decadimento', col: [36, 140, 76], simbolo: '✳', frase: 'dopo la sua vita una particella si divide nelle sue figlie: è il punto da cui partono i petali, le forcelle, i ventagli.' },
 };
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const PARTI = { gravita: 'gravita', magnetico: 'magnetico', materia: 'materia', luce: 'luce', specchio: 'luce', rifrazione: 'luce' };
@@ -34,18 +34,22 @@ const haForza = (legge, f) => String(legge || '').split('+').some((p) => PARTI[p
 // quanto sono forti. Una spirale passa dal blu (il campo la piega) al marrone
 // (la materia la frena) man mano che rallenta.
 function coloriTraccia(cella, tr) {
-  const P = tr.punti, out = new Array(P.length), luce = !!tr.specie.luce;
+  const P = tr.punti, out = new Array(P.length), luce = !!tr.specie.luce, quote = (tr.quote = new Array(P.length));
+  const nessuna = { gravita: 0, magnetico: 0, materia: 0, luce: 0 };
+  cella = { ...cella, leggi };
   for (let i = 0; i < P.length; i++) {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dt = b[3] - a[3];
-    if (/specchio|rifrazione/.test(P[i][5])) { out[i] = FORZE.luce.col; continue; }
-    if (!(dt > 0)) { out[i] = out[i - 1] || (luce ? FORZE.luce.col : [28, 27, 24]); continue; }
-    const F = forze(cella, tr.specie, P[i][0], P[i][1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, tr.esposizione ?? -1);
+    quote[i] = nessuna;
+    if (/specchio|rifrazione/.test(P[i][5])) { out[i] = FORZE.luce.col; quote[i] = { ...nessuna, luce: 1 }; continue; }
+    if (!(dt > 0)) { out[i] = out[i - 1] || (luce ? FORZE.luce.col : [28, 27, 24]); quote[i] = quote[i - 1] || nessuna; continue; }
+    const F = forze(cella, tr.specie, P[i][0], P[i][1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, tr.esposizione ?? -1, P[i][3]);
     const pesi = { gravita: F.gravita ? Math.hypot(...F.gravita) : 0, magnetico: F.magnetico ? Math.hypot(...F.magnetico) : 0, materia: F.materia ? Math.hypot(...F.materia) : 0 };
     // la luce e chi va dritto: il colore della luce o l'inchiostro, ma la gravità si vede quando piega davvero
     const curva = (pesi.gravita + pesi.magnetico) / ((F.v * F.v) || 1), soglia = 1 / (4 * Math.max(cella.larghezza, cella.altezza));
     if (luce) pesi.luce = soglia * F.v * F.v;
     const tot = pesi.gravita + pesi.magnetico + pesi.materia + (pesi.luce || 0);
-    if (!tot || (!luce && curva < soglia * 0.25 && pesi.materia < soglia * F.v * F.v * 0.25)) { out[i] = luce ? FORZE.luce.col : [28, 27, 24]; continue; }
+    if (!tot || (!luce && curva < soglia * 0.25 && pesi.materia < soglia * F.v * F.v * 0.25)) { out[i] = luce ? FORZE.luce.col : [28, 27, 24]; if (luce) quote[i] = { ...nessuna, luce: 1 }; continue; }
+    quote[i] = { gravita: pesi.gravita / tot, magnetico: pesi.magnetico / tot, materia: pesi.materia / tot, luce: (pesi.luce || 0) / tot };
     const c = [0, 0, 0];
     for (const [k, w] of Object.entries(pesi)) if (w) for (let j = 0; j < 3; j++) c[j] += (FORZE[k].col[j] * w) / tot;
     out[i] = c.map(Math.round);
@@ -58,7 +62,16 @@ let comp = COMPOSIZIONI['fiori e riempitivi']();
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
-const strati = { gravita: true, magnetico: true, materia: true, luce: true, decadimento: true };
+// le leggi accese (agiscono nella fisica) e la vista «solo questa forza»
+const leggi = { ...LEGGI };
+let solo = null, confronto = null, confrontoTesto = '';
+const vedi = (f) => !solo || solo === f;
+// lo stato adesso, all'istante del cursore del tempo
+const ora = () => (vista === 'pattern' ? Infinity : Math.min(tempo, tMax()));
+const leggeOra = (k) => leggeA(leggi[k], ora());
+const accesoOra = (o) => accesoA(o, ora());
+// a metà del tempo gli interruttori scattano in quell'istante; alla fine valgono per tutta la storia
+const aMeta = () => vista !== 'pattern' && isFinite(tempo) && tempo < tMax() - 1e-9;
 let coloriForze = true, fuoco = null, immagine = null, mostraOriginale = true;
 const pat = { cx: 125, cy: 125, z: 1 };
 const indietro = [], avanti = [];
@@ -67,11 +80,12 @@ const cel = () => el().cella;
 
 // ---------- simulazione, con la memoria per elemento
 const memoria = new Map();
+const chiave = (cella) => JSON.stringify(cella) + JSON.stringify(leggi);
 function tracceDi(e) {
-  const k = JSON.stringify(e.cella);
+  const k = chiave(e.cella);
   let m = memoria.get(k);
   if (!m) {
-    let t = []; try { t = simulaMondo(e.cella); } catch (err) { console.error(err); }
+    let t = []; try { t = simulaMondo({ ...e.cella, leggi }); } catch (err) { console.error(err); }
     const cx = e.cella.larghezza / 2, cy = e.cella.altezza / 2; let r = 4;
     for (const tr of t) for (const p of tr.punti) if (p[2]) r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cy));
     m = { tracce: t, raggio: r, sprite: new Map() };
@@ -89,8 +103,8 @@ function simula() {
   if (vista === 'spaziotempo') imposta3D();
 }
 const tMax = () => { let m = 0; for (const t of tracce) m = Math.max(m, t.punti[t.punti.length - 1][3]); return m || cel().tempo || 1; };
-function ricorda() { indietro.push(JSON.stringify({ comp, corrente })); if (indietro.length > 200) indietro.shift(); avanti.length = 0; }
-function aggiorna({ pannello: p = true } = {}) { simula(); aggiornaTempo(); disegna(); if (p) mostraPannello(); }
+function ricorda() { indietro.push(JSON.stringify({ comp, corrente })); if (indietro.length > 200) indietro.shift(); avanti.length = 0; confronto = null; }
+function aggiorna({ pannello: p = true } = {}) { simula(); aggiornaTempo(); disegna(); dove(); mostraSchede(); if (p) mostraPannello(); }
 
 // ---------- disegno: smistamento
 function disegna() {
@@ -111,6 +125,7 @@ function spriteDi(e, s) {
   const c = sp.getContext('2d'); c.scale(k, k); c.lineCap = 'round'; c.lineJoin = 'round';
   for (const tr of m.tracce) {
     const P = tr.punti;
+    if (tr.sagoma) { c.fillStyle = coloriForze ? rgb(FORZE.luce.col) : INK; tracciaSagoma(c, tr); c.fill('evenodd'); continue; }
     for (let i = 1; i < P.length; i++) {
       const a = P[i - 1], b = P[i]; if (!a[2] || !b[2]) continue;
       c.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i]) : INK; c.lineWidth = Math.max(0.6 / k, (a[4] + b[4]) / 2);
@@ -225,15 +240,16 @@ function disegnaElemento() {
   ctx.setTransform(vt.s, 0, 0, vt.s, vt.ox, vt.oy);
   ctx.fillStyle = CARTA; ctx.fillRect(0, 0, c.larghezza, c.altezza);
   disegnaCampi();
-  if (strati.gravita) campoGravita();
+  if (vedi('gravita')) campoGravita();
   for (let i = 0; i < c.masse.length; i++) disegnaMassa(c.masse[i], sel?.tipo === 'massa' && sel.i === i);
   c.pareti.forEach((p, i) => disegnaParete(p, sel?.tipo === 'parete' && sel.i === i));
   if (prima) disegnaTracce(prima, Infinity, true);
+  else if (confronto) disegnaTracce(confronto, Infinity, true);
   const tante = tracce.length > 60 || tracce.reduce((n, t) => n + t.punti.length, 0) > 40000;
-  if (tante && T >= tMax() && !fetta && !fuoco && !evidenzia && !(sel && ['traccia', 'specie', 'sorgente'].includes(sel.tipo))) ctx.drawImage(spriteDi(el(), vt.s), 0, 0, c.larghezza, c.altezza);
+  if (tante && T >= tMax() && !fetta && !fuoco && !solo && !evidenzia && !(sel && ['traccia', 'specie', 'sorgente'].includes(sel.tipo))) ctx.drawImage(spriteDi(el(), vt.s), 0, 0, c.larghezza, c.altezza);
   else disegnaTracce(tracce, T, false);
   if (sonda || sel?.tipo === 'traccia') { const id = sonda ? sonda.tr : sel.i, tr = tracce.find((t) => t.id === id); if (tr && tante) disegnaTracce([tr], T, false); }
-  if (strati.decadimento) for (const dk of tracce.decadimenti || []) if (dk.t <= T) disegnaDecadimento(dk);
+  if (vedi('decadimento')) for (const dk of tracce.decadimenti || []) if (dk.t <= T) disegnaDecadimento(dk);
   if (T < tMax()) disegnaTeste(T);
   c.sorgenti.forEach((so, i) => disegnaSorgente(so, sel?.tipo === 'sorgente' && sel.i === i));
   if (sel?.tipo === 'dominio') maniglieDominio(c.domini[sel.i]);
@@ -247,11 +263,28 @@ function evidente(tr) {
   if (sel?.tipo === 'sorgente') return tr.sorgente === sel.i;
   return false;
 }
+// il contorno di una sagoma, con i suoi buchi (si riempie pari e dispari)
+function tracciaSagoma(c, tr) {
+  c.beginPath();
+  for (const anello of [tr.contorno, ...tr.buchi]) { anello.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.closePath(); }
+}
+function dentroSagoma(tr, x, y) {
+  let d = false;
+  for (const P of [tr.contorno, ...tr.buchi]) for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < ((P[j][0] - P[i][0]) * (y - P[i][1])) / (P[j][1] - P[i][1]) + P[i][0]) d = !d;
+  return d;
+}
 function disegnaTracce(lista, T, fantasma) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const qualcosa = !fantasma && lista.some(evidente), t0 = fetta > 0 ? T - fetta : -Infinity;
   for (const tr of lista) {
     const P = tr.punti, ev = !fantasma && evidente(tr);
+    if (tr.sagoma) {
+      // il lampo è all'istante zero: c'è sempre, tranne in una fetta di tempo che non lo comprende
+      if (t0 > 0) continue;
+      ctx.fillStyle = fantasma ? 'rgba(120,115,105,0.25)' : ev ? ACCENTO : solo ? (solo === 'luce' ? rgb(FORZE.luce.col) : 'rgba(28,27,24,0.1)') : rgb(coloriForze ? FORZE.luce.col : [28, 27, 24], qualcosa ? 0.35 : 1);
+      tracciaSagoma(ctx, tr); ctx.fill('evenodd');
+      continue;
+    }
     for (let i = 1; i < P.length; i++) {
       const a = P[i - 1], b = P[i];
       if (a[3] > T) break;
@@ -261,7 +294,9 @@ function disegnaTracce(lista, T, fantasma) {
       let colore;
       if (fantasma) colore = 'rgba(120,115,105,0.32)';
       else if (ev) colore = ACCENTO;
-      else if (fuoco) colore = haForza(b[5], fuoco) ? rgb(FORZE[fuoco].col) : 'rgba(28,27,24,0.18)';
+      else if (solo === 'decadimento') colore = tr.generazione > 0 ? rgb(FORZE.decadimento.col, 0.95) : 'rgba(28,27,24,0.15)';
+      else if (solo) { if (!tr.quote) coloriTraccia(cel(), tr); const q = tr.quote[i]?.[solo] ?? 0; colore = q > 0.02 ? rgb(FORZE[solo].col, 0.25 + 0.75 * q) : 'rgba(28,27,24,0.12)'; }
+      else if (fuoco && !solo) colore = haForza(b[5], fuoco) ? rgb(FORZE[fuoco].col) : 'rgba(28,27,24,0.18)';
       else colore = rgb(coloriForze ? (tr.colori ??= coloriTraccia(cel(), tr))[i] : [28, 27, 24], qualcosa ? 0.35 : 1);
       ctx.strokeStyle = colore; ctx.lineWidth = Math.max(px(0.7), (a[4] + b[4]) / 2);
       ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(bx, by); ctx.stroke();
@@ -276,15 +311,15 @@ function freccia(x, y, dx, dy, colore, larghezza = 2) {
   ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx - h * Math.cos(an - 0.42), ty - h * Math.sin(an - 0.42)); ctx.lineTo(tx - h * Math.cos(an + 0.42), ty - h * Math.sin(an + 0.42)); ctx.closePath(); ctx.fill();
 }
 // le frecce delle forze su una particella: lunghezza come la radice dell'intensità
-function frecceForze(tr, x, y, vx, vy, etichette) {
-  const F = forze(cel(), tr.specie, x, y, vx, vy, tr.esposizione ?? -1), v = F.v, c = cel();
+function frecceForze(tr, x, y, vx, vy, etichette, t) {
+  const F = forze({ ...cel(), leggi }, tr.specie, x, y, vx, vy, tr.esposizione ?? -1, t), v = F.v, c = cel();
   const aRif = (v * v) / (0.12 * Math.max(c.larghezza, c.altezza)) || 1;
   const lun = (a) => Math.min(px(70), px(34) * Math.sqrt(Math.hypot(...a) / aRif));
   const lv = Math.min(px(60), px(14) + px(4) * v);
   freccia(x, y, (vx / v) * lv, (vy / v) * lv, INK, 1.4);
   const righe = [`${tr.specie.nome || 'particella'} · velocità ${fmt(v)} (freccia nera)`];
   for (const f of ['gravita', 'magnetico', 'materia']) {
-    if (!F[f] || !strati[f]) continue;
+    if (!F[f] || !vedi(f)) continue;
     const a = F[f], m = Math.hypot(...a), L = lun(a);
     freccia(x, y, (a[0] / m) * L, (a[1] / m) * L, rgb(FORZE[f].col), 2.4);
     if (f === 'magnetico') righe.push([`⊙ magnetismo: la piega, raggio ${fmt((v * v) / m)}`, f]);
@@ -296,10 +331,11 @@ function frecceForze(tr, x, y, vx, vy, etichette) {
 }
 function disegnaTeste(T) {
   for (const tr of tracce) {
+    if (tr.sagoma) continue;
     const P = tr.punti; if (P[0][3] > T || P[P.length - 1][3] < T) continue;
     let i = 0; while (i < P.length - 2 && P[i + 1][3] <= T) i++;
     const a = P[i], b = P[i + 1], dt = b[3] - a[3] || 1e-9, u = (T - a[3]) / dt, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u;
-    frecceForze(tr, x, y, (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, false);
+    frecceForze(tr, x, y, (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, false, T);
     const q = tr.specie.q ?? 0;
     ctx.fillStyle = tr.specie.luce ? rgb(FORZE.luce.col) : '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(x, y, px(5), 0, 7); ctx.fill(); ctx.stroke();
@@ -307,10 +343,10 @@ function disegnaTeste(T) {
   }
 }
 function disegnaSonda() {
-  const tr = tracce.find((t) => t.id === sonda.tr); if (!tr) return;
+  const tr = tracce.find((t) => t.id === sonda.tr); if (!tr || tr.sagoma) return;
   const P = tr.punti, k = Math.max(1, Math.min(P.length - 2, sonda.k)), a = P[k - 1], b = P[k + 1], dt = b[3] - a[3] || 1e-9, p = P[k];
   ctx.fillStyle = '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(p[0], p[1], px(4), 0, 7); ctx.fill(); ctx.stroke();
-  frecceForze(tr, p[0], p[1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, true);
+  frecceForze(tr, p[0], p[1], (b[0] - a[0]) / dt, (b[1] - a[1]) / dt, true, p[3]);
 }
 function disegnaDecadimento(dk) {
   const c = rgb(FORZE.decadimento.col), r = px(6);
@@ -345,20 +381,27 @@ function disegnaCampi() {
     if (!tr) return;
     for (const d of corridoiDella(tr)) {
       forma(d.forma);
-      if (d.B && strati.magnetico) { ctx.fillStyle = rgb(FORZE.magnetico.col, 0.18); ctx.fill('evenodd'); }
-      if (d.K && strati.materia) { ctx.fillStyle = rgb(FORZE.materia.col, 0.25); ctx.fill('evenodd'); }
+      if (d.B && vedi('magnetico')) { ctx.fillStyle = rgb(FORZE.magnetico.col, 0.18); ctx.fill('evenodd'); }
+      if (d.K && vedi('materia')) { ctx.fillStyle = rgb(FORZE.materia.col, 0.25); ctx.fill('evenodd'); }
       ctx.strokeStyle = rgb(d.B ? FORZE.magnetico.col : d.K ? FORZE.materia.col : [28, 27, 24], 0.6); ctx.lineWidth = px(1); ctx.stroke();
     }
     const e = c.esposizioni[tr.esposizione];
-    if (e && strati.luce) e.pareti.forEach((p) => { if (tr.punti.some((q, i) => i % 4 === 0 && Math.hypot(q[0] - p.a[0], q[1] - p.a[1]) < 30)) disegnaParete(p, false); });
+    if (e && vedi('luce')) e.pareti.forEach((p) => { if (tr.punti.some((q, i) => i % 4 === 0 && Math.hypot(q[0] - p.a[0], q[1] - p.a[1]) < 30)) disegnaParete(p, false); });
     return;
   }
   const lista = [{ forma: { tipo: 'tutto' }, ...c.fondo, fondo: true }, ...c.domini];
   lista.forEach((dm, k) => {
     const scelto = sel?.tipo === 'dominio' && sel.i === k - 1, etichetta = [];
-    if (dm.B && strati.magnetico) { forma(dm.forma); ctx.fillStyle = rgb(FORZE.magnetico.col, Math.min(0.16, 0.04 + Math.abs(dm.B) * 0.25)); ctx.fill('evenodd'); etichetta.push([`${dm.B > 0 ? '⊙' : '⊗'} campo ${fmt(dm.B)}`, FORZE.magnetico.col]); }
-    if (dm.K && strati.materia) { puntini(dm.forma, rgb(FORZE.materia.col, Math.min(0.5, 0.15 + dm.K / 150)), px(Math.max(5, 14 - dm.K / 8))); etichetta.push([`▒ materia ${fmt(dm.K)}`, FORZE.materia.col]); }
-    if ((dm.n ?? 1) !== 1 && strati.luce) { forma(dm.forma); ctx.fillStyle = rgb([90, 170, 200], Math.min(0.3, (dm.n - 1) * 0.4)); ctx.fill('evenodd'); etichetta.push([`◇ vetro n ${fmt(dm.n)}`, [40, 120, 150]]); }
+    if (!dm.fondo && !accesoOra(dm)) {
+      // spento: resta solo il contorno, la fisica lo ignora
+      forma(dm.forma); ctx.setLineDash([px(3), px(4)]); ctx.strokeStyle = scelto ? ACCENTO : 'rgba(28,27,24,0.4)'; ctx.lineWidth = px(1); ctx.stroke(); ctx.setLineDash([]);
+      const f = dm.forma; if (f.centro) scriviMondo(`${dm.nome || 'zona'}: spenta`, f.centro[0] - px(30), f.centro[1], GRIGIO);
+      return;
+    }
+    dm = { ...dm, B: leggeOra('magnetico') ? dm.B : 0, K: leggeOra('materia') ? dm.K : 0, n: leggeOra('luce') ? dm.n : 1 };
+    if (dm.B && vedi('magnetico')) { forma(dm.forma); ctx.fillStyle = rgb(FORZE.magnetico.col, Math.min(0.16, 0.04 + Math.abs(dm.B) * 0.25)); ctx.fill('evenodd'); etichetta.push([`${dm.B > 0 ? '⊙' : '⊗'} campo ${fmt(dm.B)}`, FORZE.magnetico.col]); }
+    if (dm.K && vedi('materia')) { puntini(dm.forma, rgb(FORZE.materia.col, Math.min(0.5, 0.15 + dm.K / 150)), px(Math.max(5, 14 - dm.K / 8))); etichetta.push([`▒ materia ${fmt(dm.K)}`, FORZE.materia.col]); }
+    if ((dm.n ?? 1) !== 1 && vedi('luce')) { forma(dm.forma); ctx.fillStyle = rgb([90, 170, 200], Math.min(0.3, (dm.n - 1) * 0.4)); ctx.fill('evenodd'); etichetta.push([`◇ vetro n ${fmt(dm.n)}`, [40, 120, 150]]); }
     if (!dm.fondo) { forma(dm.forma); ctx.setLineDash(scelto ? [] : [px(5), px(4)]); ctx.strokeStyle = scelto ? ACCENTO : 'rgba(28,27,24,0.35)'; ctx.lineWidth = px(scelto ? 2 : 1); ctx.stroke(); ctx.setLineDash([]); }
     // il cartellino: dice che cosa c'è in questa zona
     if (etichetta.length) {
@@ -367,11 +410,11 @@ function disegnaCampi() {
     }
   });
   // i simboli del campo magnetico: ⊙ esce dal foglio, ⊗ entra
-  if (!strati.magnetico) return;
+  if (!vedi('magnetico')) return;
   const passo = px(34);
   for (let y = passo / 2; y < c.altezza; y += passo) for (let x = passo / 2; x < c.larghezza; x += passo) {
-    let B = c.fondo.B || 0; for (const dm of c.domini) if (dentro(dm.forma, x, y)) B = dm.B ?? B;
-    if (!B) continue;
+    let B = c.fondo.B || 0; for (const dm of c.domini) if (accesoOra(dm) && dentro(dm.forma, x, y)) B = dm.B ?? B;
+    if (!B || !leggeOra('magnetico')) continue;
     const r = px(3), col = rgb(FORZE.magnetico.col, Math.min(0.55, 0.15 + Math.abs(B)));
     ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = px(1);
     ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
@@ -381,11 +424,11 @@ function disegnaCampi() {
 }
 // il campo di gravità: frecce verso le masse, più lunghe dove tira di più
 function campoGravita() {
-  const c = cel(); if (!c.masse.length) return;
+  const c = cel(), masse = c.masse.filter(accesoOra); if (!masse.length || !leggeOra('gravita')) return;
   const passo = px(46), G = c.G ?? 1, col = FORZE.gravita.col;
   for (let y = passo / 2; y < c.altezza; y += passo) for (let x = passo / 2; x < c.larghezza; x += passo) {
     let gx = 0, gy = 0, dentroCorpo = false;
-    for (const m of c.masse) { const dx = m.pos[0] - x, dy = m.pos[1] - y, r = Math.hypot(dx, dy); if (r < (m.R ?? 0) + px(6)) dentroCorpo = true; const k = (G * m.M) / (r * r * r + 1e-9); gx += k * dx; gy += k * dy; }
+    for (const m of masse) { const dx = m.pos[0] - x, dy = m.pos[1] - y, r = Math.hypot(dx, dy); if (r < (m.R ?? 0) + px(6)) dentroCorpo = true; const k = (G * m.M) / (r * r * r + 1e-9); gx += k * dx; gy += k * dy; }
     if (dentroCorpo) continue;
     const g = Math.hypot(gx, gy), L = Math.min(px(22), px(4) + px(5) * Math.log1p(g * 20));
     ctx.globalAlpha = Math.min(0.6, 0.12 + Math.log1p(g * 20) / 8);
@@ -397,19 +440,27 @@ function maniglieDominio(dm) { if (!dm || dm.forma.tipo !== 'cerchio') return; c
 function manigliaQ(x, y) { ctx.fillStyle = '#fff'; ctx.strokeStyle = ACCENTO; ctx.lineWidth = px(1.5); ctx.beginPath(); ctx.rect(x - px(4), y - px(4), px(8), px(8)); ctx.fill(); ctx.stroke(); }
 function disegnaMassa(m, scelta) {
   const G = cel().G ?? 1, col = FORZE.gravita.col, R = Math.max(m.R ?? 0, px(5));
-  if (strati.gravita) for (const a of [4, 1, 0.25, 0.0625]) { const r = Math.sqrt((G * m.M) / a); if (r < (m.R ?? 0) * 1.1 || r > 400) continue; ctx.strokeStyle = rgb(col, 0.22); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(m.pos[0], m.pos[1], r, 0, 7); ctx.stroke(); }
+  if (!accesoOra(m) || !leggeOra('gravita')) {
+    ctx.setLineDash([px(3), px(3)]); ctx.strokeStyle = scelta ? ACCENTO : rgb(col, 0.6); ctx.lineWidth = px(1.5);
+    ctx.beginPath(); ctx.arc(m.pos[0], m.pos[1], R, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    scriviMondo(`● massa ${fmt(m.M)}: ${!accesoOra(m) ? 'spenta' : 'la gravità è spenta'}`, m.pos[0] + R + px(4), m.pos[1] - px(4), GRIGIO);
+    return;
+  }
+  if (vedi('gravita')) for (const a of [4, 1, 0.25, 0.0625]) { const r = Math.sqrt((G * m.M) / a); if (r < (m.R ?? 0) * 1.1 || r > 400) continue; ctx.strokeStyle = rgb(col, 0.22); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(m.pos[0], m.pos[1], r, 0, 7); ctx.stroke(); }
   const g = ctx.createRadialGradient(m.pos[0], m.pos[1], 0, m.pos[0], m.pos[1], R);
   g.addColorStop(0, rgb([90, 40, 25])); g.addColorStop(1, rgb(col));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.pos[0], m.pos[1], R, 0, 7); ctx.fill();
   if (scelta) { ctx.strokeStyle = ACCENTO; ctx.lineWidth = px(2); ctx.stroke(); }
-  if (strati.gravita) scriviMondo(`● massa ${fmt(m.M)}`, m.pos[0] + R + px(4), m.pos[1] - px(4), rgb(col));
+  if (vedi('gravita')) scriviMondo(`● massa ${fmt(m.M)}`, m.pos[0] + R + px(4), m.pos[1] - px(4), rgb(col));
 }
 function disegnaParete(p, scelta) {
-  ctx.lineCap = 'round'; ctx.globalAlpha = strati.luce ? 1 : 0.4;
+  const pSpenta = !accesoOra(p) || !leggeOra('luce');
+  ctx.lineCap = 'round'; ctx.globalAlpha = pSpenta ? 0.3 : vedi('luce') ? 1 : 0.4;
+  if (pSpenta) ctx.setLineDash([px(4), px(4)]);
   ctx.strokeStyle = scelta ? ACCENTO : p.tipo === 'assorbe' ? '#111' : rgb(FORZE.luce.col); ctx.lineWidth = px(p.tipo === 'assorbe' ? 4 : 3.5);
   ctx.beginPath(); ctx.moveTo(...p.a); ctx.lineTo(...p.b); ctx.stroke();
-  if (p.tipo !== 'assorbe') { ctx.strokeStyle = '#fff8dc'; ctx.lineWidth = px(1); ctx.stroke(); }
-  ctx.globalAlpha = 1;
+  if (p.tipo !== 'assorbe' && !pSpenta) { ctx.strokeStyle = '#fff8dc'; ctx.lineWidth = px(1); ctx.stroke(); }
+  ctx.globalAlpha = 1; ctx.setLineDash([]);
   if (scelta) { manigliaQ(...p.a); manigliaQ(...p.b); }
 }
 const specieDi = (so) => (typeof so.specie === 'string' ? { nome: so.specie, ...cel().specie[so.specie] } : so.specie);
@@ -419,8 +470,10 @@ function puntaFreccia(so) {
 }
 function disegnaSorgente(so, scelta) {
   const [x, y] = so.pos, [tx, ty] = puntaFreccia(so), col = scelta ? ACCENTO : rgb(FORZE.decadimento.col);
-  ctx.globalAlpha = 0.9; freccia(x, y, tx - x, ty - y, col, 2); ctx.globalAlpha = 1;
+  const sSpenta = !accesoA(so, so.t0 ?? 0);
+  ctx.globalAlpha = sSpenta ? 0.3 : 0.9; freccia(x, y, tx - x, ty - y, col, 2); ctx.globalAlpha = sSpenta ? 0.3 : 1;
   ctx.fillStyle = '#fff'; ctx.strokeStyle = col; ctx.lineWidth = px(2); ctx.beginPath(); ctx.arc(x, y, px(5), 0, 7); ctx.fill(); ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 // ---------- scegliere e trascinare nell'elemento
@@ -428,6 +481,7 @@ function distSeg(x, y, a, b) { const sx = b[0] - a[0], sy = b[1] - a[1], l2 = sx
 function vicinoTraccia(x, y, raggioPx) {
   let best = null, bd = px(raggioPx); const T = Math.min(tempo, tMax());
   for (const tr of tracce) for (let k = 1; k < tr.punti.length; k++) {
+    if (tr.sagoma) { if (k === 1 && dentroSagoma(tr, x, y) && !best) best = { tr: tr.id, k: 0 }; continue; }
     const a = tr.punti[k - 1], b = tr.punti[k]; if (a[3] > T) break; if (!a[2] || !b[2]) continue;
     const d = distSeg(x, y, a, b) - b[4] / 2; if (d < bd) { bd = d; best = { tr: tr.id, k }; }
   }
@@ -618,17 +672,30 @@ function pannelloElemento(h) {
     h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo, materia, vetro), una massa, uno specchio, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
     if (c.esposizioni) {
       const ds = c.esposizioni.flatMap((e) => e.domini), so = c.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0);
-      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; una parete nera la ferma alla fine. Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Passa sopra una linea per vedere i suoi corridoi.</p>`);
+      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra, ${(c.sagome || []).length} sagome.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; una parete nera la ferma alla fine. Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Le campiture sono sagome: corpi opachi appoggiati sulla lastra, impressi da un lampo di luce all'istante zero. Passa sopra una linea per vedere i suoi corridoi.</p>`);
       h.push(`<h2>le specie (che cosa sono le particelle)</h2><p class="nota">La carica decide lo spessore della traccia.</p><div class="elenco">`);
       for (const nome of Object.keys(c.specie)) h.push(`<div data-specie="${nome}">◦ <b>${nome}</b> ${descriviSpecie(c.specie[nome])}</div>`);
       h.push('</div>');
       return;
     }
-    h.push(`<h2>che cosa c'è in questa cella</h2><div class="elenco">`);
-    c.sorgenti.forEach((so, i) => h.push(`<div data-sel="sorgente:${i}"><i style="color:${rgb(FORZE.decadimento.col)}">→</i> sorgente ${i + 1}: <b>${specieDi(so).nome}</b> ${specieDi(so).luce ? 'luce' : `v ${fmt(so.v ?? 0)}`}</div>`));
-    c.domini.forEach((d, i) => h.push(`<div data-sel="dominio:${i}"><i style="color:${rgb(d.B ? FORZE.magnetico.col : d.K ? FORZE.materia.col : [40, 120, 150])}">▒</i> ${d.nome || 'zona'}: ${descriviDominio(d)}</div>`));
-    c.masse.forEach((m, i) => h.push(`<div data-sel="massa:${i}"><i style="color:${rgb(FORZE.gravita.col)}">●</i> ${m.nome || 'massa'} M ${fmt(m.M)}</div>`));
-    c.pareti.forEach((p, i) => h.push(`<div data-sel="parete:${i}"><i style="color:${rgb(FORZE.luce.col)}">—</i> ${p.tipo} ${i + 1}</div>`));
+    // le leggi e gli oggetti che le portano: ogni oggetto si accende e si spegne
+    const riga = (tipo, i, o, testo) => `<div class="ogg ${accesoOra(o) ? '' : 'spento'}"><input type="checkbox" data-acceso="${tipo}:${i}" ${accesoOra(o) ? 'checked' : ''} title="acceso: agisce sulla fisica"><span data-sel="${tipo}:${i}">${testo}</span>${scattiTesto(o.interruttori, `${tipo}:${i}`)}</div>`;
+    const gruppi = {
+      gravita: c.masse.map((m, i) => riga('massa', i, m, `${m.nome || `massa ${i + 1}`} · M ${fmt(m.M)}, raggio ${fmt(m.R ?? 0)}`)),
+      magnetico: c.domini.map((d, i) => (d.B ? riga('dominio', i, d, `${d.nome || `zona ${i + 1}`} · B ${fmt(d.B)} ${d.B > 0 ? '⊙' : '⊗'}`) : '')).filter(Boolean).concat(c.fondo.B ? [`<div class="ogg"><span>tutta la cella · B ${fmt(c.fondo.B)} (il fondo, sotto)</span></div>`] : []),
+      materia: c.domini.map((d, i) => (d.K ? riga('dominio', i, d, `${d.nome || `zona ${i + 1}`} · densità ${fmt(d.K)}`) : '')).filter(Boolean).concat(c.fondo.K ? [`<div class="ogg"><span>tutta la cella · densità ${fmt(c.fondo.K)}</span></div>`] : []),
+      luce: [...c.domini.map((d, i) => ((d.n ?? 1) !== 1 ? riga('dominio', i, d, `${d.nome || `vetro ${i + 1}`} · indice ${fmt(d.n)}`) : '')).filter(Boolean), ...c.pareti.map((p, i) => riga('parete', i, p, `${p.tipo} ${i + 1}`))],
+      decadimento: Object.entries(c.specie).filter(([, sp]) => sp.vita != null && sp.figli?.length).map(([n, sp]) => `<div class="ogg"><span data-specie="${n}">${n} → ${[...new Set(sp.figli.map((f) => f.specie))].join(' + ')} dopo ${fmt(sp.vita)}</span></div>`),
+    };
+    h.push(`<h2>le leggi e gli oggetti</h2><p class="nota">⏻ spegne una legge o un oggetto nella fisica: la scena si rifà e in grigio resta com'era. «solo» mostra soltanto quella forza.</p>`);
+    for (const [k, f] of Object.entries(FORZE)) {
+      const righe = gruppi[k];
+      h.push(`<div class="legge ${leggeOra(k) ? '' : 'spenta'} ${solo === k ? 'sola' : ''}" style="--c:${rgb(f.col)}"><div class="testa"><label title="la legge agisce"><input type="checkbox" data-legge="${k}" ${leggeOra(k) ? 'checked' : ''}> <b>${f.simbolo} ${f.nome}</b>${scattiTesto(Array.isArray(leggi[k]) ? leggi[k] : null, `legge:${k}`)}</label><button class="piccolo" data-solo-p="${k}">${solo === k ? 'tutte' : 'solo'}</button></div>`);
+      h.push(righe.length ? righe.join('') : `<div class="ogg vuoto">nessun oggetto in questa cella</div>`);
+      h.push(`</div>`);
+    }
+    h.push(`<h2>dove nascono le particelle</h2><div class="elenco">`);
+    c.sorgenti.forEach((so, i) => h.push(riga('sorgente', i, so, `→ sorgente ${i + 1}: <b>${specieDi(so).nome}</b> ${specieDi(so).luce ? 'luce' : `v ${fmt(so.v ?? 0)}`}`)));
     h.push(`</div><h2>le specie (che cosa sono le particelle)</h2><div class="elenco">`);
     for (const nome of Object.keys(c.specie)) h.push(`<div data-specie="${nome}">◦ <b>${nome}</b> ${descriviSpecie(c.specie[nome])}</div>`);
     h.push(`</div><h2>l'universo della cella</h2><div class="nota">fondo (dove non c'è nessuna zona)</div>`);
@@ -652,6 +719,7 @@ function pannelloElemento(h) {
   else if (sel.tipo === 'sorgente') {
     const so = c.sorgenti[sel.i], sp = specieDi(so);
     h.push(`<h2>sorgente ${sel.i + 1}</h2><p class="nota">il punto da cui parte la storia: qui nasce un ${sp.nome}. Trascina il cerchio per spostarla, la punta della freccia per la direzione${sp.luce ? '' : ' e la velocità'}.</p>`);
+    h.push(interruttore('sorgente', sel.i, so));
     h.push(`<label class="riga">che cosa emette <select data-specie-sorgente>${Object.keys(c.specie).map((k) => `<option ${k === sp.nome ? 'selected' : ''}>${k}</option>`).join('')}</select></label>`);
     if (!sp.luce) h.push(cursore('vInizio', so, 'v', 0, 30, 0.05, 'velocità'));
     h.push(cursoreAngolo(so));
@@ -660,6 +728,7 @@ function pannelloElemento(h) {
   } else if (sel.tipo === 'dominio') {
     const d = c.domini[sel.i];
     h.push(`<h2>${d.nome || 'zona'}</h2><p class="nota">una zona del piano con le sue proprietà, ferme nel tempo. ${d.forma.tipo === 'cerchio' ? 'Trascina il centro per spostarla, il quadratino sul bordo per allargarla.' : 'Vale in tutta la cella.'}</p>`);
+    h.push(interruttore('dominio', sel.i, d));
     h.push(`<label class="riga">forma <select data-forma>${['tutto', 'cerchio'].map((f) => `<option ${d.forma.tipo === f ? 'selected' : ''}>${f}</option>`).join('')}</select></label>`);
     if (d.forma.tipo === 'cerchio') h.push(cursore('raggioDominio', d.forma, 'r', 2, 300, 0.5, 'raggio'));
     h.push(cursore('B', d, 'B', -1, 1, 0.005, 'campo magnetico B'));
@@ -669,15 +738,19 @@ function pannelloElemento(h) {
   } else if (sel.tipo === 'massa') {
     const m = c.masse[sel.i];
     h.push(`<h2>${m.nome || 'massa'}</h2><p class="nota">un corpo fermo che curva lo spazio. Trascinalo. Le frecce rosse: dove e quanto tira; gli anelli: dove la caduta è forte.</p>`);
+    h.push(interruttore('massa', sel.i, m));
     h.push(cursore('M', m, 'M', 0, 4000, 5, 'massa M'));
     h.push(cursore('R', m, 'R', 0, 40, 0.5, 'raggio R'));
   } else if (sel.tipo === 'parete') {
     const p = c.pareti[sel.i];
     h.push(`<h2>${p.tipo} ${sel.i + 1}</h2><p class="nota">un segmento perpendicolare al piano. Trascina gli estremi o il centro.</p>`);
+    h.push(interruttore('parete', sel.i, p));
     h.push(`<label class="riga">tipo <select data-parete>${['specchio', 'assorbe'].map((f) => `<option ${p.tipo === f ? 'selected' : ''}>${f}</option>`).join('')}</select></label><p class="spiega">${SPIEGA.tipoParete}</p>`);
   }
   h.push(`<div class="riga-bottoni">${['traccia', 'specie'].includes(sel.tipo) ? '' : '<button data-azione="elimina">elimina</button>'}<button data-azione="chiudi">chiudi</button></div>`);
 }
+const interruttore = (tipo, i, o) => `<label class="riga interr"><span><b>acceso</b> — agisce sulla fisica${scattiTesto(o.interruttori, `${tipo}:${i}`)}</span><input type="checkbox" data-acceso="${tipo}:${i}" ${accesoOra(o) ? 'checked' : ''}></label>`;
+const scattiTesto = (ev, chi) => (ev && ev.length ? ` <span class="scatti">${ev.map((e) => `${e.acceso ? 'acceso' : 'spento'} a t ${fmt(e.t)}`).join(', ')} <button class="piccolo" data-togli-scatti="${chi}" title="togli gli scatti nel tempo">✕</button></span>` : '');
 function descriviDominio(d) { const p = []; if (d.B) p.push(`campo ${fmt(d.B)}`); if (d.K) p.push(`materia ${fmt(d.K)}`); if ((d.n ?? 1) !== 1) p.push(`vetro n ${fmt(d.n)}`); return p.join(', ') || 'vuoto'; }
 function descriviSpecie(s) { if (s.luce) return `luce${s.vita != null ? `, si converte dopo ${fmt(s.vita)}` : ''}`; return `q ${fmt(s.q ?? 0)}, m ${fmt(s.m ?? 1)}${s.vita != null ? `, decade dopo ${fmt(s.vita)}` : ''}`; }
 function misureDominio(d) {
@@ -739,6 +812,8 @@ pannello.addEventListener('change', (e) => {
   const t = e.target;
   if (registro.has(t.dataset.per || t.id)) { prima = null; disegna(); return; }
   if (t.id === 'nuovoChi' || t.id === 'nuovoK') return;
+  if (t.dataset.acceso) { const [tipo, i] = t.dataset.acceso.split(':'); cambiaOggetto(tipo, +i, t.checked); return; }
+  if (t.dataset.legge) { cambiaLegge(t.dataset.legge, t.checked); return; }
   ricorda();
   if (t.dataset.specchio != null) comp.elementi[scelto.e].posti[scelto.p].specchio = t.checked;
   if (t.dataset.originale != null) mostraOriginale = t.checked;
@@ -763,6 +838,12 @@ pannello.addEventListener('click', (e) => {
   const t = e.target.closest('button,[data-sel],[data-specie]'); if (!t) return;
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
+  if (d.togliScatti) {
+    const [tipo, i] = d.togliScatti.split(':');
+    if (tipo === 'legge') leggi[i] = true; else { ricorda(); const o = { sorgente: cel().sorgenti, dominio: cel().domini, massa: cel().masse, parete: cel().pareti }[tipo][+i]; delete o.interruttori; }
+    return aggiorna();
+  }
+  if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
   if (d.vistaP != null) { vista = 'pattern'; aggiornaVista(); return; }
   if (d.copiaPosto != null) { ricorda(); const e2 = comp.elementi[+d.copiaPosto], { a, b } = comp.reticolo; e2.posti.push({ pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], rot: 0 }); scelto = { e: +d.copiaPosto, p: e2.posti.length - 1 }; return aggiorna(); }
   if (d.scegliPosto != null) { scelto = { e: +d.scegliPosto, p: 0 }; mostraPannello(); return disegna(); }
@@ -795,19 +876,54 @@ function mostraSchede() {
     conta.materia = zK ? `${zK} ${zK === 1 ? 'zona' : 'zone'}` : 'nessuna';
     const luci = Object.values(c.specie).filter((s) => s.luce).length;
     const specchi = tuttePareti.filter((p) => p.tipo === 'specchio').length;
-    conta.luce = specchi || zn || luci ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
+    const sag = (c.sagome || []).length;
+    conta.luce = specchi || zn || luci || sag ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, sag && `${sag} sagome`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
     const dec = Object.values(c.specie).filter((s) => s.vita != null).length;
     conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'niente';
   }
+  // ogni scheda: il nome (clic: vista «solo questa forza») e l'interruttore ⏻ (la legge agisce o no)
   schede.classList.toggle('legenda', !c);
-  schede.innerHTML = Object.entries(FORZE).map(([k, f]) => `<button data-forza="${k}" class="${strati[k] || !c ? 'acceso' : ''}" style="--c:${rgb(f.col)}"><i>${f.simbolo}</i> ${f.nome}${conta[k] ? ` <small>${conta[k]}</small>` : ''}</button>`).join('') +
-    `<label class="colori"><input type="checkbox" id="coloriForze" ${coloriForze ? 'checked' : ''}> linee colorate per forza</label>`;
+  schede.innerHTML = Object.entries(FORZE).map(([k, f]) => `<span class="scheda ${solo === k ? 'sola' : ''} ${leggeOra(k) ? '' : 'spenta'}" style="--c:${rgb(f.col)}">`
+    + `<button data-solo="${k}" title="${c ? 'vedi solo questa forza' : f.frase}"><i>${f.simbolo}</i> ${f.nome}${conta[k] ? ` <small>${conta[k]}</small>` : ''}</button>`
+    + `<label title="la legge agisce (spenta: la fisica la ignora)"><input type="checkbox" data-legge="${k}" ${leggeOra(k) ? 'checked' : ''}>⏻</label></span>`).join('')
+    + `<label class="colori"><input type="checkbox" id="coloriForze" ${coloriForze ? 'checked' : ''}> linee colorate per forza</label>`;
 }
-schede.addEventListener('click', (e) => { const b = e.target.closest('[data-forza]'); if (!b || vista === 'pattern') return; strati[b.dataset.forza] = !strati[b.dataset.forza]; mostraSchede(); disegna(); });
-schede.addEventListener('change', (e) => { if (e.target.id === 'coloriForze') { coloriForze = e.target.checked; disegna(); } });
+// accendere e spegnere: la legge intera o un oggetto. Si rifà la fisica; in grigio resta com'era
+function confronta(testo) { confronto = tracce.length ? tracce : null; confrontoTesto = testo; }
+const aggiungiScatto = (lista, t, acceso) => [...(lista || []).filter((e) => Math.abs(e.t - t) > 1e-9), { t, acceso }].sort((a, b) => a.t - b.t);
+function cambiaLegge(k, acceso) {
+  const t = Math.round(ora() * 1000) / 1000;
+  if (vista !== 'pattern') confronta(aMeta() ? `come sarebbe andata se a t ${fmt(t)} non si fosse ${acceso ? 'accesa' : 'spenta'} ${FORZE[k].art}` : `com'era ${acceso ? 'senza' : 'con'} ${FORZE[k].art}`);
+  if (aMeta()) leggi[k] = aggiungiScatto(Array.isArray(leggi[k]) ? leggi[k] : [], t, acceso);
+  else leggi[k] = acceso;
+  aggiorna(); mostraSchede();
+}
+function cambiaOggetto(tipo, i, acceso) {
+  const c = cel(), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse, parete: c.pareti }[tipo]?.[i]; if (!o) return;
+  const chi = o.nome || ({ sorgente: 'questa sorgente', dominio: 'questa zona', massa: 'questa massa', parete: 'questo specchio' })[tipo];
+  ricorda();
+  if (aMeta() && tipo !== 'sorgente') {
+    // l'interruttore scatta adesso: prima di questo istante non cambia niente, dopo sì
+    const t = Math.round(ora() * 1000) / 1000;
+    confronta(`come sarebbe andata se a t ${fmt(t)} non si fosse ${acceso ? 'acceso' : 'spento'} «${chi}»`);
+    o.interruttori = aggiungiScatto(o.interruttori, t, acceso);
+  } else {
+    confronta(`com'era ${acceso ? 'senza' : 'con'} ${chi}`);
+    delete o.interruttori; if (acceso) delete o.spento; else o.spento = true;
+  }
+  aggiorna();
+}
+schede.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-solo]'); if (!b || vista === 'pattern') return;
+  solo = solo === b.dataset.solo ? null : b.dataset.solo; mostraSchede(); dove(); disegna(); mostraPannello();
+});
+schede.addEventListener('change', (e) => {
+  if (e.target.id === 'coloriForze') { coloriForze = e.target.checked; disegna(); return; }
+  if (e.target.dataset.legge) cambiaLegge(e.target.dataset.legge, e.target.checked);
+});
 schede.addEventListener('pointerover', (e) => {
-  const b = e.target.closest('[data-forza]'), f = b ? b.dataset.forza : null;
-  if (f !== fuoco) { fuoco = f; $('spiegaForza').innerHTML = f ? `<b style="color:${rgb(FORZE[f].col)}">${FORZE[f].simbolo} ${FORZE[f].nome}</b> — ${FORZE[f].frase}${vista === 'dettaglio' ? ' <i>Le linee dove agisce sono accese; clic per nascondere o mostrare i suoi segni.</i>' : ''}` : ''; if (vista === 'dettaglio') disegna(); }
+  const b = e.target.closest('.scheda'), f = b ? b.querySelector('[data-solo]').dataset.solo : null;
+  if (f !== fuoco) { fuoco = f; $('spiegaForza').innerHTML = f ? `<b style="color:${rgb(FORZE[f].col)}">${FORZE[f].simbolo} ${FORZE[f].nome}</b> — ${FORZE[f].frase}${vista === 'pattern' ? ' <i>⏻ la spegne in tutto il pattern.</i>' : ' <i>Clic sul nome: vedi solo questa forza. ⏻: la spegni nella fisica, e vedi in grigio com\'era.</i>'}` : ''; if (vista === 'dettaglio' && !solo) disegna(); }
 });
 schede.addEventListener('pointerleave', () => { if (fuoco) { fuoco = null; $('spiegaForza').innerHTML = ''; disegna(); } });
 
@@ -827,8 +943,10 @@ function dove() {
     ? `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', specchio: 'lo specchio', vetro: 'il vetro' })[strumento]} (Esc per annullare).`
     : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
-    : `«${el().nome}»: passa sopra una linea per vedere le forze che la piegano; tocca una cosa per cambiarla.`;
-  $('dove').textContent = t;
+    : solo ? `Vedi solo ${FORZE[solo].art}: ${solo === 'decadimento' ? 'in verde le particelle nate da un decadimento, le stelle dove avviene' : 'le linee si accendono dove questa forza le piega, tanto più quanto più conta'}. Clic di nuovo sul nome per tornare a tutto.`
+    : aMeta() ? `t ${fmt(ora())}: ora ogni ⏻ scatta in questo istante, e le traiettorie cambiano da qui in poi (le tacche sulla linea del tempo). Porta il tempo alla fine per accendere o spegnere per tutta la storia.`
+    : `«${el().nome}»: passa sopra una linea per vedere le forze che la piegano; tocca una cosa per cambiarla. Ferma il tempo a metà (o fallo scorrere) e i ⏻ scattano in quell'istante.`;
+  $('dove').textContent = t + (confronto && vista !== 'pattern' ? ` In grigio: ${confrontoTesto}.` : '');
 }
 function aggiornaVista() {
   const inPattern = vista === 'pattern';
@@ -843,7 +961,7 @@ function aggiornaVista() {
   disegna(); mostraPannello();
 }
 function carica(nuova, { tieniImmagine = false } = {}) {
-  comp = nuova; corrente = 0; scelto = null; sopra = null; sel = null; tempo = Infinity; if (!tieniImmagine) immagine = null;
+  comp = nuova; corrente = 0; scelto = null; sopra = null; sel = null; tempo = Infinity; gioca = false; $('gioca').textContent = '▶'; confronto = null; if (!tieniImmagine) immagine = null;
   vista = 'pattern'; adattaPattern(); aggiornaVista();
 }
 $('annulla').addEventListener('click', annulla); $('rifai').addEventListener('click', rifai);
@@ -935,11 +1053,11 @@ async function daImmagine(src, nome) {
     if (m.fatto) {
       passoLettura(5);
       const { cella, conta, fedelta: f, misure: mi } = m;
-      const nota = `${conta.tratti} tratti, ${conta.petali} petali, ${conta.dischi} dischi, ${conta.campiture} campiture; ${conta.pezzi} archi di campo in ${conta.esposizioni} esposizioni. La fisica rifà l'immagine al ${Math.round(f.iou * 100)}%.`;
+      const nota = `${conta.tratti} tratti, ${conta.petali} petali, ${conta.dischi} dischi, ${conta.campiture} campiture (sagome impresse da un lampo); ${conta.pezzi} archi di campo in ${conta.esposizioni} esposizioni. La fisica rifà l'immagine al ${Math.round(f.iou * 100)}%.`;
       const nuovo = { nome, nota, reticolo: { a: [mi.larghezza, 0], b: [0, mi.altezza] }, elementi: [{ nome: "l'immagine", nota: `ogni linea è una particella vera: ${nota}`, posti: [{ pos: [mi.larghezza / 2, mi.altezza / 2], rot: 0 }], cella }] };
       // le tracce calcolate nel lettore: niente da rifare
       let r = 4; for (const t of m.tracce) for (const p of t.punti) if (p[2]) r = Math.max(r, Math.hypot(p[0] - mi.larghezza / 2, p[1] - mi.altezza / 2));
-      memoria.set(JSON.stringify(cella), { tracce: m.tracce, raggio: r, sprite: new Map() });
+      memoria.set(chiave(cella), { tracce: m.tracce, raggio: r, sprite: new Map() });
       $('letturaEsito').innerHTML = `<p><span class="numero">${Math.round(f.iou * 100)}%</span> dell'immagine rifatto dalla fisica <span class="nota">(ritrova il ${Math.round(f.richiamo * 100)}% del disegno; il ${Math.round(f.precisione * 100)}% di ciò che traccia sta sul disegno)</span></p>
         <p class="nota">${m.preparata ? `Prima l'ho pulita: ${m.motivi.join(', ')}. ` : ''}${nota} Il seme è di ${conta.numeri} numeri. ${m.secondi.toFixed(0)} secondi.</p>`;
       $('letturaOk').hidden = false; $('letturaAnnulla').textContent = 'chiudi';
@@ -954,19 +1072,30 @@ $('fileImmagine').addEventListener('change', (ev) => { const f = ev.target.files
 
 // ---------- il tempo: la fetta
 const cursoreT = $('tempo');
+let firmaScatti = '';
 function aggiornaTempo() {
   const inPattern = vista === 'pattern';
   document.querySelector('.sotto').classList.toggle('spento', inPattern);
   if (inPattern) { $('otempo').textContent = 'il tempo: entra in un elemento'; return; }
   const m = tMax(), t = Math.min(tempo, m); cursoreT.value = t / m; $('otempo').textContent = `t ${fmt(t)} / ${fmt(m)}`;
+  // le tacche sulla linea del tempo: dove scatta un interruttore
+  const c = cel(), tacche = [];
+  for (const [lista, col] of [[c.domini, null], [c.masse, FORZE.gravita.col], [c.pareti, FORZE.luce.col]]) for (const o of lista) for (const e of o.interruttori || []) tacche.push({ t: e.t, acceso: e.acceso, col: col || (o.B ? FORZE.magnetico.col : o.K ? FORZE.materia.col : FORZE.luce.col), chi: o.nome || 'un oggetto' });
+  for (const [k, v] of Object.entries(leggi)) if (Array.isArray(v)) for (const e of v) tacche.push({ t: e.t, acceso: e.acceso, col: FORZE[k].col, chi: FORZE[k].art });
+  const firma = JSON.stringify(tacche) + m;
+  if (firma !== firmaScatti) { firmaScatti = firma; $('scatti').innerHTML = tacche.map((e) => `<i class="${e.acceso ? '' : 'spento'}" style="left:${(100 * e.t) / m}%;background:${rgb(e.col)}" title="t ${fmt(e.t)}: ${e.acceso ? 'si accende' : 'si spegne'} ${e.chi}"></i>`).join(''); }
+  // gli interruttori mostrano lo stato di adesso
+  document.querySelectorAll('[data-acceso]').forEach((el) => { const [tipo, i] = el.dataset.acceso.split(':'), o = { sorgente: c.sorgenti, dominio: c.domini, massa: c.masse, parete: c.pareti }[tipo]?.[+i]; if (!o) return; const a = tipo === 'sorgente' ? accesoA(o, o.t0 ?? 0) : accesoOra(o); el.checked = a; el.closest('.ogg')?.classList.toggle('spento', !a); });
+  document.querySelectorAll('[data-legge]').forEach((el) => { const a = leggeOra(el.dataset.legge); el.checked = a; el.closest('.scheda, .legge')?.classList.toggle('spenta', !a); });
+  dove();
 }
 cursoreT.addEventListener('input', () => { if (vista === 'pattern') return; tempo = +cursoreT.value >= 0.999 ? Infinity : +cursoreT.value * tMax(); gioca = false; $('gioca').textContent = '▶'; aggiornaTempo(); disegna(); });
 $('fetta').addEventListener('input', () => { fetta = +$('fetta').value * tMax(); $('ofetta').textContent = fetta ? `fetta ${fmt(fetta)}` : 'tutta la storia'; disegna(); });
 $('gioca').addEventListener('click', () => { if (vista === 'pattern') return; gioca = !gioca; $('gioca').textContent = gioca ? '❚❚' : '▶'; if (gioca && tempo >= tMax()) tempo = 0; if (gioca) passo(); });
 let ultimo = 0;
-function passo(ora = performance.now()) {
+function passo(adesso = performance.now()) {
   if (!gioca) return;
-  const m = tMax(); tempo = Math.min(m, (isFinite(tempo) ? tempo : 0) + (m / 8) * Math.min(0.05, (ora - (ultimo || ora)) / 1000)); ultimo = ora;
+  const m = tMax(); tempo = Math.min(m, (isFinite(tempo) ? tempo : 0) + (m / 8) * Math.min(0.05, (adesso - (ultimo || adesso)) / 1000)); ultimo = adesso;
   if (tempo >= m) { tempo = Infinity; gioca = false; $('gioca').textContent = '▶'; ultimo = 0; }
   aggiornaTempo(); disegna();
   if (gioca) requestAnimationFrame(passo); else ultimo = 0;

@@ -42,6 +42,7 @@ export function dimensioneLastra(esp) {
 
 // la storia di una traccia, in parole
 export function storia(tr, esp) {
+  if (tr.sagoma) return `Questa campitura è la sagoma di un corpo opaco appoggiato sulla lastra. Un lampo di luce uniforme, all'istante zero, ne ha impresso la forma piena: è un fotogramma, come una radiografia. ${tr.buchi.length ? `Ha ${tr.buchi.length} ${tr.buchi.length === 1 ? 'buco' : 'buchi'}, da cui la luce è passata.` : ''}`;
   const s = tr.specie, P = tr.punti, leggi = new Set(P.map((p) => p[5]).join('+').split('+'));
   const chi = s.luce ? `un raggio di luce (${s.nome || 'fotone'})` : `${s.nome ? `un ${s.nome}` : 'una particella'} (carica ${fmt(s.q ?? 0)}, massa ${fmt(s.m ?? 1)})`;
   const nascita = tr.madre ? `è nato al tempo ${fmt(P[0][3])} dal decadimento di un ${tr.madre.specie}` : `parte dalla sorgente ${tr.sorgente + 1} al tempo ${fmt(P[0][3])}`;
@@ -143,24 +144,25 @@ export function lente() {
   };
 }
 
-// IL BILIARDO. Un raggio di luce chiuso in una scatola di specchi rimbalza
-// all'infinito: la campitura. Una goccia di vetro al centro lo rifrange.
-export function biliardo() {
-  const R = [[20, 20], [180, 20], [180, 180], [20, 180]];
+// LA GOCCIA. Raggi di sole paralleli attraversano una goccia di vetro: entrando
+// e uscendo si rifrangono (Snell) e si incrociano dietro di lei in una caustica,
+// la stessa luce concentrata che fa una goccia d'acqua su un tavolo.
+export function goccia() {
+  const sorgenti = [];
+  for (let k = -12; k <= 12; k++) sorgenti.push({ pos: [0, 100 + k * 3.6], dir: 0, specie: 'luce' });
   return {
-    nome: 'il biliardo',
-    nota: 'un raggio di luce in una scatola di specchi riempie lo spazio; una goccia di vetro lo devia',
+    nome: 'la goccia',
+    nota: 'raggi paralleli attraversano una goccia di vetro, si rifrangono e si incrociano in una caustica',
     cella: {
-      larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 300,
+      larghezza: 200, altezza: 200, c: C, G: 1, bordo: 'aperto', tempo: 12,
       fondo: { B: 0, K: 0, n: 1 },
-      domini: [{ nome: 'la goccia di vetro', forma: { tipo: 'cerchio', centro: [100, 100], r: 34 }, B: 0, K: 0, n: 1.45 }],
-      masse: [],
-      pareti: R.map((a, i) => ({ a, b: R[(i + 1) % 4], tipo: 'specchio' })),
-      pellicola: { w0: 0.7, saturazione: 3, vRif: 10 },
+      domini: [{ nome: 'la goccia di vetro', forma: { tipo: 'cerchio', centro: [70, 100], r: 46 }, B: 0, K: 0, n: 1.5 }],
+      masse: [], pareti: [],
+      pellicola: { w0: 0.9, saturazione: 3, vRif: 10 },
       specie: { luce: { luce: true, m: 1 } },
-      sorgenti: [{ pos: [30, 64], dir: 0.31, specie: 'luce' }],
+      sorgenti,
     },
-    ripetizione: { tipo: 'specchio', colonne: 3, righe: 2 },
+    ripetizione: { tipo: 'quadrato', colonne: 3, righe: 2 },
   };
 }
 
@@ -188,7 +190,7 @@ export function palmetta(N = 7) {
   };
 }
 
-export const PRESET = { fiore, voluta, palmetta, lente, biliardo };
+export const PRESET = { fiore, voluta, palmetta, lente, goccia };
 
 // ---------- la stessa storia in un mondo più grande (o più piccolo)
 // Una similitudine della fisica: le lunghezze e i tempi si moltiplicano per k,
@@ -253,13 +255,13 @@ export const COMPOSIZIONI = {
     le.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 90 });
     return { nome: 'lenti', nota: 'masse che piegano la luce, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [le] };
   },
-  'biliardi': () => {
-    const bi = elemento(biliardo());
-    bi.posti.push({ pos: [0, 0], rot: 0 });
-    return { nome: 'biliardi', nota: 'un raggio chiuso tra specchi riempie la piastrella', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [bi] };
+  'gocce': () => {
+    const go = elemento(goccia());
+    go.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 180 });
+    return { nome: 'gocce', nota: 'gocce di vetro che concentrano la luce, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [go] };
   },
 };
-export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, lente, biliardo };
+export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, lente, goccia };
 export const nuovoElemento = (chi, k = 1) => elemento(ELEMENTI[chi](), k);
 
 // spostare tutto un mondo non cambia la sua fisica: si porta il centro del

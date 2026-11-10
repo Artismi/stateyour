@@ -15,8 +15,9 @@
 //   · alla fine del tratto una parete nera ASSORBE la particella;
 //   · un PETALO è una carica che frena nella materia: si allarga verso la
 //     punta e si ferma lì (picco di Bragg); un DISCO è una carica pesante che
-//     si ferma subito; una CAMPITURA è un biliardo: una carica che rimbalza
-//     tra gli specchi del suo contorno finché la riempie.
+//     si ferma subito; una CAMPITURA è una SAGOMA: un corpo opaco appoggiato
+//     sulla lastra, impresso da un lampo di luce all'istante zero (un
+//     fotogramma, come una radiografia): esatta, piena, istantanea.
 //
 // I corridoi di due tratti che si incrociano non possono stare nello stesso
 // mondo (il campo è uno solo per punto): si mettono in ESPOSIZIONI diverse
@@ -144,7 +145,7 @@ const tocca = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= 
 // ris: il risultato di decodifica() (coordinate del mondo con y verso l'alto)
 export function tracciaFisica(ris, opzioni = {}) {
   const W = ris.misure.larghezza, H = ris.misure.altezza, giu = (p) => [p[0], H - p[1], p[2] ?? 0];
-  const oggetti = [], specie = {};
+  const oggetti = [], specie = {}, sagome = [];
   const nomeSpecie = (q, m, extra = '') => { const n = `${extra || 'tratto'} ${arr(q)}`; if (!specie[n]) specie[n] = { q: arr(q), m }; return n; };
   let pezzi = 0;
   // i tratti
@@ -172,13 +173,8 @@ export function tracciaFisica(ris, opzioni = {}) {
       const c = giu(e.pos), q = quarto(Math.max(0.5, e.d / PELLICOLA.saturazione)), v = 1, K = (v ** 4) / (4 * q * q * 0.2);
       oggetti.push({ tipo: 'disco', domini: [{ forma: { tipo: 'cerchio', centro: c.slice(0, 2).map(arr), r: arr(e.d) }, B: 0, K: arr(K) }], pareti: [], sorgenti: [{ pos: c.slice(0, 2).map(arr), dir: 0, v, specie: nomeSpecie(q, 1, 'goccia') }], tempo: 2, pezzi: 1 });
     } else if (e.tipo === 'campitura') {
-      // un biliardo: il contorno e i buchi sono specchi, dentro una carica rimbalza
-      const pareti = [];
-      for (const anello of [e.contorno, ...(e.buchi || [])]) anello.forEach((a, i) => { const b = anello[(i + 1) % anello.length]; pareti.push({ a: giu(a).slice(0, 2).map(arr), b: giu(b).slice(0, 2).map(arr), tipo: 'specchio' }); });
-      const q = quarto(Math.max(0.5, e.spessore)), lung = (1.7 * e.area) / q;
-      // dentro il contorno la lastra è vuota (fuori è materia densa)
-      const dentroVuoto = { forma: { tipo: 'poligono', punti: e.contorno.map((a) => giu(a).slice(0, 2).map(arr)) }, B: 0, K: 0 };
-      oggetti.push({ tipo: 'campitura', domini: [dentroVuoto], pareti, sorgenti: [{ pos: giu(e.inizio).slice(0, 2).map(arr), dir: 0.6180339, v: V, specie: nomeSpecie(q, 1, 'riempimento') }], tempo: lung / V, pezzi: pareti.length });
+      // una sagoma: un corpo appoggiato sulla lastra, impresso dal lampo all'istante zero
+      sagome.push({ contorno: e.contorno.map((a) => giu(a).slice(0, 2).map(arr)), buchi: (e.buchi || []).map((h) => h.map((a) => giu(a).slice(0, 2).map(arr))) });
     }
   }
   // le esposizioni: due oggetti che si toccano vanno su lastre diverse
@@ -200,10 +196,22 @@ export function tracciaFisica(ris, opzioni = {}) {
   }));
   // la lastra è materia densa: i corridoi sono canali vuoti. Una particella
   // che sfugge al suo canale si ferma subito, invece di tirare una riga
-  const cella = { larghezza: W, altezza: H, c: 30, G: 1, bordo: 'aperto', tempo: Math.max(1, ...esposizioni.map((e) => e.tempo)), fondo: { B: 0, K: 40000, n: 1 }, domini: [], masse: [], pareti: [], sorgenti: [], pellicola: { ...PELLICOLA }, specie, esposizioni };
-  const numeri = esposizioni.reduce((n, e) => n + e.domini.length * 6 + e.pareti.length * 4 + e.sorgenti.length * 4, 0);
-  const conta = { tratti: oggetti.filter((o) => o.tipo === 'tratto').length, petali: oggetti.filter((o) => o.tipo === 'petalo').length, dischi: oggetti.filter((o) => o.tipo === 'disco').length, campiture: oggetti.filter((o) => o.tipo === 'campitura').length, pezzi, esposizioni: esposizioni.length, numeri };
+  const cella = { larghezza: W, altezza: H, c: 30, G: 1, bordo: 'aperto', tempo: Math.max(1, ...esposizioni.map((e) => e.tempo)), fondo: { B: 0, K: 40000, n: 1 }, domini: [], masse: [], pareti: [], sorgenti: [], pellicola: { ...PELLICOLA }, specie, esposizioni, sagome };
+  const numeri = esposizioni.reduce((n, e) => n + e.domini.length * 6 + e.pareti.length * 4 + e.sorgenti.length * 4, 0) + sagome.reduce((n, g) => n + 2 * (g.contorno.length + g.buchi.reduce((m, h) => m + h.length, 0)), 0);
+  const conta = { tratti: oggetti.filter((o) => o.tipo === 'tratto').length, petali: oggetti.filter((o) => o.tipo === 'petalo').length, dischi: oggetti.filter((o) => o.tipo === 'disco').length, campiture: sagome.length, pezzi, esposizioni: esposizioni.length, numeri };
   return { cella, conta };
+}
+
+// riempie dei poligoni (pari e dispari: i buchi restano vuoti)
+function riempi(m, W, H, anelli) {
+  let y0 = Infinity, y1 = -Infinity;
+  for (const a of anelli) for (const p of a) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(H - 1, Math.ceil(y1)); y++) {
+    const yc = y + 0.5, xs = [];
+    for (const a of anelli) for (let i = 0, j = a.length - 1; i < a.length; j = i++) { const p = a[i], q = a[j]; if ((p[1] > yc) !== (q[1] > yc)) xs.push(p[0] + ((yc - p[1]) * (q[0] - p[0])) / (q[1] - p[1])); }
+    xs.sort((u, v) => u - v);
+    for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.max(0, Math.ceil(xs[k] - 0.5)); x <= Math.min(W - 1, Math.floor(xs[k + 1] - 0.5)); x++) m[y * W + x] = 1;
+  }
 }
 
 // quanto la fisica rifà l'immagine: le tracce rasterizzate contro l'inchiostro
@@ -213,7 +221,8 @@ export function fedelta(tracce, maschera, W, H, ritaglio = [0, 0, W, H]) {
     for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(H - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++)
       if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r) m[y * W + x] = 1;
   };
-  for (const t of tracce) for (let i = 1; i < t.punti.length; i++) {
+  for (const t of tracce) if (t.sagoma) riempi(m, W, H, [t.contorno, ...t.buchi]);
+  for (const t of tracce) if (!t.sagoma) for (let i = 1; i < t.punti.length; i++) {
     const a = t.punti[i - 1], b = t.punti[i]; if (!a[2] || !b[2]) continue;
     const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 2));
     for (let k = 0; k <= n; k++) { const u = k / n; timbro(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, Math.max(0.5, (a[4] + (b[4] - a[4]) * u) / 2)); }

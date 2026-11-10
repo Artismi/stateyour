@@ -113,4 +113,36 @@ prova('le composizioni di partenza: ogni elemento ha posti e si simula', () => {
   for (const [k, f] of Object.entries(COMPOSIZIONI)) { const c = f(); assert.ok(c.elementi.length && c.reticolo.a && c.reticolo.b, k); for (const e of c.elementi) { assert.ok(e.posti.length, k); assert.ok(simulaMondo(e.cella).length, `${k} ${e.nome}`); } }
 });
 
+prova('le leggi e gli oggetti si spengono: la fisica li ignora davvero', () => {
+  const l = PRESET.lente().cella, con = simulaMondo(l)[0].punti.at(-1), senza = simulaMondo({ ...l, leggi: { gravita: false } })[0].punti.at(-1);
+  assert.ok(Math.abs(con[1] - senza[1]) > 1, 'senza gravità la luce non si piega');
+  assert.ok(Math.abs(senza[1] - l.sorgenti[0].pos[1]) < 1e-9, 'senza gravità va dritta');
+  const m = structuredClone(l); m.masse[0].spento = true;
+  assert.deepEqual(simulaMondo(m)[0].punti.at(-1), senza, 'una massa spenta è come la gravità spenta');
+  const f = PRESET.fiore().cella;
+  assert.equal(simulaMondo({ ...f, leggi: { decadimento: false } }).length, 0, 'senza decadimento il nucleo (neutro) non si divide: niente tracce');
+  for (const t of simulaMondo({ ...f, leggi: { magnetico: false } })) { const a = t.punti[0], b = t.punti[Math.floor(t.punti.length / 2)], c = t.punti.at(-1); assert.ok(Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) < 1e-6, 'senza campo le tracce sono dritte'); }
+  const s = structuredClone(f); s.sorgenti[0].spento = true;
+  assert.equal(simulaMondo(s).length, 0, 'una sorgente spenta non emette');
+});
+
+prova("un interruttore che scatta a metà: prima nulla cambia, dopo le traiettorie sì", () => {
+  const f = PRESET.fiore().cella, a = simulaMondo(f), g = structuredClone(f), ts = 2;
+  g.domini[0].interruttori = [{ t: ts, acceso: false }];
+  const b = simulaMondo(g);
+  const pos = (tr, t) => { const P = tr.punti; let i = 0; while (i < P.length - 1 && P[i + 1][3] <= t) i++; return P[i]; };
+  for (const k of [1, 2]) {
+    const p0 = pos(a[k], ts - 0.01), q0 = pos(b[k], ts - 0.01), p1 = pos(a[k], ts + 1.5), q1 = pos(b[k], ts + 1.5);
+    assert.ok(Math.hypot(p0[0] - q0[0], p0[1] - q0[1]) < 1e-12, 'prima dello scatto identiche');
+    assert.ok(Math.hypot(p1[0] - q1[0], p1[1] - q1[1]) > 1, 'dopo lo scatto diverse');
+    // dopo lo scatto, niente campo e niente materia: la traccia è dritta e la velocità costante
+    const P = b[k].punti.filter((p) => p[3] > ts + 0.05 && p[3] < ts + 1), u = P[0], w = P[P.length - 1], m = P[P.length >> 1];
+    assert.ok(Math.abs((m[0] - u[0]) * (w[1] - u[1]) - (m[1] - u[1]) * (w[0] - u[0])) < 1e-6);
+  }
+  // una legge come lista di scatti: spenta tra 2 e 3, poi di nuovo accesa
+  const c = simulaMondo({ ...f, leggi: { magnetico: [{ t: 2, acceso: false }, { t: 3, acceso: true }] } });
+  assert.equal(c.length, a.length);
+  assert.ok(c.some((t, i) => Math.hypot(t.punti.at(-1)[0] - a[i].punti.at(-1)[0], t.punti.at(-1)[1] - a[i].punti.at(-1)[1]) > 1));
+});
+
 console.log(`camera: ${ok} prove, tutto ok`);
