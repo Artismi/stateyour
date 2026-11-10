@@ -17,11 +17,15 @@ export const COLORI_LEGGI = {
   gravita: [232, 96, 70], magnetico: [86, 140, 255], 'attrito+magnetico': [176, 120, 255], attrito: [140, 160, 200],
   molla: [90, 200, 120], 'magnetico+molla': [120, 220, 220], specchio: [255, 210, 80], rifrazione: [255, 170, 60], assorbe: [200, 200, 200],
   libero: [180, 176, 166],
+  // la camera
+  materia: [150, 140, 120], 'magnetico+materia': [176, 120, 255], luce: [255, 226, 120], 'gravita+luce': [255, 150, 90],
+  'gravita+magnetico': [200, 110, 200], 'gravita+materia': [210, 120, 90], 'gravita+magnetico+materia': [220, 120, 170],
 };
 export const NOMI_LEGGI = {
   gravita: 'gravità: orbite, archi di cerchio', magnetico: 'campo magnetico: curva a raggio costante', 'attrito+magnetico': 'magnetico + attrito: la voluta',
   molla: 'molla: la spatola del petalo, la sinusoide', 'magnetico+molla': 'molla + magnetico: il petalo che si incurva', libero: 'nessuna forza: la retta',
   specchio: 'specchio: i rimbalzi, le campiture', rifrazione: 'rifrazione',
+  materia: 'materia: frena', 'magnetico+materia': 'campo + materia: la spirale fino all\'occhio', luce: 'luce', 'gravita+luce': 'luce piegata da una massa',
 };
 export const coloreLegge = (l) => COLORI_LEGGI[l] || COLORI_LEGGI[(l || '').split('+').sort().join('+')] || [200, 200, 200];
 

@@ -3,9 +3,80 @@
 Scomposizione e codifica dei pattern: la loro origine e la loro replica
 tramite regole di generazione geometrica.
 
-## Lo studio
+## La camera: il pattern come sezione di un universo possibile
 
-`index.html` è il programma: un solo seme al centro di tutto.
+`index.html` è la camera. Ogni motivo è la fotografia di un evento fisico in
+una cella di spaziotempo: in uno dei tanti universi possibili, le masse, i
+campi e i mezzi stanno esattamente dove servono perché, guardato da qui,
+quell'evento abbia la forma del motivo.
+
+**Il seme è la storia: le condizioni iniziali.** Dove stanno le masse, dove
+c'è campo magnetico, dove c'è materia, dove c'è vetro, dove sono gli specchi,
+che cosa sono le particelle (carica, massa, vita, in che cosa decadono) e dove
+nascono, verso dove, a che velocità. Le leggi sono fisse; ogni linea, ogni
+spessore, ogni occhio è conseguenza.
+
+Le leggi (`src/camera/mondo.js`) sono cinque, quelle del nostro universo:
+
+| legge | che cosa fa | che forma dà |
+|---|---|---|
+| gravità | masse ferme curvano lo spazio; chi passa segue la curvatura ma non sposta la massa. Le particelle cadono con a = G·M/r², uguale per tutte (equivalenza); la luce si piega il doppio, come in un vetro di indice n = 1 + 2GM/(rc²) | orbite, rosette, lenti, caustiche |
+| magnetismo | nei domini con campo B una carica gira con ω = qB/m | archi di cerchio, versi opposti per + e − |
+| materia | nei domini con densità K una carica frena (Bethe, dv/dt = −Kq²/(mv²)) e si ferma dopo m·v⁴/(4Kq²) | la spirale che si stringe, l'occhio (picco di Bragg) |
+| luce e mezzi | la luce va a c/n; al confine tra mezzi si rifrange (Snell) o si riflette tutta; gli specchi riflettono chiunque | rimbalzi, campiture, fuochi |
+| decadimento | dopo la sua vita una particella si divide nelle figlie della sua specie | il centro da cui partono i petali, le forcelle, i ventagli |
+
+La pellicola registra le cariche come bolle, con lo spessore che cresce quando
+la particella rallenta; la luce lascia un filo; le neutre non si vedono.
+Le particelle sono corpi di prova: non spostano le masse né si attirano tra
+loro, quindi non c'è problema a molti corpi e il calcolo è leggero (ogni
+evento di partenza si simula in pochi millisecondi). Dentro un dominio senza
+masse il passo è esatto (rotazione, Bethe in forma chiusa, corda dell'arco).
+
+**Il laboratorio** (`src/camera/laboratorio.js`): si guarda UN motivo, e le
+cose che lo producono sono sulla scena e si trascinano:
+
+- la freccia verde è una sorgente: il cerchio la sposta, la punta cambia
+  direzione e velocità;
+- le zone colorate sono domini: ⊙ blu campo B positivo, ⊗ rosso negativo,
+  grigio materia, azzurro vetro; si spostano dal centro e si allargano dal
+  quadratino sul bordo;
+- i dischi scuri sono masse, con gli anelli dove la caduta è forte;
+- i segmenti grigi sono specchi;
+- clic su una linea: il pannello racconta la sua storia (chi è, da chi è
+  nata, quali leggi l'hanno piegata, perché finisce) e mostra la sua specie.
+
+Il pannello mostra solo la cosa scelta, e sotto ogni numero c'è la frase che
+dice che cosa cambia. Mentre muovi un cursore o trascini un oggetto, in grigio
+resta com'era prima. Passando sopra i cursori di una specie, si accendono le
+sue linee. Il tempo è una fetta: scorri e vedi l'evento accadere, con le
+particelle vive (blu +, rosse −, gialla la luce); la seconda barra restringe
+la fetta per vedere solo un intervallo. "Il pattern" ripete la cella (griglia,
+sfalsata, a specchio: la copia riflessa è lo stesso evento con B rovesciato,
+perché B è uno pseudoscalare); "spaziotempo" mostra le linee d'universo.
+
+Gli eventi di partenza (`src/camera/esperimento.js`): il fiore (un nucleo
+decade in fotoni a raggiera, ogni fotone si converte in una coppia + −, il
+campo richiude la coppia in un petalo), la voluta (una neutra decade in + e −,
+due spirali opposte fino all'occhio), la palmetta (un ventaglio di cariche),
+la lente (una massa piega la luce e trattiene una carica in orbita), il
+biliardo (un raggio tra specchi e una goccia di vetro).
+
+**È sempre possibile creare qualunque forma?** In linea di principio sì: con
+abbastanza domini piccoli una carica segue a pezzi di cerchio qualunque curva
+liscia, e gli specchi danno gli spigoli. Ma la domanda giusta è quanto costa
+il seme. Una forma è naturale per questo universo se il suo seme è corto: un
+fiore a sei petali sono una sorgente, un campo e cinque specie. Uno
+scarabocchio qualunque richiede un seme lungo quanto il disegno. Ci sono poi
+vincoli veri, che sono anche il carattere delle forme: una traccia è continua,
+gira solo dove c'è campo, si ingrossa solo quando rallenta, e finisce con
+l'occhio.
+
+Il vecchio studio (a parole, frasi e blocchi) è in `studio.html`.
+
+## Lo studio (vecchio)
+
+`studio.html` è il programma precedente: un solo seme al centro di tutto.
 
 - **Da un'immagine.** Si carica un'immagine e lo studio la ricostruisce: la
   decodifica e la lingua girano in un processo a parte, e ne esce un seme di

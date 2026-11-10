@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stateyour — lo studio (vecchio)</title>
+<style>
+  :root { --carta: #f4f1ea; --inchiostro: #1c1b18; --grigio: #8a867c; --riga: #d8d3c6; --accento: #d0532f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--carta); color: var(--inchiostro); height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 8px 14px; border-bottom: 1px solid var(--riga); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 10px 0 0; }
+  header .gruppo { display: flex; gap: 4px; align-items: center; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--riga); }
+  header .gruppo:last-child { border-right: 0; }
+  button, select, input { font: inherit; }
+  button { border: 1px solid var(--riga); background: #fff; color: var(--inchiostro); padding: 5px 9px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--inchiostro); }
+  button.attivo { background: var(--inchiostro); color: var(--carta); border-color: var(--inchiostro); }
+  button.primo { background: var(--accento); color: #fff; border-color: var(--accento); }
+  input[type=number] { width: 72px; padding: 4px; border: 1px solid var(--riga); border-radius: 3px; }
+  select { padding: 4px; border: 1px solid var(--riga); border-radius: 3px; background: #fff; }
+  label.file { border: 1px solid var(--riga); background: #fff; padding: 5px 9px; border-radius: 3px; cursor: pointer; }
+  label.file input { display: none; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .scena { display: flex; flex-direction: column; min-height: 0; }
+  .tele { flex: 1; position: relative; min-height: 0; }
+  .tele canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tele canvas[hidden] { display: none; }
+  #tela2d { background: #e9e5db; touch-action: none; }
+  #tela3d { background: #15140f; touch-action: none; }
+  .sotto { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--riga); }
+  .sotto input[type=range] { flex: 1; }
+  #stato { color: var(--grigio); font-size: 12px; padding: 4px 12px 8px; min-height: 22px; white-space: pre-wrap; }
+  aside { border-left: 1px solid var(--riga); overflow-y: auto; overflow-x: hidden; padding: 10px 12px 40px; }
+  aside select { max-width: 150px; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--grigio); margin: 16px 0 6px; font-weight: 600; }
+  aside h2:first-child { margin-top: 2px; }
+  .strumenti { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .strumenti button { padding: 6px 2px; }
+  .aiuto { color: var(--grigio); font-size: 12px; margin: 6px 0 0; }
+  .parole div { display: flex; justify-content: space-between; gap: 6px; padding: 4px 6px; border: 1px solid transparent; border-radius: 3px; cursor: pointer; }
+  .parole div:hover { border-color: var(--riga); }
+  .parole div.scelta { border-color: var(--accento); background: #fff; }
+  .parole span.info { color: var(--grigio); }
+  .campi { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
+  .campi label { color: var(--grigio); }
+  .campi input[type=number] { width: 90px; }
+  .campi input[type=range] { width: 140px; }
+  .riga-bottoni { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+  dialog { border: 1px solid var(--riga); border-radius: 4px; width: min(640px, 90vw); }
+  dialog textarea { width: 100%; height: 300px; font: 11px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>stateyour · studio</h1>
+  <nav style="order: 99; margin-left: auto; display: flex; gap: 10px; font-size: 12px;"><a href="./index.html" style="color: var(--accento)">la camera</a><a href="./decodifica.html" style="color: var(--grigio)">decodifica</a><a href="./spaziotempo.html" style="color: var(--grigio)">spaziotempo</a><a href="./piastrelle.html" style="color: var(--grigio)">piastrelle</a><a href="./motore.html" style="color: var(--grigio)">motore</a></nav>
+  <div class="gruppo">
+    <label class="file">immagine…<input type="file" id="file" accept="image/*"></label>
+    <button id="esempio">tavola greca</button>
+  </div>
+  <div class="gruppo">
+    <button id="nuovo">nuovo</button>
+    <span>seme n.</span><input type="number" id="numero" value="7" min="1" step="1">
+    <button id="inventa">inventa</button>
+    <button id="dado" title="un numero a caso">🎲</button>
+  </div>
+  <div class="gruppo">
+    <button id="muta">muta</button>
+    <input type="range" id="intensita" min="0.05" max="1" step="0.05" value="0.3" title="quanto mutare">
+  </div>
+  <div class="gruppo">
+    <button id="annulla" title="annulla (Ctrl+Z)">↶</button>
+    <button id="rifai" title="rifai (Ctrl+Y)">↷</button>
+  </div>
+  <div class="gruppo">
+    <button id="v2d" class="attivo">2D</button>
+    <button id="v3d">spaziotempo 3D</button>
+    <select id="stile"><option value="pieno">pieno</option><option value="contorno">contorno</option><option value="filo">filo</option></select>
+  </div>
+  <div class="gruppo">
+    <button id="copia">copia il seme</button>
+    <button id="incolla">incolla un seme</button>
+    <button id="scarica">scarica</button>
+  </div>
+</header>
+<main>
+  <section class="scena">
+    <div class="tele"><canvas id="tela2d"></canvas><canvas id="tela3d" hidden></canvas></div>
+    <div class="sotto">
+      <button id="gioca">▶</button>
+      <input type="range" id="tempo" min="0" max="1" step="0.001" value="1">
+      <output id="otempo"></output>
+    </div>
+    <div id="stato"></div>
+  </section>
+  <aside id="pannello"></aside>
+</main>
+<dialog id="dialogo">
+  <p id="dialogoTitolo">il seme in JSON</p>
+  <textarea id="dialogoTesto"></textarea>
+  <div class="riga-bottoni"><button id="dialogoOk" class="primo">usa questo seme</button><button id="dialogoChiudi">chiudi</button></div>
+</dialog>
+<script type="module" src="./src/studio/app.js"></script>
+</body>
+</html>
