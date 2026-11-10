@@ -24,11 +24,14 @@ Le leggi (`src/camera/mondo.js`) sono cinque, quelle del nostro universo:
 | gravità | masse ferme curvano lo spazio; chi passa segue la curvatura ma non sposta la massa. Le particelle cadono con a = G·M/r², uguale per tutte (equivalenza); la luce si piega il doppio, come in un vetro di indice n = 1 + 2GM/(rc²) | orbite, rosette, lenti, caustiche |
 | magnetismo | nei domini con campo B una carica gira con ω = qB/m | archi di cerchio, versi opposti per + e − |
 | materia | nei domini con densità K una carica frena (Bethe, dv/dt = −Kq²/(mv²)) e si ferma dopo m·v⁴/(4Kq²) | la spirale che si stringe, l'occhio (picco di Bragg) |
-| luce e mezzi | la luce va a c/n; al confine tra mezzi si rifrange (Snell) o si riflette tutta; gli specchi riflettono chiunque | rimbalzi, campiture, fuochi |
+| ottica | solo per la luce: va a c/n; al confine tra mezzi si rifrange (Snell) o si riflette tutta; gli specchi la riflettono, gli schermi la fermano. Le cariche non sentono né specchi né vetri | fuochi, caustiche, raggi spezzati |
 | decadimento | dopo la sua vita una particella si divide nelle figlie della sua specie | il centro da cui partono i petali, le forcelle, i ventagli |
 
-La pellicola registra le cariche come bolle, con lo spessore che cresce quando
-la particella rallenta; la luce lascia un filo; le neutre non si vedono.
+La **lastra** registra: le cariche come bolle, con lo spessore che cresce
+quando la particella rallenta; la luce come un filo; le neutre non si vedono.
+E registra le **sagome**: corpi opachi appoggiati sopra, impressi da un lampo
+di luce all'istante zero. La lastra non è una forza: è ciò su cui l'evento
+resta scritto, e ha il suo interruttore (il lampo).
 Le particelle sono corpi di prova: non spostano le masse né si attirano tra
 loro, quindi non c'è problema a molti corpi e il calcolo è leggero (ogni
 evento di partenza si simula in pochi millisecondi). Dentro un dominio senza
@@ -57,7 +60,8 @@ collegati:
   La luce, velocissima, sta quasi orizzontale (il cono di luce), le particelle
   lente salgono ripide, le masse sono colonne ferme.
 
-**Le cinque forze si vedono**, ognuna col suo colore e il suo segno, nelle
+**Le cinque leggi si vedono** (tre forze che piegano le linee, il decadimento che
+le fa nascere e finire, l'ottica della luce), ognuna col suo colore e il suo segno, nelle
 schede sopra la scena (clic: mostra o nasconde i suoi segni; passandoci sopra,
 la sua frase e le linee dove agisce):
 
@@ -66,7 +70,7 @@ la sua frase e le linee dove agisce):
 | gravità | rosso | la massa, gli anelli, le frecce del campo che puntano verso di lei |
 | magnetismo | blu | la zona tinta, ⊙ (B esce dal foglio) o ⊗ (entra), il cartellino col valore |
 | materia | marrone | la zona a puntini, più fitti dove è più densa |
-| luce, specchi, vetri | giallo | gli specchi dorati, i vetri azzurri, i raggi |
+| ottica | giallo | i vetri azzurri, gli specchi dorati, i raggi di luce |
 | decadimento | verde | le sorgenti e le stelle ✳ dove una particella si divide |
 
 Ogni tratto di linea ha il colore delle forze che agiscono lì, pesate per
@@ -116,8 +120,9 @@ avvengono:
    stato in cui il primo finisce: la traccia è continua e liscia come quella di
    una particella vera (due giri di spirale logaritmica: 6 archi). Ogni pezzo
    diventa un corridoio di campo lungo l'arco, largo quanto lo spazio libero
-   intorno, con B = κ·m·v/q; lo spessore è la carica; una parete nera ferma la
-   particella alla fine. Un petalo è una carica che frena nella materia (si
+   intorno, con B = κ·m·v/q; lo spessore è la carica; alla fine del tratto la
+   particella decade in neutri invisibili (le particelle di una specie decadono
+   ognuna a un istante diverso: la sua vita è il tempo per percorrere il tratto). Un petalo è una carica che frena nella materia (si
    allarga verso la punta), un disco una carica pesante che si ferma subito, una
    campitura una **sagoma**: un corpo opaco appoggiato sulla lastra, impresso da
    un lampo di luce uniforme all'istante zero (un fotogramma, come una

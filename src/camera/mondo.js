@@ -21,9 +21,10 @@
 //                dv/dt = −K·q²/(m·v²). Più lenta, frena più in fretta: si ferma
 //                dopo una gittata finita m·v⁴/(4·K·q²) e la curva si stringe in
 //                spirale fino all'occhio.
-//   4. LUCE E MEZZI la luce va a c/n, dove n è l'indice del dominio; al confine
-//                tra due mezzi si rifrange (Snell) o si riflette tutta; gli
-//                SPECCHI (segmenti) riflettono chiunque, le pareti nere assorbono.
+//   4. OTTICA    vale solo per la luce: va a c/n, dove n è l'indice del
+//                mezzo; al confine tra due mezzi si rifrange (Snell) o si
+//                riflette tutta; gli SPECCHI la riflettono, gli schermi neri la
+//                fermano. Le cariche non sentono né specchi né vetri.
 //   5. DECADIMENTO dopo la sua vita una particella si divide nelle figlie
 //                previste dalla sua specie (direzione, quota di quantità di moto).
 //                Un fotone che si converte in una coppia elettrone-positrone è
@@ -139,8 +140,7 @@ export function risolviSpecie(s, catalogo = {}) {
 // all'istante zero, ne imprime la forma piena (un fotogramma, come una
 // radiografia). Sono le campiture: esatte, istantanee, senza riempimenti.
 function sagomeImpresse(mondo) {
-  const luce = leggeA({ ...LEGGI, ...(mondo.leggi || {}) }.luce, 0);
-  if (!luce) return [];
+  if (mondo.lampo === false) return [];
   return (mondo.sagome || []).filter((s) => accesoA(s, 0)).map((s, i) => ({
     sagoma: true, indice: i, contorno: s.contorno, buchi: s.buchi || [], fine: 'lampo', specie: { nome: 'lampo', luce: true }, sorgente: -1, generazione: 0,
     punti: [...s.contorno, s.contorno[0]].map((p) => [p[0], p[1], true, 0, 0, 'luce']),
@@ -205,13 +205,15 @@ export function simulaMondo(mondo, opzioni = {}) {
   const coda = (mondo.sorgenti || []).map((s, i) => {
     if (!accesoA(s, s.t0 ?? 0)) return null;
     const specie = risolviSpecie(s.specie, catalogo), v = specie.luce ? C / campoIn(...s.pos).n : s.v;
-    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null };
+    // «vita» sulla sorgente: l'istante in cui QUESTA particella decade (le particelle di una
+    // stessa specie decadono ognuna a un istante diverso; la specie ne dà solo la media)
+    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null, vita: s.vita };
   }).filter(Boolean);
   let nate = 0;
 
   while (coda.length && nate < maxParticelle) {
     const p = coda.shift(); nate++;
-    const sp = p.specie, luce = !!sp.luce, q = luce ? 0 : sp.q ?? 0, m = sp.m ?? 1, vita = sp.vita ?? Infinity;
+    const sp = p.specie, luce = !!sp.luce, q = luce ? 0 : sp.q ?? 0, m = sp.m ?? 1, vita = p.vita ?? sp.vita ?? Infinity;
     statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? (luce || q !== 0);
     const larghezza = (v) => (!visibile ? 0 : q ? pel.w0 * Math.abs(q) * Math.min(pel.saturazione, pel.vRif / Math.max(v, 1e-9)) : pel.w0 * 0.35);
@@ -276,7 +278,7 @@ export function simulaMondo(mondo, opzioni = {}) {
       }
       // le pareti: la prima toccata lungo la corda
       let colpo = null;
-      for (const pa of pareti) {
+      for (const pa of luce ? pareti : []) { // specchi e schermi: solo per la luce
         const rx = s.x - x, ry = s.y - y, sx = pa.b[0] - pa.a[0], sy = pa.b[1] - pa.a[1];
         const den = rx * sy - ry * sx; if (Math.abs(den) < 1e-14) continue;
         const qx = pa.a[0] - x, qy = pa.a[1] - y, u = (qx * sy - qy * sx) / den, z = (qx * ry - qy * rx) / den;

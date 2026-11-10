@@ -50,10 +50,10 @@ export function storia(tr, esp) {
   if (leggi.has('magnetico')) cosa.push('il campo magnetico lo fa girare');
   if (leggi.has('materia')) cosa.push('la materia lo frena e la curva si stringe');
   if (leggi.has('gravita')) cosa.push(s.luce ? 'una massa piega il suo cammino' : 'una massa lo attira');
-  if (leggi.has('specchio')) cosa.push('rimbalza su uno specchio');
+  if (leggi.has('specchio')) cosa.push('si riflette su uno specchio');
   if (leggi.has('rifrazione')) cosa.push('cambia mezzo e si rifrange');
   if (!cosa.length) cosa.push('nessuna forza: va dritto');
-  const FINI = { ferma: 'si ferma: la macchia tonda in fondo è il picco di Bragg', decade: 'decade: qui nascono le sue figlie', fuori: 'esce dalla cella', tempo: 'la pellicola smette di registrare', assorbita: 'una parete nera lo assorbe', caduta: 'cade sul corpo di una massa' };
+  const FINI = { ferma: 'si ferma: la macchia tonda in fondo è il picco di Bragg', decade: s.figli?.length ? 'decade: qui nascono le sue figlie' : 'decade in particelle neutre, invisibili: la linea finisce qui', fuori: 'esce dalla cella', tempo: 'la pellicola smette di registrare', assorbita: 'uno schermo nero lo ferma', caduta: 'cade sul corpo di una massa' };
   const lung = P.reduce((L, p, i) => (i && P[i - 1][2] && p[2] ? L + Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]) : L), 0);
   return `Questa linea è ${chi}. ${cap(nascita)}. Lungo la strada ${cosa.join(', ')}. Alla fine ${FINI[tr.fine] || tr.fine}. Lunghezza ${fmt(lung)}, dal tempo ${fmt(P[0][3])} al tempo ${fmt(P[P.length - 1][3])}.`;
 }

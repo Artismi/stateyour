@@ -15,7 +15,7 @@ const { cella, conta } = tracciaFisica({ linee, elementi: [], misure: { larghezz
 const tr = simulaMondo(cella);
 assert.equal(tr.length, 3);
 for (const [i, t] of tr.entries()) {
-  assert.equal(t.fine, 'assorbita', `il tratto ${i} arriva in fondo e si ferma sulla parete`);
+  assert.equal(t.fine, 'decade', `il tratto ${i} arriva in fondo e lì decade`);
   // ogni punto della traccia sta entro un pixel dal disegno
   const P = linee[i].punti.map((p) => [p[0], H - p[1]]);
   let peggio = 0;

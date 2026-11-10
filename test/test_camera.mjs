@@ -51,10 +51,13 @@ prova('luce e mezzi: una lente sferica mette a fuoco, Snell al bordo', () => {
   assert.ok(Math.abs(Math.sin(i) - 1.5 * Math.sin(rr)) < 1e-3);
 });
 
-prova('specchi: angolo di uscita uguale a quello di entrata', () => {
-  const [tr] = simulaMondo({ larghezza: 400, altezza: 400, pareti: [{ a: [300, 0], b: [300, 400], tipo: 'specchio' }], tempo: 30, sorgenti: [{ pos: [100, 100], dir: Math.PI / 6, v: 10, specie: { q: 0, visibile: true } }] });
+prova('specchi: la luce esce con lo stesso angolo con cui entra; una carica li attraversa', () => {
+  const mondo = { larghezza: 400, altezza: 400, c: 10, pareti: [{ a: [300, 0], b: [300, 400], tipo: 'specchio' }], tempo: 30 };
+  const [tr] = simulaMondo({ ...mondo, sorgenti: [{ pos: [100, 100], dir: Math.PI / 6, specie: { luce: true } }] });
   const u = tr.punti.at(-1), d = Math.atan2(u[1] - tr.punti.at(-2)[1], u[0] - tr.punti.at(-2)[0]);
   assert.ok(Math.abs(d - (Math.PI - Math.PI / 6)) < 1e-9);
+  const [c] = simulaMondo({ ...mondo, sorgenti: [{ pos: [100, 100], dir: Math.PI / 6, v: 10, specie: { q: 1 } }] });
+  assert.ok(c.punti.every((p) => p[5] !== 'specchio') && c.punti.at(-1)[0] > 300, 'le cariche non sentono gli specchi');
 });
 
 prova('decadimento: il fotone si converte in una coppia; storia in parole', () => {

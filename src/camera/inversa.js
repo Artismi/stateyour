@@ -12,7 +12,8 @@
 //   · ogni pezzo diventa un CORRIDOIO di campo lungo l'arco (un settore di
 //     anello, o un rettangolo se è dritto) con B = κ·m·v/q;
 //   · lo SPESSORE diventa la carica (la pellicola ingrossa con |q|);
-//   · alla fine del tratto una parete nera ASSORBE la particella;
+//   · alla fine del tratto la particella DECADE in neutri invisibili: la sua
+//     vita è proprio il tempo che impiega a percorrerlo;
 //   · un PETALO è una carica che frena nella materia: si allarga verso la
 //     punta e si ferma lì (picco di Bragg); un DISCO è una carica pesante che
 //     si ferma subito; una CAMPITURA è una SAGOMA: un corpo opaco appoggiato
@@ -154,10 +155,9 @@ export function tracciaFisica(ris, opzioni = {}) {
     if (!fit || fit.lunghezza < 1) continue;
     const q = Math.max(0.5, Math.round(fit.larghezza * 4) / 4), hw = Math.max(2, q * 0.6 + 1.5);
     const { domini, fine } = corridoi(fit, q, 1, hw);
-    // la parete nera che ferma la particella alla fine del tratto
-    const nx = -Math.sin(fine.dir) * hw, ny = Math.cos(fine.dir) * hw, ex = fine.pos[0] + Math.cos(fine.dir) * 0.4, ey = fine.pos[1] + Math.sin(fine.dir) * 0.4;
-    const pareti = [{ a: [arr(ex + nx), arr(ey + ny)], b: [arr(ex - nx), arr(ey - ny)], tipo: 'assorbe' }];
-    oggetti.push({ tipo: 'tratto', domini, pareti, sorgenti: [{ pos: fit.inizio.pos.map(cifre), dir: cifre(fit.inizio.dir), v: V, specie: nomeSpecie(q, 1) }], tempo: fit.lunghezza / V + 1, pezzi: fit.pezzi.length });
+    // alla fine del tratto la particella decade: la sua vita è il tempo per percorrerlo
+    void fine;
+    oggetti.push({ tipo: 'tratto', domini, pareti: [], sorgenti: [{ pos: fit.inizio.pos.map(cifre), dir: cifre(fit.inizio.dir), v: V, vita: cifre(fit.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: fit.lunghezza / V + 1, pezzi: fit.pezzi.length });
     pezzi += fit.pezzi.length;
   }
   for (const e of ris.elementi) {

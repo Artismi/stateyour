@@ -24,7 +24,7 @@ export const FORZE = {
   gravita: { nome: 'gravità', art: 'la gravità', col: [214, 84, 52], simbolo: '●', frase: 'le masse ferme curvano lo spazio: chi passa cade verso di loro, uguale se leggero o pesante; la luce si piega il doppio. Nessuno sposta le masse.' },
   magnetico: { nome: 'magnetismo', art: 'il magnetismo', col: [52, 104, 214], simbolo: '⊙', frase: 'dove c\'è campo B le cariche girano: + da una parte, − dall\'altra. Raggio m·v/(q·B): più campo, curve più strette; più massa o velocità, più larghe.' },
   materia: { nome: 'materia', art: 'la materia', col: [150, 104, 50], simbolo: '▒', frase: 'la materia frena le cariche, e più sono lente più frenano: la curva si stringe in spirale e finisce in una macchia tonda (l\'occhio).' },
-  luce: { nome: 'luce, specchi, vetri', art: 'la luce, gli specchi e i vetri', col: [196, 142, 0], simbolo: '◇', frase: 'la luce va dritta a velocità c/n; si rifrange entrando in un vetro, rimbalza sugli specchi. Gli specchi riflettono anche le particelle.' },
+  luce: { nome: 'ottica', art: "l'ottica", col: [196, 142, 0], simbolo: '◇', frase: 'vale solo per la luce: va dritta a velocità c/n, si rifrange entrando in un vetro (Snell), si riflette sugli specchi. Le cariche non sentono né specchi né vetri.' },
   decadimento: { nome: 'decadimento', art: 'il decadimento', col: [36, 140, 76], simbolo: '✳', frase: 'dopo la sua vita una particella si divide nelle sue figlie: è il punto da cui partono i petali, le forcelle, i ventagli.' },
 };
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -125,7 +125,7 @@ function spriteDi(e, s) {
   const c = sp.getContext('2d'); c.scale(k, k); c.lineCap = 'round'; c.lineJoin = 'round';
   for (const tr of m.tracce) {
     const P = tr.punti;
-    if (tr.sagoma) { c.fillStyle = coloriForze ? rgb(FORZE.luce.col) : INK; tracciaSagoma(c, tr); c.fill('evenodd'); continue; }
+    if (tr.sagoma) { c.fillStyle = INK; tracciaSagoma(c, tr); c.fill('evenodd'); continue; }
     for (let i = 1; i < P.length; i++) {
       const a = P[i - 1], b = P[i]; if (!a[2] || !b[2]) continue;
       c.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i]) : INK; c.lineWidth = Math.max(0.6 / k, (a[4] + b[4]) / 2);
@@ -281,7 +281,7 @@ function disegnaTracce(lista, T, fantasma) {
     if (tr.sagoma) {
       // il lampo è all'istante zero: c'è sempre, tranne in una fetta di tempo che non lo comprende
       if (t0 > 0) continue;
-      ctx.fillStyle = fantasma ? 'rgba(120,115,105,0.25)' : ev ? ACCENTO : solo ? (solo === 'luce' ? rgb(FORZE.luce.col) : 'rgba(28,27,24,0.1)') : rgb(coloriForze ? FORZE.luce.col : [28, 27, 24], qualcosa ? 0.35 : 1);
+      ctx.fillStyle = fantasma ? 'rgba(120,115,105,0.25)' : ev ? ACCENTO : solo ? 'rgba(28,27,24,0.1)' : rgb([28, 27, 24], qualcosa ? 0.35 : 1);
       tracciaSagoma(ctx, tr); ctx.fill('evenodd');
       continue;
     }
@@ -627,7 +627,7 @@ const SPIEGA = {
   raggioDominio: 'raggio: fin dove arriva questa zona. Trascina il quadratino sul bordo.',
   M: 'massa M (rossa): quanto curva lo spazio intorno. Le particelle cadono verso di lei con G·M/r², la luce si piega il doppio. Nessuno la sposta: resta ferma.',
   R: 'raggio R: il corpo della massa. Chi lo tocca ci cade dentro e si ferma.',
-  tipoParete: 'specchio: riflette tutto, angolo di uscita uguale a quello di entrata. Assorbe: ferma qualunque cosa la tocchi.',
+  tipoParete: 'specchio: riflette la luce, con l\'angolo di uscita uguale a quello di entrata. Schermo: la ferma. Le cariche non sentono né l\'uno né l\'altro.',
   c: 'velocità della luce c in questo universo: il limite. La luce va a c/n.',
   tempo: 'durata dell\'esposizione: quanto a lungo la pellicola registra.',
   w0: 'spessore base della pellicola: quanto è grossa la bolla di una carica unitaria veloce.',
@@ -672,7 +672,8 @@ function pannelloElemento(h) {
     h.push(`<p class="aiuto">Un elemento solo: una cella di spaziotempo. <b>Passa sopra una linea</b> e vedi le forze che agiscono lì, ognuna col suo colore. <b>Tocca</b> una cosa per cambiarla: la freccia verde (dove nasce la particella), una zona (campo, materia, vetro), una massa, uno specchio, una linea. Quello che cambi qui cambia in tutte le copie del pattern.</p>`);
     if (c.esposizioni) {
       const ds = c.esposizioni.flatMap((e) => e.domini), so = c.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0);
-      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra, ${(c.sagome || []).length} sagome.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; una parete nera la ferma alla fine. Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Le campiture sono sagome: corpi opachi appoggiati sulla lastra, impressi da un lampo di luce all'istante zero. Passa sopra una linea per vedere i suoi corridoi.</p>`);
+      h.push(`<h2>che cosa c'è in questa cella</h2><p>${so} particelle, ${ds.length} corridoi di campo, ${c.esposizioni.length} esposizioni sulla stessa lastra, ${(c.sagome || []).length} sagome.</p><p class="nota">Ogni linea è una particella che parte dal suo inizio e percorre corridoi di campo magnetico tagliati sulla sua curva; alla fine del tratto decade in particelle neutre, invisibili (la sua vita è il tempo per percorrerlo). Le linee che si incrociano stanno su esposizioni diverse, perché in un punto il campo è uno solo. Passa sopra una linea per vedere i suoi corridoi.</p>`);
+      h.push(lastra(c));
       h.push(`<h2>le specie (che cosa sono le particelle)</h2><p class="nota">La carica decide lo spessore della traccia.</p><div class="elenco">`);
       for (const nome of Object.keys(c.specie)) h.push(`<div data-specie="${nome}">◦ <b>${nome}</b> ${descriviSpecie(c.specie[nome])}</div>`);
       h.push('</div>');
@@ -694,6 +695,7 @@ function pannelloElemento(h) {
       h.push(righe.length ? righe.join('') : `<div class="ogg vuoto">nessun oggetto in questa cella</div>`);
       h.push(`</div>`);
     }
+    if ((c.sagome || []).length) h.push(lastra(c));
     h.push(`<h2>dove nascono le particelle</h2><div class="elenco">`);
     c.sorgenti.forEach((so, i) => h.push(riga('sorgente', i, so, `→ sorgente ${i + 1}: <b>${specieDi(so).nome}</b> ${specieDi(so).luce ? 'luce' : `v ${fmt(so.v ?? 0)}`}`)));
     h.push(`</div><h2>le specie (che cosa sono le particelle)</h2><div class="elenco">`);
@@ -743,12 +745,15 @@ function pannelloElemento(h) {
     h.push(cursore('R', m, 'R', 0, 40, 0.5, 'raggio R'));
   } else if (sel.tipo === 'parete') {
     const p = c.pareti[sel.i];
-    h.push(`<h2>${p.tipo} ${sel.i + 1}</h2><p class="nota">un segmento perpendicolare al piano. Trascina gli estremi o il centro.</p>`);
+    h.push(`<h2>${p.tipo === 'assorbe' ? 'schermo' : 'specchio'} ${sel.i + 1}</h2><p class="nota">un segmento perpendicolare al piano, per la luce. Trascina gli estremi o il centro.</p>`);
     h.push(interruttore('parete', sel.i, p));
-    h.push(`<label class="riga">tipo <select data-parete>${['specchio', 'assorbe'].map((f) => `<option ${p.tipo === f ? 'selected' : ''}>${f}</option>`).join('')}</select></label><p class="spiega">${SPIEGA.tipoParete}</p>`);
+    h.push(`<label class="riga">tipo <select data-parete>${[['specchio', 'specchio'], ['assorbe', 'schermo nero']].map(([f, n]) => `<option value="${f}" ${p.tipo === f ? 'selected' : ''}>${n}</option>`).join('')}</select></label><p class="spiega">${SPIEGA.tipoParete}</p>`);
   }
   h.push(`<div class="riga-bottoni">${['traccia', 'specie'].includes(sel.tipo) ? '' : '<button data-azione="elimina">elimina</button>'}<button data-azione="chiudi">chiudi</button></div>`);
 }
+// la lastra: non è una forza, è ciò che registra. Le tracce delle cariche e della
+// luce, e le sagome dei corpi appoggiati sopra, impresse dal lampo
+const lastra = (c) => `<h2>la lastra</h2><div class="legge" style="--c:rgb(28,27,24)"><div class="testa"><label><input type="checkbox" data-lampo ${c.lampo === false ? '' : 'checked'}> <b>■ il lampo: ${(c.sagome || []).length} sagome</b></label></div><p class="spiega">Le campiture sono sagome di corpi opachi appoggiati sulla lastra: un lampo di luce uniforme, all'istante zero, ne imprime la forma piena, come in una radiografia. Non è una forza: è un modo in cui la lastra registra.</p></div>`;
 const interruttore = (tipo, i, o) => `<label class="riga interr"><span><b>acceso</b> — agisce sulla fisica${scattiTesto(o.interruttori, `${tipo}:${i}`)}</span><input type="checkbox" data-acceso="${tipo}:${i}" ${accesoOra(o) ? 'checked' : ''}></label>`;
 const scattiTesto = (ev, chi) => (ev && ev.length ? ` <span class="scatti">${ev.map((e) => `${e.acceso ? 'acceso' : 'spento'} a t ${fmt(e.t)}`).join(', ')} <button class="piccolo" data-togli-scatti="${chi}" title="togli gli scatti nel tempo">✕</button></span>` : '');
 function descriviDominio(d) { const p = []; if (d.B) p.push(`campo ${fmt(d.B)}`); if (d.K) p.push(`materia ${fmt(d.K)}`); if ((d.n ?? 1) !== 1) p.push(`vetro n ${fmt(d.n)}`); return p.join(', ') || 'vuoto'; }
@@ -814,6 +819,7 @@ pannello.addEventListener('change', (e) => {
   if (t.id === 'nuovoChi' || t.id === 'nuovoK') return;
   if (t.dataset.acceso) { const [tipo, i] = t.dataset.acceso.split(':'); cambiaOggetto(tipo, +i, t.checked); return; }
   if (t.dataset.legge) { cambiaLegge(t.dataset.legge, t.checked); return; }
+  if (t.dataset.lampo != null) { ricorda(); confronta(t.checked ? 'com\'era senza il lampo' : 'com\'era con il lampo'); if (t.checked) delete cel().lampo; else cel().lampo = false; aggiorna(); return; }
   ricorda();
   if (t.dataset.specchio != null) comp.elementi[scelto.e].posti[scelto.p].specchio = t.checked;
   if (t.dataset.originale != null) mostraOriginale = t.checked;
@@ -876,8 +882,7 @@ function mostraSchede() {
     conta.materia = zK ? `${zK} ${zK === 1 ? 'zona' : 'zone'}` : 'nessuna';
     const luci = Object.values(c.specie).filter((s) => s.luce).length;
     const specchi = tuttePareti.filter((p) => p.tipo === 'specchio').length;
-    const sag = (c.sagome || []).length;
-    conta.luce = specchi || zn || luci || sag ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, sag && `${sag} sagome`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
+    conta.luce = specchi || zn || luci ? [specchi && `${specchi} specchi`, zn && `${zn} vetri`, luci && 'luce'].filter(Boolean).join(', ') : 'niente';
     const dec = Object.values(c.specie).filter((s) => s.vita != null).length;
     conta.decadimento = dec ? `${dec} ${dec === 1 ? 'specie' : 'specie'}` : 'niente';
   }
