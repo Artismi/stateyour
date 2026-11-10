@@ -45,8 +45,9 @@ export function indirizzoDi(numero) {
   const gslot = n % GALASSIE_MAX; n = Math.floor(n / GALASSIE_MAX);
   const cosmoN = n + 1;
   const C = cosmo(cosmoN), galassia = gslot % C.galassie.length;
-  const S = sistema(cosmoN, galassia, stella);
-  return { cosmo: cosmoN, galassia, stella, pianeta: slot % S.pianeti.length, regione };
+  let st = stella, S = sistema(cosmoN, galassia, st);
+  while (!S.pianeti.length) { st = (st + 1) % STELLE; S = sistema(cosmoN, galassia, st); }
+  return { cosmo: cosmoN, galassia, stella: st, pianeta: slot % S.pianeti.length, regione };
 }
 export function numeroDi(a) {
   return 1 + a.regione + REGIONI * (a.pianeta + PIANETI_MAX * (a.stella + STELLE * (a.galassia + GALASSIE_MAX * (a.cosmo - 1))));
@@ -112,13 +113,17 @@ export const galassia = memo((n, id) => {
     }
     // la stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
     // misurata, e un campo magnetico suo; poi vive secondo le sue equazioni fino a «adesso»
-    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita, vita = stellaVera(m0);
+    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 * ANNO : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita, vita = stellaVera(m0);
+    // la METALLICITÀ (in unità del Sole): il gas da cui nasce è stato arricchito dalle supernove delle
+    // generazioni prima; cresce con il tempo passato dalla nascita della galassia, ed è più alta al centro
+    // (dove le stelle si sono formate prima e più fitte)
+    const Z = 2.2 * (1 - Math.exp(-(nascita - G.formazione) / (2e9 * ANNO))) * Math.exp(-Math.hypot(x, y) / 0.7) * (G.tipo === 'ellittica' ? 1.6 : 1) + 0.01;
     if (eta < vita.vita * ANNO) {
       const gigante = eta > 0.9 * vita.vita * ANNO, T = gigante ? Math.min(vita.T, 4200) : vita.T;
-      stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0 });
+      stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0, Z });
     } else {
       const f = fine(m0, B0), morta = (eta - vita.vita * ANNO) / ANNO;
-      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta });
+      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z });
     }
   }
   // le sorgenti dei raggi cosmici EMERGONO dalla storia: le supernove nascono dalle stelle massicce
@@ -160,10 +165,14 @@ export const metriPerUnita = (livello, via) => {
 export const RAGGIO_SISTEMA = 0.0025; // in unità della galassia (sulla mappa)
 export const sistema = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
-  const np = intero(1, PIANETI_MAX), pianeti = [];
+  // i pianeti nascono dal disco della stella giovane, fatto della sua stessa materia: con poca materia
+  // pesante solo piccoli pianeti; i giganti di gas si formano attorno a un nucleo di ghiaccio e roccia, e
+  // sono tanto più probabili quanto più la stella è metallica (P ∝ Z², come si osserva)
+  const Z = S.Z ?? 1, morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
+  const np = morta ? 0 : Z < 0.05 ? intero(0, 1) : intero(1, PIANETI_MAX), pianeti = [];
   let a = tra(0.1, 0.18);
   for (let k = 0; k < np; k++) {
-    const freddo = a > 0.4, tipo = freddo ? (c() < 0.6 ? 'gassoso' : 'ghiacciato') : (c() < 0.8 ? 'roccioso' : 'gassoso');
+    const freddo = a > 0.4, gigante = c() < Math.min(0.85, 0.25 * Z * Z + 0.05), tipo = freddo ? (gigante ? 'gassoso' : 'ghiacciato') : (gigante && c() < 0.3 ? 'gassoso' : 'roccioso');
     const r = tipo === 'gassoso' ? tra(0.022, 0.04) : tra(0.008, 0.018);
     // le grandezze vere: il raggio (m) e il campo magnetico all'equatore (T)
     const raggioM = tipo === 'gassoso' ? tra(2.4e7, 7.5e7) : tipo === 'ghiacciato' ? tra(1.5e7, 2.6e7) : tra(2.4e6, 9e6);
@@ -173,11 +182,17 @@ export const sistema = memo((n, gid, sid) => {
       campo: Math.min(1, Math.log10(B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)),
       anelli: (tipo !== 'roccioso' && c() < 0.6) || c() < 0.08, lune: intero(0, tipo === 'gassoso' ? 6 : 2),
       colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
+      // di che cosa è fatto: la materia del disco, più ricca di ferro e roccia dove la stella è metallica
+      composizione: tipo === 'gassoso' ? { idrogeno: 0.71, elio: 0.27, pesanti: 0.02 * Math.max(0.3, Z) } : tipo === 'ghiacciato' ? { ghiaccio: 0.6, roccia: 0.3, ferro: 0.1 } : { ferro: Math.min(0.5, 0.2 + 0.1 * Z), roccia: 1 - Math.min(0.5, 0.2 + 0.1 * Z) - 0.02, acqua: 0.02 },
     });
     pianeti[k].pos = [a * Math.cos(pianeti[k].fase), a * Math.sin(pianeti[k].fase)];
     a *= tra(1.35, 1.8); if (a > 1.1) break;
   }
-  return { stella: { ...S, r: 0.012 + 0.006 * Math.cbrt(S.massa) }, pianeti };
+  // una nana bianca: quand'era gigante ha inghiottito i pianeti vicini, e perdendo massa ha lasciato
+  // allontanare gli altri (l'orbita si allarga come la massa iniziale su quella finale)
+  if (S.stato === 'nana bianca') { const k = (S.massaNascita || 1) / S.massa; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.1) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
+  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa';
+  return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });
 
 // ---------- un pianeta: l'anello, la magnetosfera, le regioni

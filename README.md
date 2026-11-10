@@ -161,6 +161,17 @@ stelle massicce che muoiono (quante all'anno discende da quante ne nascono e da
 quanto vivono), le pulsar sono ciò che lasciano; nelle ellittiche esplodono solo
 nane bianche, che non lasciano niente.
 
+Ogni stella eredita una **metallicità** (quanta materia pesante le supernove
+delle generazioni prima hanno lasciato nel gas da cui nasce: cresce col tempo,
+è più alta al centro). Da lì discendono i pianeti: i giganti di gas sono tanto
+più probabili quanto più la stella è metallica (come si osserva), e la
+composizione di ogni pianeta viene dal suo disco. Le stelle di neutroni e i
+buchi neri non hanno pianeti (la supernova li disperde); una nana bianca ha
+inghiottito quelli vicini quand'era gigante, e quelli lontani si sono
+allontanati mentre perdeva massa. Sulla mappa la fascia di radiazione è fatta
+dei suoi protoni, cerchi della loro grandezza vera: avvicinandosi a una regione
+si vedono le stesse cose più grandi, non un foglio sovrapposto.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al

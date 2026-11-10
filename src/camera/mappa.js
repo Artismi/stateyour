@@ -112,11 +112,13 @@ export function colpisciMappa(cam, sx, sy, W, H) {
   if (!migliore) return null;
   const d = migliore.dato;
   const testo = cam.livello === 0 ? `galassia ${d.id + 1} · ${d.tipo}${d.attivita > 0.3 ? ', con il buco nero attivo' : ''} · clic per avvicinarti`
-    : cam.livello === 1 ? `stella ${d.id + 1} · ${d.T > 9000 ? 'azzurra' : d.T > 6500 ? 'bianca' : d.T > 5000 ? 'gialla' : d.T > 3800 ? 'arancione' : 'rossa'}, ${d.massa.toFixed(1)} masse solari · clic per i suoi pianeti`
+    : cam.livello === 1 ? (d.stato === 'in vita' || d.stato === 'gigante rossa'
+      ? `stella ${d.id + 1} · ${d.stato === 'gigante rossa' ? 'gigante rossa, alla fine' : d.T > 9000 ? 'azzurra' : d.T > 6500 ? 'bianca' : d.T > 5000 ? 'gialla' : d.T > 3800 ? 'arancione' : 'rossa'}, ${d.massa.toFixed(1)} masse solari, ${Math.round(d.eta / 1e6).toLocaleString('it-IT')} milioni di anni, metalli ${d.Z.toFixed(2)}× il Sole · clic per i suoi pianeti`
+      : `stella ${d.id + 1} · ${d.stato}, ${d.massa.toFixed(2)} masse solari (nata con ${d.massaNascita.toFixed(1)}), raggio ${fmtLunghezza(d.raggioM)}${d.B ? `, campo ${d.B.toExponential(0)} tesla` : ''}, morta da ${Math.round(d.morta / 1e6).toLocaleString('it-IT')} milioni di anni${d.stato === 'nana bianca' ? ' · clic per i pianeti sopravvissuti' : ' · nessun pianeta: la supernova li ha dispersi'}`)
     : descriviPianeta(d) + ' · clic per avvicinarti';
   return { tipo: ['galassia', 'stella', 'pianeta'][cam.livello], pos: migliore.pos, scala: migliore.scala * migliore.raggio, testo };
 }
-const descriviPianeta = (P) => `pianeta ${P.id + 1} · ${P.tipo}${P.anelli ? ', con anelli' : ''}${P.lune ? `, ${P.lune} ${P.lune === 1 ? 'luna' : 'lune'}` : ''}, campo magnetico ${P.campo > 0.6 ? 'forte' : P.campo > 0.3 ? 'medio' : 'debole'}`;
+const descriviPianeta = (P) => `pianeta ${P.id + 1} · ${P.tipo}${P.anelli ? ', con anelli' : ''}${P.lune ? `, ${P.lune} ${P.lune === 1 ? 'luna' : 'lune'}` : ''}, raggio ${fmtLunghezza(P.raggioM)}, campo ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT, fatto di ${Object.entries(P.composizione || {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}`;
 
 // la camera che va verso un oggetto: un passo di volo (da chiamare a ogni fotogramma)
 export function volaVerso(cam, obiettivo, W, H) {
@@ -263,8 +265,21 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
   for (const L of [1.6, 2.2, 3, 4]) { ctx.beginPath(); for (let t = 0; t <= 64; t++) { const th = (t / 64) * 2 * Math.PI, r = L * Math.cos(th) ** 2; const x = X(r * Math.cos(th)), y = Y(r * Math.sin(th)); t ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
   // l'anello: le sue fasce, disegnate con la stessa densità che usa la fisica delle regioni
   if (Pl.anello) for (let r = Pl.anello[0]; r < Pl.anello[1]; r += 0.01) { const d = Pl.densitaAnello(r); ctx.strokeStyle = rgb(P.colore, Math.min(0.5, 0.25 * d)); ctx.lineWidth = Math.max(1, 0.011 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
-  // la fascia di radiazione: lo stesso profilo che riempie le regioni
-  for (let r = 1.16; r < 6; r += 0.04) { const f = fascia(P, Pl, r) / 0.17; if (f < 0.02) continue; ctx.strokeStyle = `rgba(150,140,255,${Math.min(0.3, 0.3 * f)})`; ctx.lineWidth = Math.max(1, 0.042 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
+  // la fascia di radiazione: lo stesso profilo che riempie le regioni, e i suoi protoni come cerchi
+  // della loro grandezza vera (il giro di un protone nel campo di quel punto), come dentro le regioni
+  for (let r = 1.16; r < 6; r += 0.04) { const f = fascia(P, Pl, r) / 0.17; if (f < 0.02) continue; ctx.strokeStyle = `rgba(150,140,255,${Math.min(0.12, 0.12 * f)})`; ctx.lineWidth = Math.max(1, 0.042 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
+  {
+    let sd = 977 + v.pianeta * 31 + v.stella * 7; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    ctx.strokeStyle = 'rgba(200,190,255,0.45)'; ctx.lineWidth = dpr;
+    for (let i = 0; i < 1400; i++) {
+      const r = 1.15 + caso() * 4.85, an = caso() * 2 * Math.PI, E = 10 * Math.pow(30, caso()), u = caso();
+      if (u * 1.0 > fascia(P, Pl, r) / 0.17) continue;
+      const B = P.B0 / r ** 3, rg = (Math.sqrt(E * E + 2 * E * 938.27) * 3.336e-3) / B / P.raggioM; // in raggi del pianeta
+      const cx = r * Math.cos(an), cy = r * Math.sin(an), R = rg * z;
+      if (R < 0.6 * dpr || X(cx) + R < 0 || Y(cy) + R < 0 || X(cx) - R > ctx.canvas.width || Y(cy) - R > ctx.canvas.height) continue;
+      ctx.beginPath(); ctx.arc(X(cx) + R, Y(cy), R, 0, 7); ctx.stroke();
+    }
+  }
   // i raggi cosmici nel campo del pianeta: le orbite di Størmer, calcolate davvero
   ctx.strokeStyle = 'rgba(255,196,120,0.5)'; ctx.lineWidth = dpr;
   for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
@@ -281,8 +296,8 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
     if (lato > 120 * dpr && x < ctx.canvas.width && y < ctx.canvas.height && x + lato > 0 && y + lato > 0) {
       const tr = anteprimaRegione({ ...v, regione: R.id }), k = lato / 1000;
       ctx.save(); ctx.beginPath(); ctx.rect(x, y, lato, lato); ctx.clip();
-      ctx.fillStyle = `rgba(244,240,232,${Math.min(0.95, (lato - 120 * dpr) / (300 * dpr))})`; ctx.fillRect(x, y, lato, lato);
-      ctx.strokeStyle = 'rgba(40,60,140,0.8)'; ctx.lineWidth = Math.max(0.5, 0.8 * k);
+      // nessun foglio sopra: è lo stesso spazio, visto con più dettaglio (stessi colori del resto della mappa)
+      ctx.strokeStyle = `rgba(200,190,255,${Math.min(0.75, (lato - 120 * dpr) / (250 * dpr))})`; ctx.lineWidth = Math.max(0.6 * dpr, 0.8 * k);
       for (const t of tr) { if (t.sagoma) continue; ctx.beginPath(); let su = false; for (const p of t.punti) { if (!p[2]) { su = false; continue; } const px = x + p[0] * k, py = y + p[1] * k; su ? ctx.lineTo(px, py) : ctx.moveTo(px, py); su = true; } ctx.stroke(); }
       ctx.restore();
     }

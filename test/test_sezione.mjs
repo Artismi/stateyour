@@ -58,7 +58,10 @@ prova('il caleidoscopio: le copie del triangolo riempiono il motivo, e le linee 
 });
 
 prova('i rami paralleli: un evento va diversamente, e cambia solo ciò che ne discende', () => {
-  const u = universo(285085), a = simulaMondo(u.cella), d = a.decadimenti[Math.floor(a.decadimenti.length / 2)];
+  // una regione dove succede qualcosa (uno sciame nell'anello di un pianeta): la si cerca
+  let numero = 1, u, a;
+  for (let n = 1; n < 3e6; n += 7919) { const v = universo(n), t = v.cella.sorgenti.length ? simulaMondo(v.cella) : { decadimenti: [] }; if (t.decadimenti.length >= 4) { numero = n; u = v; a = t; break; } }
+  const d = a.decadimenti.find((x) => a.some((t) => t.madre?.evento === x.evento)) || a.decadimenti[0]; // un decadimento con figlie visibili
   const c2 = ramo(u.cella, d.evento, generatore(4)), b = simulaMondo(c2);
   assert.equal(c2.seme, u.cella.seme); assert.ok(c2.rami[d.evento] > 0);
   const firma = (T) => new Map(T.map((t) => [t.evento, JSON.stringify(t.punti)]));
@@ -69,7 +72,7 @@ prova('i rami paralleli: un evento va diversamente, e cambia solo ciò che ne di
   // e lo stesso ramo è sempre lo stesso universo
   assert.equal(JSON.stringify(simulaMondo(c2).map((t) => t.punti.length)), JSON.stringify(b.map((t) => t.punti.length)));
   // la ricerca del ramo migliore non scende
-  const m = cercaSezione({ solo: 285085, inquadrature: 4, seme: 2 });
+  const m = cercaSezione({ solo: numero, inquadrature: 4, seme: 2 });
   const p = perfeziona({ cella: u.cella, finestra: m.finestra, vista: m.vista, sezione: m.sezione, ripeti: m.ripeti }, { passi: 14, seme: 3 });
   assert.ok(p.bellezza.totale >= m.bellezza.totale - 1e-9, `la ricerca non scende: ${p.bellezza.totale} contro ${m.bellezza.totale}`);
 });

@@ -63,7 +63,7 @@ function coloriTraccia(cella, tr) {
 
 // ---------- lo stato
 // all'avvio: un ornamento trovato dal dado: raggi cosmici nel campo di un pianeta, in un ramo dove alcuni eventi sono andati diversamente
-let comp = compBiblioteca(17129968, {"centro":[302.446,197.649],"lato":278.603}, {"fine":97.369,"durata":97.278}, {"inclinazione":37.34,"rotazione":90.614,"scalaTempo":3.834}, {"gruppo":"esagoni","angolo":240.493}, { rami: {"f15":4988570,"f7":3942017,"f2":4692994,"f13":2013146}, separato: null });
+let comp = compBiblioteca(17280429, {"centro":[938.193,98.516],"lato":230.773}, {"fine":100.803,"durata":91.266}, {"inclinazione":0,"rotazione":0,"scalaTempo":4.839}, {"gruppo":"esagoni","angolo":215.159}, { rami: {"0":4970158,"f9":1058580,"f1":3463938}, separato: null });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
