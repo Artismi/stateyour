@@ -11,7 +11,10 @@
 //     periodicità della natura, l'unica ripetizione che non è una copia;
 //   · una PIOGGIA di raggi cosmici che entra dai bordi e, urtando, genera
 //     sciami di particelle;
-//   · DECADIMENTI spontanei di particelle neutre, qua e là.
+//   · DECADIMENTI spontanei di particelle neutre, qua e là;
+//   · qualche STELLA NUCLEARE: un nucleo colpito si spezza in una raggiera di
+//     particelle (le «stelle» delle emulsioni fotografiche): nel campo le
+//     cariche positive e negative si arricciano in versi opposti, in rosette.
 // Le particelle sono quelle di un piccolo catalogo naturale, con le loro vite
 // medie: ognuna decade quando capita.
 //
@@ -66,14 +69,23 @@ export function universo(numero) {
     const pos = [[u * LATO, 0], [LATO, u * LATO], [u * LATO, LATO], [0, u * LATO]][lato], verso = [Math.PI / 2, Math.PI, -Math.PI / 2, 0][lato] + tra(-0.6, 0.6);
     sorgenti.push({ pos, dir: verso, v: tra(16, 30), t0: tra(0, 40), specie: 'protone' });
   }
+  // le stelle nucleari: un nucleo si spezza in una raggiera (angoli quasi regolari, energie a caso)
+  const specieStelle = {};
+  for (let i = intero(0, 3); i > 0; i--) {
+    const n = intero(5, 14), base = tra(0, 360), figli = [], scelta = ['pione+', 'pione-', 'elettrone', 'positrone', 'protone'];
+    for (let j = 0; j < n; j++) { const a = base + (360 * j) / n; figli.push({ specie: scelta[Math.floor(caso() * (caso() < 0.5 ? 4 : 5))], angolo: [a - 360 / n / 4, a + 360 / n / 4], quota: [0.04, 0.16] }); }
+    const nome = `stella ${i}`;
+    specieStelle[nome] = { q: 0, m: 20, vita: 0.001, visibile: false, figli };
+    sorgenti.push({ pos: [tra(150, LATO - 150), tra(150, LATO - 150)], dir: tra(0, 2 * Math.PI), v: 6, t0: tra(5, 50), specie: nome });
+  }
   // i decadimenti spontanei, qua e là
   for (let i = intero(2, 8); i > 0; i--) sorgenti.push({ pos: [tra(80, LATO - 80), tra(80, LATO - 80)], dir: tra(0, 2 * Math.PI), v: tra(2, 10), t0: tra(0, 60), specie: 'kaone0' });
   const cella = {
     larghezza: LATO, altezza: LATO, c: C, G: 1, bordo: 'aperto', tempo: 140, seme: numero,
     fondo: { B: 0, K: 0 }, domini: [], masse, onde: { B: ondeB }, nubi, cristalli,
-    pellicola: { w0: 0.8, saturazione: 4, vRif: 5 }, specie: { ...CATALOGO }, sorgenti,
+    pellicola: { w0: 0.8, saturazione: 4, vRif: 5 }, specie: { ...CATALOGO, ...specieStelle }, sorgenti,
     finestra: { centro: [LATO / 2, LATO / 2], lato: 400 }, sezione: { fine: 140, durata: 140 },
   };
-  const descrizione = [`${masse.length} ${masse.length === 1 ? 'massa' : 'masse'}`, `un campo magnetico di ${nB} onde`, nubi ? 'nubi di materia' : 'niente materia', cristalli.length ? `${cristalli.length} ${cristalli.length === 1 ? 'cristallo' : 'cristalli'}` : 'nessun cristallo', `${sorgenti.filter((s) => s.specie === 'protone').length} raggi cosmici`, `${sorgenti.filter((s) => s.specie === 'kaone0').length} decadimenti spontanei`].join(', ');
+  const descrizione = [`${masse.length} ${masse.length === 1 ? 'massa' : 'masse'}`, `un campo magnetico di ${nB} onde`, nubi ? 'nubi di materia' : 'niente materia', cristalli.length ? `${cristalli.length} ${cristalli.length === 1 ? 'cristallo' : 'cristalli'}` : 'nessun cristallo', `${sorgenti.filter((s) => s.specie === 'protone').length} raggi cosmici`, `${sorgenti.filter((s) => s.specie === 'kaone0').length} decadimenti spontanei`, Object.keys(specieStelle).length && `${Object.keys(specieStelle).length} stelle nucleari`].filter(Boolean).join(', ');
   return { nome: `universo n. ${numero}`, nota: `nessuno l'ha costruito: ${descrizione}, estratti a caso dal numero ${numero}`, cella };
 }

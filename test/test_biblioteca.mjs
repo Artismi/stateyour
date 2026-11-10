@@ -17,7 +17,7 @@ prova('dentro ci sono solo cose naturali: niente specchi, vetri, schermi, fasci'
     const c = universo(n).cella;
     assert.ok(!c.pareti || !c.pareti.length);
     assert.ok(c.domini.every((d) => d.n == null));
-    assert.ok(c.sorgenti.every((s) => s.specie === 'protone' || s.specie === 'kaone0'), 'nascono solo raggi cosmici e decadimenti spontanei');
+    assert.ok(c.sorgenti.every((s) => s.specie === 'protone' || s.specie === 'kaone0' || s.specie.startsWith('stella')), 'nascono solo raggi cosmici, decadimenti spontanei e stelle nucleari');
   }
   assert.ok(Object.values(CATALOGO).every((s) => !s.visibile || s.q), 'la luce e le neutre non lasciano traccia');
 });

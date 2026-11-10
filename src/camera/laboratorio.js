@@ -13,6 +13,7 @@
 
 import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, campiContinui } from './mondo.js';
 import { universo } from './biblioteca.js';
+import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -83,10 +84,10 @@ const memoria = new Map();
 // contano soltanto: non si modificano a mano
 const impronteGrandi = new WeakMap();
 const chiave = (cella) => {
-  if (!cella.esposizioni) return JSON.stringify({ ...cella, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
+  if (!cella.esposizioni) return JSON.stringify({ ...cella, finestra: undefined, sezione: undefined, vista: undefined }) + JSON.stringify(leggi);
   let base = impronteGrandi.get(cella.esposizioni);
   if (!base) { base = `${cella.esposizioni.length}|${cella.esposizioni.reduce((n, e) => n + e.sorgenti.length, 0)}|${(cella.sagome || []).length}|${Math.random()}`; impronteGrandi.set(cella.esposizioni, base); }
-  return base + JSON.stringify({ ...cella, esposizioni: undefined, sagome: undefined, finestra: undefined, sezione: undefined }) + JSON.stringify(leggi);
+  return base + JSON.stringify({ ...cella, esposizioni: undefined, sagome: undefined, finestra: undefined, sezione: undefined, vista: undefined }) + JSON.stringify(leggi);
 };
 function tracceDi(e) {
   const k = chiave(e.cella);
@@ -158,11 +159,18 @@ function piastrelleVisibili(margine) {
 }
 function disegnaSezione() {
   const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, e = comp.elementi[0], f = e.cella.finestra, l = f.lato;
-  const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z, ox = f.centro[0] - l / 2, oy = f.centro[1] - l / 2;
+  const X = (x) => W / 2 + (x - pat.cx) * z, Y = (y) => H / 2 + (y - pat.cy) * z;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#e4dfd3'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = CARTA; ctx.fillRect(X(0), Y(0), l * z, l * z);
   ctx.save(); ctx.beginPath(); ctx.rect(X(0), Y(0), l * z, l * z); ctx.clip();
-  ctx.setTransform(z, 0, 0, z, X(-ox), Y(-oy)); ctx.drawImage(spriteDi(e, z), 0, 0, e.cella.larghezza, e.cella.altezza);
+  // la sezione: le linee d'universo proiettate secondo la vista, nella fetta di tempo
+  const m = tracceDi(e), perId = new Map(m.tracce.map((t) => [t.id, t]));
+  ctx.setTransform(z, 0, 0, z, X(0), Y(0)); ctx.lineCap = 'round';
+  for (const [a, b, c, d, w, id, i] of segmentiSezione(m.tracce, e.cella)) {
+    const tr = perId.get(id);
+    ctx.strokeStyle = coloriForze ? rgb((tr.colori ??= coloriTraccia(e.cella, tr))[i] || [28, 27, 24]) : INK; ctx.lineWidth = Math.max(0.6 / z, w);
+    ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke();
+  }
   ctx.restore();
 }
 function disegnaPattern() {
@@ -289,7 +297,7 @@ function disegnaElemento() {
     ctx.fillStyle = 'rgba(228,223,211,0.62)'; ctx.beginPath(); ctx.rect(-5000, -5000, 10000 + c.larghezza, 10000 + c.altezza); ctx.rect(x0, y0, l, l); ctx.fill('evenodd');
     ctx.strokeStyle = ACCENTO; ctx.lineWidth = px(2); ctx.strokeRect(x0, y0, l, l);
     manigliaQ(x0 + l, y0 + l);
-    scriviMondo(`la sezione · lato ${fmt(l)} · trascina il bordo per spostarla, l'angolo per ingrandirla`, x0, y0 - px(6), ACCENTO);
+    scriviMondo(inclinata(c.vista) ? `la sezione · inclinata di ${fmt(c.vista.inclinazione)}°: la vedi nel Pattern` : `la sezione · lato ${fmt(l)} · trascina il bordo per spostarla, l'angolo per ingrandirla`, x0, y0 - px(6), ACCENTO);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
@@ -693,6 +701,9 @@ const SPIEGA = {
   w0: 'spessore base della pellicola: quanto è grossa la bolla di una carica unitaria veloce.',
   saturazione: 'saturazione: quanto può ingrossare la traccia quando la particella rallenta (l\'occhio finale).',
   vRif: 'velocità di riferimento: sotto questa velocità la traccia comincia a ingrossare.',
+  inclinazione: 'inclinazione: da sopra (0°) la lastra vede solo il piano; inclinandola, il tempo diventa una direzione del disegno e le spirali diventano onde, trocoidi, catene di anelli. Si vede nel Pattern.',
+  rotazione: 'rotazione: da che lato del piano si inclina lo sguardo.',
+  scalaTempo: 'scala del tempo: quanto spazio vale un istante quando il tempo entra nel disegno. Più grande, più le linee si allungano lungo il tempo.',
   rot: 'rotazione: lo stesso evento, girato. Ruotare un universo non cambia le sue leggi.',
   specchio: 'a specchio: lo stesso evento nell\'universo riflesso. Lì il campo magnetico ha il verso opposto, e la forma è esattamente la riflessione.',
 };
@@ -703,7 +714,16 @@ function mostraPannello() {
   if (vista === 'pattern') pannelloPattern(h); else pannelloElemento(h);
   pannello.innerHTML = h.join('');
 }
-const controlliUniverso = (c) => `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button><button data-univ="dado" title="un universo a caso">🎲</button></div>`;
+const controlliUniverso = (c) => {
+  c.vista ??= { ...VISTA_SOPRA };
+  return `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button></div>`
+    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button></div>`
+    + `<p class="nota" id="cercaStato"></p>`
+    + `<h2>da dove la guardi</h2>`
+    + cursore('inclinazione', c.vista, 'inclinazione', 0, 85, 1, 'inclinazione (gradi)')
+    + cursore('rotazione', c.vista, 'rotazione', 0, 360, 1, 'rotazione (gradi)')
+    + cursore('scalaTempo', c.vista, 'scalaTempo', 1, 20, 0.5, 'scala del tempo');
+};
 function pannelloPattern(h) {
   if (!comp.reticolo) {
     const c = comp.elementi[0].cella;
@@ -915,7 +935,8 @@ pannello.addEventListener('click', (e) => {
   const t = e.target.closest('button,[data-sel],[data-specie]'); if (!t) return;
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
-  if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(d.univ === 'dado' ? 1 + Math.floor(Math.random() * 999999) : Math.max(1, n + +d.univ)); }
+  if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
+  if (d.cerca) return cercaBella(d.cerca === 'qui');
   if (d.togliScatti) {
     const [tipo, i] = d.togliScatti.split(':');
     if (tipo === 'legge') leggi[i] = true; else { ricorda(); const o = { sorgente: cel().sorgenti, dominio: cel().domini, massa: cel().masse }[tipo][+i]; delete o.interruttori; }
@@ -1081,15 +1102,37 @@ $('usaSeme').addEventListener('click', () => { try { const n = JSON.parse($('tes
 $('chiudiSeme').addEventListener('click', () => $('dialogoSeme').close());
 
 // ---------- la biblioteca: un universo per ogni numero
-function compBiblioteca(n, finestra, sezione) {
+function compBiblioteca(n, finestra, sezione, vistaS) {
   const u = universo(n);
   if (finestra) u.cella.finestra = clona(finestra);
   if (sezione) u.cella.sezione = clona(sezione);
+  u.cella.vista = vistaS ? clona(vistaS) : { ...VISTA_SOPRA };
   return { nome: u.nome, nota: u.nota, reticolo: null, elementi: [{ nome: u.nome, nota: u.nota, cella: u.cella, posti: [{ pos: [0, 0], rot: 0 }] }] };
+}
+let cercatore = null;
+function cercaBella(qui) {
+  if (cercatore) cercatore.terminate();
+  const c = comp.elementi[0].cella, stato = (t) => { const el = $('cercaStato'); if (el) el.textContent = t; $('dove').textContent = t; };
+  stato(qui ? `cerco un'inquadratura più bella nell'universo n. ${c.seme}…` : 'sfoglio la biblioteca: molti universi, molte inquadrature…');
+  cercatore = new Worker(new URL('./cercatore.js', import.meta.url), { type: 'module' });
+  const da = 1 + Math.floor(Math.random() * 999000);
+  cercatore.onmessage = (ev) => {
+    const m = ev.data;
+    if (m.errore) { stato(`la ricerca non è riuscita: ${m.errore.split('\n')[0]}`); console.error(m.errore); return; }
+    if (m.frazione != null && !m.fatto) stato(`${qui ? 'provo inquadrature' : 'sfoglio la biblioteca'}… ${Math.round(m.frazione * 100)}% · la più bella finora: ${m.migliore ? m.migliore.bellezza.totale.toFixed(2) : '–'}`);
+    if (m.fatto) {
+      const b = m.migliore; cercatore.terminate(); cercatore = null;
+      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista); corrente = 0; sel = null; scelto = null;
+      vista = 'pattern'; adattaPattern(); aggiornaVista();
+      const x = b.bellezza;
+      stato(`trovata: universo n. ${b.numero}, ${x.totale.toFixed(2)} di bellezza (pieno ${x.pieno.toFixed(2)}, equilibrio ${x.equilibrio.toFixed(2)}, simmetria ${x.simmetria.toFixed(2)}, ripetizione ${x.ripetizione.toFixed(2)}, curve ${x.curve.toFixed(2)}, ordine ${(x.ordine ?? 0).toFixed(2)})${inclinata(b.vista) ? `, guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
+    }
+  };
+  cercatore.postMessage(qui ? { solo: c.seme, inquadrature: 24, seme: Math.floor(Math.random() * 1e9) } : { da, universi: 24, inquadrature: 16, seme: Math.floor(Math.random() * 1e9) });
 }
 function cambiaUniverso(n) {
   // stessa inquadratura, stessa fetta di tempo: un altro universo
-  const c = comp.elementi[0].cella, nuova = compBiblioteca(n, c.finestra, c.sezione);
+  const c = comp.elementi[0].cella, nuova = compBiblioteca(n, c.finestra, c.sezione, c.vista);
   ricorda(); comp = nuova; corrente = 0; sel = null; scelto = null;
   if (vista === 'pattern') { adattaPattern(); aggiornaVista(); } else entra(0);
 }
@@ -1110,7 +1153,7 @@ $('carte').addEventListener('click', (e) => {
   const b = e.target.closest('[data-carta]'); if (!b) return;
   $('nuovo').close();
   const k = b.dataset.carta;
-  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); entra(0); }
+  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); cercaBella(false); }
   else if (k === 'immagine') $('fileImmagine').click();
   else if (k === 'esempio') daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6');
   else if (k === 'modello') { ricorda(); carica(COMPOSIZIONI[b.dataset.nome]()); }

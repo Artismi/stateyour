@@ -50,6 +50,27 @@ si ingrandisce la **finestra** sull'universo, e con la barra del tempo e la
 fetta si sceglie **quando** guardare. Il Pattern mostra la sezione così com'è,
 senza copie né montaggi.
 
+**Da che angolo.** L'universo è un piano più il tempo: uno spaziotempo. La
+lastra «da sopra» guarda lungo il tempo e vede solo il piano. Ma la sezione si
+può guardare inclinata (`src/camera/sezione.js`: inclinazione, rotazione,
+scala del tempo): allora il tempo diventa una direzione del disegno, e una
+spirale diventa un'elica che, proiettata, è un'onda, una trocoide, una catena
+di anelli come un cordone di fregio; un elettrone che gira e deriva nel campo
+disegna un guilloché.
+
+**Il dado che porta a cose belle.** Sfogliare a caso dà quasi sempre sezioni
+generiche. Il dado (`src/camera/cercatore.js`, in un processo a parte) prova
+molti universi e, per ognuno, molte inquadrature (dove, quanto larga, da che
+angolo, quale fetta di tempo), e tiene la più bella secondo una misura
+dichiarata: pieno (né vuota né satura), equilibrio (il disegno sparso nella
+finestra), simmetria (specchi e mezzo giro), ripetizione (il motivo che torna),
+curve (le linee che girano) e ordine (pochi motivi forti invece di tante linee
+scollegate). In tre secondi trova sezioni che valgono in media tre volte quelle
+prese a caso. «✨ più bella qui» cerca solo nuove inquadrature dell'universo che
+si sta guardando. Per avere cose belle da trovare, gli universi hanno anche le
+**stelle nucleari** delle emulsioni fotografiche: un nucleo colpito si spezza in
+una raggiera di particelle che, nel campo, si arricciano in rosette.
+
 Una cosa va detta, perché è il cuore dell'idea di Borges: nella biblioteca c'è
 tutto, ma l'indirizzo di un libro qualunque è lungo quanto il libro. Un
 universo con un indirizzo corto può contenere solo forme naturali: spirali,
