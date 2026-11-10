@@ -80,4 +80,16 @@ prova('lo zoom: dieci volte più vicino, le stesse particelle nello stesso posto
   }
 });
 
+const L = await import('../src/camera/leggi.js'), F = await import('../src/camera/fluidi.js');
+prova('le leggi: età del cosmo, Chandrasekhar, il clima della Terra, la soglia della convezione', () => {
+  assert.ok(Math.abs(L.etaUniverso() / L.ANNO / 1e9 - 13.8) < 0.1);
+  assert.ok(Math.abs(L.massaChandrasekhar() / L.MSOLE - 1.43) < 0.05);
+  const terra = L.clima({ Lw: L.LSOLE, aM: L.UA, massaKg: 5.97e24, raggioM: 6.371e6, tipo: 'roccioso', acqua: 0.02 });
+  assert.equal(terra.acqua, 'liquida'); assert.ok(terra.T > 260 && terra.T < 320, `la Terra a ${terra.T} K`);
+  const luna = L.clima({ Lw: L.LSOLE, aM: L.UA, massaKg: 7.3e22, raggioM: 1.737e6, tipo: 'roccioso', acqua: 0.02 });
+  assert.ok(!luna.tenuti.includes('azoto') && luna.pressione < 1, 'la Luna non trattiene un\'atmosfera');
+  const q = F.flussoInterno(5.97e24, 6.371e6);
+  assert.ok(F.convezione({ g: 9.8, q, d: 0.01 }).epsilon < 0 && F.convezione({ g: 9.8, q, d: 0.03 }).epsilon > 0, 'sotto una soglia fermo, sopra si muove');
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);

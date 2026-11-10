@@ -185,6 +185,21 @@ visibile, il puntino diventa il suo cerchio; dentro una regione la nebbia resta
 come sfondo e le linee sono quelle che si seguono una per una, con il conteggio
 vero nella scheda.
 
+**Calore, atmosfera, acqua, convezione** (`leggi.js`, `fluidi.js`). La
+temperatura di un pianeta discende dalla luce della sua stella, dalla distanza e
+da quanta ne riflette; trattiene un gas se la sua gravità basta a non farlo
+fuggire per miliardi di anni (la Terra perde l'idrogeno e tiene l'azoto, la Luna
+perde tutto); la pressione e l'effetto serra dai gas che trattiene; l'acqua è
+liquida, ghiaccio o vapore secondo il suo diagramma di fase. La «linea della
+neve», oltre la quale nascono i pianeti di ghiaccio e i giganti, discende dalla
+luminosità della stella. Ne emerge da solo che l'acqua liquida sta sui pianeti
+rocciosi vicini alle stelle piccole. Su un pianeta con acqua, una pozza scaldata
+dal calore dell'interno: sotto una profondità il calore passa senza muovere
+niente, sopra l'acqua si organizza da sola in celle; negli strati sottili vince
+la tensione della superficie e vengono esagoni (Bénard), più in profondità la
+gravità e vengono rulli e labirinti (l'equazione di Swift-Hohenberg, ricavata da
+quelle dei fluidi, con i numeri di Rayleigh e Marangoni veri).
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al

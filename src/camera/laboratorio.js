@@ -18,6 +18,7 @@ import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
 import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
+import { convezione, celle, flussoInterno } from './fluidi.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
@@ -939,6 +940,19 @@ function pannelloPattern(h) {
   h.push(`<h2>la piastrella</h2><p class="nota">a = (${fmt(a[0])}, ${fmt(a[1])}) · b = (${fmt(b[0])}, ${fmt(b[1])}) · trascina i pallini a e b</p><div class="riga-bottoni"><button data-reticolo="quadrato">quadrata</button><button data-reticolo="esagonale">esagonale</button><button data-reticolo="sfalsato">sfalsata</button></div>`);
   if (immagine) h.push(`<h2>l'immagine</h2><label class="riga">mostra l'originale sotto <input type="checkbox" data-originale ${mostraOriginale ? 'checked' : ''}></label>`);
 }
+// la superficie di un pianeta con acqua: una pozza scaldata dal basso (fluidi.js). La profondità si
+// sceglie dall'indirizzo, attorno a quella in cui l'acqua comincia a muoversi
+const superfici = new Map();
+function superficie(v) {
+  const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
+  const P = sistemaDi(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], q = flussoInterno(P.massaKg, P.raggioM), g = P.clima.g;
+  let lo = 1e-4, hi = 1; for (let i = 0; i < 50; i++) { const m = Math.sqrt(lo * hi); if (convezione({ g, q, d: m }).epsilon < 0) lo = m; else hi = m; }
+  let sd = (v.cosmo * 131 + v.galassia * 17 + v.stella * 7 + v.pianeta) % 2147483647 || 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const d = hi * (1.03 + 0.35 * caso()), c = convezione({ g, q, d }), r = c.epsilon > 0 ? celle(c, { seme: sd }) : null;
+  let url = null;
+  if (r) { const cv = document.createElement('canvas'); cv.width = cv.height = r.N; const x = cv.getContext('2d'), im = x.createImageData(r.N, r.N); let mx = 1e-9; for (const w of r.u) mx = Math.max(mx, Math.abs(w)); for (let i = 0; i < r.N * r.N; i++) { const t = 0.5 + 0.5 * (r.u[i] / mx); im.data[4 * i] = 40 + 150 * t; im.data[4 * i + 1] = 80 + 140 * t; im.data[4 * i + 2] = 120 + 120 * t; im.data[4 * i + 3] = 255; } x.putImageData(im, 0, 0); url = cv.toDataURL(); }
+  const out = { P, q, d, c, url }; superfici.set(k, out); return out;
+}
 function pannelloCosmo(h) {
   const a = indirizzoOra(), c = el()?.cella;
   h.push(`<div class="briciole"><button data-modo-p="dettaglio">← la regione</button> <b>dove si trova</b></div>`);
@@ -947,6 +961,14 @@ function pannelloCosmo(h) {
   if (a && c) {
     const raggi = c.sorgenti.filter((s) => s.origine);
     const conta = {}; for (const s of raggi) conta[s.origine] = (conta[s.origine] || 0) + 1;
+    if (camMappa.livello === 3) {
+      const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
+      h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
+      if (cl.acqua === 'liquida') {
+        const sf = superficie(camMappa.via);
+        h.push(`<h2>la superficie: una pozza</h2><p class="nota">Il calore dell'interno (${sf.q.toFixed(3)} W/m²) attraversa una pozza profonda ${(sf.d * 100).toFixed(1)} cm: Rayleigh ${Math.round(sf.c.Ra)}, Marangoni ${Math.round(sf.c.Ma)} → ${sf.c.regime}.</p>${sf.url ? `<img src="${sf.url}" style="width:100%;image-rendering:auto;border-radius:3px" alt="la convezione nella pozza">` : ''}<p class="nota">Nessuno disegna le celle: l'acqua calda sale e quella fredda scende, e si organizzano da sole. Negli strati sottili vince la tensione della superficie e vengono esagoni (le celle di Bénard); più in profondità la gravità, e vengono rulli e labirinti.</p>`);
+      }
+    }
     h.push(`<h2>da dove viene ciò che vedi</h2><p class="nota">La regione dell'universo n. ${c.seme} riceve:</p><ul class="nota">${Object.entries(conta).map(([o, n]) => `<li>${n} × ${o}</li>`).join('')}</ul><p class="nota">Nella galassia le linee tratteggiate vanno dalle sorgenti alla stella del pianeta.</p>`);
   }
 }

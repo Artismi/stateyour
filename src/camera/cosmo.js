@@ -20,7 +20,7 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO } from './leggi.js';
+import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima } from './leggi.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
@@ -170,9 +170,13 @@ export const sistema = memo((n, gid, sid) => {
   // sono tanto più probabili quanto più la stella è metallica (P ∝ Z², come si osserva)
   const Z = S.Z ?? 1, morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
   const np = morta ? 0 : Z < 0.05 ? intero(0, 1) : intero(1, PIANETI_MAX), pianeti = [];
-  let a = tra(0.1, 0.18);
+  // le orbite (unità: 30 UA): la prima vicino alla stella, le altre sempre più larghe. La «linea della
+  // neve», oltre la quale il ghiaccio non evapora (sotto 170 K) e i nuclei crescono abbastanza da
+  // catturare gas, discende dalla luminosità della stella giovane: 2,7 UA · √L
+  const Lgiovane = stellaVera(S.massaNascita || S.massa).L, neve = (2.7 * Math.sqrt(Lgiovane)) / 30;
+  let a = tra(0.012, 0.035) * Math.sqrt(Math.max(0.05, Lgiovane));
   for (let k = 0; k < np; k++) {
-    const freddo = a > 0.4, gigante = c() < Math.min(0.85, 0.25 * Z * Z + 0.05), tipo = freddo ? (gigante ? 'gassoso' : 'ghiacciato') : (gigante && c() < 0.3 ? 'gassoso' : 'roccioso');
+    const freddo = a > neve, gigante = c() < Math.min(0.85, 0.25 * Z * Z + 0.05), tipo = freddo ? (gigante ? 'gassoso' : 'ghiacciato') : (gigante && c() < 0.3 ? 'gassoso' : 'roccioso');
     const r = tipo === 'gassoso' ? tra(0.022, 0.04) : tra(0.008, 0.018);
     // le grandezze vere: il raggio (m) e il campo magnetico all'equatore (T)
     const raggioM = tipo === 'gassoso' ? tra(2.4e7, 7.5e7) : tipo === 'ghiacciato' ? tra(1.5e7, 2.6e7) : tra(2.4e6, 9e6);
@@ -186,12 +190,17 @@ export const sistema = memo((n, gid, sid) => {
       composizione: tipo === 'gassoso' ? { idrogeno: 0.71, elio: 0.27, pesanti: 0.02 * Math.max(0.3, Z) } : tipo === 'ghiacciato' ? { ghiaccio: 0.6, roccia: 0.3, ferro: 0.1 } : { ferro: Math.min(0.5, 0.2 + 0.1 * Z), roccia: 1 - Math.min(0.5, 0.2 + 0.1 * Z) - 0.02, acqua: 0.02 },
     });
     pianeti[k].pos = [a * Math.cos(pianeti[k].fase), a * Math.sin(pianeti[k].fase)];
-    a *= tra(1.35, 1.8); if (a > 1.1) break;
+    a *= tra(1.4, 1.9); if (a > 1.6) break;
   }
   // una nana bianca: quand'era gigante ha inghiottito i pianeti vicini, e perdendo massa ha lasciato
   // allontanare gli altri (l'orbita si allarga come la massa iniziale su quella finale)
-  if (S.stato === 'nana bianca') { const k = (S.massaNascita || 1) / S.massa; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.1) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
-  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa';
+  if (S.stato === 'nana bianca') { const k = (S.massaNascita || 1) / S.massa; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
+  // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è fioca: 1/1000 del Sole)
+  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = (viva ? stellaVera(S.massa).L : S.stato === 'nana bianca' ? 1e-3 : 0) * LSOLE;
+  for (const p of pianeti) {
+    const rho = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 }[p.tipo], massaKg = (4 / 3) * Math.PI * p.raggioM ** 3 * rho;
+    p.massaKg = massaKg; p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
+  }
   return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });
 

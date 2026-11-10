@@ -76,3 +76,32 @@ export function massaNascita(u) {
   if (u < f) return (a ** -0.3 + (u / f) * (b ** -0.3 - a ** -0.3)) ** (1 / -0.3);
   return (b ** -1.3 + ((u - f) / (1 - f)) * (c ** -1.3 - b ** -1.3)) ** (1 / -1.3);
 }
+
+// ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.
+export const UA = 1.496e11, R_GAS = 8.314;
+// la temperatura di equilibrio: la luce che arriva, meno quella riflessa, uguale a quella irradiata
+export const temperaturaEquilibrio = (Lw, aM, albedo) => Math.pow((Lw * (1 - albedo)) / (16 * Math.PI * COSTANTI.sigma * aM * aM), 0.25);
+// un gas resta se la gravità trattiene le sue molecole più veloci (parametro di Jeans: per restare
+// miliardi di anni serve circa 25: così la Terra perde l'idrogeno e tiene l'azoto, la Luna perde tutto); l'esosfera è più calda della superficie
+export const trattiene = (M, R, T, massaMolecola) => (COSTANTI.G * M * massaMolecola) / (COSTANTI.kB * 3 * T * R) > 25;
+export const MOLECOLE = { idrogeno: 2, elio: 4, acqua: 18, azoto: 28, 'anidride carbonica': 44, metano: 16 };
+// il punto di ebollizione dell'acqua a una pressione (Clausius-Clapeyron); il ghiaccio fonde a 273 K;
+// sotto 611 Pa (il punto triplo) l'acqua liquida non può esistere
+export function statoAcqua(T, P) {
+  if (P < 611) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
+  const Teb = 1 / (1 / 373.15 - (R_GAS * Math.log(P / 101325)) / 40700);
+  return T < 273.15 ? 'ghiaccio' : T < Teb ? 'liquida' : 'vapore';
+}
+// il clima di un pianeta: dalla luminosità della stella, dalla distanza, dalla massa e dalla composizione
+export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0 }) {
+  const albedo = tipo === 'ghiacciato' ? 0.6 : tipo === 'gassoso' ? 0.35 : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
+  const g = (COSTANTI.G * massaKg) / (raggioM * raggioM), mu = COSTANTI.mp;
+  const tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
+  if (tipo === 'gassoso') return { Teq, T: Teq * 1.2, g, pressione: Infinity, tenuti, acqua: 'nelle nuvole', albedo };
+  // i gas che il pianeta ha liberato dall'interno (circa un milionesimo della sua massa, come la Terra),
+  // se riesce a trattenerli; l'effetto serra cresce con la pressione
+  const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.3 + 3 * acqua) : 0;
+  const pressione = (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = 0.8 * Math.pow(pressione / 1e5, 0.6);
+  const T = Teq * Math.pow(1 + 0.75 * tau, 0.25);
+  return { Teq, T, g, pressione, tenuti, acqua: acqua > 0 ? statoAcqua(T, pressione) : 'assente', albedo };
+}

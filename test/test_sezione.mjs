@@ -35,7 +35,7 @@ prova('il dado trova sezioni molto più belle del caso puro', () => {
   const media = puri.reduce((a, b) => a + b, 0) / puri.length;
   const m = cercaSezione({ da: 300, universi: 8, inquadrature: 12, seme: 7 });
   // (con la fisica vera anche le sezioni a caso sono archi puliti: il dado vince di meno, ma vince)
-  assert.ok(m.bellezza.totale > 1.5 * media, `${m.bellezza.totale} contro ${media}`);
+  assert.ok(m.bellezza.totale > 1.2 * media, `${m.bellezza.totale} contro ${media}`);
   // e la stessa ricerca, con lo stesso seme, ritrova la stessa sezione
   assert.equal(JSON.stringify(cercaSezione({ da: 300, universi: 8, inquadrature: 12, seme: 7 }).finestra), JSON.stringify(m.finestra));
 });

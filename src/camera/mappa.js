@@ -119,7 +119,8 @@ export function colpisciMappa(cam, sx, sy, W, H) {
     : descriviPianeta(d) + ' · clic per avvicinarti';
   return { tipo: ['galassia', 'stella', 'pianeta'][cam.livello], pos: migliore.pos, scala: migliore.scala * migliore.raggio, testo };
 }
-const descriviPianeta = (P) => `pianeta ${P.id + 1} · ${P.tipo}${P.anelli ? ', con anelli' : ''}${P.lune ? `, ${P.lune} ${P.lune === 1 ? 'luna' : 'lune'}` : ''}, raggio ${fmtLunghezza(P.raggioM)}, campo ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT, fatto di ${Object.entries(P.composizione || {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}`;
+const descriviClima = (c) => !c ? '' : ` · ${Math.round(c.T - 273.15)} °C${isFinite(c.pressione) ? `, ${c.pressione < 1 ? 'senza atmosfera' : `${(c.pressione / 1e5).toPrecision(2)} bar`}` : ''}, acqua ${c.acqua}`;
+const descriviPianeta = (P) => `pianeta ${P.id + 1}${descriviClima(P.clima)} · ${P.tipo}${P.anelli ? ', con anelli' : ''}${P.lune ? `, ${P.lune} ${P.lune === 1 ? 'luna' : 'lune'}` : ''}, raggio ${fmtLunghezza(P.raggioM)}, campo ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT, fatto di ${Object.entries(P.composizione || {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}`;
 
 // la camera che va verso un oggetto: un passo di volo (da chiamare a ogni fotogramma)
 export function volaVerso(cam, obiettivo, W, H) {
