@@ -952,7 +952,8 @@ function mostraSchede() {
     const zB = [c.fondo, ...tuttiDomini].filter((d) => d.B).length, zK = [c.fondo, ...tuttiDomini].filter((d) => d.K).length;
     const lisce = (c.esposizioni || []).filter((e) => e.mappa).length, naturaliB = (c.onde?.B?.length ? 1 : 0) + (c.cristalli || []).length + lisce;
     conta.magnetico = zB || naturaliB ? [zB && `${zB} ${zB === 1 ? 'zona' : 'zone'}`, (c.onde?.B?.length || lisce) && 'campo liscio', (c.cristalli || []).length && `${c.cristalli.length} cristalli`].filter(Boolean).join(', ') : 'nessuno';
-    conta.materia = zK || c.nubi ? [zK && `${zK} ${zK === 1 ? 'zona' : 'zone'}`, c.nubi && 'nubi'].filter(Boolean).join(', ') : 'nessuna';
+    const nubiLisce = (c.esposizioni || []).filter((e) => e.mappa?.sparsaK).length;
+    conta.materia = zK || c.nubi || nubiLisce ? [zK && `${zK} ${zK === 1 ? 'zona' : 'zone'}`, (c.nubi || nubiLisce) && 'nubi lisce'].filter(Boolean).join(', ') : 'nessuna';
     const dec = Object.values(c.specie).filter((s) => s.vita != null || s.vitaMedia != null).length;
     const ginocchi = (c.esposizioni || []).reduce((n, e) => n + e.sorgenti.filter((so) => so.vita != null).length, 0);
     conta.decadimento = dec || ginocchi ? [dec && `${dec} specie`, ginocchi && `${ginocchi} particelle con la loro vita`].filter(Boolean).join(', ') : 'niente';

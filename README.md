@@ -118,15 +118,25 @@ mostrati mentre avvengono:
    che frena nella materia, un disco una che si ferma subito, una campitura una
    sagoma impressa dal lampo. Le linee che si incrociano vanno su esposizioni
    diverse della stessa lastra, perché in un punto il campo è uno solo.
-4. **Verifica**: la tavola greca è 2603 particelle (2276 nate da un ginocchio)
-   in un campo liscio su 63 esposizioni, rifatta dalla sola fisica al 74%
-   (ritrova l'85% del disegno; l'85% di ciò che traccia sta sul disegno). La
-   versione precedente, con 3332 corridoi di campo tagliati a spigolo vivo,
-   arrivava al 75,7%: quasi la stessa fedeltà, ma con un artificio.
+   Lo **spessore** che cambia lungo il tratto viene dalla frenata: la lastra
+   ingrossa la traccia quando la particella rallenta (w = q·V/v), quindi la
+   particella va dall'estremo sottile a quello spesso, attraverso una nube di
+   materia liscia che la rallenta proprio quanto serve (Bethe: K = m·q²·V⁴·w′/w⁵),
+   e il campo che la piega tiene conto della velocità che cala (B = κ·m·v/q). Un
+   tratto sottile ai capi e spesso in mezzo diventa due particelle che partono
+   dalle punte e si incontrano nel punto più spesso.
+4. **Verifica**: la tavola greca è circa 8300 particelle (molte nate da un
+   ginocchio o da una frenata) in un campo liscio e in nubi lisce su 182
+   esposizioni, rifatta dalla sola fisica all'**83%** (ritrova il 91% del
+   disegno; il 90% di ciò che traccia sta sul disegno). Il tetto, con la lettura
+   di oggi, è l'86%: tanto varrebbe disegnare i tratti letti alla perfezione. La
+   fisica è a tre punti dal tetto; il resto della distanza dall'originale è della
+   lettura (i dettagli sotto i 2–3 pixel, le giunzioni). La versione con i
+   corridoi di campo tagliati a spigolo vivo arrivava al 75,7%.
    (`tracciaFisica(ris, { campo: 'corridoi' })` la rifà ancora, per confronto.)
 
-Come vuole Borges, l'indirizzo di questa pagina è lungo: la mappa del campo ha
-circa 320.000 valori diversi da zero. Una forma precisa è nella biblioteca, ma
+Come vuole Borges, l'indirizzo di questa pagina è lungo: le mappe del campo e
+della materia hanno circa 390.000 valori diversi da zero. Una forma precisa è nella biblioteca, ma
 il suo indirizzo contiene la forma. Sfogliare a caso non la troverebbe mai: si
 calcola, risolvendo il problema inverso.
 

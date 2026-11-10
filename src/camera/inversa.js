@@ -223,7 +223,7 @@ function mappaTubi(campioni, opzioni = {}) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const c of asse) { x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]); }
   x0 = Math.floor((x0 - margine) / h) * h; y0 = Math.floor((y0 - margine) / h) * h;
-  const nx = Math.ceil((x1 + margine - x0) / h) + 1, ny = Math.ceil((y1 + margine - y0) / h) + 1, B = new Float64Array(nx * ny), dist = new Float64Array(nx * ny).fill(Infinity);
+  const nx = Math.ceil((x1 + margine - x0) / h) + 1, ny = Math.ceil((y1 + margine - y0) / h) + 1, B = new Float64Array(nx * ny), Kq = new Float64Array(nx * ny), dist = new Float64Array(nx * ny).fill(Infinity);
   for (const c of asse) {
     const r0 = c[5] ?? 1.5, r1 = r0 + sfuma, i0 = Math.max(0, Math.floor((c[0] - r1 - x0) / h)), i1 = Math.min(nx - 1, Math.ceil((c[0] + r1 - x0) / h)), j0 = Math.max(0, Math.floor((c[1] - r1 - y0) / h)), j1 = Math.min(ny - 1, Math.ceil((c[1] + r1 - y0) / h));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -231,12 +231,12 @@ function mappaTubi(campioni, opzioni = {}) {
       if (d >= dist[n]) continue;
       dist[n] = d;
       const w = d <= r0 ? 1 : d >= r1 ? 0 : 0.5 + 0.5 * Math.cos((Math.PI * (d - r0)) / sfuma);
-      B[n] = c[2] * w;
+      B[n] = c[2] * w; Kq[n] = (c[6] ?? 0) * w;
     }
   }
-  const sparsa = []; let ultimo = -1;
-  for (let n = 0; n < B.length; n++) if (B[n]) { sparsa.push(n - ultimo, +B[n].toPrecision(4)); ultimo = n; }
-  return { x0: +x0.toFixed(3), y0: +y0.toFixed(3), h, nx, ny, sparsa };
+  const comprimi = (A) => { const out = []; let ultimo = -1; for (let n = 0; n < A.length; n++) if (A[n]) { out.push(n - ultimo, +A[n].toPrecision(4)); ultimo = n; } return out; };
+  const sparsaK = comprimi(Kq);
+  return { x0: +x0.toFixed(3), y0: +y0.toFixed(3), h, nx, ny, sparsa: comprimi(B), ...(sparsaK.length ? { sparsaK } : {}) };
 }
 
 // i ginocchi: dove il tratto piega di colpo, la particella decade e la figlia riparte nella
@@ -244,8 +244,8 @@ function mappaTubi(campioni, opzioni = {}) {
 // l'arco brevissimo dello spigolo diventa un angolo vivo, nel punto dove si incontrano le tangenti.
 function spezzaAiGinocchi(fit, opzioni = {}) {
   const angoloMin = opzioni.ginocchio ?? 0.35, lungMax = opzioni.ginocchioLungo ?? 2.5;
-  const segmenti = []; let corrente = { inizio: { ...fit.inizio, pos: fit.inizio.pos.slice() }, pezzi: [] };
-  let p = fit.inizio.pos.slice(), th = fit.inizio.dir;
+  const segmenti = []; let corrente = { inizio: { ...fit.inizio, pos: fit.inizio.pos.slice() }, pezzi: [], s0: 0 };
+  let p = fit.inizio.pos.slice(), th = fit.inizio.dir, sTot = 0;
   for (const z of fit.pezzi) {
     const fi = z.k * z.L, f = Math.abs(fi) > 1e-9 ? Math.sin(fi / 2) / (fi / 2) : 1;
     const fine = [p[0] + z.L * f * Math.cos(th + fi / 2), p[1] + z.L * f * Math.sin(th + fi / 2)];
@@ -254,18 +254,79 @@ function spezzaAiGinocchi(fit, opzioni = {}) {
       const t = Math.abs(Math.tan(fi / 2) / z.k), spigolo = [p[0] + t * Math.cos(th), p[1] + t * Math.sin(th)];
       corrente.pezzi.push({ k: 0, L: t });
       segmenti.push(corrente);
-      corrente = { inizio: { pos: spigolo, dir: th + fi }, pezzi: [{ k: 0, L: t }] };
+      corrente = { inizio: { pos: spigolo, dir: th + fi }, pezzi: [{ k: 0, L: t }], s0: sTot + z.L / 2 };
     } else corrente.pezzi.push(z);
-    p = fine; th += fi;
+    p = fine; th += fi; sTot += z.L;
   }
   segmenti.push(corrente);
   return segmenti.filter((g) => g.pezzi.reduce((a, z) => a + z.L, 0) > 0.5).map((g) => ({ ...g, lunghezza: g.pezzi.reduce((a, z) => a + z.L, 0), larghezza: fit.larghezza }));
 }
 
+// ---------- lo spessore: la particella frena nella materia
+// La lastra ingrossa la traccia quando la particella rallenta: w = q·V/v (sotto la
+// velocità di riferimento V). Per avere lo spessore w(s) lungo il percorso la
+// velocità deve essere v(s) = q·V/w(s), e dunque w deve crescere: la particella va
+// dall'estremo sottile a quello spesso. Bethe (dv/ds = −K·q²/(m·v³)) dice quanta
+// materia serve: K(s) = m·q²·V⁴·w'/w⁵. Il campo che la piega, più lenta, è
+// B(s) = κ·m·v(s)/q. Un tratto sottile ai capi e spesso in mezzo diventa due
+// particelle che partono dalle punte e si incontrano nel punto più spesso.
+function particelleSpesse(g, wDi, opzioni = {}) {
+  const ds = 0.25, sigma = opzioni.sigma ?? 1.2, sat = PELLICOLA.saturazione;
+  // la curvatura lungo il segmento, ammorbidita (l'angolo di ogni svolta si conserva)
+  const kap = [];
+  for (const { k, L } of g.pezzi) for (let n = Math.max(1, Math.round(L / ds)), i = 0; i < n; i++) kap.push(k * (L / n) / ds);
+  const liscio = (arr, sg) => { const R = Math.ceil((3 * sg) / ds), gk = []; for (let i = -R; i <= R; i++) gk.push(Math.exp(-0.5 * ((i * ds) / sg) ** 2)); return arr.map((_, i) => { let v = 0, w = 0; for (let j = -R; j <= R; j++) { const t = i + j; if (t < 0 || t >= arr.length) continue; v += arr[t] * gk[j + R]; w += gk[j + R]; } return v / w; }); };
+  const kl = liscio(kap, sigma);
+  const asse = []; let x = g.inizio.pos[0], y = g.inizio.pos[1], th = g.inizio.dir;
+  kl.forEach((k, i) => { asse.push([x, y, th, k, i * ds]); const fi = k * ds, f = Math.abs(fi) > 1e-9 ? Math.sin(fi / 2) / (fi / 2) : 1; x += ds * f * Math.cos(th + fi / 2); y += ds * f * Math.sin(th + fi / 2); th += fi; });
+  asse.push([x, y, th, kl[kl.length - 1] ?? 0, kl.length * ds]);
+  // lo spessore lungo il segmento, ammorbidito
+  const w = liscio(asse.map((a) => Math.max(0.5, wDi(g.s0 + a[4]))), opzioni.sigmaSpessore ?? 2.5);
+  // i tratti monotoni: tra un minimo e un massimo dello spessore (le piccole oscillazioni non contano)
+  const tolleranza = opzioni.spessoreTolleranza ?? 0.12, giri = [0];
+  let verso = 0, estremo = 0;
+  for (let i = 1; i < w.length; i++) {
+    if (verso >= 0 && w[i] > w[estremo]) estremo = i;
+    if (verso <= 0 && w[i] < w[estremo]) estremo = i;
+    const d = w[i] - w[estremo];
+    if (verso >= 0 && d < -tolleranza * w[estremo]) { if (verso > 0) giri.push(estremo); verso = -1; estremo = i; }
+    else if (verso <= 0 && d > tolleranza * w[estremo]) { if (verso < 0) giri.push(estremo); verso = 1; estremo = i; }
+  }
+  giri.push(w.length - 1);
+  const libero = (i) => { let d = Infinity; const a = asse[i]; for (let j = 0; j < asse.length; j += 2) { if (Math.abs(asse[j][4] - a[4]) < 6) continue; d = Math.min(d, Math.hypot(asse[j][0] - a[0], asse[j][1] - a[1])); } return d; };
+  const tubo = opzioni.tubo ?? [0, -0.8, 0.8, -1.6, 1.6], out = [];
+  for (let r = 0; r + 1 < giri.length; r++) {
+    let a = giri[r], b = giri[r + 1];
+    if (b - a < 2) continue;
+    const cresce = w[b] >= w[a];
+    const idx = []; if (cresce) for (let i = a; i <= b; i++) idx.push(i); else for (let i = b; i >= a; i--) idx.push(i);
+    // la carica: lo spessore all'estremo sottile (a quarti); lo spessore cresce fino a sat·q
+    const q = quarto(Math.max(0.5, Math.min(w[idx[0]], w[idx[idx.length - 1]] / sat)));
+    const ww = idx.map((i) => Math.min(sat * q, Math.max(q, w[i])));
+    const v = ww.map((x) => (q * V) / x);
+    let tempo = 0;
+    const campioni = [];
+    idx.forEach((i, n) => {
+      const A = asse[i], k = cresce ? A[3] : -A[3], dirA = cresce ? A[2] : A[2] + Math.PI;
+      // la materia che serve per rallentare così: K = m·q²·V⁴·w'/w⁵ (w' lungo il verso di marcia)
+      const n2 = Math.min(idx.length - 1, n + 1), n1 = Math.max(0, n - 1), dw = (ww[n2] - ww[n1]) / (((n2 - n1) || 1) * ds);
+      const K = Math.max(0, (q * q * V ** 4 * dw) / ww[n] ** 5), b = (k * v[n]) / q;
+      if (n) tempo += ds / ((v[n] + v[n - 1]) / 2);
+      if (n % 2 === 0) {
+        const nx = -Math.sin(dirA), ny = Math.cos(dirA), lim = Math.min(0.7 / Math.max(Math.abs(k), 1e-9), 0.45 * libero(i));
+        for (const d of tubo.filter((d) => Math.abs(d) <= lim + 1e-9)) campioni.push([A[0] + nx * d, A[1] + ny * d, b, n * ds, d, Math.max(1.2, Math.min(1.6, lim)), K]);
+      }
+    });
+    const A0 = asse[idx[0]];
+    out.push({ campioni, q, vita: tempo, lunghezza: idx.length * ds, inizio: { pos: [A0[0], A0[1]], dir: cresce ? A0[2] : A0[2] + Math.PI }, v0: v[0] });
+  }
+  return out;
+}
+
 // ---------- l'intera immagine
 // ris: il risultato di decodifica() (coordinate del mondo con y verso l'alto)
 export function tracciaFisica(ris, opzioni = {}) {
-  opzioni = { distanza: 10, separa: false, griglia: 0.5, ginocchio: 0.2, ginocchioLungo: 4, ...opzioni };
+  opzioni = { distanza: 10, separa: false, griglia: 0.4, ginocchio: 0.2, ginocchioLungo: 4, tolleranza: 0.15, sigma: 0.6, ...opzioni };
   OPZ = opzioni;
   const W = ris.misure.larghezza, H = ris.misure.altezza, giu = (p) => [p[0], H - p[1], p[2] ?? 0];
   const oggetti = [], specie = {}, sagome = [];
@@ -279,9 +340,16 @@ export function tracciaFisica(ris, opzioni = {}) {
     const liscio = opzioni.campo !== 'corridoi';
     if (liscio) {
       // segmenti lisci tra un ginocchio e l'altro: ognuno una particella, nata dal decadimento della precedente
+      // lo spessore lungo il tratto, dalla decodifica
+      const Sq = [0]; for (let i = 1; i < fit.Q.length; i++) Sq.push(Sq[i - 1] + Math.hypot(fit.Q[i][0] - fit.Q[i - 1][0], fit.Q[i][1] - fit.Q[i - 1][1]));
+      const wDi = (sx) => { let i = 0; while (i < Sq.length - 2 && Sq[i + 1] < sx) i++; const u = Math.max(0, Math.min(1, (sx - Sq[i]) / ((Sq[i + 1] - Sq[i]) || 1))); return fit.Q[i][2] + (fit.Q[Math.min(i + 1, fit.Q.length - 1)][2] - fit.Q[i][2]) * u; };
       spezzaAiGinocchi(fit, opzioni).forEach((g, n) => {
-        const campioni = campioniTratto(g, q, 1, 0.5, opzioni.tubo ?? [0, -0.8, 0.8, -1.6, 1.6]);
-        oggetti.push({ tipo: 'tratto', domini: [], campioni, pareti: [], ginocchio: n > 0, sorgenti: [{ pos: g.inizio.pos.map(cifre), dir: cifre(g.inizio.dir), v: V, vita: cifre(g.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: g.lunghezza / V + 1, pezzi: g.pezzi.length });
+        if (opzioni.spessore === false) {
+          const campioni = campioniTratto(g, q, 1, 0.5, opzioni.tubo ?? [0, -0.8, 0.8, -1.6, 1.6]);
+          oggetti.push({ tipo: 'tratto', domini: [], campioni, pareti: [], ginocchio: n > 0, sorgenti: [{ pos: g.inizio.pos.map(cifre), dir: cifre(g.inizio.dir), v: V, vita: cifre(g.lunghezza / V), specie: nomeSpecie(q, 1) }], tempo: g.lunghezza / V + 1, pezzi: g.pezzi.length });
+        } else for (const pt of particelleSpesse(g, wDi, opzioni)) {
+          oggetti.push({ tipo: 'tratto', domini: [], campioni: pt.campioni, pareti: [], ginocchio: n > 0, sorgenti: [{ pos: pt.inizio.pos.map(cifre), dir: cifre(pt.inizio.dir), v: cifre(pt.v0), vita: cifre(pt.vita), specie: nomeSpecie(pt.q, 1) }], tempo: pt.vita + 1, pezzi: g.pezzi.length });
+        }
         ginocchi += n > 0 ? 1 : 0;
       });
       pezzi += fit.pezzi.length;

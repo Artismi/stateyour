@@ -96,11 +96,12 @@ export function generatore(seme) {
 }
 // una mappa si può scrivere compatta: «sparsa» = [scarto d'indice, valore, ...]
 const mappeDense = new WeakMap();
-function densa(m) {
-  if (m.B) return m.B;
-  let d = mappeDense.get(m);
-  if (!d) { d = new Float32Array(m.nx * m.ny); let n = -1; for (let i = 0; i < m.sparsa.length; i += 2) { n += m.sparsa[i]; d[n] = m.sparsa[i + 1]; } mappeDense.set(m, d); }
-  return d;
+function densa(m, chiave = 'sparsa') {
+  if (chiave === 'sparsa' && m.B) return m.B;
+  if (!m[chiave]) return null;
+  let tutte = mappeDense.get(m); if (!tutte) { tutte = {}; mappeDense.set(m, tutte); }
+  if (!tutte[chiave]) { const d = new Float32Array(m.nx * m.ny); let n = -1; for (let i = 0; i < m[chiave].length; i += 2) { n += m[chiave][i]; d[n] = m[chiave][i + 1]; } tutte[chiave] = d; }
+  return tutte[chiave];
 }
 // i campi continui: onde (campi che variano dolcemente) e cristalli (campi periodici)
 export function campiContinui(mondo) {
@@ -111,8 +112,8 @@ export function campiContinui(mondo) {
   // la lunghezza su cui il campo cambia, qui: fitta dentro un cristallo, larga fuori
   // la MAPPA: un campo dato su una griglia fine e interpolato con continuità (bilineare)
   const dentroMappa = (x, y) => mappa && x >= mappa.x0 && y >= mappa.y0 && x <= mappa.x0 + (mappa.nx - 1) * mappa.h && y <= mappa.y0 + (mappa.ny - 1) * mappa.h;
-  const M = mappa ? densa(mappa) : null;
-  const valoreMappa = (x, y) => {
+  const MB = mappa ? densa(mappa) : null, MK = mappa ? densa(mappa, 'sparsaK') : null;
+  const valoreMappa = (x, y, M = MB) => {
     const fx = (x - mappa.x0) / mappa.h, fy = (y - mappa.y0) / mappa.h, i = Math.min(mappa.nx - 2, Math.floor(fx)), j = Math.min(mappa.ny - 2, Math.floor(fy)), u = fx - i, v = fy - j, n = mappa.nx;
     return M[j * n + i] * (1 - u) * (1 - v) + M[j * n + i + 1] * u * (1 - v) + M[(j + 1) * n + i] * (1 - u) * v + M[(j + 1) * n + i + 1] * u * v;
   };
@@ -134,9 +135,10 @@ export function campiContinui(mondo) {
     return b;
   };
   const K = (x, y) => {
-    if (!nubi) return 0;
-    let s = 0; for (const o of ondeK) s += o.a * Math.cos(o.k[0] * x + o.k[1] * y + o.fi);
-    return nubi.K * Math.max(0, s);
+    let k = 0;
+    if (nubi) { let s = 0; for (const o of ondeK) s += o.a * Math.cos(o.k[0] * x + o.k[1] * y + o.fi); k = nubi.K * Math.max(0, s); }
+    if (MK && dentroMappa(x, y)) k += Math.max(0, valoreMappa(x, y, MK));
+    return k;
   };
   return { B, K, lambda };
 }

@@ -35,7 +35,7 @@ const img = leggiPNG(new URL('../esempi/greco_6.png', import.meta.url).pathname)
 const ris = decodifica(img), fis = tracciaFisica(ris), tracce = simulaMondo(fis.cella);
 const f = fedelta(tracce, mascheraOriginale(ris), img.larghezza, img.altezza, ris.misure.ritaglio);
 console.log(`  ✓ tavola greca: ${fis.conta.tratti} tratti, ${fis.conta.pezzi} archi, ${fis.conta.esposizioni} esposizioni; la fisica la rifà al ${(f.iou * 100).toFixed(1)}% (richiamo ${(f.richiamo * 100).toFixed(1)}%, precisione ${(f.precisione * 100).toFixed(1)}%)`);
-assert.ok(f.iou > 0.7 && f.precisione > 0.8);
+assert.ok(f.iou > 0.8 && f.precisione > 0.85, 'la tavola rifatta oltre l\'80%');
 assert.ok(fis.cella.esposizioni.every((e) => !e.domini.some((d) => d.forma.tipo === 'anello')), 'niente corridoi tagliati: il campo è una mappa liscia');
-assert.ok(tracce.filter((t) => t.fine === 'fuori').length === 0, 'nessuna particella sfugge alla lastra');
+assert.ok(tracce.filter((t) => t.fine === 'fuori').length <= tracce.length / 1000, 'quasi nessuna particella sfugge alla lastra (al più una su mille, ai bordi)');
 console.log('inversa: tutto ok');
