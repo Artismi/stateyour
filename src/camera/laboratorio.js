@@ -870,6 +870,11 @@ function passo(ora = performance.now()) {
 }
 
 addEventListener('resize', disegna);
+// il lavoro resta: si salva da solo e si ritrova alla prossima apertura
+const CHIAVE = 'stateyour:camera';
+try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.reticolo) { comp = s; scelta.value = COMPOSIZIONI[s.nome] ? s.nome : ''; } } catch { /* un salvataggio rotto si ignora */ }
+let salvato = '';
+setInterval(() => { const j = JSON.stringify(comp); if (j !== salvato) { try { localStorage.setItem(CHIAVE, j); salvato = j; } catch { /* spazio finito */ } } }, 1500);
 adattaPattern(); aggiornaVista();
 window.__camera = {
   get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, pat,

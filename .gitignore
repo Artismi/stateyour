@@ -4,3 +4,4 @@ node_modules/
 _scratch/
 stateyour.bundle
 stateyour.zip
+dist/

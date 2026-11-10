@@ -1,11 +1,51 @@
 {
   "name": "stateyour",
   "version": "0.1.0",
-  "description": "Scomposizione e codifica dei pattern: particelle, piano gravitazionale, piano delle interfacce, regole a eventi.",
+  "description": "La camera: i pattern come sezioni di un universo possibile, generati da poche leggi fisiche.",
   "type": "module",
   "private": true,
   "scripts": {
+    "app": "electron .",
     "test": "node test/test_camera.mjs && node test/test_onda.mjs && node test/test_ottica.mjs && node test/test_campi.mjs && node test/test_catena.mjs && node test/test_grammatica.mjs && node test/test_seme.mjs && node test/test_spessore.mjs && node test/test_greco.mjs && node test/test_decodifica.mjs && node test/test_lingua.mjs && node test/test_studio.mjs",
-    "start": "python3 -m http.server 8000"
+    "start": "python3 -m http.server 8000",
+    "pacchetto": "electron-builder --dir",
+    "installabile": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "it.stateyour.camera",
+    "productName": "stateyour",
+    "files": [
+      "electron/**",
+      "src/**",
+      "esempi/**",
+      "*.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.graphics-design"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
   }
 }

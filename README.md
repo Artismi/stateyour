@@ -107,6 +107,37 @@ l'occhio.
 
 Il vecchio studio (a parole, frasi e blocchi) è in `studio.html`.
 
+### Come applicazione sul computer (Electron)
+
+stateyour gira anche come programma da scrivania, in una cartella locale,
+senza server e senza rete. Serve [Node.js](https://nodejs.org) (la versione
+LTS). Nella cartella del progetto, una volta sola:
+
+```bash
+npm install
+```
+
+e poi ogni volta:
+
+```bash
+npm run app
+```
+
+Per farne un programma da installare come gli altri (`.dmg` su Mac, `.exe` su
+Windows, AppImage su Linux), sullo stesso tipo di computer:
+
+```bash
+npm run installabile
+```
+
+Il risultato è nella cartella `dist/`. Su Mac l'app non è firmata: la prima
+volta si apre con clic destro → Apri.
+
+L'app (`electron/main.cjs`) serve le stesse pagine con un protocollo proprio,
+`app://stateyour/`, perché i moduli e il processo della decodifica funzionano
+solo da un'origine vera; legge solo i file della cartella del progetto. Il
+lavoro nella camera si salva da solo e si ritrova alla riapertura.
+
 ## Lo studio (vecchio)
 
 `studio.html` è il programma precedente: un solo seme al centro di tutto.
