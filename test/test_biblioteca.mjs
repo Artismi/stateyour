@@ -49,4 +49,15 @@ prova('un universo si simula in fretta, e le figlie restano sotto la velocità d
   }
 });
 
+const { indirizzoDi, numeroDi, regione, cosmo, galassia } = await import('../src/camera/cosmo.js');
+prova('il cosmo: ogni numero è un indirizzo, ogni raggio ha una sorgente vera, un ramo cambia l\'emissione', () => {
+  for (const n of [1, 2, 13, 5000, 4575388]) { const a = indirizzoDi(n); assert.equal(indirizzoDi(numeroDi(a)).regione, a.regione); }
+  const a = indirizzoDi(4575388), Gx = galassia(a.cosmo, a.galassia), c = regione(a).cella;
+  assert.ok(cosmo(1).galassie.length > 20, 'un cosmo ha molte galassie');
+  for (const s of c.sorgenti.filter((s) => s.specie === 'protone')) assert.ok(s.origine && (s.origine.startsWith('il vento') || Gx.sorgenti.some((g) => s.origine.startsWith(g.nome))), `il raggio viene da ${s.origine}`);
+  // l'emissione è un evento: in un altro ramo il raggio parte altrove
+  const t1 = simulaMondo(c).find((t) => t.evento === '0'), t2 = simulaMondo({ ...c, rami: { 0: 7 } }).find((t) => t.evento === '0');
+  assert.notEqual(JSON.stringify(t1.punti[0].slice(0, 2)), JSON.stringify(t2.punti[0].slice(0, 2)));
+});
+
 console.log(`biblioteca: ${ok} prove, tutto ok`);

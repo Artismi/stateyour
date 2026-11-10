@@ -245,7 +245,24 @@ export function simulaMondo(mondo, opzioni = {}) {
   const passoMax = opzioni.passo ?? Math.max(W, H) / 500;
   const maxParticelle = opzioni.maxParticelle ?? 20000;
   const tracce = [], decadimenti = [];
-  const coda = (mondo.sorgenti || []).map((s, i) => {
+  const coda = (mondo.sorgenti || []).map((s0, i) => {
+    // l'EMISSIONE come evento quantistico: quando parte e in che direzione esatta, estratti
+    // dal caso del suo evento (cambiano nei rami); «dal: 'bordo'» la fa entrare dal bordo
+    let s = s0;
+    if (s0.emissione) {
+      const e = s0.emissione, ce = casoEvento(seme, `${i}|emissione`, rami[`${i}`] ?? 0), est = (x, d) => (Array.isArray(x) ? x[0] + ce() * (x[1] - x[0]) : x ?? d);
+      const dir = est(e.dir, s0.dir ?? 0), t0 = est(e.t0, s0.t0 ?? 0);
+      let pos = s0.pos;
+      if (e.dal === 'bordo') {
+        const u = est(e.u, 0.5), dx = Math.cos(dir), dy = Math.sin(dir), P = [W / 2 - dy * (u - 0.5) * W, H / 2 + dx * (u - 0.5) * H];
+        // all'indietro lungo la direzione fino al bordo
+        let tt = Infinity;
+        if (dx > 1e-9) tt = Math.min(tt, (P[0] - 0) / dx); if (dx < -1e-9) tt = Math.min(tt, (P[0] - W) / dx);
+        if (dy > 1e-9) tt = Math.min(tt, (P[1] - 0) / dy); if (dy < -1e-9) tt = Math.min(tt, (P[1] - H) / dy);
+        pos = [Math.min(W - 0.01, Math.max(0.01, P[0] - dx * (tt - 0.01))), Math.min(H - 0.01, Math.max(0.01, P[1] - dy * (tt - 0.01)))];
+      }
+      s = { ...s0, dir, t0, pos };
+    }
     if (!accesoA(s, s.t0 ?? 0)) return null;
     const specie = risolviSpecie(s.specie, catalogo), v = specie.luce ? C : s.v;
     // «vita» sulla sorgente: l'istante in cui QUESTA particella decade (le particelle di una

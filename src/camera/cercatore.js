@@ -11,7 +11,8 @@ import { perfeziona } from './vicini.js';
 export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = null, seme = 1, gruppo = null }, avanza = () => {}) {
   const caso = generatore(seme), tra = (a, b) => a + caso() * (b - a);
   let migliore = null;
-  const numeri = solo != null ? [solo] : Array.from({ length: universi }, (_, i) => da + i);
+  // numeri sparsi: regioni di pianeti e stelle diverse (numeri vicini sono regioni dello stesso pianeta)
+  const numeri = solo != null ? [solo] : Array.from({ length: universi }, (_, i) => da + i * 7919);
   numeri.forEach((n, k) => {
     const u = universo(n), cella = u.cella, tracce = simulaMondo(cella);
     // i posti interessanti: dove nascono le stelle e gli sciami, e dove c'è inchiostro

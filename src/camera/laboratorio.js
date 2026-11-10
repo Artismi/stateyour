@@ -15,6 +15,8 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi } from './cosmo.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -59,9 +61,8 @@ function coloriTraccia(cella, tr) {
 }
 
 // ---------- lo stato
-// all'avvio: un ornamento trovato dal dado nella biblioteca (universo n. 4070, in un ramo dove quattro decadimenti sono andati diversamente)
-let comp = compBiblioteca(4070, { centro: [100.997, 471.206], lato: 317.2 }, { fine: 128.826, durata: 87.49 }, { inclinazione: 0, rotazione: 0, scalaTempo: 5.26 }, { gruppo: 'esagoni', angolo: 269.1 },
-  { rami: { '7.5.0': 588992, '6.3.0': 1010409, '7.5.0.0': 437716, '2.1': 750812 }, separato: 21.29 });
+// all'avvio: un ornamento trovato dal dado nella biblioteca, in un ramo dove un decadimento è andato diversamente
+let comp = compBiblioteca(4575388, {"centro":[587.127,513.655],"lato":317.388}, {"fine":110.203,"durata":66.636}, {"inclinazione":36.263,"rotazione":164.51,"scalaTempo":7.721}, {"gruppo":"esagoni","angolo":54}, { rami: {"10.12":826041}, separato: 48.954 });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
@@ -123,7 +124,8 @@ function disegna() {
   if (vista === 'spaziotempo') { v3.tempo(cel().finestra ? v3.tMax() : Math.min(tempo, v3.tMax())); return; }
   const dpr = devicePixelRatio || 1;
   tela.width = tela.clientWidth * dpr; tela.height = tela.clientHeight * dpr;
-  if (vista === 'pattern') disegnaPattern(); else if (vista === 'finestra') disegnaFinestra(); else disegnaElemento();
+  if (vista === 'cosmo') disegnaMappa(ctx, tela.width, tela.height, camMappa, { sopra: sopraMappa, evidenzia: evidenzaMappa(), dpr });
+  else if (vista === 'pattern') disegnaPattern(); else if (vista === 'finestra') disegnaFinestra(); else disegnaElemento();
 }
 
 // =================================================================== IL PATTERN
@@ -236,6 +238,46 @@ function disegnaFinestra() {
   if (sopraFinestra) { ctx.fillStyle = ACCENTO; ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillText('clic: lo spaziotempo di questa finestra', x0, y0 - 6 * dpr); }
 }
 let sopraFinestra = false;
+
+// =================================================================== IL COSMO
+// La catena dello zoom, nei due versi: pattern ↔ finestra ↔ l'universo (la regione)
+// ↔ il pianeta ↔ la stella ↔ la galassia ↔ il cosmo.
+let camMappa = null, sopraMappa = null, volo = null, rotella = 0;
+const indirizzoOra = () => (vista === 'pattern' ? comp.elementi[0] : el())?.cella.indirizzo || null;
+const evidenzaMappa = () => { const a = indirizzoOra(); return a ? { ...a, sorgenti: (el()?.cella.sorgenti || []).map((s) => s.origine).filter(Boolean) } : null; };
+function apriCosmo() {
+  const a = indirizzoOra(); if (!a) return;
+  const dpr = devicePixelRatio || 1; camMappa = camSuRegione(a, tela.clientWidth * dpr, tela.clientHeight * dpr);
+  sopraMappa = null; vista = 'cosmo'; aggiornaVista();
+}
+function entraRegione(a) {
+  volo = null;
+  const qui = indirizzoOra();
+  if (!qui || numeroDi(qui) !== numeroDi(a) || qui.cosmo !== a.cosmo) { ricorda(); comp = compBiblioteca(numeroDi(a)); corrente = 0; sel = null; scelto = null; }
+  entra(0); vista = 'dettaglio'; aggiornaVista();
+}
+// la rotella che, oltre un limite, porta alla vista accanto nella catena
+function passaVista(verso) {
+  rotella = 0;
+  const conIndirizzo = !!indirizzoOra();
+  if (verso < 0) { // indietro: più lontano
+    if (vista === 'pattern' && !comp.reticolo) { entra(0); return true; }
+    if (vista === 'finestra') { vista = 'dettaglio'; aggiornaVista(); return true; }
+    if (vista === 'dettaglio' && conIndirizzo) { apriCosmo(); return true; }
+  } else { // avanti: più vicino
+    if (vista === 'dettaglio' && el()?.cella.finestra) { vista = 'finestra'; aggiornaVista(); return true; }
+    if (vista === 'finestra') { vista = 'pattern'; adattaPattern(); aggiornaVista(); return true; }
+  }
+  return false;
+}
+function passoVolo() {
+  if (!volo || vista !== 'cosmo') { volo = null; return; }
+  const W = tela.width, H = tela.height, r = volaVerso(camMappa, volo, W, H);
+  if (r?.entra) { entraRegione(r.entra); return; }
+  // arrivati: se l'oggetto è ora un livello, ci si ferma
+  if (++volo.passi > 60 || (volo.livello !== camMappa.livello)) { volo = null; sopraMappa = null; aggiornaVista(); return; }
+  disegna(); dove(); requestAnimationFrame(passoVolo);
+}
 function disegnaPattern() {
   if (!comp.reticolo) return disegnaSezione();
   const W = tela.width, H = tela.height, dpr = devicePixelRatio || 1, z = pat.z * dpr, { a, b } = comp.reticolo;
@@ -643,6 +685,7 @@ tela.addEventListener('pointerdown', (e) => {
     return;
   }
   if (vista === 'finestra') { presa = { tipo: 'clicFinestra', sx: e.clientX, sy: e.clientY }; return; }
+  if (vista === 'cosmo') { volo = null; presa = { tipo: 'cosmo', sx: e.clientX, sy: e.clientY, cx: camMappa.cx, cy: camMappa.cy }; return; }
   const [x, y] = aMondo(e), c = cel();
   if (strumento !== 'seleziona') { aggiungi(strumento, x, y); return; }
   const fh = colpisciFinestra(x, y);
@@ -673,6 +716,13 @@ tela.addEventListener('pointermove', (e) => {
       comp.elementi[presa.e].posti[presa.p].pos = [Math.round((presa.orig[0] + x - presa.x0) * 10) / 10, Math.round((presa.orig[1] + y - presa.y0) * 10) / 10];
       scelto = { e: presa.e, p: presa.p }; disegna();
     }
+    return;
+  }
+  if (vista === 'cosmo') {
+    const dpr = devicePixelRatio || 1, r = tela.getBoundingClientRect();
+    if (presa?.tipo === 'cosmo') { camMappa.cx = presa.cx - ((e.clientX - presa.sx) * dpr) / camMappa.z; camMappa.cy = presa.cy - ((e.clientY - presa.sy) * dpr) / camMappa.z; disegna(); return; }
+    const h = colpisciMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, tela.width, tela.height);
+    if ((h?.testo || null) !== (sopraMappa?.testo || null)) { sopraMappa = h; tela.style.cursor = h ? 'pointer' : 'grab'; disegna(); }
     return;
   }
   if (vista === 'finestra') {
@@ -707,6 +757,14 @@ tela.addEventListener('pointermove', (e) => {
   arrotonda(o); simula(); disegna();
 });
 tela.addEventListener('pointerup', (e) => {
+  if (presa?.tipo === 'cosmo') {
+    const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null;
+    if (fermo && sopraMappa) {
+      if (sopraMappa.tipo === 'regione') { entraRegione(sopraMappa.via); return; }
+      if (sopraMappa.tipo !== 'buco') { volo = { pos: sopraMappa.pos, scala: sopraMappa.scala, livello: camMappa.livello, passi: 0 }; requestAnimationFrame(passoVolo); }
+    }
+    return;
+  }
   if (presa?.tipo === 'clicFinestra') { const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null; if (fermo && sopraFinestra) { sopraFinestra = false; vista = 'spaziotempo'; aggiornaVista(); } return; }
   if (vista === 'pattern' && presa) {
     if (presa.tipo === 'posto' && !presa.mosso) { scelto = { e: presa.e, p: presa.p }; presa = null; entra(scelto.e); return; }
@@ -724,8 +782,25 @@ function colpisciFinestra(x, y) {
 }
 tela.addEventListener('pointerleave', () => { if (sopra || sonda) { sopra = null; sonda = null; disegna(); } });
 tela.addEventListener('wheel', (e) => {
+  if (vista === 'cosmo') {
+    e.preventDefault(); volo = null;
+    const r = tela.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+    const esito = zoomMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, Math.exp(-e.deltaY * 0.0015), tela.width, tela.height);
+    if (esito?.entra) { entraRegione(esito.entra); return; }
+    sopraMappa = null; disegna(); dove(); mostraPannello(); return;
+  }
+  if (vista === 'finestra' || vista === 'dettaglio') {
+    e.preventDefault(); rotella += e.deltaY;
+    if (Math.abs(rotella) > 260) passaVista(rotella > 0 ? -1 : 1);
+    return;
+  }
   if (vista !== 'pattern') return;
   e.preventDefault();
+  if (e.deltaY > 0 && !comp.reticolo) {
+    // il pattern, rimpicciolito oltre un limite, lascia il posto alla sua finestra
+    const M = motivoDi(comp.elementi[0]), L = M.reticolo ? Math.hypot(...M.reticolo.a) : comp.elementi[0].cella.finestra.lato;
+    if (L * pat.z < 0.09 * Math.min(tela.clientWidth, tela.clientHeight)) { rotella += e.deltaY; if (rotella > 260) passaVista(-1); return; }
+  }
   const [x, y] = aPattern(e), k = Math.exp(-e.deltaY * 0.0015);
   pat.z = Math.max(0.02, Math.min(40, pat.z * k));
   const [x2, y2] = aPattern(e); pat.cx += x - x2; pat.cy += y - y2; disegna();
@@ -787,7 +862,7 @@ const SPIEGA = {
 function mostraPannello() {
   idCursore = 0; registro.clear();
   const h = [];
-  if (vista === 'pattern') pannelloPattern(h); else pannelloElemento(h);
+  if (vista === 'pattern') pannelloPattern(h); else if (vista === 'cosmo') pannelloCosmo(h); else pannelloElemento(h);
   pannello.innerHTML = h.join('');
 }
 const controlliUniverso = (c) => {
@@ -829,6 +904,17 @@ function pannelloPattern(h) {
   const { a, b } = comp.reticolo;
   h.push(`<h2>la piastrella</h2><p class="nota">a = (${fmt(a[0])}, ${fmt(a[1])}) · b = (${fmt(b[0])}, ${fmt(b[1])}) · trascina i pallini a e b</p><div class="riga-bottoni"><button data-reticolo="quadrato">quadrata</button><button data-reticolo="esagonale">esagonale</button><button data-reticolo="sfalsato">sfalsata</button></div>`);
   if (immagine) h.push(`<h2>l'immagine</h2><label class="riga">mostra l'originale sotto <input type="checkbox" data-originale ${mostraOriginale ? 'checked' : ''}></label>`);
+}
+function pannelloCosmo(h) {
+  const a = indirizzoOra(), c = el()?.cella;
+  h.push(`<div class="briciole"><button data-modo-p="dettaglio">← la regione</button> <b>dove si trova</b></div>`);
+  h.push(`<p class="nota">${percorso(camMappa).join(' › ')}</p>`);
+  h.push(`<p class="aiuto">L'universo intero, da esplorare. Nessun bordo: lo spazio si richiude su sé stesso. Ogni cosa ha una causa più in là: le galassie nascono dove le fluttuazioni dell'inizio hanno lasciato più materia; le stelle nei bracci; i pianeti attorno alle stelle; le regioni nell'anello o nel campo dei pianeti. <b>Avvicinati con la rotella</b> fino alle particelle, <b>allontanati</b> fino alla rete delle galassie.</p>`);
+  if (a && c) {
+    const raggi = c.sorgenti.filter((s) => s.origine);
+    const conta = {}; for (const s of raggi) conta[s.origine] = (conta[s.origine] || 0) + 1;
+    h.push(`<h2>da dove viene ciò che vedi</h2><p class="nota">La regione dell'universo n. ${c.seme} riceve:</p><ul class="nota">${Object.entries(conta).map(([o, n]) => `<li>${n} × ${o}</li>`).join('')}</ul><p class="nota">Nella galassia le linee tratteggiate vanno dalle sorgenti alla stella del pianeta.</p>`);
+  }
 }
 function pannelloElemento(h) {
   const c = cel();
@@ -1023,6 +1109,7 @@ pannello.addEventListener('click', (e) => {
   }
   if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
   if (d.vistaP != null) { vista = 'pattern'; aggiornaVista(); return; }
+  if (d.modoP) { vista = d.modoP; aggiornaVista(); return; }
   if (d.copiaPosto != null) { ricorda(); const e2 = comp.elementi[+d.copiaPosto], { a, b } = comp.reticolo; e2.posti.push({ pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], rot: 0 }); scelto = { e: +d.copiaPosto, p: e2.posti.length - 1 }; return aggiorna(); }
   if (d.scegliPosto != null) { scelto = { e: +d.scegliPosto, p: 0 }; mostraPannello(); return disegna(); }
   if (d.togliPosto != null) return togliPosto(scelto.e, scelto.p);
@@ -1108,7 +1195,7 @@ schede.addEventListener('pointerleave', () => { if (fuoco) { fuoco = null; $('sp
 function scegliStrumento(st) { strumento = st; document.querySelectorAll('[data-strumento]').forEach((b) => b.classList.toggle('attivo', b.dataset.strumento === st)); tela.style.cursor = st === 'seleziona' ? 'default' : 'crosshair'; dove(); }
 document.querySelectorAll('[data-strumento]').forEach((b) => b.addEventListener('click', () => scegliStrumento(strumento === b.dataset.strumento ? 'seleziona' : b.dataset.strumento)));
 document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.vista === 'pattern') { vista = 'pattern'; sonda = null; aggiornaVista(); } else entra(corrente); }));
-document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { vista = { spaziotempo: 'spaziotempo', finestra: 'finestra' }[b.dataset.modo] || 'dettaglio'; aggiornaVista(); }));
+document.querySelectorAll('[data-modo]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.modo === 'cosmo') return apriCosmo(); vista = { spaziotempo: 'spaziotempo', finestra: 'finestra' }[b.dataset.modo] || 'dettaglio'; aggiornaVista(); }));
 const v3 = creaVista3D(tela3d, { spunte: () => ({ linee: true, pianta: true, taglio: true, forze: false, masse: true, campi: true }) });
 function imposta3D() {
   const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }].filter(Boolean) }));
@@ -1138,6 +1225,7 @@ function dove() {
   const t = vista === 'pattern'
     ? (!comp.reticolo ? `Il pattern: la finestra dell'universo n. ${comp.elementi[0].cella.seme}, ${ripetiDi(comp.elementi[0].cella).gruppo === 'una' ? 'da sola' : `ripetuta ${GRUPPI[comp.elementi[0].cella.ripeti.gruppo].nome.replace(/^caleidoscopio/, 'nel caleidoscopio')}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
+    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo.' : ''}`
     : vista === 'finestra' ? `La finestra: la sezione dell'universo n. ${el().cella.seme} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
     : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra: il tempo sale dall'inizio della fetta alla sua fine. La sezione è questo blocco guardato da un angolo. Trascina per ruotare, rotella per avvicinarti.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
@@ -1150,8 +1238,9 @@ function dove() {
 function aggiornaVista() {
   const inPattern = vista === 'pattern';
   document.querySelectorAll('[data-vista]').forEach((b) => b.classList.toggle('attivo', (b.dataset.vista === 'pattern') === inPattern));
-  const conFinestra = !!el()?.cella.finestra, modoOra = { spaziotempo: 'spaziotempo', finestra: 'finestra' }[vista] || 'piano';
-  document.querySelectorAll('[data-modo]').forEach((b) => { b.classList.toggle('attivo', b.dataset.modo === modoOra); if (b.dataset.modo === 'finestra') b.hidden = !conFinestra; if (b.dataset.modo === 'piano') b.textContent = conFinestra ? "l'universo" : 'piano'; });
+  const conFinestra = !!el()?.cella.finestra, modoOra = { spaziotempo: 'spaziotempo', finestra: 'finestra', cosmo: 'cosmo' }[vista] || 'piano';
+  document.body.classList.toggle('in-cosmo', vista === 'cosmo');
+  document.querySelectorAll('[data-modo]').forEach((b) => { b.classList.toggle('attivo', b.dataset.modo === modoOra); if (b.dataset.modo === 'finestra') b.hidden = !conFinestra; if (b.dataset.modo === 'cosmo') b.hidden = !el()?.cella.indirizzo; if (b.dataset.modo === 'piano') b.textContent = conFinestra ? "l'universo" : 'piano'; });
   document.body.classList.toggle('in-finestra', vista === 'finestra' || vista === 'spaziotempo');
   document.body.classList.toggle('in-pattern', inPattern);
   tela.hidden = vista === 'spaziotempo'; tela3d.hidden = vista !== 'spaziotempo';
@@ -1239,7 +1328,7 @@ function cercaBella(come = 'ovunque') {
       stato(`trovata: universo n. ${b.numero}${nomeRamo(b.cella) ? `, ${nomeRamo(b.cella)}` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · ${GRUPPI[b.ripeti.gruppo].nome} · inchiostro ${x.pieno.toFixed(2)}, celle ${x.celle.toFixed(2)}, nitidezza ${x.nitido.toFixed(2)}, linee distese ${x.distese.toFixed(2)}, pulizia ${x.pulizia.toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
     }
   };
-  const da = 1 + Math.floor(Math.random() * 999000);
+  const da = 1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length * 0.98);
   cercatore.postMessage(come === 'vicini' ? { stato: { cella: clona(c), finestra: c.finestra, vista: c.vista, sezione: c.sezione, ripeti: ripetiDi(c), numero: c.seme }, passi: 60, seme }
     : come === 'qui' ? { solo: c.seme, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme });
 }
@@ -1266,7 +1355,7 @@ $('carte').addEventListener('click', (e) => {
   const b = e.target.closest('[data-carta]'); if (!b) return;
   $('nuovo').close();
   const k = b.dataset.carta;
-  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * 999999))); cercaBella('ovunque'); }
+  if (k === 'biblioteca') { ricorda(); carica(compBiblioteca(1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length))); cercaBella('ovunque'); }
   else if (k === 'immagine') $('fileImmagine').click();
   else if (k === 'esempio') daImmagine('./esempi/greco_6.png', 'la tavola greca n. 6');
   else if (k === 'modello') { ricorda(); carica(COMPOSIZIONI[b.dataset.nome]()); }

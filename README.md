@@ -92,18 +92,33 @@ prese a caso. «✨ più bella qui» cerca solo nuove inquadrature dell'universo
 si sta guardando. La misura conta anche la **pulizia**: i frammenti, pezzi di
 linea corti che attraversano la finestra senza fare niente, sembrano rumore.
 
-**Gli universi vicini.** Una sezione quasi bella ha spesso una linea a caso,
-spezzata, storta. Ma nella biblioteca accanto a ogni universo ce ne sono
-infiniti quasi uguali (`src/camera/vicini.js`): lo stesso campo un poco più
-forte o ruotato, la stessa nube più densa, la stessa massa un poco più in là,
-lo stesso raggio cosmico arrivato un istante dopo, da un'altra direzione, o mai
-arrivato. In qualcuno di questi la linea storta non c'è, o va dove deve.
-Perfezionare una sezione è camminare tra i vicini, un passo alla volta, verso
-il più bello (una salita con un poco di caso, per non fermarsi al primo
-poggio). Il dado ora fa le due cose: trova una sezione quasi bella, poi cerca
-il vicino migliore (da 0.57 a 0.69, da 0.59 a 0.73 nelle prove); «✦ un
-universo vicino più pulito» fa solo la seconda, sulla sezione che si sta
-guardando. Il vicino non è più estraibile dal solo numero: si salva nel seme.
+**I rami paralleli.** Ogni decadimento è un evento quantistico: quando avviene e
+in che direzioni partono le figlie è caso vero. Ogni particella ha un indirizzo
+nella sua genealogia (la sorgente 3, la sua figlia 3.0, la nipote 3.0.1) e il
+suo evento ha un caso suo (`casoEvento` in `src/camera/mondo.js`). Un universo
+parallelo è lo stesso universo con alcuni eventi andati diversamente
+(`mondo.rami`): fino a quell'istante è identico, dopo cambia solo ciò che ne
+discende. Anche l'emissione di un raggio cosmico (quando parte, con che
+direzione esatta) è un evento. Perfezionare una sezione (`src/camera/vicini.js`)
+è cercare il ramo giusto: si trova la linea storta o spezzata, si risale al
+decadimento da cui è nata e si passa al ramo in cui è andato diversamente. È la
+correzione minima, ed esiste davvero (nel senso dei molti mondi di Everett).
+
+**Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
+richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
+nasce la rete della materia; dove è più densa, le galassie, con un buco nero al
+centro, i bracci, i resti di supernova e le pulsar; nei bracci le stelle;
+attorno alle stelle i pianeti, con i loro campi e i loro anelli; nell'anello o
+nel campo di un pianeta, le **regioni**: sono gli universi della biblioteca. Il
+numero di un universo è il suo indirizzo scritto in cifre (numeri vicini sono
+regioni dello stesso pianeta; numeri lontanissimi, cosmi paralleli separati
+all'inizio). Ogni raggio cosmico di una regione parte da una sorgente vera della
+sua galassia e arriva in media dalla sua direzione. Niente è conservato: dato
+un indirizzo, una regola dice che cosa c'è lì, sempre la stessa cosa; si calcola
+solo il pezzo che si guarda. Nell'app lo zoom è una catena continua, nei due
+versi: pattern ↔ finestra ↔ l'universo (la regione) ↔ il pianeta ↔ la stella ↔
+la galassia ↔ il cosmo (`src/camera/mappa.js`); nella galassia le linee
+tratteggiate vanno dalle sorgenti dei raggi alla stella del pianeta.
 
 Per avere cose belle da trovare, gli universi hanno anche le
 **stelle nucleari**: un raggio cosmico colpisce un nucleo, che si spezza in
