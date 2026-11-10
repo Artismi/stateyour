@@ -154,5 +154,6 @@ export function bellezzaPattern(segmenti, ripeti, lato) {
   const tot = c16.reduce((a, b) => a + b, 0); let H = 0; for (const c of c16) if (c) { const p = c / tot; H -= p * Math.log(p); }
   const sEq = H / Math.log(16);
   const totale = sPieno * (0.15 + 0.85 * sCelle) * (0.2 + 0.8 * sNitido) * (0.25 + 0.75 * sDistese) * (0.5 + 0.5 * sPulizia) * (0.4 + 0.6 * sEq);
-  return { totale, pieno, celle: sCelle, nitido: sNitido, distese: sDistese, pulizia: sPulizia, equilibrio: sEq };
+  // (le tracce che entrano nel pezzo che si ripete, con la loro lunghezza: servono a cercare i rami)
+  return { totale, pieno, celle: sCelle, nitido: sNitido, distese: sDistese, pulizia: sPulizia, equilibrio: sEq, pezzi: [...perTraccia] };
 }

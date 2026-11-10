@@ -4,7 +4,7 @@ import { proiettore, segmentiSezione, bellezza } from '../src/camera/sezione.js'
 import { cercaSezione } from '../src/camera/cercatore.js';
 import { universo } from '../src/camera/biblioteca.js';
 import { simulaMondo, generatore } from '../src/camera/mondo.js';
-import { vicino, perfeziona } from '../src/camera/vicini.js';
+import { ramo, perfeziona } from '../src/camera/vicini.js';
 import { geometria, motivo, bellezzaPattern, RIPETI_BASE } from '../src/camera/pattern.js';
 
 let ok = 0;
@@ -56,16 +56,21 @@ prova('il caleidoscopio: le copie del triangolo riempiono il motivo, e le linee 
   assert.equal(bellezzaPattern([], RIPETI_BASE, 100).totale, 0);
 });
 
-prova('gli universi vicini: quasi uguali, e tra loro uno più bello', () => {
-  const u = universo(321), caso = generatore(4);
-  const v = vicino(u.cella, 1, caso);
-  assert.equal(v.seme, u.cella.seme); assert.equal(v.vicino, 1);
-  const diff = JSON.stringify(v) !== JSON.stringify({ ...u.cella, vicino: 1 }); assert.ok(diff, 'un vicino è diverso');
-  assert.ok(Math.abs(JSON.stringify(v).length - JSON.stringify(u.cella).length) < 400, 'ma di poco');
-  const m = cercaSezione({ solo: 321, inquadrature: 4, seme: 2 });
+prova('i rami paralleli: un evento va diversamente, e cambia solo ciò che ne discende', () => {
+  const u = universo(4070), a = simulaMondo(u.cella), d = a.decadimenti[Math.floor(a.decadimenti.length / 2)];
+  const c2 = ramo(u.cella, d.evento, generatore(4)), b = simulaMondo(c2);
+  assert.equal(c2.seme, u.cella.seme); assert.ok(c2.rami[d.evento] > 0);
+  const firma = (T) => new Map(T.map((t) => [t.evento, JSON.stringify(t.punti)]));
+  const A = firma(a), B = firma(b);
+  let diverse = 0;
+  for (const [k, v] of A) if (B.get(k) !== v) { diverse++; assert.ok(k === d.evento || k.startsWith(d.evento + '.'), `è cambiata ${k}, che non discende da ${d.evento}`); }
+  assert.ok(diverse >= 1, 'il ramo deve cambiare qualcosa');
+  // e lo stesso ramo è sempre lo stesso universo
+  assert.equal(JSON.stringify(simulaMondo(c2).map((t) => t.punti.length)), JSON.stringify(b.map((t) => t.punti.length)));
+  // la ricerca del ramo migliore non scende
+  const m = cercaSezione({ solo: 4070, inquadrature: 4, seme: 2 });
   const p = perfeziona({ cella: u.cella, finestra: m.finestra, vista: m.vista, sezione: m.sezione, ripeti: m.ripeti }, { passi: 14, seme: 3 });
-  assert.ok(p.bellezza.totale >= m.bellezza.totale - 1e-9, `la salita non scende: ${p.bellezza.totale} contro ${m.bellezza.totale}`);
-  assert.ok(p.bellezza.pulizia >= 0 && p.bellezza.pulizia <= 1);
+  assert.ok(p.bellezza.totale >= m.bellezza.totale - 1e-9, `la ricerca non scende: ${p.bellezza.totale} contro ${m.bellezza.totale}`);
 });
 
 console.log(`sezione: ${ok} prove, tutto ok`);

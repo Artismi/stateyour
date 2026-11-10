@@ -59,8 +59,9 @@ function coloriTraccia(cella, tr) {
 }
 
 // ---------- lo stato
-// all'avvio: un ornamento trovato dal dado nella biblioteca (universo n. 5669)
-let comp = compBiblioteca(5669, { centro: [948.351, 764.759], lato: 340.706 }, { fine: 115.02, durata: 66.973 }, { inclinazione: 74.829, rotazione: 72.862, scalaTempo: 2.408 }, { gruppo: 'esagoni', angolo: 191 });
+// all'avvio: un ornamento trovato dal dado nella biblioteca (universo n. 4070, in un ramo dove quattro decadimenti sono andati diversamente)
+let comp = compBiblioteca(4070, { centro: [100.997, 471.206], lato: 317.2 }, { fine: 128.826, durata: 87.49 }, { inclinazione: 0, rotazione: 0, scalaTempo: 5.26 }, { gruppo: 'esagoni', angolo: 269.1 },
+  { rami: { '7.5.0': 588992, '6.3.0': 1010409, '7.5.0.0': 437716, '2.1': 750812 }, separato: 21.29 });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
@@ -105,7 +106,7 @@ function tracceDi(e) {
   return m;
 }
 function simula() {
-  if (vista === 'pattern' && !comp.reticolo) { const c = comp.elementi[0].cella; $('misure').textContent = `universo n. ${c.seme} · sezione di lato ${fmt(c.finestra.lato)} · tempo da ${fmt(c.sezione.fine - c.sezione.durata)} a ${fmt(c.sezione.fine)}`; return; }
+  if (vista === 'pattern' && !comp.reticolo) { const c = comp.elementi[0].cella; $('misure').textContent = `universo n. ${c.seme}${c.rami && Object.keys(c.rami).length ? `, un ramo (${Object.keys(c.rami).length} eventi diversi)` : ''} · sezione di lato ${fmt(c.finestra.lato)} · tempo da ${fmt(c.sezione.fine - c.sezione.durata)} a ${fmt(c.sezione.fine)}`; return; }
   if (vista === 'pattern') { const ne = comp.elementi.length, np = comp.elementi.reduce((n, e) => n + e.posti.length, 0); $('misure').textContent = `${ne} ${ne === 1 ? 'elemento' : 'elementi'} · ${np} ${np === 1 ? 'posto' : 'posti'} per piastrella`; return; }
   const t0 = performance.now();
   try { tracce = tracceDi(el()).tracce; $('errore').textContent = ''; } catch (e) { tracce = []; $('errore').textContent = e.message; }
@@ -792,7 +793,7 @@ function mostraPannello() {
 const controlliUniverso = (c) => {
   c.vista ??= { ...VISTA_SOPRA };
   return `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button></div>`
-    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button><button data-cerca="vicini" title="cerca, tra gli universi quasi uguali a questo, quello in cui la sezione non ha linee a caso, spezzate o storte">✦ un universo vicino più pulito</button></div>`
+    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button><button data-cerca="vicini" title="ogni decadimento è un evento quantistico: l'universo si divide in rami, uno per esito. Cerca il ramo in cui i decadimenti da cui nascono le linee storte sono andati diversamente">✦ un ramo parallelo più pulito</button></div>`
     + `<p class="nota" id="cercaStato"></p>`
     + `<h2>da dove la guardi</h2>`
     + cursore('inclinazione', c.vista, 'inclinazione', 0, 85, 1, 'inclinazione (gradi)')
@@ -1203,9 +1204,12 @@ $('usaSeme').addEventListener('click', () => { try { const n = JSON.parse($('tes
 $('chiudiSeme').addEventListener('click', () => $('dialogoSeme').close());
 
 // ---------- la biblioteca: un universo per ogni numero
-function compBiblioteca(n, finestra, sezione, vistaS, ripeti) {
+// un ramo: { rami, separato } — lo stesso universo, con alcuni eventi andati diversamente
+const nomeRamo = (c) => { const n = Object.keys(c.rami || {}).length; return n ? `un ramo parallelo (${n} ${n === 1 ? 'evento andato' : 'eventi andati'} diversamente, separato a t ${fmt(c.separato ?? 0)})` : ''; };
+function compBiblioteca(n, finestra, sezione, vistaS, ripeti, ramoS) {
   const u = universo(n);
   if (ripeti) u.cella.ripeti = clona(ripeti);
+  if (ramoS?.rami && Object.keys(ramoS.rami).length) { u.cella.rami = { ...ramoS.rami }; u.cella.separato = ramoS.separato; u.nome = `${u.nome}, un ramo`; }
   if (finestra) u.cella.finestra = clona(finestra);
   if (sezione) u.cella.sezione = clona(sezione);
   u.cella.vista = vistaS ? clona(vistaS) : { ...VISTA_SOPRA };
@@ -1217,23 +1221,22 @@ let cercatore = null;
 function cercaBella(come = 'ovunque') {
   if (cercatore) cercatore.terminate();
   const c = comp.elementi[0].cella, stato = (t) => { const el = $('cercaStato'); if (el) el.textContent = t; $('dove').textContent = t; };
-  stato(come === 'vicini' ? `cammino tra gli universi vicini al n. ${c.seme}…` : come === 'qui' ? `cerco un'inquadratura più bella nell'universo n. ${c.seme}…` : 'sfoglio la biblioteca: molti universi, molte inquadrature…');
+  stato(come === 'vicini' ? `cerco tra i rami paralleli dell'universo n. ${c.seme}…` : come === 'qui' ? `cerco un'inquadratura più bella nell'universo n. ${c.seme}…` : 'sfoglio la biblioteca: molti universi, molte inquadrature…');
   cercatore = new Worker(new URL('./cercatore.js', import.meta.url), { type: 'module' });
   const seme = Math.floor(Math.random() * 1e9);
   cercatore.onmessage = (ev) => {
     const m = ev.data;
     if (m.errore) { stato(`la ricerca non è riuscita: ${m.errore.split('\n')[0]}`); console.error(m.errore); return; }
     if (!m.fatto && m.fase === 'cerca') stato(`${come === 'qui' ? 'provo inquadrature' : 'sfoglio la biblioteca'}… ${Math.round(m.frazione * 100)}% · la più bella finora: ${m.migliore ? m.migliore.bellezza.totale.toFixed(2) : '–'}`);
-    if (!m.fatto && m.fase === 'perfeziona') stato(`quasi bella: cerco tra gli universi vicini quello senza linee a caso… ${Math.round(m.frazione * 100)}% · ${m.bellezza.totale.toFixed(2)}`);
+    if (!m.fatto && m.fase === 'perfeziona') stato(`quasi bella: risalgo ai decadimenti da cui nascono le linee storte, e cerco il ramo in cui sono andati diversamente… ${Math.round(m.frazione * 100)}% · ${m.bellezza.totale.toFixed(2)}`);
     if (m.fatto) {
       const b = m.migliore; cercatore.terminate(); cercatore = null;
-      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista); comp.elementi[0].cella.ripeti = clona(b.ripeti);
-      // l'universo vicino: lo stesso numero, appena diverso
-      if (b.cella.vicino) { const e = comp.elementi[0]; e.cella = { ...b.cella, finestra: b.finestra, sezione: b.sezione, vista: b.vista, ripeti: b.ripeti }; e.nome = comp.nome = `${e.nome}, vicino ${b.cella.vicino}`; }
+      // il ramo trovato: lo stesso universo, con alcuni decadimenti andati diversamente
+      ricorda(); comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista, b.ripeti, { rami: b.cella.rami, separato: b.cella.separato });
       corrente = 0; sel = null; scelto = null;
       vista = 'pattern'; adattaPattern(); aggiornaVista();
       const x = b.bellezza;
-      stato(`trovata: universo n. ${b.numero}${b.cella.vicino ? ` (un vicino, ${b.cella.vicino} passi più in là)` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · ${GRUPPI[b.ripeti.gruppo].nome} · inchiostro ${x.pieno.toFixed(2)}, celle ${x.celle.toFixed(2)}, nitidezza ${x.nitido.toFixed(2)}, linee distese ${x.distese.toFixed(2)}, pulizia ${x.pulizia.toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
+      stato(`trovata: universo n. ${b.numero}${nomeRamo(b.cella) ? `, ${nomeRamo(b.cella)}` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · ${GRUPPI[b.ripeti.gruppo].nome} · inchiostro ${x.pieno.toFixed(2)}, celle ${x.celle.toFixed(2)}, nitidezza ${x.nitido.toFixed(2)}, linee distese ${x.distese.toFixed(2)}, pulizia ${x.pulizia.toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
     }
   };
   const da = 1 + Math.floor(Math.random() * 999000);

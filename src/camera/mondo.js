@@ -94,6 +94,19 @@ export function generatore(seme) {
   let a = seme >>> 0 || 1;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+// I RAMI. Ogni particella ha un indirizzo nella sua genealogia: «3» è la terza
+// sorgente, «3.0» la sua prima figlia, «3.0.1» la seconda figlia di quella. Il
+// suo decadimento (quando, e in che direzioni partono le figlie) è un evento
+// quantistico: ha il suo caso, che dipende solo dal seme e dall'indirizzo.
+// Un universo parallelo è lo stesso universo con alcuni eventi andati
+// diversamente: mondo.rami = { indirizzo: n } sceglie l'esito n-esimo di
+// quell'evento. Tutto il resto resta identico; cambia solo ciò che ne discende.
+export function casoEvento(seme, indirizzo, ramo = 0) {
+  let h = (seme >>> 0) ^ 0x811c9dc5;
+  const s = `${indirizzo}|${ramo}`;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return generatore((h ^ (h >>> 16)) >>> 0);
+}
 // una mappa si può scrivere compatta: «sparsa» = [scarto d'indice, valore, ...]
 const mappeDense = new WeakMap();
 function densa(m, chiave = 'sparsa') {
@@ -200,7 +213,7 @@ export function simulaMondo(mondo, opzioni = {}) {
   const leggiIn = { ...LEGGI, ...(mondo.leggi || {}) };
   const f0 = { B: 0, K: 0, ...(mondo.fondo || {}) };
   const domini = mondo.domini || [], tutteMasse = mondo.masse || [];
-  const continui = campiContinui(mondo), caso = generatore(mondo.seme ?? 1);
+  const continui = campiContinui(mondo), seme = mondo.seme ?? 1, rami = mondo.rami || {};
   const scatti = [...new Set([...domini, ...tutteMasse].flatMap((o) => (o.interruttori || []).map((e) => e.t)).concat(Object.values(leggiIn).flatMap((v) => (Array.isArray(v) ? v.map((e) => e.t) : []))))].sort((a, b) => a - b);
   const prossimoScatto = (t) => { for (const x of scatti) if (x > t + 1e-12) return x; return Infinity; };
   let S, masse; // lo stato del mondo adesso: tra due scatti non cambia
@@ -237,7 +250,7 @@ export function simulaMondo(mondo, opzioni = {}) {
     const specie = risolviSpecie(s.specie, catalogo), v = specie.luce ? C : s.v;
     // «vita» sulla sorgente: l'istante in cui QUESTA particella decade (le particelle di una
     // stessa specie decadono ognuna a un istante diverso; la specie ne dà solo la media)
-    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null, vita: s.vita };
+    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.t0 ?? 0, sorgente: i, generazione: 0, madre: null, vita: s.vita, ev: `${i}` };
   }).filter(Boolean);
   let nate = 0;
 
@@ -245,6 +258,8 @@ export function simulaMondo(mondo, opzioni = {}) {
     const p = coda.shift(); nate++;
     const sp = p.specie, luce = !!sp.luce, q = luce ? 0 : sp.q ?? 0, m = sp.m ?? 1;
     // la vita di QUESTA particella: data, o estratta dalla vita media della specie
+    // (il suo caso: quello del suo evento, nel ramo scelto per questo universo)
+    const caso = casoEvento(seme, p.ev, rami[p.ev] ?? 0);
     const vita = p.vita ?? sp.vita ?? (sp.vitaMedia != null ? -sp.vitaMedia * Math.log(1 - caso()) : Infinity);
     statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? q !== 0;
@@ -332,17 +347,17 @@ export function simulaMondo(mondo, opzioni = {}) {
       punti.push([x, y, visibile, t, larghezza(Math.hypot(vx, vy)), legge(c, gg[0], gg[1], Math.hypot(vx, vy))]);
       if (s.ferma) { fine = 'ferma'; vx = 0; vy = 0; break; }
     }
-    if (visibile && punti.length > 1) tracce.push({ id: tracce.length, punti, fine, specie: sp, sorgente: p.sorgente, generazione: p.generazione, madre: p.madre });
+    if (visibile && punti.length > 1) tracce.push({ id: tracce.length, punti, fine, specie: sp, sorgente: p.sorgente, generazione: p.generazione, madre: p.madre, evento: p.ev });
     // il decadimento: le figlie partono da qui, ora
     if (fine === 'decade' && sp.figli) {
       const v = Math.hypot(vx, vy), dir = Math.atan2(vy, vx), P = luce ? m * C : m * v;
-      for (const f of sp.figli) {
+      sp.figli.forEach((f, k) => {
         const estrai = (x, d) => (Array.isArray(x) ? x[0] + caso() * (x[1] - x[0]) : x ?? d);
         const fs = risolviSpecie(f.specie, catalogo), a = dir + (estrai(f.angolo, 0) * Math.PI) / 180, mf = fs.m ?? 1;
         const vf = fs.luce ? C : Math.min(0.95 * C, f.v != null ? f.v : (estrai(f.quota, 0.5) * (P || m * pel.vRif)) / mf);
-        coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t } });
-      }
-      decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione });
+        coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
+      });
+      decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione, evento: p.ev });
     }
   }
   for (const s of sagomeImpresse(mondo)) tracce.push({ ...s, id: tracce.length });
