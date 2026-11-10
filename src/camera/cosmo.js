@@ -20,6 +20,8 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
+import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO } from './leggi.js';
+const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
 
@@ -84,6 +86,7 @@ export const cosmo = memo((n) => {
     G.tipo = r.c() < 0.72 ? 'spirale' : 'ellittica'; G.bracci = r.intero(2, 4); G.angolo = r.tra(0, 2 * Math.PI); G.passo = r.tra(0.25, 0.5);
     G.schiacciata = G.tipo === 'ellittica' ? r.tra(0.45, 0.95) : 1; G.attivita = Math.pow(r.c(), 2.2); G.getto = r.tra(0, Math.PI);
     G.tinta = G.tipo === 'ellittica' ? [255, 214, 170] : [210, 222, 255];
+    G.formazione = (0.4 + 2.5 / (1 + G.peso) + r.tra(0, 0.8)) * 1e9 * ANNO; // le più dense si formano prima
   });
   return { n, modi, densita, griglia, N, media, sigma, galassie };
 });
@@ -107,18 +110,39 @@ export const galassia = memo((n, id) => {
       const a = G.angolo + (2 * Math.PI * braccio) / G.bracci + Math.log(r / 0.08) / Math.tan(G.passo) + gauss() * (c() < 0.7 ? 0.18 : 0.6);
       x = r * Math.cos(a); y = r * Math.sin(a);
     }
-    const massa = Math.min(40, 0.3 * Math.pow(1 - c() * 0.999, -1 / 1.35)), T = 3000 * Math.pow(massa / 0.3, 0.55);
-    stelle.push({ id: s, pos: [x, y], massa, T, colore: colorePerTemperatura(T) });
+    // la stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
+    // misurata, e un campo magnetico suo; poi vive secondo le sue equazioni fino a «adesso»
+    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita, vita = stellaVera(m0);
+    if (eta < vita.vita * ANNO) {
+      const gigante = eta > 0.9 * vita.vita * ANNO, T = gigante ? Math.min(vita.T, 4200) : vita.T;
+      stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0 });
+    } else {
+      const f = fine(m0, B0), morta = (eta - vita.vita * ANNO) / ANNO;
+      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta });
+    }
   }
-  // il buco nero e le sorgenti dei raggi cosmici: il suo getto, i resti di supernova, le pulsar
+  // le sorgenti dei raggi cosmici EMERGONO dalla storia: le supernove nascono dalle stelle massicce
+  // che muoiono (quante ne muoiono all'anno discende da quante stelle nascono e da quanto vivono le
+  // grandi), le pulsar sono le stelle di neutroni giovani che quelle lasciano; il getto è del buco nero.
+  const massaStelle = 2e10 * Math.min(4, G.peso + 0.5), frazioneMassicce = 0.0062, durata = ADESSO - G.formazione;
+  const ritmoSN = (G.tipo === 'ellittica' ? 0.05 : 1) * ((massaStelle / 0.57) * frazioneMassicce * ANNO) / durata; // supernove all'anno (nelle ellittiche solo nane bianche che esplodono)
+  const giovani = stelle.filter((x) => x.stato === 'in vita' || x.stato === 'gigante rossa').filter((x) => Math.hypot(...x.pos) > 0.15);
   const sorgenti = [{ tipo: 'getto', nome: 'il getto del buco nero', pos: [0, 0], potenza: 2 + 10 * G.attivita, angolo: G.getto }];
-  const nRes = 3 + Math.floor(c() * 6);
-  for (let k = 0; k < nRes; k++) {
-    const s = stelle[Math.floor(c() * STELLE)];
-    sorgenti.push({ tipo: 'supernova', nome: `il resto della supernova ${k + 1}`, pos: s.pos.slice(), r: tra(0.01, 0.045), potenza: tra(0.6, 2) });
-    if (c() < 0.4) sorgenti.push({ tipo: 'pulsar', nome: `la pulsar nel resto ${k + 1}`, pos: [s.pos[0] + tra(-0.005, 0.005), s.pos[1] + tra(-0.005, 0.005)], potenza: tra(0.3, 1) });
+  let t = 0;
+  for (let k = 0; k < 8; k++) {
+    t += -Math.log(1 - c()) / Math.max(1e-9, ritmoSN); // le più giovani: gli intervalli tra le morti
+    if (t > 1e5) break;
+    // nelle ellittiche (e una volta su sette nelle spirali) esplode una nana bianca che ha preso troppa
+    // materia da una compagna: non resta niente; altrimenti è il nucleo di una stella grande che collassa
+    const ia = G.tipo === 'ellittica' || c() < 0.15;
+    const dove = (ia ? stelle.filter((x) => x.stato === 'nana bianca') : giovani.length ? giovani : stelle).concat(stelle)[0 + Math.floor(c() * (ia ? stelle.filter((x) => x.stato === 'nana bianca').length || stelle.length : giovani.length || stelle.length))];
+    const prog = 8 + 30 * Math.pow(c(), 2), f = ia ? { tipo: 'niente (è esplosa una nana bianca)' } : fine(prog, Math.pow(10, -5 + 3 * c()));
+    sorgenti.push({ tipo: 'supernova', nome: `il resto della supernova ${k + 1}`, pos: dove.pos.slice(), r: Math.min(0.045, 0.008 + 0.00005 * Math.pow(t, 0.4)), potenza: 2.5 * Math.exp(-t / 3e4), eta: t, resto: f.tipo });
+    if (f.tipo === 'stella di neutroni') sorgenti.push({ tipo: 'pulsar', nome: `la ${f.B > 1e10 ? 'magnetar' : 'pulsar'} nel resto ${k + 1}`, pos: [dove.pos[0] + tra(-0.004, 0.004), dove.pos[1] + tra(-0.004, 0.004)], potenza: 0.4 + Math.min(1.5, Math.log10(f.B / 1e7) * 0.3), B: f.B, eta: t });
   }
-  return { G, stelle, sorgenti, buco: { M: 0.5 + 2 * G.attivita } };
+  // il buco nero centrale: circa due millesimi della massa del nucleo della galassia (relazione misurata)
+  const buco = { M: 0.002 * massaStelle * 0.2, attivita: G.attivita };
+  return { G, stelle, sorgenti, buco, ritmoSN };
 });
 
 // ---------- le grandezze vere di ogni livello (per il metro sullo schermo). Tra un livello e

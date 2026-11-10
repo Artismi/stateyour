@@ -145,6 +145,22 @@ linee e archi, come i girih. Le spirali torneranno dove nascono da sole: vicino
 alle stelle morte magnetiche, o in un laboratorio, se una civiltà nascerà dalle
 regole.
 
+**Le leggi, da cui tutto discende** (`src/camera/leggi.js`). Le costanti della
+natura (c, G, ħ, le masse delle particelle) e i parametri del cosmo (quanta
+materia, quanta energia oscura, la forza delle fluttuazioni). Da questi si
+calcola: l'età dell'universo (13,8 miliardi di anni, esatta per un cosmo
+piatto), la massa massima di una nana bianca (Chandrasekhar, 1,43 masse
+solari) e di una stella di neutroni (2,2), i loro raggi (8700 km, 12 km),
+quanto vive una stella e che cosa diventa quando muore; il campo di ciò che
+resta cresce da solo, perché il flusso magnetico si conserva mentre la stella
+si contrae (pulsar da 10⁶ a 10⁹ tesla). Le stelle di una galassia nascono nella
+sua storia (con la distribuzione delle masse misurata, dichiarata come tale) e
+vivono fino a «adesso»: alcune sono già nane bianche, stelle di neutroni, buchi
+neri. Le sorgenti dei raggi cosmici non sono più messe: le supernove sono le
+stelle massicce che muoiono (quante all'anno discende da quante ne nascono e da
+quanto vivono), le pulsar sono ciò che lasciano; nelle ellittiche esplodono solo
+nane bianche, che non lasciano niente.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al
