@@ -56,7 +56,7 @@ export function storia(tr, esp) {
   const lung = P.reduce((L, p, i) => (i && P[i - 1][2] && p[2] ? L + Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]) : L), 0);
   return `Questa linea è ${chi}. ${cap(nascita)}. Lungo la strada ${cosa.join(', ')}. Alla fine ${FINI[tr.fine] || tr.fine}. Lunghezza ${fmt(lung)}, dal tempo ${fmt(P[0][3])} al tempo ${fmt(P[P.length - 1][3])}.`;
 }
-export const fmt = (x) => (Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2)).replace(/\.?0+$/, '') || '0';
+export const fmt = (x) => { const t = Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : Math.abs(x) >= 0.1 || x === 0 ? x.toFixed(2) : x.toPrecision(2); return t.includes('.') && !t.includes('e') ? t.replace(/0+$/, '').replace(/\.$/, '') : t; };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 // ---------- gli esperimenti di partenza: ognuno è un evento fisico possibile
@@ -189,3 +189,125 @@ export function palmetta(N = 7) {
 }
 
 export const PRESET = { fiore, voluta, palmetta, lente, biliardo };
+
+// ---------- la stessa storia in un mondo più grande (o più piccolo)
+// Una similitudine della fisica: le lunghezze e i tempi si moltiplicano per k,
+// le velocità restano. Allora il campo diventa B/k (r = m·v/(q·B)), la materia
+// K/k (la gittata va come 1/K), le masse M·k (v² = G·M/r), la pellicola w0·k.
+export function scalaCella(cella, k) {
+  const c = clona(cella), S = (p) => p.map((x) => x * k);
+  c.larghezza *= k; c.altezza *= k; c.tempo = (c.tempo ?? 200) * k;
+  if (c.fondo) { c.fondo.B = (c.fondo.B ?? 0) / k; c.fondo.K = (c.fondo.K ?? 0) / k; }
+  for (const d of c.domini || []) {
+    const f = d.forma;
+    if (f.centro) f.centro = S(f.centro);
+    if (typeof f.r === 'number') f.r *= k; else if (Array.isArray(f.r)) f.r = S(f.r);
+    if (f.punti) f.punti = f.punti.map(S);
+    if (d.B != null) d.B /= k; if (d.K != null) d.K /= k;
+  }
+  for (const m of c.masse || []) { m.pos = S(m.pos); m.M *= k; m.R = (m.R ?? 0) * k; }
+  for (const p of c.pareti || []) { p.a = S(p.a); p.b = S(p.b); }
+  if (c.pellicola) c.pellicola.w0 = (c.pellicola.w0 ?? 1) * k;
+  for (const s of Object.values(c.specie || {})) if (s.vita != null) s.vita *= k;
+  for (const s of c.sorgenti || []) { s.pos = S(s.pos); if (s.t0) s.t0 *= k; }
+  return c;
+}
+const elemento = (esp, k = 1) => { const c = centraCella(esp.cella).cella; return { nome: esp.nome, nota: esp.nota, cella: k === 1 ? c : scalaCella(c, k), posti: [] }; };
+
+// ---------- la composizione: tanti elementi, un reticolo infinito
+// composizione = { nome, nota, reticolo: { a, b }, elementi: [{ nome, nota, cella, posti: [{ pos, rot, specchio }] }] }
+// Ogni elemento è un evento fisico nella sua cella; i posti dicono dove il
+// centro della cella cade dentro la piastrella del reticolo, ruotato (gradi) e
+// forse riflesso (l'universo riflesso, con B rovesciato). La piastrella si
+// ripete all'infinito lungo a e b.
+export function trasformaPosto(cella, posto, origine = [0, 0]) {
+  const r = ((posto.rot ?? 0) * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r), f = posto.specchio ? -1 : 1;
+  const W2 = cella.larghezza / 2, H2 = cella.altezza / 2;
+  // T(pos) · R(rot) · S(f, 1) · T(−W/2, −H/2)
+  const a = c * f, b = s * f, cc = -s, d = c;
+  return [a, b, cc, d, origine[0] + posto.pos[0] - (a * W2 + cc * H2), origine[1] + posto.pos[1] - (b * W2 + d * H2)];
+}
+
+export const COMPOSIZIONI = {
+  'fiori e riempitivi': () => {
+    const fi = elemento(fiore(6)), st = elemento({ ...fiore(4), nome: 'la stellina', nota: 'lo stesso evento del fiore, con quattro fotoni e in un mondo più piccolo' }, 0.42), vo = elemento({ ...voluta(), nome: 'le volute' }, 0.36);
+    fi.posti.push({ pos: [0, 0], rot: 0 });
+    st.posti.push({ pos: [125, 125], rot: 45 });
+    vo.posti.push({ pos: [125, 0], rot: 90 }, { pos: [0, 125], rot: 0 });
+    return { nome: 'fiori e riempitivi', nota: 'un fiore per piastrella; tra i fiori una stellina e due coppie di volute', reticolo: { a: [250, 0], b: [0, 250] }, elementi: [fi, st, vo] };
+  },
+  'volute a specchio': () => {
+    const vo = elemento(voluta()), pa = elemento(palmetta(), 0.55);
+    vo.posti.push({ pos: [0, 0], rot: 0 }, { pos: [110, 95], rot: 180, specchio: true });
+    pa.posti.push({ pos: [110, 0], rot: 0 }, { pos: [0, 95], rot: 180 });
+    return { nome: 'volute a specchio', nota: 'volute e palmette alternate, a righe capovolte', reticolo: { a: [220, 0], b: [0, 190] }, elementi: [vo, pa] };
+  },
+  'palmette sfalsate': () => {
+    const pa = elemento(palmetta()), fi = elemento({ ...fiore(5), nome: 'il bocciolo' }, 0.4);
+    pa.posti.push({ pos: [0, 0], rot: 0 });
+    fi.posti.push({ pos: [100, 80], rot: 0 });
+    return { nome: 'palmette sfalsate', nota: 'palmette su un reticolo sfalsato, un bocciolo tra l\'una e l\'altra', reticolo: { a: [200, 0], b: [100, 160] }, elementi: [pa, fi] };
+  },
+  'lenti': () => {
+    const le = elemento(lente());
+    le.posti.push({ pos: [0, 0], rot: 0 }, { pos: [100, 100], rot: 90 });
+    return { nome: 'lenti', nota: 'masse che piegano la luce, a scacchiera', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [le] };
+  },
+  'biliardi': () => {
+    const bi = elemento(biliardo());
+    bi.posti.push({ pos: [0, 0], rot: 0 });
+    return { nome: 'biliardi', nota: 'un raggio chiuso tra specchi riempie la piastrella', reticolo: { a: [200, 0], b: [0, 200] }, elementi: [bi] };
+  },
+};
+export const ELEMENTI = { fiore: () => fiore(6), stellina: () => fiore(4), voluta, palmetta, lente, biliardo };
+export const nuovoElemento = (chi, k = 1) => elemento(ELEMENTI[chi](), k);
+
+// ---------- da un'immagine: lo schema della lingua diventa una composizione
+// Ogni parola trovata dalla decodifica (con la sua simmetria, la sua taglia e
+// i posti dove compare) diventa un evento fisico con la stessa simmetria e la
+// stessa taglia: un fiore a n petali per una simmetria di ordine n ≥ 2, una
+// voluta per una simmetria a specchio o nessuna. È una prima bozza: lo stesso
+// schema, con parole fisiche al posto di quelle disegnate.
+// spostare tutto un mondo non cambia la sua fisica: si porta il centro del
+// disegno nel centro della cella, così il posto cade dove cade il motivo
+export function centraCella(cella) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const t of simulaMondo(cella)) for (const p of t.punti) if (p[2]) { x0 = Math.min(x0, p[0] - p[4] / 2); x1 = Math.max(x1, p[0] + p[4] / 2); y0 = Math.min(y0, p[1] - p[4] / 2); y1 = Math.max(y1, p[1] + p[4] / 2); }
+  if (!isFinite(x0)) return { cella, raggio: 1 };
+  const dx = cella.larghezza / 2 - (x0 + x1) / 2, dy = cella.altezza / 2 - (y0 + y1) / 2, c = clona(cella), T = (p) => [p[0] + dx, p[1] + dy];
+  for (const d of c.domini || []) { if (d.forma.centro) d.forma.centro = T(d.forma.centro); if (d.forma.punti) d.forma.punti = d.forma.punti.map(T); }
+  for (const m of c.masse || []) m.pos = T(m.pos);
+  for (const p of c.pareti || []) { p.a = T(p.a); p.b = T(p.b); }
+  for (const s of c.sorgenti || []) s.pos = T(s.pos);
+  return { cella: c, raggio: Math.max(x1 - x0, y1 - y0) / 2 };
+}
+const naturali = new Map();
+function base(chi) {
+  if (!naturali.has(chi)) { const esp = chi.startsWith('fiore') ? fiore(+chi.slice(5)) : ELEMENTI[chi](), { cella, raggio } = centraCella(esp.cella); naturali.set(chi, { esp: { ...esp, cella }, raggio }); }
+  return naturali.get(chi);
+}
+export function daSchema(schema, misure) {
+  const W = misure.larghezza, H = misure.altezza;
+  let a = [W, 0], b = [0, H], ret = schema.reticolo;
+  if (ret && ret.v2) { a = [ret.v1[0], -ret.v1[1]]; b = [ret.v2[0], -ret.v2[1]]; }
+  const det = a[0] * b[1] - a[1] * b[0];
+  const ridotto = (p) => { if (!ret || !ret.v2) return p; const u = (b[1] * p[0] - b[0] * p[1]) / det, v = (-a[1] * p[0] + a[0] * p[1]) / det, fu = u - Math.floor(u), fv = v - Math.floor(v); return [fu * a[0] + fv * b[0], fu * a[1] + fv * b[1]]; };
+  const elementi = [];
+  for (const w of schema.parole) {
+    const n = w.simmetria.n ?? 1, tipo = w.simmetria.tipo;
+    const chi = n >= 2 ? `fiore${Math.min(12, n)}` : 'voluta';
+    const { esp: b0, raggio: r0 } = base(chi);
+    const k = Math.max(0.05, w.raggio / r0);
+    const el = elemento({ ...b0, nome: `parola ${w.nome}`, nota: `${tipo === 'D' ? `simmetria D${n}` : tipo === 'C' ? `simmetria C${n}` : 'nessuna simmetria'}, ${w.istanze.length} volte nell'immagine, raggio ${fmt(w.raggio)}: ${b0.nota}` }, k);
+    // l'asse dello specchio della parola (nell'immagine) sull'asse della voluta
+    const asse = tipo === 'D' && w.simmetria.asse != null ? (w.simmetria.asse * 180) / Math.PI : 90;
+    const rot0 = chi === 'voluta' ? asse - 90 : 0;
+    for (const ist of w.istanze) {
+      const pos = ridotto(ist.pos);
+      if (el.posti.some((p) => Math.hypot(p.pos[0] - pos[0], p.pos[1] - pos[1]) < w.raggio * 0.4)) continue;
+      el.posti.push({ pos: pos.map((x) => Math.round(x * 100) / 100), rot: Math.round((rot0 + ist.rot) * 10) / 10, specchio: !!ist.specchio });
+    }
+    elementi.push(el);
+  }
+  return { nome: 'dall\'immagine', nota: `${schema.parole.length} parole lette dall'immagine, ognuna sostituita da un evento fisico con la stessa simmetria e la stessa taglia. Prima bozza: entra in ogni parola e regola la fisica.`, reticolo: { a, b }, elementi, finita: !(ret && ret.v2) };
+}

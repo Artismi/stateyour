@@ -47,7 +47,27 @@
   .figlia { border-left: 2px solid var(--riga); padding-left: 6px; margin: 8px 0; }
   .piccolo { padding: 0 6px; font-size: 11px; }
   .misure { font-size: 12px; margin-top: 8px; }
-  .riga-bottoni { display: flex; gap: 4px; margin-top: 14px; }
+  .riga-bottoni { display: flex; gap: 4px; margin-top: 8px; }
+  label.file { border: 1px solid var(--riga); background: #fff; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
+  label.file input { display: none; }
+  body.in-pattern .strumenti { opacity: 0.45; }
+  .sotto.spento { opacity: 0.45; }
+  .sopra { position: absolute; left: 10px; top: 8px; right: 10px; pointer-events: none; }
+  .forze { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; pointer-events: auto; }
+  .forze button { border: 1px solid var(--c); color: var(--c); background: rgba(255,255,255,0.75); padding: 3px 8px; border-radius: 14px; font-size: 12px; }
+  .forze button i { font-style: normal; }
+  .forze button small { color: var(--grigio); font-size: 10.5px; }
+  .forze button.acceso { background: var(--c); color: #fff; }
+  .forze button.acceso small { color: rgba(255,255,255,0.85); }
+  .forze .colori { font-size: 11.5px; color: var(--grigio); margin-left: 6px; background: rgba(243,239,230,0.8); padding: 2px 6px; border-radius: 3px; }
+  #spiegaForza { margin-top: 6px; max-width: 640px; font-size: 12px; background: rgba(255,255,255,0.92); border-radius: 3px; pointer-events: none; }
+  #spiegaForza:not(:empty) { padding: 6px 8px; border: 1px solid var(--riga); }
+  .elemento { border: 1px solid var(--riga); border-radius: 4px; padding: 6px 8px; margin: 6px 0; background: #fffdf8; }
+  .elemento.scelto { border-color: var(--accento); }
+  .elemento .testa { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .briciole { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; }
+  button.primo { background: var(--accento); color: #fff; border-color: var(--accento); }
+  .riga-bottoni { flex-wrap: wrap; }
   dialog { border: 1px solid var(--riga); border-radius: 4px; width: min(720px, 92vw); }
   dialog textarea { width: 100%; height: 360px; font: 11px ui-monospace, monospace; }
 </style>
@@ -56,9 +76,16 @@
 <header>
   <h1>stateyour · la camera</h1>
   <div class="gruppo">
-    <select id="esperimento" title="un evento di partenza"></select>
+    <select id="composizione" title="un pattern di partenza"></select>
+    <label class="file" title="decodifica un'immagine: le sue parole diventano eventi fisici">immagine…<input type="file" id="file" accept="image/*"></label>
+    <button id="esempio">tavola greca</button>
   </div>
-  <div class="gruppo">
+  <div class="gruppo viste">
+    <button data-vista="pattern" class="attivo" title="tutti gli elementi sulla griglia infinita">▦ il pattern</button>
+    <button data-vista="dettaglio" title="un elemento solo: la sua fisica">◉ l'elemento <span id="nomeElemento"></span></button>
+    <button data-vista="spaziotempo" title="l'elemento con il tempo che sale">⧗ spaziotempo</button>
+  </div>
+  <div class="gruppo strumenti">
     <button data-strumento="seleziona" class="attivo" title="tocca e trascina le cose sulla scena">✋ tocca</button>
     <button data-strumento="sorgente" title="clicca dove far nascere una particella">+ sorgente</button>
     <button data-strumento="campo" title="una zona con campo magnetico">+ campo</button>
@@ -66,19 +93,10 @@
     <button data-strumento="massa" title="una massa ferma che curva lo spazio">+ massa</button>
     <button data-strumento="specchio">+ specchio</button>
     <button data-strumento="vetro" title="una zona di vetro che rifrange la luce">+ vetro</button>
+  </div>
+  <div class="gruppo">
     <button id="elimina" title="elimina la cosa scelta (Canc)">✕</button>
-  </div>
-  <div class="gruppo">
     <button id="annulla" title="annulla (Ctrl+Z)">↶</button><button id="rifai" title="rifai (Ctrl+Y)">↷</button>
-  </div>
-  <div class="gruppo">
-    <button data-vista="fiore" class="attivo" title="una cella sola: l'evento">un motivo</button>
-    <button data-vista="pattern" title="la cella ripetuta">il pattern</button>
-    <button data-vista="spaziotempo" title="l'evento nello spaziotempo: il tempo sale">spaziotempo</button>
-    <select id="ripTipo" title="come si ripete la cella"><option value="nessuna">una cella</option><option value="quadrato">griglia</option><option value="sfalsato">sfalsata</option><option value="specchio">a specchio</option></select>
-    <input type="number" id="ripCol" min="1" max="12" title="colonne"><input type="number" id="ripRighe" min="1" max="12" title="righe">
-  </div>
-  <div class="gruppo">
     <button id="seme" title="il seme: le condizioni iniziali, tutto il resto è conseguenza">il seme</button>
     <button id="scarica">scarica</button>
   </div>
@@ -86,7 +104,7 @@
 </header>
 <main>
   <section class="scena">
-    <div class="tele"><canvas id="tela"></canvas><canvas id="tela3d" hidden></canvas></div>
+    <div class="tele"><canvas id="tela"></canvas><canvas id="tela3d" hidden></canvas><div class="sopra"><div id="forze" class="forze"></div><div id="spiegaForza"></div></div></div>
     <div class="sotto">
       <button id="gioca" title="guarda l'evento accadere">▶</button>
       <input type="range" id="tempo" min="0" max="1" step="0.001" value="1" title="il tempo">
@@ -99,7 +117,7 @@
   <aside id="pannello"></aside>
 </main>
 <dialog id="dialogo">
-  <p><b>il seme</b>: le condizioni iniziali di questa cella di spaziotempo, dove stanno le masse, i campi, i mezzi, gli specchi, che cosa sono le particelle e dove nascono. Le leggi sono fisse; tutto il resto, ogni linea, ogni spessore, è conseguenza.</p>
+  <p><b>il seme</b>: il pattern intero. La piastrella (a, b), gli elementi e i loro posti; per ogni elemento le condizioni iniziali della sua cella di spaziotempo, dove stanno le masse, i campi, i mezzi, gli specchi, che cosa sono le particelle e dove nascono. Le leggi sono fisse; tutto il resto, ogni linea, ogni spessore, è conseguenza.</p>
   <textarea id="testoSeme" spellcheck="false"></textarea>
   <div class="riga-bottoni"><button id="usaSeme" class="attivo">usa questo seme</button><button id="chiudiSeme">chiudi</button></div>
 </dialog>

@@ -10,7 +10,8 @@ una cella di spaziotempo: in uno dei tanti universi possibili, le masse, i
 campi e i mezzi stanno esattamente dove servono perché, guardato da qui,
 quell'evento abbia la forma del motivo.
 
-**Il seme è la storia: le condizioni iniziali.** Dove stanno le masse, dove
+**Il seme è la storia: le condizioni iniziali.** La piastrella e i posti
+degli elementi; per ogni elemento dove stanno le masse, dove
 c'è campo magnetico, dove c'è materia, dove c'è vetro, dove sono gli specchi,
 che cosa sono le particelle (carica, massa, vita, in che cosa decadono) e dove
 nascono, verso dove, a che velocità. Le leggi sono fisse; ogni linea, ogni
@@ -33,34 +34,66 @@ loro, quindi non c'è problema a molti corpi e il calcolo è leggero (ogni
 evento di partenza si simula in pochi millisecondi). Dentro un dominio senza
 masse il passo è esatto (rotazione, Bethe in forma chiusa, corda dell'arco).
 
-**Il laboratorio** (`src/camera/laboratorio.js`): si guarda UN motivo, e le
-cose che lo producono sono sulla scena e si trascinano:
+**Il laboratorio** (`src/camera/laboratorio.js`) ha tre livelli, sempre
+collegati:
 
-- la freccia verde è una sorgente: il cerchio la sposta, la punta cambia
-  direzione e velocità;
-- le zone colorate sono domini: ⊙ blu campo B positivo, ⊗ rosso negativo,
-  grigio materia, azzurro vetro; si spostano dal centro e si allargano dal
-  quadratino sul bordo;
-- i dischi scuri sono masse, con gli anelli dove la caduta è forte;
-- i segmenti grigi sono specchi;
-- clic su una linea: il pannello racconta la sua storia (chi è, da chi è
-  nata, quali leggi l'hanno piegata, perché finisce) e mostra la sua specie.
+- **Il pattern.** La piastrella (due vettori a e b) si ripete all'infinito.
+  Ogni motivo è un *elemento*: un evento fisico nella sua cella, messo in uno o
+  più *posti* della piastrella (con una rotazione, e forse a specchio). Le
+  parole ripetute e i riempitivi sono tutti elementi. Passando sopra un motivo
+  si accendono tutte le sue copie; un clic entra nell'elemento; trascinandolo
+  si sposta con tutte le copie; il fondo si trascina, la rotella fa lo zoom, i
+  pallini a e b cambiano la piastrella. Ogni elemento si simula una volta sola
+  e si disegna in ogni copia: la copia ruotata è lo stesso evento in un
+  universo ruotato, quella a specchio è l'universo riflesso con B rovesciato.
+- **L'elemento.** Un evento solo, con le cose che lo producono sulla scena e
+  trascinabili: la freccia verde (dove nasce la particella, verso dove, a che
+  velocità), le zone (campo, materia, vetro; si spostano dal centro e si
+  allargano dal quadratino), le masse, gli specchi. Il pannello mostra solo la
+  cosa scelta, con la frase che dice che cosa fa ogni numero; mentre la cambi,
+  in grigio resta com'era prima. Clic su una linea: la sua storia (chi è, da
+  chi nasce, quali forze la piegano, perché finisce).
+- **Lo spaziotempo.** L'elemento con il tempo che sale: le linee d'universo.
+  La luce, velocissima, sta quasi orizzontale (il cono di luce), le particelle
+  lente salgono ripide, le masse sono colonne ferme.
 
-Il pannello mostra solo la cosa scelta, e sotto ogni numero c'è la frase che
-dice che cosa cambia. Mentre muovi un cursore o trascini un oggetto, in grigio
-resta com'era prima. Passando sopra i cursori di una specie, si accendono le
-sue linee. Il tempo è una fetta: scorri e vedi l'evento accadere, con le
-particelle vive (blu +, rosse −, gialla la luce); la seconda barra restringe
-la fetta per vedere solo un intervallo. "Il pattern" ripete la cella (griglia,
-sfalsata, a specchio: la copia riflessa è lo stesso evento con B rovesciato,
-perché B è uno pseudoscalare); "spaziotempo" mostra le linee d'universo.
+**Le cinque forze si vedono**, ognuna col suo colore e il suo segno, nelle
+schede sopra la scena (clic: mostra o nasconde i suoi segni; passandoci sopra,
+la sua frase e le linee dove agisce):
 
-Gli eventi di partenza (`src/camera/esperimento.js`): il fiore (un nucleo
+| forza | colore | segno sulla scena |
+|---|---|---|
+| gravità | rosso | la massa, gli anelli, le frecce del campo che puntano verso di lei |
+| magnetismo | blu | la zona tinta, ⊙ (B esce dal foglio) o ⊗ (entra), il cartellino col valore |
+| materia | marrone | la zona a puntini, più fitti dove è più densa |
+| luce, specchi, vetri | giallo | gli specchi dorati, i vetri azzurri, i raggi |
+| decadimento | verde | le sorgenti e le stelle ✳ dove una particella si divide |
+
+Ogni tratto di linea ha il colore delle forze che agiscono lì, pesate per
+quanto sono forti: una spirale nasce blu (il campo la piega) e diventa marrone
+verso l'occhio (la materia la frena). **Passando sopra una linea** compaiono
+le frecce delle forze in quel punto (velocità nera, gravità rossa, magnetismo
+blu, materia marrone) con il loro valore. Il tempo è una fetta: scorrendolo si
+vedono le particelle vive (+, −, luce) con le loro frecce; la seconda barra
+restringe la fetta a un intervallo.
+
+**Da un'immagine.** La decodifica e la lingua (in un processo a parte) leggono
+le parole, la loro simmetria, la loro taglia e i loro posti; ogni parola
+diventa un evento fisico con la stessa simmetria e la stessa taglia (un fiore
+a n petali per l'ordine n ≥ 2, una voluta per lo specchio), centrato e scalato
+con la similitudine della fisica (`scalaCella`: lunghezze e tempi ×k, B/k,
+K/k, M·k, velocità uguali: la forma è identica). L'originale resta sotto per
+confronto. È una prima bozza: lo schema è quello dell'immagine, la fisica di
+ogni parola va poi regolata entrando nell'elemento.
+
+Gli elementi di partenza (`src/camera/esperimento.js`): il fiore (un nucleo
 decade in fotoni a raggiera, ogni fotone si converte in una coppia + −, il
-campo richiude la coppia in un petalo), la voluta (una neutra decade in + e −,
-due spirali opposte fino all'occhio), la palmetta (un ventaglio di cariche),
-la lente (una massa piega la luce e trattiene una carica in orbita), il
-biliardo (un raggio tra specchi e una goccia di vetro).
+campo richiude la coppia in un petalo), la stellina (lo stesso evento con
+quattro fotoni), la voluta (una neutra decade in + e −, due spirali opposte
+fino all'occhio), la palmetta (un ventaglio di cariche), la lente (una massa
+piega la luce e trattiene una carica in orbita), il biliardo (un raggio tra
+specchi e una goccia di vetro). Le composizioni: fiori e riempitivi, volute a
+specchio, palmette sfalsate, lenti, biliardi.
 
 **È sempre possibile creare qualunque forma?** In linea di principio sì: con
 abbastanza domini piccoli una carica segue a pezzi di cerchio qualunque curva

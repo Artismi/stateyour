@@ -299,6 +299,24 @@ export function simulaMondo(mondo, opzioni = {}) {
   return tracce;
 }
 
+// ---------- le forze in un punto, separate per legge (per vederle)
+// Restituisce le accelerazioni che ogni legge dà a una particella di quella
+// specie che passa in (x, y) con velocità (vx, vy), e il dominio dove si trova.
+export function forze(mondo, specie, x, y, vx, vy) {
+  const fondo = { B: 0, K: 0, n: 1, ...(mondo.fondo || {}) }, G = mondo.G ?? 1;
+  let d = { ...fondo, i: -1 };
+  (mondo.domini || []).forEach((dm, i) => { if (dentro(dm.forma, x, y)) d = { B: dm.B ?? fondo.B, K: dm.K ?? fondo.K, n: dm.n ?? fondo.n, i }; });
+  const sp = risolviSpecie(specie, mondo.specie), luce = !!sp.luce, q = luce ? 0 : sp.q ?? 0, m = sp.m ?? 1;
+  const v = Math.hypot(vx, vy) || 1e-12, ux = vx / v, uy = vy / v, out = { dominio: d, v };
+  let gx = 0, gy = 0;
+  for (const s of mondo.masse || []) { const dx = s.pos[0] - x, dy = s.pos[1] - y, r2 = dx * dx + dy * dy + 1e-9, k = (G * s.M) / (r2 * Math.sqrt(r2)); gx += k * dx; gy += k * dy; }
+  if (luce) { const k = 2 / (d.n * d.n), par = gx * ux + gy * uy; gx = k * (gx - par * ux); gy = k * (gy - par * uy); }
+  if (gx || gy) out.gravita = [gx, gy];
+  if (q && d.B) { const w = (q * d.B) / m; out.magnetico = [-w * vy, w * vx]; }
+  if (q && d.K) { const a = (d.K * q * q) / (m * v * v); out.materia = [-a * ux, -a * uy]; }
+  return out;
+}
+
 // ---------- un esperimento: più esposizioni sovrapposte sulla stessa lastra
 export function simulaEsperimento(esp, opzioni = {}) {
   const out = [];

@@ -1,7 +1,7 @@
 // test_camera.mjs — le cinque leggi della camera danno quello che la fisica prevede
 import assert from 'node:assert/strict';
-import { simulaMondo, raggio, gittata, deflessioneLuce } from '../src/camera/mondo.js';
-import { PRESET, copie, storia } from '../src/camera/esperimento.js';
+import { simulaMondo, raggio, gittata, deflessioneLuce, forze } from '../src/camera/mondo.js';
+import { PRESET, copie, storia, scalaCella, trasformaPosto, COMPOSIZIONI, daSchema, centraCella } from '../src/camera/esperimento.js';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 let ok = 0;
@@ -82,6 +82,50 @@ prova('ripetizione a specchio: la copia riflessa è lo stesso evento con B roves
 
 prova('tutti gli esperimenti di partenza girano in fretta', () => {
   for (const [k, f] of Object.entries(PRESET)) { const t0 = performance.now(), tr = simulaMondo(f().cella); assert.ok(tr.length > 0, k); assert.ok(performance.now() - t0 < 500, k); }
+});
+
+prova('la stessa storia in un mondo k volte più grande: B/k, K/k, M·k, e la forma è identica', () => {
+  for (const nome of ['voluta', 'fiore', 'lente']) {
+    const c = PRESET[nome]().cella, k = 0.37, a = simulaMondo(c), b = simulaMondo(scalaCella(c, k));
+    assert.equal(a.length, b.length, nome);
+    a.forEach((t, i) => { const p = t.punti.at(-1), q = b[i].punti.at(-1); assert.ok(Math.hypot(p[0] * k - q[0], p[1] * k - q[1]) < 1e-6 * c.larghezza, `${nome} ${i}`); assert.ok(Math.abs(p[4] * k - q[4]) < 1e-9); });
+  }
+});
+
+prova('le forze in un punto: il magnetismo vale q·v·B/m ed è perpendicolare, la materia frena', () => {
+  const c = PRESET.fiore().cella, F = forze(c, 'positrone', 100, 60, 6, 0);
+  assert.ok(Math.abs(Math.hypot(...F.magnetico) - 6 * 0.32) < 1e-12);
+  assert.ok(Math.abs(F.magnetico[0] * 6) < 1e-12);
+  assert.ok(F.materia[0] < 0 && Math.abs(F.materia[0] + 42 / 36) < 1e-12);
+  assert.equal(forze(c, 'fotone', 100, 60, 30, 0).magnetico, undefined);
+});
+
+prova('i posti: il centro della cella cade sul posto, ruotato e riflesso', () => {
+  const cella = { larghezza: 200, altezza: 100 };
+  for (const posto of [{ pos: [50, 60], rot: 0 }, { pos: [50, 60], rot: 90 }, { pos: [-30, 7], rot: 33, specchio: true }]) {
+    const M = trasformaPosto(cella, posto, [1000, 0]);
+    assert.ok(Math.hypot(M[0] * 100 + M[2] * 50 + M[4] - 1050 - posto.pos[0] + 50, M[1] * 100 + M[3] * 50 + M[5] - posto.pos[1]) < 1e-9);
+    assert.ok(Math.abs(M[0] * M[3] - M[1] * M[2] - (posto.specchio ? -1 : 1)) < 1e-12);
+  }
+});
+
+prova('le composizioni di partenza: ogni elemento ha posti e si simula', () => {
+  for (const [k, f] of Object.entries(COMPOSIZIONI)) { const c = f(); assert.ok(c.elementi.length && c.reticolo.a && c.reticolo.b, k); for (const e of c.elementi) { assert.ok(e.posti.length, k); assert.ok(simulaMondo(e.cella).length, `${k} ${e.nome}`); } }
+});
+
+prova("dall'immagine: le parole diventano eventi con la stessa simmetria, taglia e posti", () => {
+  const schema = { parole: [
+    { nome: 'A', raggio: 40, simmetria: { tipo: 'D', n: 6, asse: 0 }, istanze: [{ pos: [100, 100], rot: 0, specchio: false }, { pos: [300, 100], rot: 0, specchio: false }] },
+    { nome: 'B', raggio: 15, simmetria: { tipo: 'D', n: 1, asse: Math.PI / 2 }, istanze: [{ pos: [200, 200], rot: 0, specchio: false }] },
+  ], reticolo: null };
+  const comp = daSchema(schema, { larghezza: 400, altezza: 300 });
+  assert.equal(comp.elementi.length, 2);
+  assert.equal(comp.elementi[0].posti.length, 2);
+  assert.equal(comp.elementi[0].cella.specie.nucleo.figli.filter((f) => f.specie === 'fotone').length, 6);
+  // la taglia: il disegno dell'elemento sta in un cerchio di raggio circa 40 attorno al centro della cella
+  const { raggio: r } = centraCella(comp.elementi[0].cella);
+  assert.ok(Math.abs(r - 40) / 40 < 0.05, `${r}`);
+  assert.deepEqual(comp.reticolo, { a: [400, 0], b: [0, 300] });
 });
 
 console.log(`camera: ${ok} prove, tutto ok`);
