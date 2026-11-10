@@ -104,6 +104,31 @@ direzione esatta) è un evento. Perfezionare una sezione (`src/camera/vicini.js`
 decadimento da cui è nata e si passa al ramo in cui è andato diversamente. È la
 correzione minima, ed esiste davvero (nel senso dei molti mondi di Everett).
 
+**La fisica vera (primo passo).** Le regole sono ora quelle vere, a ogni scala
+che c'è (`src/camera/unita.js`): masse, cariche e vite vere delle particelle; la
+relatività (un muone che corre vive di più, e un protone veloce gira più
+largo); il campo di ogni pianeta è un dipolo vero, con l'intensità e il raggio
+in metri e tesla; il metro sullo schermo dice le distanze vere (tra un livello
+della mappa e l'altro lo zoom fa un salto, dentro ogni livello i rapporti sono
+veri). Niente è collocato: ciò che compare nasce dalle regole.
+
+I raggi cosmici di una regione si calcolano **all'indietro**: dal bordo della
+regione si segue ogni possibile raggio indietro nel tempo, nel campo vero del
+pianeta; se esce dalla magnetosfera è arrivato davvero, dalla direzione di una
+sorgente della galassia (e il cielo dei raggi pesa quante ne arrivano da lì);
+se sbatte contro il pianeta, quella strada non esiste. È come si calcolano i
+raggi che raggiungono la Terra (la soglia di Størmer): le magnetosfere forti,
+come quelle dei giganti, sono schermate davvero. Negli anelli, con la stessa
+densità che si vede sulla mappa, un raggio può urtare un granello di ghiaccio:
+ne esce uno sciame, i cui elettroni e positroni girano in riccioli opposti.
+
+Una conseguenza onesta: le spirali strette delle camere a bolle in natura quasi
+non ci sono (servono campi da laboratorio). A questa scala la natura disegna
+archi e piccoli riccioli; nel caleidoscopio diventano ornamenti geometrici di
+linee e archi, come i girih. Le spirali torneranno dove nascono da sole: vicino
+alle stelle morte magnetiche, o in un laboratorio, se una civiltà nascerà dalle
+regole.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al

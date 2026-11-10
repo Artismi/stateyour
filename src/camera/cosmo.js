@@ -18,7 +18,8 @@
 // le galassie sono altre). Il numero della biblioteca è l'indirizzo scritto in
 // cifre: numeri vicini sono posti vicini dello stesso universo.
 
-import { generatore } from './mondo.js';
+import { generatore, simulaMondo } from './mondo.js';
+import { unita, catalogoVero, velocita, fmtLunghezza } from './unita.js';
 
 export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
 
@@ -120,9 +121,19 @@ export const galassia = memo((n, id) => {
   return { G, stelle, sorgenti, buco: { M: 0.5 + 2 * G.attivita } };
 });
 
+// ---------- le grandezze vere di ogni livello (per il metro sullo schermo). Tra un livello e
+// l'altro lo zoom fa un salto: dentro ogni livello i rapporti sono quelli veri.
+export const TORO_M = 3.7e25; // il lato del cosmo richiuso (circa 1,2 miliardi di parsec)
+export const metriPerUnita = (livello, via) => {
+  if (livello === 0) return TORO_M;
+  if (livello === 1) { const G = cosmo(via.cosmo).galassie[via.galassia]; return (G.tipo === 'ellittica' ? 6e20 : 4.5e20) * (0.7 + 0.15 * Math.min(4, G.peso)); }
+  if (livello === 2) return 30 * 1.496e11;
+  return sistema(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
+};
+
 // ---------- un sistema: la stella e i suoi pianeti
-// coordinate del sistema: l'orbita più esterna è circa 1
-export const RAGGIO_SISTEMA = 0.0025; // in unità della galassia
+// coordinate del sistema: l'orbita più esterna è circa 1 (trenta unità astronomiche)
+export const RAGGIO_SISTEMA = 0.0025; // in unità della galassia (sulla mappa)
 export const sistema = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
   const np = intero(1, PIANETI_MAX), pianeti = [];
@@ -130,9 +141,12 @@ export const sistema = memo((n, gid, sid) => {
   for (let k = 0; k < np; k++) {
     const freddo = a > 0.4, tipo = freddo ? (c() < 0.6 ? 'gassoso' : 'ghiacciato') : (c() < 0.8 ? 'roccioso' : 'gassoso');
     const r = tipo === 'gassoso' ? tra(0.022, 0.04) : tra(0.008, 0.018);
+    // le grandezze vere: il raggio (m) e il campo magnetico all'equatore (T)
+    const raggioM = tipo === 'gassoso' ? tra(2.4e7, 7.5e7) : tipo === 'ghiacciato' ? tra(1.5e7, 2.6e7) : tra(2.4e6, 9e6);
+    const B0 = tipo === 'gassoso' ? tra(2e-5, 4.5e-4) : tipo === 'ghiacciato' ? tra(1e-5, 4e-5) : (c() < 0.3 ? tra(1e-8, 1e-6) : tra(1e-5, 6e-5));
     pianeti.push({
-      id: k, a, fase: tra(0, 2 * Math.PI), r, tipo,
-      campo: tipo === 'gassoso' ? tra(0.5, 1) : tipo === 'ghiacciato' ? tra(0.2, 0.6) : tra(0.05, 0.4),
+      id: k, a, fase: tra(0, 2 * Math.PI), r, tipo, raggioM, B0,
+      campo: Math.min(1, Math.log10(B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)),
       anelli: (tipo !== 'roccioso' && c() < 0.6) || c() < 0.08, lune: intero(0, tipo === 'gassoso' ? 6 : 2),
       colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
     });
@@ -142,94 +156,118 @@ export const sistema = memo((n, gid, sid) => {
   return { stella: { ...S, r: 0.012 + 0.006 * Math.cbrt(S.massa) }, pianeti };
 });
 
-// ---------- un pianeta e le sue regioni
-// coordinate del pianeta: il raggio del pianeta è 1; le regioni stanno nell'anello o nella magnetosfera
+// ---------- un pianeta: l'anello, la magnetosfera, le regioni
+// coordinate del pianeta: il raggio del pianeta è 1
 export const LATO_REGIONE = 0.32; // in raggi del pianeta
 export const pianeta = memo((n, gid, sid, pid) => {
   const P = sistema(n, gid, sid).pianeti[pid], { tra } = casoDi('pianeta', n, gid, sid, pid);
-  const anello = P.anelli ? [tra(1.45, 1.7), tra(2.05, 2.6)] : null;
+  // l'anello: fasce più e meno dense (come quelle vere); una funzione sola per il disegno e per la fisica
+  const anello = P.anelli ? [tra(1.3, 1.6), tra(2.0, 2.5)] : null;
+  const bande = anello ? Array.from({ length: 5 }, () => ({ r: tra(anello[0], anello[1]), w: tra(0.02, 0.12), a: tra(0.3, 1.2) })) : [];
+  const densitaAnello = (r) => (!anello || r < anello[0] || r > anello[1] ? 0 : Math.min(2, 0.15 + bande.reduce((s, b) => s + b.a * Math.exp(-(((r - b.r) / b.w) ** 2)), 0)));
   const regioni = [];
   for (let k = 0; k < REGIONI; k++) {
-    const ang = (2 * Math.PI * k) / REGIONI + tra(-0.08, 0.08), rr = anello ? (anello[0] + anello[1]) / 2 + tra(-0.08, 0.08) : tra(1.6, 2.6);
-    regioni.push({ id: k, pos: [rr * Math.cos(ang), rr * Math.sin(ang)], angolo: ang, nellAnello: !!anello });
+    const nelAnello = anello && k < 6;
+    const ang = (2 * Math.PI * k) / REGIONI + tra(-0.15, 0.15), rr = nelAnello ? tra(anello[0] + 0.1, anello[1] - 0.1) : tra(1.45, 4);
+    regioni.push({ id: k, pos: [rr * Math.cos(ang), rr * Math.sin(ang)], angolo: ang, r: rr, nellAnello: !!nelAnello && densitaAnello(rr) > 0.05 });
   }
-  return { P, anello, regioni };
+  return { P, anello, densitaAnello, regioni };
 });
 
-// ---------- una regione: lo spazio attorno a un pianeta, dove si guarda (un universo della camera)
-const LATO = 1000, C = 40;
-export const CATALOGO = {
-  protone: { q: 1, m: 8, vitaMedia: 18, figli: [
-    { specie: 'nucleone', angolo: [-12, 12], quota: [0.3, 0.6] },
-    { specie: 'pione+', angolo: [-35, 35], quota: [0.1, 0.35] },
-    { specie: 'pione-', angolo: [-35, 35], quota: [0.1, 0.3] },
-    { specie: 'pione0', angolo: [-20, 20], quota: [0.05, 0.2] },
-  ] },
-  nucleone: { q: 1, m: 8 },
-  'pione+': { q: 1, m: 1.4, vitaMedia: 14, figli: [{ specie: 'muone+', angolo: [-10, 10], quota: [0.6, 0.9] }] },
-  'pione-': { q: -1, m: 1.4, vitaMedia: 14, figli: [{ specie: 'muone-', angolo: [-10, 10], quota: [0.6, 0.9] }] },
-  pione0: { q: 0, m: 1.3, vitaMedia: 0.05, visibile: false, figli: [{ specie: 'fotone', angolo: [8, 50], quota: 0.5 }, { specie: 'fotone', angolo: [-50, -8], quota: 0.5 }] },
-  'muone+': { q: 1, m: 1, vitaMedia: 45, figli: [{ specie: 'positrone', angolo: [-70, 70], quota: [0.1, 0.5] }] },
-  'muone-': { q: -1, m: 1, vitaMedia: 45, figli: [{ specie: 'elettrone', angolo: [-70, 70], quota: [0.1, 0.5] }] },
-  fotone: { luce: true, m: 0.3, vitaMedia: 5, figli: [{ specie: 'elettrone', angolo: [4, 30], quota: [0.3, 0.7] }, { specie: 'positrone', angolo: [-30, -4], quota: [0.3, 0.7] }] },
-  elettrone: { q: -1, m: 0.12 },
-  positrone: { q: 1, m: 0.12 },
-  kaone0: { q: 0, m: 3.5, vitaMedia: 4, visibile: false, figli: [{ specie: 'pione+', angolo: [5, 45], quota: [0.3, 0.6] }, { specie: 'pione-', angolo: [-45, -5], quota: [0.3, 0.6] }] },
-};
+// ---------- la fisica alla scala del pianeta: il suo campo (un dipolo), il pianeta come ostacolo
+// mondo del pianeta: 4000 × 4000 unità, il pianeta al centro con raggio 100 unità
+const MONDO_P = 4000, R_P = 100;
+function mondoPianeta(P) {
+  const u = unita(P.raggioM * (1000 / R_P));
+  return { u, cella: { larghezza: MONDO_P, altezza: MONDO_P, c: 40, relativita: true, bordo: 'aperto', tempo: 900, fondo: { B: 0, K: 0 }, domini: [],
+    masse: [{ pos: [MONDO_P / 2, MONDO_P / 2], M: 0, R: R_P }], dipoli: [{ centro: [MONDO_P / 2, MONDO_P / 2], B0: u.B(P.B0), R: R_P }], pellicola: { w0: 0.8, saturazione: 4, vRif: 5 } } };
+}
+// lo spettro dei raggi cosmici: tanti lenti, pochi velocissimi (energia cinetica in MeV, ~E^-2.7)
+const energiaRaggio = (x, Emin = 500) => { const a = Emin ** -1.7, b = 1e6 ** -1.7; return (a - x * (a - b)) ** (-1 / 1.7); };
+// la soglia di Størmer: sotto questa rigidità (GV) un raggio non arriva a quella distanza dal pianeta
+// (cresce con il campo e il raggio del pianeta, cala come il quadrato della distanza; Terra all'equatore: 14,9 GV)
+const sogliaStormer = (P, r) => (14.9 / (3.1e-5 * 6.371e6)) * P.B0 * P.raggioM / (r * r);
+const energiaDaRigidita = (GV) => Math.sqrt((GV * 1000) ** 2 + 938.27 ** 2) - 938.27;
+const impulsoProtone = (E) => Math.sqrt(E * E + 2 * E * 938.27);
+// da quali direzioni arrivano i raggi alla stella del pianeta: le sorgenti della galassia, sparpagliate dal suo campo
+function cieloDeiRaggi(a) {
+  const Gx = galassia(a.cosmo, a.galassia), st = Gx.stelle[a.stella].pos;
+  const sorgenti = Gx.sorgenti.map((s) => { const d = Math.hypot(st[0] - s.pos[0], st[1] - s.pos[1]); return { ...s, verso: Math.atan2(s.pos[1] - st[1], s.pos[0] - st[0]), peso: s.potenza / (0.02 + d * d), k: Math.max(0.6, 6 / (1 + 25 * d)) }; });
+  const fondo = 0.15 * sorgenti.reduce((x, s) => x + s.peso, 0);
+  const contributi = (fi) => sorgenti.map((s) => s.peso * Math.exp(s.k * (Math.cos(fi - s.verso) - 1)));
+  const flusso = (fi) => fondo + contributi(fi).reduce((x, y) => x + y, 0);
+  const chi = (fi, u) => { const w = contributi(fi), t = w.reduce((x, y) => x + y, 0) + fondo; let r = u * t; for (let i = 0; i < w.length; i++) if ((r -= w[i]) < 0) return sorgenti[i].nome; return 'il fondo di raggi della galassia'; };
+  return { flusso, chi, massimo: fondo + sorgenti.reduce((x, s) => x + s.peso, 0), sorgenti };
+}
+
+// le orbite dei raggi cosmici attorno al pianeta (orbite di Størmer), per la mappa
+export const magnetosfera = memo((n, gid, sid, pid) => {
+  const P = sistema(n, gid, sid).pianeti[pid], { c: caso } = casoDi('magnetosfera', n, gid, sid, pid);
+  const { cella } = mondoPianeta(P), cielo = cieloDeiRaggi({ cosmo: n, galassia: gid, stella: sid });
+  const sorgenti = [];
+  for (let k = 0; k < 400 && sorgenti.length < 36; k++) {
+    const fi = caso() * 2 * Math.PI; if (caso() * cielo.massimo > cielo.flusso(fi)) continue;
+    // arriva da lontano, dalla direzione fi, con un parametro d'urto a caso
+    const b = (caso() - 0.5) * 2 * 12 * R_P, E = energiaRaggio(caso() * 0.9, Math.max(500, energiaDaRigidita(0.3 * sogliaStormer(P, 6))));
+    const pos = [MONDO_P / 2 + Math.cos(fi) * 1950 - Math.sin(fi) * b, MONDO_P / 2 + Math.sin(fi) * 1950 + Math.cos(fi) * b];
+    if (pos[0] < 0 || pos[1] < 0 || pos[0] > MONDO_P || pos[1] > MONDO_P) continue;
+    sorgenti.push({ pos, dir: fi + Math.PI, v: velocita(impulsoProtone(E), 1836.15), t0: 0, specie: 'protone' });
+  }
+  const tracce = simulaMondo({ ...cella, specie: { protone: { q: 1, m: 1836.15 } }, sorgenti }, { passo: 6, maxPassi: 8000 });
+  // in raggi del pianeta, con l'origine al centro
+  return tracce.map((t) => t.punti.filter((_, i) => i % 2 === 0 || i === t.punti.length - 1).map((p) => [(p[0] - MONDO_P / 2) / R_P, (p[1] - MONDO_P / 2) / R_P]));
+});
+
+// ---------- una regione: un pezzo della magnetosfera (o dell'anello) del pianeta
 export const descriviIndirizzo = (a) => {
   const G = cosmo(a.cosmo).galassie[a.galassia], P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta];
   return `${a.cosmo > 1 ? `cosmo ${a.cosmo} · ` : ''}galassia ${a.galassia + 1} (${G.tipo}) · stella ${a.stella + 1} · pianeta ${a.pianeta + 1} (${P.tipo}${P.anelli ? ', con anelli' : ''}) · regione ${a.regione + 1}`;
 };
+export const CATALOGO = catalogoVero(unita(1e6));
 
 export function regione(a) {
-  const numero = numeroDi(a), Gx = galassia(a.cosmo, a.galassia), S = sistema(a.cosmo, a.galassia, a.stella), P = S.pianeti[a.pianeta], Pl = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta), R = Pl.regioni[a.regione];
-  const { c: caso, tra, intero } = casoDi('regione', a.cosmo, a.galassia, a.stella, a.pianeta, a.regione);
-  const onda = (lmin, lmax, amp) => { const l = tra(lmin, lmax), th = tra(0, 2 * Math.PI); return { k: [(2 * Math.PI * Math.cos(th)) / l, (2 * Math.PI * Math.sin(th)) / l], a: amp, fi: tra(0, 2 * Math.PI) }; };
-  // il campo magnetico del pianeta, visto da vicino: alcune onde lunghe (più forte vicino ai giganti)
-  const forzaB = 0.02 + 0.33 * P.campo * tra(0.4, 1), nB = intero(3, 7), ondeB = [];
-  for (let i = 0; i < nB; i++) ondeB.push(onda(150, 900, (forzaB / Math.sqrt(nB)) * tra(0.5, 1.5) * (caso() < 0.5 ? -1 : 1)));
-  // la polvere: nell'anello è densa, fuori è rada
-  const nubi = R.nellAnello ? (caso() < 0.95 ? { K: tra(8, 40), modi: Array.from({ length: intero(3, 6) }, () => onda(120, 600, tra(0.4, 1))) } : null)
-    : (caso() < 0.5 ? { K: tra(2, 15), modi: Array.from({ length: intero(3, 6) }, () => onda(120, 600, tra(0.4, 1))) } : null);
-  // i granelli cristallini (ghiaccio e silicati), più spessi negli anelli dei pianeti freddi
-  const cristalli = [];
-  for (let i = intero(0, R.nellAnello ? (P.tipo === 'roccioso' ? 1 : 3) : 1); i > 0; i--) cristalli.push({ centro: [tra(100, LATO - 100), tra(100, LATO - 100)], r: tra(50, 180), passo: tra(6, 24), angolo: tra(0, Math.PI), a: tra(0.3, 1.4) * (caso() < 0.5 ? -1 : 1) });
-  // i sassi e le piccole lune dell'anello
-  const masse = [];
-  for (let i = intero(0, R.nellAnello ? 4 : 2); i > 0; i--) { const M = 40 * Math.pow(caso(), -1.4); masse.push({ pos: [tra(50, LATO - 50), tra(50, LATO - 50)], M: Math.min(4000, M), R: 2 + Math.cbrt(Math.min(4000, M)) * 0.5 }); }
-  // i raggi cosmici: ognuno parte da una sorgente vera della galassia. Il campo della
-  // galassia li sparpaglia, ma arrivano in media dalla direzione della loro sorgente.
-  // La loro emissione (quando, e con che direzione esatta) è un evento quantistico: si può
-  // cambiare passando a un altro ramo.
-  const stella = Gx.stelle[a.stella].pos, pesi = Gx.sorgenti.map((s) => s.potenza / (0.02 + Math.hypot(s.pos[0] - stella[0], s.pos[1] - stella[1]) ** 2)), totP = pesi.reduce((x, y) => x + y, 0);
-  const sorgenti = [];
-  const nRaggi = Math.max(3, Math.min(9, Math.round(3 + Math.log1p(totP / 30) * 2 + tra(-1, 2))));
-  for (let i = 0; i < nRaggi; i++) {
-    let r = caso() * totP, k = 0; while (k < pesi.length - 1 && (r -= pesi[k]) > 0) k++;
-    const src = Gx.sorgenti[k], verso = Math.atan2(stella[1] - src.pos[1], stella[0] - src.pos[0]), largo = Math.min(1.2, 0.35 + 3 * Math.hypot(stella[0] - src.pos[0], stella[1] - src.pos[1]));
-    sorgenti.push({ pos: [LATO / 2, LATO / 2], dir: verso, v: tra(16, 30), t0: 0, specie: 'protone', emissione: { dir: [verso - largo, verso + largo], t0: [0, 40], dal: 'bordo', u: [0.1, 0.9] }, origine: `${src.nome} (galassia ${a.galassia + 1})` });
+  const numero = numeroDi(a), S = sistema(a.cosmo, a.galassia, a.stella), P = S.pianeti[a.pianeta], Pl = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta), R = Pl.regioni[a.regione];
+  const { c: caso } = casoDi('regione', a.cosmo, a.galassia, a.stella, a.pianeta, a.regione);
+  const LATO = 1000, latoM = LATO_REGIONE * P.raggioM, u = unita(latoM), { cella: cp } = mondoPianeta(P);
+  // la regione nel mondo del pianeta
+  const cx = MONDO_P / 2 + R.pos[0] * R_P, cy = MONDO_P / 2 + R.pos[1] * R_P, lp = LATO_REGIONE * R_P, x0 = cx - lp / 2, y0 = cy - lp / 2, k = LATO / lp;
+  // I RAGGI COSMICI, CALCOLATI ALL'INDIETRO. Si parte dal bordo della regione con una direzione
+  // verso l'interno e un'energia dallo spettro vero, e si segue la particella indietro nel tempo
+  // (stessa strada, carica opposta, verso opposto) nel campo vero del pianeta. Se all'indietro
+  // esce dalla magnetosfera, è arrivata davvero, dalla direzione da cui è uscita; se sbatte
+  // contro il pianeta o resta intrappolata, quella traiettoria non esiste.
+  const cielo = cieloDeiRaggi(a), sorgenti = [], specieP = { indietro: { q: -1, m: 1836.15 } };
+  let prove = 0, vietate = 0;
+  // sotto un terzo della soglia non arriva nessuno da nessuna direzione; e più alta è la soglia, meno
+  // raggi ci sono (lo spettro cala): così una magnetosfera forte è davvero schermata
+  const Emin = Math.max(500, energiaDaRigidita(0.3 * sogliaStormer(P, R.r)));
+  const voluti = Math.round((9 + caso() * 8) * Math.min(1, (Emin / 500) ** -1.7));
+  while (sorgenti.length < voluti && prove < 12 * voluti + 20) {
+    prove++;
+    const lato = Math.floor(caso() * 4), t = caso(), nrm = [Math.PI / 2, Math.PI, -Math.PI / 2, 0][lato];
+    const pe = [[x0 + t * lp, y0], [x0 + lp, y0 + t * lp], [x0 + t * lp, y0 + lp], [x0, y0 + t * lp]][lato];
+    const dir = nrm + Math.asin(2 * caso() - 1), E = energiaRaggio(caso(), Emin), v = velocita(impulsoProtone(E), 1836.15);
+    const tr = simulaMondo({ ...cp, tempo: 400, specie: specieP, sorgenti: [{ pos: pe, dir: dir + Math.PI, v, specie: 'indietro' }] }, { passo: 6, maxParticelle: 1, maxPassi: 5000 })[0];
+    if (!tr || tr.fine !== 'fuori') { vietate++; continue; }
+    const q = tr.punti, ult = q[q.length - 1], pen = q[Math.max(0, q.length - 3)], esce = Math.atan2(ult[1] - pen[1], ult[0] - pen[0]);
+    // il flusso da quella direzione decide se c'è davvero un raggio
+    if (caso() * cielo.massimo > cielo.flusso(esce)) continue;
+    const pos = [Math.min(LATO - 0.01, Math.max(0.01, (pe[0] - x0) * k)), Math.min(LATO - 0.01, Math.max(0.01, (pe[1] - y0) * k))];
+    sorgenti.push({ pos, dir, v, t0: 0, specie: 'protone', emissione: { t0: [0, 100] }, origine: `${cielo.chi(esce, caso())} (galassia ${a.galassia + 1})`, energia: E, arrivo: esce });
   }
-  // il vento della stella: particelle più lente, dalla direzione della stella
-  const dalSole = Math.atan2(P.pos[1], P.pos[0]);
-  for (let i = intero(0, 2); i > 0; i--) sorgenti.push({ pos: [LATO / 2, LATO / 2], dir: dalSole, v: tra(10, 16), t0: 0, specie: 'protone', emissione: { dir: [dalSole - 0.4, dalSole + 0.4], t0: [0, 60], dal: 'bordo', u: [0.05, 0.95] }, origine: `il vento della stella ${a.stella + 1}` });
-  // le stelle nucleari: un raggio colpisce il nucleo di un granello, che si spezza in una raggiera
-  const specieStelle = {};
-  for (let i = intero(0, R.nellAnello ? 3 : 2); i > 0; i--) {
-    const nn = intero(5, 14), base = tra(0, 360), figli = [], scelta = ['pione+', 'pione-', 'elettrone', 'positrone', 'protone'];
-    for (let j = 0; j < nn; j++) { const an = base + (360 * j) / nn; figli.push({ specie: scelta[Math.floor(caso() * (caso() < 0.5 ? 4 : 5))], angolo: [an - 360 / nn / 4, an + 360 / nn / 4], quota: [0.04, 0.16] }); }
-    const nome = `stella ${i}`;
-    specieStelle[nome] = { q: 0, m: 20, vita: 0.001, visibile: false, figli };
-    sorgenti.push({ pos: [tra(150, LATO - 150), tra(150, LATO - 150)], dir: tra(0, 2 * Math.PI), v: 6, t0: tra(5, 50), specie: nome, origine: 'un raggio cosmico che colpisce il nucleo di un granello di polvere' });
-  }
-  // i decadimenti spontanei: particelle neutre nate dagli urti dei raggi con la polvere
-  for (let i = intero(2, 8); i > 0; i--) sorgenti.push({ pos: [tra(80, LATO - 80), tra(80, LATO - 80)], dir: tra(0, 2 * Math.PI), v: tra(2, 10), t0: tra(0, 60), specie: 'kaone0', origine: 'un urto di un raggio cosmico con la polvere' });
+  // la materia dell'anello: la stessa densità che si vede sulla mappa. Un raggio che la
+  // attraversa può urtare un granello di ghiaccio: ne esce uno sciame.
+  const tau = Pl.densitaAnello(R.r), urtoProtone = tau > 0.05 ? (0.9 * LATO) / tau : Infinity;
+  const specie = catalogoVero(u, { urtoProtone, urtoFotone: urtoProtone * 0.55 });
+  const centroP = [(MONDO_P / 2 - x0) * k, (MONDO_P / 2 - y0) * k], RPr = R_P * k;
   const cella = {
-    larghezza: LATO, altezza: LATO, c: C, G: 1, bordo: 'aperto', tempo: 140, seme: numero, indirizzo: { ...a },
-    fondo: { B: 0, K: 0 }, domini: [], masse, onde: { B: ondeB }, nubi, cristalli,
-    pellicola: { w0: 0.8, saturazione: 4, vRif: 5 }, specie: { ...CATALOGO, ...specieStelle }, sorgenti,
+    larghezza: LATO, altezza: LATO, c: 40, G: 1, bordo: 'aperto', tempo: 140, relativita: true, seme: numero, indirizzo: { ...a },
+    fondo: { B: 0, K: 0 }, domini: [], masse: [{ pos: centroP, M: 0, R: RPr }], dipoli: [{ centro: centroP, B0: u.B(P.B0), R: RPr }],
+    pellicola: { w0: 0.8, saturazione: 4, vRif: 5 }, specie, sorgenti,
     finestra: { centro: [LATO / 2, LATO / 2], lato: 400 }, sezione: { fine: 140, durata: 140 },
+    scala: { latoM, secondi: 140 * u.tu },
   };
-  const nRC = sorgenti.filter((s) => s.specie === 'protone').length;
-  const descrizione = [`${masse.length} ${masse.length === 1 ? 'sasso' : 'sassi'} ${R.nellAnello ? "dell'anello" : ''}`.trim(), `il campo del pianeta (${nB} onde)`, nubi ? (R.nellAnello ? "la polvere dell'anello" : 'polvere rada') : 'niente polvere', cristalli.length ? `${cristalli.length} ${cristalli.length === 1 ? 'granello cristallino' : 'granelli cristallini'}` : null, `${nRC} raggi cosmici`, Object.keys(specieStelle).length ? `${Object.keys(specieStelle).length} nuclei spezzati` : null].filter(Boolean).join(', ');
-  return { nome: `universo n. ${numero}`, nota: `${descriviIndirizzo(a)}: ${descrizione}. Nessuno l'ha costruito: ogni cosa ha una causa più in là, che si raggiunge allontanandosi.`, cella };
+  const Breg = P.B0 / R.r ** 3;
+  const descrizione = [`il campo del pianeta, ${(Breg * 1e9).toLocaleString('it-IT', { maximumFractionDigits: 0 })} nT`, `${sorgenti.length} raggi cosmici arrivati fin qui (${vietate} strade all'indietro finivano contro il pianeta: da lì non arriva niente)`, tau > 0.05 ? `la polvere dell'anello (spessore ottico ${tau.toFixed(2)})` : 'niente materia'].join(', ');
+  return { nome: `universo n. ${numero}`, nota: `${descriviIndirizzo(a)}, a ${R.r.toFixed(2)} raggi dal centro; la regione è larga ${fmtLunghezza(latoM)}, l'esposizione dura ${(140 * u.tu * 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} ms. ${descrizione}. Nessuno l'ha costruito: ogni cosa ha una causa più in là.`, cella };
 }

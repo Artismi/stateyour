@@ -9,7 +9,8 @@
 // Ogni livello ha le sue coordinate; la camera della mappa è { livello, via, cx, cy, z }
 // (via = l'indirizzo dei livelli sopra), e passare di livello non muove niente sullo schermo.
 
-import { cosmo, galassia, sistema, pianeta, regione, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
+import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
+import { fmtLunghezza } from './unita.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -192,6 +193,13 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
   } else {
     disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia);
   }
+  // il metro: le distanze vere
+  {
+    const mpp = metriPerUnita(cam.livello, v) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
+    const L = passo / mpp, x0 = 18 * dpr, y0 = H - 22 * dpr;
+    ctx.strokeStyle = 'rgba(235,230,215,0.85)'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x0, y0 - 5 * dpr); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0); ctx.lineTo(x0 + L, y0 - 5 * dpr); ctx.stroke();
+    ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(235,230,215,0.9)'; ctx.fillText(fmtLunghezza(passo), x0 + L + 8 * dpr, y0);
+  }
   if (sopra) {
     ctx.strokeStyle = 'rgba(255,200,120,0.9)'; ctx.lineWidth = 1.2 * dpr;
     let px = sopra.pos[0], py = sopra.pos[1];
@@ -253,7 +261,11 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
   // la magnetosfera: linee di campo, come quelle di un dipolo
   ctx.strokeStyle = `rgba(110,150,255,${0.08 + 0.18 * P.campo})`; ctx.lineWidth = dpr;
   for (const L of [1.6, 2.2, 3, 4]) { ctx.beginPath(); for (let t = 0; t <= 64; t++) { const th = (t / 64) * 2 * Math.PI, r = L * Math.cos(th) ** 2; const x = X(r * Math.cos(th)), y = Y(r * Math.sin(th)); t ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
-  if (Pl.anello) { ctx.strokeStyle = rgb(P.colore, 0.28); ctx.lineWidth = (Pl.anello[1] - Pl.anello[0]) * z; ctx.beginPath(); ctx.arc(X(0), Y(0), ((Pl.anello[0] + Pl.anello[1]) / 2) * z, 0, 7); ctx.stroke(); }
+  // l'anello: le sue fasce, disegnate con la stessa densità che usa la fisica delle regioni
+  if (Pl.anello) for (let r = Pl.anello[0]; r < Pl.anello[1]; r += 0.01) { const d = Pl.densitaAnello(r); ctx.strokeStyle = rgb(P.colore, Math.min(0.5, 0.25 * d)); ctx.lineWidth = Math.max(1, 0.011 * z); ctx.beginPath(); ctx.arc(X(0), Y(0), r * z, 0, 7); ctx.stroke(); }
+  // i raggi cosmici nel campo del pianeta: le orbite di Størmer, calcolate davvero
+  ctx.strokeStyle = 'rgba(255,196,120,0.5)'; ctx.lineWidth = dpr;
+  for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
   disegnaCorpo(ctx, P, X(0), Y(0), z, S.stella, v, dpr, P.pos);
   // la direzione della stella
   const ds = Math.atan2(-P.pos[1], -P.pos[0]); alone(ctx, X(Math.cos(ds) * 6), Y(Math.sin(ds) * 6), 40 * dpr, S.stella.colore, 0.25);

@@ -119,6 +119,9 @@ function densa(m, chiave = 'sparsa') {
 // i campi continui: onde (campi che variano dolcemente) e cristalli (campi periodici)
 export function campiContinui(mondo) {
   const ondeB = mondo.onde?.B || [], nubi = mondo.nubi || null, cristalli = mondo.cristalli || [], mappa = mondo.mappa || null;
+  // il DIPOLO di un pianeta (o di una stella), visto nel suo piano equatoriale: il campo è
+  // perpendicolare al piano e cala come il cubo della distanza, B = B0·(R/r)³
+  const dipoli = mondo.dipoli || [];
   const ondeK = nubi?.modi || [];
   let lambdaOnde = Infinity;
   for (const o of [...ondeB, ...ondeK]) lambdaOnde = Math.min(lambdaOnde, (2 * Math.PI) / Math.hypot(...o.k));
@@ -130,8 +133,8 @@ export function campiContinui(mondo) {
     const fx = (x - mappa.x0) / mappa.h, fy = (y - mappa.y0) / mappa.h, i = Math.min(mappa.nx - 2, Math.floor(fx)), j = Math.min(mappa.ny - 2, Math.floor(fy)), u = fx - i, v = fy - j, n = mappa.nx;
     return M[j * n + i] * (1 - u) * (1 - v) + M[j * n + i + 1] * u * (1 - v) + M[(j + 1) * n + i] * (1 - u) * v + M[(j + 1) * n + i + 1] * u * v;
   };
-  const lambda = (x, y) => { let l = lambdaOnde; for (const c of cristalli) if (Math.hypot(x - c.centro[0], y - c.centro[1]) < c.r + c.passo) l = Math.min(l, c.passo); if (dentroMappa(x, y)) l = Math.min(l, mappa.h * 2); return l; };
-  if (!ondeB.length && !ondeK.length && !cristalli.length && !mappa) return null;
+  const lambda = (x, y) => { let l = lambdaOnde; for (const d of dipoli) l = Math.min(l, Math.max(d.R * 0.05, Math.hypot(x - d.centro[0], y - d.centro[1]) / 4)); for (const c of cristalli) if (Math.hypot(x - c.centro[0], y - c.centro[1]) < c.r + c.passo) l = Math.min(l, c.passo); if (dentroMappa(x, y)) l = Math.min(l, mappa.h * 2); return l; };
+  if (!ondeB.length && !ondeK.length && !cristalli.length && !mappa && !dipoli.length) return null;
   const B = (x, y) => {
     let b = 0;
     for (const o of ondeB) b += o.a * Math.cos(o.k[0] * x + o.k[1] * y + o.fi);
@@ -145,6 +148,7 @@ export function campiContinui(mondo) {
       b += (c.a * sfuma * somma) / 3;
     }
     if (dentroMappa(x, y)) b += valoreMappa(x, y);
+    for (const d of dipoli) { const r = Math.max(d.R, Math.hypot(x - d.centro[0], y - d.centro[1])); b += d.B0 * (d.R / r) ** 3; }
     return b;
   };
   const K = (x, y) => {
@@ -213,7 +217,7 @@ export function simulaMondo(mondo, opzioni = {}) {
   const leggiIn = { ...LEGGI, ...(mondo.leggi || {}) };
   const f0 = { B: 0, K: 0, ...(mondo.fondo || {}) };
   const domini = mondo.domini || [], tutteMasse = mondo.masse || [];
-  const continui = campiContinui(mondo), seme = mondo.seme ?? 1, rami = mondo.rami || {};
+  const continui = campiContinui(mondo), seme = mondo.seme ?? 1, rami = mondo.rami || {}, rel = !!mondo.relativita;
   const scatti = [...new Set([...domini, ...tutteMasse].flatMap((o) => (o.interruttori || []).map((e) => e.t)).concat(Object.values(leggiIn).flatMap((v) => (Array.isArray(v) ? v.map((e) => e.t) : []))))].sort((a, b) => a - b);
   const prossimoScatto = (t) => { for (const x of scatti) if (x > t + 1e-12) return x; return Infinity; };
   let S, masse; // lo stato del mondo adesso: tra due scatti non cambia
@@ -277,7 +281,11 @@ export function simulaMondo(mondo, opzioni = {}) {
     // la vita di QUESTA particella: data, o estratta dalla vita media della specie
     // (il suo caso: quello del suo evento, nel ramo scelto per questo universo)
     const caso = casoEvento(seme, p.ev, rami[p.ev] ?? 0);
+    // la vita: nel proprio tempo (vitaMedia, si dilata con la velocità) o come cammino libero in
+    // un mezzo (camminoLibero: l'urto con la materia, contato nel tempo del laboratorio)
     const vita = p.vita ?? sp.vita ?? (sp.vitaMedia != null ? -sp.vitaMedia * Math.log(1 - caso()) : Infinity);
+    const urto = sp.camminoLibero != null ? -sp.camminoLibero * Math.log(1 - caso()) : Infinity; // in unità di lunghezza
+    let tp = 0, percorso = 0; // il tempo proprio e la strada fatta
     statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? q !== 0;
     const larghezza = (v) => (!visibile ? 0 : q ? pel.w0 * Math.abs(q) * Math.min(pel.saturazione, pel.vRif / Math.max(v, 1e-9)) : pel.w0 * 0.35);
@@ -295,13 +303,15 @@ export function simulaMondo(mondo, opzioni = {}) {
     const g0 = gravita(x, y);
     const punti = [[x, y, visibile, t, larghezza(Math.hypot(vx, vy)), legge(c, g0[0], g0[1], Math.hypot(vx, vy))]];
     let fine = 'tempo', guardia = 0;
-    while (t < T && guardia++ < 200000) {
+    while (t < T && guardia++ < (opzioni.maxPassi ?? 200000)) {
       const v = Math.hypot(vx, vy);
       if (v < 1e-9) { fine = 'ferma'; break; }
       // un interruttore scatta: il mondo cambia qui, la particella prosegue nel mondo nuovo
       if (t >= scatto - 1e-12) { statoA(t); scatto = prossimoScatto(t); c = campoIn(x, y); }
-      if (S.L.decadimento && t >= p.nascita + vita) { fine = 'decade'; break; }
-      const w = q ? (q * c.B) / m : 0, kq = q ? (c.K * q * q) / m : 0;
+      if (S.L.decadimento && (rel ? tp >= vita : t >= p.nascita + vita)) { fine = 'decade'; break; }
+      if (percorso >= urto) { fine = 'decade'; break; }
+      const gam = rel ? 1 / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : 1;
+      const w = q ? (q * c.B) / (m * gam) : 0, kq = q ? (c.K * q * q) / m : 0;
       // l'accelerazione di gravità: per la luce solo la parte trasversale, doppia, divisa per n²
       const accel = (px, py, ux, uy) => {
         if (!masse.length) return [0, 0];
@@ -312,7 +322,7 @@ export function simulaMondo(mondo, opzioni = {}) {
       };
       const [ax, ay] = accel(x, y, vx / v, vy / v);
       // il passo: piccolo abbastanza per la svolta, per il rallentamento, vicino alle masse
-      let dt = Math.min(passoMax / v, T - t, S.L.decadimento ? p.nascita + vita - t : Infinity, scatto - t);
+      let dt = Math.min(passoMax / v, T - t, S.L.decadimento ? (rel ? (vita - tp) * gam : p.nascita + vita - t) : Infinity, scatto - t, isFinite(urto) ? (urto - percorso) / v + 1e-12 : Infinity);
       if (masse.length) { const L = lontano(x, y), a = Math.hypot(ax, ay) + 1e-12; dt = Math.min(dt, (0.02 * L) / v, 0.1 * Math.sqrt(L / a)); }
       if (w) dt = Math.min(dt, 0.06 / Math.abs(w));
       if (kq) dt = Math.min(dt, (0.15 * v * v * v) / (3 * kq) + 1e-12);
@@ -340,7 +350,7 @@ export function simulaMondo(mondo, opzioni = {}) {
         for (let k = 0; k < 22; k++) { const mid = (lo + hi) / 2, r = avanza(mid); if (campoIn(r.x, r.y).i === c.i) lo = mid; else hi = mid; }
         dt = hi; s = avanza(dt);
       }
-      x = s.x; y = s.y; vx = s.vx; vy = s.vy; t += dt;
+      percorso += Math.hypot(s.x - x, s.y - y); x = s.x; y = s.y; vx = s.vx; vy = s.vy; t += dt; if (rel) tp += dt / gam;
       // il corpo di una massa: chi lo tocca ci cade dentro
       if (masse.length) {
         const { d, chi } = superficie(x, y);
@@ -367,12 +377,14 @@ export function simulaMondo(mondo, opzioni = {}) {
     if (visibile && punti.length > 1) tracce.push({ id: tracce.length, punti, fine, specie: sp, sorgente: p.sorgente, generazione: p.generazione, madre: p.madre, evento: p.ev });
     // il decadimento: le figlie partono da qui, ora
     if (fine === 'decade' && sp.figli) {
-      const v = Math.hypot(vx, vy), dir = Math.atan2(vy, vx), P = luce ? m * C : m * v;
+      const v = Math.hypot(vx, vy), dir = Math.atan2(vy, vx), P = luce ? (p.impulso ?? m * C) : rel ? (m * v) / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : m * v;
       sp.figli.forEach((f, k) => {
         const estrai = (x, d) => (Array.isArray(x) ? x[0] + caso() * (x[1] - x[0]) : x ?? d);
         const fs = risolviSpecie(f.specie, catalogo), a = dir + (estrai(f.angolo, 0) * Math.PI) / 180, mf = fs.m ?? 1;
-        const vf = fs.luce ? C : Math.min(0.95 * C, f.v != null ? f.v : (estrai(f.quota, 0.5) * (P || m * pel.vRif)) / mf);
-        coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
+        const pf = estrai(f.quota, 0.5) * (P || m * pel.vRif);
+        // con la relatività: dall'impulso alla velocità, v = p / √(m² + (p/c)²), mai oltre c
+        const vf = fs.luce ? C : f.v != null ? f.v : rel ? Math.min(0.99 * C, pf / Math.sqrt(mf * mf + (pf / C) ** 2)) : Math.min(0.95 * C, pf / mf);
+        coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, impulso: fs.luce && rel ? pf : undefined, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
       });
       decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione, evento: p.ev });
     }
