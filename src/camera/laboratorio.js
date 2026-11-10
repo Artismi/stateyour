@@ -20,7 +20,7 @@ import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle, flussoInterno } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie } from './geologia.js';
-import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi } from './cosmo.js';
+import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
@@ -801,7 +801,7 @@ tela.addEventListener('pointerup', (e) => {
     }
     return;
   }
-  if (presa?.tipo === 'clicFinestra') { const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null; if (fermo && sopraFinestra) { sopraFinestra = false; vista = 'spaziotempo'; aggiornaVista(); } return; }
+  if (presa?.tipo === 'clicFinestra') { const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null; if (fermo && sopraFinestra) { sopraFinestra = false; allineaAllaFinestra = true; vista = 'spaziotempo'; aggiornaVista(); } return; }
   if (vista === 'pattern' && presa) {
     if (presa.tipo === 'posto' && !presa.mosso) { scelto = { e: presa.e, p: presa.p }; presa = null; entra(scelto.e); return; }
     if (presa.tipo === 'vista' && !comp.reticolo && Math.hypot(presa.ux - presa.sx, presa.uy - presa.sy) < 5) { presa = null; entra(0); return; }
@@ -965,6 +965,18 @@ function pannelloCosmo(h) {
     if (camMappa.livello === 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
+      // PERCHÉ È FATTO COSÌ: la catena delle cause, dall'inizio al suo nucleo
+      {
+        const v = camMappa.via, Gx = galassiaDi(v.cosmo, v.galassia), St = Gx.stelle[v.stella], Gg = Gx.G, ANNI = 3.156e7;
+        const dopo = ((St.morta != null ? 0 : 0) + (13.8e9 - (St.eta ?? 0) - (St.morta ?? 0)) - Gg.formazione / ANNI) / 1e9, rc = Math.hypot(...St.pos);
+        h.push(`<h2>perché è fatto così</h2><ol class="nota catena">
+          <li><b>L'inizio.</b> Le fluttuazioni dell'universo appena nato (quelle che si vedono ancora nella radiazione cosmica di fondo) qui erano ${Gg.peso.toFixed(1)} volte più dense della media.</li>
+          <li><b>La galassia.</b> Su quel picco la materia è collassata presto: la galassia ${v.galassia + 1} ha cominciato a fare stelle ${(Gg.formazione / ANNI / 1e9).toFixed(1)} miliardi di anni dopo l'inizio.</li>
+          <li><b>Le generazioni di stelle.</b> Le stelle grandi vivono pochi milioni di anni ed esplodono, lasciando nel gas ferro, silicio, ossigeno. Questa stella è nata ${Math.max(0, dopo).toFixed(1)} miliardi di anni dopo le prime, a ${rc.toFixed(2)} raggi dal centro: il suo gas aveva ${St.Z.toFixed(2)} volte i metalli del Sole.</li>
+          <li><b>Il disco.</b> Dal gas della stella giovane, il disco: ${P.tipo === 'roccioso' ? `vicino alla stella, dove fa caldo, restano solo roccia e metalli; ferro al ${Math.round((P.composizione.ferro ?? 0) * 100)}%` : P.tipo === 'ghiacciato' ? 'oltre la linea della neve, roccia e ghiaccio' : 'oltre la linea della neve un nucleo abbastanza grande da catturare il gas'}.</li>
+          <li><b>Il pianeta.</b> ${P.interno && P.tipo !== 'gassoso' ? `Fuso da giovane, il ferro è sceso nel nucleo (${Math.round(P.interno.nucleo * 100)}% del raggio); la radioattività ereditata dalle stesse supernove lo scalda ancora (${P.interno.q.toFixed(3)} W/m²), ${P.interno.dinamo ? 'e il nucleo liquido fa il campo magnetico' : 'ma non abbastanza: il nucleo si è congelato e il campo è sparito'}.` : 'Il gas avvolge il nucleo.'}</li>
+        </ol>`);
+      }
       const it = P.interno;
       if (it) h.push(`<h2>l'interno</h2><p class="nota">${P.tipo === 'gassoso' ? `idrogeno metallico in profondità: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT.` : `un nucleo di ferro largo ${Math.round(it.nucleo * 100)}% del raggio, ${it.dinamo ? `ancora liquido: la dinamo fa un campo di ${Math.round(P.B0 * 1e9).toLocaleString('it-IT')} nT` : 'congelato: nessuna dinamo, nessun campo magnetico'}; il calore che esce dall'interno ${it.q.toFixed(3)} W/m²; la crosta ${it.tettonica === 'a placche' ? 'si è rotta in placche (il mantello spinge e l\'acqua la indebolisce)' : it.tettonica === 'ferma' ? 'è un guscio unico e fermo' : 'è un guscio unico, bucato dai vulcani'}.`}</p>`);
       if (it && P.tipo !== 'gassoso') {
@@ -1267,8 +1279,14 @@ const v3 = creaVista3D(tela3d, { spunte: () => ({ linee: true, pianta: true, tag
 function imposta3D() {
   const c = cel(), blocchi = c.domini.filter((d) => d.forma.tipo !== 'tutto').map((d) => ({ regione: d.forma, legge: [d.B && { tipo: 'magnetico' }, d.K && { tipo: 'materia' }].filter(Boolean) }));
   if (!c.finestra) { v3.imposta({ masse: c.masse, blocchi }, tracce); return; }
-  v3.imposta({ masse: c.masse.filter((m) => dentroBlocco(c, m.pos[0], m.pos[1])), blocchi: [] }, bloccoFinestra(c, tracce));
+  // le interazioni nel blocco: dove entrano i raggi (con la loro origine) e dove le particelle si spezzano
+  const z = c.sezione || { fine: tMax(), durata: tMax() }, t0 = z.fine - z.durata, eventi = [];
+  for (const d of tracce.decadimenti || []) if (d.t >= t0 && d.t <= z.fine && dentroBlocco(c, d.pos[0], d.pos[1])) eventi.push({ tipo: 'decadimento', x: d.pos[0], y: d.pos[1], t: d.t - t0 });
+  for (const tr of tracce) { if (tr.madre || !tr.punti.length) continue; const p = tr.punti.find((q) => q[3] >= t0 && q[3] <= z.fine && dentroBlocco(c, q[0], q[1])); const src = c.sorgenti[tr.sorgente]; if (p) eventi.push({ tipo: 'arrivo', x: p[0], y: p[1], t: p[3] - t0, testo: src?.origine ? src.origine.replace(/ \(galassia \d+\)/, '') : '' }); }
+  v3.imposta({ masse: c.masse.filter((m) => dentroBlocco(c, m.pos[0], m.pos[1])), blocchi: [], scalaTempo: (c.vista || {}).scalaTempo ?? 5, eventi }, bloccoFinestra(c, tracce));
+  if (allineaAllaFinestra) { allineaAllaFinestra = false; v3.allinea(c.vista || {}); }
 }
+let allineaAllaFinestra = false;
 // le linee d'universo dentro la finestra e la fetta di tempo; il tempo parte dall'inizio della fetta
 const dentroBlocco = (c, x, y) => Math.abs(x - c.finestra.centro[0]) <= c.finestra.lato / 2 && Math.abs(y - c.finestra.centro[1]) <= c.finestra.lato / 2;
 function bloccoFinestra(c, tracce) {
@@ -1294,7 +1312,7 @@ function dove() {
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
     : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo.' : ''}`
     : vista === 'finestra' ? `La finestra: la sezione dell'universo n. ${el().cella.seme} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
-    : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra: il tempo sale dall'inizio della fetta alla sua fine. La sezione è questo blocco guardato da un angolo. Trascina per ruotare, rotella per avvicinarti.`
+    : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra, guardato all'inizio dallo stesso angolo della sezione: è il pattern. Trascina per ruotarlo e vedere le linee d'universo nel blocco (il tempo sale); i punti arancio sono dove entrano i raggi e da dove vengono, le stelle verdi dove una particella si spezza. Tasto A: torna allineato.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
     : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
     : solo ? `Vedi solo ${FORZE[solo].art}: ${solo === 'decadimento' ? 'in verde le particelle nate da un decadimento, le stelle dove avviene' : 'le linee si accendono dove questa forza le piega, tanto più quanto più conta'}. Clic di nuovo sul nome per tornare a tutto.`
@@ -1333,6 +1351,7 @@ addEventListener('keydown', (e) => {
   else if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); salvaSeme(); }
   else if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); $('fileImmagine').click(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') elimina();
+  else if ((e.key === 'a' || e.key === 'A') && vista === 'spaziotempo' && el()?.cella.finestra) v3.allinea(el().cella.vista || {});
   else if (e.key === 'Escape') {
     if (strumento !== 'seleziona') { scegliStrumento('seleziona'); return; }
     if (vista !== 'pattern' && !sel) { vista = 'pattern'; aggiornaVista(); return; }

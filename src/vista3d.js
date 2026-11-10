@@ -44,7 +44,7 @@ export function creaVista3D(tela, opzioni = {}) {
       if ((p[3] ?? 0) > tMax) tMax = p[3];
     }
     if (!isFinite(x0)) { S = null; return; }
-    const dim = Math.max(x1 - x0, y1 - y0) || 1, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, kt = (0.75 * dim) / (tMax || 1);
+    const dim = Math.max(x1 - x0, y1 - y0) || 1, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, kt = conf.scalaTempo ?? (0.75 * dim) / (tMax || 1);
     // per disegnare in fretta: pochi punti per linea, ma tutti i cambi di legge
     const linee3d = [], pianta = [];
     const totale = tracce.reduce((n, tr) => n + tr.punti.length, 0);
@@ -86,7 +86,7 @@ export function creaVista3D(tela, opzioni = {}) {
   }
 
   function proiettore() {
-    const W = tela.width, H = tela.height, f = Math.min(W, H) * 0.9;
+    const W = tela.width, H = tela.height, f = Math.min(W, H) * 0.9 * (cam.zoom || 1), cr = Math.cos(cam.roll || 0), sr = Math.sin(cam.roll || 0);
     const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
     const D = cam.dist, [bx, by, bz] = cam.bersaglio;
     return (x, y, tt) => {
@@ -94,7 +94,9 @@ export function creaVista3D(tela, opzioni = {}) {
       const x1 = X * cy - Z * sy, z1 = X * sy + Z * cy;
       const y2 = Y * cp - z1 * sp, z2 = Y * sp + z1 * cp + D;
       if (z2 < 0.05) return null;
-      return [W / 2 + (f * x1) / z2, H / 2 - (f * y2) / z2, z2];
+      // senza prospettiva (ortografica) la vista allineata coincide con la sezione disegnata
+      const zz = cam.orto ? D : z2, px = (f * x1) / zz, py = -(f * y2) / zz;
+      return [W / 2 + px * cr - py * sr, H / 2 + px * sr + py * cr, z2];
     };
   }
 
@@ -200,6 +202,16 @@ export function creaVista3D(tela, opzioni = {}) {
         ctx.beginPath(); ctx.arc(r[0], r[1], 2.6 * dpr, 0, Math.PI * 2); ctx.fill();
       }
     }
+    // le INTERAZIONI che causano le linee: dove entra un raggio (e da dove viene), dove una particella si spezza
+    if (S.conf.eventi) {
+      ctx.font = `${11 * dpr}px ui-monospace, monospace`;
+      for (const ev of S.conf.eventi) {
+        if (ev.t > t) continue;
+        const r = P(ev.x, ev.y, ev.t); if (!r) continue;
+        if (ev.tipo === 'decadimento') { ctx.strokeStyle = 'rgba(120,220,150,0.95)'; ctx.lineWidth = 1.2 * dpr; for (let k = 0; k < 4; k++) { const a = (k * Math.PI) / 4, l = 4.5 * dpr; ctx.beginPath(); ctx.moveTo(r[0] - Math.cos(a) * l, r[1] - Math.sin(a) * l); ctx.lineTo(r[0] + Math.cos(a) * l, r[1] + Math.sin(a) * l); ctx.stroke(); } }
+        else { ctx.fillStyle = 'rgba(255,200,120,0.95)'; ctx.beginPath(); ctx.arc(r[0], r[1], 3 * dpr, 0, 7); ctx.fill(); if (ev.testo && S.conf.etichette !== false) { ctx.fillStyle = 'rgba(255,215,160,0.8)'; ctx.fillText(ev.testo, r[0] + 6 * dpr, r[1] - 4 * dpr); } }
+      }
+    }
     if (opzioni.alCambio) opzioni.alCambio({ t, tMax: S.tMax });
   }
 
@@ -211,11 +223,11 @@ export function creaVista3D(tela, opzioni = {}) {
     const dx = e.clientX - trascina.x, dy = e.clientY - trascina.y;
     trascina.x = e.clientX; trascina.y = e.clientY;
     if (trascina.sposta) { const k = cam.dist / 600; cam.bersaglio[0] -= dx * Math.cos(cam.yaw) * k; cam.bersaglio[2] += dx * Math.sin(cam.yaw) * k; cam.bersaglio[1] += dy * k; }
-    else { cam.yaw += dx * 0.006; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006)); }
+    else { cam.yaw += dx * 0.006; cam.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cam.pitch + dy * 0.006)); }
     disegna();
   });
   tela.addEventListener('pointerup', () => { trascina = null; });
-  tela.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.max(0.4, Math.min(8, cam.dist * Math.exp(e.deltaY * 0.001))); disegna(); }, { passive: false });
+  tela.addEventListener('wheel', (e) => { e.preventDefault(); if (cam.orto) cam.zoom = Math.max(0.1, Math.min(40, (cam.zoom || 1) * Math.exp(-e.deltaY * 0.001))); else cam.dist = Math.max(0.4, Math.min(8, cam.dist * Math.exp(e.deltaY * 0.001))); disegna(); }, { passive: false });
 
   return {
     imposta,
@@ -223,7 +235,14 @@ export function creaVista3D(tela, opzioni = {}) {
     tempo: (nuovo) => { if (nuovo != null) { t = nuovo; disegna(); } return t; },
     tMax: () => (S ? S.tMax : 0),
     leggiPresenti: () => { const s = new Set(); if (S) for (const pts of S.linee3d) for (const q of pts) if (q[5]) s.add(q[5]); return [...s].sort(); },
-    rimettiVista: () => { Object.assign(cam, { ...VISTA, bersaglio: VISTA.bersaglio.slice() }); disegna(); },
+    rimettiVista: () => { Object.assign(cam, { ...VISTA, bersaglio: VISTA.bersaglio.slice(), roll: 0, zoom: 1, orto: false }); disegna(); },
+    // guarda il blocco esattamente come la sezione: lungo la sua direzione, senza prospettiva, centrato
+    // sul blocco; così all'inizio si vede il pattern della finestra, e ruotando si capisce nello spaziotempo
+    allinea: ({ inclinazione = 0, rotazione = 0 } = {}) => {
+      if (!S) return; const th = (inclinazione * Math.PI) / 180, fi = (rotazione * Math.PI) / 180;
+      Object.assign(cam, { yaw: Math.PI / 2 - fi, pitch: Math.PI / 2 - th, roll: -Math.PI / 2, orto: true, dist: 3, zoom: 3 / 1.02, bersaglio: [0, (S.tMax / 2) * S.kt / S.dim, 0] });
+      disegna();
+    },
     camera: (o) => { if (o) { Object.assign(cam, o); disegna(); } return cam; },
   };
 }

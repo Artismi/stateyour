@@ -213,6 +213,20 @@ i punti più bassi con l'acqua che il pianeta ha; la pioggia scende lungo la
 pendenza più ripida e fa i fiumi; il ghiaccio sta dove fa freddo. La mappa è nel
 pannello e avvolta sulla sfera del pianeta.
 
+Il pannello del pianeta racconta **perché è fatto così**, risalendo la catena
+delle cause con i suoi numeri: le fluttuazioni dell'inizio (quelle della
+radiazione cosmica di fondo) in quel punto, quando la galassia ha cominciato a
+fare stelle, quante generazioni di supernove avevano arricchito il gas quando è
+nata la stella, il disco e il suo ferro, il nucleo e il suo calore.
+
+**Il pattern nelle tre dimensioni.** Cliccando la finestra si entra nel suo
+spaziotempo guardato esattamente dallo stesso angolo della sezione, senza
+prospettiva: si vede il pattern. Trascinando lo si ruota e si capisce che cosa
+è: linee d'universo in un blocco di spazio e tempo. I punti arancio sono dove
+entrano i raggi (con la loro origine: un resto di supernova, il getto del buco
+nero), le stelle verdi dove una particella si spezza. Il tasto A torna
+allineato.
+
 **Il cosmo.** Niente entra dal bordo, perché il bordo non c'è: lo spazio è
 richiuso su sé stesso (`src/camera/cosmo.js`). Dalle fluttuazioni dell'inizio
 nasce la rete della materia; dove è più densa, le galassie, con un buco nero al
