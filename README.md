@@ -276,8 +276,24 @@ urto, dal disco intorno a un gigante, o è catturata; deve stare tra il limite
 di Roche (dentro si sbriciola) e la sfera di Hill (fuori la stella la strappa).
 Le maree spostano la sua orbita nel tempo, bloccano la sua rotazione, e
 scaldano l'interno di una luna in orbita eccentrica (vulcani come Io, oceani
-sotto il ghiaccio come Europa). Sono calcolate per ogni pianeta e si leggono
-nel pannello; sulla mappa non sono ancora disegnate.
+sotto il ghiaccio come Europa). Sono calcolate per ogni pianeta e si vedono sulla mappa.
+
+**Cosmi paralleli a ogni scala** (`src/camera/eventi.js`, `cosmoRamo` in
+`cosmo.js`). Ogni corso di eventi del cosmo ha un indirizzo: «disco/3/53» è la
+formazione dei pianeti della stella 53 nella galassia 3, «mantello/3/53/0» la
+storia interna del suo primo pianeta. Un cosmo parallelo è lo stesso cosmo con
+alcuni di questi eventi andati diversamente; cambia solo ciò che ne discende:
+stesse galassie, stesse stelle, stessi altri pianeti, stesse particelle nelle
+regioni. Nel pannello di un pianeta, «un pianeta parallelo» mostra lo stesso
+pianeta (stessa massa, stessa stella) con un'altra storia del mantello, quindi
+altri continenti. È la stessa regola dei rami delle particelle (molti mondi),
+portata in alto. Limite detto: per ora un ramo cambia un intero corso di eventi
+(tutta la formazione di un sistema, tutta la storia di un mantello), non ancora
+un singolo urto.
+
+Sulla mappa, al livello del pianeta, **le lune** girano sulle loro orbite vere
+(in raggi del pianeta) con la loro taglia vera; passandoci sopra si legge da
+dove vengono e in che stato sono.
 
 **La chimica** (`src/camera/chimica.js`). Dagli elementi che la galassia ha
 prodotto fino a quel momento (le abbondanze seguono i metalli della stella),
