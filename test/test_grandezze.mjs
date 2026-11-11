@@ -135,10 +135,12 @@ const indirizzo = GZ.indirizzoDi;
 { for (const g of GRANDEZZE) {
     if (!g.altrove || g.campione === false) continue;
     const perCopia = new Map();
-    for (const M of CAMPIONE) { const c = GZ.copie(g.nome, M); if (c.length < 2) continue;
-      for (const q of c.slice(1)) { const r = perCopia.get(q.dove) || { n: 0, div: 0, max: 0, es: null, scarti: [] }; r.n++; const s = salto(c[0].valore, q.valore); if (s > TOLL) { r.div++; r.scarti.push(Math.min(s, 2)); if (s > r.max) { r.max = s; r.es = { dove: indirizzo(M), a: c[0].valore, b: q.valore }; } } perCopia.set(q.dove, r); r.primo = c[0].dove; } }
-    for (const [dove, r] of perCopia) { const medio = r.scarti.length ? r.scarti.sort((u, w) => u - w)[Math.floor(r.scarti.length / 2)] : 0; R.copie.push({ nome: g.nome, primo: r.primo, copia: dove, n: r.n, diversi: r.div, max: r.max, medio, esempio: r.es });
-      if (r.div) nonTorna(`${g.nome}: la copia ${dove} è diversa da ${r.primo} in ${r.div} mondi su ${r.n} (scarto massimo ${pc(r.max)}, tipico ${pc(medio)}: ${cifre(r.es.a, 6)} contro ${cifre(r.es.b, 6)}, in ${r.es.dove})`); }
+    // (una copia può essere la stessa grandezza a un giro prima di un risolutore: allora coincide entro la tolleranza che il grafo dichiara)
+    const tol = g.tolleranza?.assoluta ?? 0;
+    for (const M of CAMPIONE) { if (!GZ.valePer(g.vale, M)) continue; const c = GZ.copie(g.nome, M); if (c.length < 2) continue;
+      for (const q of c.slice(1)) { const r = perCopia.get(q.dove) || { n: 0, div: 0, max: 0, es: null, scarti: [] }; r.n++; const s = tol > 0 && typeof c[0].valore === 'number' && typeof q.valore === 'number' && Math.abs(c[0].valore - q.valore) <= tol ? 0 : salto(c[0].valore, q.valore); if (s > TOLL) { r.div++; r.scarti.push(Math.min(s, 2)); if (s > r.max) { r.max = s; r.es = { dove: indirizzo(M), a: c[0].valore, b: q.valore }; } } perCopia.set(q.dove, r); r.primo = c[0].dove; } }
+    for (const [dove, r] of perCopia) { const medio = r.scarti.length ? r.scarti.sort((u, w) => u - w)[Math.floor(r.scarti.length / 2)] : 0; R.copie.push({ nome: g.nome, primo: r.primo, copia: dove, n: r.n, diversi: r.div, max: r.max, medio, esempio: r.es, tolleranza: tol || null, perche: g.tolleranza?.perche || null });
+      if (r.div) nonTorna(`${g.nome}: la copia ${dove} è diversa da ${r.primo}${tol > 0 ? ` oltre la tolleranza dichiarata (${cifre(tol)} ${g.unita})` : ''} in ${r.div} mondi su ${r.n} (scarto massimo ${pc(r.max)}, tipico ${pc(medio)}: ${cifre(r.es.a, 6)} contro ${cifre(r.es.b, 6)}, in ${r.es.dove})`); }
   }
   const tot = R.copie.length, male = R.copie.filter((c) => c.diversi).length;
   console.log(`  ${tot} copie della stessa grandezza in posti diversi dello stesso oggetto: ${tot - male} sempre uguali, ${male} no`);
@@ -406,6 +408,17 @@ function sonda(f, x) { const k = `${f}|${x}`; if (sonde.has(k)) return sonde.get
   if (condizionati) console.log(`  (${condizionati} archi detti non si muovono nei pochi mondi delle scansioni ma sì sondando tutto il campione: valgono solo a certe condizioni)`);
   // gli archi attesi il cui ingresso non si può nemmeno scrivere (il programma non lo tiene)
   for (const a of ARCHI) if (a.attesa && !misure.has(`${a.da}→${a.a}`)) { R.staccati.push({ da: a.da, a: a.a, specie: 'atteso dalla fisica, assente nel codice', nota: a.nota || '', dove: doveFonte(a.fonte), mondi: 0, peso: 2 }); nonTorna(`FILO STACCATO ${a.da} → ${a.a}: ${a.nota} (l'ingresso non è tenuto in nessun oggetto: la fonte non può leggerlo) [${doveFonte(a.fonte)}]`); }
+}
+// C1 bis. LE DIPENDENZE MANCANTI SEGNALATE fuori dal campione (grandezze.js DIPENDENZE_MANCANTI), misurate una per una
+{ const misure2 = { radiazione: () => { const LG = GZ.MODULI['leggi.js'], U = GZ.MODULI['galassie.js'].COSMOLOGIA, K = LG.COSTANTI, c = LG.COSMO, a1 = 1 / 1091, MPC = 3.0857e22, H0 = (c.H0 * 1e3) / MPC;
+    // Ω_r da Tcmb e Neff: u_γ = (π²/15)(kT)⁴/(ħc)³, più i neutrini a T_ν = (4/11)^⅓·T; poi t(a) = ∫ da/(a·H) con e senza
+    const rhoC = (3 * H0 * H0) / (8 * Math.PI * K.G), Og = ((Math.PI ** 2 / 15) * (K.kB * c.Tcmb) ** 4) / (K.hbar * K.c) ** 3 / (rhoC * K.c ** 2), Or = Og * (1 + c.Neff * (7 / 8) * Math.pow(4 / 11, 4 / 3));
+    const t = (or) => { let s = 0; const n = 20000; for (let i = 0; i < n; i++) { const a = (a1 * (i + 0.5)) / n; s += (a1 / n) / (a * H0 * Math.sqrt(c.Om / a ** 3 + or / a ** 4 + c.OL)); } return s / LG.ANNO; };
+    const senza = t(0), con = t(Or), diU = U.tempo(a1) * (U.tempo(1) > 1e6 ? 1 : 1e9);
+    return { testo: `a z = 1090 galassie.js U.tempo dà ${cifre(diU)} anni (senza radiazione, rifatto qui: ${cifre(senza)}); con Ω_r = ${cifre(Or)} (da Tcmb = ${c.Tcmb} K, Neff = ${c.Neff}) sono ${cifre(con)}`, prima: diU, dopo: con }; } };
+  for (const d of GZ.DIPENDENZE_MANCANTI) { let m = null; try { m = misure2[d.chiave]?.(); } catch (e) { m = { testo: `(non misurata: ${e.message.slice(0, 80)})` }; }
+    const riga = rigaDi(d.dove.modulo, d.dove.cerca); R.staccati.push({ da: d.da, a: d.a, specie: 'dipendenza mancante (fuori dal campione)', nota: `${d.nota}: ${m?.testo ?? ''}`, dove: `${d.dove.modulo}${riga ? `:${riga}` : ''}`, mondi: 0, peso: 2, sanare: d.sanare });
+    nonTorna(`DIPENDENZA MANCANTE ${d.da} → ${d.a}: ${d.nota}: ${m?.testo ?? ''} [${d.dove.modulo}${riga ? `:${riga}` : ''}]`); }
 }
 // C2. nel campione: le due grandezze vanno insieme nel verso che la dipendenza dice? Si confronta la correlazione
 // PARZIALE (tolti gli altri ingressi dichiarati della stessa uscita) con il segno dichiarato o, se non è dichiarato,

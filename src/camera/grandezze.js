@@ -443,6 +443,14 @@ export const FORMULE_CON_FONTE = [
   { grandezza: 'clima.equilibrio', che: 'la temperatura di equilibrio con albedo 0,3 fisso', casa: [], motivo: /temperaturaEquilibrio\([^)]*, 0\.3\)/ },
 ];
 
+// LE DIPENDENZE MANCANTI SEGNALATE: grandezze che dovrebbero entrare in una formula e non ci entrano, fuori dal
+// campione dei pianeti (quelle dentro il campione sono gli archi «attesi» delle grandezze). La prova le misura una per una.
+export const DIPENDENZE_MANCANTI = [
+  { chiave: 'radiazione', da: 'la densità di radiazione Ω_r (fotoni e neutrini: da leggi.js COSMO.Tcmb e COSMO.Neff)', a: 'il tempo cosmico di galassie.js (U.tempo: l\'età dell\'universo a un dato redshift)',
+    nota: 'U.tempo conta solo materia ed energia oscura: ai redshift alti, dove la radiazione pesa, dà un\'età troppo lunga', dove: { modulo: 'galassie.js', cerca: 'tempo = (a) =>' },
+    sanare: 'integrare dt = da/(a·H) con H² = H0²·(Ωm/a³ + Ω_r/a⁴ + ΩΛ), con Ω_r da COSMO.Tcmb e COSMO.Neff (ragnatela.js lo fa già per conto suo)' },
+];
+
 // =====================================================================================================
 // 7. L'INDICE e la coerenza del grafo
 // =====================================================================================================

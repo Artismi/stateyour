@@ -474,6 +474,7 @@ export function coerenza(etaAnni = ETA_RIFERIMENTO) {
 // dal vento della stella (campo di forza, Gleeson e Axford 1968: ogni particella perde Φ = 0,55 GeV entrando).
 const M_P = 0.93827, PHI = 0.55, LAMBDA_ATT = 1.4; // (GeV, GV) · la lunghezza di attenuazione dei nucleoni è 1,4 volte quella d'urto (aria: 120 g/cm²)
 const fuori = (E) => { const P = Math.sqrt(E * (E + 2 * M_P)); return (1.3 * 1.9e4 * Math.pow(P, -2.78)) / (1 + 0.4866 * Math.pow(P, -2.51)); };
+export const spettroInterstellare = fuori; // (lo spettro dei raggi cosmici fuori dal vento della stella: una fonte sola, lo legge vuoto_mezzo.js)
 const primari = (E) => (fuori(E + PHI) * (E * (E + 2 * M_P))) / ((E + PHI) * (E + PHI + 2 * M_P));
 const RESA_MUONI = (0.14 / 1.8) * Math.pow(10, 2.7);
 // la soglia di Størmer (GV) in un punto della superficie: sotto questa rigidità un raggio che arriva dall'alto non passa.
