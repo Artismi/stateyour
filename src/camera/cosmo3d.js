@@ -46,26 +46,33 @@ function fft(re, im, n, o, s, inversa) {
     for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < h; k++) { const a = o + (i + k) * s, b = a + h * s, xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr; re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } }
   }
 }
+// LE ONDE DEL TORO: mezzo spazio (le altre sono le coniugate), |k| ≤ kmax giri per lato, ognuna con la sua potenza
+// vera ⟨|δ_k|²⟩ = Δ²(k)/(4π·k³). La lista è la stessa per chiunque faccia un campo su questo toro (bolle.js).
+export function ondeDelToro(toroM, kmax) {
+  const L = toroM / MPC, kx = [], ky = [], kz = [], P = [];
+  for (let z = 0; z <= kmax; z++) for (let y = -kmax; y <= kmax; y++) for (let x = -kmax; x <= kmax; x++) {
+    if (z === 0 && (y < 0 || (y === 0 && x <= 0))) continue; const k2 = x * x + y * y + z * z; if (k2 > kmax * kmax) continue;
+    const k = Math.sqrt(k2); kx.push(x); ky.push(y); kz.push(z); P.push(U.potenza((PI2 * k) / L) / (4 * Math.PI * k2 * k)); // k in giri per lato
+  }
+  return { N: P.length, KX: Int16Array.from(kx), KY: Int16Array.from(ky), KZ: Int16Array.from(kz), PK: Float64Array.from(P) };
+}
 const campi = new WeakMap();
 // IL COSMO IN 3D. C: cosmo(n) di cosmo.js (le galassie con pos [x, y] e peso); radice e rami: l'indirizzo del cosmo
 // («cosmo 1») e i suoi rami; toroM: il lato. → vedi i campi restituiti in fondo.
 export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, kmax = 24, celle = 64 } = {}) {
   let F = campi.get(C); if (F) return F;
   const L = toroM / MPC, caso = sorgente(radice, rami), c = generatore(caso.seme('campo')), gauss = () => Math.sqrt(-2 * Math.log(1 - c())) * Math.cos(PI2 * c());
-  // ---- le onde: mezzo spazio (le altre sono le coniugate), |k| ≤ kmax; l'ampiezza dallo spettro vero
-  const kx = [], ky = [], kz = [], P = [];
-  for (let z = 0; z <= kmax; z++) for (let y = -kmax; y <= kmax; y++) for (let x = -kmax; x <= kmax; x++) {
-    if (z === 0 && (y < 0 || (y === 0 && x <= 0))) continue; const k2 = x * x + y * y + z * z; if (k2 > kmax * kmax) continue;
-    const k = Math.sqrt(k2); kx.push(x); ky.push(y); kz.push(z); P.push(U.potenza((PI2 * k) / L) / (4 * Math.PI * k2 * k)); // ⟨|δ_k|²⟩ = Δ²(k)/(4π·k³), k in giri per lato
-  }
-  const N = P.length, A = new Float64Array(N), B = new Float64Array(N), KX = Int16Array.from(kx), KY = Int16Array.from(ky), KZ = Int16Array.from(kz), PK = Float64Array.from(P);
+  // ---- le onde (ondeDelToro) e le loro ampiezze libere
+  const { N, KX, KY, KZ, PK } = ondeDelToro(toroM, kmax), A = new Float64Array(N), B = new Float64Array(N);
   for (let i = 0; i < N; i++) { const s = Math.sqrt(PK[i] / 2); A[i] = s * gauss(); B[i] = s * gauss(); }
+  const A0 = Float64Array.from(A), B0 = Float64Array.from(B); // il campo LIBERO di questo indirizzo, prima di ogni vincolo (per bolle.js)
   // ---- le galassie: x, y dalla carta; z un evento di ognuna
   const G = C.galassie, ng = G.length, pos = G.map((g) => [g.pos[0], g.pos[1], sorgente(`${radice}/galassia ${g.id}`, rami)('profondità')]);
   // ---- il vincolo: il campo filtrato alle onde lunghe (|k| ≤ onde) vale peso·σ nel punto di ogni galassia
   const lunghe = []; for (let i = 0; i < N; i++) if (KX[i] ** 2 + KY[i] ** 2 + KZ[i] ** 2 <= onde * onde) lunghe.push(i);
   const sigmaOnde = SIGMA_CAMPO(toroM, onde), co = new Float64Array(ng), si = new Float64Array(ng), xi = new Float64Array(ng * ng), resto = new Float64Array(ng); let s2 = 0;
   for (let i = 0; i < ng; i++) resto[i] = (G[i].peso ?? 0) * sigmaOnde;
+  const valori = Float64Array.from(resto); // ciò che il campo filtrato deve valere in ogni galassia
   for (const m of lunghe) {
     s2 += 2 * PK[m];
     for (let i = 0; i < ng; i++) { const t = PI2 * (KX[m] * pos[i][0] + KY[m] * pos[i][1] + KZ[m] * pos[i][2]); co[i] = Math.cos(t); si[i] = Math.sin(t); resto[i] -= 2 * (A[m] * co[i] - B[m] * si[i]); }
@@ -119,6 +126,6 @@ export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, kmax
     const comoventi = pos.map((x, i) => [0, 1, 2].map((d) => x[d] - ((1 - g.D) * V[i][d]) / (COSMO.H0 * f0 * L))); // Zel'dovich: x(t) = x₀ − (1 − D)·Ψ, Ψ = v/(H₀·f₀)
     return { a, z: 1 / a - 1, D: g.D, H: g.H, latoM: a * toroM, comoventi, velocita: V.map((v) => v.map((q) => q * k)) };
   };
-  F = { toroM, latoMpc: L, onde: { n: N, kx: KX, ky: KY, kz: KZ, A, B, potenza: PK, kmax }, sigmaOnde, sigmaLunghe: Math.sqrt(s2), pos, densita, densitaLunga, velocita, marea, griglia, motiGalassie, assiGalassie, alTempo, crescita, f0, vere, peso: vere / ng, massaMinima: mMin, oggiGa: U.tempo(1) };
+  F = { toroM, latoMpc: L, onde: { n: N, kx: KX, ky: KY, kz: KZ, A, B, potenza: PK, kmax }, libere: { A: A0, B: B0 }, vincoli: { taglio: onde, valori }, sigmaOnde, sigmaLunghe: Math.sqrt(s2), pos, densita, densitaLunga, velocita, marea, griglia, motiGalassie, assiGalassie, alTempo, crescita, f0, vere, peso: vere / ng, massaMinima: mMin, oggiGa: U.tempo(1) };
   campi.set(C, F); return F;
 }
