@@ -51,7 +51,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // lo stato del mantello dalla storia termica del pianeta (storia.js: quella che il pianeta ha già): il salto di temperatura
   // tra il mantello alto e la superficie, la sua conducibilità e la sua diffusività: da lì la velocità delle placche
   let mantello = null; if (aPlacche) { try { const sto = storia(P, int.eta ?? 4.5e9); if (sto && sto.Tum > sto.Ts) mantello = { dT: sto.Tum - sto.Ts, k: STORIA.kSu, kappa: STORIA.kSu / (STORIA.rhoSu * STORIA.cp) }; } catch { mantello = null; } }
-  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, mantello, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
+  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(`onda ${k}/direzione`), f: 2 + k * 0.7, fi: caso(`onda ${k}/fase`) * 6.28, a: 1 / (1 + k * 0.35) }));

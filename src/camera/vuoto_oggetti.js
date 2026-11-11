@@ -5,8 +5,8 @@
 //
 // COME SONO FATTI (uguale per tutti i tipi): il disco è diviso in CELLE — l'anello di galassie.js, in strisce di raggio
 // larghe ~¼ kpc, in settori presi RISPETTO AI BRACCI (un settore gira con l'onda). In ogni cella gli oggetti di un tipo
-// sono un processo di Poisson: Γ₁ < Γ₂ < … sono somme di intervalli esponenziali (un evento per cella, le sue estrazioni
-// una dopo l'altra), e l'oggetto j esiste se Γ_j è sotto il numero atteso nella cella. Per i tipi che hanno una
+// sono un processo di Poisson: Γ₁ < Γ₂ < … sono somme di intervalli esponenziali (un evento per striscia, «nube/5.3/quanti»,
+// con le estrazioni di ogni cella una dopo l'altra), e l'oggetto j esiste se Γ_j è sotto il numero atteso nella cella. Per i tipi che hanno una
 // grandezza che li ordina (la massa di una nube, la massa della stella che accende una regione H II) Γ_j È quella
 // grandezza: la massa dell'oggetto j è quella sopra la quale nella cella se ne aspettano Γ_j. Così i più grandi vengono
 // per primi, la funzione di massa è quella giusta, e per elencare «quelli sopra una soglia» ci si ferma appena la si
@@ -233,6 +233,9 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
   const dentro = (p) => Math.hypot(p[0] - centro[0], p[1] - centro[1], p[2] - centro[2]) <= raggio, oggetti = [], nebbia = {};
   const perAnello = (peso) => { const W = new Float64Array(ANELLI); for (const c of celle) { c.w = peso(c); W[c.k] += c.w; } return W; };
   const intervallo = (s, j) => -logEsatto(1 - s(j)); // l'intervallo j di un processo di Poisson di ritmo 1 (esatto: decide chi esiste)
+  // gli intervalli di tutte le celle di una striscia di raggio sono estrazioni dello stesso evento («nube/5.3/quanti»: la
+  // cella s usa le estrazioni da s·65536 in su): così guardare una cella vuota costa un numero, non un indirizzo nuovo
+  const PER_CELLA = 65536, strisce = new Map(), striscia = (nome, c, ep = null) => { const k = `${nome}/${c.k}.${c.i}${ep == null ? '' : `/epoca ${ep}`}/quanti`; let s = strisce.get(k); if (!s) strisce.set(k, (s = c0.serie(k))); return s; };
   // --- i tipi ordinati da una grandezza: sopra(M) = quanti se ne aspettano nell'anello sopra M; fai(R, valore, sorgente)
   const ordinati = (tipo, nome, cdf, hz, attesiTot, valoreDi, fai) => {
     if (!tipi.includes(tipo)) return;
@@ -241,8 +244,8 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
     // (la nebbia: di ogni anello si tiene la stessa parte, dall'alto: i più grandi; zoomando la parte cresce e i primi restano)
     for (const c of celle) {
       const R = Cn.anello(c.k), tot = attesiTot(R) * c.w, fin = tot * taglio; if (!(fin > 0)) continue;
-      const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}`, s = c0.serie(nomeCella); let G = 0;
-      for (let j = 0; j < 100000; j++) { G += intervallo(s, j); if (G >= fin) break; const o = c0.sotto(`${nomeCella}/${j}`), p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; // (prima il posto: chi sta fuori dalla regione non si costruisce nemmeno)
+      const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}`, s = striscia(nome, c), s0 = c.s * PER_CELLA; let G = 0;
+      for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= fin) break; const o = c0.sotto(`${nomeCella}/${j}`), p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; // (prima il posto: chi sta fuori dalla regione non si costruisce nemmeno)
         const ogg = fai(R, valoreDi(R, G / c.w), o); if (!ogg) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k }); mostrati++; }
     }
     nebbia[tipo] = { veri, mostrati, soglia: taglio, cosa: taglio < 1 ? `i ${Math.round(massimo)} più grandi di ${Math.round(veri)}` : 'tutti' };
@@ -260,8 +263,8 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
     for (const c of celle) {
       const R = Cn.anello(c.k), D = durata(R), perEpoca = ritmo(R) * c.w * D; if (!(perEpoca > 0)) continue; const e1 = Math.floor(tAnni / D);
       for (let ep = e1 - 1; ep <= e1; ep++) {
-        const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}/epoca ${ep}`, s = c0.serie(nomeCella); let G = 0;
-        for (let j = 0; j < 100000; j++) { G += intervallo(s, j); if (G >= perEpoca * taglio) break; const o = c0.sotto(`${nomeCella}/${j}`), nato = (ep + o('quando')) * D, eta = tAnni - nato; if (eta < 0 || eta >= D || (salta && salta(nato))) continue;
+        const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}/epoca ${ep}`, s = striscia(nome, c, ep), s0 = c.s * PER_CELLA; let G = 0;
+        for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= perEpoca * taglio) break; const o = c0.sotto(`${nomeCella}/${j}`), nato = (ep + o('quando')) * D, eta = tAnni - nato; if (eta < 0 || eta >= D || (salta && salta(nato))) continue;
           const p = postoIn(forma, R, c.i, c.s, cdf, Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; const ogg = fai(R, o, eta); if (!ogg) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k, nato }); mostrati++; }
       }
     }

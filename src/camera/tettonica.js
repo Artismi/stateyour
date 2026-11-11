@@ -360,7 +360,7 @@ export const velocitaPlacche = ({ q, dT, lunghezza, k = 4.2, kappa = 1e-6 }) => 
 // resto è mantello); q: calore interno oggi (W/m²; Terra 0,087); eta: età in anni; acqua: se la crosta è indebolita
 // dall'acqua (senza, non si rompe in placche); passi: quanti passi sulla griglia finale; impronta: lo stato iniziale
 // del mantello, l'anomalia termica lasciata dagli urti (vedi mantello: una mappa lon × lat o una funzione (W, H) → mappa);
-// mantello: { dT, k, kappa } lo stato del mantello dalla storia termica (storia.js), per la velocità delle placche;
+// termico: { dT, k, kappa } lo stato del mantello dalla storia termica (storia.js), per la velocità delle placche;
 // seme: il ripiego, se l'impronta manca o è piatta (storia.impronta dice quale dei due ha deciso: 'urti' o 'seme').
 // IL TEMPO. La velocità è quella vera, e in un passo la crosta non può fare più di un terzo di cella: quindi il
 // passato lontano si simula a grana grossa (griglie larghe 64, 128… celle: tanto il rimescolamento ne cancella i
@@ -399,7 +399,7 @@ export const velocitaPlacche = ({ q, dT, lunghezza, k = 4.2, kappa = 1e-6 }) => 
 // spinta = 0, spessore = 0, fosse = 0 (e così velocità, sollevamento, copertura), etaCrosta = l'età del pianeta ovunque; alt = solo i rigonfiamenti sopra i
 // pennacchi del mantello (fino a 1,5 km, come Tharsis o gli altopiani di Venere), o piatta (tutta 0) se anche il
 // mantello è fermo (q ≤ 0,02).
-export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null, impronta = null, mantello = null } = {}) {
+export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null, impronta = null, termico = null } = {}) {
   if (W !== 2 * H || W < 32 || (W & (W - 1))) throw new Error('tettonica: serve W = 2H, potenza di 2, almeno 32');
   const N = W * H, alt = new Float32Array(N), cont = new Uint8Array(N), spinta = new Float32Array(N), etaCrosta = new Float32Array(N), spessore = new Float32Array(N), fosse = new Float32Array(N), copertura = new Float32Array(N), sollevamento = new Float32Array(N), regge = new Float32Array(N), arco = new Float32Array(N), consumata = new Float32Array(N), posata = new Float32Array(N), velEst = new Float32Array(N), velSud = new Float32Array(N);
   // le celle del mantello sono larghe circa una volta e mezza il suo spessore: quante ce ne stanno in un giro
@@ -412,10 +412,10 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     if (vivo) { const u = man.su(W, H), A = 1500 * Math.min(1, q / C.qTerra); let mx = 1e-9; for (const v of u) mx = Math.max(mx, Math.abs(v)); for (let k = 0; k < N; k++) alt[k] = (A * u[k]) / mx; }
     return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, salite: vivo ? Float32Array.from(man.su(W, H)) : null, spessore, fosse, copertura, sollevamento, regge, arco, consumata, posata, velEst, velSud, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [], impronta: origine, finestra: 0 } };
   }
-  // LA VELOCITÀ DELLE PLACCHE. Se chi chiama dà lo stato del mantello (mantello: { dT, k, kappa }, dalla storia termica del
+  // LA VELOCITÀ DELLE PLACCHE. Se chi chiama dà lo stato del mantello (termico: { dT, k, kappa }, dalla storia termica del
   // pianeta: storia.js) è quella di velocitaPlacche(), ricavata; se no resta la LEGGE DI SCALA di prima (strato limite
   // della convezione: cresce come il quadrato del calore che esce), agganciata alla Terra (4 cm/anno a 0,087 W/m²)
-  const V = mantello && mantello.dT > 0 ? velocitaPlacche({ q, dT: mantello.dT, lunghezza: (2 * Math.PI * raggioM) / onde, k: mantello.k, kappa: mantello.kappa }) : C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
+  const V = termico && termico.dT > 0 ? velocitaPlacche({ q, dT: termico.dT, lunghezza: (2 * Math.PI * raggioM) / onde, k: termico.k, kappa: termico.kappa }) : C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
   // i livelli di griglia e quanti passi su ciascuno, partendo dal presente e andando indietro
   const larghezze = []; for (let w = W; w >= Math.min(64, W); w /= 2) larghezze.unshift(w);
   const liv = larghezze.map((w) => ({ W: w, H: w / 2, dt: (C_PASSO * 2 * Math.PI * raggioM) / w / V, n: 0 }));

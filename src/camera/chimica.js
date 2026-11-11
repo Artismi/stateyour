@@ -332,7 +332,10 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
   const gSup = conInventario ? gravitaDiSuperficie(P.massaKg, P.raggioM) : 0;
   const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : cl.livello ?? LIVELLO_GIGANTI; // nei giganti: il livello di riferimento (leggi.js)
   // («memoria»: chi chiede molte arie dello stesso pianeta a temperature vicine non rifà ogni volta l'equilibrio)
-  const chiaveEq = memoria ? `${Math.round(Tr / 5)}|${Pr.toPrecision(6)}|${Object.values(el).map((v) => v.toPrecision(6)).join(',')}` : null;
+  // (la chiave è ESATTA — temperatura, pressione ed elementi così come sono —: la memoria risparmia solo i conti identici
+  // (lo stesso equilibrio chiesto con un'altra CO2 del ciclo, o due volte alla stessa temperatura) e non cambia mai il
+  // risultato. Prima arrotondava la temperatura a 5 K: l'aria che restava era quella di una temperatura vicina)
+  const chiaveEq = memoria ? `${Tr}|${Pr}|${Object.values(el).join(',')}` : null;
   const eq = (memoria && memoria.get(chiaveEq)) || equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas }; if (memoria) memoria.set(chiaveEq, eq);
   for (const f in x) if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f];
   // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
@@ -661,8 +664,14 @@ export function rocceDelPianeta(P = {}) {
     return { anortite: r.Ca > 0 ? an / r.Ca : 0, olivina: Si >= M ? 0 : Math.min(1, (2 * Math.min(M - Si, Math.max(Si, 0))) / M) }; };
   return { mantello: { ...perKg(mantello), ...ROCCE.rimasto }, basalto: { ...perKg(basalto), ospiti: ospiti(basalto) }, granito: { ...perKg(granito), ospiti: ospiti(granito) }, fusione: F_BASALTO };
 }
-// l'acidità dell'acqua del suolo sotto una pressione di CO2 (bar): [H⁺] (mol/kg), mai meno dell'acqua pura
-export const acidoDelSuolo = (pCO2, T = 288) => Math.max(1e-7, Math.sqrt(Math.pow(10, ROCCE.acidoCarbonico[0]) * Math.exp(((-1000 * ROCCE.acidoCarbonico[1]) / R_GAS) * (1 / T - 1 / 298.15)) * Math.max(0, pCO2)));
+// l'acidità dell'acqua del suolo sotto una pressione di CO2 (bar): [H⁺] (mol/kg). È il bilancio delle cariche dell'acqua
+// in equilibrio con la CO2, [H⁺] = [HCO3⁻] + [OH⁻]: [H⁺]² = K·pCO2 + Kw, con Kw = 10⁻¹⁴ (l'acqua pura: [H⁺] = 10⁻⁷, a 25 °C;
+// la sua dipendenza dalla temperatura qui non c'è). Senza CO2 è l'acqua pura; con molta, √(K·pCO2).
+// (Prima era max(10⁻⁷, √(K·pCO2)): sotto 0,07 Pa di CO2 l'acidità restava ferma di colpo, le rocce consumate non
+// dipendevano più dalla CO2, e la CO2 del ciclo saltava di cento volte, fino al pavimento di Urey, appena i vulcani
+// ne davano un filo meno di quanto la sola acqua pura consuma. Era un taglio di comodo, non una soglia della natura.)
+const KW_ACQUA = 1e-14;
+export const acidoDelSuolo = (pCO2, T = 288) => Math.sqrt(Math.pow(10, ROCCE.acidoCarbonico[0]) * Math.exp(((-1000 * ROCCE.acidoCarbonico[1]) / R_GAS) * (1 / T - 1 / 298.15)) * Math.max(0, pCO2) + KW_ACQUA);
 // quanta parte di un minerale si scioglie nel tempo che il granello resta nel suolo (anni), a T, con l'acqua acida aH
 const lab = (minerale, T, aH) => { const [ln, En, , la, n, Ea] = MINERALI_ROCCIA[minerale], ar = (E) => Math.exp(((-1000 * E) / R_GAS) * (1 / T - 1 / 298.15)); return Math.pow(10, ln) * ar(En) + (la > -90 ? Math.pow(10, la) * ar(Ea) * Math.pow(aH, n) : 0); };
 export function sciolto(minerale, T, anni, aH = acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)) {
