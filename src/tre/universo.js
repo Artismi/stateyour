@@ -167,7 +167,11 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
   let assiSistema = null; import('../camera/spazio3d.js').then((m) => { assiSistema = m.assiSistema; });
   const scenaAssi = (v) => { const a = assiSistema ? assiSistema(v.cosmo, v.galassia, v.stella) : [[1, 0, 0], [0, 1, 0], [0, 0, 1]]; return [a[0][0], a[1][0], a[2][0], a[0][1], a[1][1], a[2][1], a[0][2], a[1][2], a[2][2]]; };
   // chi governa: a ogni fotogramma si guarda che cosa c'è vicino e lo si prepara (o lo si lascia)
+  // (subito dopo un salto a una bolla le distanze misurate dagli strati sono ancora quelle di prima del salto: per due
+  // fotogrammi non si chiude niente, o si chiuderebbe proprio il sistema in cui si è appena arrivati)
+  let fermoGoverno = 0;
   const governo = { nome: 'livelli', aggiorna(S) {
+    if (fermoGoverno > 0) { fermoGoverno--; return; }
     if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina]; if (cosmo.distanzaVicina < 14 * r && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
     cosmo.dentro = !!G && G.distanza < 2.5 * G.raggio;
     if (G && assiSistema) { if (G.vicina >= 0 && G.distanzaVicina < 4e15 && (!Sis || Sis.via.stella !== G.vicina)) apriSistema(G.vicina); else if (Sis && G.distanzaVicina > 1.2e16) chiudiSistema(); }
@@ -194,7 +198,7 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     let corpo = cosmo.radice, tipo = 'cosmo';
     if (v.galassia != null) { apriGalassia(v.galassia); corpo = G.nodo; tipo = 'galassia';
       if (v.stella != null) { if (!assiSistema) return false; apriSistema(v.stella);
-        if (Sis) { corpo = Sis.nodo; tipo = 'sistema'; if (b.indirizzo.percorso.includes('astro')) corpo = Sis.stella;
+        if (Sis) { corpo = Sis.nodo; tipo = 'sistema';
           const p = v.pianeta != null ? Sis.pianeta(v.pianeta) : null; if (p) { corpo = p; tipo = 'corpo';
             if (v.luna != null) { const l = Sis.corpi.find((x) => { const q = Sis.scheda(x); return q && q.c.cosa === 'luna' && q.c.pianeta === v.pianeta && q.c.id === v.luna; }); if (l) corpo = l; } } } } }
     if (b.posizione && b.assi) { cam.corpo = corpo; cam.solidale = !!(b.moto && b.moto.solidale) && !!corpo.assetto; cam.pos = b.posizione.slice(); cam.assi = b.assi.slice(); cam.perno = null; }
@@ -204,7 +208,7 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
       else if (tipo === 'sistema') guardaDa(corpo, d || 2.4 * Math.max(...Sis.Sis.pianeti.map((q) => q.aM || 0), 1e11), 0.5, 0.8);
       else if (tipo === 'galassia') guardaDa(corpo, d || 2.6 * G.raggio, 0.55, 0.7);
       else { const sc = cosmo.scena(), P = sc.punti.pos, k = (d || 0.15 * cosmo.lato()) / Math.hypot(0.12, 0.05, 0.09); cam.corpo = cosmo.radice; cam.solidale = false; cam.pos = [P[0] + 0.12 * k, P[1] + 0.05 * k, P[2] + 0.09 * k]; cam.assi = N.assiDa(V.norma([-0.12, -0.05, -0.09]), [0, 0, 1]); cam.perno = null; } }
-    N.cambia(); return true;
+    fermoGoverno = 2; N.cambia(); return true;
   }
   let partito = false, daAprire = bollaIniziale; const aspetta = { nome: 'partenza', aggiorna() {
     if (daAprire) { if (applica(daAprire) !== false) { daAprire = null; partito = true; } return; }

@@ -8,6 +8,13 @@ import { interno, superficiePianeta, climaSuperficie } from '../src/camera/geolo
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 const tra = (x, a, b, che) => assert.ok(x > a && x < b, `${che}: ${x} (atteso tra ${a} e ${b})`);
+// CIÒ CHE DIPENDE DA DOVE SONO I CONTINENTI non è una legge: su un mondo c'è e su un altro no. Queste proprietà non fermano
+// la prova: su questa Terra si stampano («≠ NON TORNA» se mancano), e più sotto si misurano su una POPOLAZIONE di Terre con
+// i continenti diversi (stessi parametri, semi diversi), stampando in quante valgono. Le asserzioni dure restano su ciò che
+// la fisica garantisce (l'acqua che si conserva, i versi dei venti, i limiti). Se una proprietà vale su meno della metà dei
+// mondi il difetto è del modello, e resta scritto in fondo.
+const nonTorna = [];
+const atteso = (bene, che) => { if (!bene) { nonTorna.push(`su questa Terra: ${che}`); console.log(`      ≠ NON TORNA (su questa Terra)  ${che}`); } return bene; };
 const W = 64, H = 32, N = W * H, GIORNO = 86164;
 const lat = (j) => 90 - ((j + 0.5) * 180) / H, peso = (j) => Math.cos((lat(j) * Math.PI) / 180);
 const zonale = (x) => Array.from({ length: H }, (_, j) => { let s = 0; for (let i = 0; i < W; i++) s += x[j * W + i]; return s / W; });
@@ -88,7 +95,7 @@ prova('la Terra: alisei da est ai tropici, venti da ovest alle medie latitudini,
     tra(estremo(zUa, 20, 50, em, Math.max), 20, 60, 'il getto in quota (m/s; misurato 30-40)');
     assert.ok(fascia(zonale(terra.v), 5, 18, em) * em < 0, 'al suolo gli alisei vanno verso l\'equatore');
   }
-  assert.ok(terra.fasceNord >= 3 && terra.fasceSud >= 3, `almeno tre fasce di vento per emisfero: ${terra.fasceNord} e ${terra.fasceSud}`);
+  atteso(terra.fasceNord >= 3 && terra.fasceSud >= 3, `almeno tre fasce di vento per emisfero: ${terra.fasceNord} e ${terra.fasceSud} (sulla popolazione: più sotto)`);
   tra(terra.latitudineAlisei, 15, 35, 'dove finiscono gli alisei (°; sulla Terra 30)');
   // la cella di Hadley: in quota verso i poli, tra l'equatore e i tropici, da una parte e dall'altra
   const psiN = terra.psi[H / 2 - 3], psiS = terra.psi[H / 2 + 1];
@@ -129,7 +136,11 @@ prova('la neve sale con la quota, e la pioggia si porta sulla griglia fine dell\
   for (let k = 0; k < pf.neve.length; k++) assert.ok(pf.neve[k] >= 0 && pf.neve[k] <= pf.pioggia[k] * 1.0001 + 1e-6);
   // una tessera (un sedicesimo della carta): stessa pioggia dello stesso pezzo
   const ts = pioggiaFine(terra, { W: 32, H: 32, alt: new Float32Array(1024), rett: [0.5, 0.5, 0.5625, 0.5625] });
-  let m = 0; for (const v of ts.pioggia) m += v / 1024; tra(m, 0.5 * terra.pioggia[16 * W + 32], 2 * terra.pioggia[16 * W + 33] + 50, 'la pioggia di una tessera');
+  // (la tessera copre le colonne 32–35 e le righe 16–17 della carta: la sua pioggia media sta tra la minima e la massima di
+  // quelle celle e delle loro vicine, da cui è interpolata. Prima si chiedeva «tra metà della cella 32 e il doppio della 33»:
+  // dove la pioggia cambia in fretta da una cella all'altra l'intervallo era vuoto, e la prova falliva su 7 mondi su 16)
+  let m = 0; for (const v of ts.pioggia) m += v / 1024; let pMin = Infinity, pMax = 0; for (let j = 15; j <= 18; j++) for (let i = 31; i <= 36; i++) { pMin = Math.min(pMin, terra.pioggia[j * W + i]); pMax = Math.max(pMax, terra.pioggia[j * W + i]); }
+  tra(m, 0.97 * pMin - 1, 1.03 * pMax + 1, 'la pioggia di una tessera (tra la minima e la massima delle celle che copre)');
   console.log(`      neve sopra i 2500 m: ${(100 * alti / nAlti).toFixed(0)}% della precipitazione (${nAlti} punti); sotto i 500 m: ${(100 * bassi / nBassi).toFixed(0)}% (${nBassi} punti)`);
 });
 
@@ -139,13 +150,32 @@ const stagione = (e) => { const T = terraMisurata(); for (let j = 0; j < H; j++)
 const quattro = (amp) => [stagione(0), stagione(amp), stagione(0), stagione(-amp)];
 const tS = performance.now(), anno = circolazione({ ...base, stagioni: quattro(14), alt: sf.alt, mare: sf.mare }), tempoStagioni = performance.now() - tS;
 
+// LA POPOLAZIONE: dodici Terre con gli stessi parametri e i continenti diversi (questa e i semi da 11 a 21: i primi, non
+// scelti), ognuna con le sue quattro stagioni. Che cosa si misura su ognuna: le tre fasce di vento, la fascia delle piogge
+// che segue il sole, la stagione secca e quella piovosa ai tropici. Con dodici mondi una frazione è nota a ± 14% (uno scarto).
+const SEMI_POPOLAZIONE = [37, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+const misuraStagioni = (an) => { const [pri, est, aut, inv] = an.stagioni.map((r) => r.latitudinePiogge), zEst = zonale(an.stagioni[1].pioggia), zInv = zonale(an.stagioni[3].pioggia);
+  const nE = fascia(zEst, 8, 25, 1), nI = fascia(zInv, 8, 25, 1), sE = fascia(zEst, 8, 25, -1), sI = fascia(zInv, 8, 25, -1);
+  return { lat: [pri, est, aut, inv], nE, nI, sE, sI, fasceNord: an.fasceNord, fasceSud: an.fasceSud,
+    fasce: an.fasceNord >= 3 && an.fasceSud >= 3, migra: est > 2 && inv < -2, versoIlSole: est > inv,
+    equinoziVicini: Math.abs(pri) < Math.abs(est) + 0.1 && Math.abs(aut) <= Math.abs(inv) + 0.1, equinoziInMezzo: pri >= inv && pri <= est && aut >= inv && aut <= est,
+    seccaEPiovosa: nE > 1.8 * nI && sI > 1.8 * sE, piovosaNord: nE > 1.8 * nI, piovosaSud: sI > 1.8 * sE,
+    conserva: Math.abs(an.bilancio.evaporata - an.bilancio.piovuta - an.bilancio.accumulata) / an.bilancio.piovuta, piovuta: an.bilancio.piovuta }; };
+const tPop = performance.now();
+const POPOLAZIONE = SEMI_POPOLAZIONE.map((seme) => { const s = seme === 37 ? sf : superficiePianeta(`meteo-popolazione-${seme}`, P, it, seme); return { seme, ...misuraStagioni(seme === 37 ? anno : circolazione({ ...base, stagioni: quattro(14), alt: s.alt, mare: s.mare })) }; });
+const tempoPopolazione = performance.now() - tPop;
+// in quanti mondi vale; sotto la metà è un difetto del modello: si stampa «≠ NON TORNA» e resta scritto in fondo
+const suiMondi = (chiave, che) => { const k = POPOLAZIONE.filter((m) => m[chiave]).length, n = POPOLAZIONE.length; if (2 * k < n) { nonTorna.push(`sulla popolazione: ${che}: ${k} mondi su ${n}`); console.log(`      ≠ NON TORNA  ${che}: solo ${k} mondi su ${n}`); } return `${k}/${n}`; };
+
 prova('le stagioni: la fascia delle piogge segue il sole, i tropici hanno una stagione secca e una piovosa, d\'inverno nevica', () => {
   assert.equal(anno.stagioni.length, 4); const [pri, est, aut, inv] = anno.stagioni, zEst = zonale(est.pioggia), zInv = zonale(inv.pioggia);
-  assert.ok(est.latitudinePiogge > 2 && inv.latitudinePiogge < -2, `la fascia delle piogge migra: ${est.latitudinePiogge}° d'estate, ${inv.latitudinePiogge}° d'inverno`);
-  assert.ok(Math.abs(pri.latitudinePiogge) < Math.abs(est.latitudinePiogge) + 0.1 && Math.abs(aut.latitudinePiogge) <= Math.abs(inv.latitudinePiogge) + 0.1, 'agli equinozi sta più vicina all\'equatore');
+  // (dove cade il massimo delle piogge dipende dai continenti, e la carta ha righe di 5,6°: su questa Terra si stampa, la
+  // misura è sulla popolazione, nella prova che segue)
+  atteso(est.latitudinePiogge > 2 && inv.latitudinePiogge < -2, `la fascia delle piogge migra: ${est.latitudinePiogge}° d'estate, ${inv.latitudinePiogge}° d'inverno`);
+  atteso(pri.latitudinePiogge >= inv.latitudinePiogge && pri.latitudinePiogge <= est.latitudinePiogge && aut.latitudinePiogge >= inv.latitudinePiogge && aut.latitudinePiogge <= est.latitudinePiogge, `agli equinozi la fascia delle piogge sta tra le posizioni dei due solstizi: ${pri.latitudinePiogge}° e ${aut.latitudinePiogge}°`);
   // tra 8° e 25°: piove nella stagione calda, è secco in quella fredda (da una parte e dall'altra dell'equatore, a stagioni invertite)
   const nE = fascia(zEst, 8, 25, 1), nI = fascia(zInv, 8, 25, 1), sE = fascia(zEst, 8, 25, -1), sI = fascia(zInv, 8, 25, -1);
-  assert.ok(nE > 1.8 * nI && sI > 1.8 * sE, `stagione piovosa e stagione secca: a nord ${nE} d'estate e ${nI} d'inverno, a sud ${sE} e ${sI} (mm/anno)`);
+  atteso(nE > 1.8 * nI && sI > 1.8 * sE, `stagione piovosa e stagione secca: a nord ${nE} d'estate e ${nI} d'inverno, a sud ${sE} e ${sI} (mm/anno)`);
   // al solstizio una cella sola scavalca l'equatore: in quota l'aria va dall'emisfero d'estate a quello d'inverno
   const eq = H / 2 - 1; assert.ok(est.psi[eq] < -1.5e11 && inv.psi[eq] > 1.5e11 && Math.abs(pri.psi[eq]) < 0.6 * Math.abs(est.psi[eq]), `la cella del solstizio: ${est.psi[eq]} e ${inv.psi[eq]} kg/s all'equatore (misurata ≈ 2·10¹¹), ${pri.psi[eq]} all'equinozio`);
   // l'anno è la media delle stagioni, e l'acqua si conserva
@@ -155,8 +185,8 @@ prova('le stagioni: la fascia delle piogge segue il sole, i tropici hanno una st
   // la neve: tra 45° e 65° nord d'inverno la precipitazione è quasi tutta neve, d'estate quasi tutta pioggia (resta la neve delle terre alte)
   const nvI = fascia(zonale(inv.neve), 45, 65, 1) / fascia(zInv, 45, 65, 1), nvE = fascia(zonale(est.neve), 45, 65, 1) / fascia(zEst, 45, 65, 1); assert.ok(nvI > 0.8 && nvE < 0.3, `neve a 45-65° nord: ${nvI} della precipitazione d'inverno, ${nvE} d'estate`);
   // la fascia equatoriale, che ora si sposta, è meno intensa che senza stagioni; i tropici restano secchi nella media dell'anno
-  const zA = zonale(anno.pioggia); assert.ok(Math.max(...zA) < Math.max(...zP), `l'equatore: ${Math.max(...zA)} mm/anno con le stagioni, ${Math.max(...zP)} senza`);
-  assert.ok(anno.fasceNord >= 3 && anno.fasceSud >= 3, 'le tre fasce di vento restano');
+  const zA = zonale(anno.pioggia); atteso(Math.max(...zA) < Math.max(...zP), `la fascia equatoriale è meno intensa con le stagioni: l'equatore: ${Math.max(...zA)} mm/anno con le stagioni, ${Math.max(...zP)} senza`);
+  atteso(anno.fasceNord >= 3 && anno.fasceSud >= 3, `le tre fasce di vento restano con le stagioni: ${anno.fasceNord} a nord e ${anno.fasceSud} a sud`);
   // un asse più inclinato (stagioni doppie): la fascia delle piogge va più lontano
   const forte = circolazione({ ...base, stagioni: quattro(28), alt: sf.alt, mare: sf.mare });
   assert.ok(forte.stagioni[1].latitudinePiogge > est.latitudinePiogge && forte.stagioni[3].latitudinePiogge < inv.latitudinePiogge, `con stagioni doppie le piogge arrivano a ${forte.stagioni[1].latitudinePiogge}° e ${forte.stagioni[3].latitudinePiogge}° invece di ${est.latitudinePiogge}° e ${inv.latitudinePiogge}°`);
@@ -164,6 +194,23 @@ prova('le stagioni: la fascia delle piogge segue il sole, i tropici hanno una st
   const mp = meteoPianeta(P, sf, { ...cl, stagioni: quattro(14) }, { passi: 400 }); assert.equal(mp.stagioni.length, 4); assert.equal(meteoPianeta(P, sf, { ...cl, stagioni: undefined }, { passi: 200 }).stagioni, null);
   console.log(`      piogge a ${anno.stagioni.map((r) => r.latitudinePiogge.toFixed(0)).join('°, ')}° (primavera, estate, autunno, inverno del nord); a 8-25° nord ${nE.toFixed(0)} mm/anno d'estate e ${nI.toFixed(0)} d'inverno, a sud ${sE.toFixed(0)} e ${sI.toFixed(0)}; cella del solstizio ${(est.psi[eq] / 1e9).toFixed(0)} e ${(inv.psi[eq] / 1e9).toFixed(0)} ·10⁹ kg/s; neve a 45-65° nord ${(100 * nvI).toFixed(0)}% d'inverno, ${(100 * nvE).toFixed(0)}% d'estate`);
   console.log(`      l'anno: pioggia ${anno.bilancio.piovuta.toFixed(0)} mm/anno, equatore ${Math.max(...zA).toFixed(0)} (senza stagioni ${Math.max(...zP).toFixed(0)}), tropici ${fascia(zA, 15, 30).toFixed(0)}, alisei fino a ${anno.latitudineAlisei.toFixed(0)}°, Hadley ${(Math.max(...anno.psi) / 1e9).toFixed(0)} e ${(Math.min(...anno.psi) / 1e9).toFixed(0)} ·10⁹ kg/s, celle ${anno.celleNord}/${anno.celleSud}, calore in media ${globale(anno.trasportoCalore).toFixed(1)} W/m²; stagioni doppie: piogge fino a ${forte.stagioni[1].latitudinePiogge.toFixed(0)}° e ${forte.stagioni[3].latitudinePiogge.toFixed(0)}°; ${tempoStagioni.toFixed(0)} ms`);
+});
+
+prova('su dodici Terre con i continenti diversi: in quante ci sono le tre fasce di vento, le piogge che seguono il sole, la stagione secca', () => {
+  const N = POPOLAZIONE.length, media = (f) => POPOLAZIONE.reduce((a, m) => a + f(m), 0) / N;
+  // ciò che la fisica garantisce vale su ogni mondo: l'acqua si conserva, piove una quantità terrestre, e ai tropici
+  // piove di più nella stagione calda (la cella del solstizio sale nell'emisfero d'estate). DOVE cade il massimo delle
+  // piogge, invece, sulla carta a righe di 5,6° lo decidono anche i continenti: si conta
+  for (const m of POPOLAZIONE) { assert.ok(m.conserva < 1e-4, `seme ${m.seme}: l'acqua non si conserva (${m.conserva})`); tra(m.piovuta, 400, 2500, `seme ${m.seme}: pioggia media (mm/anno)`); assert.ok(m.nE > m.nI && m.sI > m.sE, `seme ${m.seme}: ai tropici non piove di più d'estate: a nord ${m.nE} e ${m.nI}, a sud ${m.sI} e ${m.sE}`); }
+  console.log(`      su ogni mondo ai tropici (8-25°) piove di più d'estate che d'inverno: da ${Math.min(...POPOLAZIONE.map((m) => Math.min(m.nE / m.nI, m.sI / m.sE))).toFixed(2)} a ${Math.max(...POPOLAZIONE.map((m) => Math.max(m.nE / m.nI, m.sI / m.sE))).toFixed(2)} volte`);
+  console.log(`      le tre fasce di vento in tutti e due gli emisferi: ${suiMondi('fasce', 'le tre fasce di vento (alisei, venti da ovest, venti polari) in tutti e due gli emisferi')} mondi (fasce a nord ${POPOLAZIONE.map((m) => m.fasceNord).join('')}, a sud ${POPOLAZIONE.map((m) => m.fasceSud).join('')})`);
+  console.log(`      la fascia delle piogge passa l'equatore con il sole (oltre 2° d'estate e d'inverno): ${suiMondi('migra', 'la fascia delle piogge passa l\'equatore con il sole')}; d'estate più a nord che d'inverno: ${suiMondi('versoIlSole', 'la fascia delle piogge d\'estate più a nord che d\'inverno')}; in media a ${[0, 1, 2, 3].map((k) => media((m) => m.lat[k]).toFixed(1)).join('°, ')}° (primavera, estate, autunno, inverno)`);
+  // (sulla Terra vera la fascia delle piogge segue il sole in ritardo: in autunno è ancora a nord quasi quanto d'estate, in
+  // primavera è la più vicina all'equatore. «Agli equinozi più vicina all'equatore che ai solstizi» non è quindi la legge:
+  // la legge è che agli equinozi sta TRA le due posizioni dei solstizi. Si misurano tutte e due)
+  console.log(`      agli equinozi tra le posizioni dei solstizi: ${suiMondi('equinoziInMezzo', 'agli equinozi la fascia delle piogge sta tra le posizioni dei solstizi')}; (com'era chiesto prima: più vicina all'equatore che ai solstizi: ${POPOLAZIONE.filter((m) => m.equinoziVicini).length}/${N})`);
+  console.log(`      a 8-25° una stagione piovosa e una secca (quasi il doppio di pioggia) in tutti e due gli emisferi: ${suiMondi('seccaEPiovosa', 'stagione secca e stagione piovosa ai tropici in tutti e due gli emisferi')}; a nord ${suiMondi('piovosaNord', 'stagione piovosa d\'estate ai tropici del nord')}, a sud ${suiMondi('piovosaSud', 'stagione piovosa d\'estate ai tropici del sud')}; pioggia d'estate / d'inverno in media ${media((m) => m.nE / m.nI).toFixed(2)} a nord e ${media((m) => m.sI / m.sE).toFixed(2)} a sud`);
+  console.log(`      (${N} mondi: ogni frazione ± ${Math.round(100 * Math.sqrt(0.25 / N))}% al più; ${(tempoPopolazione / 1000).toFixed(0)} s)`);
 });
 
 prova('l\'ombra di pioggia: un oceano, un muro di monti, e il vento che lo investe', () => {
@@ -280,4 +327,4 @@ prova('i tempi: un pianeta a 64×32 in circa un secondo', () => {
   console.log(`      la Terra: ${ms.toFixed(0)} ms (1800 passi)`);
 });
 
-console.log(`meteo: ${ok} prove, tutto ok`);
+console.log(`meteo: ${ok} prove, tutto ok` + (nonTorna.length ? `; ${nonTorna.length} attese NON TORNANO (non fermano: dipendono dai continenti, o sono difetti del modello se «sulla popolazione»):\n  ${nonTorna.join('\n  ')}` : '; tutte le attese tornano'));

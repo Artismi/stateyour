@@ -53,7 +53,7 @@ export function bollaDi(N, rami = null) {
     let g = c.genitore; while (g && !g.luogo) g = g.genitore; if (g) { const d = N.tra(g, c, t); pos = [pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]]; } c = g; }
   const percorso = []; for (let x = c; x; x = x.genitore) if (x.luogo) percorso.unshift(...String(x.luogo).split('/'));
   // quanto è grande ciò che si guarda: l'altezza del campo alla distanza del suolo, o della cosa più vicina
-  const terra = cam.corpo && cam.corpo.quota, d = terra ? Math.max(S.quota || 0, 0.5) : S.vicinoM > 0 ? S.vicinoM : Math.hypot(pos[0], pos[1], pos[2]) || 1, grandezza = 2 * (S.tanY || Math.tan((cam.fov || 0.75) / 2)) * d;
+  const terra = cam.corpo && cam.corpo.quota, lontano = Math.hypot(pos[0], pos[1], pos[2]), d = terra ? Math.max(S.quota || 0, 0.5) : Math.min(S.vicinoM > 0 ? S.vicinoM : Infinity, cam.corpo && cam.corpo.genitore && lontano > 0 ? lontano : Infinity, S.vicinoM > 0 ? Infinity : lontano || 1), grandezza = 2 * (S.tanY || Math.tan((cam.fov || 0.75) / 2)) * d;
   const ora = performance.now() / 1000, chiave = percorso.join('/') + (solidale ? '|s' : ''); let velocita = [0, 0, 0];
   if (prima && prima.chiave === chiave && ora - prima.ora > 1e-3 && ora - prima.ora < 2) velocita = [0, 1, 2].map((k) => (pos[k] - prima.pos[k]) / (ora - prima.ora));
   if (!prima || prima.chiave !== chiave || ora - prima.ora > 0.25) prima = { chiave, ora, pos: pos.slice() };

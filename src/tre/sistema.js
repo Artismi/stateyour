@@ -35,7 +35,7 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   for (const c of defs) {
     const g = c.genitore < 0 ? nodo : corpi[c.genitore], P = c.cosa === 'pianeta' ? Sis.pianeti[c.id] : null, L = c.cosa === 'luna' ? Sis.pianeti[c.pianeta].lune.find((l) => l.id === c.id) : null;
     // (il nome del suo luogo, per la bolla — bolla.js —, e i suoi periodi: quando il tempo corre troppo per vederlo girare, il nucleo lo ferma)
-    const luogo = c.cosa === 'stella' ? 'astro' : `${c.cosa} ${c.id}`, periodi = P ? { giro: P.bloccato ? 0 : P.giorno || 0, orbita: P.anno || 0 } : L ? { giro: L.periodo || 0, orbita: L.periodo || 0 } : null;
+    const luogo = c.cosa === 'stella' ? null : `${c.cosa} ${c.id}`, periodi = P ? { giro: P.bloccato ? 0 : P.giorno || 0, orbita: P.anno || 0 } : L ? { giro: L.periodo || 0, orbita: L.periodo || 0 } : null;
     const corpo = N.corpo({ ...c, luogo, periodi, genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
       // fin dove la camera si attacca a questo corpo: un pianeta 50 raggi (ma dentro l'orbita della sua prima luna larga), una luna 12
       influenza: c.cosa === 'pianeta' ? 50 * c.raggio : c.cosa === 'luna' ? Math.min(12 * c.raggio, 0.3 * (L?.aM || 1e12)) : 0 });
