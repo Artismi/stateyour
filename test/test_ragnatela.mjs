@@ -267,14 +267,16 @@ prova('una macchia di cielo come seme dal basso: condiziono su una mappa presa d
   for (let i = 0; i < 3; i++) { const oss = { posizione: punto(`oss macchia ${i}`) }, vero = COSMI[i + 3], base = COSMI[i], Fv = R.fondoCosmico(vero, oss), Fb = R.fondoCosmico(base, oss), dir = macchia(`macchia ${i}`, 7, 0.25);
     const iso = dir.map((n) => Fv.parti(n).isotropo), tot = dir.map((n) => Fv.in(n)), scala = Math.max(...tot.map(Math.abs));
     // (1) solo il termine isotropo: passa da campoCondizionato di bolle.js (campo riscalato)
-    const [V1, t1] = ms(() => R.campoVincolato(base, R.vincoliDelCielo(Fb, dir, iso, { doppler: false }))); if (!i) costa('campoVincolato: 49 direzioni di cielo, via bolle.js', t1);
+    const [V1, t1] = ms(() => R.campoVincolato(base, R.vincoliDelCielo(Fb, dir, iso, { doppler: false }))); if (!i) costa('campoVincolato: 49 direzioni di cielo (forma isotropa)', t1);
     assert.ok(V1.esiste && V1.via === 'bolle.js' && V1.gradi === 49); const F1 = R.fondoCosmico(V1, oss); let e1 = 0; dir.forEach((n, k) => { e1 = Math.max(e1, Math.abs(F1.parti(n).isotropo - iso[k])); }); assert.ok(e1 < 1e-9 * scala, `non ridà la mappa: ${e1}`);
-    // (2) la stessa cosa per la via scritta qui: stesse ampiezze, stesso χ²
-    const V2 = R.campoVincolato(base, R.vincoliDelCielo(Fb, dir, iso, { doppler: false }), { via: 'qui' }); let d = 0, am = 0; for (let m = 0; m < base.N; m++) { d = Math.max(d, Math.abs(V1.onde.A[m] - V2.onde.A[m]), Math.abs(V1.onde.B[m] - V2.onde.B[m])); am = Math.max(am, Math.abs(V1.onde.A[m])); }
-    assert.ok(V2.via === 'ragnatela.js' && d < 1e-9 * am && Math.abs(V1.chi2 - V2.chi2) < 1e-6 * V1.chi2, `le due vie differiscono: ${d} su ${am}`);
-    // (3) la temperatura intera (col Doppler): forma lineare non isotropa, via di qui
-    const [V3, t3] = ms(() => R.campoVincolato(base, R.vincoliDelCielo(Fb, dir, tot))); if (!i) costa('campoVincolato: 49 direzioni di cielo col Doppler, via di qui', t3);
-    assert.ok(V3.esiste && V3.via === 'ragnatela.js'); const F3 = R.fondoCosmico(V3, oss); let e3 = 0; dir.forEach((n, k) => { e3 = Math.max(e3, Math.abs(F3.in(n) - tot[k])); }); assert.ok(e3 < 1e-9 * scala, `non ridà la mappa intera: ${e3}`);
+    // (2) riscontro indipendente dalla forma: senza Doppler il vincolo è una DENSITÀ in un punto del campo riscalato onda per
+    // onda (A·W0, P·W0²): lo stesso campoCondizionato, senza forme, deve dare le stesse ampiezze e lo stesso χ²
+    const W0 = Fb.pesi.W0, k2di = (m) => base.KX[m] ** 2 + base.KY[m] ** 2 + base.KZ[m] ** 2, risc = { radice: 'riscalato', toroM: L, kmax: base.kmax, N: base.N, KX: base.KX, KY: base.KY, KZ: base.KZ, PK: base.PK.map((v, m) => v * W0[k2di(m)] ** 2), A: base.A.map((v, m) => v * W0[k2di(m)]), B: base.B.map((v, m) => v * W0[k2di(m)]), fissi: [] };
+    const V2 = campoCondizionato(risc, dir.map((n, k) => ({ posizione: n.map((x, q) => oss.posizione[q] + Fb.raggioM * x), scala: 0, valore: iso[k] }))); let d = 0, am = 0; for (let m = 0; m < base.N; m++) { const w = W0[k2di(m)]; if (w === 0) continue; d = Math.max(d, Math.abs(V1.onde.A[m] - base.A[m] - (V2.onde.A[m] - risc.A[m]) / w), Math.abs(V1.onde.B[m] - base.B[m] - (V2.onde.B[m] - risc.B[m]) / w)); am = Math.max(am, Math.abs(V1.onde.A[m])); }
+    assert.ok(V2.esiste && d < 1e-9 * am && Math.abs(V1.chi2 - V2.chi2) < 1e-6 * V1.chi2, `la forma e il campo riscalato differiscono: ${d} su ${am}`);
+    // (3) la temperatura intera (col Doppler): forma lineare non isotropa
+    const [V3, t3] = ms(() => R.campoVincolato(base, R.vincoliDelCielo(Fb, dir, tot))); if (!i) costa('campoVincolato: 49 direzioni di cielo col Doppler', t3);
+    assert.ok(V3.esiste && V3.via === 'bolle.js'); const F3 = R.fondoCosmico(V3, oss); let e3 = 0; dir.forEach((n, k) => { e3 = Math.max(e3, Math.abs(F3.in(n) - tot[k])); }); assert.ok(e3 < 1e-9 * scala, `non ridà la mappa intera: ${e3}`);
     // il peso: i valori vengono da un mondo possibile, quindi sono tipici (χ² ≈ 49 ± 10: probabilità non estrema)
     tra(V3.probabilita, 1e-4, 1 - 1e-4, 'probabilità del χ² di una macchia presa da un altro cosmo');
     // tra un punto dato e l'altro (a metà passo) il cielo ricostruito segue quello vero meglio di quello di partenza
@@ -288,17 +290,19 @@ prova('una macchia di cielo come seme dal basso: condiziono su una mappa presa d
   const Fb = R.fondoCosmico(COSMI[0], { posizione: punto('oss macchia 0') }), n = versore('doppio'), no = R.campoVincolato(COSMI[0], R.vincoliDelCielo(Fb, [n, n], [1e-5, 2e-5])); assert.equal(no.esiste, false); assert.ok(no.perche);
 });
 
-prova('«qui c\'è un filamento / un vuoto» come vincoli sulle onde: la classe è quella detta, lo scheletro passa di lì; il vuoto di sola densità passa da bolle.js', () => {
+prova('«qui c\'è un filamento / un vuoto» come vincoli sulle onde (forme di campoCondizionato): la classe è quella detta, lo scheletro passa di lì', () => {
   const R0 = 25 * MPC; let passa = 0, vuotiForma = 0, vuotiDensita = 0, nodi = 0; const chi = [], NQ = 12;
   for (let i = 0; i < NQ; i++) { const F = COSMI[i % 6], p = punto(`detto ${i}`), u = versore(`detto ${i}`), vf = R.vincoliDi(F, { cosa: 'filamento', posizione: p, scala: R0, direzione: u }), [V, t] = ms(() => R.campoVincolato(F, vf)); if (!i) costa('campoVincolato: un filamento (8 vincoli di marea e pendenza)', t);
-    assert.ok(V.esiste && V.via === 'ragnatela.js' && V.gradi === 8); chi.push(V.chi2); const w = R.doveSono(V, p, { scala: R0 }); assert.equal(w.classe, 'filamento'); assert.ok(Math.abs(Math.abs(sc(w.direzione, u)) - 1) < 1e-9, 'la direzione è quella detta');
+    assert.ok(V.esiste && V.via === 'bolle.js' && V.gradi === 8); chi.push(V.chi2); const w = R.doveSono(V, p, { scala: R0 }); assert.equal(w.classe, 'filamento'); assert.ok(Math.abs(Math.abs(sc(w.direzione, u)) - 1) < 1e-9, 'la direzione è quella detta');
     // ridiscendendo: lo scheletro del campo vincolato (alla stessa scala) passa per il punto, lungo la direzione detta
     const S = R.scheletro(V, { centro: p, lato: 200 * MPC, celle: 17 }, { scala: R0 }); let vicino = Infinity, cv = 0; for (let a = 0; a < S.n; a++) { const d = Math.hypot(...[0, 1, 2].map((k) => { const q = S.pos[3 * a + k] - p[k]; return q - L * Math.round(q / L); })); if (d < vicino) { vicino = d; cv = Math.abs(sc([S.direzione[3 * a], S.direzione[3 * a + 1], S.direzione[3 * a + 2]], u)); } } if (vicino < 0.01 * S.latoCellaM && cv > 0.99) passa++;
-    // un vuoto: con la forma (9 vincoli) la classe è garantita ed è un minimo; con la sola densità (1 vincolo, via bolle.js) no
+    // un vuoto: con la forma (9 vincoli) la classe è garantita ed è un minimo; con la sola densità (1 vincolo) no
     const Vv = R.campoVincolato(F, R.vincoliDi(F, { cosa: 'vuoto', posizione: p, scala: R0 })), wv = R.doveSono(Vv, p, { scala: R0 }); assert.equal(wv.classe, 'vuoto'); vuotiForma++;
     const dens = R.vincoliDi(F, { cosa: 'vuoto', posizione: p, scala: R0, forma: false }), Vd = R.campoVincolato(F, dens), wd = R.doveSono(Vd, p, { scala: R0 }); assert.ok(Vd.via === 'bolle.js' && Vd.gradi === 1 && Math.abs(wd.delta - dens[0].valore) < 1e-9); if (wd.classe === 'vuoto') vuotiDensita++;
-    // seconda via: lo stesso vincolo di densità per la via di qui dà le stesse ampiezze di bolle.js
-    if (i < 3) { const Vq = R.campoVincolato(F, dens, { via: 'qui' }); let d = 0; for (let m = 0; m < F.N; m++) d = Math.max(d, Math.abs(Vq.onde.A[m] - Vd.onde.A[m]), Math.abs(Vq.onde.B[m] - Vd.onde.B[m])); assert.ok(d < 1e-12 && Math.abs(Vq.chi2 - Vd.chi2) < 1e-9); const diretto = campoCondizionato(F, [{ posizione: p, scala: R0, valore: dens[0].valore }]); assert.ok(Math.abs(diretto.chi2 - Vd.chi2) < 1e-12); assert.ok(Math.abs(R.doveSono(diretto, p, { scala: R0 }).delta - dens[0].valore) < 1e-9, 'un campo di bolle.js si legge qui così com\'è'); }
+    // il vincolo di sola densità è quello di sempre di bolle.js; un campo di bolle.js si legge qui così com'è
+    if (i < 3) { const diretto = campoCondizionato(F, [{ posizione: p, scala: R0, valore: dens[0].valore }]); assert.ok(Math.abs(diretto.chi2 - Vd.chi2) < 1e-12); assert.ok(Math.abs(R.doveSono(diretto, p, { scala: R0 }).delta - dens[0].valore) < 1e-9); }
+    // la teoria del campo vincolato (attesa di bolle.js, con le forme): la pendenza lungo l'asse è nulla e resta incerta solo lungo il filamento
+    if (i < 3) { const forma = (kx, ky, kz, k2, out) => { out[0] = 0; out[1] = kx * w.assi[0][0] + ky * w.assi[0][1] + kz * w.assi[0][2]; return out; }, at = V.campo.attesa(p, R0, null, forma); assert.ok(Math.abs(at.media) < 1e-9 && at.varianza < 1e-9 * at.libera, 'la pendenza vincolata non ha più incertezza'); assert.ok(Math.abs(V.campo.misura(p, forma, R0)) < 1e-9); }
     if (R.doveSono(R.campoVincolato(F, R.vincoliDi(F, { cosa: 'nodo', posizione: p, scala: R0 })), p, { scala: R0 }).classe === 'nodo') nodi++; }
   assert.equal(nodi, NQ); // il χ² di una cosa tipica è tipico: 6 valori del tensore (le pendenze nulle non costano)
   tra(media(chi), 2, 12, 'χ² di un filamento tipico (6 gradi)');
@@ -307,11 +311,11 @@ prova('«qui c\'è un filamento / un vuoto» come vincoli sulle onde: la classe 
   assert.ok(Vi.esiste && Vi.gradi === 17); assert.equal(R.doveSono(Vi, pa, { scala: R0 }).classe, 'filamento'); assert.equal(R.doveSono(Vi, pb, { scala: R0 }).classe, 'vuoto');
   console.log(`      (${NQ} punti su sei cosmi, scala ${num(R0 / MPC)} Mpc: filamento con la direzione detta ${NQ} su ${NQ}, χ² medio ${num(media(chi))} su 6; vuoto con la forma ${vuotiForma} su ${NQ}; nodo ${nodi} su ${NQ}; un filamento e un vuoto insieme: χ² ${num(Vi.chi2)} su 17 vincoli)`);
   riscontro(`lo scheletro del campo vincolato passa per il punto detto, lungo la direzione detta (su ${NQ})`, passa, Math.ceil(0.75 * NQ), NQ, 'tutti, se «cresta» e «tensore di marea» dicessero la stessa cosa: la curvatura della densità non è vincolata');
-  console.log(`      (misurato: un vuoto detto con la sola densità, via bolle.js, è di classe vuoto ${vuotiDensita} volte su ${NQ}: un valore di densità non fissa i tre autovalori, per la classe serve la forma)`);
+  console.log(`      (misurato: un vuoto detto con la sola densità è di classe vuoto ${vuotiDensita} volte su ${NQ}: un valore di densità non fissa i tre autovalori, per la classe serve la forma)`);
 });
 
 prova('in un cosmo della biblioteca i vincoli nuovi lasciano le galassie dove sono; senza vincoli nuovi è il cosmo di sempre', () => {
-  const F = campoCosmo(1), O = R.ondeDi(1), V0 = R.campoVincolato(1, [], { via: 'qui' }); let d = 0, am = 0; for (let m = 0; m < O.N; m++) { d = Math.max(d, Math.abs(V0.onde.A[m] - O.A[m]), Math.abs(V0.onde.B[m] - O.B[m])); am = Math.max(am, Math.abs(O.A[m])); }
+  const F = campoCosmo(1), O = R.ondeDi(1), V0 = R.campoVincolato(1, []); let d = 0, am = 0; for (let m = 0; m < O.N; m++) { d = Math.max(d, Math.abs(V0.onde.A[m] - O.A[m]), Math.abs(V0.onde.B[m] - O.B[m])); am = Math.max(am, Math.abs(O.A[m])); }
   assert.ok(d < 1e-7 * am, `senza vincoli nuovi le ampiezze differiscono da cosmo3d di ${d} su ${am}`);
   const p = punto('biblioteca'), V = R.campoVincolato(1, R.vincoliDi(1, { cosa: 'filamento', posizione: p, scala: 25 * MPC, direzione: [1, 1, 0] })); assert.ok(V.esiste && V.gradi === 8); assert.equal(R.doveSono(V, p, { scala: 25 * MPC }).classe, 'filamento');
   // il campo filtrato alle onde lunghe vale ancora l'altezza del picco di ogni galassia

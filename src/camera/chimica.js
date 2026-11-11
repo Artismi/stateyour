@@ -426,6 +426,9 @@ export function gasDellAria(gas = {}) {
 // Se nemmeno tutta la CO2 che ha basta, il pianeta è gelato; se è troppo caldo anche senza, il mare bolle e l'acqua
 // se ne va (Venere): tutta la CO2 resta nell'aria.
 // → { clima, atmosfera }: clima.pressione è quella dell'aria vera e clima.tau la serra dei suoi gas.
+// (entro quanto il ghiaccio messo nel ciclo del carbonio deve coincidere con quello che il clima ne dà: è la tolleranza
+// dichiarata del punto fisso, in frazione della superficie)
+export const CICLO = Object.freeze({ ghiaccio: 1e-3 });
 export function climaEAria(dati, { Z } = {}) {
   const P = { tipo: dati.tipo, massaKg: dati.massaKg, raggioM: dati.raggioM, composizione: dati.composizione || {}, involucro: dati.involucro || 0 };
   const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
@@ -465,16 +468,27 @@ export function climaEAria(dati, { Z } = {}) {
     // (g dipende solo da T. Le terre che la pioggia consuma sono quelle fuori dal mare e dal ghiaccio; ma il ghiaccio
     // dipende dal clima, che dipende dalla CO2, che dipende dalle terre scoperte: più ghiaccio, meno rocce consumate, più
     // CO2, più caldo, meno ghiaccio. Dove conta si cerca, dimezzando, il ghiaccio che torna uguale a sé stesso)
-    const terre0 = 1 - (primo.mare ?? 0.7), con = (T, ghiaccio) => { const cc = Math.max(co2, ciclo(T, { mare: primo.mare, ghiaccio })), a = ariaDi(T, 'liquida', cc), c = climaDi(a, T); return { a, c, co2: cc, T, d: c.T - T }; };
-    const g = (T) => { let r = con(T, 0); if (!(r.c.ghiaccio > 0.02) || !(terre0 > 0.005)) return r;
-      let lo = 0, hi = 1; for (let k = 0; k < 5; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; } return r; };
+    const terre0 = 1 - (primo.mare ?? 0.7), con = (T, ghiaccio) => { const cc = Math.max(co2, ciclo(T, { mare: primo.mare, ghiaccio })), a = ariaDi(T, 'liquida', cc), c = climaDi(a, T); return { a, c, co2: cc, T, d: c.T - T, m: ghiaccio }; };
+    // IL GHIACCIO CHE TORNA UGUALE A SÉ STESSO. Con più ghiaccio le rocce coperte consumano meno CO2, che sale e lo scioglie:
+    // il ghiaccio che il clima dà cala al crescere di quello messo nel ciclo, e il punto fisso è dove i due coincidono.
+    // Si cerca dimezzando, finché coincidono entro CICLO.ghiaccio (un millesimo della superficie). Il ghiaccio del clima è
+    // continuo (leggi.js lo conta con la stessa curva dell'albedo); se però salta proprio lì — l'instabilità del ghiaccio
+    // e dell'albedo: tra un po' di ghiaccio e molto non c'è uno stato fermo, il pianeta oscilla (Menou 2015) — si resta a
+    // cavallo del salto e lo si DICE: r.bilico (clima.cicloInBilico).
+    const g = (T) => { let r = con(T, 0); if (!(dati.calore > 0) || !(terre0 > 0.005) || !(r.c.ghiaccio > CICLO.ghiaccio)) return r;
+      let lo = 0, hi = 1; for (let k = 0; k < 14 && Math.abs(r.c.ghiaccio - r.m) > CICLO.ghiaccio; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; }
+      if (Math.abs(r.c.ghiaccio - r.m) > 10 * CICLO.ghiaccio) r.bilico = true; return r; };
     let sotto = g(273.5); if (!(sotto.d > 0)) return sotto; // (gelato anche con la CO2 che il ciclo lascia al gelo)
     // (si sale fino al punto critico dell'acqua, 647 K: fin lì sotto abbastanza pressione un mare può esserci. Fermandosi a
     // 640 K i mari più caldi uscivano con l'aria fatta a 640 K e il clima qualche grado sopra: una coppia non cercata)
     let sopra = null; for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640, ACQUA.critica - 0.5]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
     if (!sopra) return sotto; // (più caldo a ogni temperatura: il mare bolle)
-    for (let k = 0; k < 9 && sopra.T - sotto.T > 0.3; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
-    const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra; if (dati.calore > 0) r.c.co2Ciclo = r.co2; return r;
+    // (con il ciclo del carbonio la CO2 cambia del 10% in pochi decimi di grado: lì la temperatura si stringe cento volte di più)
+    const fino = dati.calore > 0 ? 0.003 : 0.3;
+    for (let k = 0; k < 16 && sopra.T - sotto.T > fino; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
+    const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra;
+    // ciò che resta scritto: la CO2 del ciclo, il ghiaccio con cui è stata calcolata (uguale a clima.ghiaccio se il punto fisso c'è) e se il ciclo è in bilico
+    if (dati.calore > 0) { r.c.co2Ciclo = r.co2; r.c.ghiaccioDelCiclo = r.m; if (r.bilico) r.c.cicloInBilico = true; } return r;
   };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
   if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));

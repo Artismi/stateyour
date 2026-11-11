@@ -30,6 +30,14 @@
 //    costa N seni e coseni (~0,3 ms). Con il campo di cosmo3d (N = 28 888): 4 bolle più le galassie del cosmo
 //    ~0,05 s; 100 vincoli ~0,6 s; 1000 vincoli 33 s. Per questo la prova dei mille usa un campo più grosso
 //    (kmax = 10, 2 084 onde: 2,8 s). In memoria: la matrice n² e due copie delle ampiezze.
+//    LA FORMA DI UN VINCOLO. Di suo un vincolo è il contrasto lisciato in un punto. Ma la correzione vale per QUALUNQUE
+//    forma lineare delle onde: c_j = Σ_onde 2·Re[(A + iB)·W_j(k)·g_j(k)·e^(ik·x_j)], con g_j il «guadagno» dell'onda in quel
+//    vincolo. Lo si dà in `forma(kx, ky, kz, k2, out) → [g_reale, g_immaginario]` (k in giri per lato; `out` è un vettore di
+//    servizio che si può riempire e restituire): niente forma = g = 1 (la densità); la pendenza della densità lungo e:
+//    g = i·(k·e); il tensore di marea ij: g = k_i·k_j/k²; un punto del cielo del fondo: g = W0(k) + i·(k̂·n)·W1(k)
+//    (ragnatela.js). Così «è un massimo» si dice: l'altezza più tre pendenze nulle (vincoliMassimo; regola 12).
+//    L'ordine canonico tiene conto della forma con la sua IMPRONTA (i suoi valori su poche onde fisse): due funzioni
+//    scritte diversamente che fanno lo stesso guadagno sono lo stesso vincolo.
 //    CHE COSA NON C'È: i vincoli sono sul contrasto di densità LINEARE (una massa d'alone, una galassia di un certo
 //    tipo non sono lineari: lì si campiona, parte B; il ponte è l'altezza del picco: vedi «nel cosmo» più sotto).
 //
@@ -143,11 +151,22 @@ function campoDelCosmo(n, { galassie = true } = {}) {
 const eUnCosmo = (c) => typeof c === 'number' || /^\d+(#.*)?$/.test(String(c));
 const frazione = (v) => v - Math.floor(v);
 
+// L'IMPRONTA DI UNA FORMA: i suoi valori su poche onde fisse (quelle che entrano nel campo), per l'ordine canonico
+const SONDE = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1], [-1, 1, 0], [2, -1, 1], [1, 2, 3], [-3, 1, 2]];
+const improntaDi = (forma, K2) => { const out = [], g = [0, 0]; for (const [a, b, c] of SONDE) { const k2 = a * a + b * b + c * c; if (k2 > K2) continue; const v = forma(a, b, c, k2, g); out.push(v[0], v[1]); } return out; };
+const confrontaImpronte = (a, b) => { if (!a || !b) return (a ? 1 : 0) - (b ? 1 : 0); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+// «È UN MASSIMO» (o un minimo: un punto fermo) del campo lisciato, alto `valore`: l'altezza più tre pendenze nulle.
+// (Un vincolo lineare fissa valori, non segni: che sia un massimo e non una sella lo decide la curvatura, che per un
+// picco alto è quasi sempre negativa; la prova lo misura.) → quattro vincoli per campoCondizionato
+export const PENDENZE = [0, 1, 2].map((d) => (kx, ky, kz, k2, out) => { out[0] = 0; out[1] = d === 0 ? kx : d === 1 ? ky : kz; return out; });
+export const vincoliMassimo = ({ posizione, scala = 0, taglio = null, valore }) => { const base = taglio != null ? { posizione, taglio } : { posizione, scala }; return [{ ...base, valore }, ...PENDENZE.map((forma) => ({ ...base, valore: 0, forma }))]; };
+
 // IL CAMPO CONDIZIONATO.
 //   cosmo    un numero di cosmo («3», o con i suoi rami come lo scrive cosmo.js), oppure un indirizzo qualunque
 //            (una stringa: il campo libero viene da eventi.js), oppure un campo già fatto con campoLibero()
 //   vincoli  [{ posizione: [x, y, z] in metri sul toro (comoventi, oggi), scala: R in metri (0 = nel punto),
-//               valore: il contrasto lisciato che il campo deve avere lì }, …] in numero qualsiasi; al posto di
+//               valore: il contrasto lisciato che il campo deve avere lì, forma: (facoltativa) il guadagno dell'onda
+//               in questo vincolo, vedi l'intestazione }, …] in numero qualsiasi; al posto di
 //               `scala` si può dare `taglio`: il campo filtrato alle onde lunghe fino a `taglio` giri per lato
 //               (taglio netto: è il campo in cui galassie.js legge l'altezza del picco di una galassia)
 //   opz      { toroM, kmax } per un indirizzo qualunque; { galassie: false } per un cosmo senza i vincoli delle galassie
@@ -156,7 +175,10 @@ const frazione = (v) => v - Math.floor(v);
 //     quanto valeva lì il campo libero, e `dato`: il suo posto nella lista data), ridondanti, gradi, chi2, probabilita,
 //     logPeso (−χ²/2), logDensita, chi2Libero, deltaChi2 (quanto costa rispetto al mondo di partenza),
 //     in(p) il campo nel punto p (metri), lisciato(p, R), filtrato(p, taglio), libero(p) il campo libero, correzione(p),
-//     attesa(p, R, taglio) → { media, varianza, libera } che la teoria dà per il campo vincolato in p, onde: { A, B, … } }
+//     misura(p, forma, R, taglio) una forma lineare qualunque del campo vincolato in p (misuraLibera: del campo libero),
+//     attesa(p, R, taglio, forma) → { media, varianza, libera } che la teoria dà per il campo vincolato in p,
+//     liberta() → { gradiTotali, gradiFissati, gradiLiberi, varianzaLibera: la parte della varianza del campo (media sul
+//     toro) che i vincoli NON fissano: 1 − Σ_onde (P/2)·|L⁻¹G|²/Σ P }, onde: { A, B, … } }
 //   (con le galassie, χ² e gradi sono quelli delle bolle DATE le galassie: il pezzo in più che le bolle costano)
 export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
   const base = cosmo && cosmo.A && cosmo.PK ? cosmo : eUnCosmo(cosmo) ? campoDelCosmo(typeof cosmo === 'number' ? cosmo : String(cosmo), opz) : campoLibero(cosmo, opz);
@@ -164,10 +186,10 @@ export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
   // ---- i vincoli in ordine canonico (così l'ordine in cui arrivano non conta)
   const dati = vincoli.map((v, i) => {
     const p = v.posizione, R = v.scala ?? 0, taglio = v.taglio ?? null;
-    if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !(R >= 0) || !Number.isFinite(v.valore) || (taglio != null && !(taglio >= 1 && taglio <= kmax))) throw new Error(`vincolo ${i}: servono posizione [x, y, z] in metri, scala ≥ 0 (o taglio tra 1 e ${kmax}) e valore`);
-    return { dato: i, posizione: [...p], scala: R, taglio, valore: v.valore, x: p.map((q) => frazione(q / toroM)) };
-  }).sort((a, b) => a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.taglio ?? 0) - (b.taglio ?? 0) || a.valore - b.valore || a.dato - b.dato);
-  const tutti = [...base.fissi, ...dati], n = tutti.length, nf = base.fissi.length;
+    if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !(R >= 0) || !Number.isFinite(v.valore) || (taglio != null && !(taglio >= 1 && taglio <= kmax)) || (v.forma != null && typeof v.forma !== 'function')) throw new Error(`vincolo ${i}: servono posizione [x, y, z] in metri, scala ≥ 0 (o taglio tra 1 e ${kmax}) e valore; la forma, se c'è, è una funzione`);
+    return { dato: i, posizione: [...p], scala: R, taglio, valore: v.valore, forma: v.forma ?? null, impronta: v.forma ? improntaDi(v.forma, K2) : null, x: p.map((q) => frazione(q / toroM)) };
+  }).sort((a, b) => a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.taglio ?? 0) - (b.taglio ?? 0) || confrontaImpronte(a.impronta, b.impronta) || a.valore - b.valore || a.dato - b.dato);
+  const tutti = [...base.fissi, ...dati], n = tutti.length, nf = base.fissi.length, gg = [0, 0];
   // la finestra di ogni vincolo, per ogni |k|² intero: gaussiana per le bolle, taglio netto per le galassie
   const finestra = (v) => { const W = new Float64Array(K2 + 1); if (v.taglio != null) { for (let k2 = 0; k2 <= K2; k2++) W[k2] = k2 <= v.taglio * v.taglio ? 1 : 0; } else { const q = 0.5 * (giri * v.scala) ** 2; for (let k2 = 0; k2 <= K2; k2++) W[k2] = Math.exp(-q * k2); } return W; };
   const Wt = tutti.map(finestra);
@@ -177,7 +199,9 @@ export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
   const X = new Float64Array(n), Y = new Float64Array(n), Z = new Float64Array(n); for (let j = 0; j < n; j++) { X[j] = PI2 * tutti[j].x[0]; Y[j] = PI2 * tutti[j].x[1]; Z[j] = PI2 * tutti[j].x[2]; }
   for (let m = 0; m < N; m++) {
     const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz, r = Math.sqrt(2 * PK[m]), a = (2 * A0[m]) / r, b = (2 * B0[m]) / r;
-    for (let j = 0; j < n; j++) { const w = Wt[j][k2] * r; if (w === 0) { co[j] = 0; si[j] = 0; continue; } const t = kx * X[j] + ky * Y[j] + kz * Z[j]; co[j] = w * Math.cos(t); si[j] = w * Math.sin(t); d0[j] += a * co[j] - b * si[j]; }
+    for (let j = 0; j < n; j++) { const w = Wt[j][k2] * r; if (w === 0) { co[j] = 0; si[j] = 0; continue; } const t = kx * X[j] + ky * Y[j] + kz * Z[j], f = tutti[j].forma;
+      if (f) { const g = f(kx, ky, kz, k2, gg), c = Math.cos(t), s = Math.sin(t); co[j] = w * (g[0] * c - g[1] * s); si[j] = w * (g[0] * s + g[1] * c); } else { co[j] = w * Math.cos(t); si[j] = w * Math.sin(t); }
+      d0[j] += a * co[j] - b * si[j]; }
     for (let i = 0; i < n; i++) { const ci = co[i], sn = si[i]; if (ci === 0 && sn === 0) continue; const riga = i * n; for (let j = i; j < n; j++) C[riga + j] += ci * co[j] + sn * si[j]; }
   }
   // ---- Cholesky C = L·Lᵀ nell'ordine canonico (L nel triangolo basso), e insieme L⁻¹ applicato a c, a d0 e a c − d0
@@ -206,22 +230,38 @@ export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
   const A = Float64Array.from(A0), B = Float64Array.from(B0);
   if (n) for (let m = 0; m < N; m++) {
     const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; let a = 0, b = 0;
-    for (let j = 0; j < n; j++) { const q = w[j] * Wt[j][k2]; if (q === 0) continue; const t = kx * X[j] + ky * Y[j] + kz * Z[j]; a += q * Math.cos(t); b -= q * Math.sin(t); }
+    for (let j = 0; j < n; j++) { const q = w[j] * Wt[j][k2]; if (q === 0) continue; const t = kx * X[j] + ky * Y[j] + kz * Z[j], f = tutti[j].forma;
+      if (f) { const g = f(kx, ky, kz, k2, gg), c = Math.cos(t), s = Math.sin(t); a += q * (g[0] * c - g[1] * s); b -= q * (g[0] * s + g[1] * c); } else { a += q * Math.cos(t); b -= q * Math.sin(t); } }
     A[m] += PK[m] * a; B[m] += PK[m] * b;
   }
   // ---- il campo in un punto: funzione pura (nessuno stato: l'ordine delle domande non conta)
   const valuta = (AA, BB, p, R = 0, taglio = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio; let d = 0;
     for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const t = kx * x + ky * y + kz * z, f = q ? Math.exp(-q * k2) : 1; d += f * (AA[m] * Math.cos(t) - BB[m] * Math.sin(t)); }
     return 2 * d; };
+  // una forma lineare qualunque del campo in un punto: 2·Σ Re[(A + iB)·W·g·e^(iθ)]
+  const misura = (AA, BB, p, forma, R = 0, taglio = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio; let d = 0;
+    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const t = kx * x + ky * y + kz * z, f = q ? Math.exp(-q * k2) : 1, g = forma(kx, ky, kz, k2, gg), c = Math.cos(t), s = Math.sin(t); d += f * (AA[m] * (g[0] * c - g[1] * s) - BB[m] * (g[0] * s + g[1] * c)); }
+    return 2 * d; };
   // ciò che la teoria dice del campo vincolato in un punto: media ξᵀC⁻¹c, varianza σ² − ξᵀC⁻¹ξ
-  const attesa = (p, R = 0, taglio = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio, xi = new Float64Array(n); let var0 = 0;
-    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const f = 2 * PK[m] * (q ? Math.exp(-q * k2) : 1), t0 = kx * x + ky * y + kz * z; var0 += f * (q ? Math.exp(-q * k2) : 1); for (let j = 0; j < n; j++) { const wj = Wt[j][k2]; if (wj) xi[j] += f * wj * Math.cos(t0 - (kx * X[j] + ky * Y[j] + kz * Z[j])); } }
+  const attesa = (p, R = 0, taglio = null, forma = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio, xi = new Float64Array(n); let var0 = 0;
+    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const f = 2 * PK[m] * (q ? Math.exp(-q * k2) : 1), t0 = kx * x + ky * y + kz * z;
+      if (!forma) { var0 += f * (q ? Math.exp(-q * k2) : 1); for (let j = 0; j < n; j++) { const wj = Wt[j][k2]; if (!wj) continue; const fj = tutti[j].forma, tj = kx * X[j] + ky * Y[j] + kz * Z[j]; if (!fj) xi[j] += f * wj * Math.cos(t0 - tj); else { const g = fj(kx, ky, kz, k2, gg), d = t0 - tj; xi[j] += f * wj * (g[0] * Math.cos(d) + g[1] * Math.sin(d)); } } }
+      else { const gp = forma(kx, ky, kz, k2, gg), pr = gp[0], pi = gp[1]; var0 += f * (q ? Math.exp(-q * k2) : 1) * (pr * pr + pi * pi); // ⟨Q(p)·c_j⟩ = Σ 2P·W_p·W_j·Re[g_p e^(iθ_p)·(g_j e^(iθ_j))*]
+        for (let j = 0; j < n; j++) { const wj = Wt[j][k2]; if (!wj) continue; const fj = tutti[j].forma, d = t0 - (kx * X[j] + ky * Y[j] + kz * Z[j]), c = Math.cos(d), s = Math.sin(d); let jr = 1, ji = 0; if (fj) { const g = fj(kx, ky, kz, k2, gg); jr = g[0]; ji = g[1]; } xi[j] += f * wj * ((pr * jr + pi * ji) * c + (pr * ji - pi * jr) * s); } } }
     let media = 0, tolta = 0; for (let j = 0; j < n; j++) { if (!vivo[j]) continue; let t = xi[j]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[j * n + k] * xi[k]; xi[j] = t / C[j * n + j]; media += xi[j] * yc[j]; tolta += xi[j] * xi[j]; }
     return { media, varianza: Math.max(0, var0 - tolta), libera: var0 }; };
+  // quanto del campo resta libero: la varianza a posteriori di ogni ampiezza, sommata (un terzo giro sulle onde, a richiesta)
+  const liberta = () => { let tolta = 0, tot = 0, rango = 0; const yr = new Float64Array(n), yi = new Float64Array(n); for (let j = 0; j < n; j++) rango += vivo[j];
+    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz, r = Math.sqrt(2 * PK[m]); let q = 0;
+      for (let j = 0; j < n; j++) { if (!vivo[j]) continue; const w = Wt[j][k2] * r; let a = 0, b = 0; if (w !== 0) { const t = kx * X[j] + ky * Y[j] + kz * Z[j], f = tutti[j].forma, c = Math.cos(t), s = Math.sin(t); if (f) { const g = f(kx, ky, kz, k2, gg); a = w * (g[0] * c - g[1] * s); b = w * (g[0] * s + g[1] * c); } else { a = w * c; b = w * s; } }
+        const rj = j * n; for (let k = 0; k < j; k++) if (vivo[k]) { a -= C[rj + k] * yr[k]; b -= C[rj + k] * yi[k]; } yr[j] = a / C[rj + j]; yi[j] = b / C[rj + j]; q += yr[j] * yr[j] + yi[j] * yi[j]; }
+      tolta += 0.5 * PK[m] * q; tot += PK[m]; }
+    return { gradiTotali: 2 * N, gradiFissati: rango, gradiLiberi: 2 * N - rango, varianzaLibera: 1 - tolta / tot }; };
   return { esiste: true, radice: base.radice, toroM, kmax, sigma: Math.sqrt(s2),
-    vincoli: dati.map((v, i) => ({ dato: v.dato, posizione: v.posizione, scala: v.scala, taglio: v.taglio, valore: v.valore, libero: d0[nf + i] })), fissi: nf, ridondanti,
+    vincoli: dati.map((v, i) => ({ dato: v.dato, posizione: v.posizione, scala: v.scala, taglio: v.taglio, valore: v.valore, forma: v.forma, libero: d0[nf + i] })), fissi: nf, ridondanti,
     gradi, chi2, probabilita: probabilitaChi2(chi2, gradi), logPeso: -chi2 / 2, logDensita: -chi2 / 2 - logDet - (gradi / 2) * Math.log(PI2), chi2Libero, deltaChi2: chi2 - chi2Libero,
-    in: (p) => valuta(A, B, p), lisciato: (p, R) => valuta(A, B, p, R), filtrato: (p, taglio) => valuta(A, B, p, 0, taglio), libero: (p, R = 0) => valuta(A0, B0, p, R), correzione: (p) => valuta(A, B, p) - valuta(A0, B0, p), attesa,
+    in: (p) => valuta(A, B, p), lisciato: (p, R) => valuta(A, B, p, R), filtrato: (p, taglio) => valuta(A, B, p, 0, taglio), libero: (p, R = 0) => valuta(A0, B0, p, R), correzione: (p) => valuta(A, B, p) - valuta(A0, B0, p), attesa, liberta,
+    misura: (p, forma, R = 0, taglio = null) => misura(A, B, p, forma, R, taglio), misuraLibera: (p, forma, R = 0, taglio = null) => misura(A0, B0, p, forma, R, taglio),
     onde: { n: N, kx: KX, ky: KY, kz: KZ, A, B, potenza: PK, kmax } };
 }
 
@@ -455,6 +495,8 @@ function posa(b, via, g, c, nome) {
 //   opz.mondi     quanti indirizzi provare per ogni ricerca (300); opz.cosmi: in quanti cosmi, se il cosmo è libero (2)
 //   opz.etichetta un nome in più per la domanda (un'altra etichetta, un'altra scelta tra i mondi che vanno bene)
 //   opz.campione  un nome per un altro campione di mondi (gli stessi mondi per ogni domanda nello stesso luogo, se non lo si cambia)
+//                 (con `massimi: true` in quell'oggetto ogni galassia è chiesta come PUNTO FERMO del campo filtrato: l'altezza
+//                 più tre pendenze nulle, vincoliMassimo; senza, come sempre, solo l'altezza)
 //   opz.nelCosmo  le bolle stanno in galassie DIVERSE di uno stesso cosmo, e si dice dove: { posizioni: [[x, y, z], …] }
 //                 (metri sul toro, una per bolla, nell'ordine dato), oppure { distanza: d } (in fila, a d metri l'una
 //                 dall'altra), oppure 'libero' (dove capita: posti estratti dagli eventi della domanda).
@@ -523,9 +565,10 @@ function cosmoDelleBolle(esito, come, c, radice) {
   const richieste = esito.map((e) => chiedeAlCosmo(e.bolla.dove)), L = richieste[0].toroM, diverse = [...new Set(richieste.map((q) => q.galassia))];
   if (come.biblioteca == null) richieste.forEach((q, i) => { const k = diverse.indexOf(q.galassia), primo = richieste.findIndex((x) => x.galassia === q.galassia);
     q.posizione = come.posizioni ? [...come.posizioni[primo]] : come.distanza != null ? [L / 2 + (k - (diverse.length - 1) / 2) * come.distanza, L / 2, L / 2] : ['x', 'y', 'z'].map((asse) => L * c(`cosmo/dove sta ${q.galassia}/${asse}`)); if (i !== primo) q.posizione = [...richieste[primo].posizione]; });
-  const vincoli = diverse.map((nome) => { const q = richieste.find((x) => x.galassia === nome); return { posizione: q.posizione, taglio: q.taglio, valore: q.valore }; });
+  // (come.massimi: ogni galassia è un punto fermo del campo filtrato, non solo un valore: tre pendenze nulle in più, regola 12)
+  const vincoli = diverse.flatMap((nome) => { const q = richieste.find((x) => x.galassia === nome); return come.massimi ? vincoliMassimo({ posizione: q.posizione, taglio: q.taglio, valore: q.valore }) : [{ posizione: q.posizione, taglio: q.taglio, valore: q.valore }]; });
   const F = come.biblioteca != null ? campoCondizionato(come.biblioteca, vincoli, { galassie: false }) : campoCondizionato(campoLibero(`${radice}/cosmo`), vincoli);
-  if (!F.esiste) { const [a, b] = F.incompatibili.map((i) => diverse[i]); return { esiste: false, richieste, perche: `nel campo del cosmo non c'è posto: ${a ?? 'una galassia'} e ${b ?? 'un\'altra'} sono messe nello stesso punto, ma chiedono picchi di altezza diversa (un campo ha un valore solo in ogni punto)` }; }
+  if (!F.esiste) { const [a, b] = F.incompatibili.map((i) => diverse[come.massimi ? Math.floor(i / 4) : i]); return { esiste: false, richieste, perche: `nel campo del cosmo non c'è posto: ${a ?? 'una galassia'} e ${b ?? 'un\'altra'} sono messe nello stesso punto, ma chiedono picchi di altezza diversa (un campo ha un valore solo in ogni punto)` }; }
   const libera = F.attesa(vincoli[0].posizione, 0, vincoli[0].taglio).libera, lontane = vincoli.reduce((a, v) => a + (v.valore * v.valore) / libera, 0);
   return { esiste: true, radice: come.biblioteca != null ? `cosmo ${come.biblioteca}` : `${radice}/cosmo`, daBiblioteca: come.biblioteca ?? null, richieste, galassie: diverse, gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, logPeso: F.logPeso, logDensita: F.logDensita, chi2Lontane: lontane,
     campo: come.biblioteca != null ? campoCondizionato(come.biblioteca, []) : F };

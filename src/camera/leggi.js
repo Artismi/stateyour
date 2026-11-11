@@ -501,7 +501,11 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
     } else { dato.fill(0); A.set(nuovo); }
     if (ultimo && su) sommaDelTrasporto(lat, nuovo, dato, somma);
     for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; calore[j] += dato[j] / passiAnno; ariaMedia[j] += A[j] / passiAnno; ventoMedio += (cosLat[j] * vento[j]) / passiAnno; scambioMedio += (cosLat[j] * scambio[j]) / passiAnno;
-      ghiaccio += (cosLat[j] * ghiaccioAcqua * (mare * (nuovo[j] < 271 ? 1 : 0) + (1 - mare) * (nuovo[j] < CLIMA.geloTerra ? 1 : 0))) / passiAnno; } }
+      // (il ghiaccio che si conta è QUELLO CHE L'ALBEDO VEDE: la stessa curva morbida gelo() attorno alle stesse soglie
+      // (geloMare, geloTerra), fascia per fascia e momento per momento. Prima si contava a parte, con un taglio netto a
+      // 271 K per il mare e a geloTerra per la terra: avanzava a gradini di una fascia intera, e chi cercava il ghiaccio
+      // che «torna uguale a sé stesso» — il ciclo del carbonio in chimica.js — non trovava un punto fermo)
+      ghiaccio += (cosLat[j] * (mare * gelo(nuovo[j], gM) + (1 - mare) * gelo(nuovo[j], gT))) / passiAnno; } }
   }
   if (Math.abs(irradiata - assorbita) < 0.01 * assorbita) break;
   }

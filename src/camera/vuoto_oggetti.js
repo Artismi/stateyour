@@ -42,7 +42,7 @@ const K = COSTANTI, PI = Math.PI, PI4 = 4 * PI, PI2 = 2 * PI, Z = MEZZO, H_PLANC
 const stringi = (x, a, b) => Math.max(a, Math.min(b, x));
 export const OGGETTI = Object.freeze({
   cella: 0.25, // (kpc) il lato di una cella: SCELTA DI CALCOLO (cambia gli indirizzi, non le statistiche)
-  planetaria: { raggio: 0.9 * PC, velocita: 4.2e4, guscio: 0.2 * MSOLE }, // [R] Jacob, Schönberner & Steffen 2013 (A&A 558, A78): una nebulosa planetaria si vede fino a ~0,9 pc, e si allarga a 42 km/s (→ 21000 anni); massa ionizzata tipica 0,1–0,3 M☉ (Pottasch 1984)
+  planetaria: { raggio: 0.9 * PC, velocita: 4.2e4, guscio: 0.2 * MSOLE }, // [V] Jacob, Schönberner & Steffen 2013 (A&A 558, A78; arXiv:1307.6189, riassunto): velocità vera media di espansione 42 km/s; arriva a 0,9 pc in 21000 ± 5000 anni. La massa ionizzata tipica, 0,1–0,3 M☉, è [R] (Pottasch 1984)
   mestel: [8.8e6, 5 / 7, 7 / 5, 1.5e5], // la nana bianca appena nata: la STESSA legge di galassie.js (stelleGalassia, Mestel 1952): formula riscritta, è privata là
   urtoHbeta: [7.44e-6, 2.41], // [R] un urto radiativo emette in Hβ 7,44·10⁻⁶·(v/100 km/s)^2,41·n erg/cm²/s (Dopita & Sutherland 1996, ApJS 102, 161, eq. 3.4)
   urtoBalmer: 3.0, urtoOIII: 2.0, // [R] dietro un urto Hα/Hβ ≈ 3; [O III]/Hβ ~ 2 (da 1 a 6) se l'urto supera ~100 km/s (Hartigan, Raymond & Hartmann 1987): INDICATIVO
@@ -235,7 +235,8 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
   const intervallo = (s, j) => -logEsatto(1 - s(j)); // l'intervallo j di un processo di Poisson di ritmo 1 (esatto: decide chi esiste)
   // gli intervalli di tutte le celle di una striscia di raggio sono estrazioni dello stesso evento («nube/5.3/quanti»: la
   // cella s usa le estrazioni da s·65536 in su): così guardare una cella vuota costa un numero, non un indirizzo nuovo
-  const PER_CELLA = 65536, strisce = new Map(), striscia = (nome, c, ep = null) => { const k = `${nome}/${c.k}.${c.i}${ep == null ? '' : `/epoca ${ep}`}/quanti`; let s = strisce.get(k); if (!s) strisce.set(k, (s = c0.serie(k))); return s; };
+  // (le celle arrivano in fila striscia per striscia: la serie si rifà solo quando la striscia cambia)
+  const PER_CELLA = 65536, ultima = { nome: null, k: -1, i: -1, ep: null, s: null }, striscia = (nome, c, ep = null) => { if (ultima.nome !== nome || ultima.k !== c.k || ultima.i !== c.i || ultima.ep !== ep) { ultima.nome = nome; ultima.k = c.k; ultima.i = c.i; ultima.ep = ep; ultima.s = c0.serie(`${nome}/${c.k}.${c.i}${ep == null ? '' : `/epoca ${ep}`}/quanti`); } return ultima.s; };
   // --- i tipi ordinati da una grandezza: sopra(M) = quanti se ne aspettano nell'anello sopra M; fai(R, valore, sorgente)
   const ordinati = (tipo, nome, cdf, hz, attesiTot, valoreDi, fai) => {
     if (!tipi.includes(tipo)) return;
@@ -244,12 +245,13 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
     // (la nebbia: di ogni anello si tiene la stessa parte, dall'alto: i più grandi; zoomando la parte cresce e i primi restano)
     for (const c of celle) {
       const R = Cn.anello(c.k), tot = attesiTot(R) * c.w, fin = tot * taglio; if (!(fin > 0)) continue;
-      const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}`, s = striscia(nome, c), s0 = c.s * PER_CELLA; let G = 0;
-      for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= fin) break; const o = c0.sotto(`${nomeCella}/${j}`), p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; // (prima il posto: chi sta fuori dalla regione non si costruisce nemmeno)
+      const s = striscia(nome, c), s0 = c.s * PER_CELLA; let G = 0, nomeCella = null;
+      for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= fin) break; nomeCella ??= `${nome}/${c.k}.${c.i}.${c.s}`; const o = c0.sotto(`${nomeCella}/${j}`), p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; // (prima il posto: chi sta fuori dalla regione non si costruisce nemmeno)
         const ogg = fai(R, valoreDi(R, G / c.w), o); if (!ogg) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k }); mostrati++; }
     }
     nebbia[tipo] = { veri, mostrati, soglia: taglio, cosa: taglio < 1 ? `i ${Math.round(massimo)} più grandi di ${Math.round(veri)}` : 'tutti' };
   };
+  const prima = { nome: null, k: -1, i: -1, ep: null, s: null }, strisciaPrima = (nome, c, ep) => { if (prima.nome !== nome || prima.k !== c.k || prima.i !== c.i || prima.ep !== ep) { prima.nome = nome; prima.k = c.k; prima.i = c.i; prima.ep = ep; prima.s = c0.serie(`${nome}/${c.k}.${c.i}/epoca ${ep}/quanti`); } return prima.s; };
   const hGas = () => LEGGI.spessoreGas, indice = (cum, v, da) => { let lo = da, hi = cum.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] > v) lo = m; else hi = m; } return [lo, cum[lo] > cum[lo + 1] ? (cum[lo] - v) / (cum[lo] - cum[lo + 1]) : 0]; };
   ordinati('nube molecolare', 'nube', (k) => Cn.anello(k).nubi.cdf, hGas, (R) => R.nubi.totale, (R, N) => R.nubi.massa(N), (R, M, o) => (M >= R.nubi.Mmin ? nube(R, M, o) : null));
   ordinati('regione H II', 'stella calda', () => Cn.giovani, hGas, (R) => R.hii[R.S.iSN], (R, N) => indice(R.hii, N, R.S.iSN), (R, v, o) => regioneHII(R, v[0], v[1], o, tAnni));
@@ -263,8 +265,8 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
     for (const c of celle) {
       const R = Cn.anello(c.k), D = durata(R), perEpoca = ritmo(R) * c.w * D; if (!(perEpoca > 0)) continue; const e1 = Math.floor(tAnni / D);
       for (let ep = e1 - 1; ep <= e1; ep++) {
-        const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}/epoca ${ep}`, s = striscia(nome, c, ep), s0 = c.s * PER_CELLA; let G = 0;
-        for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= perEpoca * taglio) break; const o = c0.sotto(`${nomeCella}/${j}`), nato = (ep + o('quando')) * D, eta = tAnni - nato; if (eta < 0 || eta >= D || (salta && salta(nato))) continue;
+        const s = ep === e1 ? striscia(nome, c, ep) : strisciaPrima(nome, c, ep), s0 = c.s * PER_CELLA; let G = 0, nomeCella = null;
+        for (let j = 0; j < PER_CELLA; j++) { G += intervallo(s, s0 + j); if (G >= perEpoca * taglio) break; nomeCella ??= `${nome}/${c.k}.${c.i}.${c.s}/epoca ${ep}`; const o = c0.sotto(`${nomeCella}/${j}`), nato = (ep + o('quando')) * D, eta = tAnni - nato; if (eta < 0 || eta >= D || (salta && salta(nato))) continue;
           const p = postoIn(forma, R, c.i, c.s, cdf, Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; const ogg = fai(R, o, eta); if (!ogg) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k, nato }); mostrati++; }
       }
     }

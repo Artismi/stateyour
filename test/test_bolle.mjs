@@ -3,7 +3,7 @@
 //   B. che cosa chiede una bolla a chi le sta sopra, dove più bolle si incontrano, il mondo che le contiene.
 // Con BOLLE_FONDO=1 si scende anche alla superficie vera (croste di sale, carbonato: ~11 s a pianeta).
 import assert from 'node:assert/strict';
-import { campoCondizionato, campoLibero, probabilitaChi2, RANGO, CONTENUTI, LIVELLI, GRAPPOLO, bolla, chiede, giudica, antenatoComune, incontra, causaComune, inFondo, chiedeAlCosmo, ridiscendiNelCosmo } from '../src/camera/bolle.js';
+import { campoCondizionato, campoLibero, probabilitaChi2, RANGO, vincoliMassimo, PENDENZE, CONTENUTI, LIVELLI, GRAPPOLO, bolla, chiede, giudica, antenatoComune, incontra, causaComune, inFondo, chiedeAlCosmo, ridiscendiNelCosmo } from '../src/camera/bolle.js';
 import { sorgente } from '../src/camera/eventi.js';
 import * as CO from '../src/camera/cosmo.js';
 import { campoCosmo } from '../src/camera/spazio3d.js';
@@ -286,5 +286,35 @@ if (process.env.BOLLE_FONDO) {
 } else console.log('  ○ la discesa alla superficie vera (croste di sale nei mari chiusi, carbonato che precipita: mare.js) non è in questa prova: costa ~11 s a pianeta. Si lancia con BOLLE_FONDO=1 node test/test_bolle.mjs');
 // i candidati «forse» per la crosta di sale: i mondi col mare (la ricerca libera sceglie quelli già decisi, asciutti)
 function CO_candidati(cosa) { const out = []; for (let k = 0; out.length < 8 && k < 40; k++) { const r = incontra([{ contenuto: 'acqua liquida' }], { mondi: MONDI, etichetta: `fondo ${k}` }), d = r.bolle[0].bolla.dove; if (giudica({ luogo: r.bolle[0].luogo.replace(/\/punto.*/, ''), contenuto: cosa }).esito === 'forse' && !out.some((x) => x.stella === d.stella && x.galassia === d.galassia && x.cosmo === d.cosmo && x.pianeta === d.pianeta)) out.push(d); } return out; }
+
+console.log('C. la forma di un vincolo');
+prova('un vincolo con una forma lineare qualunque: la forma 1 è la densità di sempre; l\'ordine non conta; «è un massimo» è l\'altezza più tre pendenze nulle (regola 12)', () => {
+  const base = campoLibero('prova/bolle/forme', { kmax: 12 }), R = 40 * MPC, uno = (kx, ky, kz, k2, out) => { out[0] = 1; out[1] = 0; return out; };
+  // (1) la forma che vale 1 è il vincolo di densità: stesse ampiezze, stesso χ²
+  const p0 = punti(1, 'forma uno', R)[0], senza = campoCondizionato(base, [{ ...p0, valore: 0.4 }]), con = campoCondizionato(base, [{ ...p0, valore: 0.4, forma: uno }]); let d = 0; for (let m = 0; m < base.N; m++) d = Math.max(d, Math.abs(senza.onde.A[m] - con.onde.A[m]), Math.abs(senza.onde.B[m] - con.onde.B[m]));
+  assert.ok(d < 1e-15 && Math.abs(senza.chi2 - con.chi2) < 1e-12 && con.gradi === 1, `forma 1 e densità differiscono di ${d}`);
+  // la stessa cosa chiesta due volte, con e senza forma: è lo stesso vincolo (uno è di troppo); con valori diversi non esiste
+  const doppio = campoCondizionato(base, [{ ...p0, valore: 0.4 }, { ...p0, valore: 0.4, forma: uno }]); assert.ok(doppio.esiste && doppio.gradi === 1 && doppio.ridondanti.length === 1); assert.equal(campoCondizionato(base, [{ ...p0, valore: 0.4 }, { ...p0, valore: 0.5, forma: uno }]).esiste, false);
+  // (2) sei punti: ognuno un massimo alto 2,5 scarti del campo lisciato. χ² = 2,5² per punto se sono lontani (le pendenze
+  // nulle nello stesso punto non costano: pendenza e altezza non sono correlate), l'ordine dei vincoli non conta
+  const P = punti(6, 'massimi', R), sR = Math.sqrt(campoCondizionato(base, []).attesa(P[0].posizione, R).libera), V = P.flatMap((p) => vincoliMassimo({ ...p, valore: 2.5 * sR }));
+  const t0 = performance.now(), F = campoCondizionato(base, V), ms = performance.now() - t0, G = campoCondizionato(base, [...V].reverse()); assert.ok(F.esiste && F.gradi === 24 && F.ridondanti.length === 0);
+  for (let m = 0; m < base.N; m += 7) assert.ok(F.onde.A[m] === G.onde.A[m] && F.onde.B[m] === G.onde.B[m], 'l\'ordine dei vincoli non conta, bit per bit'); assert.equal(F.chi2, G.chi2);
+  const solo = campoCondizionato(base, P.map((p) => ({ ...p, valore: 2.5 * sR }))); let pend = 0, pendSolo = 0, massimi = 0, massimiSolo = 0; const h = 4 * MPC, hd = 0.5 * MPC;
+  const eMassimo = (C, p) => { const c0 = C.lisciato(p, R); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) if ((i || j || k) && C.lisciato([p[0] + i * h, p[1] + j * h, p[2] + k * h], R) > c0) return false; return true; };
+  for (const p of P) { assert.ok(Math.abs(F.lisciato(p.posizione, R) - 2.5 * sR) < 1e-9);
+    for (let dd = 0; dd < 3; dd++) { const q = [...p.posizione]; q[dd] += hd; const su = F.lisciato(q, R), suS = solo.lisciato(q, R); q[dd] -= 2 * hd; pend = Math.max(pend, Math.abs(su - F.lisciato(q, R)) / sR); pendSolo = Math.max(pendSolo, Math.abs(suS - solo.lisciato(q, R)) / sR);
+      assert.ok(Math.abs(F.misura(p.posizione, PENDENZE[dd], R)) < 1e-9, 'la pendenza misurata nel punto è nulla'); const at = F.attesa(p.posizione, R, null, PENDENZE[dd]); assert.ok(Math.abs(at.media) < 1e-9 && at.varianza < 1e-9 * at.libera, 'e la teoria non le lascia incertezza'); }
+    if (eMassimo(F, p.posizione)) massimi++; if (eMassimo(solo, p.posizione)) massimiSolo++; }
+  // (alle differenze finite resta il termine di terz'ordine, ~(passo/R)² di una pendenza tipica)
+  assert.ok(pend < 3 * (hd / R) ** 2 * pendSolo, `la pendenza (differenze finite) è nulla: ${pend} contro ${pendSolo} senza il vincolo`);
+  tra(F.chi2 / (6 * 6.25), 0.8, 1.25, 'χ² dei sei massimi su 6·2,5² (punti a caso sul toro: quasi indipendenti)'); assert.ok(Math.abs(F.chi2 - solo.chi2) < 0.05 * solo.chi2, 'le pendenze nulle costano poco o niente');
+  assert.ok(massimi >= 3, 'un picco alto 2,5 scarti con pendenza nulla è quasi sempre un massimo'); const lib = F.liberta(); assert.equal(lib.gradiFissati, 24); tra(lib.varianzaLibera, 0.9, 1, 'la varianza che resta libera');
+  console.log(`      (sei punti alti 2,5 scarti a ${num(R / MPC)} Mpc: con le pendenze nulle sono massimi ${massimi} su 6 e la pendenza è ${num(pend)} scarti su 1 Mpc; con la sola altezza ${massimiSolo} su 6 e ${num(pendSolo)}; χ² ${num(F.chi2)} contro ${num(solo.chi2)}; 24 vincoli in ${num(ms)} ms; varianza libera ${(100 * lib.varianzaLibera).toFixed(2)}%)`);
+  // (3) le galassie di due bolle chieste come punti fermi del campo (incontra, nelCosmo con massimi)
+  const due = [{ contenuto: 'acqua liquida' }, { contenuto: 'anello' }], r = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 300 * MPC, massimi: true } }), r0 = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 300 * MPC } });
+  assert.ok(r.esiste && r.cosmo.gradi === 8 && r0.cosmo.gradi === 2); for (const q of r.cosmo.richieste) for (let dd = 0; dd < 3; dd++) assert.ok(Math.abs(r.cosmo.campo.misura(q.posizione, PENDENZE[dd], 0, q.taglio)) < 1e-9); assert.ok(ridiscendiNelCosmo(r).every((x) => x.torna));
+  console.log(`      (due bolle in due galassie a 300 Mpc: χ² ${num(r0.cosmo.chi2)} con le sole altezze, ${num(r.cosmo.chi2)} chiedendole come punti fermi del campo filtrato; ridiscendendo tornano)`);
+});
 
 console.log(`\n${ok} prove superate in ${((performance.now() - T0) / 1000).toFixed(1)} s`);

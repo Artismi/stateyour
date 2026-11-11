@@ -159,7 +159,10 @@ prova('l\'acqua risale all\'equatore e scende nei giri dei tropici; quella densa
 
 prova('la salinità segue evaporazione e pioggia: più salato ai tropici, meno all\'equatore e ai poli; il calcare satura al caldo', () => {
   const eq = fascia(T.salinita, 0, 6), tropici = fascia(T.salinita, 18, 32), poli = fascia(T.salinita, 62, 90);
-  assert.ok(tropici > eq + 0.3 && tropici > poli + 0.3, `tropici ${tropici}, equatore ${eq}, poli ${poli}`);
+  // (la legge: più salato dove evapora più di quanto piove. Di quanto, dipende dalla geografia e dalla salinità stessa: lo scarto di
+  // 0,3 g/kg era scritto per un mare a 70 g/kg, cioè il 4 per mille; resta un'attesa stampata, in proporzione alla salinità)
+  assert.ok(tropici > eq && tropici > poli, `tropici ${tropici}, equatore ${eq}, poli ${poli}`);
+  attesa(tropici > eq + 0.0042 * T.salinitaMedia && tropici > poli + 0.0042 * T.salinitaMedia, `i tropici sono più salati di equatore e poli di almeno il 4 per mille (qui ${n3(1000 * (tropici - Math.max(eq, poli)) / T.salinitaMedia)} per mille)`);
   attesa(fascia(T.eMenoP, 18, 32) > 0 && fascia(T.eMenoP, 0, 5) < 0, '(11/12) ai tropici evapora più di quanto piove, all\'equatore il contrario');
   let s = 0, a = 0, lo = Infinity, hi = -Infinity; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!eMare(k)) continue; const w = Math.cos((latJ(j) * Math.PI) / 180); s += T.salinita[k] * w; a += w; lo = Math.min(lo, T.salinita[k]); hi = Math.max(hi, T.salinita[k]); }
   tra(s / a / T.salinitaMedia, 0.97, 1.03, 'la media della carta è la salinità del bilancio');
@@ -212,7 +215,9 @@ prova('il moto browniano: una sfera di 1 µm a 20 °C si sposta di un micron al 
 
 prova('alla foce: acqua meno salata e torbida, l\'argilla coagula col sale; il fango cala allontanandosi, la sabbia per prima', () => {
   const d = [0.03, 0.1, 0.4, 1.5, 5].map((g) => luogo(T, verso(g).lon, verso(g).lat, { profondita: 1, acqua: true })), tot = (x) => x.sospeso.sabbia + x.sospeso.limo + x.sospeso.argilla + x.sospeso.fiocchi;
-  for (let i = 1; i < d.length; i++) { attesa(tot(d[i]) < tot(d[i - 1]), `(11/12) la torbidità cala: ${d.map(tot).map(n3)}`); assert.ok(d[i].salinita >= d[i - 1].salinita - 0.2, `la salinità risale verso il largo: ${d.map((x) => n3(x.salinita))}`); }
+  for (let i = 1; i < d.length; i++) { attesa(tot(d[i]) < tot(d[i - 1]), `(11/12) la torbidità cala: ${d.map(tot).map(n3)}`); attesa(d[i].salinita >= d[i - 1].salinita - 0.003 * T.salinitaMedia, `la salinità risale a ogni passo verso il largo: ${d.map((x) => n3(x.salinita))}`); }
+  // (a ogni passo dipende da quali altre foci sono vicine su questa Terra: è un'attesa stampata; la legge è che al largo l'acqua del fiume è diluita)
+  assert.ok(d[d.length - 1].salinita > d[0].salinita + 0.2 * T.salinitaMedia, `dalla foce al largo la salinità risale: ${d.map((x) => n3(x.salinita))}`);
   assert.ok(d[0].salinita < 0.7 * T.salinitaMedia && d[0].foce.parteDiFiume > 0.3, 'accanto alla foce l\'acqua è in buona parte dolce');
   assert.ok(d[0].sospeso.sabbia / tot(d[0]) > 10 * (d[2].sospeso.sabbia / tot(d[2]) + 1e-12), 'la sabbia cade subito'); assert.ok(d[4].sospeso.argilla > 20 * (d[4].sospeso.limo + d[4].sospeso.sabbia), 'lontano resta solo l\'argilla');
   assert.ok(d[2].foce.coagula > 0.8 && d[2].sospeso.fiocchi >= 0, 'nell\'acqua salata l\'argilla coagula'); { const limpido = tot(luogo(T, aperto.lon, aperto.lat, { profondita: 1 })); attesa(tot(d[0]) > 1000 * limpido, `alla foce più grande il fango è oltre mille volte quello del mare aperto: ${n3(tot(d[0]) / limpido)} volte`); } // (mille volte: dipende da quale fiume è il più grande su questa Terra; se non torna resta scritto)

@@ -15,6 +15,18 @@ import { creaPianeta, fabbricaAnello, V_SFERA, F_SFERA } from './pianeta.js';
 import { creaPunti } from './luci.js';
 import { sistema } from '../camera/cosmo.js';
 import { corpiSistema, scenaSistema } from '../camera/spazio3d.js';
+import { creaBucoNero } from './buconero.js';
+import { COSTANTI } from '../camera/leggi.js';
+
+// un buco nero nel mondo: lo strato di buconero.js (nel modo «scena»: piega ciò che gli altri hanno disegnato) più il
+// TEMPO PROPRIO di chi gli sta vicino: per chi sta fermo a r il suo secondo vale 1/√(1 − 2r_g/r) secondi di chi sta
+// lontano (relativita.js `ritmoFermo`); lo si dice al nucleo (`tempo.ritmo`), che fa scorrere il mondo di conseguenza.
+// Sopra 10⁵ r_g la differenza è sotto una parte su centomila e non si tocca niente.
+export function bucoNelMondo(N, opzioni) {
+  const b = creaBucoNero(N, { accrescimento: 0, modo: 'scena', luce: null, ...opzioni }), aggiorna = b.aggiorna;
+  b.aggiorna = (S) => { aggiorna.call(b, S); const r = b.stato.distanza; if (r > 2.02 && r < 1e5) N.tempo.ritmo = Math.min(N.tempo.ritmo || 1, Math.sqrt(1 - 2 / r)); };
+  return b;
+}
 
 const UA = 1.495978707e11;
 const V_ORBITA = `
@@ -32,16 +44,29 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   const lontanoMax = Math.max(1, ...Sis.pianeti.map((P) => P.aM || 0));
   const nodo = N.corpo({ nome: `sistema ${via.stella}`, luogo: `stella ${via.stella}`, genitore, posizione, assi, raggio: 0, influenza: Math.max(3 * lontanoMax, 40 * UA) });
   const corpi = [], schede = [];
+  // LE VELOCITÀ dei corpi (per il cono di luce del nucleo: un corpo si vede dov'era quando è partita la luce): due stati
+  // del sistema a un minuto l'uno dall'altro, una volta per istante (prima tutti a t − 60 s, poi tutti a t: così chi
+  // tiene lo stato in spazio3d.js lo rifà due volte per fotogramma, non due per corpo)
+  const PASSO_V = 60, memoV = { t: NaN, v: defs.map(() => [0, 0, 0]) }, _pa = defs.map(() => [0, 0, 0]), _pb = [0, 0, 0];
+  const velocitaDi = (k) => (t, out = [0, 0, 0]) => {
+    if (memoV.t !== t) { for (let j = 0; j < defs.length; j++) defs[j].posizione(t - PASSO_V, _pa[j]); for (let j = 0; j < defs.length; j++) { defs[j].posizione(t, _pb); const v = memoV.v[j]; v[0] = (_pb[0] - _pa[j][0]) / PASSO_V; v[1] = (_pb[1] - _pa[j][1]) / PASSO_V; v[2] = (_pb[2] - _pa[j][2]) / PASSO_V; } memoV.t = t; }
+    const v = memoV.v[k]; out[0] = v[0]; out[1] = v[1]; out[2] = v[2]; return out; };
   for (const c of defs) {
     const g = c.genitore < 0 ? nodo : corpi[c.genitore], P = c.cosa === 'pianeta' ? Sis.pianeti[c.id] : null, L = c.cosa === 'luna' ? Sis.pianeti[c.pianeta].lune.find((l) => l.id === c.id) : null;
     // (il nome del suo luogo, per la bolla — bolla.js —, e i suoi periodi: quando il tempo corre troppo per vederlo girare, il nucleo lo ferma)
     const luogo = c.cosa === 'stella' ? null : `${c.cosa} ${c.id}`, periodi = P ? { giro: P.bloccato ? 0 : P.giorno || 0, orbita: P.anno || 0 } : L ? { giro: L.periodo || 0, orbita: L.periodo || 0 } : null;
-    const corpo = N.corpo({ ...c, luogo, periodi, genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
+    const corpo = N.corpo({ ...c, luogo, periodi, velocita: velocitaDi(corpi.length), genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
       // fin dove la camera si attacca a questo corpo: un pianeta 50 raggi (ma dentro l'orbita della sua prima luna larga), una luna 12
       influenza: c.cosa === 'pianeta' ? 50 * c.raggio : c.cosa === 'luna' ? Math.min(12 * c.raggio, 0.3 * (L?.aM || 1e12)) : 0 });
     corpi.push(corpo); schede.push({ c, corpo, P, L, anello: P && P.anello && typeof P.anello.densita === 'function' ? fabbricaAnello(N, P) : null, vero: null, rel: [0, 0, 0], sole: [1, 0, 0], E: 0 });
   }
   const stella = corpi[0]; nodo.stella = stella; stella.luminosita = defs[0].luminosita;
+  // se la «stella» è un buco nero (il resto di una stella grande: stelle.fine), lo si vede com'è: l'ombra e il cielo
+  // piegato attorno. La massa è quella del suo orizzonte (spazio3d.js dà il raggio di Schwarzschild); niente disco: il
+  // modello non gli dà niente da inghiottire. Sotto 2,5 r_g non si scende (lì chi sta fermo non esiste quasi più).
+  const eBuco = Sis.stella.stato === 'buco nero' || (!(defs[0].luminosita > 0) && defs[0].raggio < 1e6 && Sis.stella.massa > 2.5), massaBuco = eBuco ? (defs[0].raggio * COSTANTI.c ** 2) / (2 * COSTANTI.G) : 0;
+  const buco = eBuco ? bucoNelMondo(N, { corpo: stella, massaKg: massaBuco, radice: `cosmo ${via.cosmo}/galassia ${via.galassia}/stella ${via.stella}/buco` }) : null;
+  if (buco) stella.raggio = 2.5 * buco.raggioGravitazionale;
   const punti = creaPunti(N), alone = punti.insieme(1), segni = punti.insieme(defs.length), posS = new Float32Array(3 * defs.length), luceS = new Float32Array(4 * defs.length), prgSfera = N.programma(V_SFERA, F_SFERA, { a_angolo: 0 });
   const quadrato = (() => { const vao = gl.createVertexArray(), b = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null); return { vao, b }; })();
   // le orbite: 256 punti ciascuna, riferiti al corpo attorno a cui girano (gli elementi sono quelli di oggi)
@@ -117,7 +142,7 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
     vero: () => schede.find((s) => s.vero)?.vero || null, scheda: (corpo) => schede.find((s) => s.corpo === corpo) || null,
     // che cosa è un corpo, in parole (per la riga in basso)
     descrivi(corpo) { const s = schede.find((x) => x.corpo === corpo); if (!s) return ''; if (s.c.cosa === 'stella') return `la stella: ${Tstella.toFixed(0)} K, raggio ${(corpo.raggio / 6.957e8).toFixed(2)} raggi solari`; if (s.P) return `il pianeta ${s.c.id + 1}: ${s.P.tipo}, raggio ${(corpo.raggio / 1000).toFixed(0)} km, a ${((s.P.aM || 0) / UA).toFixed(2)} UA${s.P.anello ? ', con gli anelli' : ''}${(s.P.lune || []).length ? `, ${(s.P.lune || []).length} lune` : ''}`; return `una luna del pianeta ${s.c.pianeta + 1}: raggio ${(corpo.raggio / 1000).toFixed(0)} km`; },
-    libera() { N.togli(strato); for (const s of schede) { if (s.vero) s.vero.libera(); if (s.anello) s.anello.libera(); } for (const o of orbite) { gl.deleteBuffer(o.buf); gl.deleteVertexArray(o.vao); } punti.libera(); gl.deleteBuffer(quadrato.b); gl.deleteVertexArray(quadrato.vao);
+    buco, libera() { N.togli(strato); if (buco) N.togli(buco); for (const s of schede) { if (s.vero) s.vero.libera(); if (s.anello) s.anello.libera(); } for (const o of orbite) { gl.deleteBuffer(o.buf); gl.deleteVertexArray(o.vao); } punti.libera(); gl.deleteBuffer(quadrato.b); gl.deleteVertexArray(quadrato.vao);
       for (const c of [nodo, ...corpi]) { const i = N.corpi.indexOf(c); if (i >= 0) N.corpi.splice(i, 1); } },
   };
 }

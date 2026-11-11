@@ -14,8 +14,10 @@
 //     resistenza Q*(D) ∝ D^s. Con s = 0 è il 3,5 di Dohnanyi (1969); con le due pendenze di Benz & Asphaug che
 //     impatti.js già usa (IMPATTI.rottura) viene 3,66 sotto qualche centinaio di metri e 3,04 sopra (O'Brien & Greenberg 2003);
 //   · la nube esterna: una cometa scagliata da un pianeta diffonde in energia finché la marea della galassia non le
-//     alza il perielio fuori dalla portata dei pianeti; dove i due tempi sono uguali comincia la nube; finisce dove la
-//     marea vince la stella. Quanta parte ci resta invece di uscire: (1/a_interno)/(calcio del pianeta), al più 1;
+//     alza il perielio fuori dalla portata dei pianeti; dove i due tempi sono uguali comincia la nube (se i calci sono
+//     grandi, come quelli di un gigante: dove la marea ce la fa in un giro solo); finisce dove la marea vince la stella.
+//     Quanta parte ci resta invece di uscire: (1/a_interno − 1/a_esterno)/(calcio del pianeta), al più 1: un pianeta
+//     piccolo riempie la nube, un gigante espelle quasi tutto (Giove vero, in questa legge: il 2%);
 //   · quando una cometa si accende: dove metà della luce assorbita al punto sotto la stella va in vapore;
 //   · β = spinta della luce / gravità = 3·L·Q/(16π·G·M·c·ρ·a); il tempo di Poynting–Robertson c·r²/(4·G·M·β);
 //   · il più vicino, gli incontri tra stelle: n·σ·v con il fuoco gravitazionale.
@@ -55,7 +57,7 @@ export const SISTEMA = Object.freeze({
   vitaAcqua: 8.3e4, vitaIone: 1e6, // [R] (s, a 1 UA dal Sole) una molecola d'acqua regge 8·10⁴ s alla luce ultravioletta prima di spezzarsi; uno ione CO⁺ nasce in ~10⁶ s (Huebner, Keady & Lyon 1992)
   righe: { C2: 516.5, COpiu: 426.0 }, // [R] (nm) la banda di Swan del C₂ (il verde della chioma) e la banda più forte del CO⁺ (l'azzurro della coda di ioni)
   granoTipico: 1e-4, pressioneLuce: 1, // (m) il grano che porta la luce zodiacale, ~100 µm (Grün et al. 1985) [R]; Q della pressione di radiazione per un grano grande = 1
-  oumuamua: 100, // (m) la taglia di 1I/'Oumuamua (~100–200 m: Meech et al. 2017): la soglia per contare gli oggetti interstellari
+  oumuamua: 100, // (m) [R] la taglia di 1I/'Oumuamua (~100–200 m: Meech et al. 2017): la soglia per contare gli oggetti interstellari. (Il riscontro, 0,2 per UA³, è [V]: Do, Tucker & Tonry 2018, arXiv:1801.02821, riassunto)
 });
 const SS = SISTEMA;
 

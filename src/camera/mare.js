@@ -297,7 +297,8 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
   const int = P.interno || {}, q = int.q ?? 0, eta = int.eta ?? 4.5e9, vu = vulcani({ calore: q, raggioM: P.raggioM, composizione: P.composizione }), magma = vu.magma, fuso = vu.fuso, F = rocce.fusione || 0.1;
   const massaMantello = P.massaKg * (1 - (P.composizione?.ferro ?? 0.32));
   // il fondo: l'acqua che attraversa la roccia calda e quella tiepida (kg/anno), dal calore che esce dal fondo
-  const vivo = q > 0.02 ? (placche ? 1 : 0.2) : 0, Pfondo = (P.clima?.pressione || 0) + 1000 * gravita(P) * 2500;
+  const regime = int.tettonica, vivo = placche ? 1 : regime ? (String(regime).startsWith('coperchio') ? 0.2 : 0) : q > 0.02 ? 0.2 : 0, // (il regime della crosta è quello della storia del pianeta; la soglia sul calore solo se manca)
+     Pfondo = (P.clima?.pressione || 0) + 1000 * gravita(P) * 2500;
   const Tcamino = Math.min(DATI.critico, ebollizione(Pfondo)), Tfondo = Math.max(271, Math.min(Tmare, 277));
   const caldo = (vivo * DATI.caldo * q * areaMare * ANNO) / (4000 * Math.max(50, Tcamino - Tfondo)), tiepido = (vivo * DATI.tiepido * q * areaMare * ANNO) / (4000 * DATI.salto);
   const M = massaMare, kSepolto = ((sedimento / DATI.densitaRoccia) * (DATI.porosita / (1 - DATI.porosita)) * 1000) / M, kNeutro = kSepolto + evaporiti, kTorna = riciclo > 0 && isFinite(riciclo) ? 1 / riciclo : 0;
@@ -476,8 +477,8 @@ export function mare(P, sf, cl, se = null, caso = null) {
   for (let jf = 0; jf < FH; jf++) { const A = areaF(jf); for (let i = 0; i < FW; i++) { const k = jf * FW + i; aTutta += A; if (tipo[k] === 1 ? fondoF[k] < fondoSfiato : pAria < DATI.pressioneSfiato) aBassa += A; } }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (bagnato[k] > 0 && Tclima[k] > Tmare) { const A = area(j) * bagnato[k]; calcTutto += A; if (fondo[k] < 200) calcBasso += A; } }
   const placche = P.interno?.tettonica ? P.interno.tettonica === 'a placche' : (s.placche || 0) > 1, q0 = P.interno?.q ?? 0;
-  // ogni quanto i sedimenti tornano in gioco: il tempo in cui le placche chiudono un oceano (larghezza / velocità: la legge di tettonica.js)
-  const riciclo = placche && q0 > 0 && areaMare > 0 ? Math.sqrt(areaMare) / (TETTONICA.vTerra * (q0 / TETTONICA.qTerra) ** 2) : Infinity;
+  // ogni quanto i sedimenti tornano in gioco: il tempo in cui le placche chiudono un oceano (larghezza / velocità delle placche)
+  const vPlacche = s.tettonica?.velocita > 0 ? s.tettonica.velocita : TETTONICA.vTerra * (q0 / TETTONICA.qTerra) ** 2, riciclo = placche && q0 > 0 && areaMare > 0 ? Math.sqrt(areaMare) / vPlacche : Infinity; // (la velocità delle placche è quella che la tettonica di questa superficie ha usato; la legge di scala solo se la superficie non la porta)
   // --- LE FOCI: dove i fiumi di erosione() entrano in mare (in proporzione alla portata), cella per cella
   const dolceFine = new Float32Array(FN); let sommaFoci = 0; if (s.flusso) for (let k = 0; k < FN; k++) if (tipo[k] === 1 && s.flusso[k] > 2) sommaFoci += s.flusso[k];
   if (sommaFoci > 0) for (let k = 0; k < FN; k++) if (tipo[k] === 1 && s.flusso[k] > 2) dolceFine[k] = ((s.flusso[k] / sommaFoci) * fiumi) / 1000 / ANNO; // (m³/s)

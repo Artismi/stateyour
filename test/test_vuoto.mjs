@@ -59,7 +59,7 @@ prova('i raggi cosmici: UNA fonte con materia.js (la copia, frenata come là, ri
   assert.equal(s.relativo, 1); assert.ok(V.raggiCosmiciIn(VL).relativo === MAT.cieloRelativo({ ritmoSN: VL.ritmoSN.totale, forma: VL }).relativo, 'il cielo relativo è quello di materia.js');
   riscontro('raggi cosmici', 'densità di energia vicino al Sole (eV/cm³)', s.energia / EV / 1e6, [0.83, 1.8], { entro: 1.3, fonte: 'Voyager 1 (Cummings et al. 2016): 0,83; Webber 1998: 1,8' });
   riscontro('raggi cosmici', '  doppione: risalita.js DATI.COSMICI_GALASSIA (eV/cm³)', RISALITA.COSMICI_GALASSIA / EV / 1e6, s.energia / EV / 1e6, { entro: 1.3, fonte: 'la stessa grandezza, scritta là e integrata qui' });
-  riscontro('raggi cosmici', 'ionizzazione primaria ζ (10⁻¹⁷ per H e per s)', s.ionizzazione * 1e17, [10, 30], { fonte: 'H₃⁺ nelle nubi diffuse: Indriolo & McCall 2012' });
+  riscontro('raggi cosmici', 'ionizzazione primaria ζ (10⁻¹⁷ per H e per s)', s.ionizzazione * 1e17, [7.4, 46], { fonte: '[V] H₃⁺ nelle nubi diffuse: ζ₂ = 3,5·10⁻¹⁶ per molecola, da 1,7 a 10,6 (Indriolo & McCall 2012, arXiv:1111.6936); per atomo ζ₂/2,3' });
   riscontro('raggi cosmici', '  la stessa, contro il valore «classico»', s.ionizzazione * 1e17, [0.7, 2], { fonte: 'Spitzer & Tomasko 1968; Voyager: 1,5' });
   riscontro('raggi cosmici', 'campo magnetico di equipartizione (nT)', B * 1e9, [0.5, 0.6], { fonte: 'vicino al Sole, totale: Beck 2001; Ferrière 2001' });
   riscontro('raggi cosmici', 'flusso da tutte le direzioni (per cm² e per s)', s.flusso / 1e4, [3, 6], { entro: 10, fonte: 'dominato dai MeV, che nessuno misura bene' });
@@ -331,10 +331,10 @@ prova('tra le stelle: oggetti interstellari e pianeti vaganti da 24 sistemi dell
   const inc = V.incontri(VL, SOLE), inc2 = V.incontri(VL, SOLE, PC / 2); tra(inc2.perMilioneDiAnni / inc.perMilioneDiAnni, 0.25, 0.26, 'gli incontri vanno come b² (più il fuoco)'); assert.ok(inc.fuoco > 1 && inc.fuoco < 1.001);
   console.log(`      (per stella, in media su ${VAG.campione} — ${VAG.conPianeti} con pianeti —: ${num(VAG.perStella.planetesimiKg / MTERRA)} Terre di planetesimi persi, ${num(VAG.perStella.nellaNubeKg / MTERRA)} nella nube, ${num(VAG.perStella.pianetiVaganti)} pianeti scacciati)`);
   riscontro('tra le stelle', 'stelle per pc³ a metà del disco', VAG.stellePerPc3, [0.1, 0.14], { fonte: 'vicino al Sole, con nane brune e nane bianche (RECONS)' });
-  riscontro('tra le stelle', 'oggetti interstellari > 100 m per UA³ (macinati dalla cascata)', VAG.oggetti.perUA3, [0.1, 0.2], { entro: 10, fonte: 'da 1I/\'Oumuamua: Do, Tucker & Tonry 2018' });
+  riscontro('tra le stelle', 'oggetti interstellari > 100 m per UA³ (macinati dalla cascata)', VAG.oggetti.perUA3, [0.1, 0.2], { entro: 10, fonte: '[V] da 1I/\'Oumuamua: 0,2 per UA³ (Do, Tucker & Tonry 2018, arXiv:1801.02821)' });
   riscontro('tra le stelle', '  se usciti com\'erano nati (tutti da 100 km): il minimo', VAG.oggetti.perUA3Minimo, [0.1, 0.2], { entro: 10, fonte: 'idem' });
   riscontro('tra le stelle', 'pianeti scacciati per stella', VAG.pianetiVaganti.perStella, [0.25, 20], { entro: 3, fonte: 'microlenti: ≤ 0,25 come Giove (Mróz et al. 2017), forse molti come la Terra (Sumi et al. 2023)' });
-  riscontro('tra le stelle', 'stelle che passano entro 1 pc in un milione di anni', inc.perMilioneDiAnni, 19.7, { fonte: 'Gaia DR2: 19,7 ± 2,2 (Bailer-Jones et al. 2018)' });
+  riscontro('tra le stelle', 'stelle che passano entro 1 pc in un milione di anni', inc.perMilioneDiAnni, 19.7, { fonte: '[V] Gaia DR2: 19,7 ± 2,2 (Bailer-Jones et al. 2018, arXiv:1805.07581)' });
   riscontro('tra le stelle', 'velocità media tra due stelle (km/s)', inc.velocita / 1e3, [40, 55], { fonte: 'dispersioni vicino al Sole (Dehnen & Binney 1998)' });
 });
 
@@ -384,7 +384,9 @@ prova('scenaVuoto: i dati per il motore — metri, watt, righe con la loro lungh
 prova('galassie estreme (una nana, un ammasso, una appena fusa): niente si rompe, il gas torna, nessun conteggio negativo', () => {
   for (const a of [{ massa: 1e10, spin: 0.035 }, { massa: 1e14, spin: 0.035 }, { massa: 3e12, spin: 0.04, fusioni: [{ quando: 12, rapporto: 1 }] }]) { const c = sorgente('prova/estrema'), f = formaDaAlone({ fusioni: [], ...a }, c), q = V.quantiInTutto(f), m = V.massaDelGas(f);
     for (const k in q) assert.ok(q[k] >= 0 && isFinite(q[k]), `alone ${a.massa}: ${k} = ${q[k]}`); if (f.massaGas > 0) tra(m.totale / f.massaGas, 0.995, 1.005, `alone ${a.massa}: gas`);
-    const o = V.oggettiIn(f, { centro: [0, 0, 0], raggio: 300 }, 0, { caso: c, massimo: 30 }); for (const x of o.oggetti) assert.ok(x.raggio > 0 && isFinite(x.raggio) && x.pos.every(isFinite)); const sc = V.scenaVuoto({ forma: f, caso: c, massimo: 20 }); assert.ok(sc.volumi.length === V.oggettiIn(f, { centro: [0, 0, 0], raggio: f.anelli.bordo[ANELLI] }, 0, { caso: c, massimo: 20 }).oggetti.length);
+    // (una sfera di 15 kpc attorno al centro: guardare TUTTO il disco di un ammasso costa secondi — 1,3 milioni di celle — ed è misurato tra i costi)
+    const reg = { centro: [0, 0, 0], raggio: Math.min(15, f.anelli.bordo[ANELLI]) }, o = V.oggettiIn(f, reg, 0, { caso: c, massimo: 30 }); for (const x of o.oggetti) assert.ok(x.raggio > 0 && isFinite(x.raggio) && x.pos.every(isFinite)); const sc = V.scenaVuoto({ forma: f, caso: c, regione: reg, massimo: 30 }); assert.equal(sc.volumi.length, o.oggetti.length);
+    if (a.massa === 1e14) { const t = performance.now(), tutto = V.oggettiIn(f, { centro: [0, 0, 0], raggio: 1e3 }, 0, { caso: c, massimo: 30 }); costo(`oggettiIn, TUTTO il disco di una galassia gigante (alone 10¹⁴ M☉, ${f.anelli.bordo[ANELLI].toFixed(0)} kpc: ${tutto.celle} celle)`, performance.now() - t); }
     const fuori = V.contenuto(f, { r: 3 * f.anelli.bordo[ANELLI], z: 5 }); assert.equal(fuori.gas.nH, 0); assert.ok(fuori.alone.nH >= 0 && fuori.fondo.fotoni > 0, 'fuori dal disco restano l\'alone caldo e il fondo'); }
 });
 

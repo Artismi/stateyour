@@ -26,6 +26,12 @@ import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, riflette, rifless
 // «dieci volte più debole» senza dipolo (soglia di Rossby 0,12), e per i giganti di gas la legge di prima.
 export function interno(P, stella) { return internoDaStoria(P, stella); }
 
+// lo stato del mantello dalla storia termica del pianeta (storia.js: quella che il pianeta ha già), per tettonica.js: il
+// salto di temperatura tra il mantello alto e la superficie, la sua conducibilità e la sua diffusività; null se non c'è
+export function statoDelMantello(P, int = P.interno) {
+  try { const sto = storia(P, int?.eta ?? 4.5e9); return sto && sto.Tum > sto.Ts ? { dT: sto.Tum - sto.Ts, k: STORIA.kSu, kappa: STORIA.kSu / (STORIA.rhoSu * STORIA.cp) } : null; } catch { return null; }
+}
+
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
 const memo = new Map();
 import { comeSorgente } from './eventi.js'; // il caso della superficie: dalla fonte unica («seme» è un numero o la sorgente del luogo)
@@ -48,9 +54,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // la storia degli impatti del pianeta (impatti.js, P.impatti); se il pianeta non la porta restano i ripieghi da seme.
   // Lo stato da cui parte il mantello è l'impronta termica dei suoi urti
   const storiaUrti = P.impatti ?? null;
-  // lo stato del mantello dalla storia termica del pianeta (storia.js: quella che il pianeta ha già): il salto di temperatura
-  // tra il mantello alto e la superficie, la sua conducibilità e la sua diffusività: da lì la velocità delle placche
-  let mantello = null; if (aPlacche) { try { const sto = storia(P, int.eta ?? 4.5e9); if (sto && sto.Tum > sto.Ts) mantello = { dT: sto.Tum - sto.Ts, k: STORIA.kSu, kappa: STORIA.kSu / (STORIA.rhoSu * STORIA.cp) }; } catch { mantello = null; } }
+  const mantello = aPlacche ? statoDelMantello(P, int) : null; // (dalla storia termica: da lì la velocità delle placche)
   const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno

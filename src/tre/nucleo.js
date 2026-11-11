@@ -161,7 +161,10 @@ export function creaNucleo(tela, opzioni = {}) {
   }
 
   // ---------- il tempo del mondo
-  const tempo = { t: O.t0 || 0, velocita: 1, pausa: false };
+  const tempo = { t: O.t0 || 0, velocita: 1, pausa: false, ritmo: 1 };
+  // LO STATO DELLA VISTA. `cono`: ciò che si vede è il passato — ogni cosa lontana è disegnata dov'era quando è partita
+  // la luce che arriva adesso (t − distanza/c); false: la sezione «adesso», tutto allo stesso istante (per confrontare).
+  const vista = { cono: O.cono !== false }, C_LUCE = 299792458;
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
@@ -294,6 +297,12 @@ export function creaNucleo(tela, opzioni = {}) {
   // ---------- gli strati e le immagini su cui si disegna
   const strati = []; let imm = null;
   const aggiungi = (s) => { strati.push(s); if (s.prepara) s.prepara(N); cambia(); return s; };
+  // togliere un corpo (e i suoi figli) dall'albero: se la camera gli era attaccata passa, restando dov'è, a suo padre
+  function togliCorpo(c) {
+    if (!c) return; const via = new Set([c]); for (let giro = 0, cambiato = true; cambiato && giro < 20; giro++) { cambiato = false; for (const x of corpi) if (x.genitore && via.has(x.genitore) && !via.has(x)) { via.add(x); cambiato = true; } }
+    if (via.has(cam.corpo)) { let su = c.genitore; while (su && via.has(su)) su = su.genitore; if (su) riattacca(su); }
+    for (let i = corpi.length - 1; i >= 0; i--) if (via.has(corpi[i])) corpi.splice(i, 1);
+  }
   const togli = (s) => { const i = strati.indexOf(s); if (i >= 0) { strati.splice(i, 1); if (s.libera) s.libera(); } };
   function preparaImmagini() {
     const W = tela.width, H = tela.height; if (imm && imm.W === W && imm.H === H) return;
@@ -312,13 +321,34 @@ export function creaNucleo(tela, opzioni = {}) {
   S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
   const _a = new Map(); let occhioInerziale = [0, 0, 0];
   S.assetto = (c) => { let a = _a.get(c); if (!a) { a = assettoDi(c, S.t); _a.set(c, a); } return a; };
-  S.versoCorpo = (c, out = [0, 0, 0]) => { tra(cam.corpo, c, S.t, out); out[0] -= occhioInerziale[0]; out[1] -= occhioInerziale[1]; out[2] -= occhioInerziale[2]; return out; };
+  // dove SI VEDE un corpo: col cono, dov'era quando è partita la luce. Il ritardo è distanza/c (dalla sua superficie: il
+  // suolo sotto i piedi è «adesso»); lo spostamento in quel tempo si conta lungo la catena dei riferimenti fino
+  // all'antenato comune con l'occhio: con la velocità, se il corpo la sa dare (`velocita(t, out)`, come `posizione`: al
+  // primo ordine, basta finché il ritardo è breve rispetto al periodo), altrimenti chiedendo la posizione a quell'istante.
+  const _c1 = [0, 0, 0], _c2 = [0, 0, 0], _c3 = [0, 0, 0];
+  S.ritardo = (c) => (c && c._ritardo) || 0; // (secondi: di quanto è vecchia la luce di quel corpo, in questo fotogramma)
+  S.versoCorpo = (c, out = [0, 0, 0]) => {
+    tra(cam.corpo, c, S.t, out); out[0] -= occhioInerziale[0]; out[1] -= occhioInerziale[1]; out[2] -= occhioInerziale[2];
+    if (!vista.cono || c === cam.corpo) { if (c) c._ritardo = 0; return out; }
+    const dt = Math.max(0, Math.hypot(out[0], out[1], out[2]) - (c.raggio || 0)) / C_LUCE; c._ritardo = dt; if (dt < 1e-3) return out;
+    const miei = new Set(); for (let x = cam.corpo; x; x = x.genitore) miei.add(x);
+    for (let x = c; x && !miei.has(x); x = x.genitore) {
+      if (!x.posizione || mediato(x, 'orbita')) continue; const m = quadro(x.genitore, S.t);
+      if (x.velocita) { x.velocita(S.t, _c1); _c1[0] *= -dt; _c1[1] *= -dt; _c1[2] *= -dt; }
+      else { x.posizione(S.t - dt, _c2); x.posizione(S.t, _c3); _c1[0] = _c2[0] - _c3[0]; _c1[1] = _c2[1] - _c3[1]; _c1[2] = _c2[2] - _c3[2]; }
+      const v = m ? V.mv(m, _c1, _c2) : _c1; out[0] += v[0]; out[1] += v[1]; out[2] += v[2];
+    }
+    return out;
+  };
   const stat = { cpuMs: 0, fotogrammi: 0 }; let esposto = 1, perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
   const tasti = new Set();
   function fotogramma(ms = performance.now()) {
     if (perso || !cam.corpo || !tela.width || !tela.height) return;
     const t0 = performance.now(), dtVero = Math.min(0.1, ultimoMs ? (ms - ultimoMs) / 1000 : 0); ultimoMs = ms;
-    if (!tempo.pausa) tempo.t += dtVero * tempo.velocita;
+    // (il tempo che scorre è quello di chi guarda: dove il suo orologio va più piano — vicino a un buco nero — nello stesso
+    // suo secondo il mondo ne fa di più. Chi lo sa lo dice a ogni fotogramma in `tempo.ritmo` = dτ/dt ≤ 1; lontano vale 1.)
+    if (!tempo.pausa) tempo.t += (dtVero * tempo.velocita) / (tempo.ritmo > 0 ? tempo.ritmo : 1);
+    tempo.ritmo = 1;
     // i tasti del volo: W A S D (o le frecce) avanti e di lato, R e F su e giù, Q ed E girano la testa; maiuscolo: più in fretta
     if (tasti.size && dtVero > 0) {
       const k = (a, b) => (tasti.has(a) || tasti.has(b) ? 1 : 0), svelto = tasti.has('shift') ? 4 : 1;
@@ -391,7 +421,7 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.libera) s.libera(); strati.length = 0;
     if (!perso) gl.getExtension('WEBGL_lose_context')?.loseContext(); perso = true;
   }
-  const N = { gl, tela, opzioni: O, V, tempo, camera: cam, corpo, corpi, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
+  const N = { gl, tela, opzioni: O, V, tempo, vista, camera: cam, corpo, corpi, togliCorpo, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
     avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; }, tasti };
   ridimensiona();
   return N;

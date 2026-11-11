@@ -58,12 +58,9 @@
 //    accoppiato: Cornish et al. 2004 [R]): è un toro di comodo, e il suo cielo lo mostra.
 //
 // D. IL VERSO INVERSO (vincoliDelCielo, vincoliDi, campoVincolato): una macchia di cielo, o «qui c'è un filamento / un
-//    vuoto», sono vincoli LINEARI sulle onde. campoCondizionato() di bolle.js accetta solo vincoli di densità lisciata
-//    in un punto: quelli passano di lì così come sono; e così anche una macchia di cielo senza il termine Doppler
-//    (il suo nucleo è isotropo: è un vincolo di «densità» su un campo riscalato onda per onda, ed è esatto). Per i
-//    vincoli che NON sono isotropi (marea, pendenza della densità, Doppler) qui c'è la stessa correzione di Hoffman &
-//    Ribak (1991) scritta per una forma lineare qualunque: è una SECONDA VIA della stessa legge, provata uguale a bolle.js dove entrambe
-//    valgono; le righe per portarla dentro bolle.js sono nel rapporto.
+//    vuoto», sono vincoli LINEARI sulle onde. Il conto è tutto di campoCondizionato di bolle.js (una fonte), che per
+//    ogni vincolo accetta la sua forma (il guadagno dell'onda): qui si scrivono solo le forme (marea, pendenza, cielo
+//    con o senza Doppler) e i valori tipici da chiedere.
 //
 // E. L'UNIVERSO OSSERVABILE (distanze, orizzonti, conoDiLuce): dalla cosmologia di leggi.js / galassie.js (U.E, U.tempo)
 //    più la radiazione (che in COSMO non c'è: Ω_r viene da T₀ e dalle costanti).
@@ -104,7 +101,7 @@ import { COSTANTI, COSMO, ANNO, MSOLE } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U, LEGGI as LEGGI_GALASSIE } from './galassie.js';
 import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
-import { campoCondizionato, campoLibero, probabilitaChi2, RANGO } from './bolle.js';
+import { campoCondizionato, campoLibero } from './bolle.js';
 import { campoCosmo } from './spazio3d.js';
 import { cosmoBase, ramiCosmo } from './cosmo.js';
 import { DATI as DATI_STELLE } from './stelle.js';
@@ -620,7 +617,7 @@ export function doroshkevich(n = 40000) {
 // SEI vincoli sul tensore di marea lisciato: T = Σ λ_a·e_a e_a, con gli autovalori tipici della classe (doroshkevich) per
 // σ_R·altezza. Un vincolo lineare fissa VALORI, non disuguaglianze: «è un filamento» diventa «il tensore di marea vale
 // quello di un filamento tipico» (così la classe in quel punto, a quella scala, è garantita). Con `forma: false` si dà
-// solo la densità (UN vincolo, δ_R = la somma di quegli autovalori: passa da campoCondizionato di bolle.js così com'è):
+// solo la densità (UN vincolo senza forma, δ_R = la somma di quegli autovalori):
 // dice «qui è vuoto quanto un vuoto tipico», ma non garantisce la classe (la prova misura quante volte la dà).
 // → i vincoli ({ tipo: 'marea' | 'pendenza' | 'densita', … }) da dare a campoVincolato, anche insieme ad altri (regola 12)
 export function vincoliDi(cosmo, { cosa, posizione, scala = 0, direzione = null, altezza = 1, forma = true, centrato = true }) {
@@ -644,86 +641,33 @@ export function vincoliDi(cosmo, { cosa, posizione, scala = 0, direzione = null,
 }
 // I VINCOLI DI UNA MACCHIA DI CIELO: per ogni direzione osservata, il valore ΔT/T (già tolto il dipolo dell'osservatore,
 // come si fa con le mappe vere). fondo: ciò che dà fondoCosmico per quell'osservatore (dice dove sta e a che raggio guarda).
-//   doppler: true = il vincolo è sulla temperatura intera (isotropo + Doppler: forma lineare non isotropa: si risolve qui);
-//            false = solo il termine isotropo [Θ₀+Ψ] (passa da campoCondizionato di bolle.js su un campo riscalato).
+//   doppler: true = il vincolo è sulla temperatura intera (isotropo + Doppler); false = solo il termine isotropo [Θ₀+Ψ].
 export const vincoliDelCielo = (fondo, direzioni, valori, { doppler = fondo.doppler } = {}) => direzioni.map((n, i) => ({ tipo: 'cielo', fondo, direzione: [...n], valore: valori[i], doppler }));
 
-// IL CAMPO VINCOLATO da vincoli lineari qualunque sulle onde (Hoffman & Ribak 1991, come bolle.js):
-//   δ_c = δ + ξᵀC⁻¹(c − c₀),  χ² = cᵀC⁻¹c,  ogni vincolo j una forma lineare  c_j = Σ_onde 2·Re[(A + iB)·g_j·e^(ik·x_j)]
-// con g_j il «guadagno» dell'onda in quel vincolo: densità lisciata g = W(k) (reale, isotropo); marea ij g = W·k_i k_j/k²;
-// pendenza della densità lungo e: g = i·(k·e)·W (in giri per lato: ∂δ/∂x·L/2π);
-// cielo g = W0(k) + i·(k̂·n)·W1(k) nel punto x₀ + χ·n. C_ij = Σ 2P·Re[g_i e^(iθ_i)·(g_j e^(iθ_j))*], ΔA = P·Σ_j w_j·Re[…], ΔB = −P·Σ_j w_j·Im[…].
-// QUALE VIA: se i vincoli sono tutti di densità, o tutti di cielo dello stesso fondo senza Doppler, il conto lo fa
-// campoCondizionato di bolle.js (per il cielo: sul campo riscalato A·W0, P·W0², dove il vincolo È una densità in un punto;
-// le ampiezze tornano indietro dividendo per W0). Altrimenti (marea, Doppler, vincoli misti) lo fa la via scritta qui.
-// opz.via = 'qui' forza la seconda (per le prove: le due vie danno le stesse ampiezze).
+// IL CAMPO VINCOLATO da vincoli lineari qualunque sulle onde: il conto è di campoCondizionato di bolle.js (Hoffman &
+// Ribak 1991: una fonte), che accetta per ogni vincolo la sua FORMA, cioè il guadagno g dell'onda in quel vincolo:
+//   c_j = Σ_onde 2·Re[(A + iB)·W_j·g_j·e^(ik·x_j)]
+// Qui si scrivono solo le forme: densità lisciata g = 1; marea ij g = k_i k_j/k²; pendenza della densità lungo e
+// g = i·(k·e) (in giri per lato: ∂δ/∂x·L/2π); cielo g = W0(k) + i·(k̂·n)·W1(k) nel punto x₀ + χ·n (W0, W1 di fondoCosmico).
 // Per un cosmo della biblioteca i vincoli delle sue galassie restano (come in bolle.js), e χ² è quello dei vincoli nuovi.
-// → { esiste, via ('bolle.js' | 'ragnatela.js'), toroM, radice, gradi, chi2, probabilita, chi2Libero, ridondanti,
+// → { esiste, via: 'bolle.js', toroM, radice, gradi, chi2, probabilita, chi2Libero, ridondanti,
 //     vincoli (ognuno con `libero`: quanto valeva nel campo di partenza, e `ottenuto`), onde: { A, B, … } (un cosmo per le
-//     funzioni di qui), liberta() → { gradiLiberi, gradiTotali, varianzaLibera (la parte della varianza del campo, media
-//     sul toro, che i vincoli NON fissano) } }
-export function campoVincolato(cosmo, vincoli = [], opz = {}) {
-  const O = ondeDi(cosmo), { N, KX, KY, KZ, PK, kmax } = O, K2 = kmax * kmax, soloDensita = vincoli.every((v) => v.tipo === 'densita'), f0 = vincoli[0]?.fondo;
-  const soloCielo = vincoli.length > 0 && vincoli.every((v) => v.tipo === 'cielo' && v.fondo === f0 && !v.doppler) && O.fissi.length === 0;
-  const A0 = O.libere ? O.libere.A : O.A, B0 = O.libere ? O.libere.B : O.B;
-  const involucro = (r) => { const onde = { n: N, kx: KX, ky: KY, kz: KZ, A: r.A, B: r.B, potenza: PK, kmax }; return { ...r, toroM: O.toroM, radice: O.radice, rami: O.rami, kmax, onde }; };
-  // ---- la via di bolle.js
-  if (opz.via !== 'qui' && (soloDensita || soloCielo)) {
-    if (soloDensita) { const F = campoCondizionato({ radice: O.radice, toroM: O.toroM, kmax, N, KX, KY, KZ, PK, A: A0, B: B0, fissi: O.libere ? O.fissi : [] }, vincoli.map((v) => ({ posizione: v.posizione, scala: v.scala ?? 0, valore: v.valore })));
-      if (!F.esiste) return { esiste: false, via: 'bolle.js', perche: F.perche, incompatibili: F.incompatibili };
-      return involucro({ esiste: true, via: 'bolle.js', gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, chi2Libero: F.chi2Libero, ridondanti: F.ridondanti, vincoli: F.vincoli.map((v) => ({ ...vincoli[v.dato], dato: v.dato, libero: v.libero, ottenuto: v.valore })), A: F.onde.A, B: F.onde.B, liberta: () => liberta(O, vincoli) }); }
-    const W0 = f0.pesi.W0, A1 = new Float64Array(N), B1 = new Float64Array(N), P1 = new Float64Array(N); for (let m = 0; m < N; m++) { const w = W0[KX[m] ** 2 + KY[m] ** 2 + KZ[m] ** 2]; A1[m] = O.A[m] * w; B1[m] = O.B[m] * w; P1[m] = PK[m] * w * w; }
-    const F = campoCondizionato({ radice: O.radice, toroM: O.toroM, kmax, N, KX, KY, KZ, PK: P1, A: A1, B: B1, fissi: [] }, vincoli.map((v) => ({ posizione: v.direzione.map((n, d) => f0.osservatore.posizione[d] + f0.raggioM * n), scala: 0, valore: v.valore })));
-    if (!F.esiste) return { esiste: false, via: 'bolle.js', perche: F.perche, incompatibili: F.incompatibili };
-    const A = Float64Array.from(O.A), B = Float64Array.from(O.B); for (let m = 0; m < N; m++) { const w = W0[KX[m] ** 2 + KY[m] ** 2 + KZ[m] ** 2]; if (w !== 0) { A[m] += (F.onde.A[m] - A1[m]) / w; B[m] += (F.onde.B[m] - B1[m]) / w; } }
-    return involucro({ esiste: true, via: 'bolle.js', gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, chi2Libero: F.chi2Libero, ridondanti: F.ridondanti, vincoli: F.vincoli.map((v) => ({ ...vincoli[v.dato], dato: v.dato, libero: v.libero, ottenuto: v.valore })), A, B, liberta: () => liberta(O, vincoli) });
-  }
-  // ---- la via di qui: una forma lineare qualunque
-  const S = prepara(O, vincoli), n = S.n, nf = S.nf, C = new Float64Array(n * n), d0 = new Float64Array(n), Gr = new Float64Array(n), Gi = new Float64Array(n);
-  for (let m = 0; m < N; m++) { S.guadagni(m, Gr, Gi); const a = 2 * A0[m], b = 2 * B0[m], p2 = 2 * PK[m];
-    for (let j = 0; j < n; j++) d0[j] += a * Gr[j] - b * Gi[j];
-    for (let i = 0; i < n; i++) { const gr = Gr[i], gi = Gi[i]; if (gr === 0 && gi === 0) continue; const riga = i * n, pr = p2 * gr, pi = p2 * gi; for (let j = i; j < n; j++) C[riga + j] += pr * Gr[j] + pi * Gi[j]; } }
-  // Cholesky nell'ordine canonico, saltando i vincoli che non aggiungono niente (come bolle.js: RANGO)
-  const diag = new Float64Array(n), yc = new Float64Array(n), y0 = new Float64Array(n), vivo = new Uint8Array(n), ridondanti = [];
-  for (let j = 0; j < n; j++) { const rj = j * n; let s = C[rj + j], ac = S.tutti[j].valore, a0 = d0[j]; diag[j] = s;
-    for (let k = 0; k < j; k++) if (vivo[k]) { const l = C[rj + k]; s -= l * l; ac -= l * yc[k]; a0 -= l * y0[k]; }
-    if (!(s > RANGO * diag[j])) { if (Math.abs(ac) > 1e-7 * (Math.abs(S.tutti[j].valore) + Math.sqrt(Math.max(diag[j], 1e-300)))) return { esiste: false, via: 'ragnatela.js', incompatibili: [S.tutti[j].dato ?? -1], perche: `il vincolo ${S.tutti[j].dato ?? S.tutti[j].nome} è già deciso da quelli che lo precedono, ma chiede un valore diverso di ${ac.toExponential(2)}` }; ridondanti.push(S.tutti[j].dato ?? S.tutti[j].nome); continue; }
-    const l = Math.sqrt(s); vivo[j] = 1; C[rj + j] = l; yc[j] = ac / l; y0[j] = a0 / l;
-    for (let i = j + 1; i < n; i++) { const ri = i * n; let t = C[rj + i]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[ri + k] * C[rj + k]; C[ri + j] = t / l; } }
-  const w = new Float64Array(n); for (let j = n - 1; j >= 0; j--) { if (!vivo[j]) continue; let t = yc[j] - y0[j]; for (let i = j + 1; i < n; i++) if (vivo[i]) t -= C[i * n + j] * w[i]; w[j] = t / C[j * n + j]; }
-  let chi2 = 0, chi2Libero = 0, gradi = 0; for (let j = nf; j < n; j++) if (vivo[j]) { chi2 += yc[j] * yc[j]; chi2Libero += y0[j] * y0[j]; gradi++; }
-  const A = Float64Array.from(A0), B = Float64Array.from(B0);
-  if (n) for (let m = 0; m < N; m++) { S.guadagni(m, Gr, Gi); let a = 0, b = 0; for (let j = 0; j < n; j++) { a += w[j] * Gr[j]; b -= w[j] * Gi[j]; } A[m] += PK[m] * a; B[m] += PK[m] * b; }
-  return involucro({ esiste: true, via: 'ragnatela.js', gradi, chi2, probabilita: probabilitaChi2(chi2, gradi), chi2Libero, ridondanti, vincoli: S.tutti.slice(nf).map((v, i) => ({ ...v.dato0, dato: v.dato, libero: d0[nf + i], ottenuto: v.valore })), A, B, liberta: () => liberta(O, vincoli) });
-}
-// i vincoli in ordine canonico e, per ogni onda, il loro guadagno già moltiplicato per la fase: G_j = g_j·e^(iθ_j)
-function prepara(O, vincoli) {
-  const { KX, KY, KZ, kmax } = O, K2 = kmax * kmax, ordineTipo = { densita: 0, marea: 1, pendenza: 2, cielo: 3 }, radici = new Float64Array(K2 + 1); for (let k2 = 0; k2 <= K2; k2++) radici[k2] = Math.sqrt(k2);
-  const taglio = (t) => { const W = new Float64Array(K2 + 1); for (let k2 = 0; k2 <= K2; k2++) W[k2] = k2 <= t * t ? 1 : 0; return W; }, uno = new Float64Array(K2 + 1).fill(1);
-  const fissi = O.libere ? O.fissi.map((f) => ({ tipo: 'densita', x: f.x.map(frazione), W: taglio(f.taglio), valore: f.valore, nome: f.nome })) : [];
-  const dati = vincoli.map((v, i) => {
-    if (v.tipo === 'cielo') { const F = v.fondo, x = v.direzione.map((n, d) => frazione((F.osservatore.posizione[d] + F.raggioM * n) / O.toroM)); return { tipo: 'cielo', x, W: F.pesi.W0, W1: v.doppler ? F.pesi.W1 : null, n: v.direzione, valore: v.valore, dato: i, dato0: v, scala: 0 }; }
-    if (v.tipo !== 'densita' && v.tipo !== 'marea' && v.tipo !== 'pendenza') throw new Error(`campoVincolato: vincolo ${i}: tipo sconosciuto (${v.tipo})`);
-    if (!Array.isArray(v.posizione) || !Number.isFinite(v.valore)) throw new Error(`campoVincolato: vincolo ${i}: servono posizione e valore`);
-    return { tipo: v.tipo, x: v.posizione.map((p) => frazione(p / O.toroM)), W: finestra(O, v.scala ?? 0) ?? uno, i: v.i ?? 0, j: v.j ?? 0, n: v.direzione ?? null, valore: v.valore, dato: i, dato0: v, scala: v.scala ?? 0 };
-  }).sort((a, b) => ordineTipo[a.tipo] - ordineTipo[b.tipo] || a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.i ?? 0) - (b.i ?? 0) || (a.j ?? 0) - (b.j ?? 0) || (a.n?.[0] ?? 0) - (b.n?.[0] ?? 0) || (a.n?.[1] ?? 0) - (b.n?.[1] ?? 0) || (a.n?.[2] ?? 0) - (b.n?.[2] ?? 0) || a.valore - b.valore || a.dato - b.dato);
-  const tutti = [...fissi, ...dati], n = tutti.length, X = tutti.map((v) => v.x.map((q) => PI2 * q));
-  const guadagni = (m, Gr, Gi) => { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz, kk = [kx, ky, kz];
-    for (let j = 0; j < n; j++) { const v = tutti[j], w = v.W[k2]; let gr = w, gi = 0;
-      if (v.tipo === 'marea') gr = (w * kk[v.i] * kk[v.j]) / k2; else if (v.tipo === 'pendenza') { gr = 0; gi = w * (kx * v.n[0] + ky * v.n[1] + kz * v.n[2]); } else if (v.tipo === 'cielo' && v.W1) gi = (v.W1[k2] * (kx * v.n[0] + ky * v.n[1] + kz * v.n[2])) / radici[k2];
-      if (gr === 0 && gi === 0) { Gr[j] = 0; Gi[j] = 0; continue; }
-      const t = kx * X[j][0] + ky * X[j][1] + kz * X[j][2], c = Math.cos(t), s = Math.sin(t); Gr[j] = gr * c - gi * s; Gi[j] = gr * s + gi * c; } };
-  return { tutti, n, nf: fissi.length, guadagni };
-}
-// QUANTO DEL CAMPO RESTA LIBERO: i gradi (ampiezze reali) non fissati, e la parte della varianza del campo (media sul
-// toro) che i vincoli non tolgono: 1 − Σ_onde P²·(|L⁻¹G_r|² + |L⁻¹G_i|²)/Σ P  (la varianza a posteriori di ogni ampiezza)
-function liberta(O, vincoli) {
-  const S = prepara(O, vincoli), n = S.n, { N, PK } = O, C = new Float64Array(n * n), Gr = new Float64Array(n), Gi = new Float64Array(n), vivo = new Uint8Array(n);
-  for (let m = 0; m < N; m++) { S.guadagni(m, Gr, Gi); const p2 = 2 * PK[m]; for (let i = 0; i < n; i++) { const pr = p2 * Gr[i], pi = p2 * Gi[i], riga = i * n; for (let j = i; j < n; j++) C[riga + j] += pr * Gr[j] + pi * Gi[j]; } }
-  let rango = 0; for (let j = 0; j < n; j++) { const rj = j * n; let s = C[rj + j]; const d = s; for (let k = 0; k < j; k++) if (vivo[k]) s -= C[rj + k] ** 2; if (!(s > RANGO * d)) continue; const l = Math.sqrt(s); vivo[j] = 1; rango++; C[rj + j] = l; for (let i = j + 1; i < n; i++) { const ri = i * n; let t = C[rj + i]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[ri + k] * C[rj + k]; C[ri + j] = t / l; } }
-  let tolta = 0, tot = 0; const yr = new Float64Array(n), yi = new Float64Array(n);
-  for (let m = 0; m < N; m++) { S.guadagni(m, Gr, Gi); let q = 0; for (let j = 0; j < n; j++) { if (!vivo[j]) continue; let a = Gr[j], b = Gi[j]; const rj = j * n; for (let k = 0; k < j; k++) if (vivo[k]) { a -= C[rj + k] * yr[k]; b -= C[rj + k] * yi[k]; } yr[j] = a / C[rj + j]; yi[j] = b / C[rj + j]; q += yr[j] * yr[j] + yi[j] * yi[j]; } tolta += PK[m] * PK[m] * q; tot += PK[m]; }
-  return { gradiTotali: 2 * N, gradiFissati: rango, gradiLiberi: 2 * N - rango, varianzaLibera: 1 - tolta / tot };
+//     funzioni di qui), campo (ciò che dà campoCondizionato: in, attesa, misura…), liberta() → { gradiLiberi, gradiTotali,
+//     varianzaLibera (la parte della varianza del campo, media sul toro, che i vincoli NON fissano) } }
+const formaDi = (v) => {
+  if (v.tipo === 'densita') return null;
+  if (v.tipo === 'marea') { const i = v.i, j = v.j; return (kx, ky, kz, k2, out) => { out[0] = ((i === 0 ? kx : i === 1 ? ky : kz) * (j === 0 ? kx : j === 1 ? ky : kz)) / k2; out[1] = 0; return out; }; }
+  if (v.tipo === 'pendenza') { const [a, b, c] = v.direzione; return (kx, ky, kz, k2, out) => { out[0] = 0; out[1] = kx * a + ky * b + kz * c; return out; }; }
+  if (v.tipo === 'cielo') { const W0 = v.fondo.pesi.W0, W1 = v.doppler ? v.fondo.pesi.W1 : null, [a, b, c] = v.direzione; return (kx, ky, kz, k2, out) => { out[0] = W0[k2]; out[1] = W1 ? (W1[k2] * (kx * a + ky * b + kz * c)) / Math.sqrt(k2) : 0; return out; }; }
+  throw new Error(`campoVincolato: tipo di vincolo sconosciuto (${v.tipo})`);
+};
+export function campoVincolato(cosmo, vincoli = []) {
+  const O = ondeDi(cosmo), { N, KX, KY, KZ, PK, kmax } = O;
+  const base = { radice: O.radice, toroM: O.toroM, kmax, N, KX, KY, KZ, PK, A: O.libere ? O.libere.A : O.A, B: O.libere ? O.libere.B : O.B, fissi: O.libere ? O.fissi : [] };
+  const F = campoCondizionato(base, vincoli.map((v) => (v.tipo === 'cielo' ? { posizione: v.direzione.map((n, d) => v.fondo.osservatore.posizione[d] + v.fondo.raggioM * n), scala: 0, valore: v.valore, forma: formaDi(v) } : { posizione: v.posizione, scala: v.scala ?? 0, valore: v.valore, forma: formaDi(v) })));
+  if (!F.esiste) return { esiste: false, via: 'bolle.js', perche: F.perche, incompatibili: F.incompatibili };
+  return { esiste: true, via: 'bolle.js', toroM: O.toroM, radice: O.radice, rami: O.rami, kmax, gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, chi2Libero: F.chi2Libero, ridondanti: F.ridondanti,
+    vincoli: F.vincoli.map((v) => ({ ...vincoli[v.dato], dato: v.dato, libero: v.libero, ottenuto: v.valore })), A: F.onde.A, B: F.onde.B, onde: F.onde, campo: F, liberta: F.liberta };
 }
 
 // =====================================================================================================

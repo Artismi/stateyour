@@ -14,8 +14,12 @@
 //                        che distanza sta la cosa più vicina di ogni tipo, a ogni scala;
 //                     f. scenaVuoto(dove, t): i dati per il motore 3D, nella forma delle scene di spazio3d.js.
 // Marche delle fonti in tutti i file: [V] letta sulla fonte ora · [R] ricordata (da verificare) · [D] derivata qui.
-// (Nessuna fonte esterna è stata riletta in rete per questo modulo: le costanti di letteratura sono tutte [R]; [V]
-//  compare solo per ciò che è stato letto nel codice del progetto.)
+// (Quasi tutte le costanti di letteratura sono [R]: non rilette. [V], lette ora sui riassunti di arXiv: la durata delle
+//  nebulose planetarie (Jacob, Schönberner & Steffen 2013, arXiv:1307.6189: 42 km/s, 0,9 pc in 21000 ± 5000 anni) e tre
+//  RISCONTRI: la ionizzazione dall'H₃⁺ (Indriolo & McCall 2012, arXiv:1111.6936: ζ₂ = 3,5·10⁻¹⁶ s⁻¹, da 1,7 a 10,6), gli
+//  oggetti interstellari (Do, Tucker & Tonry 2018, arXiv:1801.02821: 0,2 per UA³), le stelle di passaggio (Bailer-Jones
+//  et al. 2018, arXiv:1805.07581: 19,7 ± 2,2 per milione di anni entro 1 pc). Di Blitz & Rosolowsky 2006 il riassunto
+//  conferma solo «quasi lineare con la pressione»: esponente e P₀ restano [R]. [V] vale anche per ciò che è letto nel codice.)
 //
 // LA FORMA DEI DATI
 //   contenuto(forma, { r, z, fi | fase }, t) → {
@@ -73,14 +77,25 @@
 //   · impatti.js: non espone il ritmo di polvere di oggi, né le orbite delle comete che i giganti portano dentro;
 //   · materia.js: i raggi cosmici sono uniformi in tutta la galassia (nessun calo verso il bordo).
 // CHE COSA NON TORNA (stampato dalle prove, con il numero):
-//   · la ionizzazione dei raggi cosmici viene 2–3·10⁻¹⁷ per secondo: è il valore «classico» (Spitzer & Tomasko 1968), ma
-//     l'H₃⁺ nelle nubi diffuse ne chiede 2·10⁻¹⁶ (Indriolo & McCall 2012): è una discordanza nota anche nel mondo vero.
+//   · la ionizzazione dei raggi cosmici viene 1,7·10⁻¹⁷ per atomo e per secondo vicino al Sole: è il valore «classico»
+//     (Spitzer & Tomasko 1968), ma l'H₃⁺ nelle nubi diffuse ne chiede ~1,5·10⁻¹⁶ (Indriolo & McCall 2012: ζ₂ = 3,5·10⁻¹⁶
+//     per molecola): è una discordanza nota anche nel mondo vero (i raggi cosmici sotto il MeV non li misura nessuno).
 //     Con così pochi elettroni e un campo ultravioletto 1,5 volte quello misurato, la pressione delle due fasi viene
 //     2–3 volte quella vera (3800 K/cm³), e il gas atomico freddo viene poco;
 //   · i fotoni ionizzanti per stella nata sono il doppio dei veri (stelle come corpi neri);
 //   · gli oggetti interstellari: tre ordini di grandezza meno della stima da 1I/'Oumuamua (lo sono anche nei modelli veri);
 //   · le fasce: quelle interne sono quasi tutte esaurite a 4,5 miliardi di anni (impatti.js lo dichiara: manca Yarkovsky),
-//     quelle esterne pesano decine di Terre (manca la migrazione): la polvere zodiacale viene 10⁵ volte la vera.
+//     quelle esterne pesano decine di Terre (manca la migrazione): la polvere zodiacale viene 10⁵ volte la vera, e gli
+//     urti di oggi sui mondi di roccia dieci volte meno dei veri. (Le STESSE leggi, con la massa vera della fascia degli
+//     asteroidi, danno invece numeri giusti: 440 corpi sopra 100 km, urti distruttivi ogni 4,6 miliardi di anni, 10⁴ kg/s di polvere.)
+//   · la pendenza dell'estinzione: R_V = 3,8 invece di 3,1 (un solo materiale per i grani, ottica approssimata).
+// I COSTI (misurati in test_vuoto.mjs): contenuto() ~10 µs a punto (più ~25 ms la prima volta in ogni anello: la curva
+//   termica); il censimento di una galassia ~0,3 s una volta; oggettiIn ~0,3–0,5 µs per cella toccata e per tipo più
+//   ~5 µs per oggetto: 2 ms in una sfera di 50 pc, ~0,15 s per tutta una galassia come la nostra con la nebbia (55 mila
+//   celle), SECONDI per tutto il disco di una gigante (10⁶ celle: lì conviene guardare a pezzi); corpiMinori ~0,1–0,3 s la
+//   prima volta (è la storia degli impatti di impatti.js, pianeta per pianeta) poi ~1 ms; vaganti ~1,3 s una volta per anello.
+// ANCORA DA SAPERE: attorno a una nana bianca le fasce stanno dov'erano (cosmo.js allarga le orbite dei pianeti quando la
+//   stella perde massa: qui no); quantoVuoto in un sistema non dà i raggi cosmici (li frena il vento: è materia.js, raggiCosmici).
 import { COSTANTI, MSOLE, UA } from './leggi.js';
 import * as ST from './stelle.js';
 import { LEGGI, ANELLI, popolazione, COSMOLOGIA, dentro as GAL } from './galassie.js';
