@@ -73,13 +73,13 @@ prova('un ramo dei parametri aperti cambia solo ciò che ne discende', () => {
   for (const k in APERTI) tra(APERTI[k].valore, APERTI[k].intervallo[0], APERTI[k].intervallo[1], `${k}: il valore centrale sta nel suo intervallo`);
   console.log(`      Terra senz'acqua nei pori: ${secca.crosta.regime}, T_UM ${n(secca.Tum, 4)} K (con: ${n(base.Tum, 4)}), q ${n(secca.q)} W/m²`);
 });
-prova('il criterio di Korenaga: decide l\'attrito (cioè l\'acqua), e la superficie calda ferma il coperchio', () => {
+prova('il criterio di Korenaga: decide l\'attrito, cioè l\'acqua (Venere è ferma perché è asciutta, non perché è calda)', () => {
   const s = oggi(TERRA), c = s.crosta;
   assert.ok(c.lnContrasto < c.lnCritico && c.mobilita > 0.9); const v = oggi(VENERE); assert.ok(v.crosta.lnContrasto > v.crosta.lnCritico + 10 && v.crosta.mobilita < 1e-4, 'Venere, asciutta: coperchio fermo senza appello');
   // l'attrito che sta sulla soglia per la Terra di oggi: 0,327·γ^0,647·θ = ln(0,25·Ra_i^½)
   const tb = tabellaStoria(TERRA), u = tb.t.length - 1, dT = tb.Tum[u] - tb.Ts[u], teta = (STORIA.Enu * dT) / (LG.R_GAS * tb.Tum[u] ** 2), muSoglia = STORIA.alfa * dT * Math.pow(tb.lnCrit[u] / (STORIA.korenagaA * teta), 1 / STORIA.korenagaN);
   tra(muSoglia, 0.02, 0.1, 'attrito efficace alla soglia'); assert.ok(STORIA.attritoSecco * (1 - APERTI.poriAcqua.valore) < muSoglia && STORIA.attritoSecco > 5 * muSoglia);
-  // una Terra con la superficie di Venere (735 K) e l'acqua (per assurdo): il contrasto cala meno di quanto la soglia chieda? lo si stampa
+  // una Terra con la superficie di Venere (735 K) e l'acqua (per assurdo): resta a placche; lo si stampa
   const calda = storia(mondo('Terra'), 4.5e9, { stella: SOLE, Tsuperficie: 735 });
   console.log(`      Terra: ln Δη_L ${n(c.lnContrasto)} contro ln Δη_crit ${n(c.lnCritico)} (θ = ${n(teta)}); attrito alla soglia ${n(muSoglia)} (con l'acqua ${n(STORIA.attritoSecco * (1 - APERTI.poriAcqua.valore))}, roccia secca ${STORIA.attritoSecco}); con la superficie a 735 K e l'acqua: ${calda.crosta.regime}`);
   // l'acqua che conta è quella che sta sopra come mare: con un decimo dell'acqua la stessa Terra non ha più placche

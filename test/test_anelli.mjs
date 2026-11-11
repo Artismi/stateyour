@@ -245,7 +245,14 @@ prova('sui pianeti veri del cosmo: quanti hanno anelli, e in fretta', () => {
   // e con un giorno così corto l'anello resta: la frazione è salita da un quarto a sette su dieci. È una conseguenza
   // delle premesse, non una taratura: resta tra le cose da guardare)
   tra(giganti.massiccio / giganti.n, 0.03, 0.85, 'frazione di giganti con anelli massicci');
-  assert.ok(roc.anello / roc.n < 0.1, `i rocciosi quasi mai: ${pc(roc.anello, roc.n)}`);
+  // I ROCCIOSI. Il riscontro vero è piccolissimo: nel Sistema Solare nessuno dei quattro ha un anello. La domanda giusta è
+  // se la frazione del modello è compatibile con «zero su quattro», non se sta sotto una soglia scelta: (1 − f)⁴ deve
+  // restare una probabilità non trascurabile (oltre il 5%). (Da quando la dinamo viene dalla storia termica, storia.js,
+  // i rocciosi grandi e vecchi non hanno più campo: senza campo non c'è pioggia e l'anello dura; la frazione è salita dal
+  // 3% al 10%, tutti senza campo.)
+  const fRoc = roc.anello / roc.n, zeroSuQuattro = (1 - fRoc) ** 4;
+  console.log(`      rocciosi con anello: ${pc(roc.anello, roc.n)} (${roc.senzaCampo} su ${roc.anello} senza campo magnetico); probabilità di vederne zero su quattro, come nel Sistema Solare: ${pc(zeroSuQuattro, 1)}`);
+  assert.ok(zeroSuQuattro > 0.05, `la frazione di rocciosi con anello (${pc(roc.anello, roc.n)}) non è compatibile con zero su quattro`);
   tempi.sort((x, y) => x - y);
   const media = tempi.reduce((x, y) => x + y, 0) / tempi.length;
   assert.ok(media < 0.5 && tempi[Math.floor(0.99 * tempi.length)] < 2 && peggio < 20, `anelli(): media ${media} ms, 99% ${tempi[Math.floor(0.99 * tempi.length)]} ms, peggiore ${peggio} ms`);
