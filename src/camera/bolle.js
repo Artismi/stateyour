@@ -218,11 +218,17 @@ export const LIVELLI = ['cosmo', 'galassia', 'stella', 'pianeta', 'punto'];
 const si = (parte, perche, misura = null) => ({ esito: 'sì', parte, perche, misura });
 const no = (perche, legge = null) => ({ esito: 'no', parte: 0, perche, legge });
 const forse = (perche, misura = null) => ({ esito: 'forse', parte: null, perche, misura });
-const cifre = (x, n = 3) => (Number.isFinite(x) ? Number(x.toPrecision(n)).toString().replace('.', ',') : String(x));
+const cifre = (x, n = 3) => (!Number.isFinite(x) ? String(x) : x !== 0 && (Math.abs(x) >= 1e6 || Math.abs(x) < 1e-3) ? x.toExponential(n - 1).replace('.', ',').replace('e+', 'e') : Number(x.toPrecision(n)).toString().replace('.', ','));
 const RAD = Math.PI / 180;
 
 // ---------- ciò che un pianeta sa (lo stato del livello «pianeta»), e ciò che ne passa a un suo punto (regola 4)
-const mondo = (d) => { const Sis = sistema(d.cosmo, d.galassia, d.stella), P = Sis.pianeti[d.pianeta]; return P ? { P, S: Sis.stella, via: { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta } } : null; };
+// (un sistema costa ~35 ms e cosmo.js ne tiene 64: chi cerca tra centinaia di mondi li rifarebbe a ogni domanda. Qui se
+// ne tengono fino a 320, quanti una ricerca ne prova; dimentica() li lascia andare)
+const visti = new Map();
+export const dimentica = () => { visti.clear(); elenchi.clear(); };
+const mondo = (d) => { const k = `${d.cosmo}|${d.galassia}|${d.stella}|${d.pianeta}`; if (visti.has(k)) return visti.get(k);
+  const Sis = sistema(d.cosmo, d.galassia, d.stella), P = Sis.pianeti[d.pianeta], M = P ? { P, S: Sis.stella, via: { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta } } : null;
+  if (visti.size >= 320) visti.delete(visti.keys().next().value); visti.set(k, M); return M; };
 // le fasce di latitudine del clima (leggi.js): [{ lat, T, peso (la parte d'area) }]
 function fasce(P) { const f = P.clima?.fasce; if (!f?.lat?.length) return [{ lat: 0, T: P.clima?.T ?? 3, peso: 1 }]; let w = 0; const o = f.lat.map((lat, j) => { const c = Math.cos(lat * RAD); w += c; return { lat, T: f.T[j], peso: c }; }); for (const b of o) b.peso /= w; return o; }
 // la temperatura media a una latitudine: interpolata tra i centri delle fasce
@@ -376,30 +382,49 @@ function contraddizioni(B) {
   return null;
 }
 
-// ---------- i mondi candidati: indirizzi della biblioteca dentro un antenato comune, scelti dagli eventi della domanda
+// ---------- i mondi candidati: indirizzi della biblioteca dentro un antenato comune, scelti dagli eventi della domanda.
+// A GRAPPOLI: fare una galassia costa (le sue 2500 stelle), fare un sistema poco; perciò si prendono GRAPPOLO stelle
+// per ogni galassia estratta. Le stelle di una galassia si somigliano (stessa storia chimica): l'errore si calcola
+// dalla differenza TRA i grappoli, non contando i mondi come se fossero indipendenti.
+export const GRAPPOLO = 25;
 function candidato(pre, serie, k, cosmi) {
-  const u = (j) => serie(4 * k + j), n = pre.cosmo ?? 1 + Math.floor(u(0) * cosmi), C = cosmoDi(n), g = pre.galassia ?? Math.floor(u(1) * C.galassie.length);
-  let st = pre.stella ?? Math.floor(u(2) * STELLE), S = sistema(n, g, st);
+  const g0 = Math.floor(k / GRAPPOLO), ug = (j) => serie(2 * (2 ** 30 + g0) + j), u = (j) => serie(2 * k + j); // (i numeri del grappolo stanno oltre 2³¹: non si mescolano a quelli dei mondi)
+  const n = pre.cosmo ?? 1 + Math.floor(ug(0) * cosmi), C = cosmoDi(n), g = pre.galassia ?? Math.floor(ug(1) * C.galassie.length);
+  let st = pre.stella ?? Math.floor(u(0) * STELLE), S = sistema(n, g, st);
   if (pre.stella == null) for (let giri = 0; !S.pianeti.length && giri < STELLE; giri++) { st = (st + 1) % STELLE; S = sistema(n, g, st); } // (come fa la biblioteca: la prima stella con pianeti)
   if (!S.pianeti.length) return null;
-  return { cosmo: n, galassia: g, stella: st, pianeta: pre.pianeta ?? Math.floor(u(3) * S.pianeti.length) };
+  return { cosmo: n, galassia: g, stella: st, pianeta: pre.pianeta ?? Math.floor(u(1) * S.pianeti.length) };
+}
+// I mondi provati dipendono solo da DOVE si cerca (e da `campione`, per chi ne vuole altri), non da che cosa si chiede:
+// domande diverse nello stesso luogo guardano gli stessi mondi (e non li rifanno); la SCELTA tra quelli buoni invece
+// viene dagli eventi della domanda.
+const elenchi = new Map();
+function mondiDi(pre, cosmi, campione = '') { // → (k) il k-esimo mondo candidato di quel luogo (tenuto: trovarlo vuol dire fare il suo sistema)
+  const nome = `mondi in ${percorsoDi(pre).join('/') || `${cosmi} cosmi`}${campione ? `/${campione}` : ''}`; let E = elenchi.get(nome);
+  if (!E) { if (elenchi.size > 8) elenchi.delete(elenchi.keys().next().value); E = { serie: sorgente('bolle').serie(nome), vie: [] }; elenchi.set(nome, E); }
+  return (k) => { if (E.vie[k] === undefined) E.vie[k] = candidato(pre, E.serie, k, cosmi); return E.vie[k]; };
+}
+// la media di una grandezza sui mondi provati e il suo errore, dai grappoli: v[k] il valore del mondo k (NaN: non provato)
+function mediaAGrappoli(v, unSoloGrappolo) {
+  let s = 0, n = 0; const medie = []; for (let k0 = 0; k0 < v.length; k0 += GRAPPOLO) { let a = 0, m = 0; for (let k = k0; k < Math.min(v.length, k0 + GRAPPOLO); k++) if (!Number.isNaN(v[k])) { a += v[k]; m++; } if (m) { medie.push(a / m); s += a; n += m; } }
+  if (!n) return { valore: 0, errore: 0 }; const media = s / n;
+  if (unSoloGrappolo || medie.length < 2) { let q = 0; for (const x of v) if (!Number.isNaN(x)) q += (x - media) ** 2; return { valore: media, errore: n > 1 ? Math.sqrt(q / (n - 1) / n) : 0 }; }
+  const mm = medie.reduce((a, x) => a + x, 0) / medie.length; let q = 0; for (const x of medie) q += (x - mm) ** 2; return { valore: media, errore: Math.sqrt(q / (medie.length - 1) / medie.length) };
 }
 // tutti i mondi di un dominio piccolo (un sistema dato: i suoi pianeti; un pianeta dato: lui), oppure null se va campionato
 function tutti(pre) { if (pre.stella == null) return null; const S = sistema(pre.cosmo, pre.galassia, pre.stella); return (pre.pianeta != null ? [pre.pianeta] : S.pianeti.map((p, i) => i)).map((p) => ({ cosmo: pre.cosmo, galassia: pre.galassia, stella: pre.stella, pianeta: p })); }
 // la ricerca di un mondo per un gruppo di bolle che stanno nello stesso pianeta (libero dentro `pre`)
-function cerca(B, pre, c, nome, { mondi, cosmi }) {
-  const elenco = tutti(pre), serie = c.serie(`${nome}/mondi`), N = elenco ? elenco.length : mondi, buoni = [], dubbi = [], motivi = new Map(); let somma = 0, somma2 = 0, provati = 0;
+function cerca(B, pre, c, nome, { mondi, cosmi, campione }) {
+  const elenco = tutti(pre), kEsimo = elenco ? null : mondiDi(pre, cosmi, campione), N = elenco ? elenco.length : mondi, buoni = [], dubbi = [], motivi = new Map(), bene = new Float64Array(N).fill(NaN), pesi = new Float64Array(N).fill(NaN); let provati = 0;
   for (let k = 0; k < N; k++) {
-    const via = elenco ? elenco[k] : candidato(pre, serie, k, cosmi); if (!via) continue; const M = mondo(via); if (!M) continue; provati++;
+    const via = elenco ? elenco[k] : kEsimo(k); if (!via) continue; const M = mondo(via); if (!M) continue; provati++; bene[k] = 0; pesi[k] = 0;
     const G = B.map((b) => giudica({ luogo: percorsoDi({ ...via }), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)), negato = G.find((g) => g.esito === 'no');
     if (negato) { motivi.set(negato.legge || negato.perche, (motivi.get(negato.legge || negato.perche) || 0) + 1); continue; }
     if (G.some((g) => g.esito === 'forse')) { dubbi.push({ via, G }); continue; }
-    const peso = G.reduce((a, g) => a * g.parte, 1); buoni.push({ via, G, peso }); somma += peso; somma2 += peso * peso;
+    const peso = G.reduce((a, g) => a * g.parte, 1); buoni.push({ via, G, peso }); bene[k] = 1; pesi[k] = peso;
   }
-  const f = provati ? buoni.length / provati : 0, media = provati ? somma / provati : 0, esatto = !!elenco;
-  return { provati, esatto, buoni, dubbi, motivi: [...motivi].sort((a, b) => b[1] - a[1]).map(([legge, quanti]) => ({ legge, quanti })),
-    frazione: { valore: f, errore: esatto || !provati ? 0 : Math.sqrt((f * (1 - f)) / provati) }, forse: provati ? dubbi.length / provati : 0,
-    peso: { valore: media, errore: esatto || provati < 2 ? 0 : Math.sqrt(Math.max(0, somma2 / provati - media * media) / (provati - 1)) } };
+  const esatto = !!elenco, uno = pre.galassia != null, f = mediaAGrappoli(bene, uno), w = mediaAGrappoli(pesi, uno); if (esatto) { f.errore = 0; w.errore = 0; }
+  return { provati, esatto, buoni, dubbi, motivi: [...motivi].sort((a, b) => b[1] - a[1]).map(([legge, quanti]) => ({ legge, quanti })), frazione: f, forse: provati ? dubbi.length / provati : 0, peso: w };
 }
 // dove mettere la bolla dentro il pianeta trovato: un punto in cui il suo contenuto c'è (eventi della domanda)
 function posa(b, via, g, c, nome) {
@@ -415,9 +440,10 @@ function posa(b, via, g, c, nome) {
 //                 null (di default): ognuna dove capita, dentro il luogo che ha
 //   opz.mondi     quanti indirizzi provare per ogni ricerca (300); opz.cosmi: in quanti cosmi, se il cosmo è libero (2)
 //   opz.etichetta un nome in più per la domanda (un'altra etichetta, un'altra scelta tra i mondi che vanno bene)
+//   opz.campione  un nome per un altro campione di mondi (gli stessi mondi per ogni domanda nello stesso luogo, se non lo si cambia)
 // → { esiste, perche, antenato, ricerche: [{ bolle (i loro posti nella lista), provati, esatto, frazione, forse, peso, motivi }],
 //     bolle: [{ …la bolla col luogo completo, giudizio, daVerificare }], mondi: gli indirizzi (e i numeri della biblioteca) }
-export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etichetta = '' } = {}) {
+export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etichetta = '', campione = '' } = {}) {
   const B = (Array.isArray(bolle) ? bolle : [bolle]).map(bolla); if (!B.length) throw new Error('serve almeno una bolla');
   const A = antenatoComune(B), ordine = B.map(canonico), c = sorgente(`bolle/${[...ordine].sort().join('|')}${etichetta ? `/${etichetta}` : ''}`);
   const fuori = (perche, extra = {}) => ({ esiste: false, perche, antenato: A, ...extra });
@@ -430,7 +456,7 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
   else { const perPianeta = new Map(); B.forEach((b, i) => { if (b.dove.pianeta != null) { const k = percorsoDi(b.dove).slice(0, 4).join('/'); if (!perPianeta.has(k)) perPianeta.set(k, { quali: [], pre: b.dove }); perPianeta.get(k).quali.push(i); } else gruppi.push({ quali: [i], pre: b.dove }); }); gruppi.push(...perPianeta.values()); }
   const esito = new Array(B.length), ricerche = [];
   for (const g of gruppi) {
-    const Bg = g.quali.map((i) => B[i]), nome = g.quali.map((i) => ordine[i]).sort().join('|'), R = cerca(Bg, g.pre, c, nome, { mondi, cosmi });
+    const Bg = g.quali.map((i) => B[i]), nome = g.quali.map((i) => ordine[i]).sort().join('|'), R = cerca(Bg, g.pre, c, nome, { mondi, cosmi, campione });
     ricerche.push({ bolle: g.quali, luogo: percorsoDi(g.pre).join('/') || 'la biblioteca', provati: R.provati, esatto: R.esatto, buoni: R.buoni.length, frazione: R.frazione, forse: R.forse, peso: R.peso, motivi: R.motivi });
     if (!R.buoni.length && !R.dubbi.length) {
       const m = R.motivi[0];
@@ -455,19 +481,19 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
 // → { stesso: { peso, errore }, separati: { peso, errore }, guadagno (il rapporto: quanto la causa comune pesa di più),
 //     probabilita (che stiano nello stesso, dati i pesi), scelta: 'stesso' | 'separati' (in proporzione, dagli eventi
 //     della domanda), provati, dubbi (i mondi «forse», lasciati fuori) }
-export function causaComune(bolle, { mondi = 300, cosmi = 2, aPriori = 0.5, etichetta = '' } = {}) {
-  const B = bolle.map(bolla), A = antenatoComune(B), ordine = B.map(canonico), c = sorgente(`bolle/${[...ordine].sort().join('|')}`), serie = c.serie('causa comune/mondi'), elenco = tutti(A.dove);
-  const n = B.length, m1 = new Float64Array(n), q1 = new Float64Array(n); let prod = 0, prod2 = 0, provati = 0, dubbi = 0;
-  for (let k = 0, N = elenco ? elenco.length : mondi; k < N; k++) {
-    const via = elenco ? elenco[k] : candidato(A.dove, serie, k, cosmi); if (!via) continue; const M = mondo(via); if (!M) continue;
+export function causaComune(bolle, { mondi = 300, cosmi = 2, aPriori = 0.5, etichetta = '', campione = '' } = {}) {
+  const B = bolle.map(bolla), A = antenatoComune(B), ordine = B.map(canonico), c = sorgente(`bolle/${[...ordine].sort().join('|')}`), elenco = tutti(A.dove), kEsimo = elenco ? null : mondiDi(A.dove, cosmi, campione);
+  const n = B.length, N = elenco ? elenco.length : mondi, parti = B.map(() => new Float64Array(N).fill(NaN)), prodotti = new Float64Array(N).fill(NaN); let provati = 0, dubbi = 0;
+  for (let k = 0; k < N; k++) {
+    const via = elenco ? elenco[k] : kEsimo(k); if (!via) continue; const M = mondo(via); if (!M) continue;
     const G = B.map((b) => giudica({ luogo: percorsoDi(via), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)); if (G.some((g) => g.esito === 'forse')) { dubbi++; continue; }
-    provati++; let p = 1; G.forEach((g, i) => { m1[i] += g.parte; q1[i] += g.parte * g.parte; p *= g.parte; }); prod += p; prod2 += p * p;
+    provati++; let p = 1; G.forEach((g, i) => { parti[i][k] = g.parte; p *= g.parte; }); prodotti[k] = p;
   }
-  if (!provati) return { provati, dubbi, stesso: { peso: 0, errore: 0 }, separati: { peso: 0, errore: 0 }, guadagno: NaN, probabilita: NaN, scelta: null };
-  const stesso = prod / provati, eStesso = Math.sqrt(Math.max(0, prod2 / provati - stesso * stesso) / Math.max(1, provati - 1));
-  let separati = 1, rel2 = 0; for (let i = 0; i < n; i++) { const m = m1[i] / provati, v = Math.max(0, q1[i] / provati - m * m) / Math.max(1, provati - 1); separati *= m; rel2 += m > 0 ? v / (m * m) : 0; }
-  const pr = aPriori * stesso + (1 - aPriori) * separati, probabilita = pr > 0 ? (aPriori * stesso) / pr : NaN;
-  return { provati, dubbi, antenato: A, stesso: { peso: stesso, errore: eStesso }, separati: { peso: separati, errore: separati * Math.sqrt(rel2) }, guadagno: separati > 0 ? stesso / separati : Infinity, probabilita,
+  if (!provati) return { provati, dubbi, antenato: A, stesso: { peso: 0, errore: 0 }, separati: { peso: 0, errore: 0 }, guadagno: NaN, probabilita: NaN, scelta: null };
+  const uno = !!elenco || A.dove.galassia != null, st = mediaAGrappoli(prodotti, uno); let separati = 1, rel2 = 0;
+  for (let i = 0; i < n; i++) { const m = mediaAGrappoli(parti[i], uno); separati *= m.valore; rel2 += m.valore > 0 ? (m.errore / m.valore) ** 2 : 0; }
+  const stesso = st.valore, pr = aPriori * stesso + (1 - aPriori) * separati, probabilita = pr > 0 ? (aPriori * stesso) / pr : NaN;
+  return { provati, dubbi, antenato: A, stesso: { peso: stesso, errore: elenco ? 0 : st.errore }, separati: { peso: separati, errore: elenco ? 0 : separati * Math.sqrt(rel2) }, guadagno: separati > 0 ? stesso / separati : Infinity, probabilita,
     scelta: Number.isNaN(probabilita) ? null : c(`causa comune/scelta${etichetta ? `/${etichetta}` : ''}`) < probabilita ? 'stesso' : 'separati' };
 }
 
