@@ -26,9 +26,11 @@ const tiri = (nome) => { let s = sorgente('mondo3d').seme(nome); return () => (s
 
 // ---------- una galassia
 export function creaGalassia(N, punti, { via, genitore = null, posizione = null, opzioni = {} } = {}) {
-  // (le stelle del campione sono una su cento milioni: da lontano ogni punto porta la luce di tutte quelle che rappresenta
-  // — il suo `peso`: è il principio della nebbia —; avvicinandosi torna a essere una stella sola. La luce diffusa è l'altra metà.)
-  const O = { batuffoli: 60000, diffusa: 0.5, ...opzioni }; let sc = scenaGalassia(via.cosmo, via.galassia, N.tempo.t), tScena = N.tempo.t;
+  // (le stelle del campione sono una su cento milioni: da lontano ogni punto porta una parte della luce di quelle che
+  // rappresenta — il suo `peso`: è il principio della nebbia —; avvicinandosi torna a essere una stella sola. Solo una
+  // parte (`puntiLuce`, un ventesimo): la luce di una galassia non sta in duemila punti, e messa tutta lì li farebbe
+  // accecanti; il resto è la luce diffusa.)
+  const O = { batuffoli: 60000, diffusa: 0.95, puntiLuce: 0.05, frammenti: 5e6, ...opzioni }; let sc = scenaGalassia(via.cosmo, via.galassia, N.tempo.t), tScena = N.tempo.t;
   const Rg = sc.riferimento.raggio, n = sc.punti.n, assi = sc.nelGenitore.assi, q0 = [assi[0][0], assi[1][0], assi[2][0], assi[0][1], assi[1][1], assi[2][1], assi[0][2], assi[1][2], assi[2][2]]; // (per righe: le colonne sono i tre assi)
   const nodo = N.corpo({ nome: `galassia ${via.galassia}`, genitore, posizione, assi: q0, raggio: 0, influenza: 3 * Rg });
   const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
@@ -77,14 +79,18 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       // la luce che l'occhio chiede tra le stelle: che la più brillante in cielo valga qualche unità al suo centro
       // la luce che l'occhio chiede: quella diffusa della galassia (contata su un batuffolo ogni trenta). Da dentro riempie il
       // cielo e deve restare tenue; da fuori sta tutta in un disco piccolo, che deve valere quasi uno
-      { let E = 0; const D = nube.dati; for (let k = 0; k < nube.K; k += 30) { const x = D[8 * k] - eGr[0], y = D[8 * k + 1] - eGr[1], z = D[8 * k + 2] - eGr[2], t2 = D[8 * k + 3] ** 2; E += Math.max(D[8 * k + 4], D[8 * k + 5], D[8 * k + 6]) / Math.max(x * x + y * y + z * z, t2); }
+      // (nello stesso giro si conta quanti pixel coprirebbero tutti i batuffoli: se sono troppi se ne disegnano meno, più forti)
+      { let E = 0, carico = 0; const D = nube.dati, cap = punti.massimo;
+        for (let k = 0; k < nube.K; k += 30) { const x = D[8 * k] - eGr[0], y = D[8 * k + 1] - eGr[1], z = D[8 * k + 2] - eGr[2], t2 = D[8 * k + 3] ** 2, d2 = x * x + y * y + z * z; E += Math.max(D[8 * k + 4], D[8 * k + 5], D[8 * k + 6]) / Math.max(d2, t2);
+          const lato = (D[8 * k + 3] * S.fuoco) / Math.sqrt(d2 + 1); if (lato < cap) carico += Math.max(1.5, lato) ** 2; }
+        carico *= 30 * 0.785; strato.quanti = Math.max(3000, Math.min(nube.K, Math.round((nube.K * O.frammenti) / Math.max(carico, 1))));
         E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
         if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.25 : 2.2) * angolo)); }
     },
     disegna(S, passata) {
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
-      const peso = sc.punti.peso; nube.disegna(S, rel, g, LUCE * O.diffusa); stelle.disegna(S, LUCE, 1, [0.5 * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
+      const peso = sc.punti.peso; nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
     },
     // dove sta la stella i nel riferimento della galassia (per il sistema che le si attacca), e spegnerne il punto quando il suo sistema c'è
     posStella: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; o[0] = P[3 * i]; o[1] = P[3 * i + 1]; o[2] = P[3 * i + 2]; return o; },
@@ -127,7 +133,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     },
     disegna(S, passata) {
       if (passata !== 'velato') return; const k = lato / lato0;
-      if (rete && O.rete) rete.disegna(S, [-occhio[0], -occhio[1], -occhio[2]], [k, 0, 0, 0, k, 0, 0, 0, k], 0, 0.05 * O.rete * (strato.dentro ? 0.12 : 1), lato); // (da dentro una galassia la rete del cosmo quasi non si vede)
+      if (rete && O.rete) rete.disegna(S, [-occhio[0], -occhio[1], -occhio[2]], [k, 0, 0, 0, k, 0, 0, 0, k], 0, 0.075 * O.rete * (strato.dentro ? 0.12 : 1) * Math.min(1, 3e-9 / S.E0), lato); // (da dentro una galassia la rete del cosmo quasi non si vede; con l'occhio chiuso per la luce di una galassia vicina o di una stella, per niente)
       gal.disegna(S, LUCE, 1.5);
     },
     // dove sta la galassia i (l'immagine più vicina all'occhio), nel riferimento del cosmo

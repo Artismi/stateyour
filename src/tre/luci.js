@@ -78,12 +78,15 @@ export function creaPunti(N) {
     const u9 = new Float32Array(9), o = { n,
       aggiorna(d) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferSubData(gl.ARRAY_BUFFER, 0, d); },
       // centro: il riferimento della nube rispetto all'occhio; quadro: i suoi assi nel mondo (3×3 per righe); unita: watt per unità (0: colori già da schermo, con `opacita`)
-      // (un batuffolo è largo al più 40 pixel: decine di migliaia più larghi riempirebbero lo schermo migliaia di volte)
-      disegna(S, centro, quadro, unita, opacita = 1, toro = 0) {
+      // (un batuffolo è largo al più 40 pixel: decine di migliaia più larghi riempirebbero lo schermo migliaia di volte;
+      // chi li vuole più larghi — piu.lato — ne disegna meno — piu.quanti, i primi: sono in ordine a caso — e più forti — piu.forza)
+      disegna(S, centro, quadro, unita, opacita = 1, toro = 0, piu = null) {
         if (!prgN) prgN = N.programma(V_NUBI, F_NUBI, { a_p: 0, a_l: 1 }); const u = prgN.u; gl.useProgram(prgN.p); gl.bindVertexArray(vao);
         gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform3f(u.u_C, centro[0], centro[1], centro[2]);
         const q = quadro || V.identita(); for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = q[3 * r + c]; gl.uniformMatrix3fv(u.u_quadro, false, u9);
-        gl.uniform1f(u.u_toro, toro); gl.uniform4f(u.u_k, unita > 0 ? (unita * 1e-30) / (4 * Math.PI * S.E0) : 0, S.fuoco, Math.min(massimo, 40 * Math.max(1, S.H / 800)), opacita); gl.drawArrays(gl.POINTS, 0, o.n); gl.bindVertexArray(null);
+        gl.uniform1f(u.u_toro, toro); const latoMax = Math.min(massimo, (piu && piu.lato) || 40 * Math.max(1, S.H / 800)), quanti = Math.max(1, Math.min(o.n, Math.round((piu && piu.quanti) || o.n))), forza = (piu && piu.forza) || 1;
+        gl.uniform4f(u.u_k, unita > 0 ? (unita * forza * 1e-30) / (4 * Math.PI * S.E0) : 0, S.fuoco, latoMax, opacita);
+        gl.drawArrays(gl.POINTS, 0, quanti); gl.bindVertexArray(null);
       },
       libera() { gl.deleteBuffer(b); gl.deleteVertexArray(vao); } };
     libere.push(o); return o;

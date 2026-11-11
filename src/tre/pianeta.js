@@ -497,6 +497,12 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     let r = 0; for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) { const a = i / 4, b = j / 4, piano = (q[0] * (1 - a) + q[4] * a) * (1 - b) + (q[20] * (1 - a) + q[24] * a) * b; r = Math.max(r, Math.abs(q[5 * j + i] - piano)); }
     return r * O.rilievo;
   }
+  const striscio = (dist) => Math.max(0.3, Math.min(1, Math.sqrt(Math.max(1, stato.quota) / dist)));
+  // la distanza a cui il livello L di tessera lascia il posto al livello sopra (la stessa regola di `visita`, rovesciata)
+  function distanzaLivello(L, S) {
+    const D0 = (S.fuoco * R * Math.PI) / (TH * O.puntiPerPixel * Math.pow(4, L - 0.5)), h = Math.max(1, stato.quota); if (D0 <= h) return D0;
+    const D1 = Math.pow(D0 * Math.sqrt(h), 2 / 3); return Math.sqrt(h / D1) >= 0.3 ? D1 : 0.3 * D0;
+  }
   function visita(d, ix, iy, S) {
     const n = 2 ** d, du = 1 / n, u0 = ix * du, v0 = iy * du, lon0 = (u0 + du / 2 - 0.5) * 2 * Math.PI, lat0 = (0.5 - (v0 + du / 2)) * Math.PI, dLon = du * 2 * Math.PI, dLat = du * Math.PI;
     // la tessera più fine, tra quelle arrivate, che contiene tutta la pezza
@@ -516,7 +522,10 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     }
     const vicino = Math.max(dist - raggio, stato.quota * 0.9, 1), pxPerMetro = S.fuoco / vicino, maglia = (lato / MY) * pxPerMetro;
     // il livello di tessera che questa distanza chiede: i suoi punti grandi circa `puntiPerPixel` sullo schermo
-    const Lv = Math.max(0, Math.min(LMAX, Math.round(Math.log((R * Math.PI * pxPerMetro) / (TH * O.puntiPerPixel)) / Math.log(4))));
+    // (visto di striscio il terreno è schiacciato sullo schermo: a `dist` da un occhio alto `quota` di un fattore quota/dist
+    // lungo lo sguardo; si conta la media delle due direzioni, mai sotto 0,3: senza, guardando l'orizzonte da bassi
+    // ogni livello chiederebbe decine di tessere)
+    const Lv = Math.max(0, Math.min(LMAX, Math.round(Math.log((R * Math.PI * pxPerMetro * striscio(vicino)) / (TH * O.puntiPerPixel)) / Math.log(4))));
     // si spezza: se la pezza è più grande della tessera che le serve; se il suo terreno è troppo mosso per le sue maglie;
     // (sull'acqua) se è abbastanza vicina perché le onde lunghe muovano i vertici
     let spezza = d < 2 || d < 2 * Lv;
@@ -559,7 +568,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
           S.lega(0, t.alt, u.u_alt); S.lega(1, t.pend, u.u_pend); S.lega(2, t.terra, u.u_terra); S.lega(3, t.acqua || trasparente, u.u_acqua);
           S.lega(6, m2.alt, u.u_altM); S.lega(7, m2.pend, u.u_pendM); S.lega(8, m2.terra, u.u_terraM); S.lega(9, m2.acqua || trasparente, u.u_acquaM); gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, m2.acqua ? 1 : 0, 0.0006);
           // (il livello L serve fino alla distanza D; negli ultimi due quinti di D i dati sfumano in quelli della madre)
-          const D = madre ? (S.fuoco * R * Math.PI) / (TH * O.puntiPerPixel * Math.pow(4, t.L - 0.5)) : 0; gl.uniform2f(u.u_sfuma, 0.55 * D, 0.95 * D); if (madre) madre.uso = uso; }
+          const D = madre ? distanzaLivello(t.L, S) : 0; gl.uniform2f(u.u_sfuma, 0.55 * D, 0.95 * D); if (madre) madre.uso = uso; }
         // il centro della pezza rispetto all'occhio, in doppia precisione; poi i tre assi della pezza negli assi del mondo
         const sl = Math.sin(z.lon0), cl = Math.cos(z.lon0), sf = Math.sin(z.lat0), cf = Math.cos(z.lat0), c0 = z.c0, E = [-sl, 0, -cl], Nn = [-sf * cl, cf, sf * sl];
         const C = V.mv(A, [c0[0] * R, c0[1] * R * schiaccia, c0[2] * R]); gl.uniform3f(u.u_C, C[0] + stato.versoC[0], C[1] + stato.versoC[1], C[2] + stato.versoC[2]);
