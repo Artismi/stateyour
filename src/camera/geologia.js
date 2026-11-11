@@ -21,6 +21,7 @@
 import { celle } from './fluidi.js';
 import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
+import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
 import { acquaInSuperficie } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
@@ -187,10 +188,20 @@ export function immagineSuperficie(sf, T, cl = null) {
 // Si parte caldo, come un pianeta appena nato, e si lascia evolvere per molti anni: quello che resta è il suo clima
 // (se il ghiaccio, riflettendo, prende il sopravvento, il pianeta scivola in una glaciazione totale).
 const memoClima = new Map();
-export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, passiAnno = 240 } = {}) {
+// L'ARIA CHE CIRCOLA (meteo.js). Il clima qui sopra tratta il calore portato dall'aria e le nuvole con due coefficienti;
+// quando il pianeta ha un giorno e un'aria, si fa un secondo giro: dal primo clima si calcolano i venti, il vapore, le
+// nuvole e la pioggia veri (meteo.js), e con quelli si rifà il bilancio (meteo: nuvole punto per punto, e quanto calore
+// l'aria porta davvero). La pioggia che l'erosione usa viene da lì (cl.meteo).
+export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, passiAnno = 240, meteo = null, aria = true } = {}) {
   if (memoClima.has(chiave)) return memoClima.get(chiave);
+  if (!meteo && aria && P.giorno > 0 && isFinite(P.clima.pressione) && P.clima.pressione > 1) {
+    const primo = climaSuperficie(`${chiave}|primo giro`, P, sf, { W, H, anni, passiAnno, aria: false });
+    let m = null; try { m = meteoPianeta(P, sf, primo); } catch { m = null; }
+    if (m && m.regime === 'aria') { const cl = climaSuperficie(`${chiave}|con l'aria`, P, sf, { W, H, anni, passiAnno, meteo: m }); cl.meteo = m; memoClima.set(chiave, cl); return cl; }
+    memoClima.set(chiave, primo); return primo;
+  }
   const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = isFinite(P.clima.pressione) ? 0.8 * Math.pow(P.clima.pressione / 1e5, 0.6) : 2;
-  const D = isFinite(P.clima.pressione) ? 0.6 * Math.pow(Math.max(1e-4, P.clima.pressione / 1e5), 0.5) : 1, kx = sf.W / W, ky = sf.H / H;
+  const D = meteo ? Math.max(0, meteo.diffusivita) : isFinite(P.clima.pressione) ? 0.6 * Math.pow(Math.max(1e-4, P.clima.pressione / 1e5), 0.5) : 1, kx = sf.W / W, ky = sf.H / H;
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
@@ -205,8 +216,8 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
   // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta. Le nuvole coprono fino a metà
   // cielo e rimandano indietro il 38% della luce che le colpisce (TARATO sulla Terra: così riflette in tutto 0,30)
-  const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
-  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.38 * (1 - suolo); };
+  const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = meteo ? meteo.bilancio.piovuta > 1 : mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
+  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = meteo ? meteo.nuvole[k] : t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.38 * (1 - suolo); };
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
@@ -284,11 +295,12 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   if (memoErosione.has(chiave)) return memoErosione.get(chiave);
   const { W, H, mare } = sf, N = W * H, alt = Float32Array.from(sf.alt), alt0 = sf.alt;
   // la pioggia: dove fa abbastanza caldo e non c'è ghiaccio (dal clima simulato)
-  const pioggia = new Float32Array(N);
+  const pioggia = new Float32Array(N), pm = cl.meteo ? pioggiaPerErosione(cl.meteo, sf) : null;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1];
     const ci = Math.min(cl.W - 1, Math.floor((u0 + (i / W) * (u1 - u0)) * cl.W)), cj = Math.min(cl.H - 1, Math.floor((v0 + (j / H) * (v1 - v0)) * cl.H)), k = cj * cl.W + ci;
-    pioggia[j * W + i] = cl.piove === false ? 0 : Math.max(0, Math.min(1, (cl.media[k] - 255) / 40)) * (1 - cl.freddo[k]);
+    // (con l'aria che circola: la pioggia vera di quel punto, 1 = mille millimetri l'anno; altrimenti dove fa abbastanza caldo)
+    pioggia[j * W + i] = cl.piove === false ? 0 : pm ? pm[j * W + i] * (1 - cl.freddo[k]) : Math.max(0, Math.min(1, (cl.media[k] - 255) / 40)) * (1 - cl.freddo[k]);
   }
   const vicini = (k, f) => { const i = k % W, j = (k - i) / W; for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue; for (let di = -1; di <= 1; di++) if (di || dj) f(jj * W + ((i + di + W) % W), di && dj ? 1.414 : 1); } };
   // la coda per altezza (heap), per l'inondazione dal mare verso l'interno

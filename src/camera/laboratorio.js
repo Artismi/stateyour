@@ -67,7 +67,7 @@ function coloriTraccia(cella, tr) {
 
 // ---------- lo stato
 // all'avvio: un ornamento trovato dal dado: raggi cosmici nel campo di un pianeta, in un ramo dove alcuni eventi sono andati diversamente
-let comp = compBiblioteca(17161644, {"centro":[432.917,486.858],"lato":236.267}, {"fine":94.502,"durata":93.88}, {"inclinazione":71.117,"rotazione":281.339,"scalaTempo":3.785}, {"gruppo":"specchio","angolo":0}, { rami: {"2":812472,"6":206307,"9":831634,"11":267008,"10.2.0.0":1292145}, separato: 44.779 });
+let comp = compBiblioteca(15909196, {"centro":[128.417,565.622],"lato":350.242}, {"fine":132.772,"durata":128.569}, {"inclinazione":0,"rotazione":0,"scalaTempo":5.174}, {"gruppo":"quadrati","angolo":13.136}, { rami: {"5":825946,"10.2.0.0":2077580,"10.2.0":608623,"8.3.0.0":1018645,"8.2.0.0":2112228,"10.3.0.0":846442,"10.3.0":614061}, separato: 49.455 });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
@@ -965,9 +965,15 @@ function pannelloCosmo(h) {
     if (camMappa.livello >= 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
-      // UN PIANETA PARALLELO: lo stesso pianeta, della stessa stella, con la storia interna andata in un altro modo
-      { const v = camMappa.via, ev = `mantello/${v.galassia}/${v.stella}/${v.pianeta}`, r = ramiCosmo(v.cosmo)[ev] || 0, n = Object.keys(ramiCosmo(v.cosmo)).length;
-        if (P.tipo !== 'gassoso') h.push(`<p class="nota"><button data-ramo-p="${ev}|${r + 1}">✦ un pianeta parallelo</button>${r ? ` <button data-ramo-p="${ev}|0">↩ quello di partenza</button>` : ''}<br>${r ? `Sei in un cosmo parallelo (${n} ${n === 1 ? 'evento andato' : 'eventi andati'} diversamente): stessa galassia, stessa stella, stesso pianeta con la stessa massa; il suo mantello è partito da un altro stato, e i continenti hanno avuto un'altra storia.` : 'Lo stesso pianeta in un cosmo dove il suo mantello è partito da un altro stato: stessa massa, stessa stella, altri continenti. Tutto il resto del cosmo resta identico.'}</p>`); }
+      // UN PIANETA PARALLELO: lo stesso pianeta, della stessa stella, in un cosmo dove UN SOLO evento della sua storia è
+      // andato diversamente: l'impatto che più ha segnato il suo mantello è caduto in un altro punto. Tutti gli altri
+      // impatti, la luna, il giorno, la massa restano identici; cambia ciò che ne discende (i continenti, quel cratere).
+      { const v = camMappa.via, st = P.tipo !== 'gassoso' ? P.impatti : null, prima = st ? st.grandi.filter((g) => g.t <= st.quiete.t) : [];
+        const peso = (g) => g.energiaJ * Math.exp(-(st.quiete.t - g.t) / st.mescolaAnni), g = prima.length ? prima.reduce((a, b) => (peso(b) > peso(a) ? b : a)) : null;
+        const ev = g ? `cosmo ${cosmoBase(v.cosmo)}/galassia ${v.galassia}/stella ${v.stella}/pianeta ${v.pianeta}/impatto ${g.id}/dove` : `mantello/${v.galassia}/${v.stella}/${v.pianeta}`;
+        const r = ramiCosmo(v.cosmo)[ev] || 0, n = Object.keys(ramiCosmo(v.cosmo)).length;
+        const che = g ? `un corpo di ${Math.round(g.diametroM / 1000)} km, caduto ${g.t >= 1e9 ? `${(g.t / 1e9).toFixed(1).replace('.', ',')} miliardi` : `${Math.round(g.t / 1e6)} milioni`} di anni dopo la nascita del sistema, è caduto in un altro punto` : 'il suo mantello è partito da un altro stato';
+        if (P.tipo !== 'gassoso') h.push(`<p class="nota"><button data-ramo-p="${ev}|${r + 1}">✦ un pianeta parallelo</button>${n ? ` <button data-ramo-p="|0">↩ il cosmo di partenza</button>` : ''}<br>${r ? `Sei in un cosmo parallelo (${n} ${n === 1 ? 'evento andato' : 'eventi andati'} diversamente): ${che}. Stessa stella, stessa massa, stessa luna, stessi altri impatti; cambia ciò che ne discende.` : `Lo stesso pianeta in un cosmo dove un solo evento è andato diversamente: ${che}. Tutto il resto del cosmo resta identico; cambia ciò che ne discende (${P.interno?.tettonica === 'a placche' ? 'i continenti, quel cratere' : 'quel cratere'}).`}</p>`); }
       // L'ARIA e la prima tappa verso la vita
       if (P.atmosfera) {
         const gas = Object.entries(P.atmosfera.gas).sort((x, y) => y[1] - x[1]).filter(([, f]) => f > 0.001).slice(0, 5).map(([g, f]) => `${g} ${(f * 100).toFixed(f < 0.1 ? 1 : 0)}%`).join(', ');
@@ -1200,7 +1206,7 @@ pannello.addEventListener('click', (e) => {
   if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
   if (d.vistaP != null) { vista = 'pattern'; aggiornaVista(); return; }
   if (d.modoP) { vista = d.modoP; aggiornaVista(); return; }
-  if (d.ramoP) { const [ev, r] = d.ramoP.split('|'); camMappa.via = { ...camMappa.via, cosmo: cosmoRamo(camMappa.via.cosmo, ev, +r) }; aggiornaVista(); return; }
+  if (d.ramoP) { const k = d.ramoP.lastIndexOf('|'), ev = d.ramoP.slice(0, k), r = +d.ramoP.slice(k + 1); camMappa.via = { ...camMappa.via, cosmo: ev ? cosmoRamo(camMappa.via.cosmo, ev, r) : cosmoBase(camMappa.via.cosmo) }; aggiornaVista(); return; }
   if (d.copiaPosto != null) { ricorda(); const e2 = comp.elementi[+d.copiaPosto], { a, b } = comp.reticolo; e2.posti.push({ pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], rot: 0 }); scelto = { e: +d.copiaPosto, p: e2.posti.length - 1 }; return aggiorna(); }
   if (d.scegliPosto != null) { scelto = { e: +d.scegliPosto, p: 0 }; mostraPannello(); return disegna(); }
   if (d.togliPosto != null) return togliPosto(scelto.e, scelto.p);

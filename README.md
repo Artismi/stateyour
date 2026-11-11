@@ -253,9 +253,9 @@ crosta degli oceani nasce alle dorsali, invecchia allontanandosi e sprofonda
 come la radice dell'età (la legge misurata sulla Terra). Le quote vengono dal
 galleggiamento: la crosta spessa sta alta. Forma, numero e storia dei continenti
 non sono scelti; con poco calore o senz'acqua la crosta resta un coperchio
-unico. Il «seme» è solo il rumore minuscolo da cui il mantello parte: sta per
-le irregolarità lasciate dalla formazione del pianeta, e non è ancora ricavato
-dai suoi impatti veri (è una delle cose da collegare). Limiti detti: la carta è
+unico. Lo stato da cui il mantello parte è l'impronta termica degli urti veri della
+formazione del pianeta (`impatti.js`); solo un pianeta che non ne ha avuti
+parte da un rumore minuscolo legato al suo indirizzo. Limiti detti: la carta è
 trattata come piana (vicino ai poli le forme sono stirate), le coste sono
 ancora troppo lisce, quattro parametri (rigidità, coesione, e quanto e in quanto
 tempo un continente scalda il mantello sotto di sé) sono scelti guardando il
@@ -278,6 +278,62 @@ Le maree spostano la sua orbita nel tempo, bloccano la sua rotazione, e
 scaldano l'interno di una luna in orbita eccentrica (vulcani come Io, oceani
 sotto il ghiaccio come Europa). Sono calcolate per ogni pianeta e si vedono sulla mappa.
 
+**Le stelle dalla loro struttura** (`src/camera/stelle.js`). Luminosità, raggio,
+temperatura e vita non sono più curve misurate sul Sole: escono dall'equilibrio
+tra gravità e pressione, dal trasporto dell'energia e dalle reazioni nucleari
+(catena protone-protone e ciclo CNO, con il picco di Gamow integrato), in
+funzione di massa, metalli ed età. Ne escono anche la massa minima per
+accendere l'idrogeno (0,076 Soli), il Sole giovane più debole, e il confine tra
+nana bianca e supernova (dove il nucleo di elio supera la massa di
+Chandrasekhar). Limiti detti: la luminosità del Sole è tarata con un
+coefficiente dell'opacità (senza, verrebbe 0,38); per questo le stelle tra 1,2
+e 5 Soli escono troppo luminose (+25–80%) e calde, e vivono circa la metà.
+
+**La storia degli impatti** (`src/camera/impatti.js`). Dai corpi rimasti dopo la
+formazione: le loro taglie escono da una cascata di collisioni simulata, il
+bombardamento cala col tempo perché il pianeta li mangia o li scaglia via,
+l'aria ferma i piccoli. Gli urti giganti sono quelli veri del disco, con le
+loro masse e il loro momento: l'ultimo dà al pianeta il giorno e l'inclinazione
+dell'asse, e se lascia un disco di detriti ne nasce la luna (non più un
+sorteggio), che poi allontanandosi frena il pianeta. Da questa storia vengono i
+crateri che si vedono ancora (quelli che placche, lava ed erosione non hanno
+cancellato) e lo stato iniziale del mantello. Ogni impatto è un evento con il
+suo indirizzo: un cosmo parallelo può cambiarne uno solo. Limiti detti: manca
+il bombardamento tardo (nessuna riserva lontana di asteroidi e comete: dopo un
+miliardo di anni non cade quasi più niente); gli urti sono più lenti del vero;
+i pianeti senza una luna che li freni restano con giorni di 2–5 ore.
+
+**Gli anelli** (`src/camera/anelli.js`). Non sono più una probabilità: c'è un
+anello solo se materia è finita dentro il limite di Roche (una luna spezzata
+dalle maree, i detriti di un urto) abbastanza di recente o in quantità, perché
+un anello si allarga, piove sul pianeta e sparisce. I bordi vengono dal limite
+di Roche del materiale e dall'alta atmosfera; le divisioni dalle risonanze con
+le lune vere di quel pianeta (con le lune vere di Saturno, la divisione di
+Cassini esce a 2,01 raggi dalla 2:1 con Mimas). Limiti detti: l'anello di
+Saturno pesa dieci volte meno del vero e la divisione è troppo stretta; Giove,
+Urano e Nettuno escono senza i loro anelli tenui; con i giorni corti dati dagli
+urti, sette mondi pesanti di ghiaccio su dieci hanno anelli: troppi.
+
+**L'aria che circola e il ciclo dell'acqua** (`src/camera/meteo.js`). Due strati
+d'aria sulla sfera, mossi dalle differenze di temperatura e deviati dalla
+rotazione: alisei, venti da ovest, getto, celle (una sola se il pianeta gira
+piano, sei se gira in otto ore), vento dal giorno alla notte se è bloccato.
+L'acqua evapora dal mare, viaggia, e piove dove l'aria sale: fascia piovosa
+all'equatore, tropici più secchi, pioggia sul versante sopravvento dei monti e
+ombra di pioggia dietro. L'acqua si conserva. Il clima fa due giri: dal primo
+si calcolano venti, nuvole e pioggia, con quelli si rifà il bilancio; l'erosione
+usa la pioggia vera di ogni punto. Limiti detti: la cella di Hadley è due volte
+troppo forte, non ci sono stagioni, i rilievi non deviano il vento. Costa circa
+due secondi in più a pianeta.
+
+**La coerenza tra i livelli** (`test/test_coerenza.mjs`). Una prova a sé
+controlla che le stesse grandezze valgano lo stesso a ogni scala, su centinaia
+di sistemi veri: tempo (niente è più vecchio di ciò che lo contiene), massa,
+acqua, energia del clima, conservazione di carica, energia e quantità di moto
+nei decadimenti e negli urti, particelle uguali nelle bolle dello zoom,
+determinismo. 35 controlli passano; le incoerenze che restano (una ventina) non
+sono nascoste: la prova le misura e le stampa ogni volta.
+
 **Cosmi paralleli a ogni scala** (`src/camera/eventi.js`, `cosmoRamo` in
 `cosmo.js`). Ogni corso di eventi del cosmo ha un indirizzo: «disco/3/53» è la
 formazione dei pianeti della stella 53 nella galassia 3, «mantello/3/53/0» la
@@ -287,9 +343,8 @@ stesse galassie, stesse stelle, stessi altri pianeti, stesse particelle nelle
 regioni. Nel pannello di un pianeta, «un pianeta parallelo» mostra lo stesso
 pianeta (stessa massa, stessa stella) con un'altra storia del mantello, quindi
 altri continenti. È la stessa regola dei rami delle particelle (molti mondi),
-portata in alto. Limite detto: per ora un ramo cambia un intero corso di eventi
-(tutta la formazione di un sistema, tutta la storia di un mantello), non ancora
-un singolo urto.
+portata in alto. Gli impatti e gli anelli hanno già indirizzi fini (un ramo può cambiare dove
+cade un solo impatto); disco, lune e mantello cambiano ancora per corsi interi.
 
 Sulla mappa, al livello del pianeta, **le lune** girano sulle loro orbite vere
 (in raggi del pianeta) con la loro taglia vera; passandoci sopra si legge da
