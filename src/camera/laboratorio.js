@@ -15,7 +15,7 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
-import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo, semeEvento } from './cosmo.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo, semeEvento, motiDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
@@ -890,6 +890,8 @@ const SPIEGA = {
   angoloTriangolo: 'giro del triangolo: quale spicchio della finestra entra nel caleidoscopio. Girandolo, lo stesso universo dà un altro ornamento.',
   inclinazione: 'inclinazione: da sopra (0°) la lastra vede solo il piano; inclinandola, il tempo diventa una direzione del disegno e le spirali diventano onde, trocoidi, catene di anelli. Si vede nel Pattern.',
   rotazione: 'rotazione: da che lato del piano si inclina lo sguardo.',
+  velocita: 'a zero chi guarda è fermo nella regione. Crescendo, le lunghezze lungo il moto si accorciano e il tempo si mescola allo spazio: un cerchio percorso da una particella diventa una trocoide, una catena di anelli.',
+  direzione: 'la direzione in cui si muove chi guarda, nel piano della regione.',
   scalaTempo: 'scala del tempo: quanto spazio vale un istante quando il tempo entra nel disegno. Più grande, più le linee si allungano lungo il tempo.',
   rot: 'rotazione: lo stesso evento, girato. Ruotare un universo non cambia le sue leggi.',
   specchio: 'a specchio: lo stesso evento nell\'universo riflesso. Lì il campo magnetico ha il verso opposto, e la forma è esattamente la riflessione.',
@@ -909,7 +911,11 @@ const controlliUniverso = (c) => {
     + `<h2>da dove la guardi</h2>`
     + cursore('inclinazione', c.vista, 'inclinazione', 0, 85, 1, 'inclinazione (gradi)')
     + cursore('rotazione', c.vista, 'rotazione', 0, 360, 1, 'rotazione (gradi)')
-    + cursore('scalaTempo', c.vista, 'scalaTempo', 1, 20, 0.5, 'scala del tempo');
+    + cursore('scalaTempo', c.vista, 'scalaTempo', 1, 20, 0.5, 'scala del tempo')
+    + `<h2>chi guarda</h2><p class="nota">La traccia dipende dal moto della particella e da quello di chi la guarda. Qui la sezione è il punto di vista di un osservatore in moto, secondo la relatività: la scala del tempo è la velocità della luce, non si sceglie.</p>`
+    + cursore('velocita', c.vista, 'velocita', 0, 0.99, 0.01, "velocità di chi guarda (frazione di quella della luce)")
+    + cursore('direzione', c.vista, 'direzione', 0, 360, 1, 'verso dove va (gradi)')
+    + (c.indirizzo ? `<div class="riga-bottoni">${motiDi(c.indirizzo).map((m) => `<button data-moto="${m.velocita}|${m.direzione}" title="${m.cosa}">${m.nome}${m.kmS ? ` (${m.kmS < 10 ? m.kmS.toFixed(1) : Math.round(m.kmS)} km/s)` : ''}</button>`).join('')}</div><p class="nota">I moti veri di questa regione sono lentissimi rispetto alla luce (millesimi o decimillesimi): in un'esposizione di millisecondi spostano le tracce di pochi chilometri su migliaia. Contano per ciò che si muove piano (i grani dell'anello, l'acqua, l'aria) e per le esposizioni lunghe; chi viaggia insieme a un raggio cosmico, invece, vede tutto trasformato.</p>` : '');
 };
 function pannelloPattern(h) {
   if (!comp.reticolo) {
@@ -1200,6 +1206,7 @@ pannello.addEventListener('click', (e) => {
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
   if (d.cerca === 'vicini' && (indirizzoOra()?.zoom || []).length) { $('cercaStato').textContent = "I rami si scelgono al livello della regione (torna su con la rotella): qui dentro le particelle sono le stesse di lassù, e un ramo deve cambiarle a ogni livello insieme."; return; }
   if (d.cerca) return cercaBella(d.cerca);
+  if (d.moto) { const [vv, dd] = d.moto.split('|').map(Number); ricorda(); cel().vista.velocita = vv; cel().vista.direzione = dd; simula(); aggiornaTempo(); disegna(); mostraPannello(); return; }
   if (d.ripeti) { ricorda(); const c = comp.elementi[0].cella; c.ripeti = { ...ripetiDi(c), gruppo: d.ripeti }; adattaPattern(); aggiornaVista(); return; }
   if (d.togliScatti) {
     const [tipo, i] = d.togliScatti.split(':');

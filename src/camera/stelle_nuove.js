@@ -231,9 +231,9 @@ function energia(rho, T, X, Zm) { // W/kg dalla catena pp e dal ciclo CN
 // ∇rad, ∇ad → il gradiente vero: soluzione della cubica (ξ−U)³ + (8U/9)(ξ²−U²−W) = 0, ∇ = ξ² − U² + ∇ad
 function mescolamento(P, T, rho, kap, g, nrad, nad, cp, delta) {
   const Hp = P / (rho * g), lm = DATI.alfaConv * Hp, U = ((3 * A_RAD * K.c * T ** 3) / (cp * rho * rho * kap * lm * lm)) * Math.sqrt((8 * Hp) / (g * delta)), W = nrad - nad;
-  let a = U, b = Math.sqrt(U * U + W);
-  for (let it = 0; it < 60; it++) { const x = 0.5 * (a + b); if ((x - U) ** 3 + ((8 * U) / 9) * (x * x - U * U - W) > 0) b = x; else a = x; if (b - a < 1e-13 * b) break; }
-  const x = 0.5 * (a + b); return x * x - U * U + nad;
+  let x = Math.sqrt(U * U + W); // da qui il metodo di Newton scende senza oscillare (la funzione è crescente e convessa)
+  for (let it = 0; it < 40; it++) { const d = x - U, f = d * d * d + ((8 * U) / 9) * (x * x - U * U - W), dx = f / (3 * d * d + ((16 * U) / 9) * x); x -= dx; if (dx < 1e-12 * x) break; }
+  return x * x - U * U + nad;
 }
 
 // ---------- LA STRUTTURA: le quattro equazioni, integrate (Runge-Kutta 4) dal centro in fuori e dalla fotosfera in dentro
@@ -280,7 +280,7 @@ function fotosfera(M, R, L, X, Zm, tav) {
   rho = Math.exp(0.5 * (a + b)); return { Te, P: stato(rho, Te, X, Zm).P, rho, g };
 }
 // dalla fotosfera in dentro: variabili r, m, T, l in funzione di ln P, fino alla massa del raccordo
-function dentroDa(M, Xp, Zm, tav, R, L) {
+function dentroDa(M, Xp, Zm, tav, R, L, zFerma = Infinity) {
   const Xe = Xp[NGU - 1], ph = fotosfera(M, R, L, Xe, Zm, tav), mf = QFIT * M; let rhoG = ph.rho;
   if (!(ph.P > 0)) return null;
   const der = (z, r, m, T, l) => {
@@ -290,22 +290,30 @@ function dentroDa(M, Xp, Zm, tav, R, L) {
     D[1] = (-PI4 * r ** 4 * P) / (K.G * m); D[0] = D[1] / (PI4 * r * r * rho); D[2] = nab * T; D[3] = (e[0] + e[1]) * D[1];
     F.rho = rho; F.conv = conv; F.nrad = nrad; F.epp = e[0]; F.ecno = e[1];
   };
-  let z = Math.log(ph.P), r = R, m = M, T = ph.Te, l = L;
-  for (let i = 0; i < 4000; i++) {
-    const h = i < 80 ? 0.05 : 0.125;
-    der(z, r, m, T, l); rhoG = F.rho;
-    if (registro) registro.push([m / M, r, Math.exp(z), T, F.rho, l, F.conv ? 1 : 0, F.epp, F.ecno]);
-    const a0 = D[0], a1 = D[1], a2 = D[2], a3 = D[3];
+  let z = Math.log(ph.P), r = R, m = M, T = ph.Te, l = L, r1 = 0, m1 = 0, T1 = 0, l1 = 0;
+  const passo = (h, primo) => { // un passo di Runge-Kutta 4 da (z, r, m, T, l); il risultato in r1, m1, T1, l1
+    if (primo) { der(z, r, m, T, l); rhoG = F.rho; if (registro) registro.push([m / M, r, Math.exp(z), T, F.rho, l, F.conv ? 1 : 0, F.epp, F.ecno]); K1[0] = D[0]; K1[1] = D[1]; K1[2] = D[2]; K1[3] = D[3]; }
+    const a0 = K1[0], a1 = K1[1], a2 = K1[2], a3 = K1[3];
     der(z + h / 2, r + (h / 2) * a0, m + (h / 2) * a1, T + (h / 2) * a2, l + (h / 2) * a3); const b0 = D[0], b1 = D[1], b2 = D[2], b3 = D[3];
     der(z + h / 2, r + (h / 2) * b0, m + (h / 2) * b1, T + (h / 2) * b2, l + (h / 2) * b3); const c0 = D[0], c1 = D[1], c2 = D[2], c3 = D[3];
     der(z + h, r + h * c0, m + h * c1, T + h * c2, l + h * c3);
-    const r1 = r + (h / 6) * (a0 + 2 * b0 + 2 * c0 + D[0]), m1 = m + (h / 6) * (a1 + 2 * b1 + 2 * c1 + D[1]), T1 = T + (h / 6) * (a2 + 2 * b2 + 2 * c2 + D[2]), l1 = l + (h / 6) * (a3 + 2 * b3 + 2 * c3 + D[3]);
-    if (!(r1 > 0) || !(m1 === m1) || !(T1 > 0)) return null;
-    if (m1 <= mf) { const u = (m - mf) / (m - m1); return [Math.exp(z + u * h), T + u * (T1 - T), r + u * (r1 - r), l + u * (l1 - l), ph]; }
+    r1 = r + (h / 6) * (a0 + 2 * b0 + 2 * c0 + D[0]); m1 = m + (h / 6) * (a1 + 2 * b1 + 2 * c1 + D[1]); T1 = T + (h / 6) * (a2 + 2 * b2 + 2 * c2 + D[2]); l1 = l + (h / 6) * (a3 + 2 * b3 + 2 * c3 + D[3]);
+    return r1 > 0 && m1 === m1 && T1 > 0;
+  };
+  for (let i = 0; i < 4000; i++) {
+    let h = i < 60 ? 0.05 : T < 4e5 ? 0.15 : 0.2;
+    if (z >= zFerma) return [Math.exp(z), T, r, l, ph, rhoG];
+    if (!passo(h, true)) return null;
+    if (m1 <= mf) { // l'ultimo passo si accorcia finché arriva giusto alla massa del raccordo
+      let ha = 0, ma = m, hb = h, mb = m1;
+      for (let k = 0; k < 12 && Math.abs(m1 - mf) > 1e-10 * M; k++) { h = Math.min(hb, Math.max(ha, ha + ((ma - mf) * (hb - ha)) / (ma - mb))); if (!passo(h, false)) return null; if (m1 > mf) { ha = h; ma = m1; } else { hb = h; mb = m1; } }
+      return [Math.exp(z + h), T1, r1, l1, ph];
+    }
     r = r1; m = m1; T = T1; l = l1; z += h;
   }
   return null;
 }
+const K1 = new Float64Array(4);
 // IL TIRO: quattro incognite (pressione e temperatura al centro, raggio, luminosità: in logaritmo) e quattro
 // condizioni (al raccordo, a metà della massa, le due integrazioni devono dare lo stesso P, T, r, l). Newton, con le
 // derivate calcolate ripetendo le integrazioni.
@@ -313,27 +321,33 @@ function scarti(M, Xp, Zm, tav, y, quale = 3) { // quale: 1 solo dal centro, 2 s
   const o = quale & 1 ? fuori(M, Xp, Zm, tav, Math.exp(y[0]), Math.exp(y[1])) : null, i = quale & 2 ? dentroDa(M, Xp, Zm, tav, Math.exp(y[2]), Math.exp(y[3])) : null;
   return [o, i];
 }
-function risolvi(M, Xp, Zm, tav, y0, { giri = 40, tol = 1e-5, parla = false } = {}) {
-  let y = y0.slice(), [o, i] = scarti(M, Xp, Zm, tav, y);
+function risolvi(M, Xp, Zm, tav, y0, { giri = 60, tol = 1e-5, parla = false, J0 = null } = {}) {
+  let y = y0.slice(), [o, i] = scarti(M, Xp, Zm, tav, y), J = J0 ? J0.map((r) => r.slice()) : null, fresca = false;
   const res = (o, i, y) => (o && i ? [Math.log(o[0] / i[0]), Math.log(o[1] / i[1]), Math.log(o[2] / i[2]), (o[3] - i[3]) / Math.exp(y[3])] : null);
   const norma = (r) => (r ? Math.hypot(r[0], r[1], r[2], r[3]) : Infinity);
+  const derivate = () => { // la matrice delle derivate, ripetendo le integrazioni (due dal centro, due dalla superficie)
+    J = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; const d = 1e-4;
+    for (let k = 0; k < 4; k++) { const y1 = y.slice(); y1[k] += d; const [o1, i1] = scarti(M, Xp, Zm, tav, y1, k < 2 ? 1 : 2), r1 = res(k < 2 ? o1 : o, k < 2 ? i : i1, y1); if (!r1) return false; for (let a = 0; a < 4; a++) J[a][k] = (r1[a] - r[a]) / d; }
+    fresca = true; return true;
+  };
   let r = res(o, i, y); if (!r) return null;
   for (let g = 0; g < giri; g++) {
-    const n0 = norma(r); if (parla) console.log('   giro', g, 'scarto', n0.toExponential(2), y.map((v) => v.toFixed(4)).join(' '));
-    if (n0 < tol) { const ph = i[4]; return { y, Pc: Math.exp(y[0]), Tc: Math.exp(y[1]), R: Math.exp(y[2]), L: Math.exp(y[3]), Teff: ph.Te, giri: g }; }
-    // la matrice delle derivate
-    const J = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], d = 1e-4; let rotto = false;
-    for (let k = 0; k < 4 && !rotto; k++) {
-      const y1 = y.slice(); y1[k] += d;
-      const [o1, i1] = scarti(M, Xp, Zm, tav, y1, k < 2 ? 1 : 2), r1 = res(k < 2 ? o1 : o, k < 2 ? i : i1, y1);
-      if (!r1) { rotto = true; break; } for (let a = 0; a < 4; a++) J[a][k] = (r1[a] - r[a]) / d;
-    }
-    if (rotto) return null;
-    const dy = gauss(J, r.map((v) => -v)); if (!dy) return null;
+    const n0 = norma(r); if (parla) console.log('   giro', g, 'scarto', n0.toExponential(2), y.map((v) => v.toFixed(4)).join(' '), fresca ? '(J)' : '');
+    if (n0 < tol) return { y, J, Pc: Math.exp(y[0]), Tc: Math.exp(y[1]), R: Math.exp(y[2]), L: Math.exp(y[3]), Teff: i[4].Te, giri: g };
+    if (!J && !derivate()) return null;
+    let dy = gauss(J, r.map((v) => -v)); if (!dy) { if (fresca || !derivate()) return null; dy = gauss(J, r.map((v) => -v)); if (!dy) return null; }
     let passo = Math.min(1, 0.3 / Math.max(...dy.map(Math.abs))), fatto = false;
-    for (let prova = 0; prova < 8; prova++) { // se lo scarto non cala, si accorcia il passo
-      const y1 = y.map((v, k) => v + passo * dy[k]), [o1, i1] = scarti(M, Xp, Zm, tav, y1), r1 = res(o1, i1, y1);
-      if (norma(r1) < n0 * (1 - 0.1 * passo) || (norma(r1) < 3 * n0 && prova === 0 && passo < 1)) { y = y1; o = o1; i = i1; r = r1; fatto = true; break; }
+    for (let prova = 0; prova < 6; prova++) { // se lo scarto non cala, si accorcia il passo
+      const y1 = y.map((v, k) => v + passo * dy[k]), [o1, i1] = scarti(M, Xp, Zm, tav, y1), r1 = res(o1, i1, y1), n1 = norma(r1);
+      if (n1 < n0 * (1 - 0.1 * passo)) {
+        // aggiorna la matrice senza ricalcolarla (Broyden): J += (Δr − J·Δy)·Δyᵀ/|Δy|²
+        const sy = y1.map((v, k) => v - y[k]), n2 = sy.reduce((a, v) => a + v * v, 0);
+        for (let a = 0; a < 4; a++) { let c = r1[a] - r[a]; for (let k = 0; k < 4; k++) c -= J[a][k] * sy[k]; for (let k = 0; k < 4; k++) J[a][k] += (c * sy[k]) / n2; }
+        const lento = n1 > 0.5 * n0; y = y1; o = o1; i = i1; r = r1; fatto = true; fresca = false;
+        if (lento && !derivate()) return null; // cala troppo piano: derivate nuove
+        break;
+      }
+      if (!fresca) { if (!derivate()) return null; dy = gauss(J, r.map((v) => -v)); if (!dy) return null; passo = Math.min(1, 0.3 / Math.max(...dy.map(Math.abs))); continue; }
       passo *= 0.4;
     }
     if (!fatto) return null;
@@ -363,16 +377,16 @@ const PASSI = [1, 0.85, 0.7, 0.55, 0.4, 0.26, 0.14, 0.05, 0.01];
 const KPP = (4 * MB) / (DATI.Q4 - DATI.nuPP), KCNO = (4 * MB) / (DATI.Q4 - DATI.nuCNO); // kg di idrogeno per joule
 function traccia(Msol, Z, y0, { parla = false, passi = PASSI } = {}) {
   const { X: X0, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X0), rr = new Float64Array(NGU), stati = [];
-  let y = y0.slice(), yPrima = null, t = 0, rc0 = 0, xc0 = X0, s = 0, qmax = 2, k = 0, bersaglio = passi[0] * X0, tagli = 0;
+  let y = y0.slice(), yPrima = null, Jp = null, t = 0, rc0 = 0, xc0 = X0, s = 0, qmax = 2, k = 0, bersaglio = passi[0] * X0, tagli = 0;
   const Xs = new Float64Array(NGU); // la composizione all'inizio del passo (per riprovare con un passo più corto)
   for (;;) {
-    let sol = risolvi(M, Xp, Zm, tav, yPrima && stati.length > 1 ? y.map((v, i) => v + 0.7 * (v - yPrima[i])) : y) || (yPrima ? risolvi(M, Xp, Zm, tav, y) : null);
+    let sol = risolvi(M, Xp, Zm, tav, yPrima && stati.length > 1 ? y.map((v, i) => v + 0.7 * (v - yPrima[i])) : y, { J0: Jp }) || (yPrima ? risolvi(M, Xp, Zm, tav, y) : null);
     if (!sol) {
       if (!stati.length || tagli > 3) break;
       // il passo era troppo lungo: metà strada
       tagli++; const prec = stati[stati.length - 1].Xc; bersaglio = 0.5 * (bersaglio + prec); const s2 = (prec - bersaglio) / rc0; for (let i = 0; i < NGU; i++) Xp[i] = Math.max(0, Xs[i] - rr[i] * s2); s = s2; continue;
     }
-    yPrima = stati.length ? y : null; y = sol.y;
+    yPrima = stati.length ? y : null; y = sol.y; Jp = sol.J;
     const pr = profilo(M, Xp, Zm, tav, y), np = pr.length;
     // il nucleo convettivo (dal centro) e l'involucro convettivo (dalla superficie)
     let ic = 0; while (ic < np && pr[ic][6]) ic++; let qcc = ic === 0 ? 0 : ic >= np ? 1 : pr[ic][0];
@@ -401,5 +415,62 @@ function traccia(Msol, Z, y0, { parla = false, passi = PASSI } = {}) {
   const mHe = i === 0 ? 0 : i >= NGU ? 1 : QC[i - 1] + ((0.1 * X0 - Xp[i - 1]) / (Xp[i] - Xp[i - 1])) * (QC[i] - QC[i - 1]);
   return { M: Msol, Z, stati, vita: stati[stati.length - 1].t, mHe, finita: stati[stati.length - 1].Xc <= passi[passi.length - 1] * X0 * 1.01 };
 }
-export const dentro = { traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, mescolamento, fuori, dentroDa, fotosfera, idrogeno, NGU, QC, QB, registra: (r) => { registro = r; }, stato, densita, termo, elettroni, S, TD, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, A_RAD, MB };
+// ---------- LA SEQUENZA DI ETÀ ZERO: da una massa alla vicina, a piccoli passi (ogni soluzione è il punto di
+// partenza della successiva; se il passo è troppo lungo lo si dimezza). Restituisce le soluzioni alle masse chieste
+// e la MASSA MINIMA: sotto, scendendo, l'equilibrio non c'è più (la degenerazione ferma la contrazione).
+const SOLE0 = [37.18, 16.41, 20.30, 60.80]; // da dove parte il tiro per 1 M☉ (ln di Pc, Tc, R, L in SI): solo un punto di partenza
+function sequenza(Z, masse, { parla = false } = {}) {
+  const tav = (z) => tavolaOpacita(composizione(z).Zm), unif = (z) => new Float64Array(NGU).fill(composizione(z).X);
+  // 1 M☉ a questa metallicità: dal Sole, cambiando i metalli un po' alla volta
+  let y = SOLE0.slice(), zz = 1, sol = risolvi(MSOLE, unif(1), composizione(1).Zm, tav(1), y); if (!sol) return null; y = sol.y;
+  for (let passo = Math.log(Z) / Math.max(1, Math.ceil(Math.abs(Math.log(Z)) / 0.7)), k = 0; Math.abs(Math.log(zz / Z)) > 1e-9 && k < 200; k++) {
+    const z1 = Math.abs(Math.log(Z / zz)) <= Math.abs(passo) * 1.0001 ? Z : zz * Math.exp(passo), s1 = risolvi(MSOLE, unif(z1), composizione(z1).Zm, tav(z1), y);
+    if (s1) { y = s1.y; zz = z1; TAVOLE.size > 3 && z1 !== Z && TAVOLE.delete(composizione(z1).Zm.toPrecision(6)); } else { passo /= 2; if (Math.abs(passo) < 0.01) return null; }
+  }
+  const { X, Zm } = composizione(Z), Xp = new Float64Array(NGU).fill(X), T = tavolaOpacita(Zm), y1 = y.slice(), trovate = new Map();
+  let minima = NaN, massima = 1;
+  for (const verso of [1, -1]) {
+    const bersagli = masse.filter((m) => (verso > 0 ? m >= 1 : m < 1)).sort((a, b) => verso * (a - b));
+    let M = 1, yy = y1.slice(), yp = null, Mp = null, J = null, dl = 0.1, ib = 0;
+    if (verso > 0 && bersagli[0] === 1) { trovate.set(1, yy.slice()); ib = 1; }
+    for (let k = 0; k < 600; k++) {
+      const lim = ib < bersagli.length ? Math.abs(Math.log(bersagli[ib] / M)) : Infinity; if (verso > 0 && ib >= bersagli.length) break;
+      const esatto = lim <= dl * 1.0001, Mn = esatto ? bersagli[ib] : M * Math.exp(verso * dl);
+      const g = yp ? yy.map((v, i) => v + ((v - yp[i]) * Math.log(Mn / M)) / Math.log(M / Mp)) : yy;
+      const s1 = risolvi(Mn * MSOLE, Xp, Zm, T, g, { J0: J }) || risolvi(Mn * MSOLE, Xp, Zm, T, yy);
+      if (s1 && (verso > 0 || s1.L < Math.exp(yy[3]))) {
+        yp = yy; Mp = M; yy = s1.y; M = Mn; J = s1.J; if (esatto) { trovate.set(Mn, yy.slice()); ib++; } dl = Math.min(0.12, dl * 1.4);
+        if (parla) console.log(`   ${Mn.toFixed(4)} M☉: L ${(s1.L / LSOLE).toPrecision(4)} R ${(s1.R / RSOLE).toFixed(3)} T ${s1.Teff.toFixed(0)} Tc ${(s1.Tc / 1e6).toFixed(2)}`);
+      } else { dl /= 2; if (dl < 0.004) break; }
+    }
+    if (verso > 0) massima = M; else { minima = M; trovate.set(M, yy.slice()); }
+  }
+  return { Z, minima, massima, y: trovate };
+}
+
+// ---------- LE NANE BRUNE: sotto la massa minima non c'è equilibrio; la stella si stringe irradiando l'energia di
+// gravità (viriale: E = −(3/7)·G·M²/R per un polìtropo n = 3/2, che è la struttura esatta di una sfera tutta convettiva
+// di gas con P ∝ ρ^5/3 a entropia fissa), finché gli elettroni degeneri la reggono. La luce che esce è quella della
+// fotosfera il cui involucro, integrato in dentro, raggiunge l'entropia dell'interno.
+const LE15 = (() => { let x = 1e-3, y = 1 - (x * x) / 6, z = -x / 3; const h = 0.005, f = (x, y, z) => -Math.pow(Math.max(y, 0), 1.5) - (2 * z) / x; for (;;) { const k1y = z, k1z = f(x, y, z), k2y = z + 0.5 * h * k1z, k2z = f(x + 0.5 * h, y + 0.5 * h * k1y, k2y), k3y = z + 0.5 * h * k2z, k3z = f(x + 0.5 * h, y + 0.5 * h * k2y, k3y), k4y = z + h * k3z, k4z = f(x + h, y + h * k3y, k4y), y1 = y + (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y), z1 = z + (h / 6) * (k1z + 2 * k2z + 2 * k3z + k4z); if (y1 <= 0) { const t = y / (y - y1), xi = x + t * h, d = z + t * (z1 - z); return { xi, rc: xi / (-3 * d), pc: 1 / (PI4 * 2.5 * d * d) }; } x += h; y = y1; z = z1; } })(); // ρc/ρ̄ e Pc/(GM²/R⁴)
+function raffreddamento(Msol, Z) {
+  const { X, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X), t = [], lL = [], lR = [];
+  let R = RSOLE * Math.cbrt(Msol / 0.05), tt = 0, inv0 = 0, lT = Math.log(3500);
+  for (let k = 0; k < 60; k++) {
+    const rhoc = (LE15.rc * 3 * M) / (PI4 * R ** 3), Pc = (LE15.pc * K.G * M * M) / R ** 4;
+    // la temperatura al centro (da P e ρ) e l'entropia dell'interno
+    let a = Math.log(1e3), b = Math.log(1e9); for (let it = 0; it < 50; it++) { const m = 0.5 * (a + b); if (stato(rhoc, Math.exp(m), X, Zm).P < Pc) a = m; else b = m; }
+    const Tc = Math.exp(0.5 * (a + b)), sc = stato(rhoc, Tc, X, Zm).s, zf = Math.log(1e-3 * Pc);
+    // la temperatura della fotosfera il cui involucro arriva a quell'entropia
+    const sInv = (lt) => { const Te = Math.exp(lt), r = dentroDa(M, Xp, Zm, tav, R, PI4 * R * R * K.sigma * Te ** 4, zf); return r ? stato(r[5], r[1], X, Zm).s : NaN; };
+    let ta = Math.log(450), tb = Math.log(7000); for (let it = 0; it < 18; it++) { const m = 0.5 * (ta + tb), sv = sInv(m); if (!(sv < sc)) tb = m; else ta = m; }
+    lT = 0.5 * (ta + tb); const Te = Math.exp(lT), Ls = PI4 * R * R * K.sigma * Te ** 4;
+    if (k > 0) tt += (3 / 7) * K.G * M * M * (1 / R - 1 / (R / 0.88)) * 0.5 * (inv0 + 1 / Ls);
+    t.push(tt / ANNO); lL.push(Math.log(Ls / LSOLE)); lR.push(Math.log(R / RSOLE)); inv0 = 1 / Ls;
+    if (tt > 5e10 * ANNO || Te < 500) break;
+    R *= 0.88;
+  }
+  return { M: Msol, t, lL, lR };
+}
+export const dentro = { sequenza, raffreddamento, LE15, traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, mescolamento, fuori, dentroDa, fotosfera, idrogeno, NGU, QC, QB, registra: (r) => { registro = r; }, stato, densita, termo, elettroni, S, TD, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, A_RAD, MB };
 void MSOLE; void RSOLE; void LSOLE; void ANNO;

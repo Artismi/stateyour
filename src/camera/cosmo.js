@@ -29,7 +29,7 @@ import { rotazione } from './rotazione.js';
 import { sorgente } from './eventi.js';
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
-import { atmosfera, prebiotica, minerali } from './chimica.js';
+import { climaEAria, prebiotica, minerali } from './chimica.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 16, STELLE = 2500, GALASSIE_MAX = 200;
@@ -255,11 +255,16 @@ export const sistema = memo((n, gid, sid) => {
     // l'acqua alla superficie: la stessa per il mare, per il clima e per l'interno (leggi.js)
     const acqua = acquaInSuperficie(p);
     p.interno.acquaKg = acqua.kg;
-    p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione });
+    // IL CLIMA E L'ARIA si cercano insieme (chimica.js, climaEAria): il clima è il bilancio di energia per fasce di
+    // latitudine (leggi.js: lo stesso che climaSuperficie risolve poi sulla mappa), con la serra dei gas veri; l'aria
+    // è ciò che il pianeta ha liberato o trattenuto (anche il velo di idrogeno del disco, se la gravità lo tiene),
+    // meno ciò che a quella temperatura gela, piove o finisce nel calcare
+    const ariaEClima = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
+    p.clima = ariaEClima.clima;
     // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero (ciò che trattiene, all'equilibrio
     // chimico), e quanto rendono lì le reazioni che fanno aminoacidi e zuccheri (scariche e ultravioletto)
     try {
-      p.atmosfera = atmosfera(p, { Z: S.Z ?? 1 });
+      p.atmosfera = ariaEClima.atmosfera;
       p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua === 'liquida',
         minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
     } catch { p.atmosfera = null; p.prebiotica = null; }
@@ -490,4 +495,19 @@ export function cellaDi(a, rami = null) {
     finestra: { centro: [500, 500], lato: 400 }, sezione: { fine: padre.tempo, durata: padre.tempo },
     scala: { ...padre.scala, latoM, secondi: padre.tempo * u.tu, urtoProtone: urto },
   };
+}
+
+// ---------- I MOTI VERI DI UNA REGIONE: con quale velocità si muove, rispetto a lei, chi sta fermo più in su.
+// La traccia di una particella dipende dal suo moto e da quello di chi la guarda: fermo nella regione (che non gira,
+// centrata sul pianeta), sul pianeta che gira, fermo rispetto alla stella mentre il pianeta le corre attorno. Ogni
+// voce dà la velocità di chi guarda rispetto alla regione (frazione di c) e la direzione (gradi nel piano della
+// regione, che è quello dell'orbita). Sono moti lenti rispetto alla luce: lo si dice con i numeri veri.
+export function motiDi(a) {
+  const P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], R = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta).regioni[a.regione], c = COSTANTI.c, gr = 180 / Math.PI;
+  const giro = (2 * Math.PI * R.r * P.raggioM) / P.giorno, orbita = (2 * Math.PI * P.aM) / P.anno;
+  return [
+    { nome: 'ferma nella regione', kmS: 0, velocita: 0, direzione: 0, cosa: 'chi guarda sta fermo rispetto al pianeta, senza girare con lui' },
+    { nome: 'sul pianeta che gira', kmS: giro / 1000, velocita: giro / c, direzione: ((R.angolo * gr + (P.retrogrado ? -90 : 90)) % 360 + 360) % 360, cosa: 'chi guarda gira con il pianeta (e con il suo campo magnetico)' },
+    { nome: 'ferma rispetto alla stella', kmS: orbita / 1000, velocita: orbita / c, direzione: ((P.fase * gr - 90) % 360 + 360) % 360, cosa: 'chi guarda sta fermo rispetto alla stella: il pianeta, con la regione, gli corre davanti lungo l\'orbita' },
+  ];
 }

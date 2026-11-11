@@ -117,7 +117,7 @@ export const giriCheRegge = (delta, mu) => { if (delta <= 2 * Math.sqrt(3)) retu
 // In più ogni pianeta porta «formazione», i NUMERI della sua storia (quelli che «storia» racconta a parole; serve a
 // impatti.js). Non è enumerabile: chi elenca, stampa o confronta i pianeti vede quelli di sempre; chi li copia campo per
 // campo deve copiarla apposta.
-//   formazione = { urti, cibo, tGas, mIso, tIso, nato, scacciati, massaAlGas }
+//   formazione = { urti, cibo, tGas, mIso, tIso, nato, scacciati, orfani, massaAlGas }
 //   urti        gli urti giganti che l'hanno fatto, in ordine di tempo: [{ bersaglioKg, massaKg (i solidi dei due corpi,
 //               il più grosso e il più piccolo), delta (la distanza tra le due orbite, in raggi di Hill reciproci, a cui
 //               sono state trovate instabili; ≤ 2√3: già incrociate), tIncrocio (anni dalla nascita del sistema: quando
@@ -127,6 +127,9 @@ export const giriCheRegge = (delta, mu) => { if (delta <= 2 * Math.sqrt(3)) retu
 //   tGas        (anni) quando è sparito il gas; mIso (kg) la somma delle masse di isolamento delle sue strisce; tIso (anni)
 //               il tempo di isolamento dell'embrione principale; nato (UA); scacciati: quanti vicini ha scacciato
 //   massaAlGas  (kg) quanti solidi avevano già raccolto i suoi embrioni quando il gas è sparito
+//   orfani      i corpi che ha scacciato (con la fionda): [{ aUA (dov'era), massaKg (i suoi solidi), ciboKg (la parte della
+//               sua striscia non ancora mangiata), ghiaccio (frazione), t (anni: quando), dentro (stava più vicino alla stella) }]:
+//               i sassi che gli giravano attorno restano lì, senza più chi li raccoglie (impatti.js ne fa una fascia)
 export function formaPianeti(st, seme = 1) {
   const D = disco(st, seme), c = casoDi(seme, 0x7a3d), Mst = D.massaStella * MSOLE, eta = Math.max(0, st.eta ?? 4.5e9);
   const P = DISCO, hill = (m, a) => a * Math.cbrt(m / (3 * Mst)), vK = (a) => Math.sqrt((G * Mst) / (a * UA));
@@ -157,7 +160,7 @@ export function formaPianeti(st, seme = 1) {
     const T = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(r), ferroRoccia = Math.min(0.75, (0.19 + 0.08 * Math.min(D.Z, 4)) * (1 + (T / 600) ** 2));
     const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : 1 - P.roccia;
     corpi.push({ a: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false,
-      lista: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
+      lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
   }
 
   // 3. IL GAS. Un nucleo isolato raffredda il suo involucro in tempoInvolucro(M): se nucleo e involucro sono pronti
@@ -207,13 +210,13 @@ export function formaPianeti(st, seme = 1) {
         const p = vivi[i], q = vivi[i + 1], grande = p.m >= q.m ? p : q, piccolo = grande === p ? q : p, am = (p.a + q.a) / 2;
         const vf = Math.sqrt((2 * G * (p.m + q.m)) / (raggio(p) + raggio(q))), v = vK(am), m = p.m + q.m;
         const fionda = (vf * vf) / (2 * v * v); // quanto la gravità dei due corpi vince su quella della stella (numero di Safronov)
+        // l'incontro com'è stato (per «formazione»): a quale distanza le orbite hanno ceduto, e quando: i giri che quella
+        // distanza regge, contati da quando i due corpi sono così (l'ultimo urto di uno dei due, o la fine del gas)
+        const mu2 = (p.m + q.m) / (2 * Mst), anno = Math.pow(am, 1.5) / Math.sqrt(D.massaStella), delta = Math.max(0, s[i] * raggiNecessari((eta - D.vita) / anno, mu2));
+        const tIncrocio = Math.min(eta, Math.max(p.tUrto, q.tUrto) + giriCheRegge(delta, mu2) * anno);
         if (piccolo.m > P.pari * grande.m || c() * (1 + fionda * fionda) > fionda * fionda) { // si fondono
-          // l'urto com'è stato (per «formazione»): chi, a quale distanza le orbite hanno ceduto, e quando: i giri che
-          // quella distanza regge, contati da quando i due corpi sono così (l'ultimo urto di uno dei due, o la fine del gas)
-          const mu2 = (p.m + q.m) / (2 * Mst), anno = Math.pow(am, 1.5) / Math.sqrt(D.massaStella), delta = Math.max(0, s[i] * raggiNecessari((eta - D.vita) / anno, mu2));
-          const tIncrocio = Math.min(eta, Math.max(p.tUrto, q.tUrto) + giriCheRegge(delta, mu2) * anno);
           grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta, tIncrocio, aUA: am }];
-          grande.tUrto = tIncrocio; grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.alGas += piccolo.alGas;
+          grande.tUrto = tIncrocio; grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.alGas += piccolo.alGas; grande.orfani = [...grande.orfani, ...piccolo.orfani];
           grande.a = ((p.m * Math.sqrt(p.a) + q.m * Math.sqrt(q.a)) / m) ** 2;
           grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
           if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; grande.e = Math.min(P.eMax, ((P.mescola * vf) / v) * (0.7 + 0.6 * c())); } // l'urto strappa il velo di gas
@@ -222,6 +225,8 @@ export function formaPianeti(st, seme = 1) {
         } else { // la fionda: chi parte verso l'infinito lo fa con energia nulla, e il grande paga il conto scendendo
           if (piccolo.a > grande.a) grande.a = Math.max(D.rIn, 1 / (1 / grande.a + piccolo.m / grande.m / piccolo.a));
           grande.e = Math.min(P.eMax, Math.hypot(grande.e, (0.4 * piccolo.m) / grande.m)); grande.scacciati++;
+          // (per «formazione») il corpo scacciato lascia ORFANI i sassi che gli giravano attorno: dov'era, quanto pesava, quando
+          { const sol = piccolo.m - piccolo.gas; grande.orfani = [...grande.orfani, ...piccolo.orfani, { aUA: piccolo.a, massaKg: sol, ciboKg: Math.max(0, piccolo.cibo), ghiaccio: piccolo.h2o / sol, t: tIncrocio, dentro: piccolo.a < grande.a }]; }
         }
         piccolo.morto = true; fatto = true; i++;
       }
@@ -248,7 +253,7 @@ export function formaPianeti(st, seme = 1) {
       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`
         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
-    const formazione = { urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, massaAlGas: b.alGas };
+    const formazione = { urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas };
     return Object.defineProperty({ aUA: b.a, massaKg: b.m, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
   });
   // le orbite di oggi non si incrociano: se due si toccassero, i detriti le avrebbero già arrotondate

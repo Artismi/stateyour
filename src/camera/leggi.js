@@ -145,6 +145,10 @@ export const trasportoCalore = (pressione) => (isFinite(pressione) ? CLIMA.trasp
 // L'EFFETTO SERRA: lo spessore ottico dell'aria per la luce infrarossa. La superficie irradia σT⁴/(1 + ¾τ).
 // LEGGE EMPIRICA di riserva, quando dell'aria si conosce solo la pressione: τ = 0,8·(p / 1 bar)^0,6 (la Terra: 0,8)
 export const serraDaPressione = (pressione) => (isFinite(pressione) ? 0.8 * Math.pow(Math.max(0, pressione) / 1e5, 0.6) : 2);
+// IL LIMITE DEL VAPORE (Simpson 1927, Nakajima 1992; il valore è quello dei modelli di Kasting 1993 per la Terra): un'aria
+// satura di vapore d'acqua non irradia verso lo spazio più di circa 282 W/m², per quanto calda sia la superficie. Un
+// pianeta che ne assorbe di più non trova equilibrio finché ha un mare: l'acqua evapora tutta (è la storia di Venere)
+export const LIMITE_VAPORE = 282;
 // la parte sommersa attesa di un pianeta con «acquaKg» d'acqua in superficie (prima che la sua mappa esista)
 export function mareAtteso({ acquaKg = 0, raggioM, placche = false }) {
   const profondita = acquaKg / 1000 / (4 * Math.PI * raggioM * raggioM);
@@ -155,7 +159,7 @@ export function mareAtteso({ acquaKg = 0, raggioM, placche = false }) {
 // e hanno la stessa temperatura. Il passo nel tempo è quello di climaSuperficie: la luce irradiata linearizzata, il
 // calore dei vicini implicito (l'energia si conserva con qualunque passo), i primi anni al rallentatore se il mare ha
 // la memoria lunga. → { T (media sul pianeta, K), ghiaccio (0…1), assorbita, irradiata, arriva (W/m²), lat, fasce }
-export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 18, anni = 10, passiAnno = 24 }) {
+export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 16, anni = 8, passiAnno = 16 }) {
   const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
   const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
   for (let j = 0; j < H; j++) { lat[j] = Math.PI / 2 - (j + 0.5) * dphi; cosLat[j] = Math.cos(lat[j]); cosN[j] = Math.max(0, Math.cos(lat[j] + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)); }
@@ -218,13 +222,17 @@ export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = nul
   // LEGGE DI RISERVA, quando l'aria vera non è data: i gas liberati dall'interno sono un milionesimo della massa (la
   // Terra: 0,86 milionesimi, cioè 1 bar), un po' di più se c'è molta acqua; se la gravità li trattiene
   const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.85 + 3 * acqua) : 0;
-  const pressione = aria ? aria.pressione : (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = aria ? aria.tau : serraDaPressione(pressione), D = trasportoCalore(pressione);
+  // (oltre τ = 10⁴ l'aria è così spessa che il calore sale per convezione, non per irraggiamento: la serra non cresce più)
+  const pressione = aria ? aria.pressione : (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = Math.min(1e4, aria ? aria.tau : serraDaPressione(pressione)), D = trasportoCalore(pressione);
   const S0 = Lw / (4 * Math.PI * aM * aM), periodo = anno ?? ANNO * Math.pow(aM / UA, 1.5), kg = acquaKg ?? acquaInSuperficie({ tipo, massaKg, composizione: { acqua } }).kg;
   // si parte caldo (un pianeta nasce caldo e si raffredda), ma non più di un quarto sopra dove lo porterebbe la sola luce
-  const Tavvio = Lw > 0 ? Math.max(Tnuda, Math.min(310, 1.25 * Math.max(30, Tnuda * Math.pow(1 + 0.75 * tau, 0.25)))) : 30;
+  // (e sotto un'aria spessa, da dove la porta la serra)
+  const Tserra = Math.max(30, Tnuda * Math.pow(1 + 0.75 * tau, 0.25)), Tavvio = Lw > 0 ? Math.max(Tnuda, Math.min(310, 1.25 * Tserra), Tserra) : 30;
   const risolvi = (mare) => (S0 > 0 ? bilancioPerFasce({ S0, anno: periodo, obliquita, bloccato, mare, pressione, tau, D, Tavvio }) : { T: 3, ghiaccio: mare > 0 ? 1 : 0, assorbita: 0, irradiata: 0, arriva: 0, lat: [], fasce: [] });
   let mare = acqua > 0 ? mareAtteso({ acquaKg: kg, raggioM, placche }) : 0, b = risolvi(mare);
-  const stato = acqua > 0 ? statoAcqua(b.T, pressione) : 'assente';
+  // lo stato dell'acqua: dalla temperatura e dalla pressione; e in ogni caso vapore se il pianeta assorbe più luce di quanta
+  // un'aria satura di vapore riesca a irradiare (LIMITE_VAPORE): allora il mare evapora tutto, qualunque sia la serra
+  const stato = acqua > 0 ? (b.assorbita > LIMITE_VAPORE ? 'vapore' : statoAcqua(b.T, pressione)) : 'assente';
   if (mare > 0 && stato.startsWith('vapore')) { mare = 0; b = risolvi(0); }
   const albedo = b.arriva > 0 ? 1 - b.assorbita / b.arriva : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
   return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione), bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };

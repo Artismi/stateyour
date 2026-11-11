@@ -24,14 +24,43 @@ export function proiettore(vista = VISTA_SOPRA, centro = [0, 0, 0]) {
     return [cx + X * u[0] + Y * u[1] + T * u[2], cy + X * v[0] + Y * v[1] + T * v[2]];
   };
 }
-export const inclinata = (vista) => !!vista && ((vista.inclinazione ?? 0) !== 0 || (vista.rotazione ?? 0) !== 0);
+// ---------- L'OSSERVATORE IN MOTO. Una sezione inclinata dello spaziotempo, presa sul serio, è il punto di vista
+// di qualcuno che si muove: la relatività ristretta dice esattamente che cosa vede. Nello spaziotempo (x, y, c·t)
+// la scala del tempo non è libera: è la velocità della luce. Chi va a velocità β (frazione di c) nella direzione n
+// registra ogni punto di una traccia in   r' = r + (γ − 1)(r·n)n − γ·β·c·t ,   t' = γ(t − β·r/c),   γ = 1/√(1 − β²):
+// le lunghezze lungo il moto si accorciano, il tempo di lassù si mescola allo spazio di quaggiù, e un cerchio
+// percorso da una particella diventa una trocoide. La fetta di tempo è quella dell'orologio di chi guarda (t').
+// vista.velocita (0…<1) e vista.direzione (gradi): la velocità di chi guarda rispetto alla regione. I moti veri
+// (il pianeta che gira, la sua orbita) sono piccolissimi rispetto alla luce; chi viaggia con una particella no.
+export const inMoto = (vista) => !!vista && (vista.velocita ?? 0) > 0;
+export function osservatore(vista, centro, c = 40) {
+  const b = Math.min(0.995, vista.velocita), fi = ((vista.direzione ?? 0) * Math.PI) / 180, nx = Math.cos(fi), ny = Math.sin(fi), g = 1 / Math.sqrt(1 - b * b);
+  const [cx, cy, ct] = centro;
+  return (x, y, t) => { const X = x - cx, Y = y - cy, T = t - ct, par = X * nx + Y * ny, k = (g - 1) * par - g * b * c * T; return [cx + X + k * nx, cy + Y + k * ny, ct + g * (T - (b * par) / c)]; };
+}
+export const inclinata = (vista) => !!vista && ((vista.inclinazione ?? 0) !== 0 || (vista.rotazione ?? 0) !== 0 || inMoto(vista));
 
 // i segmenti visibili della sezione: proiettati, dentro la fetta di tempo e la finestra
 // → [[u0, v0, u1, v1, spessore], ...] in coordinate della finestra (0..lato)
 export function segmentiSezione(tracce, cella) {
   const f = cella.finestra, sez = cella.sezione || { fine: Infinity, durata: Infinity }, vista = cella.vista || VISTA_SOPRA;
   const t1 = sez.fine, t0 = sez.fine - sez.durata, l = f.lato, x0 = f.centro[0] - l / 2, y0 = f.centro[1] - l / 2;
-  const P = proiettore(vista, [f.centro[0], f.centro[1], (t0 + t1) / 2]), out = [];
+  const tc = isFinite(t0 + t1) ? (t0 + t1) / 2 : 0, P = proiettore(vista, [f.centro[0], f.centro[1], tc]), out = [];
+  if (inMoto(vista)) { // chi guarda si muove: i punti nel suo riferimento, la fetta di tempo sul suo orologio
+    const O = osservatore(vista, [f.centro[0], f.centro[1], tc], cella.c ?? 40);
+    for (const tr of tracce) {
+      if (tr.sagoma) continue;
+      const Q = tr.punti; let prec = null;
+      for (let i = 0; i < Q.length; i++) {
+        const p = Q[i]; if (!p[2]) { prec = null; continue; }
+        const [U, Vv, T] = O(p[0], p[1], p[3]); if (T < t0 || T > t1) { prec = null; continue; }
+        const q = [U - x0, Vv - y0, p[4]];
+        if (prec && ((q[0] >= 0 && q[0] <= l && q[1] >= 0 && q[1] <= l) || (prec[0] >= 0 && prec[0] <= l && prec[1] >= 0 && prec[1] <= l))) out.push([prec[0], prec[1], q[0], q[1], (prec[2] + q[2]) / 2, tr.id, i]);
+        prec = q;
+      }
+    }
+    return out;
+  }
   for (const tr of tracce) {
     if (tr.sagoma) continue;
     const Q = tr.punti; let prec = null;

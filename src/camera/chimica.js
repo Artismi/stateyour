@@ -117,7 +117,8 @@ export const costanteEquilibrio = (reazione, T) => Math.exp(-dG(typeof reazione 
 // gas la legge di Clausius-Clapeyron con due dati misurati: il calore di evaporazione (kJ/mol; per la
 // CO2, che a 1 bar non ha liquido, di sublimazione) e la temperatura a cui bolle a 1 bar (K).
 // Idrogeno ed elio non condensano mai. (Lo zolfo: dalla sua pressione di vapore a 393 K e a 718 K.)
-const EVAPORAZIONE = { CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8] };
+const EVAPORAZIONE = { CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8],
+  C2H6: [14.7, 184.6], C2H2: [21.3, 189.3], HCl: [16.2, 188.1], H2CO: [23.3, 254.0], NO: [13.8, 121.4], Cl2: [20.4, 239.1] };
 export const pressioneVapore = (T, f = 'H2O') => (f === 'H2O' ? 1e5 * Math.min(costanteEquilibrio([{ 'H2O(l)': 1 }, { H2O: 1 }], T), costanteEquilibrio([{ 'H2O(s)': 1 }, { H2O: 1 }], T))
   : EVAPORAZIONE[f] ? 1e5 * Math.exp(((-1000 * EVAPORAZIONE[f][0]) / R_GAS) * (1 / T - 1 / EVAPORAZIONE[f][1])) : Infinity);
 // equilibrio di Urey: dove c'è acqua liquida la pioggia scioglie i silicati e l'anidride carbonica finisce
@@ -246,7 +247,7 @@ export function potereRiducente(gas = {}) { const { rid, oss } = redox(gas); ret
 //     tutto è gelato), pO2 (bar), ferro (la forma stabile, da ferroStabile), fuliggine (parte del carbonio) }
 const NEI_GHIACCI = { C: 0.3, N: 0.1, S: 0.3 }, ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
 const ossigenoNellaRoccia = (ab) => ab.Mg + 2 * ab.Si + 1.5 * ab.Al + ab.Ca + (ab.Na + ab.K) / 2 + FE_NEI_SILICATI * ab.Fe;
-export function atmosfera(P, { Z, inventario = false, co2 = 0 } = {}) {
+export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } = {}) {
   const cl = P.clima || {}, tenuti = cl.tenuti || [], gigante = P.tipo === 'gassoso', comp = P.composizione || {};
   const niente = { gas: {}, riducente: false, potere: 0, pressione: 0, pO2: 0, ferro: null, fuliggine: 0 };
   // CON L'INVENTARIO (è così che la chiama climaEAria, cioè ogni pianeta del cosmo) la pressione non è data: discende
@@ -277,7 +278,9 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0 } = {}) {
   }
   const gSup = conInventario ? (COSTANTI.G * P.massaKg) / P.raggioM ** 2 : 0;
   const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : 1e5; // nei giganti: il livello di 1 bar
-  const eq = equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas };
+  // («memoria»: chi chiede molte arie dello stesso pianeta a temperature vicine non rifà ogni volta l'equilibrio)
+  const chiaveEq = memoria ? `${Math.round(Tr / 5)}|${Pr.toPrecision(6)}|${Object.values(el).map((v) => v.toPrecision(6)).join(',')}` : null;
+  const eq = (memoria && memoria.get(chiaveEq)) || equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas }; if (memoria) memoria.set(chiaveEq, eq);
   for (const f in x) if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f];
   // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
   // mare, la CO2 fino all'equilibrio di Urey e niente SO2
@@ -311,6 +314,77 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0 } = {}) {
   const { rid, oss } = redox(gas), potere = potereRiducente(gas), pO2 = ((eq.gas.O2 || 0) * Pr) / 1e5;
   // riducente: l'idrogeno che l'aria può cedere supera quello che servirebbe a ridurla, e non è una traccia (almeno l'1%)
   return { gas, riducente: rid > oss && rid > 0.01, potere, pressione, pO2, ferro: ferroStabile(Tr, pO2), fuliggine: eq.grafite };
+}
+
+// ---------- 5 bis. L'EFFETTO SERRA DAI GAS VERI, E IL CLIMA CHE NE DISCENDE
+// Lo spessore ottico dell'aria per l'infrarosso (la superficie irradia σT⁴/(1 + ¾τ): leggi.js). LEGGE EMPIRICA:
+//   · i gas che assorbono l'infrarosso (tre o più atomi: acqua, anidride carbonica, metano, ammoniaca…): le loro righe
+//     sono larghe quanto la pressione le allarga e presto si saturano: τ = k·(colonna × pressione)^0,39, con la
+//     colonna del gas in kg/m² e la pressione in bar. L'esponente (un po' meno della radice, che è la legge delle
+//     righe forti) e k della CO2 sono TARATI su Terra (τ = 0,2 con 6 kg/m²) e Venere (τ = 140 in tutto, 735 K);
+//     k dell'acqua sulla Terra (in tutto τ = 0,83, 288 K), k del metano su Titano (94 K). Marte (un'aria di CO2
+//     di 6 millibar) è il riscontro non usato per tarare: 214 K;
+//   · i gas che non assorbono (N2, O2, H2, elio): solo durante gli urti tra molecole, quindi in proporzione a
+//     colonna × pressione (sulla Terra quasi niente; su Titano metà della serra);
+//   · il vapore d'acqua sta nei primi chilometri (più su fa freddo e condensa): la sua colonna è un quarto di quella
+//     di un'aria satura fino in cima (sulla Terra: 25 kg/m²).
+// Che cosa manca: le nuvole e le foschie che assorbono o riflettono (su Titano raffreddano), le finestre tra le righe.
+export const SERRA = Object.freeze({ esponente: 0.39, H2O: 0.174, CO2: 0.098, CH4: 0.018, altri: 0.1, urti: 3.1e-6, vaporeInBasso: 0.25 });
+const TRASPARENTI = new Set(['H2', 'He', 'N2', 'O2', 'Cl2', 'S2']);
+export function serra(gas = {}, pressione, g) {
+  if (!isFinite(pressione)) return 2;
+  if (!(pressione > 0) || !(g > 0)) return 0;
+  let media = 0; for (const f in gas) media += gas[f] * (MOLECOLE[f]?.massa ?? 0);
+  if (!(media > 0)) return 0;
+  let tau = 0;
+  for (const f in gas) {
+    if (!MOLECOLE[f]) continue;
+    const colonna = ((gas[f] * MOLECOLE[f].massa) / media) * (pressione / g) * (f === 'H2O' ? SERRA.vaporeInBasso : 1), x = (colonna * pressione) / 1e5;
+    tau += TRASPARENTI.has(f) ? SERRA.urti * x : (SERRA[f] ?? (Object.values(MOLECOLE[f].atomi).reduce((a, b) => a + b, 0) >= 3 ? SERRA.altri : SERRA.altri / 5)) * Math.pow(x, SERRA.esponente);
+  }
+  return tau;
+}
+
+// IL CLIMA E L'ARIA INSIEME. La temperatura dipende dall'aria (quanta ce n'è, quanto trattiene il calore) e l'aria
+// dalla temperatura (che cosa gela, che cosa piove, se c'è un mare che si mangia l'anidride carbonica): si cercano
+// insieme, a giri alterni, finché non cambiano più. «dati» è ciò che serve a clima() di leggi.js (luce, distanza,
+// massa, raggio, tipo, acqua, anno, asse, placche…) più composizione e involucro del pianeta.
+// IL TERMOSTATO DEL CARBONIO. Dove c'è un mare la pioggia porta l'anidride carbonica nel calcare (Urey) e l'aria ne
+// resta senza; ma se così il mare gela, la pioggia smette, i vulcani continuano, e la CO2 torna ad accumularsi
+// finché il ghiaccio non si scioglie (Walker, Hays e Kasting 1981). Nessuno dei due stati sta fermo: il pianeta si
+// assesta sulla MINIMA anidride carbonica che tiene il mare aperto. È quella che si cerca qui (clima.termostato).
+// Se nemmeno tutta la CO2 che ha basta, il pianeta è gelato; se è troppo caldo anche senza, il mare bolle e l'acqua
+// se ne va (Venere): tutta la CO2 resta nell'aria.
+// → { clima, atmosfera }: clima.pressione è quella dell'aria vera e clima.tau la serra dei suoi gas.
+export function climaEAria(dati, { Z } = {}) {
+  const P = { tipo: dati.tipo, massaKg: dati.massaKg, raggioM: dati.raggioM, composizione: dati.composizione || {}, involucro: dati.involucro || 0 };
+  const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
+  if (dati.tipo === 'gassoso') return { clima: primo, atmosfera: atmosfera({ ...P, clima: primo }, { Z }) };
+  const memoria = new Map(), ariaDi = (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria });
+  const climaDi = (atm) => clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g) } });
+  // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
+  const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null; for (let k = 0; k < giri; k++) { const a = ariaDi(T, stato, co2), c = climaDi(a); r = { a, c }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } return r; };
+  const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
+  if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));
+  // 0. un mondo di ghiaccio è nato al freddo, oltre la linea della neve, e non è mai stato caldo abbastanza a lungo da
+  // tenere nell'aria i suoi ghiacci (acqua, anidride carbonica, ammoniaca, metano): se da gelato sta in equilibrio,
+  // gelato è. (Un pianeta di roccia nasce caldo: per lui si parte dal mare, e gelato è solo se non può fare altro.)
+  if (dati.tipo === 'ghiacciato') { const gelo = cerca('ghiaccio', Math.min(primo.T, 150)); if (gelo.c.acqua === 'ghiaccio') return esce(gelo); }
+  // 1. con il mare liquido (e quindi senza anidride carbonica nell'aria)
+  const mare = cerca('liquida', Math.max(primo.T, 275));
+  if (mare.c.acqua === 'liquida') return esce(mare);
+  // 2. troppo caldo: il mare non c'è, l'acqua è persa, tutta la CO2 è nell'aria
+  if (mare.c.acqua.startsWith('vapore')) return esce(cerca('vapore', mare.c.T));
+  // 3. il mare gela: il termostato. Con tutta la CO2 che ha, si scioglie? Se sì, si cerca la minima che basta
+  const prova = (co2) => { const a = ariaDi(275, 'liquida', co2), c = climaDi(a); return { a, c, co2 }; };
+  const tutta = prova(1e12);
+  if (tutta.c.acqua !== 'ghiaccio') {
+    let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null;
+    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') lo = m; else { hi = m; if (r.c.acqua === 'liquida') scelto = r; } }
+    if (scelto) return esce(scelto, { termostato: scelto.co2 });
+  }
+  // 4. gelato: nemmeno tutta la sua anidride carbonica (che al freddo gela anche lei) lo scioglie
+  return esce(cerca('ghiaccio', Math.min(mare.c.T, 270)));
 }
 
 // ---------- 6. I MINERALI DELLA SUPERFICIE E IL LORO COLORE
