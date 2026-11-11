@@ -52,8 +52,9 @@ const SCENE = {
   milione: { nome: 'carico 1 000 000', fai: () => scenaDoppioStrato({ atomi: 1000000 }, sorgente('prova/atomi3d/carico')) },
   blocco: { nome: 'salgemma 1 000 000', fai: () => scenaCristallo({ minerale: 'salgemma', latoNm: 28.2 }, sorgente('prova/atomi3d/blocco')) },
 };
-const opzioni = { densita: +(par.get('densita') || 0), vecchio: par.has('webgl1') };
-for (const k of ['massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
+let sporco = 3; // con ?fermo si ridisegna solo quando qualcosa cambia
+const opzioni = { densita: +(par.get('densita') || 0), vecchio: par.has('webgl1'), alCambio: () => { sporco = 2; } };
+for (const k of ['agitazione', 'massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
 if (par.get('sepolti') === 'no') opzioni.scartaSepolti = false;
 if (par.has('colora')) opzioni.colora = par.get('colora');
 if (par.has('nudo')) document.body.classList.add('nudo');
@@ -82,14 +83,14 @@ function mostra(nome) {
 function aggiornaTaglio() { vista.taglio($('taglia').checked && scena ? { vista: true, scarto: +$('scarto').value * 0.5 * Math.hypot(...scena.scatola) } : null); }
 
 for (const [k, s] of Object.entries(SCENE)) { const b = document.createElement('button'); b.textContent = s.nome; b.dataset.scena = k; b.onclick = () => mostra(k); $('scene').appendChild(b); }
-$('ombre').onchange = (e) => { O.ombre = e.target.checked ? 1 : 0; };
-$('contorno').onchange = (e) => { O.contorno = e.target.checked ? 0.45 : 0; O.nebbia = e.target.checked ? 0.55 : 0; };
-$('sfoca').onchange = (e) => { O.sfoca = e.target.checked ? 7 : 0; };
-$('moto').onchange = () => {};
-$('scritte').onchange = (e) => { O.etichette = e.target.checked; };
+$('ombre').onchange = (e) => { O.ombre = e.target.checked ? 1 : 0; sporco = 2; };
+$('contorno').onchange = (e) => { O.contorno = e.target.checked ? 0.45 : 0; O.nebbia = e.target.checked ? 0.55 : 0; sporco = 2; };
+$('sfoca').onchange = (e) => { O.sfoca = e.target.checked ? 7 : 0; sporco = 2; };
+$('moto').onchange = () => { sporco = 2; };
+$('scritte').onchange = (e) => { O.etichette = e.target.checked; sporco = 2; };
 $('colora').onchange = () => { O.colora = $('colora').value === 'auto' ? scena.colora || 'auto' : $('colora').value; vista.ricarica(); };
 $('taglia').onchange = aggiornaTaglio; $('scarto').oninput = aggiornaTaglio;
-$('raggi').oninput = (e) => { O.scalaRaggi = +e.target.value; };
+$('raggi').oninput = (e) => { O.scalaRaggi = +e.target.value; sporco = 2; };
 for (const [id, k] of [['ombre', 'ombre'], ['sfoca', 'sfoca']]) if (par.has(k)) $(id).checked = +par.get(k) > 0;
 if (par.has('taglio')) { $('taglia').checked = true; $('scarto').value = par.get('taglio'); }
 if (par.get('moto') === 'no') $('moto').checked = false;
@@ -106,7 +107,8 @@ vista.suAtomo((a) => {
 let tMoto = 0, fermo = par.has('fermo');
 function passo(ms) {
   const dt = Math.min(0.1, (ms - ultimo) / 1000 || 0); ultimo = ms; if ($('moto').checked && !fermo) tMoto += dt;
-  vista.disegna(tMoto); cpu += vista.statistiche().cpuMs || 0; contati++;
+  if (fermo && sporco <= 0) { requestAnimationFrame(passo); return; }
+  sporco--; vista.disegna(tMoto); cpu += vista.statistiche().cpuMs || 0; contati++; window.prova.disegnati = (window.prova.disegnati || 0) + 1;
   if (ms - daQuando > 500) { fps = (contati * 1000) / (ms - daQuando); const s = vista.statistiche(); $('dati').textContent = `${fps.toFixed(1)} fotogrammi/s · CPU ${(cpu / contati).toFixed(2)} ms\n${s.atomi} atomi · ${s.disegnate} istanze disegnate in ${s.intervalli} chiamate\nlivelli ${s.livelli.join(' / ')} · sepolti ${s.sepolti} (mostrati ${s.sepolteMostrate})\n${s.pixel.join(' × ')} px · WebGL${s.webgl} · ${(s.memoria / 1e6).toFixed(1)} MB sulla scheda`; contati = 0; cpu = 0; daQuando = ms; }
   requestAnimationFrame(passo);
 }

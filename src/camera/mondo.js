@@ -259,7 +259,7 @@ function figlieVere(sp, madre, dx, dy, catalogo, caso) {
   }
   const e = madre.e + M, W = Math.sqrt(Math.max(0, e * e - pm * pm));
   for (const nomi of canali) {
-    const masse = nomi.map(massa); if (nomi.length < 2 || !(W > masse.reduce((a, b) => a + b, 0) * 1.000001)) continue;
+    const masse = nomi.map(massa); if (nomi.length < 2 || !(W > masse.reduce((a, b) => a + b, 0) * (sp.margine ?? 1.000001))) continue; // (margine: per i nuclei, dove l'energia liberata è un milionesimo della massa)
     return (sp.beta && !sp.bersaglio && nomi.length === 3 ? spartisciBeta(W, masse, caso, sp.beta) : spartisci(W, masse, caso)).map((v, i) => ({ specie: nomi[i], ...spinta(v, madre.x / e, madre.y / e) }));
   }
   return null;
@@ -462,28 +462,28 @@ export function simulaMondo(mondo, opzioni = {}) {
         else if (u > 0) { const k = veloceCome(gamS) / u; vx *= k; vy *= k; }
       }
       if (mz && c.K > 0) { // nella materia vera: la frenata della tabella, le deviazioni, la luce Cherenkov, i raggi delta
-        colonna += ds * c.K;
+        const dm = v * dt; colonna += dm * c.K; // (la strada di questo passo, dalla velocità: la differenza delle posizioni si perde quando il passo è minuscolo)
         if (tab) {
-          const G1 = frena(tab, gamS), g2 = gamS - c.K * G1 * ds, G2 = g2 > 1 ? frena(tab, g2) : 0; let b2 = 1 - 1 / (gamS * gamS);
+          const G1 = frena(tab, gamS), g2 = gamS - c.K * G1 * dm, G2 = g2 > 1 ? frena(tab, g2) : 0; let b2 = 1 - 1 / (gamS * gamS);
           if (mz.delta && m > 1.5 && b2 > 0) { // un elettrone strappato: parte a cos²θ = T·(E + 1)²/(p²·(T + 2)) dalla traccia
-            const Tmax = (2 * (gamS * gamS - 1)) / (1 + (2 * gamS) / m + 1 / (m * m)), Tc = mz.delta.taglio, quanti = Tmax > Tc ? ((c.K * mz.delta.A * q * q) / b2) * (1 / Tc - 1 / Tmax) * ds : 0;
+            const Tmax = (2 * (gamS * gamS - 1)) / (1 + (2 * gamS) / m + 1 / (m * m)), Tc = mz.delta.taglio, quanti = Tmax > Tc ? ((c.K * mz.delta.A * q * q) / b2) * (1 / Tc - 1 / Tmax) * dm : 0;
             if (quanti > 0 && casoM() < quanti) {
               const T = 1 / (1 / Tc - casoM() * (1 / Tc - 1 / Tmax)), E = gamS * m, cos = Math.min(1, Math.sqrt((T * (E + 1) * (E + 1)) / (m * m * (gamS * gamS - 1) * (T + 2)))), a = Math.atan2(vy, vx) + (casoM() < 0.5 ? -1 : 1) * Math.acos(cos), fs = risolviSpecie(mz.delta.specie || 'elettrone', catalogo), vf = C * Math.sqrt(1 - 1 / ((1 + T) * (1 + T)));
               coda.push({ pos: [x, y], vel: [vf * Math.cos(a), vf * Math.sin(a)], t, nascita: t, specie: fs, gamma: 1 + T, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.d${nD++}` });
               gamS -= T / m;
             }
           }
-          gamS -= (c.K * ds * (G1 + G2)) / 2;
+          gamS -= (c.K * dm * (G1 + G2)) / 2;
           if (!(gamS - 1 > Math.exp(tab.x0))) { gamS = 1 + Math.exp(tab.x0); s.ferma = true; }
           const u = Math.hypot(vx, vy) || 1e-12, k = veloceCome(gamS) / u; vx *= k; vy *= k; b2 = 1 - 1 / (gamS * gamS);
           if (mz.X0 > 0 && !s.ferma) { // la deviazione multipla di questo tratto: θ0 = 13,6 MeV/(β·c·p)·|q|·√(x/X0)·(1 + 0,038·ln(x·q²/(X0·β²)))
-            const tr = (ds * c.K) / mz.X0, th = (26.614 / (m * b2 * gamS)) * Math.abs(q) * Math.sqrt(tr) * Math.max(0.2, 1 + 0.038 * Math.log((tr * q * q) / b2)) * Math.sqrt(-2 * Math.log(1 - casoM())) * Math.cos(DUE_PI * casoM());
+            const tr = (dm * c.K) / mz.X0, th = (26.614 / (m * b2 * gamS)) * Math.abs(q) * Math.sqrt(tr) * Math.max(0.2, 1 + 0.038 * Math.log((tr * q * q) / b2)) * Math.sqrt(-2 * Math.log(1 - casoM())) * Math.cos(DUE_PI * casoM());
             const cs = Math.cos(th), sn = Math.sin(th), wx = vx * cs - vy * sn; vy = vx * sn + vy * cs; vx = wx;
           }
         }
         if (mz.n > 1 && mz.fotone && q && !luce && mz.ogniFotone > 0) { // sopra la velocità della luce nel mezzo
           const bn = (Math.hypot(vx, vy) / C) * mz.n;
-          if (bn > 1) { luceC += ds; while (luceC >= mz.ogniFotone) { luceC -= mz.ogniFotone; lato = -lato; const a = Math.atan2(vy, vx) + lato * Math.acos(1 / bn), fs = risolviSpecie(mz.fotone, catalogo), vf = C / mz.n;
+          if (bn > 1) { luceC += dm; while (luceC >= mz.ogniFotone) { luceC -= mz.ogniFotone; lato = -lato; const a = Math.atan2(vy, vx) + lato * Math.acos(1 / bn), fs = risolviSpecie(mz.fotone, catalogo), vf = C / mz.n;
             coda.push({ pos: [x, y], vel: [vf * Math.cos(a), vf * Math.sin(a)], t, nascita: t, specie: fs, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.c${nC++}` }); } }
         }
       }

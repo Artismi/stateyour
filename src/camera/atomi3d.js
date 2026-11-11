@@ -698,7 +698,7 @@ export function creaVista3D(tela, opzioni = {}) {
       if (conOmbre) {
         // 2. l'ombra morbida, 3. sfumata in due passate
         let P = pigro('ombre', V_PIENO, F_OMBRE); gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); gl.viewport(0, 0, imm.wa, imm.ha); gl.useProgram(P.p);
-        lega(0, imm.prof, P.u.u_prof); gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, pxNm, 0.2 * H); gl.uniform4f(P.u.u_ao, O.raggioOmbre, Rg, 0.8, 0.75 * O.ombreForma); pieno(P);
+        lega(0, imm.prof, P.u.u_prof); gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, pxNm, 0.2 * H); gl.uniform4f(P.u.u_ao, O.raggioOmbre, Rg, 1.1, 1.0 * O.ombreForma); pieno(P);
         P = pigro('sfuma', V_PIENO, F_SFUMA); gl.useProgram(P.p); const kz = (65535 / (M4.lontano - M4.vicino)) ;
         gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA2); lega(0, imm.ao1, P.u.u_ao); gl.uniform4f(P.u.u_dir, 1 / imm.wa, 0, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);
         gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); lega(0, imm.ao2, P.u.u_ao); gl.uniform4f(P.u.u_dir, 0, 1 / imm.ha, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);

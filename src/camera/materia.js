@@ -682,3 +682,329 @@ export function cieloRelativo(galassia) {
   const ritmo = galassia?.ritmoSN, R = galassia?.forma?.unitaM; if (!(ritmo > 0) || !(R > 0)) return { relativo: 1 };
   return { relativo: limita((ritmo / 0.02) / (R / (15 * 3.0857e19)) ** 2, 1e-3, 1e3) };
 }
+
+// =====================================================================================
+// 7. LA CELLA PER IL MOTORE
+// =====================================================================================
+const UMA_ME = U_MEV / ME_MEV, M_ALFA = 3727.379 / ME_MEV, LATO = 1000, DUE_PI = 2 * Math.PI;
+// la tabella della frenata di una particella nelle unità del motore: G[i] = −dγ/ds a ln(γ − 1) = x0 + i·dx
+function tabellaMotore(part, m, u, { taglio = Infinity, soloUrti = false } = {}) {
+  const p = particella(part), E0 = p.mMeV < 1 ? 1e-3 : 1e-8 * p.mMeV, dx = 0.2, x0 = Math.log(E0 / p.mMeV), n = Math.ceil((Math.log(1e7 / p.mMeV) - x0) / dx) + 1, G = new Array(n), k = (m.densita * 100 * u.l) / p.mMeV;
+  for (let i = 0; i < n; i++) { const f = frenata(p, p.mMeV * Math.exp(x0 + i * dx), m, taglio); G[i] = +((soloUrti ? f.elettronica + f.nucleare : f.totale) * k).toPrecision(5); }
+  return { x0: +x0.toFixed(6), dx, G };
+}
+// l'urto di un fotone con un elettrone (Compton): la sezione d'urto di Klein e Nishina → il cammino libero medio (m)
+export function camminoCompton(E, luogo) {
+  const m = mezzo(luogo), k = E / ME_MEV, l = Math.log(1 + 2 * k), s = 2 * Math.PI * 7.9408e-26 * (((1 + k) / (k * k)) * ((2 * (1 + k)) / (1 + 2 * k) - l / k) + l / (2 * k) - (1 + 3 * k) / (1 + 2 * k) ** 2);
+  return 1 / (s * m.ZsuA * N_A * m.densita) / 100;
+}
+// IL CATALOGO: le specie vere di unita.js, ognuna con la sua frenata in quel mezzo, più le α, i fotoni e la luce Cherenkov.
+// «carica» è la carica vera (per i conti di conservazione: quella del nucleo, per i nuclei); q quella che il motore usa.
+function catalogoMateria(m, u, { taglio = Infinity, sciame = false, gamma = 1.46 } = {}) {
+  const X0u = m.X0m / u.l, cat = catalogoVero(u, { urtoProtone: sciame ? m.lambdaNucleare / m.densita / 100 / u.l : Infinity, urtoFotone: sciame ? (9 / 7) * X0u : Infinity });
+  const tab = (nome, part, opz) => { cat[nome].perdita = tabellaMotore(part, m, u, opz); };
+  tab('protone', 'protone', { taglio }); tab('protone lento', 'protone', { taglio }); tab('pione+', 'pione+', { taglio }); tab('pione-', 'pione-', { taglio }); tab('muone+', 'muone+', { taglio }); tab('muone-', 'muone-', { taglio });
+  tab('elettrone', 'elettrone', { soloUrti: sciame }); tab('positrone', 'positrone', { soloUrti: sciame });
+  for (const [nome, c] of Object.entries({ protone: 1, 'protone lento': 1, 'pione+': 1, 'pione-': -1, pione0: 0, 'muone+': 1, 'muone-': -1, fotone: 0, elettrone: -1, positrone: 1, neutrino: 0, neutrone: 0, nucleo: 8 })) cat[nome].carica = c;
+  if (sciame) {
+    // lo scheletro di uno sciame: il protone che ha urtato prosegue e urta ancora; un elettrone veloce, passando accanto
+    // a un nucleo, irraggia un fotone (in media ogni lunghezza di radiazione: modello di Heitler), che poi fa una coppia
+    cat.protone.canali = cat.protone.canali.map((c) => c.map((n) => (n === 'protone lento' ? 'protone' : n)));
+    for (const e of ['elettrone', 'positrone']) Object.assign(cat[e], { camminoLibero: X0u, bersaglio: 'nucleo', spettatore: true, canali: [[e, 'fotone']], figli: [] });
+  }
+  cat.alfa = { q: 2, m: M_ALFA, carica: 2, perdita: tabellaMotore('alfa', m, u, { taglio }) };
+  cat.antineutrino = { luce: true, m: 1, visibile: false, persa: true, carica: 0 };
+  // il fotone γ di un nucleo: sotto la soglia delle coppie può solo urtare un elettrone (Compton), che parte e si vede
+  cat['fotone γ'] = { luce: true, m: 1, visibile: false, carica: 0, camminoLibero: camminoCompton(gamma, m) / u.l, bersaglio: 'elettrone', canali: [['fotone γ', 'elettrone']], figli: [], margine: 1 + 1e-12 };
+  // la luce Cherenkov: nel mezzo va a c/n; l'acqua limpida la assorbe in decine di metri
+  if (m.n > 1) cat['fotone Cherenkov'] = { q: 0, m: 1e-6, visibile: true, carica: 0, vita: u.tempo((30 * m.n) / C_LUCE) };
+  return cat;
+}
+// la velocità di agitazione termica di un nucleo di massa A alla temperatura T, nelle unità del motore
+const termica = (A, T) => C_MOTORE * Math.sqrt((8.617e-11 * Math.max(T, 1)) / (A * U_MEV));
+// UN NUCLEO CHE DECADE, come specie del motore: sta (quasi) fermo, e nell'istante in cui compare decade secondo la
+// cinematica vera (mondo.js): le masse sono tali che l'energia liberata è quella vera, e l'energia di ogni figlia ne segue.
+// → il nome della specie madre (aggiunta al catalogo con le sue figlie)
+function nucleoChe(a, cat, m, u, c) {
+  const nome = `${a.nuclide} ${a.tipo}`, vuoto = { q: 0, vita: 0, visibile: false, figli: [], margine: 1 + 1e-12 };
+  if (a.tipo === 'α') {
+    const Af = a.A - 4, mf = Af * UMA_ME;
+    // il nucleo che rincula fa poche decine di nanometri: lo si segue solo se a questa scala si vede
+    cat[a.figlia] ??= (m.rinculoM ??= percorso({ Z: 90, A: 234 }, 0.072, m).m) > 0.5 * u.l ? { q: 1, m: mf, carica: a.Zf, rinculo: true, perdita: tabellaMotore({ Z: a.Zf, A: Af }, m, u) } : { q: 1, m: mf, carica: a.Zf, rinculo: true, visibile: false, persa: true };
+    cat[nome] ??= { ...vuoto, m: mf + M_ALFA + (a.energia * a.A) / Af / ME_MEV, carica: a.Z, canali: [['alfa', a.figlia]] };
+  } else if (a.tipo === 'β') {
+    // (se il nucleo figlio nasce eccitato, l'elettrone ha meno di Q: qui la sua energia massima è quella che dà l'energia media vera; il γ non è seguito)
+    const mf = a.A * UMA_ME, Q = a.gamma > 0.02 ? Math.min(a.Q, a.energia / 0.38) : a.Q, figlia = `${a.figlia} (rinculo)`;
+    cat[figlia] ??= { q: 1, m: mf, carica: a.Zf, visibile: false, persa: true };
+    cat[nome] ??= { ...vuoto, m: mf + 1 + Q / ME_MEV, carica: a.Z, canali: [[figlia, 'elettrone', 'antineutrino']], beta: { Z: a.Zf, proibita: a.proibita || 0 } };
+  } else if (a.tipo === 'cattura') {
+    // il nucleo cattura un suo elettrone: esce un neutrino (tutti con la stessa energia), poi il nucleo figlio, eccitato, emette il suo γ
+    const mf = a.A * UMA_ME, figlia = `${a.figlia} (rinculo)`, eccitato = `${a.figlia} eccitato`;
+    cat[figlia] ??= { q: 1, m: mf, carica: a.Zf, visibile: false, persa: true };
+    cat[eccitato] ??= { ...vuoto, m: mf + a.gamma / ME_MEV, carica: a.Zf, canali: [[figlia, 'fotone γ']] };
+    cat[nome] ??= { ...vuoto, m: mf + (a.Q) / ME_MEV, carica: a.Zf, canali: [[eccitato, 'neutrino']] };
+  } else {
+    // la fissione: il frammento leggero ha in media 96 nucleoni (± 6: la gobba misurata), e i protoni in proporzione
+    const AL = 4 * Math.round(limita(96 + 6 * c.normale('massa del frammento'), 80, 112) / 4), // (di quattro in quattro nucleoni: poche specie)
+       AH = 238 - AL - 2, ZL = Math.round((AL * 92) / 238), ZH = 92 - ZL, tke = (0.1189 * 92 * 92) / Math.cbrt(238) + 7.3;
+    const fr = (Z, A, E) => { const k = `frammento ${NOMI_FR(Z)}-${A}`, b = Math.sqrt((2 * E) / (A * U_MEV)); cat[k] ??= { q: Math.round(Z * (1 - Math.exp(-125 * b * Math.pow(Z, -2 / 3)))), m: A * UMA_ME, carica: Z, perdita: tabellaMotore({ Z, A }, m, u) }; return k; };
+    const kL = fr(ZL, AL, (tke * AH) / (AL + AH)), kH = fr(ZH, AH, (tke * AL) / (AL + AH)), k = `${nome} (${AL}+${AH})`;
+    cat[k] ??= { ...vuoto, m: (AL + AH) * UMA_ME + tke / ME_MEV, carica: 92, canali: [[kL, kH]] };
+    return k;
+  }
+  return nome;
+}
+const NOMI_Z = { 31: 'gallio', 45: 'rodio', 46: 'palladio', 47: 'argento', 48: 'cadmio', 61: 'promezio', 62: 'samario', 32: 'germanio', 33: 'arsenico', 34: 'selenio', 35: 'bromo', 36: 'cripton', 37: 'rubidio', 38: 'stronzio', 39: 'ittrio', 40: 'zirconio', 41: 'niobio', 42: 'molibdeno', 43: 'tecnezio', 44: 'rutenio', 49: 'indio', 50: 'stagno', 51: 'antimonio', 52: 'tellurio', 53: 'iodio', 54: 'xeno', 55: 'cesio', 56: 'bario', 57: 'lantanio', 58: 'cerio', 59: 'praseodimio', 60: 'neodimio' };
+const NOMI_FR = (Z) => NOMI_Z[Z] || `Z${Z}`;
+// l'energia dell'elettrone il cui percorso è una data lunghezza (per decidere quali raggi delta si vedono a una scala)
+function energiaPerPercorso(part, metri, m) { let lo = 1e-3, hi = 1e4; for (let k = 0; k < 50; k++) { const mid = Math.sqrt(lo * hi); if (percorso(part, mid, m).m < metri) lo = mid; else hi = mid; } return lo; }
+// un conteggio a caso (Poisson) dalla sorgente degli eventi
+function conta(c, nome, media) {
+  if (!(media > 0)) return 0; if (media > 30) return Math.max(0, Math.round(media + Math.sqrt(media) * c.normale(nome)));
+  const L = Math.exp(-media); let k = 0, p = c(`${nome}#0`); while (p > L && k < 400) { k++; p *= c(`${nome}#${k}`); } return k;
+}
+// per quanto tempo un minerale ha tenuto memoria (anni): l'età della roccia, a meno che non sia stata più calda della sua
+// temperatura di ricottura. Una roccia nata in profondità (i continenti) sale perché l'erosione consuma ciò che ha sopra:
+// ha passato l'isoterma di ricottura quando stava a (Tc − Ts)/gradiente di profondità, cioè quella profondità diviso la
+// velocità di erosione anni fa. Una lava è nata fredda: conta la sua età. tipo: 'fissione' | 'rinculo' | 'alone'
+export function ritenzione(luogo, minerale, tipo = 'fissione') {
+  const Tc = MATERIALI[minerale]?.ricottura?.[tipo], eta = luogo.etaRoccia ?? luogo.etaPianeta ?? ETA_RIFERIMENTO;
+  if (!Tc) return { anni: 0, registra: false, perche: `${minerale}: non tiene questo tipo di memoria` };
+  if ((luogo.T ?? 288) >= Tc) return { anni: 0, registra: true, Tc, perche: `qui la roccia è a ${Math.round(luogo.T - 273.15)} °C, più calda della ricottura (${Math.round(Tc - 273.15)} °C): ogni traccia si ripara` };
+  let anni = eta, perche = `la roccia ha ${fmtTempo(eta * ANNO)} e non è mai stata più calda di ${Math.round(Tc - 273.15)} °C`;
+  if (luogo.riscaldata && luogo.riscaldata.T >= Tc && luogo.riscaldata.anniFa < anni) { anni = luogo.riscaldata.anniFa; perche = `scaldata a ${Math.round(luogo.riscaldata.T - 273.15)} °C ${fmtTempo(anni * ANNO)} fa: le tracce di prima sono cancellate`; }
+  if (luogo.continente !== false && luogo.denudazione > 0 && luogo.gradiente > 0) {
+    const z = (Tc - (luogo.Tsuperficie ?? luogo.T ?? 288)) / luogo.gradiente - (luogo.profonditaM || 0), t = z / luogo.denudazione;
+    if (t < anni) { anni = Math.max(0, t); perche = `la roccia è salita: stava a ${fmtLunghezza(z + (luogo.profonditaM || 0))} di profondità, a ${Math.round(Tc - 273.15)} °C, ${fmtTempo(anni * ANNO)} fa (l'erosione toglie ${fmt(luogo.denudazione * 1e6)} m per milione di anni); prima era troppo calda per ricordare`; }
+  }
+  return { anni, registra: true, Tc, perche };
+}
+
+// → { cella, racconto: { titolo, frasi, attese, veri }, nome, nota }
+//   latoM       il lato della finestra (m); se manca lo decide ciò che si guarda
+//   modo        'istante': un evento vero mentre accade · 'memoria': ciò che un minerale ha registrato nella sua età
+//   processo    quale processo guardare ('potassio-40', 'muone cosmico', 'sciame', …); se manca: il prossimo che accade lì
+//   evento      nel modo istante: il k-esimo evento da quando si comincia a guardare (0: il primo)
+//   esposizione nel modo memoria: quanti anni guardare (se manca: tutta la memoria del minerale)
+//   ospite, granello  nel modo memoria: il minerale in cui si guarda e quello che fa da nucleo (se mancano li sceglie il luogo)
+//   massimo     quante tracce al massimo si disegnano; sopra (GeV): per lo sciame, l'energia minima del primario
+// caso: la sorgente degli eventi (eventi.js) di quel luogo; i suoi rami sono universi paralleli.
+export function cellaMateria(luogo, opzioni = {}, caso = null) {
+  const c = (caso || sorgente(luogo.indirizzo || 'materia')).sotto(`materia/${opzioni.modo || 'istante'}`);
+  if (opzioni.modo === 'memoria') return cellaMemoria(luogo, opzioni, c);
+  if (opzioni.processo === 'sciame') return cellaSciame(luogo, opzioni, c);
+  return cellaIstante(luogo, opzioni, c);
+}
+const PELLICOLA = { w0: 0.8, saturazione: 4, vRif: 5 };
+function scheletro(luogo, m, u, latoM, tempo, c, extra) {
+  return { larghezza: LATO, altezza: LATO, c: C_MOTORE, G: 1, bordo: 'aperto', tempo, relativita: true, seme: c.seme('motore'), fondo: { B: u.B(luogo.B || 0), K: 1 }, domini: [], masse: [], dipoli: [], pellicola: { ...PELLICOLA },
+    finestra: { centro: [LATO / 2, LATO / 2], lato: 400 }, sezione: { fine: tempo, durata: tempo }, scala: { latoM, secondi: tempo * u.tu }, ...extra };
+}
+// (la luce Cherenkov: si disegna un fotone ogni cinquantesimo di finestra, ma mai più di quelli veri: Frank e Tamm)
+const fotoniVeri = (m) => 2 * Math.PI * ALFA_FINE * (1 - 1 / (m.n * m.n)) * (1 / 400e-9 - 1 / 700e-9);
+const mezzoMotore = (m, u, latoM, { cherenkov = true, taglio = null } = {}) => ({ X0: +(m.X0m / u.l).toPrecision(6), ...(cherenkov && m.n > 1 ? { n: +m.n.toFixed(6), fotone: 'fotone Cherenkov', ogniFotone: +Math.max(LATO / 50, 1 / (fotoniVeri(m) * u.l)).toPrecision(5) } : {}),
+  ...(taglio ? { delta: { A: +(((K_BETHE / 2) * m.ZsuA * m.densita * 100 * u.l) / ME_MEV).toPrecision(6), taglio: +(taglio / ME_MEV).toPrecision(6), specie: 'elettrone' } } : {}) });
+
+// ---------- L'ISTANTE: un evento vero, al suo momento
+function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, massimo = 240 } = {}, c) {
+  const src = sorgentiNaturali(luogo), m = src.mezzo, visibili = src.processi.filter((p) => p.visibile && (p.perM3 > 0 || p.flusso > 0));
+  if (!visibili.length) throw new Error('cellaMateria: in questo luogo non accade niente che lasci traccia');
+  const tutti = src.processi.filter((p) => p.perM3 > 0 || p.flusso > 0), trova = (id) => tutti.find((p) => p.id === id) || visibili.find((p) => p.id.startsWith(id) || p.nuclide === id || p.id.includes(id)) || tutti.find((p) => p.id.includes(id));
+  let chi = processo ? trova(processo) : null; if (processo && !chi) throw new Error(`cellaMateria: qui non c'è «${processo}» (ci sono: ${visibili.map((p) => p.id).join(', ')})`);
+  // senza un lato: si guarda il decadimento più frequente di quel luogo (se non ce ne sono, il muone), alla scala del suo percorso
+  if (!chi && latoM == null) chi = visibili.filter((p) => p.tipo !== 'cosmico').sort((a, b) => b.perM3 - a.perM3)[0] || trova('muone cosmico') || visibili[0];
+  const ritmoDi = (p, L) => (p.tipo === 'cosmico' ? p.flusso * L * L : p.perM3 * L ** 3);
+  if (!chi) { // il prossimo evento che accade in quel cubo, qualunque sia: ognuno in proporzione al suo ritmo
+    const tot = visibili.reduce((s, p) => s + ritmoDi(p, latoM), 0); let r = c(`evento ${evento}/quale`) * tot; chi = visibili[visibili.length - 1];
+    for (const p of visibili) { r -= ritmoDi(p, latoM); if (r < 0) { chi = p; break; } }
+  }
+  const scelto = !!processo || latoM == null;
+  if (latoM == null) {
+    const carica = chi.emette.find((e) => PARTICELLE[e.particella] || e.particella === 'frammento leggero');
+    latoM = chi.tipo === 'α' || chi.tipo === 'fissione' ? 3 * carica.percorso : chi.tipo === 'β' ? 1.6 * percorso('elettrone', chi.Q, m).dritto : m.tipo === 'aria' ? 200 : m.tipo === 'roccia' ? 0.05 : 0.3;
+  }
+  const u = unita(latoM), ritmo = scelto ? ritmoDi(chi, latoM) : visibili.reduce((s, p) => s + ritmoDi(p, latoM), 0);
+  // quando: gli eventi arrivano a caso nel tempo (Poisson); il k-esimo dopo k + 1 attese, ognuna con la sua durata
+  let data = 0; for (let k = 0; k <= evento; k++) data += -Math.log(1 - c(`evento ${k}/attesa`)) / ritmo;
+  const ce = c.sotto(`evento ${evento}`), taglio = energiaPerPercorso('elettrone', 0.012 * latoM, m), cat = catalogoMateria(m, u, { taglio, gamma: chi.gamma > 0.1 ? chi.gamma : 1.46 }), sorgenti = [];
+  let tStop = 0, frase;
+  if (chi.tipo === 'cosmico') {
+    // entra dall'alto, con l'angolo dallo zenit dei raggi al suolo (∝ cos²θ) e l'energia dello spettro arrivato fin lì
+    let th = 0; for (let k = 0; k < 40; k++) { th = ce.tra(`angolo ${k}`, -1.4, 1.4); if (ce(`angolo ${k}/tiene`) < Math.cos(th) ** 2) break; }
+    const mu = chi.particella.startsWith('muone'), E = mu ? src.cosmici.spettroMuoni(ce('energia')) * 1000 : chi.particella === 'protone' ? (src.cosmici.colonnaAria < 300 ? src.cosmici.primarioTipico(ce('energia')) * 1000 : 300 * Math.pow(30, ce('energia'))) : 10 * Math.pow(100, ce('energia'));
+    // i muoni positivi sono un po' di più dei negativi (1,27: i primari sono protoni); gli elettroni di uno sciame sono metà positroni
+    const specie = mu ? (ce('segno') < 0.56 ? 'muone+' : 'muone-') : chi.particella === 'elettrone' ? (ce('segno') < 0.5 ? 'positrone' : 'elettrone') : chi.particella, p = particella(specie === 'neutrone' ? 'protone' : specie);
+    sorgenti.push({ pos: [LATO / 2, 1], dir: Math.PI / 2 + th, v: C_MOTORE * Math.sqrt(1 - 1 / (1 + E / p.mMeV) ** 2), gamma: 1 + E / p.mMeV, t0: 0, specie, emissione: { dal: 'bordo', u: [0.4, 0.6], t0: [0, 3] }, origine: chi.origine, energia: E, processo: chi.id });
+    tStop = (1.6 * latoM) / C_LUCE; const ch = m.cherenkov(p, E);
+    frase = `${chi.origine}: ${specie === 'muone+' ? 'un muone positivo' : specie === 'muone-' ? 'un muone negativo' : `un ${specie}`} da ${fmt(E >= 1000 ? E / 1000 : E)} ${E >= 1000 ? 'GeV' : 'MeV'} attraversa la finestra${ch?.fotoniAlMetro > 0 ? `; va più veloce della luce in questo mezzo (c/${m.n < 1.01 ? m.n.toFixed(5).replace('.', ',') : fmt(m.n, 3)}) e lascia un cono di luce Cherenkov a ${fmt(ch.angolo)}° dalla traccia: ${fmt(ch.fotoniAlMetro / 100)} fotoni visibili per centimetro` : ''}`;
+  } else {
+    const specie = nucleoChe(chi, cat, m, u, ce), pos = [LATO * ce.tra('dove/x', 0.2, 0.8), LATO * ce.tra('dove/y', 0.2, 0.8)];
+    sorgenti.push({ pos, dir: 0, v: termica(chi.A, luogo.T ?? 288), t0: 0, specie, emissione: { dir: [0, DUE_PI], t0: [0, 3] }, origine: chi.origine, processo: chi.id, nuclide: chi.nuclide });
+    for (const e of chi.emette) if (isFinite(e.percorso) && (PARTICELLE[e.particella] || e.rinculo || e.particella.startsWith('frammento'))) tStop = Math.max(tStop, e.particella === 'elettrone' ? percorso('elettrone', chi.Q, m).secondi : e.rinculo ? 0 : percorso(e.particella.startsWith('frammento') ? { Z: 38, A: 96 } : e.particella, e.energia, m).secondi);
+    const el = chi.tipo === 'β' ? m.cherenkov('elettrone', chi.Q) : null;
+    frase = `${chi.origine}: ${chi.emette.filter((e) => isFinite(e.percorso)).map((e) => `${e.rinculo ? `il nucleo di ${e.particella} che rincula` : e.particella === 'alfa' ? 'una particella α' : e.particella === 'elettrone' ? 'un elettrone' : e.particella === 'fotone γ' ? 'un fotone γ' : `un ${e.particella}`} (${fmt(e.energia >= 0.1 ? e.energia : e.energia * 1000)} ${e.energia >= 0.1 ? 'MeV' : 'keV'}${e.massima ? ` in media, al più ${fmt(e.massima)}` : ''}, percorso ${fmtLunghezza(e.percorso)})`).join(', ')}${chi.tipo === 'β' || chi.tipo === 'cattura' ? ', e un neutrino che esce senza toccare niente' : ''}${el?.fotoniAlMetro > 0 ? `. Finché ha più di ${fmt(el.soglia)} MeV l'elettrone supera la luce in questo mezzo e accende una scia di luce Cherenkov` : ''}`;
+  }
+  const tempo = Math.round(4 + limita((1.4 * tStop) / u.tu, 40, 6000));
+  const cella = scheletro(luogo, m, u, latoM, tempo, ce, { specie: cat, sorgenti, mezzo: mezzoMotore(m, u, latoM, { taglio }) });
+  cella.scala.attesa = data; cella.scala.ritmo = ritmo;
+  if (sorgenti[0].emissione.dal !== 'bordo') cella.finestra.centro = sorgenti[0].pos.map((x) => Math.round(limita(x, 200, 800))); // la finestra guarda dove accade
+  if (cella.mezzo.n) cella.scala.fotoniPerLinea = fotoniVeri(m) * cella.mezzo.ogniFotone * u.l; // quanti fotoni veri sta per ogni linea di luce disegnata (a β = 1)
+  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: m.nome, modo: 'istante', latoM, processo: chi.id, evento, data };
+  const attese = src.attesa(latoM), nome = `${m.nome}, ${fmtLunghezza(latoM)}: ${chi.tipo === 'cosmico' ? chi.id : chi.origine}`;
+  const frasi = [`Un cubo di ${m.nome} largo ${fmtLunghezza(latoM)}${luogo.profonditaM > 0 ? `, ${fmtLunghezza(luogo.profonditaM)} sotto la superficie` : ''}.`, `${frase}.`,
+    `Quanto è raro: in questo volume ${scelto ? 'un evento così' : 'un evento qualsiasi'} accade ogni ${fmtTempo(1 / ritmo)}; questo è il ${evento + 1}° da quando si comincia a guardare, dopo ${fmtTempo(data)}. Dura ${fmtTempo(tempo * u.tu)}: è tutta l'esposizione.`,
+    `Che cos'altro accade qui: ${attese.slice(0, 5).map((a) => a.frase).join('; ')}.`, src.neutrini.frase];
+  return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese, veri: { ritmo, data, processo: chi.id } } };
+}
+
+// ---------- LA MEMORIA: ciò che un minerale ha registrato in milioni di anni
+function cellaMemoria(luogo, { latoM = null, esposizione = null, ospite = null, granello, massimo = 160 } = {}, c) {
+  if (luogo.tipo === 'acqua' || luogo.tipo === 'aria') throw new Error(`cellaMateria: ${luogo.tipo === 'acqua' ? "nell'acqua" : "nell'aria"} non resta memoria: si guarda un evento (modo: 'istante')`);
+  const minerali = luogo.minerali || [], acc = luogo.accessori || [], ha = (n) => minerali.some((x) => x.nome === n) || acc.some((x) => x.nome === n);
+  ospite ??= ha('biotite') ? 'biotite' : acc.find((x) => MATERIALI[x.nome]?.ricottura)?.nome || minerali[0]?.nome;
+  if (granello === undefined) granello = ['zircone', 'monazite', 'apatite'].find((n) => n !== ospite && ha(n)) || null;
+  const mO = mezzo(ospite), mG = granello ? mezzo(granello) : null, eta = luogo.etaPianeta ?? ETA_RIFERIMENTO;
+  latoM ??= granello ? 120e-6 : 60e-6; const u = unita(latoM), rG = granello ? 1e-6 * Math.pow(6, c('granello/raggio')) : 0, rGu = rG / u.l;
+  const alone = ritenzione(luogo, ospite, 'alone'), fiss = ritenzione(luogo, ospite, 'fissione'), tA = Math.min(alone.anni, esposizione ?? Infinity), tF = Math.min(fiss.anni, esposizione ?? Infinity);
+  // quanti decadimenti: nel granello (tutta la sua massa) e nell'ospite (una fetta spessa quanto il granello)
+  const attG = granello ? attivita({ tipo: 'roccia', elementi: { ...concentrazioni(luogo, granello), K: 0, Rb: 0 }, etaPianeta: eta }) : [], attO = attivita({ tipo: 'roccia', elementi: concentrazioni(luogo, ospite), etaPianeta: eta });
+  const massaG = granello ? mG.densita * 1000 * (4 / 3) * Math.PI * rG ** 3 : 0, spessore = granello ? 2 * rG : latoM / 20, massaO = mO.densita * 1000 * latoM * latoM * spessore;
+  // (nel passato ce n'era di più: il numero di decadimenti in t anni è quello di oggi per (e^(λt) − 1)/(λt))
+  const cresce = (a, t) => { const capo = a.catena ? CATENE[a.catena].mezza : a.mezza, x = (Math.LN2 * t) / capo; return x > 1e-6 ? Math.expm1(x) / x : 1; };
+  const conta2 = (att, massa, tipo, t) => att.filter((a) => a.tipo === tipo).map((a) => ({ a, n: a.perKg * massa * t * ANNO * cresce(a, t) }));
+  const alfaG = conta2(attG, massaG, 'α', tA), alfaO = conta2(attO, massaO, 'α', tA), fisG = conta2(attG, massaG, 'fissione', tF), fisO = conta2(attO, massaO, 'fissione', tF), som = (l) => l.reduce((s, x) => s + x.n, 0);
+  const vereA = som(alfaG) + som(alfaO), vereF = som(fisG) + som(fisO), maxA = Math.round(0.8 * massimo), maxF = massimo - maxA;
+  const nA = vereA <= maxA ? conta(c, 'quante α', vereA) : maxA, nF = Math.min(maxF, conta(c, 'quante fissioni', vereF));
+  const cat = catalogoMateria(mO, u), sorgenti = [], Tsparso = 120;
+  const pesca = (liste, k, nome) => { const tot = liste.reduce((s, l) => s + som(l), 0); let r = c(`${nome} ${k}/quale`) * tot; for (let j = 0; j < liste.length; j++) for (const x of liste[j]) { r -= x.n; if (r < 0) return { a: x.a, nelGranello: j === 0 }; } const l = liste.find((q) => q.length); return { a: l[l.length - 1].a, nelGranello: l === liste[0] }; };
+  const dove = (k, nome, nelGranello) => { if (nelGranello) { const r = rGu * Math.sqrt(c(`${nome} ${k}/dove/r`)), f = DUE_PI * c(`${nome} ${k}/dove/fi`); return [LATO / 2 + r * Math.cos(f), LATO / 2 + r * Math.sin(f)]; } for (let j = 0; ; j++) { const p = [LATO * c(`${nome} ${k}/dove/x${j}`), LATO * c(`${nome} ${k}/dove/y${j}`)]; if (j > 8 || Math.hypot(p[0] - LATO / 2, p[1] - LATO / 2) > rGu) return p; } };
+  const metti = (k, nome, liste, t) => { const { a, nelGranello } = pesca(liste, k, nome), specie = nucleoChe(a, cat, mO, u, c.sotto(`${nome} ${k}`));
+    sorgenti.push({ pos: dove(k, nome, nelGranello), dir: 0, v: termica(a.A, luogo.T ?? 288), t0: 0, specie, emissione: { dir: [0, DUE_PI], t0: [0, Tsparso] }, origine: `${sorgenteDi(a)}, ${nelGranello ? `nel granello di ${granello}` : `nella ${ospite}`}`, processo: `${a.nuclide} ${a.tipo}`, nuclide: a.nuclide, memoria: t }); };
+  const sorgenteDi = (a) => (a.tipo === 'fissione' ? "fissione spontanea dell'uranio-238" : `decadimento α ${del(a.nuclide)}${a.catena && a.catena !== a.nuclide ? ` (catena ${del(a.catena)})` : ''}`);
+  if (vereA > 0) for (let k = 0; k < nA; k++) metti(k, 'α', [alfaG, alfaO], tA);
+  if (vereF > 0) for (let k = 0; k < nF; k++) metti(k, 'fissione', [fisG, fisO], tF);
+  const tStop = Math.max(percorso('alfa', 8.8, mO).secondi, percorso({ Z: 54, A: 140 }, 70, mO).secondi), tempo = Math.round(Tsparso + limita((1.4 * tStop) / u.tu, 40, 6000));
+  const cella = scheletro(luogo, mO, u, latoM, tempo, c, { specie: cat, sorgenti, mezzo: mezzoMotore(mO, u, latoM, { cherenkov: false }), pellicola: { ...PELLICOLA, w0: 0.15 } });
+  // il granello: un altro mezzo (più denso: frena di più), nello stesso posto per tutte le tracce
+  if (granello && rGu > 0.5) cella.domini.push({ forma: { tipo: 'cerchio', centro: [LATO / 2, LATO / 2], r: +rGu.toFixed(3) }, K: +(perdita('alfa', 5, mG).alMetro / perdita('alfa', 5, mO).alMetro).toFixed(4) });
+  cella.scala.esposizioneAnni = Math.max(tA, tF); cella.scala.sparso = Tsparso; cella.scala.compressione = (Math.max(tA, tF) * ANNO) / (Tsparso * u.tu);
+  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: ospite, modo: 'memoria', latoM, granello, raggioGranelloM: rG };
+  const anelli = granello && tA > 0 ? aloni(luogo, { ospite, granello, raggioM: rG, N: 0 }).anelli : [];
+  const nome = `${ospite}${granello ? ` attorno a un granello di ${granello}` : ''}, ${fmtLunghezza(latoM)}: la memoria di ${fmtTempo(Math.max(tA, tF) * ANNO)}`;
+  const cg = granello ? concentrazioni(luogo, granello) : null;
+  const frasi = [`Una sezione sottile di ${ospite} larga ${fmtLunghezza(latoM)}${granello ? `, con al centro un granello di ${granello} di ${fmtLunghezza(2 * rG)} (uranio ${fmt(cg.U * 1e6)} ppm, torio ${fmt(cg.Th * 1e6)} ppm: li concentra ${fmt(MATERIALI[granello].concentra.U)} e ${fmt(MATERIALI[granello].concentra.Th)} volte)` : ''}.`,
+    alone.registra ? (tA > 0 ? `Gli aloni: ${alone.perche}. In quel tempo il granello ha emesso ${fmt(som(alfaG))} particelle α${vereA > maxA ? ` (se ne disegnano ${nA}: una ogni ${fmt(vereA / nA)})` : ''}; ognuna si ferma dove finisce la sua energia, e lì annerisce la mica: ${anelli.length ? `anelli a ${anelli.filter((a) => !a.debole).map((a) => fmt(a.raggioM * 1e6, 2)).join(', ')} µm dal centro (${anelli.filter((a) => !a.debole).map((a) => a.nuclidi.join('+')).join('; ')})` : 'nessun anello'}.` : `Niente aloni: ${alone.perche}.`) : `Le α qui non lasciano un segno che duri (${alone.perche}).`,
+    fiss.registra ? (tF > 0 ? `Le tracce di fissione: ${fiss.perche}; in questa fetta ${fmt(vereF)} fissioni spontanee dell'uranio-238 (${nF} disegnate): due frammenti schiena contro schiena, ${fmtLunghezza(percorso({ Z: 38, A: 96 }, 100, mO).m + percorso({ Z: 54, A: 140 }, 70, mO).m)} in tutto.` : `Niente tracce di fissione: ${fiss.perche}.`) : `Le tracce di fissione qui non si conservano (${fiss.perche}).`,
+    `Il tempo è compresso ${fmt(cella.scala.compressione)} volte: ogni evento dura picosecondi e ha la sua data vera, sparsa nella memoria del minerale (eventiDi).`];
+  return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese: [], veri: { alfa: vereA, alfaDisegnate: nA, fissioni: vereF, fissioniDisegnate: nF, anniAlone: tA, anniFissione: tF, anelli } } };
+}
+// le date vere degli eventi di una cella (e dei suoi rami): per ogni sorgente quando è partita nel motore e, nel modo
+// memoria, quanti anni fa è accaduta davvero (il tempo dell'esposizione è sparso in modo uniforme sulla memoria)
+export function eventiDi(cella) {
+  return (cella.sorgenti || []).map((s, i) => {
+    let t0 = s.t0 ?? 0, dir = s.dir ?? 0;
+    if (s.emissione) { const ce = casoEvento(cella.seme ?? 1, `${i}|emissione`, (cella.rami || {})[`${i}`] ?? 0), est = (x, d) => (Array.isArray(x) ? x[0] + ce() * (x[1] - x[0]) : x ?? d); dir = est(s.emissione.dir, dir); t0 = est(s.emissione.t0, t0); }
+    return { indice: i, evento: `${i}`, processo: s.processo, origine: s.origine, t0, direzione: dir, ...(s.memoria != null ? { anniFa: s.memoria * (1 - t0 / (cella.scala?.sparso || 1)) } : { secondi: (cella.scala?.attesa ?? 0) + t0 * (cella.scala.secondi / cella.tempo) }) };
+  });
+}
+
+// ---------- LO SCIAME di un raggio cosmico nell'aria, su chilometri: la sua impronta al suolo è un disegno alla scala del paesaggio
+function cellaSciame(luogo, { latoM = null, evento = 0, sopra = 20 } = {}, c) {
+  const ariaQui = luogo.tipo === 'aria' ? luogo : { ...luogo, tipo: 'aria', nome: 'aria', sopra: {}, minerali: undefined }, rc = raggiCosmici(ariaQui), m = mezzo({ tipo: 'aria', aria: ariaQui.aria });
+  if (!(rc.colonnaAria > 30)) throw new Error("cellaMateria: qui non c'è abbastanza aria per uno sciame: i primari arrivano al suolo (processo: 'raggio cosmico primario')");
+  const H = rc.scalaAltezza; latoM ??= Math.round((H * Math.log(rc.colonnaAria / 5)) / 0.92 / 1000) * 1000; const u = unita(latoM), ce = c.sotto(`sciame ${evento}`);
+  // l'energia del primario: dallo spettro sopra il pianeta, tra quelli con più di «sopra» GeV (sotto, lo sciame si spegne in alto)
+  let lo = 0, hi = 1; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (rc.primarioTipico(mid) < sopra) lo = mid; else hi = mid; }
+  const E = rc.primarioTipico(hi + (1 - hi) * ce('energia')) * 1000, ritmo = rc.primari * (1 - hi) * latoM * latoM;
+  let data = 0; for (let k = 0; k <= evento; k++) data += -Math.log(1 - c(`sciame ${k}/attesa`)) / ritmo;
+  const cat = catalogoMateria(m, u, { sciame: true }), suolo = 0.94 * LATO, strati = 16, domini = [];
+  // l'aria a strati: la densità cala con la quota come e^(−h/H); sotto, il suolo
+  for (let j = 0; j < strati; j++) { const y0 = (suolo * j) / strati, y1 = (suolo * (j + 1)) / strati, h = (suolo - (y0 + y1) / 2) * u.l; domini.push({ forma: { tipo: 'poligono', punti: [[-1, y0], [LATO + 1, y0], [LATO + 1, y1], [-1, y1]] }, K: +Math.exp(-h / H).toPrecision(5) }); }
+  domini.push({ forma: { tipo: 'poligono', punti: [[-1, suolo], [LATO + 1, suolo], [LATO + 1, LATO + 1], [-1, LATO + 1]] }, K: Math.round(2700 / (m.densita * 1000)), suolo: true });
+  const th = ce.tra('angolo', -0.5, 0.5), tempo = Math.round(4 + (1.5 * LATO) / C_MOTORE + 20);
+  const sorgenti = [{ pos: [LATO / 2, 1], dir: Math.PI / 2 + th, v: C_MOTORE * Math.sqrt(1 - 1 / (1 + E / 938.272) ** 2), gamma: 1 + E / 938.272, t0: 0, specie: 'protone', emissione: { dal: 'bordo', u: [0.3, 0.7], t0: [0, 3] }, energia: E, processo: 'sciame',
+    origine: `raggio cosmico primario da ${fmt(E / 1000)} GeV${luogo.raggi?.origine ? `, ${luogo.raggi.origine}` : ''}` }];
+  const cella = scheletro(ariaQui, m, u, latoM, tempo, ce, { specie: cat, sorgenti, domini, mezzo: mezzoMotore(m, u, latoM, { cherenkov: false }) });
+  cella.scala.attesa = data; cella.scala.ritmo = ritmo; cella.scala.suolo = suolo; cella.scala.scalaAltezza = H;
+  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: 'aria', modo: 'istante', latoM, processo: 'sciame', evento, data };
+  const nome = `aria, ${fmtLunghezza(latoM)}: lo sciame di un raggio cosmico da ${fmt(E / 1000)} GeV`;
+  const frasi = [`Una fetta d'aria alta e larga ${fmtLunghezza(latoM)}, dal suolo (la fascia in basso) fin dove resta ${fmt((rc.colonnaAria * Math.exp(-(suolo * u.l) / H)))} g/cm² d'aria sopra; la densità cala con la quota (scala ${fmtLunghezza(H)}).`,
+    `Un protone da ${fmt(E / 1000)} GeV entra dall'alto. In media urta un nucleo dell'aria dopo ${fmt(m.lambdaNucleare)} g/cm² (a ${fmt(rc.quotaNascita / 1000)} km di quota): ne escono pioni. Quelli neutri diventano subito due fotoni, che fanno coppie di elettroni e positroni, che irraggiano altri fotoni: la cascata cresce finché l'energia di ognuno scende sotto ${fmt(710 / (m.z2suA / m.ZsuA + 0.92))} MeV, poi si spegne. Quelli carichi decadono in muoni, che arrivano al suolo e lo attraversano.`,
+    `Quanto è raro: sopra questo quadrato di ${fmtLunghezza(latoM)} di lato un primario con più di ${fmt(sopra)} GeV arriva ogni ${fmtTempo(1 / ritmo)}; lo sciame dura ${fmtTempo(tempo * u.tu)}.`,
+    `Al suolo, su tutto il pianeta lì: ${fmt(rc.muoni / 1e4 * 60)} muoni per cm² al minuto (soglia del campo: ${fmt(rc.soglia)} GV).`];
+  return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese: [], veri: { ritmo, data, energiaGeV: E / 1000 } } };
+}
+// l'impronta al suolo di uno sciame simulato: dove e quando ogni particella carica tocca terra → [{ x (m dal centro), t (s), specie }]
+export function improntaAlSuolo(tracce, cella) {
+  const ys = cella.scala?.suolo; if (!ys) return []; const l = cella.scala.latoM / cella.larghezza, tu = cella.scala.secondi / cella.tempo, out = [];
+  for (const tr of tracce) { if (tr.sagoma) continue; const P = tr.punti; for (let i = 1; i < P.length; i++) if (P[i - 1][1] < ys && P[i][1] >= ys) { const f = (ys - P[i - 1][1]) / (P[i][1] - P[i - 1][1]); out.push({ x: (P[i - 1][0] + f * (P[i][0] - P[i - 1][0]) - cella.larghezza / 2) * l, t: (P[i - 1][3] + f * (P[i][3] - P[i - 1][3])) * tu, specie: tr.specie.nome }); break; } }
+  return out.sort((a, b) => a.x - b.x);
+}
+// (gli aloni, qui sotto, servono anche al racconto della memoria)
+
+// =====================================================================================
+// 8. LA MEMORIA DEI MINERALI: aloni pleocroici e tracce fossili (il disegno accumulato)
+// =====================================================================================
+const COLORI_MINERALI = { biotite: [150, 108, 62], apatite: [214, 222, 202], zircone: [206, 192, 168], monazite: [196, 150, 84], quarzo: [226, 222, 214], 'feldspato potassico': [218, 186, 168], plagioclasio: [206, 204, 197] };
+const DOSE_COLORE = 3e13; // (α per cm²) la fluenza che colora la biotite
+// l'energia a cui una α frena di più in un mezzo (il picco di Bragg): lì, poco prima di fermarsi, lascia più energia
+function picco(m) { let best = 0.5, s = 0; for (let E = 0.2; E < 3; E *= 1.06) { const f = frenata(particella('alfa'), E, m).elettronica; if (f > s) { s = f; best = E; } } return best; }
+// GLI ALONI attorno a un granello ricco di uranio e torio dentro un minerale che si colora (la biotite). Ogni passo α della
+// catena ha la sua energia, quindi il suo percorso: la α lascia il massimo di energia poco prima di fermarsi (picco di
+// Bragg), e lì, a forza di α, il minerale annerisce: un anello per ogni energia. Quanto è scuro: quante α per cm² sono
+// passate (rispetto alla dose che colora), nel tempo in cui il minerale ha tenuto memoria.
+//   ospite, granello, raggioM (del granello; se manca: 1 µm), N (lato dell'immagine; 0: niente immagine), latoM
+// → { anelli: [{ raggioM, fineM (dove finisce il percorso), nuclidi, energia (MeV), quante }], profilo: { r, oscuramento }, immagine (RGBA N×N), N, latoM, alfa, anni, perche, descrizione }
+export function aloni(luogo, { ospite = 'biotite', granello = 'zircone', raggioM = 1e-6, N = 192, latoM = null, esposizione = null } = {}) {
+  const mO = mezzo(ospite), mG = mezzo(granello), rit = ritenzione(luogo, ospite, 'alone'), t = Math.min(rit.anni, esposizione ?? Infinity), eta = luogo.etaPianeta ?? ETA_RIFERIMENTO, pa = particella('alfa');
+  const att = attivita({ tipo: 'roccia', elementi: { ...concentrazioni(luogo, granello), K: 0, Rb: 0 }, etaPianeta: eta }).filter((a) => a.tipo === 'α'), massa = mG.densita * 1000 * (4 / 3) * Math.PI * raggioM ** 3;
+  const EB = picco(mO), RB = percorso(pa, EB, mO).m, kG = perdita(pa, 5, mG).alMetro / perdita(pa, 5, mO).alMetro, dentro = 0.75 * raggioM; // (la strada media dentro il granello, che frena kG volte di più)
+  const sorg = att.map((a) => { const cap = CATENE[a.catena].mezza, x = (Math.LN2 * t) / cap; return { a, quante: a.perKg * massa * t * ANNO * (x > 1e-6 ? Math.expm1(x) / x : 1), R: percorso(pa, a.energia, mO).m }; }).filter((s) => s.quante > 0);
+  // gli anelli: la fascia scura di ogni energia sta tra il massimo della ionizzazione (il picco di Bragg) e la fine del
+  // percorso; il raggio che si misura al microscopio è il suo mezzo. Quelli più vicini di quanto il granello li sfumi si fondono
+  const grezzi = sorg.map((s) => ({ raggioM: s.R - RB / 2 - (kG - 1) * dentro, fineM: s.R - (kG - 1) * dentro, nuclidi: [s.a.nuclide], energia: s.a.energia, quante: s.quante })).filter((x) => x.raggioM > 0).sort((p, q) => p.raggioM - q.raggioM), anelli = [], fonde = Math.max(0.5e-6, 0.6 * raggioM);
+  for (const g of grezzi) { const u = anelli[anelli.length - 1]; if (u && g.raggioM - u.raggioM < fonde) { u.raggioM = (u.raggioM * u.quante + g.raggioM * g.quante) / (u.quante + g.quante); u.fineM = Math.max(u.fineM, g.fineM); u.quante += g.quante; u.nuclidi.push(...g.nuclidi); } else anelli.push({ ...g, nuclidi: [...g.nuclidi] }); }
+  // (gli anelli dell'uranio-235, che è lo 0,7% dell'uranio, ci sono ma non si vedono: «debole»)
+  { const forte = anelli.reduce((x, a) => Math.max(x, a.quante), 0); for (const a of anelli) a.debole = a.quante < 0.2 * forte; }
+  // il profilo: la fluenza equivalente (α per cm², pesate con l'energia che lasciano lì) a ogni distanza dal centro
+  const Rmax = sorg.reduce((x, s) => Math.max(x, s.R), 0), nr = 400, dr = (Rmax * 1.15 || 1e-6) / nr, r = new Float64Array(nr), F = new Float64Array(nr), osc = new Float64Array(nr), Sref = frenata(pa, 5, mO).elettronica, sfuma = [-0.8, -0.4, 0, 0.4, 0.8];
+  for (let i = 0; i < nr; i++) { r[i] = (i + 0.5) * dr; for (const s of sorg) for (const d of sfuma) { const x = r[i] + (kG - 1) * dentro + d * raggioM; if (x <= 0 || x >= s.R) continue; const E = energiaDopo(pa, s.a.energia, mO, x); if (E > 0) F[i] += ((s.quante / sfuma.length) / (4 * Math.PI * (r[i] * 100) ** 2)) * (frenata(pa, E, mO).elettronica / Sref); } osc[i] = 1 - Math.exp(-F[i] / DOSE_COLORE); }
+  const alfa = sorg.reduce((x, s) => x + s.quante, 0); latoM ??= Math.max(2.5 * Rmax, 20e-6);
+  let immagine = null;
+  if (N > 0) { immagine = new Uint8ClampedArray(N * N * 4); const base = COLORI_MINERALI[ospite] || [200, 190, 170], cg = COLORI_MINERALI[granello] || [200, 200, 200];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const d = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) * (latoM / N), k = (y * N + x) * 4, i = Math.min(nr - 1, Math.floor(d / dr)), o = d < Rmax * 1.15 ? osc[i] : 0, col = d < raggioM ? cg : base;
+      for (let j = 0; j < 3; j++) immagine[k + j] = col[j] * (1 - 0.88 * (d < raggioM ? 0 : o)); immagine[k + 3] = 255; } }
+  const descrizione = t > 0 && alfa > 0 ? `un granello di ${granello} di ${fmtLunghezza(2 * raggioM)} dentro la ${ospite}: in ${fmtTempo(t * ANNO)} ha emesso ${fmt(alfa)} particelle α; ${anelli.filter((a) => !a.debole).length} anelli, da ${fmt(anelli[0].raggioM * 1e6)} a ${fmt(anelli[anelli.length - 1].raggioM * 1e6)} µm` : `nessun alone: ${rit.perche}`;
+  return { anelli: t > 0 ? anelli : [], profilo: { r, fluenza: F, oscuramento: osc }, immagine, N, latoM, alfa: t > 0 ? alfa : 0, anni: t, perche: rit.perche, piccoBragg: EB, descrizione };
+}
+// LE TRACCE FOSSILI su una superficie interna (lucidata) di un minerale: quelle di fissione (ogni fissione spontanea
+// dell'uranio-238 lascia una scia di cristallo distrutto lunga quanto i percorsi dei due frammenti) o quelle di rinculo α.
+// Quante attraversano un cm² di superficie: (fissioni per cm³) × (metà della lunghezza della traccia): è la relazione
+// della datazione, densità = età × uranio × costante di fissione × percorso. Ognuna ha la sua data vera.
+//   minerale ('apatite', 'zircone', 'biotite'), latoM, N (0: niente immagine), tipo: 'fissione' | 'rinculo', massimo (tracce elencate)
+// → { densita (per cm²), attese, quante, tracce: [{ x, y, dx, dy (m), lunghezza, anniFa }], immagine, N, latoM, anni, uranioPpm, percorsoM, perche, descrizione }
+export function tracceFossili(luogo, { minerale = 'apatite', latoM = 200e-6, N = 192, tipo = 'fissione', massimo = 5000, esposizione = null, uranio = null } = {}, caso = null) {
+  const c = (caso || sorgente(luogo.indirizzo || 'materia')).sotto(`tracce/${minerale}/${tipo}/${latoM.toExponential(2)}`), m = mezzo(minerale), rit = ritenzione(luogo, minerale, tipo), t = Math.min(rit.anni, esposizione ?? Infinity), eta = luogo.etaPianeta ?? ETA_RIFERIMENTO;
+  const conc = uranio != null ? { U: uranio, Th: 0, K: 0, Rb: 0 } : { ...concentrazioni(luogo, minerale), K: 0, Rb: 0 }, att = attivita({ tipo: 'roccia', elementi: conc, etaPianeta: eta });
+  const cap = (a) => { const x = (Math.LN2 * t) / CATENE[a.catena].mezza; return x > 1e-6 ? Math.expm1(x) / x : 1; };
+  let perCm3, lunga;
+  if (tipo === 'fissione') { const a = att.find((x) => x.tipo === 'fissione'); perCm3 = a ? a.perKg * m.densita * 1e-3 * t * ANNO * cap(a) : 0; lunga = percorso({ Z: 38, A: 96 }, 99, m).m + percorso({ Z: 54, A: 140 }, 68, m).m; }
+  else { const capi = att.filter((x) => x.tipo === 'α' && x.nuclide === x.catena); perCm3 = capi.reduce((s, a) => s + a.perKg * m.densita * 1e-3 * t * ANNO * cap(a), 0); lunga = 2 * percorso({ Z: 90, A: 234 }, 0.072, m).m; }
+  const densita = perCm3 * (lunga * 100) / 2, attese = densita * (latoM * 100) ** 2, quante = conta(c, 'quante', attese), n = Math.min(quante, massimo), tracce = [];
+  for (let k = 0; k < n; k++) {
+    // l'inclinazione: le tracce che tagliano un piano sono più spesso quelle ripide (∝ cos θ); la parte che sta sotto il piano è a caso
+    const cos = Math.sqrt(c(`t${k}/inclinazione`)), sin = Math.sqrt(1 - cos * cos), fi = DUE_PI * c(`t${k}/giro`), vista = lunga * c(`t${k}/sotto`) * sin;
+    tracce.push({ x: latoM * c(`t${k}/x`), y: latoM * c(`t${k}/y`), dx: vista * Math.cos(fi), dy: vista * Math.sin(fi), lunghezza: lunga, anniFa: t * c(`t${k}/quando`) });
+  }
+  let immagine = null;
+  if (N > 0) { immagine = new Uint8ClampedArray(N * N * 4); const base = COLORI_MINERALI[minerale] || [210, 205, 195], scuro = new Float32Array(N * N), px = N / latoM;
+    for (const tr of tracce) { const passi = Math.max(1, Math.ceil(Math.hypot(tr.dx, tr.dy) * px * 2)); for (let i = 0; i <= passi; i++) { const X = Math.floor((tr.x + (tr.dx * i) / passi) * px), Y = Math.floor((tr.y + (tr.dy * i) / passi) * px); if (X >= 0 && Y >= 0 && X < N && Y < N) scuro[Y * N + X] = Math.min(1, scuro[Y * N + X] + 0.7 * (1 - (0.6 * i) / passi)); } }
+    for (let k = 0; k < N * N; k++) { for (let j = 0; j < 3; j++) immagine[k * 4 + j] = base[j] * (1 - 0.85 * scuro[k]); immagine[k * 4 + 3] = 255; } }
+  const descrizione = t > 0 ? `${minerale} con ${fmt(conc.U * 1e6)} ppm di uranio: ${fmt(densita)} tracce di ${tipo === 'fissione' ? 'fissione' : 'rinculo α'} per cm² in ${fmtTempo(t * ANNO)} (${rit.perche}); in questo quadrato di ${fmtLunghezza(latoM)} ce ne sono ${quante}` : `nessuna traccia: ${rit.perche}`;
+  return { densita, attese, quante, tracce, immagine, N, latoM, anni: t, uranioPpm: conc.U * 1e6, percorsoM: lunga, perche: rit.perche, descrizione };
+}
+// la datazione: dall'uranio (ppm) e dalla densità di tracce di fissione (per cm²) all'età (anni). È la stessa relazione, letta al contrario.
+export function etaDaTracce(densita, uranioPpm, minerale = 'apatite', etaPianeta = ETA_RIFERIMENTO) {
+  const m = mezzo(minerale), c = CATENE['uranio-238'], atomi = ((uranioPpm * 1e-6 * m.densita) / 238.03) * N_A * c.abbondanza * quantoResta(c.mezza, etaPianeta), lunga = (percorso({ Z: 38, A: 96 }, 99, m).m + percorso({ Z: 54, A: 140 }, 68, m).m) * 100, lam = Math.LN2 / c.mezza;
+  return Math.log(1 + (densita * lam) / (atomi * c.fissione * (lunga / 2))) / lam;
+}
