@@ -2,7 +2,7 @@
 // correnti con la corrente forte a ovest, la salinità che segue evaporazione e pioggia, il fango alle foci, il campione
 // d'acqua a ogni scala (ioni e molecole veri, moto browniano), le reazioni sul posto; mari diversi su pianeti diversi
 import assert from 'node:assert/strict';
-import { mareAl, aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
+import { mareAl, aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, chiudiBacino, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
 import { interno, superficiePianeta, climaSuperficie, erosione } from '../src/camera/geologia.js';
 import { sorgente } from '../src/camera/eventi.js';
 
@@ -391,6 +391,26 @@ prova('un\'aria densa di anidride carbonica dà un mare acido; il pH scende con 
   const meno = mare({ ...P, atmosfera: { gas: { N2: 0.99, CO2: 0.01 }, pressione: 1e5 } }, sf, cl, se, 'prova/co2b'); assert.ok(meno.pH < T.pH && meno.pH > venere.pH, `pH ${T.pH} → ${meno.pH} → ${venere.pH}`);
   const c = campioneAcqua(venere, { ...aperto, latoM: 1e-8 }); assert.ok(c.pH < 6.8 && c.gas.CO2.nelCampione > 100 * campioneAcqua(T, { ...aperto, latoM: 1e-8 }).gas.CO2.nelCampione);
   console.log(`      pH: aria della Terra ${n3(T.pH)}, 1% di CO2 ${n3(meno.pH)}, 10 bar di CO2 ${n3(venere.pH)} (ferro sciolto ${n3(venere.totali.Fe * 1e6)} µmol/kg, bicarbonato ${n3(venere.ioni['HCO3-'])} mol/kg)`);
+});
+
+prova('un mare quasi chiuso che evapora: prima lascia il gesso, e solo se lo stretto è più stretto il sale; il gesso toglie solfato al mare', () => {
+  // un bacino a mano: 10⁵ km², uno stretto largo 30 km con la soglia a 100 m (gli stessi «u» per tutti: lo stretto di oggi)
+  const bacino = (F) => ({ chiuso: false, evaporaMenoArriva: F, larghezzaCella: 3e4, sogliaCella: 100, u: [0, 0] }), g = 9.81, So = 35, mareVero = { Ca: 0.0103, S: 0.0282 }, fGesso = 3.3, fSale = 10;
+  const poco = bacino(300), molto = bacino(3e5), dolce = bacino(-300); for (const b of [poco, molto, dolce]) chiudiBacino(b, So, fSale, g, { f: fGesso, ...mareVero });
+  assert.ok(dolce.gessoAtteso === 0 && dolce.depositoAtteso === 0 && dolce.salinita < So, 'dove piove più di quanto evapori non si deposita niente');
+  assert.ok(molto.depositoAtteso > poco.depositoAtteso, `più evapora, più spesso arriva al sale: ${molto.depositoAtteso} contro ${poco.depositoAtteso}`);
+  // la sequenza: tra gli esiti di uno stesso bacino, quelli che danno gesso sono meno concentrati di quelli che danno sale
+  const medio = bacino(3000); chiudiBacino(medio, So, fSale, g, { f: fGesso, ...mareVero }); const senza = bacino(3000); chiudiBacino(senza, So, fSale, g);
+  assert.ok(medio.gessoAtteso > 0 && senza.gessoAtteso === 0 && medio.depositoAtteso === senza.depositoAtteso, `il gesso si aggiunge e non cambia il sale: ${medio.gessoAtteso} mol/s`);
+  // ogni kg che esce non può lasciare più calcio di quanto ne porta (qui il calcio è meno del solfato: finisce lui)
+  assert.ok(medio.gessoAtteso <= medio.scambioSv * 1e6 * 1025 * fSale * mareVero.Ca * 36, 'il gesso non supera il calcio che passa');
+  // nel bilancio: lo stesso mare con e senza l'uscita del gesso; il solfato cala, il cloro no, e il sodio rispetto al cloro cala con lui
+  const base = { P, rocce: rocceDelPianeta(P), massaMare: T.massaMare, areaMare: T.areaMare, fiumi: T.fiume.portataKgAnno, apporto: { Na: 5e12, K: 1.5e12, Mg: 6e11, Ca: 3e12, Si: 1e12 }, argilla: 1e12, sedimento: T.fiume.sedimentoKgAnno, riciclo: T.flussi.riciclo, pCO2: 2.8e-4, O2: 0.21, Tmare: 290, placche: true };
+  const a = bilancioSali(base), b = bilancioSali({ ...base, gesso: 2e-8 });
+  assert.ok(b.ioni.S < 0.7 * a.ioni.S && Math.abs(b.ioni.Cl / a.ioni.Cl - 1) < 0.02 && b.ioni.Na / b.ioni.Cl < a.ioni.Na / a.ioni.Cl && b.bilancio.esce.S.gesso > 0, `solfato ${a.ioni.S} → ${b.ioni.S}, Na/Cl ${a.ioni.Na / a.ioni.Cl} → ${b.ioni.Na / b.ioni.Cl}`);
+  const conGesso = T.bacini.filter((x) => x.gessoAtteso > 0).length, aperti = T.bacini.filter((x) => !x.chiuso).length;
+  console.log(`      a mano: gesso ${n3(medio.gessoAtteso)} mol/s da un bacino che evapora 3000 m³/s; nel bilancio il solfato ${n3(a.ioni.S)} → ${n3(b.ioni.S)} mol/kg e Na/Cl ${n3(a.ioni.Na / a.ioni.Cl)} → ${n3(b.ioni.Na / b.ioni.Cl)}; su questa Terra: ${T.bacini.length} bacini, ${aperti} con uno stretto, ${conGesso} che lasciano gesso`);
+  confronta('mari quasi chiusi con uno stretto, dove gesso e sale possono uscire (sulla Terra: Mediterraneo, Mar Rosso, Golfo Persico, Baltico…)', aperti, 3, 40);
 });
 
 prova('altri pianeti sullo stesso rilievo: giovane, senza vulcani, con poca acqua, sotto un\'aria densa: mari diversi, ciascuno per la sua causa', () => {

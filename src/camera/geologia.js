@@ -367,8 +367,8 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //    metri: ciò che nella storia delle placche fiumi e pendii hanno posato e nessuno ha più tolto, fino alla profondità
 //    dove il sedimento sepolto diventa roccia metamorfica: tettonica.js): è stata sepolta, è roccia; la sola classe di
 //    roccia clastica litificata che Stock e Montgomery misurano è quella di mezzo (le loro «volcaniclastic rocks», 10⁻⁵–
-//    10⁻⁴): K = 3,2·10⁻⁵, cento volte il granito. Le LAVE (sf.lava: gli edifici dei vulcani; sf.arco × durata: la crosta
-//    nuova degli archi sopra le fosse, contata tutta come vulcanica): la stessa classe. Poi il BASAMENTO: granito e
+//    10⁻⁴): K = 3,2·10⁻⁵, cento volte il granito. Le LAVE (sf.lava: gli edifici dei vulcani; sf.arco: la crosta nuova
+//    degli archi sopra le fosse, che esce un po' per passo per tutta la durata, contata tutta come vulcanica): la stessa classe. Poi il BASAMENTO: granito e
 //    metamorfiche sotto i continenti, vulcanica (basalto) dove la crosta è quella dei fondali. Il fiume scava lo strato
 //    che ha sotto, e quando lo ha consumato passa a quello dopo dentro lo stesso passo. Nessuna quota di terre
 //    «sedimentarie» è data: quanta copertura resta è un'uscita (terreCoperte).
@@ -460,9 +460,10 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   const dt = T / passi;
   // LA ROCCIA, a strati dall'alto: sedimento sciolto (sci), poi copertura litificata (cop) o lave (lava: dove ci sono, la
   // copertura di prima, sepolta, non si conta più), poi il basamento (base: 0 granito e metamorfiche, 1 vulcanica)
-  const sci = sf.sciolto ? Float32Array.from(sf.sciolto) : new Float32Array(N), cop = new Float32Array(N), lava = new Float32Array(N), base = new Uint8Array(N), diLava = new Uint8Array(N);
+  const sci = sf.sciolto ? Float32Array.from(sf.sciolto) : new Float32Array(N), cop = new Float32Array(N), lava = new Float32Array(N), base = new Uint8Array(N), diLava = new Uint8Array(N), arco = sf.arco && !durata ? sf.arco : null;
   for (let k = 0; k < N; k++) { base[k] = sf.roccia ? sf.roccia[k] : sf.cont && !sf.cont[k] ? 1 : 0; if (sf.copertura) cop[k] = Math.max(0, sf.copertura[k] - sci[k]);
-    const l = (sf.lava ? sf.lava[k] : 0) + (sf.arco && !durata ? sf.arco[k] * T : 0); if (l > E.velo) { lava[k] = l; diLava[k] = 1; cop[k] = 0; } }
+    // (le lave: gli edifici ci sono già; quelle degli archi escono un po' per volta, per tutta la durata: vedi il passo)
+    const l = sf.lava ? sf.lava[k] : 0; if (l + (arco ? arco[k] * T : 0) > E.velo) { lava[k] = l; diLava[k] = 1; cop[k] = 0; } }
   const soll = crescita && sf.sollevamento ? sf.sollevamento : null, tetto = sf.tetto || null, V0 = E.suolo * dt;
   const kSed = E.K.sedimento, kMez = E.K.vulcanica, kGra = E.K.granito, cS = E.consumo.sedimento, cV = E.consumo.vulcanica, cG = E.consumo.granito;
   const resiste = (x) => (x > 1e-6 ? (1 - Math.exp(-x)) / x : 1); // quanta della ghiaia nata lungo un tratto ne esce ancora ghiaia (x = consumo × lunghezza)
@@ -488,6 +489,10 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     // la portata: la pioggia raccolta da monte a valle (area: in celle × m/anno, per chi legge il flusso; portata: m³/anno)
     const secco = cl.piove === false ? 0 : 0.2;
     for (let k = 0; k < N; k++) { area[k] = secco + pioggia[k] + (afflusso ? afflusso[k] : 0); portata[k] = area[k] * aDi(k); inizio[k] = alt[k]; }
+    // GLI ARCHI ERUTTANO PER TUTTA LA DURATA: la crosta nuova che nasce sopra le fosse (sf.arco, m/anno) arriva in cima come
+    // lava un passo per volta. Dove ne esce più di quanta il fiume ne porta via la superficie resta vulcanica; dove
+    // l'erosione vince affiora ciò che sta sotto. (La quota la alza già il sollevamento, che conta anche questa crosta.)
+    if (arco) for (let k = 0; k < N; k++) if (diLava[k] && arco[k] > 0) lava[k] += arco[k] * dt;
     for (let x = n - 1; x > 0; x--) { const k = ordine[x], r = ricevente[k]; if (r >= 0) { area[r] += area[k]; portata[r] += portata[k]; } }
     // I FIUMI SCAVANO (implicito, da valle a monte) dove l'acqua scorre e non ristagna: lo strato che c'è sotto, e
     // consumato quello, nel tempo che resta del passo, lo strato dopo

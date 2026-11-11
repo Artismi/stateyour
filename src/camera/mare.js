@@ -290,10 +290,16 @@ export function fluidoCaldo(tot, T, rocce) {
 //    carbonati e dei silicati: i fiumi non portano più cariche di quante la CO2 dei vulcani ne possa accompagnare).
 //  · ESCONO: nella roccia calda (fluidoCaldo) e tiepida del fondo, sulle argille (scambio di ioni), sepolti con l'acqua
 //    dei sedimenti e nei mari chiusi che evaporano fino al sale («evaporiti», 1/anno: lo calcola mare() dai bacini veri);
+//    il SOLFATO in più come gesso nei bacini che evaporano oltre la saturazione del gesso senza arrivare al salgemma
+//    («gesso», 1/anno: la sequenza di Usiglio, dalle solubilità di chimica.js). MANCANO, e si vedono: la pirite che i
+//    batteri fanno riducendo il solfato nei sedimenti (qui non c'è vita: sulla Terra è metà dell'uscita dello zolfo); e
+//    servono mari quasi chiusi con uno stretto: su un rilievo a celle di 150 km quasi non ce ne sono, e allora né il sale
+//    né il gesso escono. Il solfato sale fino alla solubilità del gesso nel mare aperto, e per ogni solfato in più le
+//    cariche chiedono due sodi: è per questo che il sodio supera il cloro.
 //    ciò che è sepolto torna quando i sedimenti sono risollevati («riciclo», anni: il tempo in cui le placche chiudono
 //    un oceano; senza placche non torna). Il calcio è quello che tiene il calcare alla soglia.
 // → { ioni (mol/kg), eq, bilancio: { entra, esce, residenza }, fiume, flussi, … }
-export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, argilla, sedimento, evaporiti = 0, riciclo = Infinity, parteBassa = 0.3, calcareCheTorna = 0.5, pCO2, O2, Tmare, placche = true }) {
+export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, argilla, sedimento, evaporiti = 0, gesso = 0, riciclo = Infinity, parteBassa = 0.3, calcareCheTorna = 0.5, pCO2, O2, Tmare, placche = true }) {
   const int = P.interno || {}, q = int.q ?? 0, eta = int.eta ?? 4.5e9, vu = vulcani({ calore: q, raggioM: P.raggioM, composizione: P.composizione }), magma = vu.magma, fuso = vu.fuso, F = rocce.fusione || 0.1;
   const massaMantello = P.massaKg * (1 - (P.composizione?.ferro ?? 0.32));
   // il fondo: l'acqua che attraversa la roccia calda e quella tiepida (kg/anno), dal calore che esce dal fondo
@@ -326,8 +332,9 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
     freno = cariche > 0 ? Math.min(1, (vu.CO2 * piuCaldo + oggi.vulcani.Cl + 2 * oggi.vulcani.S) / cariche) : 1;
     for (const e in mare) {
       const sc = e === 'Na' ? scambio['Na+'] : e === 'K' ? scambio['K+'] : e === 'Mg' ? scambio['Mg2+'] : 0, torna = kTorna * sed[e], tiep = e === 'Mg' ? (tiepido * DATI.magnesioTiepido) / M : e === 'K' ? (tiepido * DATI.potassioTiepido) / M : 0;
-      const entra = freno * entraFisso[e] + (oggi.vulcani[e] || 0) + torna - Math.min(sc, mare[e] / dt), nuovo = Math.max(0, (mare[e] + dt * entra) / (1 + dt * (tiep * piuCaldo + kNeutro)));
-      sed[e] = (sed[e] + dt * kNeutro * nuovo) / (1 + dt * kTorna); mare[e] = nuovo; oggi.torna[e] = torna;
+      const kSale = e === 'S' ? kNeutro + gesso : kNeutro; // (il solfato esce anche come gesso nei bacini che evaporano senza arrivare al sale)
+      const entra = freno * entraFisso[e] + (oggi.vulcani[e] || 0) + torna - Math.min(sc, mare[e] / dt), nuovo = Math.max(0, (mare[e] + dt * entra) / (1 + dt * (tiep * piuCaldo + kSale)));
+      sed[e] = (sed[e] + dt * kSale * nuovo) / (1 + dt * kTorna); mare[e] = nuovo; oggi.torna[e] = torna;
     }
     // la roccia calda del fondo: in questo passo ci passa una parte del mare, ed esce con la composizione del fluido
     // (a piccoli tratti: il fluido dipende dal mare che entra)
@@ -352,7 +359,7 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
   for (const e of ['Na', 'K', 'Mg', 'Cl', 'S']) {
     const sc = e === 'Na' ? scambio['Na+'] : e === 'K' ? scambio['K+'] : e === 'Mg' ? scambio['Mg2+'] : 0, tiep = e === 'Mg' ? tiepido * DATI.magnesioTiepido : e === 'K' ? tiepido * DATI.potassioTiepido : 0;
     entra[e] = { fiumi: freno * (apporto[e] || 0) + (oggi.torna[e] || 0), vulcani: oggi.vulcani[e] || 0, fondo: Math.max(0, dalFondo[e] || 0) };
-    esce[e] = { fondo: Math.max(0, -(dalFondo[e] || 0)) + tiep * ioni[e], argille: Math.max(0, sc), sepolto: kSepolto * mare[e], evaporiti: evaporiti * mare[e] };
+    esce[e] = { fondo: Math.max(0, -(dalFondo[e] || 0)) + tiep * ioni[e], argille: Math.max(0, sc), sepolto: kSepolto * mare[e], evaporiti: evaporiti * mare[e], ...(e === 'S' ? { gesso: gesso * mare[e] } : {}) };
     const tot = entra[e].fiumi + entra[e].vulcani + entra[e].fondo; residenza[e] = tot > 0 ? mare[e] / tot : Infinity;
   }
   // il calcare deposto sui bassi fondali torna in gioco quando è risollevato: i fiumi lo risciolgono
@@ -361,7 +368,7 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
   // l'acqua media dei fiumi (mol/kg): ciò che le rocce cedono, più i sali vecchi che tornano; le cariche le chiude il bicarbonato
   const fiume = {}; if (fiumi > 0) { for (const e of ['Na', 'K', 'Mg', 'Ca', 'Si']) fiume[e] = (freno * apporto[e] + (oggi.torna[e] || 0) + (e === 'Ca' ? caTorna : 0)) / fiumi; fiume.Cl = (oggi.torna.Cl + oggi.vulcani.Cl) / fiumi; fiume.S = (oggi.torna.S + oggi.vulcani.S) / fiumi; }
   return { ioni, eq, soglia, bilancio: { entra, esce, residenza }, fiume, fondoDiSale, vivo, fluido,
-    flussi: { magma, caldo, tiepido, Tcamino, kNeutro, kSepolto, evaporiti, riciclo, sfiato, parteBassa, calcareCheTorna: torna, sedimento, CO2vulcani: vu.CO2, freno, sedimenti: sed, mantello: mant, cloroAllaNascita: (1 - DATI.intrappolato) * ClTutto } };
+    flussi: { magma, caldo, tiepido, Tcamino, kNeutro, kSepolto, evaporiti, gesso, riciclo, sfiato, parteBassa, calcareCheTorna: torna, sedimento, CO2vulcani: vu.CO2, freno, sedimenti: sed, mantello: mant, cloroAllaNascita: (1 - DATI.intrappolato) * ClTutto } };
 }
 // quanto sale esce perché il prodotto (a − x)(b − x) torni alla solubilità
 const toglieSale = (a, b, Ks) => { const s = a + b, d = s * s - 4 * (a * b - Ks); return d > 0 ? Math.max(0, Math.min(a, b, 0.5 * (s - Math.sqrt(d)))) : 0; };
@@ -486,9 +493,13 @@ export function mare(P, sf, cl, se = null, caso = null) {
   const bac = baciniDelMare({ tipo, fondoF, FW, FH, areaF, R, eMenoP: (k) => { const i = k % FW, j = (k - i) / FW, x = ((i + 0.5) / FW) * W - 0.5, y = ((j + 0.5) / FH) * H - 0.5; return (bil(evap, W, H, x, y) - bil(piove, W, H, x, y)) / 1000 / ANNO; }, dolceFine, g, c0 });
   // (senza mare ma con laghi: il bilancio si fa lo stesso per avere l'acqua dei fiumi; due giri: i bacini che arrivano al sale dipendono da quanto è salato il mare, e viceversa)
   let bs = null, evaporiti = 0;
-  for (let giro = 0; giro < 2; giro++) { const So = bs ? grammiPerKg(bs.ioni, bs.eq) : 35, fSat = bs ? fattoreDiSaturazione(bs.ioni, Tmare, pCO2) : 10;
-    evaporiti = 0; for (const b of bac.lista) { chiudiBacino(b, So, fSat, g); evaporiti += (b.depositoAtteso * 1000 * ANNO) / Math.max(massaMare, 1); }
-    bs = bilancioSali({ P, rocce, massaMare: Math.max(massaMare, 1), areaMare, fiumi, apporto, argilla, sedimento, evaporiti, riciclo, parteBassa: aTutta > 0 ? aBassa / aTutta : 0, calcareCheTorna: calcTutto > 0 ? calcBasso / calcTutto : 0, pCO2, O2: pO2, Tmare, placche }); }
+  let gesso = 0;
+  for (let giro = 0; giro < 3; giro++) { const So = bs ? grammiPerKg(bs.ioni, bs.eq) : 35, fSat = bs ? fattoreDiSaturazione(bs.ioni, Tmare, pCO2) : 10;
+    // (il gesso: con il mare del giro prima; kGesso è la parte del solfato del mare che i bacini tolgono in un anno)
+    const perGesso = bs && bs.ioni.S > 0 && bs.ioni.Ca > 0 ? { f: fattoreDiSaturazione(bs.ioni, Tmare, pCO2, 'gesso'), Ca: bs.ioni.Ca, S: bs.ioni.S } : null; let moliGesso = 0;
+    evaporiti = 0; for (const b of bac.lista) { chiudiBacino(b, So, fSat, g, perGesso); evaporiti += (b.depositoAtteso * 1000 * ANNO) / Math.max(massaMare, 1); moliGesso += b.gessoAtteso * ANNO; }
+    gesso = perGesso ? moliGesso / (perGesso.S * Math.max(massaMare, 1)) : 0;
+    bs = bilancioSali({ P, rocce, massaMare: Math.max(massaMare, 1), areaMare, fiumi, apporto, argilla, sedimento, evaporiti, gesso, riciclo, parteBassa: aTutta > 0 ? aBassa / aTutta : 0, calcareCheTorna: calcTutto > 0 ? calcBasso / calcTutto : 0, pCO2, O2: pO2, Tmare, placche }); }
   const ioni = bs.ioni, eq = bs.eq, salinitaMedia = celleMare ? grammiPerKg(ioni, eq) : 0, moli = ioni.Na + ioni.K + ioni.Mg + ioni.Ca + ioni.Cl + ioni.S + eq.bicarbonato;
   const out = { esiste: true, W, H, raggioM: R, gravita: g, livello, massaMare, areaMare, frazioneMare: areaMare / (4 * Math.PI * R * R), profonditaMedia: areaMare > 0 ? massaMare / 1000 / areaMare : 0,
     salinitaMedia, ioni: nomiIoni(ioni, eq), totali: { ...ioni }, pH: eq.pH, alcalinita: eq.alcalinita, carbonio: eq.carbonio, soglia: bs.soglia, pCO2, pO2,
@@ -905,15 +916,21 @@ function baciniDelMare({ tipo, fondoF, FW, FH, areaF, R, eMenoP, dolceFine, c0 }
 // più (β = 7,8·10⁻⁴ per g/kg: quanto il sale appesantisce l'acqua). Se ΔS porta oltre la saturazione, il sale si
 // deposita. «depositoAtteso»: la media sugli esiti possibili dei due eventi (serve alla storia lunga del mare, che ha
 // visto molti stretti aprirsi e chiudersi); lo stato di oggi usa l'esito vero.
-function chiudiBacino(b, So, fSat, g) {
+export function chiudiBacino(b, So, fSat, g, gesso = null) {
   const beta = 7.8e-4, F = b.evaporaMenoArriva, con = (u1, u2) => { if (b.chiuso) return { dS: F > 0 ? Infinity : -So, L: 0, h: 0, Q: 0 };
     const L = b.larghezzaCella * Math.pow(10, -2.5 * u1), h = Math.max(Math.min(5, b.sogliaCella), b.sogliaCella * Math.pow(10, -1.5 * u2)), k = DATI.scambioStretto * L * Math.pow(h, 1.5) * Math.sqrt(g * beta);
     const dS = Math.sign(F) * Math.pow((So * Math.abs(F)) / Math.max(k, 1e-9), 2 / 3); return { dS, L, h, Q: k * Math.sqrt(Math.abs(dS)) }; };
-  const oggi = con(b.u[0], b.u[1]), Ssat = So * fSat; let atteso = 0; for (let a = 0; a < 6; a++) for (let c = 0; c < 6; c++) if (F > 0 && So + con((a + 0.5) / 6, (c + 0.5) / 6).dS >= Ssat) atteso += F / 36;
-  Object.assign(b, { salinita: limita(So + oggi.dS, 0.02 * So, Ssat), saturo: F > 0 && So + oggi.dS >= Ssat, larghezzaStrettoM: oggi.L, sogliaM: oggi.h, scambioSv: oggi.Q / 1e6, depositoAtteso: b.chiuso ? 0 : atteso });
+  // IL GESSO VIENE PRIMA DEL SALE (la sequenza di un'acqua di mare che evapora: Usiglio 1849; qui dalle solubilità di
+  // chimica.js): un bacino che concentra l'acqua oltre la saturazione del gesso (gesso.f volte), senza arrivare al
+  // salgemma, lascia sul fondo solfato di calcio e rimanda al mare un'acqua che ne ha di meno: per ogni kg che esce
+  // dallo stretto, x moli con (c·Ca − x)(c·S − x) = f²·Ca·S. «gessoAtteso» (mol/s): la media sugli stessi esiti.
+  const oggi = con(b.u[0], b.u[1]), Ssat = So * fSat; let atteso = 0, gessoAtteso = 0;
+  for (let a = 0; a < 6; a++) for (let c = 0; c < 6; c++) { if (!(F > 0)) continue; const e = con((a + 0.5) / 6, (c + 0.5) / 6); if (So + e.dS >= Ssat) atteso += F / 36;
+    else if (gesso && So > 0) { const conc = (So + e.dS) / So; if (conc > gesso.f) gessoAtteso += (e.Q * 1025 * toglieSale(conc * gesso.Ca, conc * gesso.S, gesso.f * gesso.f * gesso.Ca * gesso.S)) / 36; } }
+  Object.assign(b, { salinita: limita(So + oggi.dS, 0.02 * So, Ssat), saturo: F > 0 && So + oggi.dS >= Ssat, larghezzaStrettoM: oggi.L, sogliaM: oggi.h, scambioSv: oggi.Q / 1e6, depositoAtteso: b.chiuso ? 0 : atteso, gessoAtteso: b.chiuso ? 0 : gessoAtteso });
 }
-// di quante volte l'acqua del mare va concentrata perché il salgemma cominci a depositarsi
-function fattoreDiSaturazione(ioni, T, pCO2) { let lo = 1, hi = 60; for (let it = 0; it < 9; it++) { const f = Math.sqrt(lo * hi), t = {}; for (const e in ioni) t[e] = ioni[e] * f; if (acqua(t, T, { pCO2 }).omega.salgemma > 1) hi = f; else lo = f; } return Math.sqrt(lo * hi); }
+// di quante volte l'acqua del mare va concentrata perché il salgemma (o un altro sale) cominci a depositarsi
+function fattoreDiSaturazione(ioni, T, pCO2, sale = 'salgemma') { let lo = 1, hi = 60; for (let it = 0; it < 9; it++) { const f = Math.sqrt(lo * hi), t = {}; for (const e in ioni) t[e] = ioni[e] * f; if (acqua(t, T, { pCO2 }).omega[sale] > 1) hi = f; else lo = f; } return Math.sqrt(lo * hi); }
 // le moli per kg, con i nomi degli ioni (il carbonio sciolto è quasi tutto bicarbonato)
 const nomiIoni = (t, eq) => ({ 'Na+': t.Na || 0, 'K+': t.K || 0, 'Mg2+': t.Mg || 0, 'Ca2+': t.Ca || 0, 'Cl-': t.Cl || 0, 'SO4(2-)': t.S || 0, 'HCO3-': eq ? eq.bicarbonato : 0, 'CO3(2-)': eq ? eq.carbonato : 0, 'Fe2+': t.Fe || 0, H4SiO4: t.Si || 0 });
 // LA REGOLA PER IL PUNTO: il mare è ben rimescolato rispetto ai tempi di residenza, quindi gli ioni maggiori hanno

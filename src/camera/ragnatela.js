@@ -38,7 +38,15 @@
 //    SPAZIO: un'onda piana non ha un posto, e per dimezzare la scala le onde sono 8 volte di più (kmax 48: 2,3·10⁵
 //    onde, 25 Mpc; 96: 1,9·10⁶, 12 Mpc; 192: 1,5·10⁷, 6 Mpc, ~240 MB). Sotto i ~10 Mpc serve una base con un posto
 //    (pacchetti d'onda con indirizzo «…/campo/dettaglio j/pacchetto x,y,z», rumore bianco su un reticolo per ogni
-//    ottava, filtrato con lo spettro vero): NON È FATTO, e lo si dice.
+//    ottava, filtrato con lo spettro vero): è campo_pigro.js, e qui campoCompleto() lo somma alle onde del toro sotto i
+//    50 Mpc quando si chiede `dettaglio` (in doveSono, classiSuGriglia, vuoti, scheletro, contenutoCosmico,
+//    scenaRagnatela). Senza `dettaglio` tutto è com'era, bit per bit; raffina resta come riscontro (stessa statistica).
+//    A RISOLUZIONE FINE (misurato): il contrasto medio dei vuoti passa da −0,60 (50 Mpc) a −0,74, −0,84, −0,90 (25, 12,
+//    6 Mpc): quello era risoluzione. La massa per classe resta 8/42/42/8 a ogni scala (teorema gaussiano): quello è il
+//    campo lineare. Il volume dei vuoti di Zel'dovich cresce senza fermarsi (20, 31, 46, 81%): sotto ~10 Mpc metà
+//    della materia è già crollata e lo spostamento lineare gonfia i vuoti dentro gli altri flussi: lì serve dinamica
+//    non lineare vera (2LPT non basta dopo l'incrocio), non un raccordo: non fatto.
+//    GLI ALONI UNO PER UNO: aloniIn() (picchi con esclusione sul campo completo, elementi di materia spostati con Ψ).
 //
 // B. CHE COSA C'È NEL VUOTO (contenutoCosmico, aloniAttesi): barioni, materia oscura, fotoni del fondo, neutrini
 //    fossili, luce delle galassie, campo magnetico, e la nebbia degli aloni piccoli (regola 9). Ogni voce ha valore,
@@ -103,8 +111,9 @@ import { COSMOLOGIA as U, LEGGI as LEGGI_GALASSIE } from './galassie.js';
 import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
 import { campoCondizionato, campoLibero } from './bolle.js';
 import { campoCosmo } from './spazio3d.js';
-import { cosmoBase, ramiCosmo } from './cosmo.js';
+import { cosmoBase, ramiCosmo, cosmo as cosmoDi } from './cosmo.js';
 import { DATI as DATI_STELLE } from './stelle.js';
+import { campoPigro, FILTRI } from './campo_pigro.js';
 
 const PI2 = 2 * Math.PI, KPC = 3.0857e19, MPC = 3.0857e22, GA = 1e9 * ANNO, C_LUCE = COSTANTI.c;
 export const CLASSI = ['vuoto', 'foglio', 'filamento', 'nodo']; // per numero di autovalori sopra la soglia
@@ -267,21 +276,49 @@ function autovettore(xx, yy, zz, xy, xz, yz, l) {
 const classeDi = (l, soglia) => (l[0] > soglia ? 1 : 0) + (l[1] > soglia ? 1 : 0) + (l[2] > soglia ? 1 : 0);
 
 // =====================================================================================================
+// IL CAMPO COMPLETO: le onde del toro (intatte) più, sotto i 50 Mpc, il campo pigro nello spazio (campo_pigro.js)
+// =====================================================================================================
+// Le onde di cosmo3d tengono tutta la potenza fino a |k| = kmax giri per lato (k_c = 2π·kmax/L), e niente oltre. Il
+// dettaglio è il campo pigro con la finestra complementare F(k) = 1 per k > k_c, 0 altrimenti: le due finestre al quadrato
+// sommano 1 a ogni k (il taglio è netto perché le onde del toro non si toccano). Le sue celle si richiudono col periodo
+// del toro (lato del livello j: L·2^(10−j)), quindi è un campo sul toro; i suoi eventi sono «radice/campo/livello j/cella
+// x,y,z», accanto a «radice/campo/onda x,y,z». IL RACCORDO DICHIARATO: un taglio netto in k allunga il nucleo dei due
+// livelli che lo attraversano; troncato a 6 celle e rinormalizzato, il livello di 19 Mpc ha il 21% della sua varianza
+// fuori dal raggio (ma porta solo 0,03 di varianza), quello di 9 Mpc il 3%: attorno a k_c la potenza è sfumata su ~10%
+// in k (la prova misura lo spettro attraverso il taglio). Senza `dettaglio` niente di questo viene nemmeno costruito.
+//   dettaglio: la lunghezza d'onda più corta voluta (m): entrano i livelli la cui ottava (onde tra 2 e 8 lati di cella) la contiene
+// → { livello, risoluzioneM (2 lati di cella del livello più fine), kTaglio (1/Mpc), pigro (il campo di campo_pigro.js),
+//     nelPunto(x in frazioni del toro, scala in m) → { delta, T, v } come le onde da sole,
+//     sintesi(origine, passo, n, { scala }) → come sintesi(), in(punto, { scala }) → δ, marea, velocità in un punto (m) }
+const completi = new Map();
+export function campoCompleto(cosmo, { dettaglio } = {}) {
+  const O = ondeDi(cosmo); if (!(dettaglio > 0)) throw new Error('campoCompleto: serve `dettaglio` (m)'); if (O.radice == null) throw new Error('campoCompleto: di questo campo non conosco l\'indirizzo');
+  const lato0 = O.Lmpc * 1024, kc = (PI2 * O.kmax) / O.Lmpc, J = Math.max(10, Math.floor(Math.log2((4 * lato0) / (dettaglio / MPC)))), chiave = `${J}`; let M = completi.get(O.A); if (!M) { if (completi.size > 4) completi.delete(completi.keys().next().value); M = new Map(); completi.set(O.A, M); } if (M.has(chiave)) return M.get(chiave);
+  const pigro = campoPigro(O.radice, { rami: O.rami, lato0, periodo: O.Lmpc, finestra: { chiave: `>${kc}`, F: (k) => (k > kc ? 1 : 0) } }), opzDi = (scala) => (scala > 0 ? { livello: J, da: 0, scala } : { livello: J, da: 0 });
+  const nelP = (x, scala = 0) => { const a = nelPunto(O, x, finestra(O, scala)), b = pigro.in(x.map((v) => v * O.toroM), opzDi(scala)); for (let d = 0; d < 6; d++) a.T[d] += b.marea[d]; for (let d = 0; d < 3; d++) a.v[d] += b.velocita[d]; a.delta = a.T[0] + a.T[1] + a.T[2]; return a; };
+  const sint = (origine, passo, n, { scala = 0 } = {}) => { const F = sintesi(O, origine, passo, n, { scala }), G = pigro.grigliaIn(origine.map((v) => v * O.toroM), passo * O.toroM, n, opzDi(scala)); for (const k of ['xx', 'yy', 'zz', 'xy', 'xz', 'yz']) { const a = F[k], b = G[k]; for (let q = 0; q < a.length; q++) a[q] += b[q]; } for (let q = 0; q < F.delta.length; q++) F.delta[q] = F.xx[q] + F.yy[q] + F.zz[q]; return F; };
+  const C = { livello: J, risoluzioneM: 2 * pigro.latoDi(J) * MPC, kTaglio: kc, pigro, onde: O, nelPunto: nelP, sintesi: sint, in: (punto, { scala = 0 } = {}) => { const a = nelP(punto.map((p) => frazione(p / O.toroM)), scala); return { delta: a.delta, marea: a.T, velocita: a.v }; } };
+  M.set(chiave, C); return C;
+}
+
+// =====================================================================================================
 // A. LA RAGNATELA
 // =====================================================================================================
 // DOVE SONO: la classe del punto e tutto ciò che il campo dice lì.
-//   opz: { scala (m: lisciatura gaussiana in più; 0 = solo le onde che ci sono), soglia (0: Zel'dovich), t (secondi da oggi) }
+//   opz: { scala (m: lisciatura gaussiana in più; 0 = solo le onde che ci sono), soglia (0: Zel'dovich), t (secondi da oggi),
+//          dettaglio (m: la lunghezza d'onda più corta voluta, sotto i 50 Mpc: si aggiunge il campo pigro, vedi campoCompleto) }
 // → { classe ('vuoto' | 'foglio' | 'filamento' | 'nodo'), numero (0…3), autovalori [λ₁ ≥ λ₂ ≥ λ₃] (oggi; a un altro tempo
 //     valgono ×crescita), assi (i tre autovettori, nello stesso ordine), direzione (del filamento: l'asse che non
 //     crolla; di un foglio: la sua normale, l'asse che crolla; altrimenti null), delta (il contrasto LINEARE a quel
 //     tempo), densita (ρ/ρ̄ di Zel'dovich a quel tempo), crollato (Dλ₁ ≥ 1: lì la materia è già caduta e la densità di
 //     Zel'dovich non vale), velocita (km/s, il moto lineare a quel tempo), crescita, sigma (lo scarto del campo oggi),
 //     risoluzioneM (la lunghezza d'onda più corta che c'è), soglia, scala }
-export function doveSono(cosmo, punto, { scala = 0, soglia = 0, t = 0 } = {}) {
-  const O = ondeDi(cosmo), x = punto.map((p) => frazione(p / O.toroM)), P = nelPunto(O, x, finestra(O, scala)), [xx, yy, zz, xy, xz, yz] = P.T, l = autovalori(xx, yy, zz, xy, xz, yz, [0, 0, 0]);
+export function doveSono(cosmo, punto, { scala = 0, soglia = 0, t = 0, dettaglio = null } = {}) {
+  const O = ondeDi(cosmo), x = punto.map((p) => frazione(p / O.toroM)), K = dettaglio ? campoCompleto(O, { dettaglio }) : null, P = K ? K.nelPunto(x, scala) : nelPunto(O, x, finestra(O, scala)), [xx, yy, zz, xy, xz, yz] = P.T, l = autovalori(xx, yy, zz, xy, xz, yz, [0, 0, 0]);
   const a = scalaAl(t), D = U.D(a), numero = classeDi(l, soglia), assi = l.map((v) => autovettore(xx, yy, zz, xy, xz, yz, v)), J = (1 - D * l[0]) * (1 - D * l[1]) * (1 - D * l[2]);
   const fv = t === 0 ? 1 : (a * U.E(a) * D * (Math.log(U.D(a * 1.01) / U.D(a * 0.99)) / Math.log(1.01 / 0.99))) / f0Crescita; // come cosmo3d.js alTempo
-  return { classe: CLASSI[numero], numero, autovalori: l, assi, direzione: numero === 2 ? assi[2] : numero === 1 ? assi[0] : null, delta: D * P.delta, densita: 1 / Math.abs(J), crollato: D * l[0] >= 1, velocita: P.v.map((q) => q * fv), crescita: D, sigma: O.sigma, risoluzioneM: O.toroM / O.kmax, soglia, scala };
+  return { classe: CLASSI[numero], numero, autovalori: l, assi, direzione: numero === 2 ? assi[2] : numero === 1 ? assi[0] : null, delta: D * P.delta, densita: 1 / Math.abs(J), crollato: D * l[0] >= 1, velocita: P.v.map((q) => q * fv), crescita: D, sigma: O.sigma, risoluzioneM: K ? K.risoluzioneM : O.toroM / O.kmax, soglia, scala,
+    densitaSferica: nonLinDaLin(Math.min(D * P.delta, 0.9 * LEGGI_GALASSIE.deltaC)) }; // ρ/ρ̄ dal collasso sferico (Mo & White 1996 eq. 18 [R]): per l'interno dei vuoti, dove Zel'dovich lungo tre assi sottostima
 }
 // la direzione del filamento in un punto (un versore, a meno del verso), o null se lì non c'è un filamento
 export const direzioneFilamento = (cosmo, punto, opz = {}) => { const w = doveSono(cosmo, punto, opz); return w.numero === 2 ? w.direzione : null; };
@@ -317,9 +354,9 @@ export function sintesi(cosmo, origine, passo, n, { scala = 0 } = {}) {
 // → { n, periodica, origine (frazioni), passo (frazione), latoCellaM, classe: Uint8Array(n³), delta: Float32Array (lineare,
 //     oggi), volume: Float32Array (|Π(1−λ_i)|: il volume di oggi di quell'elemento, in unità del suo volume iniziale),
 //     l1, l3: Float32Array (l'autovalore più grande e il più piccolo), campo (ciò che dà sintesi), sigma }
-export function classiSuGriglia(cosmo, regione = null, { celle = 48, scala = 0, soglia = 0 } = {}) {
+export function classiSuGriglia(cosmo, regione = null, { celle = 48, scala = 0, soglia = 0, dettaglio = null } = {}) {
   const O = ondeDi(cosmo), n = regione?.celle ?? celle, periodica = !regione, passo = periodica ? 1 / n : regione.lato / O.toroM / n;
-  const origine = periodica ? [0, 0, 0] : regione.centro.map((c) => c / O.toroM - (regione.lato / O.toroM) / 2 + passo / 2), F = sintesi(O, origine, passo, n, { scala });
+  const origine = periodica ? [0, 0, 0] : regione.centro.map((c) => c / O.toroM - (regione.lato / O.toroM) / 2 + passo / 2), F = dettaglio ? campoCompleto(O, { dettaglio }).sintesi(origine, passo, n, { scala }) : sintesi(O, origine, passo, n, { scala });
   const n3 = n * n * n, classe = new Uint8Array(n3), delta = new Float32Array(n3), volume = new Float32Array(n3), l1 = new Float32Array(n3), l3 = new Float32Array(n3), l = [0, 0, 0];
   for (let q = 0; q < n3; q++) { autovalori(F.xx[q], F.yy[q], F.zz[q], F.xy[q], F.xz[q], F.yz[q], l); classe[q] = classeDi(l, soglia); delta[q] = F.delta[q]; volume[q] = Math.abs((1 - l[0]) * (1 - l[1]) * (1 - l[2])); l1[q] = l[0]; l3[q] = l[2]; }
   return { n, periodica, origine, passo, latoCellaM: passo * O.toroM, classe, delta, volume, l1, l3, campo: F, sigma: O.sigma, toroM: O.toroM, soglia, scala };
@@ -328,11 +365,15 @@ export function classiSuGriglia(cosmo, regione = null, { celle = 48, scala = 0, 
 // → { massa: [4] (la parte dei punti, cioè degli elementi di materia: per un campo gaussiano 0,08 0,42 0,42 0,08),
 //     volume: [4] (pesata col volume di Zel'dovich di oggi), densita: [4] (ρ/ρ̄ media della classe = massa/volume),
 //     deltaMedio: [4] (il contrasto lineare medio), autovaloriMedi: [4][3] (in unità dello scarto del campo),
-//     crollati (la parte dei punti con λ₁ ≥ 1), sigma, n (punti), gaussiana: [0,08 0,42 0,42 0,08] }
+//     crollati (la parte dei punti con λ₁ ≥ 1: lì |Π(1−λ)| non è più un volume, e `volume` va preso con cautela),
+//     volumeDeiVuoti, densitaDeiVuoti (validi anche a risoluzione fine), sigma, n (punti), gaussiana: [0,08 0,42 0,42 0,08] }
 export function frazioni(cosmo, opz = {}) {
   const G = opz.griglia ?? classiSuGriglia(cosmo, null, opz), n3 = G.classe.length, conta = [0, 0, 0, 0], vol = [0, 0, 0, 0], dm = [0, 0, 0, 0], lm = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]; let vt = 0, crollati = 0;
   for (let q = 0; q < n3; q++) { const c = G.classe[q]; conta[c]++; vol[c] += G.volume[q]; vt += G.volume[q]; dm[c] += G.delta[q]; lm[c][0] += G.l1[q]; lm[c][2] += G.l3[q]; lm[c][1] += G.delta[q] - G.l1[q] - G.l3[q]; if (G.l1[q] >= 1) crollati++; }
-  return { massa: conta.map((c) => c / n3), volume: vol.map((v) => v / vt), densita: conta.map((c, i) => (c / n3) / (vol[i] / vt)), deltaMedio: dm.map((d, i) => d / (conta[i] || 1)), autovaloriMedi: lm.map((v, i) => v.map((x) => x / (conta[i] || 1) / G.sigma)), crollati: crollati / n3, sigma: G.sigma, n: n3, gaussiana: [0.08, 0.42, 0.42, 0.08], griglia: G };
+  return { massa: conta.map((c) => c / n3), volume: vol.map((v) => v / vt), densita: conta.map((c, i) => (c / n3) / (vol[i] / vt)), deltaMedio: dm.map((d, i) => d / (conta[i] || 1)), autovaloriMedi: lm.map((v, i) => v.map((x) => x / (conta[i] || 1) / G.sigma)), crollati: crollati / n3, sigma: G.sigma, n: n3, gaussiana: [0.08, 0.42, 0.42, 0.08], griglia: G,
+    // i vuoti non si incrociano mai (tre autovalori negativi): il loro volume di Zel'dovich vale anche dove altrove la materia è crollata.
+    // Il volume totale è quello iniziale (la massa si conserva): parte del volume nei vuoti e loro densità media senza usare |J| degli altri
+    volumeDeiVuoti: vol[0] / n3, densitaDeiVuoti: conta[0] / (vol[0] || 1) };
 }
 // I VUOTI di tutto il toro: le regioni connesse (per facce, sul toro che si richiude) di classe vuoto.
 // → { n, vuoti: [{ celle, volumeM3 (di oggi, Zel'dovich: comovente), raggioM (della sfera di ugual volume), centro (m: dove
@@ -428,13 +469,49 @@ export function aloniAttesi(cosmo, punto, raggioM, { fasce = [[1e6, 1e8], [1e8, 
     fasce: fasce.map(([a, b]) => { const nL = conta(a, b, d0, S0), n = nL * rapporto, medio = conta(a, b, 0, 0); return { da: a, a: b, attesi: n * V, perMpc3: n, perMpc3DiMateria: nL, senzaAmbiente: medio * V, perMpc3Medio: medio, probabilitaNessuno: Math.exp(-n * V) }; }),
     fonte: '[R] Press & Schechter 1974 condizionata (Bond et al. 1991; Mo & White 1996) con σ(M) e δc di galassie.js; [R] Mo & White 1996 eq. 18 per 1+δ' };
 }
+// GLI ALONI UNO PER UNO in una regione { centro: [m], lato: m }: ciò che popola filamenti e vuoti quando si zooma tra le galassie.
+// LETTURA DELLE COORDINATE: quella che conserva la massa. I nodi di una griglia ASSOLUTA sul toro (passo L/2^m, scelto perché
+// l'alone più piccolo copra più celle) sono elementi di materia; il campo completo (campoCompleto, fino a onde di due
+// passi) vi è letto come campo iniziale; ogni alone sta OGGI in q + Ψ(q) (Zel'dovich, lo stesso Ψ = v/(H₀f) delle velocità).
+// Le galassie di cosmo3d hanno invece per posizione di oggi il punto q del loro picco: le due letture coincidono al
+// prim'ordine, e lo scarto è |Ψ| (misurato nella prova sulle galassie della biblioteca: `spostamento`).
+// LEGGE (picchi con esclusione: Bond & Myers 1996, ApJS 103, 1 [R], nella forma più semplice): per una scala di masse M
+// (a fattori 2, dalla più grande), δ mediato sulla sfera che contiene M (raggio (3M/4πρ̄)^(1/3), ρ̄ di galassie.js) nei
+// nodi non ancora presi; dove supera δc/D(t) ed è massimo tra i 26 vicini nasce un alone di massa M (la più grande a cui
+// quel punto crolla: «la massa dal filtro»), e la sua sfera è presa (un alone nasce solo se tutta la sua sfera è libera). Le galassie della biblioteca che cadono nella
+// regione vengono PRIMA, con il loro alone (galassie.js) e il loro posto: nessun picco può rinascere dentro la loro sfera.
+// Ogni alone è un evento col suo indirizzo «radice/aloni/passo m/cella i,j,k» (il nodo): lo stesso da qualunque regione lo
+// contenga con il suo margine. Sotto massaMinima c'è la nebbia (aloniAttesi, regola 9).
+// → { aloni: [{ indirizzo, massa (M☉), posizione (m, oggi), iniziale (m: il nodo), spostamento (m), altezza (δ nella sfera),
+//     galassia (l'indice in biblioteca, o null) }], n, passoM, attesi (Press–Schechter condizionata, sopra massaMinima, nella
+//     regione: aloniAttesi), nebbia (le fasce di aloniAttesi sotto massaMinima), massaMassima (la più grande cercata) }
+export function aloniIn(cosmo, regione, { massaMinima = 2e12, t = 0 } = {}) {
+  const O = ondeDi(cosmo), rho = U.Om * U.rhoC * 1e9, RL = (M) => Math.cbrt((3 * M) / (4 * Math.PI * rho)), Lm = O.Lmpc, m = Math.ceil(Math.log2(Lm / (RL(massaMinima) / 1.5))), g = Lm / 2 ** m, lato = regione.lato / MPC;
+  // la massa più grande cercata: quella la cui sfera ha per diametro mezzo lato della regione (oltre, la regione non basta a deciderla)
+  let scale = 0; while (RL(massaMinima * 2 ** (scale + 1)) < lato / 4) scale++; const Mmax = massaMinima * 2 ** scale, mg = Math.ceil(RL(Mmax) / g) + 1;
+  const i0 = regione.centro.map((c) => Math.floor((c / MPC - lato / 2) / g) - mg), nn = Math.ceil(lato / g) + 1 + 2 * mg; if (nn > 72) throw new Error(`aloniIn: regione troppo grande per questa massa minima (${nn}³ nodi): restringerla o alzare la massa`);
+  const K = campoCompleto(O, { dettaglio: 2 * g * MPC }), F = K.sintesi(i0.map((i) => (i * g) / Lm), g / Lm, nn), d = F.delta, n2 = nn * nn, preso = new Uint8Array(nn * n2), soglia = LEGGI_GALASSIE.deltaC / U.D(scalaAl(t)), aloni = [];
+  const dentroLaRegione = (i, j, k) => i >= mg && j >= mg && k >= mg && i < nn - mg && j < nn - mg && k < nn - mg, prendi = (ci, cj, ck, R) => { const r = Math.ceil(R); for (let k = Math.max(0, Math.floor(ck - r)); k <= Math.min(nn - 1, Math.ceil(ck + r)); k++) for (let j = Math.max(0, Math.floor(cj - r)); j <= Math.min(nn - 1, Math.ceil(cj + r)); j++) for (let i = Math.max(0, Math.floor(ci - r)); i <= Math.min(nn - 1, Math.ceil(ci + r)); i++) if ((i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2 <= R * R) preso[k * n2 + j * nn + i] = 1; };
+  const fuori = (q) => { const w = K.in(q.map((v) => v * MPC)), psi = w.velocita.map((v) => v / (COSMO.H0 * f0Crescita)); return { psi, oggi: q.map((v, a) => (v + psi[a]) * MPC) }; };
+  // le galassie della biblioteca nella regione (col margine): vengono prima, con il loro alone
+  if (eUnNumero(cosmo)) { const C = cosmoDi(cosmo), Fc = campoCosmo(cosmo); Fc.pos.forEach((x, id) => { const c = x.map((v, a) => { let q = v * Lm - i0[a] * g; q -= Lm * Math.round((q - (nn * g) / 2) / Lm); return q / g; }); if (c.some((v) => v < 0 || v > nn - 1)) return; const M = C.galassie[id].forma.alone.massa; prendi(c[0], c[1], c[2], RL(M) / g);
+    if (dentroLaRegione(...c.map(Math.round))) { const q = x.map((v) => v * Lm), f = fuori(q); aloni.push({ indirizzo: `${O.radice}/galassia ${id}`, massa: M, posizione: q.map((v) => v * MPC), iniziale: q.map((v) => v * MPC), spostamento: f.psi.map((v) => v * MPC), altezza: null, galassia: id }); } }); }
+  for (let sc = scale; sc >= 0; sc--) { const M = massaMinima * 2 ** sc, R = RL(M) / g, r = Math.ceil(R), off = []; for (let k = -r; k <= r; k++) for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (i * i + j * j + k * k <= R * R) off.push(k * n2 + j * nn + i);
+    const dR = new Float32Array(nn * n2).fill(-Infinity); for (let k = r; k < nn - r; k++) for (let j = r; j < nn - r; j++) for (let i = r; i < nn - r; i++) { const q = k * n2 + j * nn + i; if (preso[q]) continue; let s2 = 0; for (let o = 0; o < off.length; o++) s2 += d[q + off[o]]; dR[q] = s2 / off.length; }
+    const nuovi = []; for (let k = r + 1; k < nn - r - 1; k++) for (let j = r + 1; j < nn - r - 1; j++) for (let i = r + 1; i < nn - r - 1; i++) { const q = k * n2 + j * nn + i, v = dR[q]; if (!(v >= soglia)) continue; let massimo = true; for (let c = -1; c <= 1 && massimo; c++) for (let b = -1; b <= 1 && massimo; b++) for (let a = -1; a <= 1; a++) if ((a || b || c) && dR[q + c * n2 + b * nn + a] > v) { massimo = false; break; } if (massimo) nuovi.push([v, i, j, k]); }
+    nuovi.sort((a, b) => b[0] - a[0] || a[3] - b[3] || a[2] - b[2] || a[1] - b[1]); // i più alti prima: ordine che non dipende dalla regione
+    for (const [v, i, j, k] of nuovi) { const q0 = k * n2 + j * nn + i; let libero = true; for (let o = 0; o < off.length; o++) if (preso[q0 + off[o]]) { libero = false; break; } if (!libero) continue; /* la sua sfera non deve toccare materia già in un alone: la massa non si conta due volte */ prendi(i, j, k, R); if (!dentroLaRegione(i, j, k)) continue; const N = 2 ** m, gi = [i, j, k].map((a, e) => (((a + i0[e]) % N) + N) % N), q = gi.map((a) => a * g), f = fuori(q);
+      aloni.push({ indirizzo: `${O.radice}/aloni/passo ${m}/cella ${gi.join(',')}`, massa: M, posizione: f.oggi, iniziale: q.map((a) => a * MPC), spostamento: f.psi.map((a) => a * MPC), altezza: v, galassia: null }); } }
+  const A = aloniAttesi(cosmo, regione.centro, Math.cbrt(3 / (4 * Math.PI)) * regione.lato, { fasce: [[1e6, 1e8], [1e8, massaMinima], [massaMinima, 2 * Mmax]], t });
+  return { aloni, n: aloni.length, passoM: g * MPC, massaMassima: Mmax, attesi: A.fasce[2].perMpc3DiMateria * lato ** 3, attesiMedi: A.fasce[2].perMpc3Medio * lato ** 3, nebbia: A.fasce.slice(0, 2), delta0: A.delta0 };
+}
 // CHE COSA C'È in un punto e a un tempo. Ogni voce: { valore…, unita, fonte } con la marca [V]/[R]/[D].
 // La densità locale è quella media per il rapporto di Zel'dovich ρ/ρ̄ del punto (doveSono; se lì la materia è crollata,
 // `crollato`, il numero è solo un ordine di grandezza: dentro un alone le densità le dà galassie.js).
 // → { dove (doveSono), z, a, etaAnni, barioni, materiaOscura, fotoniDelFondo, neutrini, luceDelleGalassie,
 //     campoMagnetico, aloni (aloniAttesi entro `raggio`, 10 Mpc se non detto) }
-export function contenutoCosmico(cosmo, punto, t = 0, { scala = 0, raggio = 10 * MPC } = {}) {
-  const w = doveSono(cosmo, punto, { scala, t }), a = scalaAl(t), z = 1 / a - 1, R = ricombinazione(), ro = w.densita, { mp, kB } = COSTANTI;
+export function contenutoCosmico(cosmo, punto, t = 0, { scala = 0, raggio = 10 * MPC, dettaglio = null } = {}) {
+  const w = doveSono(cosmo, punto, { scala, t, dettaglio }), a = scalaAl(t), z = 1 / a - 1, R = ricombinazione(), ro = w.densita, { mp, kB } = COSTANTI;
   const nb = ((OmB * RHO_C) / mp) * (1 + z) ** 3 * ro, nH = (1 - Y_ELIO) * nb, nHe = (Y_ELIO / 4) * nb;
   // lo stato del gas: prima della ricombinazione plasma; poi neutro (con il residuo di Peebles); dopo z_re ionizzato dalla luce delle prime stelle
   const dopo = z < R.zReionizzazione, xe = dopo ? 1 : R.xe(z), stato = dopo ? 'ionizzato (dalla luce di stelle e quasar, dopo la reionizzazione)' : xe > 0.5 ? 'plasma (prima della ricombinazione)' : 'neutro (tra la ricombinazione e la reionizzazione)';
@@ -705,9 +782,9 @@ export function scenaRagnatela(cosmo, regione = null, t = 0, opz = {}) {
     segmenti: { n: S.m, coppie: S.segmenti, lunghezzaM: S.lunghezzaM * a },
     vuoti: { n: vr.length, pos: Float64Array.from(vp), raggio: Float64Array.from(vr), contrasto: Float32Array.from(vc), deltaMinimo: Float32Array.from(vd), cosa: 'i minimi di densità di classe vuoto: centro, raggio (fin dove resta vuoto), contrasto ρ/ρ̄ − 1 di Zel\'dovich' },
     nodi: { n: nd.length, pos: Float64Array.from(np_), densita: Float32Array.from(nd) },
-    campi: { classe: { n, dati: G.classe, nomi: CLASSI, origine: G.origine.map((v) => v * lato), passo: G.passo * lato }, densita: { n, delta: G.delta, crescita: D, lato: reg.lato * a, in: (x) => nelPunto(O, x).delta * D }, in: (punto) => doveSono(O, punto, { t, scala: opz.scala ?? 0, soglia: opz.soglia ?? 0 }) },
+    campi: { classe: { n, dati: G.classe, nomi: CLASSI, origine: G.origine.map((v) => v * lato), passo: G.passo * lato }, densita: { n, delta: G.delta, crescita: D, lato: reg.lato * a, in: (x) => nelPunto(O, x).delta * D }, in: (punto) => doveSono(O, punto, { t, scala: opz.scala ?? 0, soglia: opz.soglia ?? 0, dettaglio: opz.dettaglio ?? null }) },
     frazioni: { massa: conta.map((c) => c / G.classe.length), volume: vol.map((v) => v / vt), nomi: CLASSI },
-    risoluzione: { ondeM: O.toroM / O.kmax, cellaM: G.latoCellaM },
+    risoluzione: { ondeM: opz.dettaglio ? campoCompleto(O, { dettaglio: opz.dettaglio }).risoluzioneM : O.toroM / O.kmax, cellaM: G.latoCellaM },
     figlio: () => ({ livello: 'cosmo', via: { cosmo } }),
   };
 }

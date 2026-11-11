@@ -60,14 +60,18 @@
 //   griglia della rete in scenaCosmo, i χ² di bolle.js (la correlazione del toro diventa quella senza bordo), e tutto
 //   ragnatela.js (classi, scheletro, cielo: spariscono i cerchi, torna la potenza a ℓ < 73). Gli eventi «…/campo/onda
 //   x,y,z» non servirebbero più: i rami fatti su un'onda perderebbero il loro oggetto.
-//   IL PASSO PIÙ PICCOLO: non sostituire, COMPLETARE. Il toro tiene le onde tra 1,2 Gpc e 50 Mpc; a questo campo si
-//   chiede solo ciò che al toro manca, con una finestra in più sullo spettro (opz.finestra): le scale sotto i 50 Mpc
-//   (dettaglio pigro nello spazio, al posto di raffina) e, se si vuole un cielo senza cerchi, quelle sopra 1,2 Gpc. Le
-//   galassie restano vincolate dal campo a onde lunghe com'è (nessun numero di oggi cambia); costa un raccordo dichiarato
-//   attorno ai due bordi in k (la finestra non può essere netta senza allungare i nuclei).
-//   GLI ALONI UNO PER UNO (non fatti): con questo campo sono i picchi del campo lisciato alla scala della massa, cercati
-//   nella regione guardata; resta da scegliere la lettura delle coordinate (posizioni di oggi, come cosmo3d, o elementi di
-//   materia da spostare con Ψ, che conserva la massa): tocca cosmo3d, e non l'ho deciso io.
+//   IL PASSO PIÙ PICCOLO (FATTO, solo verso il basso): non sostituire, COMPLETARE. Il toro tiene le onde tra 1,2 Gpc e 50 Mpc;
+//   a questo campo si chiede solo ciò che al toro manca sotto i 50 Mpc, con `finestra` (F = 1 sopra il taglio, 0 sotto),
+//   `lato0` e `periodo` (le celle si richiudono col toro): è campoCompleto() di ragnatela.js, che non cambia nessun numero
+//   di oggi. Sopra 1,2 Gpc no: un campo periodico in una banda e non nelle altre è da decidere (tenere il toro o sostituire
+//   la banda intera). A SOSTITUIRE ANCHE LA BANDA DEL TORO (misurato su 189 galassie dei cosmi 1–3, rifacendo il campo
+//   libero con gli stessi vincoli delle galassie): 185 assi su 189 cambiano di più di 10° (133 di più di 45°, mediana
+//   58°: l'asse è deciso dal campo libero, non dal picco), e le velocità peculiari (469 km/s di scarto) cambiano di 653
+//   km/s di scarto: sono, in pratica, altre.
+//   LE GRIGLIE: grigliaIn() stende per ogni livello la pezza di celle della regione e somma nodo per nodo (stessi bit di
+//   in()): ~40 µs per nodo e per livello; 32³ nodi con 4 livelli ~5 s. È il costo della somma (905 celle per nodo), non
+//   delle chiavi: per scendere ancora servirebbe la convoluzione con la trasformata di Fourier su un reticolo allineato.
+//   GLI ALONI UNO PER UNO: aloniIn() di ragnatela.js, sul campo completo.
 
 import { COSMO } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
@@ -112,23 +116,32 @@ function tabelleRadiali(ks, amp, rs) {
 // IL CAMPO. radice: l'indirizzo («cosmo 7», o qualunque stringa); opz: { rami, raggio (celle), memoria (blocchi per
 // livello), finestra: { chiave, F(k) } una finestra in più sullo spettro (in ampiezza), per completare un altro campo }
 // =====================================================================================================
-export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria = PIGRO.memoria, finestra = null } = {}) {
+export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria = PIGRO.memoria, finestra = null, lato0 = LATO0, periodo = null } = {}) {
+  // (lato0: il lato delle celle del livello 0, in Mpc; periodo: se dato (Mpc), le celle si richiudono con quel periodo, e il
+  // campo è periodico esattamente: serve a completare un toro, e allora ogni livello usato deve starci un numero intero di volte)
+  const latoDi = (j) => lato0 / 2 ** j, kDi = (j) => Math.PI / (2 * latoDi(j)), finestraLivello = (j, k) => { const u = Math.abs(Math.log2(k / kDi(j))); return u >= 1 ? 0 : Math.cos((Math.PI / 2) * u); };
   const livelli = new Map(), nuclei = new Map(), NB = PIGRO.blocco, NB3 = NB ** 3, contatori = { celle: 0, blocchi: 0 };
   const lato = Math.ceil(raggio) * 2 + 2, NG = lato ** 3, gw = new Float64Array(NG), gx = new Float64Array(NG), gy = new Float64Array(NG), gz = new Float64Array(NG), gr = new Float64Array(NG);
   // ---- le celle di un livello: eventi, tenuti a blocchi (si possono buttare: si rifanno identici)
-  const livello = (j) => { let Lv = livelli.get(j); if (!Lv) { Lv = { j, h: latoDi(j), fonte: sorgente(`${radice}/campo/livello ${j}`, rami), blocchi: new Map() }; livelli.set(j, Lv); } return Lv; };
+  const livello = (j) => { let Lv = livelli.get(j); if (!Lv) { const h = latoDi(j), M = periodo ? Math.round(periodo / h) : 0; if (periodo && (M < 1 || Math.abs(M * h - periodo) > 1e-9 * periodo)) throw new Error(`campoPigro: il livello ${j} (celle di ${h} Mpc) non sta un numero intero di volte nel periodo`); Lv = { j, h, M, fonte: sorgente(`${radice}/campo/livello ${j}`, rami), blocchi: new Map(), denso: null }; livelli.set(j, Lv); } return Lv; };
   const blocco = (Lv, bx, by, bz) => { const k = `${bx},${by},${bz}`; let B = Lv.blocchi.get(k); if (!B) { if (Lv.blocchi.size >= memoria) Lv.blocchi.delete(Lv.blocchi.keys().next().value); B = new Float64Array(NB3).fill(NaN); Lv.blocchi.set(k, B); contatori.blocchi++; } return B; };
   // il valore di una cella: l'evento «…/livello j/cella ix,iy,iz» (le sue prime due estrazioni fanno la campana)
-  const cella = (j, ix, iy, iz) => { const s = livello(j).fonte.serie(`cella ${ix},${iy},${iz}`); return campana(s(0), s(1)); };
+  const cella = (j, ix, iy, iz) => { const Lv = livello(j), g = (i) => (Lv.M ? ((i % Lv.M) + Lv.M) % Lv.M : i), s = Lv.fonte.serie(`cella ${g(ix)},${g(iy)},${g(iz)}`); return campana(s(0), s(1)); };
   // raccoglie le celle entro il raggio dal punto x (Mpc): valori e distacchi (Mpc); → quante
-  const raccogli = (Lv, x) => { const h = Lv.h, R = raggio * h, R2 = R * R, lo = [0, 0, 0], hi = [0, 0, 0]; let n = 0;
+  const raccogli = (Lv, x) => { const h = Lv.h, R = raggio * h, R2 = R * R, lo = [0, 0, 0], hi = [0, 0, 0], M = Lv.M, D = Lv.denso; let n = 0;
     for (let d = 0; d < 3; d++) { lo[d] = Math.ceil((x[d] - R) / h - 0.5); hi[d] = Math.floor((x[d] + R) / h - 0.5); }
-    for (let iz = lo[2]; iz <= hi[2]; iz++) { const dz = x[2] - (iz + 0.5) * h, bz = Math.floor(iz / NB), oz = (iz - bz * NB) * NB * NB;
-      for (let iy = lo[1]; iy <= hi[1]; iy++) { const dy = x[1] - (iy + 0.5) * h, q = dz * dz + dy * dy; if (q >= R2) continue; const by = Math.floor(iy / NB), oy = oz + (iy - by * NB) * NB; let bx = NaN, B = null;
-        for (let ix = lo[0]; ix <= hi[0]; ix++) { const dx = x[0] - (ix + 0.5) * h, r2 = q + dx * dx; if (r2 >= R2) continue; const b = Math.floor(ix / NB); if (b !== bx) { bx = b; B = blocco(Lv, bx, by, bz); }
-          const o = oy + ix - bx * NB; let w = B[o]; if (w !== w) { const s = Lv.fonte.serie(`cella ${ix},${iy},${iz}`); w = B[o] = campana(s(0), s(1)); contatori.celle++; }
+    const pezza = D && lo[0] >= D.lo[0] && lo[1] >= D.lo[1] && lo[2] >= D.lo[2] && hi[0] < D.lo[0] + D.n[0] && hi[1] < D.lo[1] + D.n[1] && hi[2] < D.lo[2] + D.n[2];
+    for (let iz = lo[2]; iz <= hi[2]; iz++) { const dz = x[2] - (iz + 0.5) * h, wz = M ? ((iz % M) + M) % M : iz, bz = Math.floor(wz / NB), oz = (wz - bz * NB) * NB * NB;
+      for (let iy = lo[1]; iy <= hi[1]; iy++) { const dy = x[1] - (iy + 0.5) * h, q = dz * dz + dy * dy; if (q >= R2) continue; const wy = M ? ((iy % M) + M) % M : iy, by = Math.floor(wy / NB), oy = oz + (wy - by * NB) * NB; let bx = NaN, B = null;
+        const riga = pezza ? ((iz - D.lo[2]) * D.n[1] + iy - D.lo[1]) * D.n[0] - D.lo[0] : 0;
+        for (let ix = lo[0]; ix <= hi[0]; ix++) { const dx = x[0] - (ix + 0.5) * h, r2 = q + dx * dx; if (r2 >= R2) continue; let w;
+          if (pezza) w = D.w[riga + ix];
+          else { const wx = M ? ((ix % M) + M) % M : ix, b = Math.floor(wx / NB); if (b !== bx) { bx = b; B = blocco(Lv, bx, by, bz); } const o = oy + wx - bx * NB; w = B[o]; if (w !== w) { const s = Lv.fonte.serie(`cella ${wx},${wy},${wz}`); w = B[o] = campana(s(0), s(1)); contatori.celle++; } }
           gw[n] = w; gx[n] = dx; gy[n] = dy; gz[n] = dz; gr[n] = Math.sqrt(r2); n++; } } }
     return n; };
+  // una pezza densa di celle per un livello, attorno a una regione (Mpc): gli stessi eventi, senza passare dai blocchi
+  const stendi = (Lv, a, b) => { const h = Lv.h, R = raggio * h, M = Lv.M, lo = [0, 1, 2].map((d) => Math.ceil((a[d] - R) / h - 0.5)), n = [0, 1, 2].map((d) => Math.floor((b[d] + R) / h - 0.5) - lo[d] + 1), w = new Float64Array(n[0] * n[1] * n[2]), giro = (i) => (M ? ((i % M) + M) % M : i); let q = 0;
+    for (let k = 0; k < n[2]; k++) for (let j = 0; j < n[1]; j++) for (let i = 0; i < n[0]; i++) { const s = Lv.fonte.serie(`cella ${giro(lo[0] + i)},${giro(lo[1] + j)},${giro(lo[2] + k)}`); w[q++] = campana(s(0), s(1)); } contatori.celle += q; Lv.denso = { lo, n, w }; };
   // ---- i nuclei di un livello per un filtro: tabelle radiali troncate, raccordate e rinormalizzate
   const nucleo = (j, filtro = FILTRI.nessuno) => {
     const chiave = `${j}|${filtro.chiave}`; let N = nuclei.get(chiave); if (N) return N;
@@ -170,7 +183,16 @@ export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria
   const code = (opz = {}) => { const F = filtroDi(opz), out = []; for (const j of livelliUtili(opz, F)) { const N = nucleo(j, F); out.push({ livello: j, latoMpc: N.h, varianza: N.varianza, coda: N.coda ?? 0 }); } return out; };
   // una griglia regolare di densità (n³ punti: origine + (i, j, l)·passo, in metri): gli stessi valori di delta(), punto per punto
   const griglia = (origine, passo, n, opz = {}) => { const out = new Float64Array(n * n * n); for (let l = 0; l < n; l++) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[(l * n + j) * n + i] = delta([origine[0] + i * passo, origine[1] + j * passo, origine[2] + l * passo], opz); return out; };
-  return { radice, rami, raggio, daLivello, delta, in: in_, varianza, code, griglia, cella, nucleo, livello, raccogli, livelliUtili: (opz = {}) => livelliUtili(opz, filtroDi(opz)), memoriaIn: { gw, gx, gy, gz, gr }, contatori,
+  // LA CONVOLUZIONE PER REGIONE: δ e marea (e spostamento) sugli n³ nodi di una griglia regolare (origine, passo in metri).
+  // Per ogni livello si stende una volta la pezza di celle che la regione tocca, poi ogni nodo somma il suo intorno: gli
+  // stessi numeri di in(), bit per bit (stesse celle, stesso ordine), ma ~4 volte più in fretta (niente blocchi né chiavi).
+  // → { n, delta, xx, yy, zz, xy, xz, yz, sx, sy, sz (lo spostamento, m): Float64Array(n³), indice (l·n + j)·n + i }
+  const grigliaIn = (origine, passo, n, opz = {}) => { const F = filtroDi(opz), J = cima(opz, F), j0 = Math.min(opz.da ?? daLivello, J), a = mpc(origine), b = a.map((v) => v + ((n - 1) * passo) / MPC), n3 = n * n * n, out = { n };
+    for (const k of ['delta', 'xx', 'yy', 'zz', 'xy', 'xz', 'yz', 'sx', 'sy', 'sz']) out[k] = new Float64Array(n3);
+    for (let j = j0; j <= J; j++) if (!nucleo(j, F).vuoto) stendi(livello(j), a, b);
+    for (let l = 0, q = 0; l < n; l++) for (let jj = 0; jj < n; jj++) for (let i = 0; i < n; i++, q++) { const w = in_([origine[0] + i * passo, origine[1] + jj * passo, origine[2] + l * passo], opz); out.delta[q] = w.delta; out.xx[q] = w.marea[0]; out.yy[q] = w.marea[1]; out.zz[q] = w.marea[2]; out.xy[q] = w.marea[3]; out.xz[q] = w.marea[4]; out.yz[q] = w.marea[5]; out.sx[q] = w.spostamento[0]; out.sy[q] = w.spostamento[1]; out.sz[q] = w.spostamento[2]; }
+    for (let j = j0; j <= J; j++) if (livelli.has(j)) livelli.get(j).denso = null; return out; };
+  return { radice, rami, raggio, daLivello, latoDi, kDi, grigliaIn, delta, in: in_, varianza, code, griglia, cella, nucleo, livello, raccogli, livelliUtili: (opz = {}) => livelliUtili(opz, filtroDi(opz)), memoriaIn: { gw, gx, gy, gz, gr }, contatori,
     stato: () => { let b = 0; for (const Lv of livelli.values()) b += Lv.blocchi.size; return { livelli: livelli.size, blocchi: b, byte: b * NB3 * 8, celle: contatori.celle, nuclei: nuclei.size }; },
     dimentica: () => { livelli.clear(); }, pigro: true };
 }

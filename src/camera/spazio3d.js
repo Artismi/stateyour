@@ -25,6 +25,7 @@ import { cosmo3d } from './cosmo3d.js';
 import { rotazione } from './rotazione.js';
 import { V, terna, daTerna, statoKeplero, periodo, elementiPianeta, assePianeta, elementiLuna, asseStella } from './orbite.js';
 import { motoStella, faseBraccioAlTempo, cinematica, densitaGalassia, curvaRotazione, galassiaAlTempo, colorePerTemperatura } from './galassie.js';
+import { scenaVuoto } from './vuoto.js';
 
 export const ANNI_OGGI = etaUniverso() / ANNO; // l'epoca: t = 0
 const PI2 = 2 * Math.PI, G = COSTANTI.G, MSOLE = 1.989e30;
@@ -243,6 +244,8 @@ export function scenaGalassia(n, gid, t = 0) {
       rotazione: (r) => curvaRotazione(F, Math.max(r / k, 1e-3)) * 1e3, // m/s al raggio r (m)
     },
     buco: { pos: [0, 0, 0], massaKg: Gx.buco.M * MSOLE, raggio: (2 * G * Gx.buco.M * MSOLE) / COSTANTI.c ** 2, potenzaGetto: Gx.buco.potenzaW },
+    // ciò che riempie lo spazio tra le stelle in un pezzo della galassia (vuoto.js: nebulose, nubi oscure, resti, polvere), a questo tempo
+    vuoto: (regione, opz) => scenaVuoto({ forma: F, caso: sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}`, ramiCosmo(n)), catalogo: Gx, regione, ...opz }, t),
     figlio: (i) => ({ livello: 'sistema', via: { cosmo: n, galassia: gid, stella: i } }),
   };
 }
@@ -277,6 +280,10 @@ export function scenaSistema(n, gid, sid, t = 0) {
     riferimento: { origine: 'il baricentro del sistema', assi: 'x, y: il piano medio del sistema (le stesse della mappa); z: la normale', unita: 'm', raggio: LATO_SISTEMA_M },
     nelGenitore: { livello: 'galassia', pos: [G.pos[3 * sid], G.pos[3 * sid + 1], G.pos[3 * sid + 2]], vel: [G.vel[3 * sid], G.vel[3 * sid + 1], G.vel[3 * sid + 2]], assi: assiSistema(n, gid, sid) },
     corpi, disco: S.disco ? { interno: S.disco.rIn * UA, esterno: S.disco.rOut * UA, neve: S.disco.neve * UA, massaKg: S.disco.massaKg * S.disco.gasRimasto } : null,
+    // i corpi minori e la polvere del sistema (vuoto.js: fasce, comete, nube esterna), a questo tempo; le posizioni sono
+    // rispetto alla stella (sommare quella della stella). `attorno`: stelle e gas della galassia nel punto della stella (kg/m³)
+    vuoto: () => { const k = KPC, x = G.pos[3 * sid], y = G.pos[3 * sid + 1], z = G.pos[3 * sid + 2], d = densitaGalassia(galassia(n, gid).forma).in3d(Math.hypot(x, y) / k, z / k, Math.atan2(y, x), t / GA);
+      return scenaVuoto({ sistema: Sis, caso: sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}`, ramiCosmo(n)), attorno: ((d.stelle + d.gas) * MSOLE) / k ** 3 }, t); },
     figlio: (i) => ({ livello: 'pianeta', via: { cosmo: n, galassia: gid, stella: sid, pianeta: i } }),
   };
 }

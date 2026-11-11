@@ -15,6 +15,7 @@ import { COSMOLOGIA as U } from '../src/camera/galassie.js';
 import { campoCosmo } from '../src/camera/spazio3d.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { TORO_M } from '../src/camera/cosmo.js';
+import { FILTRI } from '../src/camera/campo_pigro.js';
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], costi = [];
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -143,6 +144,41 @@ prova('sotto la risoluzione (regola 4): raffina aggiunge onde più corte, eventi
   console.log(`      LIMITE DICHIARATO: è pigro nella scala, non nello spazio. Fino a 12 Mpc: ${num(c12.onde)} onde (${num(c12.memoriaByte / 1e6)} MB); fino a 6 Mpc: ${num(c6.onde)} onde (${num(c6.memoriaByte / 1e6)} MB, ${num(c6.msPerGenerarle / 1000)} s). Sotto servono pacchetti con un posto: non fatto.`);
 });
 
+prova('il campo completo: onde del toro intatte più il campo pigro sotto i 50 Mpc; senza `dettaglio` niente cambia; lo spettro attraversa il taglio', () => {
+  const F = COSMI[3], O = R.ondeDi(F), K = R.campoCompleto(F, { dettaglio: 12 * MPC }), kc = K.kTaglio;
+  // senza dettaglio: gli stessi oggetti di prima, bit per bit (il campo pigro non viene nemmeno costruito)
+  for (let i = 0; i < 5; i++) { const p = punto(`completo ${i}`), a = R.doveSono(F, p), b = R.doveSono(F, p, { dettaglio: null }); assert.deepEqual(a, b); const x = p.map((v) => v / L), n = R.dentro.nelPunto(O, x); assert.equal(a.delta, n.delta); }
+  const reg = { centro: punto('completo regione'), lato: 150 * MPC, celle: 12 }; assert.deepEqual([...R.classiSuGriglia(F, reg).delta], [...R.classiSuGriglia(F, reg, { dettaglio: null }).delta]);
+  // le due finestre al quadrato sommano 1 attraverso il taglio: l'ultima onda del toro (|k| = 24) sta sotto, la prima che manca (|k|² = 577) sopra
+  const fin = K.pigro.nucleo, k24 = (2 * Math.PI * 24) / O.Lmpc, k577 = (2 * Math.PI * Math.sqrt(577)) / O.Lmpc; assert.ok(kc >= k24 && kc < k577); for (const k of [0.5 * kc, k24, k577, 2 * kc]) { const toro = k <= k24 ? 1 : 0, pigro = k > kc ? 1 : 0; assert.equal(toro + pigro, 1); } void fin;
+  // lisciato a 60 Mpc il dettaglio non c'è: il campo completo è quello del toro; il dettaglio è periodico come il toro
+  let lontano = 0, per = 0; for (let i = 0; i < 6; i++) { const p = punto(`completo ${i}`); lontano = Math.max(lontano, Math.abs(R.doveSono(F, p, { scala: 60 * MPC, dettaglio: 12 * MPC }).delta - R.doveSono(F, p, { scala: 60 * MPC }).delta)); per = Math.max(per, Math.abs(K.in(p).delta - K.in([p[0] + L, p[1] - 2 * L, p[2]]).delta)); } assert.ok(lontano < 1e-9 && per < 1e-9, `a 60 Mpc cambia di ${lontano}; periodicità ${per}`);
+  // la griglia per regione è il campo nel punto, bit per bit
+  const [G, tg] = ms(() => R.classiSuGriglia(F, reg, { dettaglio: 12 * MPC })); costa('classi in una regione 12³ col dettaglio fino a 12 Mpc (3 livelli pigri)', tg); const q = (5 * 12 + 7) * 12 + 3, pq = [3, 7, 5].map((v, d) => (G.origine[d] + v * G.passo) * L), [w, tp] = ms(() => R.doveSono(F, pq, { dettaglio: 12 * MPC })); costa('doveSono col dettaglio fino a 12 Mpc (un punto)', tp); assert.ok(Math.abs(w.delta - G.campo.delta[q]) < 1e-12 && w.numero === G.classe[q]);
+  // LO SPETTRO ATTRAVERSO IL TAGLIO: la potenza in bande strette attorno a k_c (toro + pigro) contro U.potenza; e il riscontro con raffina
+  const righe = [], N = 400; for (const f of [0.7, 1, 1.4]) { const kb = f * kc, B = FILTRI.banda(kb), W = new Float64Array(O.kmax ** 2 + 1); for (let k2 = 1; k2 < W.length; k2++) W[k2] = B.F((2 * Math.PI * Math.sqrt(k2)) / O.Lmpc); let s = 0, teoria = 0;
+    for (let i = 0; i < N; i++) { const p = punto(`banda ${f}/${i}`), x = p.map((v) => v / L); s += (R.dentro.nelPunto(O, x, W).delta + K.pigro.delta(p, { filtro: B, livello: K.livello + 2 })) ** 2 / N; }
+    const nk = 1500, l0 = Math.log(kb / 12), dl = Math.log(144) / nk; for (let i = 0; i < nk; i++) { const k = Math.exp(l0 + (i + 0.5) * dl); teoria += U.potenza(k) * B.F(k) ** 2 * dl; }
+    tra(s / teoria, 1 - 4 * Math.sqrt(2 / N), 1 + 4 * Math.sqrt(2 / N), `potenza attorno a ${f}·k_c, misurata su attesa`); righe.push(`${f}·k_c: ${num(s / teoria)}`); }
+  // raffina (onde piane fino a 19 Mpc, non pigra nello spazio) come riscontro: lisciato a 12 Mpc le due vie hanno la stessa varianza aggiunta
+  const Rf = R.raffina(F, 64), sc = 12 * MPC; let va = 0, vb = 0; const NR = 300; for (let i = 0; i < NR; i++) { const p = punto(`due vie ${i}`), base = R.doveSono(F, p, { scala: sc }).delta; va += (R.doveSono(Rf, p, { scala: sc }).delta - base) ** 2 / NR; vb += (R.doveSono(F, p, { scala: sc, dettaglio: 6 * MPC }).delta - base) ** 2 / NR; }
+  tra(vb / va, 1 - 4 * Math.sqrt(4 / NR), 1 + 4 * Math.sqrt(4 / NR), 'varianza del dettaglio: campo pigro su raffina');
+  console.log(`      (taglio a k_c = ${num(kc)} /Mpc; potenza misurata/attesa attraverso il taglio: ${righe.join('; ')}; a 60 Mpc il dettaglio pesa ${num(lontano)}; varianza del dettaglio lisciato a 12 Mpc: pigro ${num(vb)}, raffina ${num(va)})`);
+});
+
+prova('i riscontri che non tornavano, rimisurati a risoluzione fine: quanto era risoluzione e quanto è il campo lineare', () => {
+  const righe = []; let ultimo = null;
+  for (const [det, lato] of [[null, 400], [25, 400], [12, 200], [6, 100]]) { const fr = [0, 1, 2].map((i) => R.frazioni(null, { griglia: R.classiSuGriglia(COSMI[i], { centro: punto(`fine ${det}/${i}`), lato: lato * MPC, celle: 24 }, det ? { dettaglio: det * MPC } : {}) })), m = (f) => media(fr.map(f));
+    ultimo = { massa: [0, 1, 2, 3].map((k) => m((x) => x.massa[k])), volVuoti: m((x) => x.volumeDeiVuoti), densVuoti: m((x) => x.densitaDeiVuoti), crollati: m((x) => x.crollati) };
+    righe.push(`onde fino a ${det ?? 50} Mpc: massa ${ultimo.massa.map((v) => (100 * v).toFixed(0)).join('/')} %; volume dei vuoti ${(100 * ultimo.volVuoti).toFixed(0)} %; contrasto medio dei vuoti ${num(ultimo.densVuoti - 1)}; crollati ${(100 * ultimo.crollati).toFixed(0)} %`); }
+  for (const r of righe) console.log(`      ${r}`);
+  // la massa per classe non dipende dalla risoluzione (campo gaussiano: 8/42/42/8 a ogni scala): è il limite del campo lineare
+  for (let k = 0; k < 4; k++) assert.ok(Math.abs(ultimo.massa[k] - [0.08, 0.42, 0.42, 0.08][k]) < 0.06, 'a ogni risoluzione i punti restano 8/42/42/8');
+  riscontro('contrasto medio dei vuoti, onde fino a 6 Mpc', ultimo.densVuoti - 1, -1, -0.8, '< −0,85 (Pan et al. 2012); a 50 Mpc era −0,60');
+  riscontro('parte del volume nei vuoti (%), onde fino a 6 Mpc', 100 * ultimo.volVuoti, 50, 80, '62 (Pan et al. 2012), 77 (Cautun et al. 2014); a 50 Mpc era 20');
+  riscontro('massa nei vuoti (%), a ogni risoluzione', 100 * ultimo.massa[0], 10.5, 19.5, '15 (Cautun et al. 2014) [R]: qui è l\'8% del teorema gaussiano, limite del campo lineare');
+});
+
 // =====================================================================================================
 console.log('B. che cosa c\'è nel vuoto');
 prova('il contenuto di un punto: barioni, materia oscura, fotoni del fondo, neutrini, luce delle galassie, campo magnetico', () => {
@@ -173,6 +209,28 @@ prova('la nebbia degli aloni (regola 9): con l\'ambiente medio è Press–Schech
   const somma = [0, 0, 0, 0]; let medio = null; const NP = 240; for (let i = 0; i < NP; i++) { const A = R.aloniAttesi(COSMI[i % 6], punto(`nebbia ${i}`), 10 * MPC); A.fasce.forEach((f, k) => { somma[k] += f.perMpc3DiMateria / NP; }); medio = A.fasce.map((f) => f.perMpc3Medio); }
   console.log(`      nel centro del vuoto più grande di ogni cosmo, entro 10 Mpc: ${num(media(nane))} aloni nani (10⁸–10¹⁰ M☉: ${num(media(rn))} della media del cosmo), aloni oltre 10¹² M☉: ${num(media(rg))} della media`);
   ['10⁶–10⁸', '10⁸–10¹⁰', '10¹⁰–10¹²', '> 10¹²'].forEach((n, k) => riscontro(`aloni ${n} M☉ per unità di materia, media su ${NP} ambienti a caso (sfere di 10 Mpc) / media del cosmo`, somma[k] / medio[k], 0.85, 1.15, '1 (la somma sugli ambienti è il totale: esatto solo col filtro netto in k e la barriera assorbente)'));
+});
+
+prova('gli aloni uno per uno (aloniIn): picchi del campo completo con esclusione, eventi con indirizzo; coerenti con la nebbia e con le galassie della biblioteca', () => {
+  const lato = 20 * MPC, M0 = 2e12; let trovati = 0, attesi = 0, psi2 = 0, quanti = 0; const righe = [];
+  for (let i = 0; i < 2; i++) { const reg = { centro: punto(`aloni ${i}`), lato }, [A, t] = ms(() => R.aloniIn(COSMI[i], reg, { massaMinima: M0 })); if (!i) costa('aloniIn: regione di 20 Mpc, aloni sopra 2·10¹² M☉ (5 livelli pigri su ~28³ nodi)', t); trovati += A.n; attesi += A.attesi;
+    for (const a of A.aloni) { assert.ok(a.massa >= M0 && a.massa <= A.massaMassima && a.altezza >= 1.686 && /\/aloni\/passo \d+\/cella \d+,\d+,\d+$/.test(a.indirizzo)); for (let d = 0; d < 3; d++) assert.ok(Math.abs(a.posizione[d] - a.iniziale[d] - a.spostamento[d]) < 1e-6 * MPC); psi2 += Math.hypot(...a.spostamento) ** 2; quanti++; }
+    assert.equal(new Set(A.aloni.map((a) => a.indirizzo)).size, A.n); // nessun alone due volte
+    // due aloni non si sovrappongono (le loro sfere di materia): la massa non si conta due volte
+    const RL = (M) => Math.cbrt((3 * M) / (4 * Math.PI * U.Om * U.rhoC * 1e9)) * MPC; for (let a = 0; a < A.n; a++) for (let b = a + 1; b < A.n; b++) { const d = Math.hypot(...A.aloni[a].iniziale.map((v, k) => { const q = v - A.aloni[b].iniziale[k]; return q - L * Math.round(q / L); })); assert.ok(d > 0.9 * Math.max(RL(A.aloni[a].massa), RL(A.aloni[b].massa))); }
+    if (!i) { // la stessa regione spostata di tre nodi: gli aloni che stanno in tutte e due sono gli stessi (indirizzo e massa)
+      const B = R.aloniIn(COSMI[0], { centro: reg.centro.map((v, d) => v + (d === 0 ? 3 * A.passoM : 0)), lato }, { massaMinima: M0 }), mappa = new Map(B.aloni.map((a) => [a.indirizzo, a.massa])); let comuni = 0, uguali = 0;
+      for (const a of A.aloni) { const x = a.iniziale[0] - (reg.centro[0] - lato / 2); if (x > 5 * A.passoM && mappa.size) { comuni++; if (mappa.get(a.indirizzo) === a.massa) uguali++; } } righe.push(`regione spostata di 3 nodi: ${uguali} aloni identici su ${comuni} che stanno in entrambe`); riscontro('aloni identici da due regioni che li contengono (parte)', comuni ? uguali / comuni : 1, 0.8, 1, '1 se l\'esclusione non guardasse fuori dalla regione: il margine è il raggio dell\'alone più grande cercato'); }
+    righe.push(`cosmo ${i}: ${A.n} aloni sopra ${num(M0)} M☉ in (20 Mpc)³ (attesi dalla nebbia nell'ambiente: ${num(A.attesi)}; δ₀ = ${num(A.delta0)}); il più grande cercato ${num(A.massaMassima)}; nebbia sotto: ${num(A.nebbia[1].attesi)} aloni tra 10⁸ e ${num(M0)} M☉ entro la sfera di ugual volume`); }
+  // una galassia della biblioteca: sta nell'elenco una volta sola, con il suo alone, e nessun picco nasce dentro la sua sfera
+  const Fc = campoCosmo(1), g0 = Fc.pos[0].map((v) => v * L), G = R.aloniIn(1, { centro: g0, lato }, { massaMinima: M0 }), sue = G.aloni.filter((a) => a.galassia === 0); assert.equal(sue.length, 1); assert.ok(sue[0].massa > 1e11 && sue[0].indirizzo === 'cosmo 1/galassia 0');
+  const RLg = Math.cbrt((3 * sue[0].massa) / (4 * Math.PI * U.Om * U.rhoC * 1e9)) * MPC; for (const a of G.aloni) if (a.galassia == null) assert.ok(Math.hypot(...a.iniziale.map((v, k) => { const q = v - g0[k]; return q - L * Math.round(q / L); })) > 0.9 * RLg, 'nessun alone rinasce dentro una galassia della biblioteca');
+  trovati += G.n - 1; attesi += G.attesi;
+  // lo scarto tra le due letture delle coordinate sulle galassie della biblioteca: |Ψ| (onde del toro) nei loro punti
+  let s2 = 0, ng = 0; for (const n of [1, 2]) campoCosmo(n).pos.forEach((x) => { const v = R.dentro.nelPunto(R.ondeDi(n), x).v; s2 += v[0] ** 2 + v[1] ** 2 + v[2] ** 2; ng++; }); const scartoMpc = Math.sqrt(s2 / ng) / (67.7 * R.dentro.f0Crescita);
+  for (const r of righe) console.log(`      ${r}`);
+  console.log(`      attorno alla galassia 0 del cosmo 1 (alone di ${num(sue[0].massa)} M☉): ${G.n - 1} altri aloni; spostamento |Ψ| degli aloni trovati: ${num(Math.sqrt(psi2 / quanti) / MPC)} Mpc; LE DUE LETTURE: le ${ng} galassie della biblioteca stanno nel punto del loro picco, la lettura che conserva la massa le metterebbe a ${num(scartoMpc)} Mpc (scarto quadratico medio di Ψ)`);
+  riscontro('aloni trovati su attesi da Press–Schechter nell\'ambiente (tre regioni)', trovati / attesi, 1 - 4 / Math.sqrt(attesi), 1 + 4 / Math.sqrt(attesi), '1 entro Poisson; i picchi con esclusione e la funzione di massa di Press–Schechter sono due leggi diverse');
 });
 
 // =====================================================================================================

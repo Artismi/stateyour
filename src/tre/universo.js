@@ -20,6 +20,7 @@ import { creaSistema } from './sistema.js';
 import { scenaCosmo, scenaGalassia, statoCosmo } from '../camera/spazio3d.js';
 import { galassiaAlTempo } from '../camera/galassie.js';
 import { creaRete } from './rete.js';
+import { creaMezzo } from './mezzo.js';
 import { bucoCentrale } from '../camera/relativita.js';
 import { bucoNelMondo } from './sistema.js';
 import { sorgente } from '../camera/eventi.js';
@@ -76,6 +77,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
     for (let k = 0; k < K; k++) { const f = (Ltot * w[k]) / somma; d[8 * k + 4] *= f; d[8 * k + 5] *= f; d[8 * k + 6] *= f; }
     const o = punti.nube(d, K); o.dati = d; o.K = K; return o;
   })();
+  const mezzo = O.mezzo === false ? null : creaMezzo(N, { scena: () => sc, raggioM: Rg, opzioni: O.mezzo || {} });
   const omega = sc.campi.bracci.velocitaAngolare || 0, rel = [0, 0, 0], eG = [0, 0, 0], eGr = [0, 0, 0]; let spenta = -1, prgChiaro = null;
   const strato = {
     nome: `galassia ${via.galassia}`, nodo,
@@ -91,7 +93,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         if (Vs) { const rit = Math.sqrt(d2) / 299792458; x -= Vs[3 * i] * rit; y -= Vs[3 * i + 1] * rit; z -= Vs[3 * i + 2] * rit; d2 = x * x + y * y + z * z; }
         pos[3 * i] = q[0] * x + q[1] * y + q[2] * z; pos[3 * i + 1] = q[3] * x + q[4] * y + q[5] * z; pos[3 * i + 2] = q[6] * x + q[7] * y + q[8] * z;
         if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia }); } }
-      strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel);
+      strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
       stelle.metti(pos, luce, n);
       // la luce che l'occhio chiede tra le stelle: che la più brillante in cielo valga qualche unità al suo centro
       // la luce che l'occhio chiede: quella diffusa della galassia (contata su un batuffolo ogni trenta). Da dentro riempie il
@@ -102,15 +104,15 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         for (let k = 0; k < nube.K; k += 30) { const x = D[8 * k] - eGr[0], y = D[8 * k + 1] - eGr[1], z = D[8 * k + 2] - eGr[2], t2 = D[8 * k + 3] ** 2, d2 = x * x + y * y + z * z; E += Math.max(D[8 * k + 4], D[8 * k + 5], D[8 * k + 6]) / Math.max(d2, t2 / 12);
           const T = D[8 * k + 3], lato = (T * S.fuoco) / Math.sqrt(d2 + 1); if (lato < cap) carico += Math.max(1.5, lato) ** 2;
           // (un batuffolo più largo del quadratino svanisce dallo schermo — ci si è dentro —: la sua luce non sparisce, è tutta
-          // intorno; la si rimette come un chiarore uniforme del cielo, L/(π²·taglia²) per la parte di cielo che copre)
-          const w = Math.max(0, Math.min(1, (lato - 0.45 * cap) / (0.55 * cap))); if (w > 0) { const f = (w * w * (3 - 2 * w) * Math.min(1, (T * T) / (16 * d2 + 1))) / (Math.PI * Math.PI * T * T); amb[0] += f * D[8 * k + 4]; amb[1] += f * D[8 * k + 5]; amb[2] += f * D[8 * k + 6]; } }
+          // intorno; la si rimette come un chiarore uniforme del cielo, L/(π²·taglia²), solo per i batuffoli in cui si è dentro o quasi)
+          const w = Math.max(0, Math.min(1, (lato - 0.45 * cap) / (0.55 * cap))); if (w > 0) { const f = (w * w * (3 - 2 * w) * Math.max(0, Math.min(1, 1.5 - Math.sqrt(d2) / T))) / (Math.PI * Math.PI * T * T); amb[0] += f * D[8 * k + 4]; amb[1] += f * D[8 * k + 5]; amb[2] += f * D[8 * k + 6]; } }
         for (let c = 0; c < 3; c++) strato.chiarore[c] = amb[c] * 30 * LUCE * O.diffusa;
         // (il buco nero, nel modo «scena», piega solo ciò che è sullo schermo: per i raggi che finirebbero fuori campo gli si dà
         // un cielo, che qui è questo stesso chiarore; lo si aggiorna quando cambia di un decimo)
         for (const b of strato.buchi) if (b && b.stato.attivo && Math.abs(strato.chiarore[1] - (b._cieloDato || 0)) > 0.1 * (b._cieloDato || 0)) { b._cieloDato = strato.chiarore[1]; const c = strato.chiarore, d = new Float32Array(32); for (let q = 0; q < 8; q++) d.set([c[0], c[1], c[2], 1], 4 * q); b.mettiCielo(b._cieloDato > 0 ? { w: 4, h: 2, dati: d, unita: 1 } : null); }
         carico *= 30 * 0.785; strato.quanti = Math.max(3000, Math.min(nube.K, Math.round((nube.K * O.frammenti) / Math.max(carico, 1))));
         E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
-        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.12 : 2.2) * angolo)); }
+        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.12 : 1.0) * angolo)); }
     },
     // (i buchi neri a cui dare il cielo: quello del centro, e quello del sistema aperto se è un buco nero)
     chiarore: [0, 0, 0], buchi: new Set(bucoNero ? [bucoNero] : []),
@@ -121,12 +123,14 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
       const peso = sc.punti.peso; nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
+      // ciò che sta tra le stelle (mezzo.js): le nubi oscure tolgono luce a ciò che è già disegnato, le nebulose aggiungono la loro
+      if (mezzo) mezzo.disegna(S, rel, q);
     },
     // dove sta la stella i nel riferimento della galassia (per il sistema che le si attacca), e spegnerne il punto quando il suo sistema c'è
     posStella: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; o[0] = P[3 * i]; o[1] = P[3 * i + 1]; o[2] = P[3 * i + 2]; return o; },
     spegni(i) { if (spenta >= 0) { const L = sc.punti.esiste[spenta] ? 1 : 0; luce[4 * spenta + 3] = L; } spenta = i; if (i >= 0) luce[4 * i + 3] = 0; },
     scena: () => sc, raggio: Rg,
-    bucoNero, libera() { N.togli(strato); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
+    bucoNero, mezzo, libera() { N.togli(strato); if (mezzo) mezzo.libera(); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
   };
   const tScena0 = tScena; N.aggiungi(strato); return strato;
 }
