@@ -8,6 +8,11 @@
 // Dentro una regione si entra nella camera (l'universo, la finestra, il pattern).
 // Ogni livello ha le sue coordinate; la camera della mappa è { livello, via, cx, cy, z }
 // (via = l'indirizzo dei livelli sopra), e passare di livello non muove niente sullo schermo.
+// LE SCALE SONO VERE dal cosmo al pianeta: una galassia nel cosmo (10⁻⁵ del toro), un sistema nella galassia (30 UA:
+// 10⁻⁸ della galassia), un pianeta nel sistema sono grandi quanto sono, cioè puntini (con una taglia minima in pixel, per
+// poterli trovare) finché non ci si avvicina moltissimo. Per arrivarci: zoomando in avanti lo sguardo scivola verso la
+// cosa più vicina al punto che si guarda; un clic ci vola. Le coordinate si ribasano a ogni livello (cx, cy relativi al
+// figlio): i numeri a sedici cifre bastano (un sistema a 10⁻⁸ della galassia ne ha ancora otto buone).
 
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, raggioSistema, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';

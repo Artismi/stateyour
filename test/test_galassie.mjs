@@ -1,10 +1,10 @@
 // test_galassie.mjs — le galassie come conseguenza: la Via Lattea dai suoi numeri veri, e le galassie di cosmo(1)
 import assert from 'node:assert/strict';
-import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
+import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, velocitaPeculiare, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, COSMO, etaUniverso, massaNascita } from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
-import { cosmo } from '../src/camera/cosmo.js';
+import { cosmo, galassia, sistema, indirizzoDi, motiDi, raggioSistema, metriPerUnita, TORO_M } from '../src/camera/cosmo.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -255,6 +255,39 @@ prova('i cataloghi delle galassie vere: coerenti con stelle.js, resti mai su ste
   }
   const medio = tempi.slice(1).reduce((a, b) => a + b, 0) / (tempi.length - 1); tra(medio, 0, 60, 'formaGalassia + stelleGalassia (ms, in media)');
   console.log(`      (forma + catalogo: ${tempi.map((t) => t.toFixed(0)).join(', ')} ms; in media ${medio.toFixed(0)} ms dopo la prima)`);
+});
+
+prova('collegate al cosmo: le scale vere, i moti della stella nella galassia e della galassia nel cosmo', () => {
+  const C = cosmo(1), H0 = COSMO.H0, f = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99); tra(f / Math.pow(COSMO.Om, 0.55), 0.97, 1.03, 'il ritmo di crescita f = dlnD/dlna (≈ Ωm^0,55)');
+  // la teoria lineare: la divergenza della velocità è −H₀·f·δ (qui la si deriva a differenze sul campo, in un punto qualunque)
+  const L = TORO_M / 3.0857e22, sb = dentro.U.sigmaOnde((2 * Math.PI * 9) / L), delta = (x, y) => ((C.densita(x, y) - C.media) / C.sigma) * sb + 0;
+  for (const [x, y] of [[0.31, 0.62], [0.8, 0.15], C.galassie[5].pos]) {
+    const h = 1e-5, v = (a, b) => velocitaPeculiare(C, [a, b]), div = (v(x + h, y)[0] - v(x - h, y)[0] + v(x, y + h)[1] - v(x, y - h)[1]) / (2 * h * L);
+    // (la media del campo sulla griglia non è una delle onde: δ qui è la somma delle onde, a media nulla)
+    const onde = (C.densita(x, y) / C.sigma) * sb; assert.ok(Math.abs(div + H0 * f * onde) < 1e-3 * H0 * f * (Math.abs(onde) + 0.1), `divergenza ${div} contro ${-H0 * f * onde}`); void delta;
+  }
+  const vel = C.galassie.map((G) => Math.hypot(...velocitaPeculiare(C, G.pos))); tra(mediana(vel), 100, 4000, 'velocità peculiare mediana delle galassie (km/s; nell\'universo vero ~400–600: il campo di cosmo.js ha onde lunghe troppo forti)');
+  // le scale: una galassia nel cosmo e un sistema nella galassia hanno la taglia vera
+  for (const G of C.galassie) { assert.equal(G.r, G.forma.unitaM / TORO_M); assert.equal(metriPerUnita(1, { cosmo: 1, galassia: G.id }), G.forma.unitaM); tra(raggioSistema(1, G.id) * G.forma.unitaM / 1.496e11, 30 - 1e-9, 30 + 1e-9, 'un sistema: 30 UA'); assert.equal(G.tipo, G.forma.tipo); }
+  // i moti di una regione vera: ogni voce è la somma, come vettori, dei moti di sotto
+  let visti = 0, sferoide = 0;
+  for (let n = 5; n < 60000 && visti < 12; n += 4801) {
+    const a = indirizzoDi(n), M = motiDi(a), Gx = galassia(a.cosmo, a.galassia), S = Gx.stelle[a.stella], P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta]; visti++;
+    assert.deepEqual(M.map((m) => m.nome), ['ferma nella regione', 'sul pianeta che gira', 'ferma rispetto alla stella', 'ferma rispetto alla galassia', 'ferma rispetto al fondo cosmico']);
+    for (const m of M) assert.ok(Number.isFinite(m.kmS) && m.kmS >= 0 && Math.abs(m.velocita - (m.kmS * 1e3) / 2.998e8) < 1e-9 && m.direzione >= 0 && m.direzione < 360 && m.cosa.length > 10, JSON.stringify(m));
+    const vet = (m) => [m.kmS * Math.cos((m.direzione * Math.PI) / 180), m.kmS * Math.sin((m.direzione * Math.PI) / 180)], meno = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+    const orbita = (2 * Math.PI * P.aM) / P.anno / 1e3; tra(M[2].kmS / orbita, 1 - 1e-9, 1 + 1e-9, 'la velocità lungo l\'orbita');
+    // la stella attorno alla galassia: la differenza tra «ferma rispetto alla galassia» e «ferma rispetto alla stella»
+    const vStella = meno(vet(M[3]), vet(M[2])), r = Math.hypot(...S.pos) * Gx.forma.unitaKpc, vc = curvaRotazione(Gx.forma, r);
+    if (S.componente === 'disco') { tra(vStella / vc, 1 - 1e-6, 1 + 1e-6, 'nel disco: la velocità della curva di rotazione alla sua distanza'); const d = [vet(M[3])[0] - vet(M[2])[0], vet(M[3])[1] - vet(M[2])[1]]; assert.ok(Math.abs(d[0] * S.pos[0] + d[1] * S.pos[1]) < 1e-6 * vc * Math.hypot(...S.pos), 'tangente: perpendicolare al raggio'); }
+    else { sferoide++; assert.ok(vStella < 5 * vc, `nello sferoide: ${vStella} km/s con una curva di ${vc}`); }
+    // la galassia nel cosmo: la differenza tra le ultime due voci è la sua velocità peculiare
+    tra(meno(vet(M[4]), vet(M[3])) / Math.hypot(...velocitaPeculiare(C, C.galassie[a.galassia].pos)), 1 - 1e-6, 1 + 1e-6, 'la velocità peculiare della galassia');
+    assert.equal(JSON.stringify(motiDi(a)), JSON.stringify(M));
+  }
+  const a = indirizzoDi(1616476), M = motiDi(a);
+  console.log(`      (velocità peculiari delle ${C.galassie.length} galassie: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}; ${visti} regioni provate, ${sferoide} attorno a stelle dello sferoide)`);
+  console.log(`      (universo n. 1616476: ${M.slice(1).map((m) => `${m.nome} ${num(m.kmS)} km/s verso ${Math.round(m.direzione)}°`).join(' · ')})`);
 });
 
 // ---------- il confronto con la Via Lattea, in chiaro

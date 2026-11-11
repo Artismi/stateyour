@@ -41,6 +41,10 @@
 // giovani di 10⁵ anni): quelle da collasso sono stelle vere, una per una (peso 1), messe negli ultimi posti del
 // catalogo come stella di neutroni o buco nero, e il loro resto sta su di loro.
 //
+// I MOTI (per cosmo.js motiDi): la stella gira attorno al centro alla velocità di curvaRotazione() (nello sferoide ha la
+// sua, estratta dalla dispersione); la galassia cade verso dove c'è più materia alla velocità di velocitaPeculiare(), la
+// teoria lineare sul campo di cosmo(n).
+//
 // CHE COSA EMERGE (non è scritto: esce dalla catena): il tipo (spirale / lenticolare / ellittica), la massa in
 // stelle e in gas, la scala del disco e la sua crescita dall'interno, la curva di rotazione, la storia della
 // formazione stellare (presto e in fretta nelle giganti, lenta nelle piccole), Z(t, r) con la relazione

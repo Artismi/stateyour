@@ -446,13 +446,16 @@ prova('il clima e l\'aria si tengono: il mare c\'è dove può, il termostato del
 // =====================================================================================================
 sezione('LA SUPERFICIE E IL CLIMA SIMULATI (pochi pianeti: costano secondi)');
 // =====================================================================================================
+// (mondi a cui arriva luce vera, almeno 0,05 W/m²: dove quasi non ne arriva — attorno a una nana bruna o a un resto freddo —
+// «irradia quanto assorbe» non dice niente, perché conta il calore dell'interno; quale pianeta capiti dipende dalle stelle della galassia)
+const ILLUMINATI = SOLIDI.filter(({ p }) => p.clima.bilancio?.arriva > 0.05);
 const SCELTI = [
-  ['un mondo ghiacciato, gelato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.clima.acqua === 'ghiaccio' && p.aM < 8 * UA && p.interno.tettonica !== 'a placche')],
-  ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && !p.clima.acqua.startsWith('vapore') && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
-  ['un roccioso con il mare e le placche', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
-  ['un roccioso con il mare tenuto aperto dal termostato del carbonio', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && !p.bloccato && p.clima.mare < 0.97 && p.interno.tettonica !== 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && p.interno.tettonica !== 'a placche')],
-  ['un roccioso con il mare, bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && !p.clima.termostato && p.interno.tettonica !== 'a placche')],
-  ['un roccioso dove l\'acqua è vapore', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],
+  ['un mondo ghiacciato, gelato', ILLUMINATI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.clima.acqua === 'ghiaccio' && p.aM < 8 * UA && p.interno.tettonica !== 'a placche')],
+  ['un roccioso coperto da un oceano profondo', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && !p.clima.acqua.startsWith('vapore') && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
+  ['un roccioso con il mare e le placche', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
+  ['un roccioso con il mare tenuto aperto dal termostato del carbonio', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && !p.bloccato && p.clima.mare < 0.97 && p.interno.tettonica !== 'a placche') || ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && p.interno.tettonica !== 'a placche')],
+  ['un roccioso con il mare, bloccato dalle maree', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && !p.clima.termostato && p.interno.tettonica !== 'a placche')],
+  ['un roccioso dove l\'acqua è vapore', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],
 ].filter(([, x]) => x).filter(([, x], i, tutti) => tutti.findIndex(([, y]) => y === x) === i);
 const SUPERFICI = SCELTI.map(([nome, x]) => {
   const { p } = x, chiave = `coerenza|${x.n}|${x.gid}|${x.sid}|${p.id}`, sf = GE.superficiePianeta(chiave, p, p.interno, p.origine), cl = GE.climaSuperficie(chiave, p, sf);
