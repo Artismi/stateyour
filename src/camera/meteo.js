@@ -26,6 +26,7 @@
 //      l'aria scende e diverge porta via il vapore: i deserti. Il calore latente di ciò che piove (meno ciò che evapora)
 //      scalda l'aria e rinforza la salita. Il suolo è un secchio: si riempie con la pioggia, evapora, trabocca.
 //      In ogni istante l'acqua evaporata, meno quella piovuta, è quella rimasta in più nell'aria (bilancio, esatto).
+//      Con le stagioni la fascia delle piogge segue il sole, e i tropici hanno una stagione secca e una piovosa.
 //   4. LE NUVOLE coprono il cielo in proporzione a quanto la colonna è vicina alla soglia della pioggia. LA NEVE è la
 //      precipitazione che cade dove fa freddo, contando la quota (più in alto più freddo: il gradiente dell'adiabatica).
 //   5. IL CALORE: ciò che l'aria dà alla superficie (o le toglie) è il calore che la circolazione ha portato lì, vapore
@@ -55,12 +56,22 @@
 //   · due soli strati: il vapore è tutto nell'aria bassa, e il suo vento è quello medio della metà bassa
 //     dell'atmosfera, usato anche come vento al suolo; non c'è stratosfera; il coperchio è rigido (niente onde sonore
 //     né onde di superficie: il moto medio dei due strati non ha divergenza);
-//   · NIENTE STAGIONI né giorno e notte: la temperatura è la media annua che dà il clima (obliquità e blocco mareale
-//     sono già lì dentro: i parametri «obliquita» e «bloccato» non cambiano il calcolo; «bloccato» fa misurare il flusso
-//     giorno-notte). La fascia delle piogge equatoriali non migra con le stagioni: è più stretta e più intensa del vero;
+//   · LE STAGIONI entrano se il clima le dà («stagioni»: la temperatura di ogni parte dell'anno, per esempio i quattro
+//     trimestri, in ordine; se manca, si usa la sola media annua T e la fascia delle piogge non migra). Per ogni stagione
+//     l'aria si adatta e poi si prendono le medie; l'anno è la media delle stagioni, la pioggia dell'anno la somma. La
+//     stagione è tenuta ferma per il tempo simulato (pochi giorni): non c'è il ritardo dell'aria sul sole, che è nel clima.
+//     Obliquità e blocco mareale stanno già nelle temperature: «obliquita» e «bloccato» non cambiano il calcolo
+//     («bloccato» fa misurare il flusso giorno-notte); non c'è il ciclo del giorno e della notte;
 //   · la superficie ha la temperatura DATA: l'aria non la cambia qui dentro (lo fa il clima, con trasportoCalore);
-//   · il lavoro dei venti, che l'attrito e la viscosità consumano, non torna all'aria come calore: per questo la media
-//     di trasportoCalore su tutto il pianeta non è zero ma un poco negativa (sulla Terra di prova −9 W/m² su ±100);
+//   · L'ENERGIA: il lavoro che la spinta della temperatura fa sul vento è tolto al calore dell'aria nella stessa misura
+//     (il modello a due strati è scritto in modo che i due conti coincidano: Arakawa); l'energia che l'attrito toglie al
+//     vento, e quella persa quando l'aria che cambia strato si mescola a un vento diverso, tornano all'aria come calore.
+//     Non torna solo la parte consumata dalla viscosità numerica e dal filtro dei poli: la media di trasportoCalore su
+//     tutto il pianeta è per questo un poco negativa (sulla Terra di prova da −4 a −6 W/m² su ±100);
+//   · l'aria che passa da uno strato all'altro porta il vento dello strato da cui viene, anche dentro i vortici: questo
+//     rimescolamento fa in buona parte il lavoro che sulla Terra fa la cella di Ferrel, e rende la cella di Hadley più
+//     forte del vero (una volta e mezza). Farlo portare solo dall'aria scaldata o raffreddata dà la cella di Ferrel e una
+//     Hadley giusta, ma a questa risoluzione gli alisei si fermano a 17° e i tropici non sono più secchi: non adottato;
 //   · i rilievi tolgono vapore (aria più fredda e più sottile in quota), frenano (la terra è più ruvida del mare), ma
 //     NON deviano il vento: nessuna onda di montagna, nessun blocco;
 //   · la griglia è grossa (64×32: 5,6°, 600 km): i vortici delle medie latitudini sono appena risolti, e su un pianeta
@@ -114,7 +125,7 @@ function fft(re, im, o, n, t, inversa) {
 
 // ---------- IL MOTORE: due strati d'aria di uguale massa sulla sfera (griglia C: θ e vapore al centro, u a est, v a sud)
 function motore(W, H, par, forz) {
-  const S = W + 2, N = S * (H + 2), NP = W * H, { a, omega, b, dt, tauRad } = par;
+  const S = W + 2, N = S * (H + 2), NP = W * H, { a, omega, dt, tauRad } = par;
   const dl = (2 * Math.PI) / W, df = Math.PI / H, ry = 1 / (a * df);
   const cc = new Float64Array(H), cfS = new Float64Array(H), cfN = new Float64Array(H), rx = new Float64Array(H), fz = new Float64Array(H);
   for (let j = 0; j < H; j++) { cc[j] = Math.sin((j + 0.5) * df); cfS[j] = j < H - 1 ? Math.sin((j + 1) * df) : 0; cfN[j] = j > 0 ? Math.sin(j * df) : 0; rx[j] = 1 / (a * cc[j] * dl); fz[j] = 2 * omega * Math.cos((j + 1) * df); }
@@ -185,7 +196,7 @@ function motore(W, H, par, forz) {
   const acc = { n: 0, u1: new Float64Array(NP), v1: new Float64Array(NP), u2: new Float64Array(NP), v2: new Float64Array(NP), th1: new Float64Array(NP), th2: new Float64Array(NP), piove: new Float64Array(NP), evapora: new Float64Array(NP), nuvole: new Float64Array(NP), umidita: new Float64Array(NP), calore: new Float64Array(NP), sale: new Float64Array(NP), scorre: new Float64Array(NP), vapore: new Float64Array(NP) };
   const { t1Eq, t2Eq, wSat, kE, bagnato, cd } = forz, attrito = 2 / par.hs, kRad = dt / tauRad, kSuolo = (dt * 2 * PARAMETRI.ce) / par.hs, kPioggia = 1 - Math.exp(-dt / PARAMETRI.tempoPioggia), u0 = PARAMETRI.umiditaNuvole, { w1, w2, capStrato } = par, latente = par.L / (capStrato * w2);
   const raffica2 = PARAMETRI.raffica ** 2, secchio = PARAMETRI.secchio, { piove: aPiove, evapora: aEvapora, umidita: aUmidita, vapore: aVapore, calore: aCalore, th1: aTh1, th2: aTh2, sale: aSale, nuvole: aNuvole, scorre: aScorre, u1: aU1, v1: aV1, u2: aU2, v2: aV2 } = acc;
-  const pX = nuovo(), pY = nuovo(), rc = PARAMETRI.umiditaPioggia;
+  const pX = nuovo(), pY = nuovo(), iCal1 = 1 / (par.cp * w1), rc = PARAMETRI.umiditaPioggia, sal1 = 1 + par.kappa, sal2 = 1 - par.kappa / 3, iCal = 1 / (par.cp * w2);
   let passi = 0;
   // una temperatura portata dal vento del suo strato (la parte che si può estrapolare nel tempo)
   const porta = (th, u, v, D, T0, Ta, Tb, c0, c1, c2, out) => {
@@ -199,7 +210,7 @@ function motore(W, H, par, forz) {
     const [c0, c1, c2] = passi === 0 ? [1, 0, 0] : passi === 1 ? [1.5, -0.5, 0] : [23 / 12, -16 / 12, 5 / 12];
     // (1) LE TEMPERATURE dei due strati: portate dal vento; dove l'aria sale si raffredda (di metà della differenza tra gli strati)
     porta(th1, u1, v1, D1, Nt1[0], Nt1[1], Nt1[2], c0, c1, c2, dt1); porta(th2, u2, v2, D2, Nt2[0], Nt2[1], Nt2[2], c0, c1, c2, dt2);
-    for (let j = 0; j < H; j++) { const o = (j + 1) * S + 1; for (let i = 0; i < W; i++) { const k = o + i, x = 0.5 * dt * D1[k] * (th1[k] - th2[k]); dt1[k] -= x; dt2[k] -= x; } }
+    for (let j = 0; j < H; j++) { const o = (j + 1) * S + 1; for (let i = 0; i < W; i++) { const k = o + i, x = 0.5 * dt * D1[k] * (th1[k] - th2[k]); dt1[k] -= sal1 * x; dt2[k] -= sal2 * x; } }
     filtra(dt1, lisciaC); filtra(dt2, lisciaC);
     // (2) L'ACQUA: il vapore viaggia con il vento basso (a monte), evapora, e dove supera la saturazione piove
     { // le pendenze limitate (van Leer): il vapore non si sparpaglia più di quanto il vento lo porti, e non diventa negativo
@@ -222,21 +233,23 @@ function motore(W, H, par, forz) {
             if (w > rc * ws) { pv = ((w - rc * ws) * kPioggia) / dt; w -= pv * dt; }
             if (bg < 1) { let s = suolo[p] + (dt * (pv * (1 - bg) - evTerra)) / (1 - bg); if (s > secchio) { if (accumula) aScorre[p] += ((s - secchio) * (1 - bg)) / dt; s = secchio; } suolo[p] = s < 0 ? 0 : s; }
           } else w = 0;
-          wv[k] = w; freno[p] = dt * attrito * cd[p] * vel;
+          wv[k] = w;
           // le temperature nuove: il calore latente (di ciò che piove meno ciò che evapora) allo strato basso; lo strato
           // basso scambia calore con la superficie (tanto più quanto più c'è vento) e tutti e due irraggiano; se lo
           // strato basso diventa troppo caldo per quello alto, la convezione li rimescola (conservando l'energia)
           const e1 = t1Eq[p], e2 = t2Eq[p], k2 = kRad + kSuolo * vel;
-          let a1 = (th1[k] + dt1[k] + kRad * e1) / (1 + kRad), a2 = (th2[k] + dt2[k] + latente * (pv - ev) * dt + k2 * e2) / (1 + k2);
+          // (l'energia che l'attrito ha tolto al vento torna all'aria bassa come calore; e così quella persa quando l'aria che cambia strato si mescola a un vento diverso)
+          const fr = freno[p], u1c = 0.5 * (u1[k] + u1[k - 1]) - uc, v1c = 0.5 * (v1[k] + v1[k - S]) - vc, mesc = 0.5 * dt * D1[k] * (u1c * u1c + v1c * v1c); // (l'attrito del passo prima: l'energia che ha tolto al vento torna all'aria bassa come calore)
+          let a1 = (th1[k] + dt1[k] + (mesc > 0 ? mesc * iCal1 : 0) + kRad * e1) / (1 + kRad), a2 = (th2[k] + dt2[k] + latente * (pv - ev) * dt + ((uc * uc + vc * vc) * fr * (1 + 0.5 * fr) - (mesc < 0 ? mesc : 0)) * iCal + k2 * e2) / (1 + k2);
           if (a1 - a2 < e1 - e2) { const en = w1 * a1 + w2 * a2; a2 = (en - w1 * (e1 - e2)) / (w1 + w2); a1 = a2 + e1 - e2; }
-          th1[k] = a1; th2[k] = a2;
+          th1[k] = a1; th2[k] = a2; freno[p] = dt * attrito * cd[p] * vel;
           if (accumula) { const rh = ws > 0 ? Math.min(1, w / (rc * ws)) : 0; aPiove[p] += pv; aEvapora[p] += ev; aUmidita[p] += rh; aVapore[p] += w; aCalore[p] += (w1 * kRad * (a1 - e1) + w2 * k2 * (a2 - e2)); aTh1[p] += a1; aTh2[p] += a2; aSale[p] += D1[k];
             if (rh > u0) aNuvole[p] += 1 - Math.sqrt((1 - rh) / (1 - u0)); }
         } }
       orlo(th1); orlo(th2); }
     // (3) IL VENTO: Coriolis e vorticità, energia cinetica, scambio verticale, viscosità (Adams-Bashforth), poi la
     // spinta della temperatura nuova (avanti-indietro), l'attrito al suolo (implicito) e la pressione del coperchio
-    { const A1 = Nu1[0], B1 = Nv1[0], A2 = Nu2[0], B2 = Nv2[0], hb = 0.25 * b * dt, A1a = Nu1[1], A1b = Nu1[2], A2a = Nu2[1], A2b = Nu2[2], B1a = Nv1[1], B1b = Nv1[2], B2a = Nv2[1], B2b = Nv2[2];
+    { const A1 = Nu1[0], B1 = Nv1[0], A2 = Nu2[0], B2 = Nv2[0], g1 = 0.5 * par.R * w1 * dt, g2 = (par.R * w2 * dt) / 6, A1a = Nu1[1], A1b = Nu1[2], A2a = Nu2[1], A2b = Nu2[2], B1a = Nv1[1], B1b = Nv1[2], B2a = Nv2[1], B2b = Nv2[2];
       for (let j = 0; j < H; j++) { const o = (j + 1) * S + 1, r = rx[j], cn = cfN[j], cs = cfS[j], ic = 0.25 / cc[j], sotto = j < H - 1, nx = nuX[j], yn = nuY * cn / cc[j], ys = nuY * cs / cc[j], cj = cc[j], cj1 = sotto ? cc[j + 1] : 0, yv = sotto ? nuY / cs : 0;
         for (let i = 0; i < W; i++) { const k = o + i;
           // u (faccia est)
@@ -245,7 +258,7 @@ function motore(W, H, par, forz) {
           let t2 = (q2[k - S] * (v2[k - S] + v2[k - S + 1]) * cn + q2[k] * (v2[k] + v2[k + 1]) * cs) * ic - (K2[k + 1] - K2[k]) * r + (u2[k + 1] + u2[k - 1] - 2 * a2) * nx + (u2[k - S] - a2) * yn - (a2 - u2[k + S]) * ys;
           if (dw > 0) t1 += sc; else t2 += sc;
           A1[k] = t1; A2[k] = t2;
-          const gx = hb * (th1[k + 1] + th2[k + 1] - th1[k] - th2[k]) * r;
+          const gx = (g1 * (th1[k + 1] - th1[k]) + g2 * (th2[k + 1] - th2[k])) * r;
           du1[k] = dt * (c0 * t1 + c1 * A1a[k] + c2 * A1b[k]) - gx; du2[k] = dt * (c0 * t2 + c1 * A2a[k] + c2 * A2b[k]) + gx;
           // v (faccia sud)
           if (sotto) { const b1 = v1[k], b2 = v2[k], dv = 0.5 * (D1[k] + D1[k + S]), sv = dv * (b2 - b1);
@@ -253,7 +266,7 @@ function motore(W, H, par, forz) {
             let s2 = -0.25 * (q2[k - 1] * (u2[k - 1] + u2[k - 1 + S]) + q2[k] * (a2 + u2[k + S])) - (K2[k] - K2[k + S]) * ry + (v2[k + 1] + v2[k - 1] - 2 * b2) * nx + ((v2[k - S] - b2) * cj - (b2 - v2[k + S]) * cj1) * yv;
             if (dv > 0) s1 += sv; else s2 += sv;
             B1[k] = s1; B2[k] = s2;
-            const gy = hb * (th1[k] + th2[k] - th1[k + S] - th2[k + S]) * ry;
+            const gy = (g1 * (th1[k] - th1[k + S]) + g2 * (th2[k] - th2[k + S])) * ry;
             dv1[k] = dt * (c0 * s1 + c1 * B1a[k] + c2 * B1b[k]) - gy; dv2[k] = dt * (c0 * s2 + c1 * B2a[k] + c2 * B2b[k]) + gy; }
         } }
       filtra(du1, lisciaC); filtra(du2, lisciaC); filtra(dv1, lisciaF); filtra(dv2, lisciaF);
@@ -270,7 +283,8 @@ function motore(W, H, par, forz) {
   };
   const sano = () => { for (let j = 1; j <= H; j++) for (let i = 1; i <= W; i++) { const k = j * S + i; if (!(Math.abs(u1[k]) < 400 && Math.abs(v1[k]) < 400 && Math.abs(u2[k]) < 400 && th1[k] > 0 && th2[k] > 0)) return false; } return true; };
   const vaporeMedio = () => { let s = 0, t = 0; for (let j = 0; j < H; j++) { let r = 0; for (let i = 0; i < W; i++) r += wv[(j + 1) * S + 1 + i]; s += r * cc[j]; t += W * cc[j]; } return s / t; };
-  return { S, u1, v1, u2, v2, th1, th2, wv, suolo, acc, passo, sano, vaporeMedio };
+  const azzera = () => { acc.n = 0; for (const c in acc) if (acc[c].fill) acc[c].fill(0); };
+  return { S, u1, v1, u2, v2, th1, th2, wv, suolo, acc, passo, sano, vaporeMedio, azzera };
 }
 
 // ---------- LA TERMODINAMICA DELL'ARIA: dai gas, dalla pressione e dalla gravità
@@ -284,14 +298,14 @@ export function aria({ pressione, massaMolare = 0.029, gravita, cp = null, Tmedi
     for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * der(T, lp); T += dl * der(m, lp + 0.5 * dl); lp += dl; } return T; };
   // L'EQUILIBRIO sopra una superficie a temperatura T: le temperature potenziali dei due strati (a 3/4 e a 1/4 della
   // pressione) lungo l'adiabatica che parte da lì; un'aria secca resta comunque stabile del minimo misurato
-  const w1 = Math.pow(0.25, kappa), w2 = Math.pow(0.75, kappa), es = 1 - PARAMETRI.stabilitaSecca, minimo = Math.pow(0.25, -kappa * es) - Math.pow(0.75, -kappa * es);
+  const wm = Math.pow(0.5, kappa), w1 = wm / (1 + kappa), w2 = wm / (1 - kappa / 3), es = 1 - PARAMETRI.stabilitaSecca, minimo = Math.pow(0.25, -kappa * es) - Math.pow(0.75, -kappa * es);
   const t0 = Math.floor(Tmin) - 1, nT = Math.ceil(Tmax) + 2 - t0, tab1 = new Float64Array(nT), tab2 = new Float64Array(nT);
   for (let i = 0; i < nT; i++) { const T = t0 + i; tab2[i] = adiabatica(T, 0.75, acqua) / w2; tab1[i] = Math.max(adiabatica(T, 0.25, acqua) / w1, tab2[i] + minimo * T); }
   const equilibrio = (T) => { const x = Math.max(0, Math.min(nT - 1.001, T - t0)), i = Math.floor(x), f = x - i; return [tab1[i] * (1 - f) + tab1[i + 1] * f, tab2[i] * (1 - f) + tab2[i + 1] * f]; };
   // il gradiente termico verticale (K/m): quello dell'adiabatica dalla temperatura media, tra la superficie e metà pressione
   const Tm = adiabatica(Tmedia, 0.5, acqua), gamma = Math.min((Tmedia - Tm) / (((R * 0.5 * (Tmedia + Tm)) / gravita) * Math.LN2), (PARAMETRI.stabilitaSecca * gravita) / cpA);
-  const hs = (R * Tmedia) / gravita, b = R * Math.log(3) * Math.pow(0.5, kappa), capStrato = (cpA * 0.5 * pressione) / gravita;
-  return { R, cp: cpA, kappa, Rv, gamma, hs, b, capStrato, w1, w2, tauRad: (capStrato * (w1 + w2)) / (4 * SIGMA * Tmedia ** 3), L: Rv * Tmedia * Tmedia * pendenza(Tmedia), equilibrio };
+  const hs = (R * Tmedia) / gravita, c2 = (R * wm) / 3, capStrato = (cpA * 0.5 * pressione) / gravita;
+  return { R, cp: cpA, kappa, Rv, gamma, hs, c2, capStrato, w1, w2, tauRad: (capStrato * (w1 + w2)) / (4 * SIGMA * Tmedia ** 3), L: Rv * Tmedia * Tmedia * pendenza(Tmedia), equilibrio };
 }
 
 // la quota e la parte bagnata di ogni cella del clima, da una carta delle quote uguale o più fine (multipla intera)
@@ -304,15 +318,17 @@ function riduci(alt, mare, W, H, lago = null) {
   return { quota, bagnato, zero };
 }
 
-export function circolazione({ W = 64, H = 32, T, alt = null, mare = -Infinity, lago = null, raggioM, gravita, giorno, bloccato = false, obliquita = 0, pressione, massaMolare = 0.029, cp = null, acqua = true, freddo = null, passi = 1800 } = {}) {
-  if (!T || T.length !== W * H) throw new Error('meteo: serve la temperatura T su una griglia W×H');
+export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = null, mare = -Infinity, lago = null, raggioM, gravita, giorno, bloccato = false, obliquita = 0, pressione, massaMolare = 0.029, cp = null, acqua = true, freddo = null, passi = 1800 } = {}) {
+  const NP = W * H, fasi = stagioni && stagioni.length > 1 ? Array.from(stagioni) : null, nS = fasi ? fasi.length : 1;
+  if (fasi) { for (const x of fasi) if (!x || x.length !== NP) throw new Error('meteo: ogni stagione è una temperatura su una griglia W×H'); if (!T) { T = new Float32Array(NP); for (const x of fasi) for (let k = 0; k < NP; k++) T[k] += x[k] / nS; } }
+  if (!T || T.length !== NP) throw new Error('meteo: serve la temperatura T su una griglia W×H');
   if (W & (W - 1) || W < 8 || H < 8 || H % 2) throw new Error('meteo: W deve essere una potenza di 2 (almeno 8) e H pari');
   if (!(raggioM > 0 && gravita > 0 && giorno > 0)) throw new Error('meteo: servono raggioM, gravita e giorno');
-  const NP = W * H, df = Math.PI / H, dl = (2 * Math.PI) / W, a = raggioM, peso = (j) => Math.sin((j + 0.5) * df), campo = () => new Float32Array(NP);
+  const df = Math.PI / H, dl = (2 * Math.PI) / W, a = raggioM, peso = (j) => Math.sin((j + 0.5) * df), campo = () => new Float32Array(NP), temperature = fasi ?? [T];
   const ris = { W, H, regime: 'senza aria', u: campo(), v: campo(), uAlto: campo(), vAlto: campo(), pioggia: campo(), neve: campo(), evaporazione: campo(), nuvole: campo(), umidita: campo(), vapore: campo(), suolo: campo(), deflusso: campo(),
-    trasportoCalore: campo(), salita: campo(), temperaturaAria: Float32Array.from(T), temperaturaQuota: Float32Array.from(T), temperatura: T, celle: 0, celleNord: 0, celleSud: 0, fasce: 0, fasceNord: 0, fasceSud: 0, latitudineAlisei: null, giornoNotte: null,
+    trasportoCalore: campo(), salita: campo(), temperaturaAria: Float32Array.from(T), temperaturaQuota: Float32Array.from(T), temperatura: T, stagioni: null, celle: 0, celleNord: 0, celleSud: 0, fasce: 0, fasceNord: 0, fasceSud: 0, latitudineAlisei: null, giornoNotte: null,
     diffusivita: 0, scambio: 0, nuvoleMedie: 0, bilancio: { evaporata: 0, piovuta: 0, accumulata: 0 }, psi: new Float64Array(H - 1), ventoZonale: new Float64Array(H), ventoZonaleAlto: new Float64Array(H), aria: null, dt: 0, giorniSimulati: 0, tentativi: 0 };
-  let Tm = 0, area = 0, tMin = Infinity, tMax = -Infinity; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const t = T[j * W + i]; Tm += t * peso(j); area += peso(j); tMin = Math.min(tMin, t); tMax = Math.max(tMax, t); } Tm /= area;
+  let Tm = 0, area = 0, tMin = Infinity, tMax = -Infinity; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { Tm += T[j * W + i] * peso(j); area += peso(j); for (const x of temperature) { const t = x[j * W + i]; tMin = Math.min(tMin, t); tMax = Math.max(tMax, t); } } Tm /= area;
   const { quota, bagnato, zero } = riduci(alt, mare, W, H, lago);
   if (typeof acqua === 'number') bagnato.fill(Math.max(0, Math.min(1, acqua))); else if (acqua && typeof acqua === 'object') bagnato.set(acqua); else if (!acqua) bagnato.fill(0); else if (!alt) bagnato.fill(1);
   Object.assign(ris, { quota: Float32Array.from(quota), bagnato: Float32Array.from(bagnato), livelloZero: zero });
@@ -324,53 +340,80 @@ export function circolazione({ W = 64, H = 32, T, alt = null, mare = -Infinity, 
   const camminoLibero = (COSTANTI.kB * Tm) / (Math.SQRT2 * Math.PI * DIAMETRO_MOLECOLA ** 2 * pressione);
   if (camminoLibero > ar.hs) return ris;
   const omega = (2 * Math.PI) / giorno;
-  // le forzanti: le temperature a cui la superficie tiene l'aria, il vapore che l'aria può portare, quanto in fretta evapora
-  const t1Eq = new Float64Array(NP), t2Eq = new Float64Array(NP), wSat = new Float64Array(NP), kE = new Float64Array(NP), cd = new Float64Array(NP), Tloc = new Float64Array(NP);
-  let sMax = 0;
-  for (let k = 0; k < NP; k++) { const [e1, e2] = ar.equilibrio(T[k]); t1Eq[k] = e1; t2Eq[k] = e2; sMax = Math.max(sMax, e1 - e2);
-    const t = Math.max(30, T[k] - ar.gamma * quota[k]); Tloc[k] = t; const pLoc = pressione * Math.exp(-quota[k] / ar.hs), e = esAcqua(t, pLoc), hq = Math.min(ar.hs, 1 / (ar.gamma * pendenza(t)));
-    wSat[k] = bagnatoMedio > 0 ? (e / (ar.Rv * t)) * hq : 0; kE[k] = (PARAMETRI.ce * e) / (ar.Rv * t); cd[k] = bagnato[k] * PARAMETRI.cdMare + (1 - bagnato[k]) * PARAMETRI.cdTerra; }
-  const cCrit = Math.cos((PARAMETRI.latCritica * Math.PI) / 180), dxCrit = a * dl * cCrit, dy = a * df, cStima = Math.sqrt(0.25 * ar.b * sMax);
+  // LE FORZANTI di una stagione (o dell'anno medio): le temperature a cui la superficie tiene l'aria, il vapore che
+  // l'aria può portare, quanto in fretta evapora. L'attrito e la parte bagnata non cambiano con la stagione
+  const cd = new Float64Array(NP); let sMax = 0;
+  for (let k = 0; k < NP; k++) cd[k] = bagnato[k] * PARAMETRI.cdMare + (1 - bagnato[k]) * PARAMETRI.cdTerra;
+  const forzanti = (Ts) => { const t1Eq = new Float64Array(NP), t2Eq = new Float64Array(NP), wSat = new Float64Array(NP), kE = new Float64Array(NP), Tloc = new Float64Array(NP);
+    for (let k = 0; k < NP; k++) { const [e1, e2] = ar.equilibrio(Ts[k]); t1Eq[k] = e1; t2Eq[k] = e2; sMax = Math.max(sMax, e1 - e2);
+      const t = Math.max(30, Ts[k] - ar.gamma * quota[k]); Tloc[k] = t; const pLoc = pressione * Math.exp(-quota[k] / ar.hs), e = esAcqua(t, pLoc), hq = Math.min(ar.hs, 1 / (ar.gamma * pendenza(t)));
+      wSat[k] = bagnatoMedio > 0 ? (e / (ar.Rv * t)) * hq : 0; kE[k] = (PARAMETRI.ce * e) / (ar.Rv * t); }
+    return { t1Eq, t2Eq, wSat, kE, Tloc }; };
+  const F = temperature.map(forzanti), NOMI = ['t1Eq', 't2Eq', 'wSat', 'kE'];
+  const cCrit = Math.cos((PARAMETRI.latCritica * Math.PI) / 180), dxCrit = a * dl * cCrit, dy = a * df, cStima = Math.sqrt(ar.c2 * sMax);
   const medie = (x) => { const m = new Float64Array(H); for (let j = 0; j < H; j++) { let s = 0; for (let i = 0; i < W; i++) s += x[j * W + i]; m[j] = s / W; } return m; };
-  const parametri = (dt) => ({ a, omega, b: ar.b, dt, tauRad: ar.tauRad, hs: ar.hs, nu: PARAMETRI.viscosita * cStima * a * dl, L: ar.L, capStrato: ar.capStrato, w1: ar.w1, w2: ar.w2 });
-  // (a) IL PIANETA «MEDIO LUNGO I PARALLELI»: una colonna per latitudine, che costa poco e va a regime. Dà lo stato
-  // di partenza, e dice quanto sono veloci i venti e le onde, cioè quanto può essere lungo il passo di tempo
-  const f1 = { t1Eq: medie(t1Eq), t2Eq: medie(t2Eq), wSat: medie(wSat), kE: medie(kE), bagnato: medie(bagnato), cd: medie(cd) };
-  let m1, dt1 = Math.min((0.5 * dy) / (cStima + 20), PARAMETRI.coriolis / (2 * omega)), tentativi = 0;
-  for (;;) { m1 = motore(1, H, parametri(dt1), f1); for (let j = 0; j < H; j++) { const o = (j + 1) * 3 + 1; m1.th1[o] = f1.t1Eq[j]; m1.th2[o] = f1.t2Eq[j]; m1.wv[o] = 0.7 * PARAMETRI.umiditaPioggia * f1.wSat[j]; }
-    let bene = true; for (let n = 0; n < 2 * passi && bene; n++) { m1.passo(false); if (n % 64 === 63) bene = m1.sano(); }
+  const parametri = (dt) => ({ a, omega, R: ar.R, cp: ar.cp, kappa: ar.kappa, dt, tauRad: ar.tauRad, hs: ar.hs, nu: PARAMETRI.viscosita * cStima * a * dl, L: ar.L, capStrato: ar.capStrato, w1: ar.w1, w2: ar.w2 });
+  // (a) IL PIANETA «MEDIO LUNGO I PARALLELI»: una colonna per latitudine, che costa poco e va a regime, per ogni
+  // stagione (la seconda a partire dalla prima, e così via). Dà lo stato di partenza, il salto da una stagione
+  // all'altra, e dice quanto sono veloci i venti e le onde, cioè quanto può essere lungo il passo di tempo
+  const F1 = F.map((f) => ({ t1Eq: medie(f.t1Eq), t2Eq: medie(f.t2Eq), wSat: medie(f.wSat), kE: medie(f.kE) })), CAMPI1 = ['u1', 'v1', 'u2', 'v2', 'th1', 'th2', 'wv'];
+  let stati1, dt1 = Math.min((0.5 * dy) / (cStima + 20), PARAMETRI.coriolis / (2 * omega)), tentativi = 0;
+  for (;;) { const f1 = { t1Eq: Float64Array.from(F1[0].t1Eq), t2Eq: Float64Array.from(F1[0].t2Eq), wSat: Float64Array.from(F1[0].wSat), kE: Float64Array.from(F1[0].kE), bagnato: medie(bagnato), cd: medie(cd) }, m1 = motore(1, H, parametri(dt1), f1);
+    for (let j = 0; j < H; j++) { const o = (j + 1) * 3 + 1; m1.th1[o] = f1.t1Eq[j]; m1.th2[o] = f1.t2Eq[j]; m1.wv[o] = 0.7 * PARAMETRI.umiditaPioggia * f1.wSat[j]; }
+    let bene = true; stati1 = [];
+    for (let s = 0; s < nS && bene; s++) { if (s > 0) for (const c of NOMI) f1[c].set(F1[s][c]);
+      for (let n = 0, fine = s === 0 ? passi + (passi >> 1) : passi >> 1; n < fine && bene; n++) { m1.passo(false); if (n % 64 === 63) bene = m1.sano(); }
+      const st = {}; for (const c of CAMPI1) { st[c] = new Float64Array(H); for (let j = 0; j < H; j++) st[c][j] = m1[c][(j + 1) * 3 + 1]; } stati1.push(st); }
     if (bene) break; if (++tentativi > 6) throw new Error('meteo: il calcolo non si stabilizza'); dt1 *= 0.7; }
-  let cOnde = 0, uMax = 0; for (let j = 0; j < H; j++) { const o = (j + 1) * 3 + 1, stretto = peso(j) < cCrit ? 2 : 1; cOnde = Math.max(cOnde, Math.sqrt(0.25 * ar.b * Math.max(0, m1.th1[o] - m1.th2[o]))); uMax = Math.max(uMax, stretto * Math.abs(m1.u1[o]), stretto * Math.abs(m1.u2[o]), Math.abs(m1.v1[o]) * (dxCrit / dy)); }
-  // (dove la superficie cambia molto anche lungo i paralleli, i venti locali crescono con quella differenza)
-  let scarto = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) scarto = Math.max(scarto, Math.abs(t1Eq[j * W + i] + t2Eq[j * W + i] - f1.t1Eq[j] - f1.t2Eq[j]));
-  let dt = Math.min((PARAMETRI.courant * dxCrit) / (Math.max(cOnde, cStima) + Math.max(1.3 * uMax, Math.sqrt(0.25 * ar.b * scarto)) + 10), PARAMETRI.coriolis / (2 * omega));
+  let cOnde = cStima, uMax = 0, scarto = 0;
+  for (let s = 0; s < nS; s++) { const st = stati1[s]; for (let j = 0; j < H; j++) { const stretto = peso(j) < cCrit ? 2 : 1; cOnde = Math.max(cOnde, Math.sqrt(ar.c2 * Math.max(0, st.th1[j] - st.th2[j]))); uMax = Math.max(uMax, stretto * Math.abs(st.u1[j]), stretto * Math.abs(st.u2[j]), Math.abs(st.v1[j]) * (dxCrit / dy));
+    // (dove la superficie cambia molto anche lungo i paralleli, i venti locali crescono con quella differenza)
+    for (let i = 0; i < W; i++) scarto = Math.max(scarto, Math.abs(F[s].t1Eq[j * W + i] + F[s].t2Eq[j * W + i] - F1[s].t1Eq[j] - F1[s].t2Eq[j])); } }
+  let dt = Math.min((PARAMETRI.courant * dxCrit) / (cOnde + Math.max(1.3 * uMax, Math.sqrt(ar.c2 * scarto)) + 10), PARAMETRI.coriolis / (2 * omega));
   // (b) IL PIANETA INTERO, a partire da lì: le differenze lungo i paralleli vengono dai mari, dalle terre, dai rilievi
-  // (e, se il pianeta è perfettamente liscio, da un'increspatura fissa). Le medie si prendono sull'ultimo 60% dei passi
-  let m2, vaporePrima = 0; const inizio = Math.floor(passi * 0.4);
-  for (;;) { m2 = motore(W, H, parametri(dt), { t1Eq, t2Eq, wSat, kE, bagnato, cd });
-    for (let j = 0; j < H; j++) { const o1 = (j + 1) * 3 + 1, rh = f1.wSat[j] > 0 ? m1.wv[o1] / f1.wSat[j] : 0; for (let i = 0; i < W; i++) { const k = (j + 1) * m2.S + 1 + i, p = j * W + i; m2.u1[k] = m1.u1[o1]; m2.v1[k] = m1.v1[o1]; m2.u2[k] = m1.u2[o1]; m2.v2[k] = m1.v2[o1]; m2.th1[k] = m1.th1[o1] + (t1Eq[p] - f1.t1Eq[j]);
-      m2.th2[k] = m1.th2[o1] + (t2Eq[p] - f1.t2Eq[j]) + PARAMETRI.increspatura * peso(j) * (Math.sin(3 * i * dl) + Math.sin(5 * i * dl + 1) + Math.sin(8 * i * dl + 2)); m2.wv[k] = rh * wSat[p]; } }
-    let bene = true; for (let n = 0; n < passi && bene; n++) { if (n === inizio) vaporePrima = m2.vaporeMedio(); m2.passo(n >= inizio); if (n % 64 === 63) bene = m2.sano(); }
-    if (bene && m2.sano()) break;
+  // (e, se il pianeta è perfettamente liscio, da un'increspatura fissa). Senza stagioni: il 40% dei passi perché nascano
+  // i vortici, il 60% per le medie. Con le stagioni: il 30% all'inizio; poi, per ogni stagione, un tratto perché l'aria si
+  // adatti e uno, doppio, per le medie. Da una stagione all'altra i vortici restano, e lo stato medio lungo i paralleli
+  // fa il salto che ha fatto la colonna
+  const nAvvio = fasi ? Math.floor(0.3 * passi) : 0, nAdatta = Math.max(1, Math.floor(fasi ? (0.7 * passi) / (3 * nS) : 0.4 * passi)), nMedia = Math.max(1, Math.floor(fasi ? (1.4 * passi) / (3 * nS) : 0.6 * passi)), CAMPI2 = ['u', 'v', 'uAlto', 'vAlto', 'pioggia', 'neve', 'evaporazione', 'deflusso', 'nuvole', 'umidita', 'vapore', 'trasportoCalore', 'salita', 'temperaturaAria', 'temperaturaQuota'];
+  let m2, raccolte, accumulata;
+  for (;;) { const f2 = { t1Eq: Float64Array.from(F[0].t1Eq), t2Eq: Float64Array.from(F[0].t2Eq), wSat: Float64Array.from(F[0].wSat), kE: Float64Array.from(F[0].kE), bagnato, cd }; m2 = motore(W, H, parametri(dt), f2);
+    const S2 = m2.S; let bene = true; raccolte = []; accumulata = 0;
+    for (let s = 0; s < nS && bene; s++) { const st = stati1[s], pr = s > 0 ? stati1[s - 1] : null;
+      for (let j = 0; j < H; j++) { const rh = F1[s].wSat[j] > 0 ? st.wv[j] / F1[s].wSat[j] : 0; for (let i = 0; i < W; i++) { const k = (j + 1) * S2 + 1 + i, p = j * W + i;
+        if (!pr) { m2.u1[k] = st.u1[j]; m2.v1[k] = st.v1[j]; m2.u2[k] = st.u2[j]; m2.v2[k] = st.v2[j]; m2.th1[k] = st.th1[j] + (F[0].t1Eq[p] - F1[0].t1Eq[j]); m2.wv[k] = rh * F[0].wSat[p];
+          m2.th2[k] = st.th2[j] + (F[0].t2Eq[p] - F1[0].t2Eq[j]) + PARAMETRI.increspatura * peso(j) * (Math.sin(3 * i * dl) + Math.sin(5 * i * dl + 1) + Math.sin(8 * i * dl + 2)); }
+        else { m2.u1[k] += st.u1[j] - pr.u1[j]; m2.u2[k] += st.u2[j] - pr.u2[j]; if (j < H - 1) { m2.v1[k] += st.v1[j] - pr.v1[j]; m2.v2[k] += st.v2[j] - pr.v2[j]; }
+          m2.th1[k] += F[s].t1Eq[p] - F[s - 1].t1Eq[p] + (st.th1[j] - F1[s].t1Eq[j]) - (pr.th1[j] - F1[s - 1].t1Eq[j]); m2.th2[k] += F[s].t2Eq[p] - F[s - 1].t2Eq[p] + (st.th2[j] - F1[s].t2Eq[j]) - (pr.th2[j] - F1[s - 1].t2Eq[j]);
+          if (F[s - 1].wSat[p] > 0) m2.wv[k] *= F[s].wSat[p] / F[s - 1].wSat[p]; } } }
+      if (pr) for (const c of NOMI) f2[c].set(F[s][c]);
+      for (let n = 0, fine = nAdatta + (s === 0 ? nAvvio : 0); n < fine && bene; n++) { m2.passo(false); if (n % 64 === 63) bene = m2.sano(); }
+      const vaporePrima = m2.vaporeMedio(); for (let n = 0; n < nMedia && bene; n++) { m2.passo(true); if (n % 64 === 63) bene = m2.sano(); }
+      if (!(bene && m2.sano())) { bene = false; break; }
+      accumulata += m2.vaporeMedio() - vaporePrima;
+      // le medie della stagione
+      const acc = m2.acc, n = acc.n, r = { temperatura: temperature[s], psi: new Float64Array(H - 1) }; for (const c of CAMPI2) r[c] = campo();
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const p = j * W + i, iw = j * W + ((i + W - 1) % W);
+        r.u[p] = (0.5 * (acc.u2[p] + acc.u2[iw])) / n; r.v[p] = (0.5 * (acc.v2[p] + (j > 0 ? acc.v2[p - W] : 0))) / n; r.uAlto[p] = (0.5 * (acc.u1[p] + acc.u1[iw])) / n; r.vAlto[p] = (0.5 * (acc.v1[p] + (j > 0 ? acc.v1[p - W] : 0))) / n;
+        r.pioggia[p] = (acc.piove[p] / n) * ANNO; r.evaporazione[p] = (acc.evapora[p] / n) * ANNO; r.deflusso[p] = (acc.scorre[p] / n) * ANNO; r.nuvole[p] = acc.nuvole[p] / n; r.umidita[p] = acc.umidita[p] / n; r.vapore[p] = acc.vapore[p] / n;
+        r.neve[p] = r.pioggia[p] * frazioneNeve(F[s].Tloc[p], !fasi && freddo ? freddo[p] : 0);
+        r.trasportoCalore[p] = (ar.capStrato * acc.calore[p]) / n / dt; r.salita[p] = acc.sale[p] / n; r.temperaturaAria[p] = temperature[s][p] + (acc.th2[p] / n - F[s].t2Eq[p]) * ar.w2; r.temperaturaQuota[p] = (acc.th1[p] / n) * ar.w1; }
+      for (let j = 0; j < H - 1; j++) { let q = 0; for (let i = 0; i < W; i++) q += acc.v1[j * W + i]; r.psi[j] = ((q / n / W) * Math.sin((j + 1) * df) * 2 * Math.PI * a * (0.5 * pressione)) / gravita; }
+      raccolte.push(r); m2.azzera(); }
+    if (bene) break;
     if (++tentativi > 6) throw new Error('meteo: il calcolo non si stabilizza');
     dt *= 0.7; }
-  // i risultati: le medie sul periodo finale
-  const acc = m2.acc, n = acc.n, sec = n * dt;
-  let ev = 0, pv = 0, nu = 0;
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const p = j * W + i, iw = j * W + ((i + W - 1) % W);
-    ris.u[p] = (0.5 * (acc.u2[p] + acc.u2[iw])) / n; ris.v[p] = (0.5 * (acc.v2[p] + (j > 0 ? acc.v2[p - W] : 0))) / n;
-    ris.uAlto[p] = (0.5 * (acc.u1[p] + acc.u1[iw])) / n; ris.vAlto[p] = (0.5 * (acc.v1[p] + (j > 0 ? acc.v1[p - W] : 0))) / n;
-    ris.pioggia[p] = (acc.piove[p] / n) * ANNO; ris.evaporazione[p] = (acc.evapora[p] / n) * ANNO; ris.deflusso[p] = (acc.scorre[p] / n) * ANNO; ris.nuvole[p] = acc.nuvole[p] / n; ris.umidita[p] = acc.umidita[p] / n; ris.vapore[p] = acc.vapore[p] / n; ris.suolo[p] = bagnato[p] < 1 ? m2.suolo[p] : 0;
-    ris.neve[p] = ris.pioggia[p] * frazioneNeve(Tloc[p], freddo ? freddo[p] : 0);
-    ris.trasportoCalore[p] = (ar.capStrato * acc.calore[p]) / n / dt; ris.salita[p] = acc.sale[p] / n;
-    ris.temperaturaAria[p] = T[p] + (acc.th2[p] / n - t2Eq[p]) * ar.w2; ris.temperaturaQuota[p] = (acc.th1[p] / n) * ar.w1;
-    ev += ris.evaporazione[p] * peso(j); pv += ris.pioggia[p] * peso(j); nu += ris.nuvole[p] * peso(j); }
-  // la prova di conservazione: in tutto il periodo, l'acqua evaporata meno quella piovuta è quella rimasta in più nell'aria
-  ris.bilancio = { evaporata: ev / area, piovuta: pv / area, accumulata: ((m2.vaporeMedio() - vaporePrima) / sec) * ANNO }; ris.nuvoleMedie = nu / area;
-  // la corrente media in quota attraverso ogni parallelo (kg/s, positiva verso nord) e i venti medi lungo i paralleli
-  const psi = ris.psi, uZona = ris.ventoZonale, uAltoZona = ris.ventoZonaleAlto; let psiMax = 0;
-  for (let j = 0; j < H - 1; j++) { let s = 0; for (let i = 0; i < W; i++) s += acc.v1[j * W + i]; psi[j] = ((s / n / W) * Math.sin((j + 1) * df) * 2 * Math.PI * a * (0.5 * pressione)) / gravita; psiMax = Math.max(psiMax, Math.abs(psi[j])); }
-  for (let j = 0; j < H; j++) { let s = 0, q = 0; for (let i = 0; i < W; i++) { s += ris.u[j * W + i]; q += ris.uAlto[j * W + i]; } uZona[j] = s / W; uAltoZona[j] = q / W; }
+  // I RISULTATI: l'anno è la media delle stagioni (la pioggia dell'anno è la somma di quella di ogni stagione)
+  for (const c of CAMPI2) { const x = ris[c]; x.fill(0); for (const r of raccolte) { const y = r[c]; for (let k = 0; k < NP; k++) x[k] += y[k] / nS; } }
+  const psi = ris.psi, uZona = ris.ventoZonale, uAltoZona = ris.ventoZonaleAlto; let psiMax = 0, ev = 0, pv = 0, nu = 0;
+  for (const r of raccolte) for (let j = 0; j < H - 1; j++) psi[j] += r.psi[j] / nS;
+  for (let j = 0; j < H - 1; j++) psiMax = Math.max(psiMax, Math.abs(psi[j]));
+  for (let j = 0; j < H; j++) { let q = 0, q2 = 0; for (let i = 0; i < W; i++) { const p = j * W + i; q += ris.u[p]; q2 += ris.uAlto[p]; ris.suolo[p] = bagnato[p] < 1 ? m2.suolo[p] : 0; ev += ris.evaporazione[p] * peso(j); pv += ris.pioggia[p] * peso(j); nu += ris.nuvole[p] * peso(j); } uZona[j] = q / W; uAltoZona[j] = q2 / W; }
+  // la prova di conservazione: nei periodi delle medie, l'acqua evaporata meno quella piovuta è quella rimasta in più nell'aria
+  ris.bilancio = { evaporata: ev / area, piovuta: pv / area, accumulata: (accumulata / (nS * nMedia * dt)) * ANNO }; ris.nuvoleMedie = nu / area;
+  // le stagioni, una per una (nell'ordine in cui sono state date): le carte e dove sta la fascia delle piogge
+  if (fasi) ris.stagioni = raccolte.map((r) => { const z = medie(r.pioggia); let jm = 0; for (let j = 0; j < H; j++) if (Math.abs(90 - ((j + 0.5) * 180) / H) < 40 && z[j] > z[jm]) jm = j; if (Math.abs(90 - ((jm + 0.5) * 180) / H) >= 40) jm = H / 2;
+    let pp = 0; for (let j = 0; j < H; j++) pp += z[j] * peso(j) * W; return { ...r, latitudinePiogge: 90 - ((jm + 0.5) * 180) / H, pioggiaMedia: pp / area }; });
   // LE CELLE: i centri di rovesciamento distinti tra l'equatore e il polo. Lungo il meridiano la corrente ψ ha massimi
   // (i centri delle celle); due massimi contano per due se tra loro ψ cambia verso o scende sotto la metà del minore;
   // i massimi sotto il 5% del più grande del pianeta non si contano
@@ -393,11 +436,15 @@ export function circolazione({ W = 64, H = 32, T, alt = null, mare = -Infinity, 
   if (bloccato) { let sa = 0, sb = 0, sw = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const lat = Math.PI / 2 - (j + 0.5) * df, lon = (i + 0.5) * dl - Math.PI, est = Math.sin(lon), nord = Math.sin(lat) * Math.cos(lon), nrm = Math.hypot(est, nord); if (nrm < 0.2) continue; const p = j * W + i, w = peso(j);
       sa += (w * (ris.uAlto[p] * est + ris.vAlto[p] * nord)) / nrm; sb += (w * (ris.u[p] * est + ris.v[p] * nord)) / nrm; sw += w; } ris.giornoNotte = { alto: sa / sw, basso: sb / sw }; }
   // quanto vale, come coefficiente di diffusione di un modello a bilancio di energia (W/m² per K, laplaciano sulla sfera
-  // unitaria), il calore che questa circolazione ha davvero portato: il miglior accordo sulle medie lungo i paralleli
-  { const zT = medie(T), zF = medie(ris.trasportoCalore); let sFL = 0, sLL = 0; for (let j = 0; j < H; j++) { const cn = j > 0 ? Math.sin(j * df) : 0, cs = j < H - 1 ? Math.sin((j + 1) * df) : 0, lap = (cn * ((j > 0 ? zT[j - 1] : zT[j]) - zT[j]) - cs * (zT[j] - (j < H - 1 ? zT[j + 1] : zT[j]))) / (peso(j) * df * df); sFL += peso(j) * zF[j] * lap; sLL += peso(j) * lap * lap; }
-    ris.diffusivita = sLL > 0 ? sFL / sLL : 0; }
+  // unitaria), il calore che questa circolazione ha davvero portato: il coefficiente che spianerebbe le differenze di
+  // temperatura della superficie (in latitudine e in longitudine: su un pianeta bloccato contano quelle tra giorno e
+  // notte) con la stessa forza, cioè D = −∫F·T / ∫|∇T|²
+  { let sFT = 0, sGG = 0; const Fm = pv >= 0 ? (() => { let q = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) q += ris.trasportoCalore[j * W + i] * peso(j); return q / area; })() : 0;
+    for (let j = 0; j < H; j++) { const c = peso(j), cs = j < H - 1 ? Math.sin((j + 1) * df) : 0; for (let i = 0; i < W; i++) { const p = j * W + i, t = T[p], gx = (T[j * W + ((i + 1) % W)] - t) / dl, gy = j < H - 1 ? (t - T[p + W]) / df : 0;
+      sFT += (ris.trasportoCalore[p] - Fm) * (t - Tm) * c; sGG += (gx * gx) / c + gy * gy * cs; } }
+    ris.diffusivita = sGG > 0 ? -sFT / sGG : 0; }
   ris.scambio = ar.capStrato * ar.w2 * (1 / ar.tauRad + (2 * PARAMETRI.ce * 5) / ar.hs); // (W/m² per K) quanto forte la superficie è legata all'aria bassa, con 5 m/s di vento
-  return Object.assign(ris, { regime: 'aria', dt, giorniSimulati: (passi * dt) / 86400, tentativi });
+  return Object.assign(ris, { regime: 'aria', dt, giorniSimulati: ((nAvvio + nS * (nAdatta + nMedia)) * dt) / 86400, giorniPerStagione: (nMedia * dt) / 86400, tentativi });
 }
 
 // quanta della precipitazione cade come neve: tutta sotto zero, niente sopra +2 °C (misurato: a +1 °C metà e metà); e
@@ -418,7 +465,7 @@ export function meteoPianeta(P, sf, cl, { passi = 1800, chiave = null } = {}) {
   let gas = P.atmosfera?.gas; if (!gas) { try { gas = atmosfera(P).gas; } catch { gas = {}; } }
   const { massaMolare, cp } = gasDellAria(gas), neve = cl.neve ?? 1;
   const out = circolazione({ W: cl.W, H: cl.H, T: cl.media, alt: sf.alt, mare: sf.mare, lago: sf.lago ?? null, raggioM: P.raggioM, gravita: (COSTANTI.G * P.massaKg) / (P.raggioM * P.raggioM), giorno: P.giorno, bloccato: !!P.bloccato, obliquita: P.obliquita ?? 0,
-    pressione: P.tipo === 'gassoso' ? Infinity : P.clima?.pressione ?? 0, massaMolare, cp, acqua: isFinite(sf.mare), freddo: cl.freddo && neve > 0 ? cl.freddo.map((x) => x / neve) : null, passi });
+    stagioni: Array.isArray(cl.stagioni) && cl.stagioni.length > 1 ? cl.stagioni : null, pressione: P.tipo === 'gassoso' ? Infinity : P.clima?.pressione ?? 0, massaMolare, cp, acqua: isFinite(sf.mare), freddo: cl.freddo && neve > 0 ? cl.freddo.map((x) => x / neve) : null, passi });
   if (chiave) { memoMeteo.set(chiave, out); if (memoMeteo.size > 6) memoMeteo.delete(memoMeteo.keys().next().value); }
   return out;
 }

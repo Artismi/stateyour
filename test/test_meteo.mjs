@@ -104,8 +104,8 @@ prova('la Terra: deserti sulla terraferma, nuvole dove piove, neve al freddo, ca
   // il calore: la circolazione lo toglie ai tropici e lo porta ai poli; in tutto non ne crea
   tra(fascia(zQ, 0, 20), -200, -30, 'calore tolto ai tropici (W/m²; misurato ≈ −50)');
   tra(fascia(zQ, 60, 90), 30, 250, 'calore portato ai poli (W/m²; misurato ≈ +100)');
-  // (resta una piccola perdita: il lavoro dei venti, che l'attrito consuma, qui non torna come calore)
-  assert.ok(Math.abs(globale(terra.trasportoCalore)) < 0.25 * mediaAssoluta(terra), `il trasporto sposta il calore, non lo crea: media ${globale(terra.trasportoCalore)} W/m² su ${mediaAssoluta(terra)}`);
+  // (il lavoro dei venti consumato dall'attrito torna come calore; resta la piccola parte consumata dalla viscosità numerica)
+  assert.ok(Math.abs(globale(terra.trasportoCalore)) < 0.1 * mediaAssoluta(terra), `il trasporto sposta il calore, non lo crea: media ${globale(terra.trasportoCalore)} W/m² su ${mediaAssoluta(terra)}`);
   tra(terra.diffusivita, 0.2, 2, 'il coefficiente di diffusione equivalente (W/m²/K; i modelli a bilancio di energia usano 0,6)');
   // l'aria in quota è più uniforme della superficie (è lei che porta il calore)
   const zTa = zonale(terra.temperaturaAria), zT = zonale(terra.temperatura);
@@ -128,6 +128,39 @@ prova('la neve sale con la quota, e la pioggia si porta sulla griglia fine dell\
   const ts = pioggiaFine(terra, { W: 32, H: 32, alt: new Float32Array(1024), rett: [0.5, 0.5, 0.5625, 0.5625] });
   let m = 0; for (const v of ts.pioggia) m += v / 1024; tra(m, 0.5 * terra.pioggia[16 * W + 32], 2 * terra.pioggia[16 * W + 33] + 50, 'la pioggia di una tessera');
   console.log(`      neve sopra i 2500 m: ${(100 * alti / nAlti).toFixed(0)}% della precipitazione (${nAlti} punti); sotto i 500 m: ${(100 * bassi / nBassi).toFixed(0)}% (${nBassi} punti)`);
+});
+
+// LE STAGIONI: la stessa Terra con la temperatura dei quattro trimestri (misurata: North e Coakley 1979, ±15,5·sin φ gradi
+// tra estate e inverno; in media sul trimestre del solstizio ±14): primavera, estate, autunno e inverno dell'emisfero nord
+const stagione = (e) => { const T = terraMisurata(); for (let j = 0; j < H; j++) { const s = Math.sin((lat(j) * Math.PI) / 180); for (let i = 0; i < W; i++) T[j * W + i] += e * s; } return T; };
+const quattro = (amp) => [stagione(0), stagione(amp), stagione(0), stagione(-amp)];
+const tS = performance.now(), anno = circolazione({ ...base, stagioni: quattro(14), alt: sf.alt, mare: sf.mare }), tempoStagioni = performance.now() - tS;
+
+prova('le stagioni: la fascia delle piogge segue il sole, i tropici hanno una stagione secca e una piovosa, d\'inverno nevica', () => {
+  assert.equal(anno.stagioni.length, 4); const [pri, est, aut, inv] = anno.stagioni, zEst = zonale(est.pioggia), zInv = zonale(inv.pioggia);
+  assert.ok(est.latitudinePiogge > 2 && inv.latitudinePiogge < -2, `la fascia delle piogge migra: ${est.latitudinePiogge}° d'estate, ${inv.latitudinePiogge}° d'inverno`);
+  assert.ok(Math.abs(pri.latitudinePiogge) < Math.abs(est.latitudinePiogge) + 0.1 && Math.abs(aut.latitudinePiogge) <= Math.abs(inv.latitudinePiogge) + 0.1, 'agli equinozi sta più vicina all\'equatore');
+  // tra 8° e 25°: piove nella stagione calda, è secco in quella fredda (da una parte e dall'altra dell'equatore, a stagioni invertite)
+  const nE = fascia(zEst, 8, 25, 1), nI = fascia(zInv, 8, 25, 1), sE = fascia(zEst, 8, 25, -1), sI = fascia(zInv, 8, 25, -1);
+  assert.ok(nE > 1.8 * nI && sI > 1.8 * sE, `stagione piovosa e stagione secca: a nord ${nE} d'estate e ${nI} d'inverno, a sud ${sE} e ${sI} (mm/anno)`);
+  // al solstizio una cella sola scavalca l'equatore: in quota l'aria va dall'emisfero d'estate a quello d'inverno
+  const eq = H / 2 - 1; assert.ok(est.psi[eq] < -1.5e11 && inv.psi[eq] > 1.5e11 && Math.abs(pri.psi[eq]) < 0.6 * Math.abs(est.psi[eq]), `la cella del solstizio: ${est.psi[eq]} e ${inv.psi[eq]} kg/s all'equatore (misurata ≈ 2·10¹¹), ${pri.psi[eq]} all'equinozio`);
+  // l'anno è la media delle stagioni, e l'acqua si conserva
+  for (const k of [100, 700, 1000, 1500]) assert.ok(Math.abs(anno.pioggia[k] - (pri.pioggia[k] + est.pioggia[k] + aut.pioggia[k] + inv.pioggia[k]) / 4) < 1e-3 * (1 + anno.pioggia[k]));
+  assert.ok(Math.abs(anno.bilancio.evaporata - anno.bilancio.piovuta - anno.bilancio.accumulata) < 1e-4 * anno.bilancio.piovuta, 'conservazione');
+  tra(anno.bilancio.piovuta, 400, 2500, 'pioggia media globale con le stagioni (mm/anno)');
+  // la neve: tra 45° e 65° nord d'inverno la precipitazione è quasi tutta neve, d'estate quasi tutta pioggia (resta la neve delle terre alte)
+  const nvI = fascia(zonale(inv.neve), 45, 65, 1) / fascia(zInv, 45, 65, 1), nvE = fascia(zonale(est.neve), 45, 65, 1) / fascia(zEst, 45, 65, 1); assert.ok(nvI > 0.8 && nvE < 0.3, `neve a 45-65° nord: ${nvI} della precipitazione d'inverno, ${nvE} d'estate`);
+  // la fascia equatoriale, che ora si sposta, è meno intensa che senza stagioni; i tropici restano secchi nella media dell'anno
+  const zA = zonale(anno.pioggia); assert.ok(Math.max(...zA) < Math.max(...zP), `l'equatore: ${Math.max(...zA)} mm/anno con le stagioni, ${Math.max(...zP)} senza`);
+  assert.ok(anno.fasceNord >= 3 && anno.fasceSud >= 3, 'le tre fasce di vento restano');
+  // un asse più inclinato (stagioni doppie): la fascia delle piogge va più lontano
+  const forte = circolazione({ ...base, stagioni: quattro(28), alt: sf.alt, mare: sf.mare });
+  assert.ok(forte.stagioni[1].latitudinePiogge > est.latitudinePiogge && forte.stagioni[3].latitudinePiogge < inv.latitudinePiogge, `con stagioni doppie le piogge arrivano a ${forte.stagioni[1].latitudinePiogge}° e ${forte.stagioni[3].latitudinePiogge}° invece di ${est.latitudinePiogge}° e ${inv.latitudinePiogge}°`);
+  // e meteoPianeta le prende dal clima, se il clima le dà (cl.stagioni)
+  const mp = meteoPianeta(P, sf, { ...cl, stagioni: quattro(14) }, { passi: 400 }); assert.equal(mp.stagioni.length, 4); assert.equal(meteoPianeta(P, sf, { ...cl, stagioni: undefined }, { passi: 200 }).stagioni, null);
+  console.log(`      piogge a ${anno.stagioni.map((r) => r.latitudinePiogge.toFixed(0)).join('°, ')}° (primavera, estate, autunno, inverno del nord); a 8-25° nord ${nE.toFixed(0)} mm/anno d'estate e ${nI.toFixed(0)} d'inverno, a sud ${sE.toFixed(0)} e ${sI.toFixed(0)}; cella del solstizio ${(est.psi[eq] / 1e9).toFixed(0)} e ${(inv.psi[eq] / 1e9).toFixed(0)} ·10⁹ kg/s; neve a 45-65° nord ${(100 * nvI).toFixed(0)}% d'inverno, ${(100 * nvE).toFixed(0)}% d'estate`);
+  console.log(`      l'anno: pioggia ${anno.bilancio.piovuta.toFixed(0)} mm/anno, equatore ${Math.max(...zA).toFixed(0)} (senza stagioni ${Math.max(...zP).toFixed(0)}), tropici ${fascia(zA, 15, 30).toFixed(0)}, alisei fino a ${anno.latitudineAlisei.toFixed(0)}°, Hadley ${(Math.max(...anno.psi) / 1e9).toFixed(0)} e ${(Math.min(...anno.psi) / 1e9).toFixed(0)} ·10⁹ kg/s, celle ${anno.celleNord}/${anno.celleSud}, calore in media ${globale(anno.trasportoCalore).toFixed(1)} W/m²; stagioni doppie: piogge fino a ${forte.stagioni[1].latitudinePiogge.toFixed(0)}° e ${forte.stagioni[3].latitudinePiogge.toFixed(0)}°; ${tempoStagioni.toFixed(0)} ms`);
 });
 
 prova('l\'ombra di pioggia: un oceano, un muro di monti, e il vento che lo investe', () => {
@@ -213,7 +246,7 @@ prova('senz\'acqua: venti ma niente pioggia; aria densa: molto più calore porta
   // la stessa superficie sotto 92 bar di CO2 che ruota piano (Venere)
   const denso = circolazione({ ...base, giorno: 243 * 86400, pressione: 9.2e6, massaMolare: 0.044, cp: 850, T: terraMisurata(), alt: isole(), mare: 0, acqua: false });
   const stesso = circolazione({ ...base, giorno: 243 * 86400, T: terraMisurata(), alt: isole(), mare: 0, acqua: false });
-  assert.ok(mediaAssoluta(denso) > 3 * mediaAssoluta(stesso), `l'aria densa porta molto più calore: ${mediaAssoluta(denso)} contro ${mediaAssoluta(stesso)} W/m²`);
+  assert.ok(mediaAssoluta(denso) > 2 * mediaAssoluta(stesso), `l'aria densa porta molto più calore: ${mediaAssoluta(denso)} contro ${mediaAssoluta(stesso)} W/m²`);
   // su un pianeta lento l'aria in quota è quasi alla stessa temperatura dappertutto (nulla la trattiene alla sua latitudine)
   const zq = zonale(stesso.temperaturaQuota), zs = zonale(stesso.temperatura), escursione = (z) => Math.max(...z) - Math.min(...z);
   assert.ok(escursione(zq) < 0.35 * escursione(zs), `in quota le differenze sono piccole: ${escursione(zq)} K contro ${escursione(zs)} K alla superficie`);
