@@ -301,7 +301,9 @@ prova('la deflessione: tre vie (integrale esatto, Binet, la forma dello shader) 
   confronta('ritardo di Shapiro Terra–Marte al bordo del Sole (andata e ritorno)', dt * 1e6, 240, 260, '~250 µs (Viking: Reasenberg et al. 1979 [R]); la formula è provata a 2·10⁻⁵ da Cassini [R]', 'µs');
   prova('il tempo esatto della luce in Schwarzschild meno la retta è il ritardo logaritmico (più il termine della coordinata)', () => {
     const rs = R.raggioSchwarzschild(MSOLE), eu = (r) => Math.sqrt(r * r - RSOLE * RSOLE) / C, atteso = (r) => (rs / C) * (Math.log((r + Math.sqrt(r * r - RSOLE * RSOLE)) / RSOLE) + 0.5 * Math.sqrt((r - RSOLE) / (r + RSOLE)));
-    for (const r of [UA, rM]) vicino(R.tempoLuce(MSOLE, RSOLE, r) - eu(r), atteso(r), 2e-3, 'ritardo esatto contro primo ordine');
+    for (const r of [UA, rM]) { vicino(R.ritardoLuce(MSOLE, RSOLE, r), atteso(r), 1e-4, 'ritardo esatto contro primo ordine'); vicino(R.tempoLuce(MSOLE, RSOLE, r), eu(r) + atteso(r), 1e-9, 'tempo totale'); }
+    // in campo forte il primo ordine non basta più: da 4 r_g a 100 r_g di un buco nero
+    { const Mb = 10 * MSOLE, gb = rg(Mb), rsb = 2 * gb, x = (rsb / C) * (Math.log((100 + Math.sqrt(1e4 - 16)) / 4) + 0.5 * Math.sqrt(96 / 104)); assert.ok(R.ritardoLuce(Mb, 4 * gb, 100 * gb) > 1.2 * x, 'vicino a un buco nero il ritardo è più del primo ordine'); }
     // la parte logaritmica, sommata sui due tratti e raddoppiata, è la formula di Shapiro
     vicino(2 * (rs / C) * (Math.log((2 * UA) / RSOLE) + Math.log((2 * rM) / RSOLE)), dt, 1e-3, 'ln(4r₁r₂/b²)'); }); }
 { const P = 87.9691 * GIORNO, a = 5.790905e10, e = 0.20563, perSecolo = (x) => (x * SEC * 36525 * GIORNO) / P;
@@ -334,7 +336,7 @@ prova('cattura e caduta: la barriera del potenziale efficace decide chi cade; il
   console.log(`        da fermo a 50 r_g di un buco di 10 M☉: ${n(O.tau * 1e3)} ms di tempo proprio fino all'orizzonte, altri ${n((R.tempoDiCaduta(M, r1, 0) - R.tempoDiCaduta(M, r1, 2 * g)) * 1e6)} µs fino al centro (da fuori: mai)    [sotto l'orizzonte: aperta]`);
 });
 prova('il fattore Doppler-gravitazionale del disco: di faccia è √(1 − 3/r); il lato che viene incontro è più blu', () => {
-  vicino(R.fattoreDisco(6, 1e9, 0), Math.sqrt(0.5), 1e-9, 'di faccia a 6 r_g'); assert.ok(R.fattoreDisco(6, 1e9, 5) > 1 && R.fattoreDisco(6, 1e9, -5) < 0.6); vicino(R.redshiftGravitazionale(R.ritmoFermo(MSOLE, 3 * R.raggioSchwarzschild(MSOLE))), 1 / Math.sqrt(1 - 1 / 3) - 1, 1e-12, 'redshift da 3 r_s');
+  vicino(R.fattoreDisco(6, 1e9, 0), Math.sqrt(0.5) / Math.sqrt(1 - 2e-9), 1e-12, 'di faccia a 6 r_g, visto da 10⁹ r_g'); assert.ok(R.fattoreDisco(6, 1e9, 5) > 1 && R.fattoreDisco(6, 1e9, -5) < 0.6); vicino(R.redshiftGravitazionale(R.ritmoFermo(MSOLE, 3 * R.raggioSchwarzschild(MSOLE))), 1 / Math.sqrt(1 - 1 / 3) - 1, 1e-12, 'redshift da 3 r_s');
 });
 { // le lenti: una galassia ellittica con σ = 250 km/s a z = 0,3 e sorgente a z = 1; un ammasso con σ = 1200 km/s a z = 0,2 e sorgente a z = 2
   confronta('raggio di Einstein di una galassia (σ = 250 km/s, z 0,3 → 1)', R.raggioEinsteinIsoterma(250e3, 0.3, 1) * SEC, 0.8, 1.8, '~1″: le lenti SLACS stanno tra 0,8″ e 1,8″ [R]', '″');

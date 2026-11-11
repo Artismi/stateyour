@@ -461,14 +461,14 @@ export function ritardoShapiro(M, r1, r2, b) {
   return ((2 * G * M) / C ** 3) * Math.log((r1 + r2 + R) / (r1 + r2 - R));
 }
 // il tempo ESATTO (coordinata di Schwarzschild) che la luce impiega dal punto più vicino r0 fino a r:
-// t = (1/c)∫ dr / ((1 − r_s/r)·√(1 − (r0/r)²·(1 − r_s/r)/(1 − r_s/r0))) [D]; con r = r0/(1 − s²) l'integrando è liscio
-export function tempoLuce(M, r0, r, n = 20000) {
-  const rs = raggioSchwarzschild(M), A0 = 1 - rs / r0, q = Math.sqrt(1 - r0 / r);
-  // r(s) = r0/(1 − s²): dr = 2 r0 s ds/(1 − s²)²; il radicando ≈ ∝ s² vicino a s = 0
-  // il radicando 1 − x²·A/A₀ con A/A₀ = 1 + ε s², ε = r_s/(r0·A₀): diviso per s² è 2 − ε − s²(1 − 2ε) − ε s⁴ (senza sottrazioni tra numeri vicini)
-  const eps = rs / (r0 * A0);
-  return simpson((s) => { const s2 = s * s, x = 1 - s2, A = 1 - (rs * x) / r0; return (2 * r0) / (x * x * A * Math.sqrt(2 - eps - s2 * (1 - 2 * eps) - eps * s2 * s2)); }, 0, q, n) / C;
+// t = (1/c)∫ dr / (A·√(1 − (r0/r)²·A/A₀)), A = 1 − r_s/r [D]. Con r = r0·cosh w il radicando diventa
+// tanh²w·(1 − ε/(cosh w·(cosh w + 1))), ε = r_s/(r0·A₀), e l'integrando r0·cosh w/(A·√(…)) è liscio. `ritardoLuce` dà
+// direttamente l'eccesso sulla retta √(r² − r0²)/c (senza sottrarre due numeri quasi uguali).
+export function ritardoLuce(M, r0, r, n = 4000) {
+  const rs = raggioSchwarzschild(M), eps = rs / (r0 * (1 - rs / r0));
+  return simpson((w) => { const ch = Math.cosh(w), A = 1 - rs / (r0 * ch), k = 1 / (A * Math.sqrt(1 - eps / (ch * (ch + 1)))); return r0 * ch * (k - 1); }, 0, Math.acosh(r / r0), n) / C;
 }
+export const tempoLuce = (M, r0, r, n = 4000) => Math.sqrt(r * r - r0 * r0) / C + ritardoLuce(M, r0, r, n);
 
 // ---------- LE PARTICELLE CON MASSA in Schwarzschild
 // LA PRECESSIONE del pericentro per orbita (rad), ESATTA: l'orbita con i punti di svolta r_p = a(1 − e), r_a = a(1 + e)

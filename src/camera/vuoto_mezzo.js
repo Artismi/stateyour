@@ -144,27 +144,31 @@ export function raggiCosmiciIn(forma) {
 const ABB = (i) => 10 ** (ST.DATI.metalli[i][2] - 12); // C: indice 0, O: indice 2 (per atomo di H, Sole)
 function curvaTermica({ G0, zeta, Zr }) {
   const f = Z.fotoelettrico, gas = 1 - LEGGI.polvere, xC = ABB(0) * Zr * gas, xO = ABB(2) * Zr * gas, kErg = K.kB * 1e7, EVerg = EV * 1e7;
-  const stato = (n, T) => { // n: atomi di H per cm³ → { x (H⁺/H), xe, scalda, raffredda (erg/s per H) }
-    const T2 = T / 100, lT2 = Math.log(T2), aR = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]), W = Z.graniRicombinano, lT = Math.log(T), sT = Math.sqrt(T);
-    const aG = (xe) => { const psi = Math.max(1e-3, (G0 * sT) / (n * xe)); return (1e-14 * W[0] * Zr) / (1 + W[1] * Math.pow(psi, W[2]) * (1 + W[3] * Math.pow(T, W[4]) * Math.pow(psi, -W[5] - W[6] * lT))); };
-    const sec = (xe) => Math.max(0, (1 - xe / Z.secondari[1]) * Z.secondari[0]) / (1 + xe / Z.secondari[2]);
-    let lo = Math.log(1e-8), hi = 0;
-    for (let k = 0; k < 44; k++) { const x = Math.exp(0.5 * (lo + hi)), xe = x + xC; if (zeta * (1 + sec(xe)) * (1 - x) - x * n * (xe * aR + aG(xe)) > 0) lo = Math.log(x); else hi = Math.log(x); }
-    const x = Math.exp(0.5 * (lo + hi)), xe = x + xC, ne = n * xe, psi = (G0 * sT) / ne;
-    const eps = f.e1 / (1 + Math.pow(psi / f.psi1, f.p1)) + (f.e2 * Math.pow(T / 1e4, f.pT)) / (1 + psi / f.psi2);
-    const scalda = f.resa * eps * G0 * Zr + zeta * EVerg * (Z.caloreCosmici[0] + Z.caloreCosmici[1] * Math.sqrt(xe / (xe + Z.caloreCosmici[2])));
+  const perT = (T) => { // ciò che dipende solo dalla temperatura, una volta
+    const T2 = T / 100, lT2 = Math.log(T2), aR = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]), W = Z.graniRicombinano, lT = Math.log(T), sT = Math.sqrt(T), w3 = W[3] * Math.pow(T, W[4]), w5 = -W[5] - W[6] * lT;
     const kC = Z.CII.kH[0] * Math.pow(T2, Z.CII.kH[1] + Z.CII.kH[2] * lT2), kCe = (8.629e-6 * Z.CII.omega) / (4 * sT), kO = Z.OI.kH[0] * Math.pow(T2, Z.OI.kH[1] + Z.OI.kH[2] * lT2);
-    const raffredda = n * (xC * kErg * Z.CII.E * 2 * Math.exp(-Z.CII.E / T) * (kC * (1 - x) + kCe * xe) + xO * kErg * Z.OI.E * 0.6 * Math.exp(-Z.OI.E / T) * kO * (1 - x)
-      + (xe * (1 - x) * Z.lyAlfa[0] * Math.exp(-Z.lyAlfa[1] / T)) / (1 + Math.sqrt(T / 1e5)) + Z.ricombinazioneGrani.c * Math.pow(T, Z.ricombinazioneGrani.pT) * Math.pow(psi, Z.ricombinazioneGrani.b0 / Math.pow(T, Z.ricombinazioneGrani.bT)) * xe * Zr);
-    return { x, xe, scalda, raffredda };
+    const cC = xC * kErg * Z.CII.E * 2 * Math.exp(-Z.CII.E / T), cO = xO * kErg * Z.OI.E * 0.6 * Math.exp(-Z.OI.E / T) * kO, cL = (Z.lyAlfa[0] * Math.exp(-Z.lyAlfa[1] / T)) / (1 + Math.sqrt(T / 1e5));
+    const cR = Z.ricombinazioneGrani.c * Math.pow(T, Z.ricombinazioneGrani.pT) * Zr, bR = Z.ricombinazioneGrani.b0 / Math.pow(T, Z.ricombinazioneGrani.bT), e2 = f.e2 * Math.pow(T / 1e4, f.pT);
+    const aG = (n, xe) => { const psi = Math.max(1e-3, (G0 * sT) / (n * xe)); return (1e-14 * W[0] * Zr) / (1 + W[1] * Math.pow(psi, W[2]) * (1 + w3 * Math.pow(psi, w5))); };
+    const sec = (xe) => Math.max(0, (1 - xe / Z.secondari[1]) * Z.secondari[0]) / (1 + xe / Z.secondari[2]);
+    return (n) => { // n: atomi di H per cm³ → { x (H⁺/H), xe, scalda, raffredda (erg/s per H) }
+      let lo = -18.4, hi = 0; // (da 10⁻⁸ a 1)
+      for (let k = 0; k < 30; k++) { const m = 0.5 * (lo + hi), x = Math.exp(m), xe = x + xC; if (zeta * (1 + sec(xe)) * (1 - x) - x * n * (xe * aR + aG(n, xe)) > 0) lo = m; else hi = m; }
+      const x = Math.exp(0.5 * (lo + hi)), xe = x + xC, psi = (G0 * sT) / (n * xe);
+      const eps = f.e1 / (1 + Math.pow(psi / f.psi1, f.p1)) + e2 / (1 + psi / f.psi2);
+      const scalda = f.resa * eps * G0 * Zr + zeta * EVerg * (Z.caloreCosmici[0] + Z.caloreCosmici[1] * Math.sqrt(xe / (xe + Z.caloreCosmici[2])));
+      const raffredda = n * (cC * (kC * (1 - x) + kCe * xe) + cO * (1 - x) + xe * (1 - x) * cL + cR * Math.pow(psi, bR) * xe);
+      return { x, xe, scalda, raffredda };
+    };
   };
+  const stato = (n, T) => perT(T)(n);
   // per ogni temperatura la densità a cui scaldare e raffreddare si pareggiano (bisezione in ln n)
-  const NT = 96, T0 = 12, T1 = 2.2e4, pts = [];
+  const NT = 80, T0 = 12, T1 = 2.2e4, pts = [];
   for (let j = 0; j < NT; j++) {
     const T = T1 * Math.pow(T0 / T1, j / (NT - 1)); let lo = Math.log(1e-4), hi = Math.log(1e6);
-    const s0 = stato(Math.exp(lo), T), s1 = stato(Math.exp(hi), T); if (!(s0.scalda > s0.raffredda) || !(s1.scalda < s1.raffredda)) continue;
-    for (let k = 0; k < 44; k++) { const m = 0.5 * (lo + hi), s = stato(Math.exp(m), T); if (s.scalda > s.raffredda) lo = m; else hi = m; }
-    const n = Math.exp(0.5 * (lo + hi)), s = stato(n, T); pts.push({ T, n, xe: s.xe, P: n * T * (1.1 + s.xe) /* K/cm³: H, He (un decimo) ed elettroni */, perdita: s.raffredda });
+    const st = perT(T), s0 = st(Math.exp(lo)), s1 = st(Math.exp(hi)); if (!(s0.scalda > s0.raffredda) || !(s1.scalda < s1.raffredda)) continue;
+    for (let k = 0; k < 32; k++) { const m = 0.5 * (lo + hi), s = st(Math.exp(m)); if (s.scalda > s.raffredda) lo = m; else hi = m; }
+    const n = Math.exp(0.5 * (lo + hi)), s = st(n); pts.push({ T, n, xe: s.xe, P: n * T * (1.1 + s.xe) /* K/cm³: H, He (un decimo) ed elettroni */, perdita: s.raffredda });
   }
   // dal caldo al freddo la pressione sale (ramo tiepido), tocca un massimo, scende (instabile), tocca un minimo, risale (ramo freddo)
   let iMax = -1, iMin = -1;
@@ -250,8 +254,9 @@ export function quadro(forma) {
   let Q = quadri.get(forma); if (Q) return Q;
   const A = forma.anelli, e = forma.interno, NR = ANELLI, nt = e.nt, C = cinematica(forma), P = popolazione(), cosmici = raggiCosmiciIn(forma), hGas = LEGGI.spessoreGas * KPC, fot = fotoniPerGenerazione();
   const stelleTot = Array.from(A.sigmaStelle).reduce((s, v, k) => s + v * A.area[k], 0), natiOra = Array.from({ length: NR }, (_, k) => e.nati[nt * NR + k]), natiTot = natiOra.reduce((s, v) => s + v, 0);
-  const anelli = [];
-  for (let k = 0; k < NR; k++) {
+  const fatti = new Array(NR).fill(null);
+  const anello = (k) => {
+    if (fatti[k]) return fatti[k];
     const Zr = Math.max(1e-3, A.Z[k]), sg = (A.sigmaGas[k] * MSOLE) / KPC ** 2, ss = (A.sigmaStelle[k] * MSOLE) / KPC ** 2, area = A.area[k] * KPC ** 2, pol = polvere(Zr);
     const sfr = natiOra[k] / (GAL.DT * 1e9) / A.area[k], resa = resaDellePopolazioni(Zr), NH = sg / MASSA_PER_H; // colonna di H attraverso tutto lo strato (per m²)
     // la luce: ultravioletta dalle stelle nate nell'ultimo passo; tutta, dalle generazioni ancora vive (popolazione().luce)
@@ -270,13 +275,13 @@ export function quadro(forma) {
     // LE NUBI: la massa più grande che il disco di gas può tenere insieme è quella di Jeans in due dimensioni,
     // π·σ⁴/(4·G²·Σ) (σ: la dispersione del gas freddo, LEGGI.soglia: 6 km/s) [D]
     const sF = LEGGI.soglia[1] * 1e3, jeans = sg > 0 ? (PI * sF ** 4) / (4 * K.G ** 2 * sg) : 0;
-    anelli.push({ k, r: A.r[k], bordo: [A.bordo[k], A.bordo[k + 1]], area, Z: Zr, sigmaGas: sg, sigmaStelle: ss, sfr, G0, uFuv, uStelle, fotoniStelle, tauV, curva, peso, P2: curva.dueFasi ? curva.P2 * 1e6 * K.kB : null,
-      nMedio, snPerVolume: sn, caldo: { Q: q4, volume: 1 - Math.exp(-q4), T: rad.T }, jeansKg: jeans, ionizzanti: (sfr * resa.Q0) / KPC ** 2, resa, polvere: pol, z0: C.z0[k] * KPC, sigZ: C.sigZ[k] * 1e3 });
-  }
+    return (fatti[k] = { k, r: A.r[k], bordo: [A.bordo[k], A.bordo[k + 1]], area, Z: Zr, sigmaGas: sg, sigmaStelle: ss, sfr, G0, uFuv, uStelle, fotoniStelle, tauV, curva, peso, P2: curva.dueFasi ? curva.P2 * 1e6 * K.kB : null,
+      nMedio, snPerVolume: sn, caldo: { Q: q4, volume: 1 - Math.exp(-q4), T: rad.T }, jeansKg: jeans, ionizzanti: (sfr * resa.Q0) / KPC ** 2, resa, nube: nubeDi(Math.max(nubeMinima(Zr), NUBE_EFFICACE * jeans), Zr), nubeMin: nubeMinima(Zr), polvere: pol, z0: C.z0[k] * KPC, sigZ: C.sigZ[k] * 1e3 });
+  };
   // IL CAMPO MAGNETICO: equipartizione con i raggi cosmici, B²/2μ₀ = u (INCERTO: l'equipartizione è un'ipotesi; il campo
   // vero vicino al Sole è ~0,5 nT, e cresce nelle nubi dense come √n: qui non c'è)
   const B = Math.sqrt(2 * MU0 * cosmici.energia);
-  Q = { anelli, cosmici, campo: { B, incerto: [B / 2, 2 * B], da: 'equipartizione con i raggi cosmici' }, hGas, D: densitaGalassia(forma), raggio: A.bordo[NR] };
+  Q = { anello, get anelli() { return Array.from({ length: NR }, (_, k) => anello(k)); }, cosmici, campo: { B, incerto: [B / 2, 2 * B], da: 'equipartizione con i raggi cosmici' }, hGas, D: densitaGalassia(forma), raggio: A.bordo[NR] };
   quadri.set(forma, Q); return Q;
 }
 
@@ -289,6 +294,9 @@ export const LARSON = Object.freeze({ sigma1pc: 720, sigmaSole: (170 * MSOLE) / 
 //   vita: [R] 20–30 milioni di anni (Kawamura et al. 2009, ApJS 184, 1, nella Grande Nube di Magellano; Blitz & Shu 1980)
 //   resaPerCaduta: [R] l'1% del gas di una nube diventa stelle per ogni tempo di caduta libera (Krumholz & Tan 2007, ApJ 654, 304)
 //   pendenza: [R] dN/dM ∝ M^−1,6 (Williams & McKee 1997, ApJ 476, 166; Rosolowsky 2005: 1,5 dentro il cerchio solare)
+// Il volume che le nubi occupano è Σ M/ρ(M), con ρ ∝ M^−½ (Σ fissa) e dN ∝ M^−γ: lo domina la più grande, e vale quello di
+// nubi tutte uguali di massa [(2−γ)/(2,5−γ)]²·M_max (0,2·M_max con γ = 1,6) [D]
+export const NUBE_EFFICACE = ((2 - LARSON.pendenza) / (2.5 - LARSON.pendenza)) ** 2;
 // una nube di massa M (kg) in un gas con metalli Zr → raggio, densità, velocità interna, caduta libera, Jeans, estinzione
 export function nubeDi(massaKg, Zr = 1, T = Z.molecolare.T) {
   const Sigma = LARSON.sigmaSole / Math.max(Zr, 0.05), R = Math.sqrt(massaKg / (PI * Sigma)), rho = massaKg / ((PI4 / 3) * R ** 3), n = rho / MASSA_PER_H, sv = LARSON.sigma1pc * Math.sqrt(R / PC);
@@ -313,14 +321,14 @@ function fasiIn(a, onda, zf, nM3) {
   // nei bracci e in altezza segue la densità
   const Pth = (c.dueFasi ? c.P2 : 1.1 * n * 8000) * (c.dueFasi ? onda * zf : 1);
   // molecolare: quanta parte in massa (Blitz & Rosolowsky), e che volume occupa alla densità di una nube tipica
-  const Rm = Math.pow(W / (M.P0 * kcm), M.esponente), fMol = Rm / (1 + Rm), nube = nubeDi(Math.sqrt(nubeMinima(a.Z) * Math.max(a.jeansKg, nubeMinima(a.Z))), a.Z);
+  const Rm = Math.pow(W / (M.P0 * kcm), M.esponente), fMol = Rm / (1 + Rm), nube = a.nube;
   let nMol = fMol * n; const vMol = Math.min(0.5, nMol / (nube.nH / 1e6));
   // caldo: i resti di supernova non ancora dissolti; alla pressione del resto (H, He ed elettroni: 2,3 particelle per H)
   let vCaldo = a.caldo.volume; const Tc = Math.max(a.caldo.T, 1e5); let nCaldo = Pth / (2.3 * Tc);
   // ionizzato tiepido: i fotoni ionizzanti che sfuggono alle nubi di nascita, spesi in ricombinazioni su una colonna alta
   // `altezza` (misurata): volume = fotoni / (2·α_B·n_e·n_p·H) [D dal bilancio]
   const nIon = Pth / (2.2 * I.T), aB = Z.alfaB[0] * Math.pow(I.T / 1e4, Z.alfaB[1]);
-  let vIon = Math.min(0.5, (I.sfugge * a.ionizzanti * 1e-4) / (2 * aB * 1.1 * nIon * nIon * I.altezza * KPC * 100));
+  let vIon = (1 - vMol - vCaldo) * -Math.expm1(-(I.sfugge * a.ionizzanti * 1e-4) / (2 * aB * 1.1 * nIon * nIon * I.altezza * KPC * 100)); // (dove i fotoni basterebbero per più del volume che c'è, il resto esce dalla galassia)
   // ciò che resta è atomico: se non basta (in alto, dove il gas è poco) si tolgono prima lo ionizzato poi il caldo
   let nAt = n - nMol - vCaldo * nCaldo - vIon * nIon;
   if (nAt < 0) { vIon = Math.max(0, Math.min(vIon, (n - nMol - vCaldo * nCaldo) / nIon)); nAt = n - nMol - vCaldo * nCaldo - vIon * nIon; }
@@ -352,7 +360,7 @@ export function contenuto(forma, punto = {}, t = 0) {
   const Q = quadro(forma), tG = t / GA_S, r = Math.max(1e-3, punto.r ?? 8), z = punto.z ?? 0, B = forma.bracci;
   const cresta = faseBraccioAlTempo(forma, r, tG), fi = punto.fase != null ? cresta + (2 * PI * punto.fase) / Math.max(1, B.numero) : punto.fi ?? 0;
   const d = Q.D.in3d(r, z, fi, tG), u = MSOLE / KPC ** 3; let k = 0; while (k < ANELLI - 1 && forma.anelli.bordo[k + 1] < r) k++;
-  const a = Q.anelli[k], rho = d.gas * u, n = rho / MASSA_PER_H, rif = a.sigmaGas / (2 * Q.hGas), ch = Math.cosh(Math.min(Math.abs(z) / LEGGI.spessoreGas, 30)), zf = 1 / (ch * ch), onda = rif > 0 && zf > 0 ? rho / (rif * zf) : 1;
+  const a = Q.anello(k), rho = d.gas * u, n = rho / MASSA_PER_H, rif = a.sigmaGas / (2 * Q.hGas), ch = Math.cosh(Math.min(Math.abs(z) / LEGGI.spessoreGas, 30)), zf = 1 / (ch * ch), onda = rif > 0 && zf > 0 ? rho / (rif * zf) : 1;
   const F = n > 0 ? fasiIn(a, onda, zf, n) : { fasi: [], Pth: 0, PsuK: 0, peso: 0, fMol: 0, nube: null };
   let fb = ((fi - cresta) * Math.max(1, B.numero)) / (2 * PI); fb -= Math.round(fb);
   // l'alone caldo di galassie.js (forma.massaCalda, isotermo, ρ ∝ r⁻², alla temperatura viriale): c'è anche fuori dal disco
