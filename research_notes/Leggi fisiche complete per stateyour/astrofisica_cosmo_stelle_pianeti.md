@@ -172,3 +172,149 @@ Le statistiche delle doppie ora sono verificate fino alle funzioni di fit: si pu
 - Fotoevaporazione esterna (griglia FRIED di Haworth; rassegna Winter & Haworth 2022, scaricata ma non letta): nessuna formula verificata; da leggere prima di codificare DS3.
 - La distribuzione di ²⁶Al tra i sistemi (frazione arricchita, forma) non ha un valore condiviso: la fonte dà solo l'intervallo esplorato.
 - Funzione di massa degli ammassi e mortalità infantile: [R].
+
+---
+
+## 4. Stelle complete: formule SSE/BSE, perdita di massa, resti, esplosioni e resti di supernova, ritardi, opacità e convezione per la sovraluminosità tra 1,2 e 5 M☉, rotazione e girocronologia
+
+### Takeaway
+I coefficienti di Tout 1996 (sequenza principale di età zero) sono ora verificati dal sorgente SSE distribuito in COSMIC (licenza MIT): la tabella a Z = 0,02 qui sotto è il **riscontro** per la sovraluminosità. La fisica che manca per 1,2–5 M☉ è, nell'ordine: (a) l'**opacità** — per una stella radiativa `L ∝ μ⁴·M³/κ` senza alcun riferimento alla generazione di energia, quindi un'opacità senza righe (sottostimata del 20–45% nell'involucro) dà esattamente un eccesso del 25–80%; (b) il **peso molecolare** (L ∝ μ⁴: 5% su μ = 22% su L); (c) l'**età del confronto**: tra età zero e fine della sequenza principale L cresce di 2,4–2,8 volte, e l'overshooting del nucleo convettivo (che compare proprio a M > 1,2 M☉) aumenta questa crescita. La catena pp contro il ciclo CNO sposta il raggio, non la luminosità.
+
+### Cited Findings
+
+**SSE: dove sono i coefficienti, licenza, forma di Tout 1996**
+- [V] COSMIC (licenza MIT, «Copyright (c) 2026 COSMIC‑PopSynth») distribuisce il Fortran SSE/BSE: coefficienti in `src/cosmic/src/zdata.h` (vettori `xz(76)` ZAMS, `xt(31)` tempi, `xl(72)` luminosità, `xr(119)` raggi, `xg(112)` giganti, `xh(99)` elio), combinazioni in metallicità in `SSE/SSE_zcnsts.f`, funzioni in `SSE/SSE_zfuncs.f`, tipi evolutivi in `SSE/SSE_hrdiag.f`. — [LICENSE](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/LICENSE); [zdata.h](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/zdata.h); [SSE_zcnsts.f](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/SSE/SSE_zcnsts.f); [SSE_zfuncs.f](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/SSE/SSE_zfuncs.f)
+- [V] **Tout e altri 1996 nel codice** (M in M☉, L in L☉, R in R☉): `L_ZAMS = (a₁·M^5,5 + a₂·M^11)/(a₃ + M³ + a₄·M⁵ + a₅·M⁷ + a₆·M⁸ + a₇·M^9,5)`; `R_ZAMS = [(a₈·M² + a₉·M⁶)·√M + a₁₀·M^11 + (a₁₁ + a₁₂·√M)·M^19]/[a₁₃ + a₁₄·M² + (a₁₅·M⁸ + M^18 + a₁₆·M^19)·√M]`; ogni `a_i = c₀ + ζ·(c₁ + ζ·(c₂ + ζ·(c₃ + ζ·c₄)))`, `ζ = log₁₀(Z/0,02)` (a₁₃ è costante). (Corregge la forma [R] del rapporto precedente.) — [SSE_zfuncs.f](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/SSE/SSE_zfuncs.f); articolo: [Tout e altri 1996](https://ui.adsabs.harvard.edu/abs/1996MNRAS.281..257T)
+- [V] **I 76 coefficienti** (righe = a₁…a₁₆; colonne = c₀…c₄) — [zdata.h](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/zdata.h):
+
+  | a | c₀ | c₁ | c₂ | c₃ | c₄ |
+  |---|---|---|---|---|---|
+  | 1 | 0,3970417 | −0,32913574 | 0,34776688 | 0,37470851 | 0,09011915 |
+  | 2 | 8,527626 | −24,41225973 | 56,43597107 | 37,06152575 | 5,4562406 |
+  | 3 | 2,5546e‑4 | −1,23461e‑3 | −2,3246e‑4 | 4,5519e‑4 | 1,6176e‑4 |
+  | 4 | 5,432889 | −8,62157806 | 13,44202049 | 14,51584135 | 3,39793084 |
+  | 5 | 5,563579 | −10,32345224 | 19,44322980 | 18,97361347 | 4,16903097 |
+  | 6 | 0,7886606 | −2,90870942 | 6,54713531 | 4,05606657 | 0,53287322 |
+  | 7 | 5,86685e‑3 | −1,704237e‑2 | 3,872348e‑2 | 2,570041e‑2 | 3,83376e‑3 |
+  | 8 | 1,715359 | 0,62246212 | −0,92557761 | −1,16996966 | −0,30631491 |
+  | 9 | 6,597788 | −0,42450044 | −12,13339427 | −10,73509484 | −2,51487077 |
+  | 10 | 10,08855 | −7,11727086 | −31,67119479 | −24,24848322 | −5,33608972 |
+  | 11 | 1,012495 | 0,3269969 | −9,23418e‑3 | −3,876858e‑2 | −4,1275e‑3 |
+  | 12 | 7,490166e‑2 | 2,410413e‑2 | 7,233664e‑2 | 3,040467e‑2 | 1,97741e‑3 |
+  | 13 | 1,077422e‑2 | — | — | — | — |
+  | 14 | 3,082234 | 0,9447205 | −2,15200882 | −2,49219496 | −0,63848738 |
+  | 15 | 17,84778 | −7,4534569 | −48,96066856 | −40,05386135 | −9,09331816 |
+  | 16 | 2,2582e‑4 | −1,86899e‑3 | 3,88783e‑3 | 1,42402e‑3 | −7,671e‑5 |
+
+- [V‑calc] **Tabella di riscontro, Z = 0,02** (ZAMS da Tout; tempo alla base del ramo delle giganti `t_BGB = (a₁₇ + a₁₈M⁴ + a₁₉M^5,5 + M⁷)/(a₂₀M² + a₂₁M⁷)` con a₁₇…a₂₁ = 1593,890; 2706,708; 146,6143; 0,04141960; 0,3426349; luminosità a fine sequenza principale `L_TMS = (a₂₇M³ + a₂₈M⁴ + a₂₉M^(a₃₂+1,8))/(a₃₀ + a₃₁M⁵ + M^a₃₂)` con a₃₀ = 3858,911, a₂₇ = 1,031538·a₃₀, a₂₈ = 1,043715·a₃₀, a₂₉ = 785,9573, a₃₁ = 288,8720, a₃₂ = 7,196580):
+
+  | M (M☉) | L_ZAMS (L☉) | R_ZAMS (R☉) | T_eff ZAMS (K) | L_TMS (L☉) | t_BGB (Ma) |
+  |---|---|---|---|---|---|
+  | 0,5 | 0,0379 | 0,459 | 3760 | — | — |
+  | 0,8 | 0,236 | 0,729 | 4710 | 0,96 | 27 900 |
+  | 1,0 | 0,698 | 0,888 | 5600 | 2,12 | 11 580 |
+  | 1,2 | 1,67 | 1,14 | 6140 | 4,21 | 5911 |
+  | 1,5 | 4,63 | 1,44 | 7060 | 10,5 | 2804 |
+  | 2,0 | 15,9 | 1,61 | 9080 | 37,6 | 1174 |
+  | 3,0 | 80,0 | 1,98 | 12 270 | 206 | 380 |
+  | 5,0 | 530 | 2,64 | 17 060 | 1509 | 104 |
+  | 10 | 5552 | 3,94 | 25 100 | 17 480 | 24,4 |
+  | 20 | 42 850 | 6,00 | 33 900 | 123 300 | 8,7 |
+
+  (coefficienti: [zdata.h](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/zdata.h), [SSE_zcnsts.f](https://raw.githubusercontent.com/COSMIC-PopSynth/COSMIC/develop/src/cosmic/src/SSE/SSE_zcnsts.f))
+- [V] Raffreddamento delle nane bianche, legge di Mestel modificata: `L = b·M_WD·Z^0,4/[A·(t + 0,1)]^x` (t in Ma, A = numero di massa medio), con `b = 300`, `x = 1,18` per t < 9000 Ma e `b = 300·(9000·A)^5,3`, `x = 6,48` oltre (sostituisce la forma 635/1,4 di SSE originale [V‑prec]). — [Hurley & Shara 2003, arXiv:astro-ph/0302119](https://arxiv.org/abs/astro-ph/0302119)
+
+**La sovraluminosità tra 1,2 e 5 M☉: che cosa dice la teoria**
+- [V] Omologia per stelle radiative di gas ideale a opacità costante: `L ∝ μ⁴·M³/κ` (eq. 7.32), ottenuta «without making any assumption about the mode of energy generation»: «a higher opacity gives rise to a smaller luminosity, because the nontransparent layers work like a blanket»; la potenza nucleare si adatta alla luminosità che l'involucro lascia uscire. Con opacità di Kramers: `L ∝ μ^7,5·M^5,5/R^0,5` (eq. 7.33). Raggi: catena pp (ν ≈ 4) `R ∝ M^0,43`; ciclo CNO (ν ≈ 18) `R ∝ μ^(2/3)·M^0,81`, `T_c ∝ μ^(1/3)·M^0,19`. — [Pols, dispense «Stellar structure and evolution», cap. 7](https://www.astro.ru.nl/~onnop/education/stev_utrecht_notes/chapter7-8.pdf)
+- [V] Passaggio pp → CNO a `T_c ≈ 1,7·10⁷ K`, cioè `M ≈ 1,3 M☉`; struttura: nucleo radiativo + involucro convettivo per 0,35 < M < 1,2 M☉, **nucleo convettivo + involucro radiativo per M > 1,2 M☉**; tra 1,1 e 1,3 M☉ il nucleo convettivo compare e cresce durante la sequenza principale. Overshooting (`d_ov = α_ov·H_P`): (1) vita di sequenza principale più lunga; (2) **aumento maggiore di luminosità e raggio durante la sequenza principale**; (3) nucleo esaurito più massiccio e luminosità più alte dopo. — [Pols, cap. 9](https://www.astro.ru.nl/~onnop/education/stev_utrecht_notes/chapter9-11.pdf)
+- [V] Calibrazioni dell'overshooting: MIST usa mescolamento diffusivo esponenziale `D_OV = D₀·exp(−2z/(f_ov·H_P))` con `f_ov,nucleo = 0,016` (≈ 0,2 H_P nello schema a gradino), tarato sulla forma del gomito di M67, con α_MLT = 1,82, Z_☉ = 0,0142, Y_☉ = 0,2703; dalle binarie a eclisse f_ov sale ripidamente da zero fino a ~2 M☉ e resta costante oltre. — [Choi e altri 2016 (MIST), arXiv:1604.08592](https://arxiv.org/abs/1604.08592); [Claret & Torres 2018, arXiv:1804.03148](https://arxiv.org/abs/1804.03148)
+
+**Perdita di massa, supernove e loro resti, pulsar**
+- [V] Vink 2001, lato caldo (27 500 < T_eff ≤ 50 000 K): `log Ṁ = −6,697 + 2,194·log(L/10⁵) − 1,313·log(M/30) − 1,226·log[(v_∞/v_esc)/2,0] + 0,933·log(T_eff/40 000) − 10,92·[log(T_eff/40 000)]² + 0,85·log(Z/Z☉)` (M☉/anno; valido per 1/30 ≤ Z/Z☉ ≤ 3; Ṁ ∝ Z^0,85). — [Vink, de Koter & Lamers 2001, arXiv:astro-ph/0101509](https://arxiv.org/abs/astro-ph/0101509)
+- [R] Lato freddo (12 500–22 500 K): `log Ṁ = −6,688 + 2,210·log(L/10⁵) − 1,339·log(M/30) − 1,601·log[(v_∞/v_esc)/2,0] + 1,07·log(T_eff/20 000) + 0,85·log(Z/Z☉)`; v_∞/v_esc = 2,6 (caldo), 1,3 (freddo). — [ibid.](https://arxiv.org/abs/astro-ph/0101509)
+- [V] **Resto di supernova, fasi** (E₅₁ = energia/10⁵¹ erg, n₀ = densità in cm⁻³, t₃ = t/10³ a): Sedov–Taylor `r_ST = 5,0 pc·E₅₁^(1/5)·n₀^(−1/5)·t₃^(2/5)`, `v_ST = 1,95·10³ km/s·E₅₁^(1/5)·n₀^(−1/5)·t₃^(−3/5)`, quantità di moto `p_ST = 2,21·10⁴ M☉ km/s·E₅₁^(4/5)·n₀^(1/5)·t₃^(3/5)`; formazione del guscio (inizio fase radiativa) `t_sf = 4,4·10⁴ a·E₅₁^0,22·n₀^−0,55`, `r_sf = 22,6 pc·E₅₁^0,29·n₀^−0,42`, `v_sf = 202 km/s·E₅₁^0,07·n₀^0,13`; poi pressione del gas caldo `∝ (t/t_sf)^(−10/7)`; quantità di moto finale per supernova `p = 2,8·10⁵ M☉ km/s·n₀^−0,17` (mezzo a due fasi; 2,95·10⁵·n₀^−0,16 omogeneo), insensibile ai dettagli dell'ambiente; massa di gas caldo alla formazione del guscio `1540 M☉·n₀^−0,33`. — [Kim & Ostriker 2015, arXiv:1410.1537](https://arxiv.org/abs/1410.1537)
+- [V] Pulsar: nessuna multimodalità delle velocità di nascita; componenti 1D esponenziali con velocità media 3D `380 (+40/−60) km/s`; nascita nei bracci, densità radiale con picco a ~3 kpc; luminosità radio ∝ √(potenza di frenamento); nessuna evidenza di decadimento del campo. — [Faucher‑Giguère & Kaspi 2006, arXiv:astro-ph/0512585](https://arxiv.org/abs/astro-ph/0512585)
+- [R] Frenamento del dipolo: `Ė = −B²·R⁶·Ω⁴·sin²α/(6c³)`, `B ≈ 3,2·10¹⁹·√(P·Ṗ) G`, età caratteristica `τ = P/(2Ṗ)`, `P(t) = √(P₀² + 2·k·B²·t)` con `k = 8π²R⁶/(3c³·I)` (≈ 9,8·10⁻⁴⁰ s G⁻² per R = 10 km, I = 10⁴⁵ g cm²); distribuzioni di nascita: P₀ normale (300 ± 150 ms), log B normale (12,65 ± 0,55). — [Faucher‑Giguère & Kaspi 2006](https://arxiv.org/abs/astro-ph/0512585)
+- [R] Kilonove e processo r: ~0,03–0,05 M☉ di elementi r per fusione di stelle di neutroni (GW170817); ritardi ∝ t⁻¹ da qualche 10 Ma; la sorgente dominante resta discussa (fusioni contro collassar). — [Côté e altri 2018, arXiv:1710.05875](https://arxiv.org/abs/1710.05875)
+
+**Rotazione, attività, girocronologia (ST8, ST12, ST14)**
+- [V] Momento frenante del vento magnetizzato: `T = −T₀·(τ_cz/τ_cz☉)^p·(Ω/Ω☉)^(p+1)` (non saturo), `T = −T₀·χ^p·(Ω/Ω☉)` (saturo, per `Ro ≤ Ro☉/χ`), `Ro = (Ω·τ_cz)⁻¹`, `T₀ = 9,5·10³⁰ erg·(R/R☉)^3,1·(M/M☉)^0,5`, p = 2, χ = 10; evoluzione `dΩ/dt = T/I − (Ω/I)·dI/dt`; limiti: `Ω = Ω_i·e^(−t/τ_sat)`, `τ_sat = I·Ω☉/(T₀·χ^p)`; e `Ω/Ω☉ → (τ_unsat/t)^(1/p)`, `τ_unsat = I·Ω☉/(T₀·p)·(τ_cz☉/τ_cz)^p` (Skumanich per p = 2). — [Matt e altri 2015, arXiv:1412.4786](https://arxiv.org/abs/1412.4786) ([R]: un erratum del 2019 abbassa T₀ a 6,3·10³⁰ erg: da controllare)
+- [V] Attività X: `L_X/L_bol = R_X,sat` per `Ro ≤ Ro_sat`, `= C·Ro^β` oltre; `log R_X,sat = −3,13 ± 0,08`, `Ro_sat = 0,13 ± 0,02`; pendenza β = −2,70 ± 0,13 (campione non distorto; il valore canonico è −2); tempo di rovesciamento convettivo `log τ = 1,16 − 1,49·log(M/M☉) − 0,54·log²(M/M☉)` (giorni); le F tarde non attraversano mai il regime saturo. — [Wright e altri 2011, arXiv:1109.4634](https://arxiv.org/abs/1109.4634)
+
+### Inferences
+- **Sovraluminosità del 25–80% tra 1,2 e 5 M☉: diagnosi in tre prove, in quest'ordine.**
+  1. *Età*: confrontare a età zero contro la tabella [V‑calc] (L_ZAMS: 1,67; 4,63; 15,9; 80,0; 530 L☉ per 1,2; 1,5; 2; 3; 5 M☉). Se il modello è confrontato «a metà vita» contro valori di età zero, un +25–80% è evoluzione normale (a fine sequenza principale il rapporto è 2,3–2,8).
+  2. *Opacità*: se l'eccesso c'è già a età zero, `L ∝ 1/κ` dice che κ media dell'involucro è bassa del 20–45%. È ciò che manca a un'opacità «senza righe, Gaunt = 1» (ST3): righe dei metalli tra 10⁵ e 10⁶·⁵ K (picco del ferro a log T ≈ 5,3). Sotto ~1,2 M☉ l'involucro è convettivo e l'effetto si vede meno: spiega perché l'errore compare proprio da 1,2 M☉ in su. Rimedio: tabelle OPAL/OP [V‑prec per dove trovarle] o, come passo intermedio, un fattore di righe tabulato in (T, R = ρ/T₆³).
+  3. *Composizione e nucleo*: μ entra alla quarta (alla 7,5 con Kramers): controllare Y iniziale (MIST: Y = 0,2703, Z = 0,0142) e che il nucleo convettivo sia mescolato fino al bordo di Schwarzschild + 0,2 H_P sopra 2 M☉ (crescente da 0 a 1,2 M☉): un nucleo troppo grande fa crescere L troppo in fretta.
+  Il rapporto pp/CNO sbagliato sposta R (pp: R ∝ M^0,43; CNO: R ∝ M^0,81) e T_c, non L: va controllato sui raggi (la tabella dà R_ZAMS).
+- **Rotazione e campo senza sorteggi**: `τ_cz(M)` di Wright → `Ro = P/τ` → momento di Matt → P(t) per integrazione (o le due soluzioni limite) → `L_X/L_bol` → XUV per la fuga atmosferica (§5) e campo `B ∝ Ro⁻¹` fino alla saturazione [R nei rapporti]. Sopra ~1,3 M☉ (niente involucro convettivo profondo) il freno si spegne: stelle calde restano veloci (coerente con OR3).
+- **Resti di supernova come luoghi**: raggio e velocità in funzione di (t, n₀) dalle quattro formule di Kim & Ostriker; la quantità di moto finale 2,8·10⁵ M☉ km/s è il termine sorgente della turbolenza del gas (e del riscaldamento del disco, §2).
+- **Collegamenti**: sopra = Z e [α/Fe] dal modello chimico (§2); di lato = compagne (§3) → trasferimento di massa, Ia come coppie vere (BSE); sotto = L(t), L_X(t), vento → dischi e atmosfere (§5), raggio della gigante → pianeti inghiottiti (CS10).
+
+### Gaps
+- Tout 1996: verificato attraverso il sorgente SSE (che lo cita in commento), non sul PDF dell'articolo (non su arXiv).
+- La licenza MIT di COSMIC copre il pacchetto; che gli autori originali (Hurley) abbiano concesso il Fortran SSE sotto MIT non è dichiarato in modo esplicito nel file letto: riscrivere dalle formule resta la via prudente.
+- Non ho una fonte letta che quantifichi di quanto un'opacità «solo Kramers + diffusione» sottostimi OPAL nell'involucro di una stella di 2 M☉: il 20–45% è dedotto da `L ∝ 1/κ` e dall'errore osservato, non misurato.
+- Frenamento del dipolo, distribuzioni di nascita delle pulsar (P₀, B), lato freddo di Vink, nebulose planetarie (tempi di visibilità), novae (tassi), kilonove (rese e tassi): [R] o non trattati con fonte aperta.
+- Barnes 2007 / Mamajek & Hillenbrand 2008 (girocronologia empirica) non verificati; BSE (Hurley 2002, sorgente scaricato) non letto oltre il titolo.
+
+---
+
+## 5. Dischi e pianeti: evoluzione, linee di neve, polveri→ciottoli→planetesimi, accrescimento di ciottoli e di gas, lacuna, migrazione, instabilità successive, eccentricità e inclinazioni, fuga dell'involucro, statistiche di riscontro
+
+### Takeaway
+La catena disco → ciottoli → nuclei → gas → migrazione è ora tutta in formule verificate (Birnstiel per le taglie, Li & Youdin per la soglia dell'instabilità di flusso, Liu & Ormel per l'efficienza di cattura dei ciottoli, Bitsch per il gas, Kanagawa/Tanigawa per lacuna e accrescimento limitato, Paardekooper 2011 con saturazione). **Le inclinazioni basse (0,54° contro 1–2°)** hanno una spiegazione precisa: i sistemi veri stanno al **limite di stabilità AMD** dopo la fase di urti giganti, e l'eccitazione dipende dalla molteplicità: mediana `1,10°·(n/5)^−1,73` e `e = 0,031·(n/5)^−1,74`. Manca quindi l'ultimo atto (instabilità dopo il gas) e il legame tra inclinazione e spaziatura; con molti pianeti per sistema 0,5° è persino giusto.
+
+### Cited Findings
+
+**Temperatura del disco e linea della neve che migra (DS4)**
+- [V] `T_vis ≃ 200 K·M_*0^(3/10)·α₃^(−1/5)·Ṁ_*8^(2/5)·(r/1 UA)^(−9/10)`; `T_irr ≃ 150 K·L_*0^(2/7)·M_*0^(−1/7)·(r/1 UA)^(−3/7)`; confine tra i due regimi `r_vis‑irr ≃ 1,8·L_*0^(−20/33)·M_*0^(31/33)·α₃^(−14/33)·Ṁ_*8^(28/33) UA`; linea della neve `r_neve ≃ max(1,2·M_*0^(1/3)·α₃^(−2/9)·Ṁ_*8^(4/9); 0,75·L_*0^(2/3)·M_*0^(−1/3)) UA` (α₃ = α/10⁻³, Ṁ_*8 = Ṁ/10⁻⁸ M☉/a). Flusso di ciottoli `Ṁ_F ≃ 9,4·10⁻⁴·L_*0^(−2/7)·M_*0^(9/14)·α₃⁻¹·Ṁ_*8·(t/10⁶ a)^(−1/3) M⊕/a`; `Σ_p/Σ_g ≃ 2·10⁻⁴·[(St/(1+St²))/0,1]⁻¹·α₃·Ṁ_F4·Ṁ_*8⁻¹`. — [Ida, Guillot & Morbidelli 2016, arXiv:1604.01291](https://arxiv.org/abs/1604.01291)
+- [V] Storia di accrescimento media del disco usata nei modelli a ciottoli: `log(Ṁ/M☉ a⁻¹) = −8,00 − 1,40·log[(t + 10⁵ a)/10⁶ a]`; `Ṁ = 3πνΣ_g`. — [Bitsch, Lambrechts & Johansen 2015, arXiv:1507.05209](https://arxiv.org/abs/1507.05209)
+
+**Polveri → ciottoli → planetesimi (IM4, DS7)**
+- [V] Taglie limite (modello a due popolazioni): frammentazione `St_frag = (1/3)·u_f²/(α·c_s²)`, `a_frag = f_f·(2/3π)·Σ_g/(ρ_s·α)·u_f²/c_s²`, f_f = 0,37; deriva `St_drift = f_d·ε·(V_K²/c_s²)·γ⁻¹`, `a_drift = f_d·(2Σ_d/πρ_s)·(V_K²/c_s²)·γ⁻¹`, f_d = 0,55 (γ = |d ln P/d ln r|, ε = Σ_d/Σ_g); crescita `τ_grow ≃ 1/(Ω·ε)`; `a₁(t) = min[min(a_drift, a_frag), a₀·exp(t/τ_grow)]`. — [Birnstiel, Klahr & Ercolano 2012, arXiv:1201.5781](https://arxiv.org/abs/1201.5781)
+- [V] Numero di Stokes limitato dalla deriva `τ_f = (√3/8)·(ε_P/η)·(Σ_peb/Σ_g)`; fronte di crescita dei ciottoli `r_g = (3/16)^(1/3)·(G·M_*)^(1/3)·(ε_D·Z)^(2/3)·t^(2/3)`, flusso `Ṁ_peb = 2π·r_g·(dr_g/dt)·Z·Σ_g`; `Σ_peb = √[2·Ṁ_peb·Σ_g/(√3·π·ε_P·r·v_K)]`; spessore dei ciottoli `H_peb = H_g·√(α/τ_f)`. — [Bitsch e altri 2015](https://arxiv.org/abs/1507.05209)
+- [V] **Instabilità di flusso, soglia** (τ_s = numero di Stokes, Π = parametro del gradiente di pressione, Z = Σ_solidi/Σ_gas): `log(Z_crit/Π) = A·(log τ_s)² + B·log τ_s + C`, con `A = 0,1; B = 0,32; C = −0,24` per τ_s < 0,015 e `A = 0,13; B = 0,1; C = −1,07` per τ_s > 0,015 (scala lineare in Π: `Z_crit(Π) = (Π/0,05)·Z_crit(0,05)`); con turbolenza α: `Z > ε_crit(τ_s)·√[(Π/5)² + α/(α + τ_s)]`, `log ε_crit = 0,48·(log τ_s)² + 0,87·log τ_s − 0,11` per τ_s > 0,015 e ε_crit = 2,5 sotto. — [Li & Youdin 2021, arXiv:2105.06042](https://arxiv.org/abs/2105.06042) (corregge i coefficienti che avevo in memoria)
+- [V] Masse dei planetesimi nati dall'instabilità: `dN/dM ∝ M^−1,6` (legge di potenza semplice) o, meglio, legge di potenza troncata esponenzialmente con pendenza bassa p′ ≈ 1,3; massa caratteristica `M_G = 4π⁵·G²·Σ_p³/Ω⁴` (da `λ_G = 4π²GΣ_p/Ω²`), che scala linearmente (non al cubo) col gradiente di pressione. — [Abod e altri 2019, arXiv:1810.10018](https://arxiv.org/abs/1810.10018)
+
+**Accrescimento di ciottoli (DS7)**
+- [V] Massa di transizione Bondi→Hill `M_t = √(1/3)·(η·v_K)³/(G·Ω_K)`; regime di Hill `Ṁ_c,2D = 2·(τ_f/0,1)^(2/3)·r_H·v_H·Σ_peb`; regime 3D `Ṁ_c,3D = Ṁ_c,2D·[π·(τ_f/0,1)^(1/3)·r_H/(2√(2π)·H_peb)]` quando `π·(τ_f/0,1)^(1/3)·r_H/(2√(2π)) < H_peb`; isolamento `M_iso ≈ 20·[(H/r)/0,05]³ M⊕`. — [Bitsch e altri 2015](https://arxiv.org/abs/1507.05209)
+- [V] **Efficienza di cattura** (frazione del flusso di ciottoli che il pianeta prende; q_p = M_p/M_*, η = scarto dalla velocità kepleriana, h_P = spessore relativo dei ciottoli): `ε_2D = 0,32·√[(q_p/(τ_s·η²))·(Δv/v_K)]·f_set`; `ε_3D = 0,39·q_p/(η·h_eff)·f_set²`; `ε_set = (ε_2D⁻² + ε_3D⁻²)^(−1/2)`; `f_set = exp[−0,5·(Δv/v_*)²]`, `v_* = (q_p/τ_s)^(1/3)·v_K`; `Δv = max(v_cir, v_ecc)`, `v_cir = [1 + 5,7·(q_p/q_c)]⁻¹·v_hw + v_sh`, `v_hw = η·v_K`, `v_sh = 0,52·(q_p·τ_s)^(1/3)·v_K`; `h_P = √[α_z/(α_z + τ_s)]·h_gas`; inclinazione del pianeta: `h_eff ≈ √{h_P² + (π·i_p²/2)·[1 − exp(−i_p/2h_P)]}`. Massa che il pianeta raggiunge consumando un dato flusso: `M_P,grw = q_p·M_*/ε`. — [Liu & Ormel 2018, arXiv:1803.06149](https://arxiv.org/abs/1803.06149); [Ormel & Liu 2018, arXiv:1803.06150](https://arxiv.org/abs/1803.06150)
+
+**Gas, lacuna, migrazione (DS8, DS16)**
+- [V] Contrazione dell'involucro: `Ṁ_gas = 0,00175·f⁻²·(κ_env/1 cm² g⁻¹)⁻¹·(ρ_c/5,5 g cm⁻³)^(−1/6)·(M_c/M⊕)^(11/3)·(M_env/0,1 M⊕)⁻¹·(T/81 K)^(−0,5) M⊕/Ma`; quando M_env > M_c accrescimento rapido `Ṁ = min[0,83·Ω_K·Σ_g·H²·(r_H/H)^(9/2); 0,14·Ω_K·Σ_g·H²]`; migrazione di tipo II classica `τ_II = τ_ν·max(1, M_P/(4πΣ_g·r_P²))`. — [Bitsch e altri 2015](https://arxiv.org/abs/1507.05209)
+- [V] **K di Kanagawa**: `K = (M_p/M_*)²·(h_p/r_p)⁻⁵·α⁻¹`; fondo della lacuna `Σ_min/Σ_un = 1/(1 + 0,04·K)`; momento torcente `Γ = [Γ_L + Γ_C·exp(−K/K_t)]/(1 + 0,04·K)`, K_t = 20; tempo di migrazione `τ_a = −(1 + 0,04·K)/[γ_L + γ_C·exp(−K/K_t)]·τ₀`, `τ₀ = r_p²·Ω·M_p/(2Γ₀)`, `Γ₀ = (M_p/M_*)²·(h/r)⁻²·Σ_un·r⁴·Ω²`; con Lindblad lineare γ_L = −3,1 (o −2,4 per pendenza diversa di T); la transizione tipo I → lacuna avviene attorno a K ≈ 20; accordo con le simulazioni entro un fattore 2–3. — [Kanagawa, Tanaka & Szuszkiewicz 2018, arXiv:1805.11101](https://arxiv.org/abs/1805.11101); definizione di K anche in [Kanagawa e altri 2015, arXiv:1505.04482](https://arxiv.org/abs/1505.04482)
+- [V] Accrescimento di gas attraverso la lacuna: `Ṁ_p = D·Σ_acc`, `D = 0,29·(h_p/r_p)⁻²·(M_p/M_*)^(4/3)·r_p²·Ω_p`, `Σ_acc = Σ_un/(1 + 0,034·K)`; limite a lacuna profonda `Ṁ_p ≈ 8,5·(h_p/r_p)·(M_p/M_*)^(−2/3)·Σ_un·ν`. — [Tanigawa & Tanaka 2016, arXiv:1510.06848](https://arxiv.org/abs/1510.06848)
+- [V] **Tipo I con saturazione** (Σ ∝ r^−α, T ∝ r^−β, ξ = β − (γ−1)α): `Γ = Γ_L + Γ_hs,baro·F(p_ν)·G(p_ν) + (1 − K(p_ν))·Γ_c,lin,baro + Γ_hs,ent·F(p_ν)·F(p_χ)·√(G(p_ν)G(p_χ)) + √((1−K(p_ν))(1−K(p_χ)))·Γ_c,lin,ent`; con `γΓ_L/Γ₀ = −2,5 − 1,7β + 0,1α`; `γΓ_hs,baro/Γ₀ = 1,1·(3/2 − α)`; `γΓ_hs,ent/Γ₀ = 7,9·ξ/γ`; `γΓ_c,lin,baro/Γ₀ = 0,7·(3/2 − α)`; `γΓ_c,lin,ent/Γ₀ = (2,2 − 1,4/γ)·ξ`; `F(p) = 1/[1 + (p/1,3)²]`; `G(p) = (16/25)·(45π/8)^(3/4)·p^(3/2)` per `p < √(8/45π)`, altrimenti `1 − (9/25)·(8/45π)^(4/3)·p^(−8/3)`; `K(p)`: come G con 28 al posto di 8; `p_ν = (2/3)·√(r_p²·Ω_p·x_s³/(2πν))`, `p_χ = √(r_p²·Ω_p·x_s³/(2πχ))`, `x_s = C(b/h)·√(q/h)` (C ≈ 1,1/γ^(1/4) per b/h = 0,4 [R]); diffusività termica `χ = 4γ(γ−1)σT⁴/(3κρ²H²Ω²)`. — [Paardekooper, Baruteau & Kley 2011, arXiv:1007.4964](https://arxiv.org/abs/1007.4964)
+
+**Eccentricità e inclinazioni: perché escono basse (OR2, DS15)**
+- [V] Kepler, dispersione delle inclinazioni in funzione del numero di pianeti k entro 400 giorni: `σ_i,k = σ_i,5·(k/5)^α`, σ_i,5 ≈ 0,8°, −4 < α < −2 (2σ); sistemi con k ≥ 5 piatti entro ~1°, con pochi pianeti inclinati fino a ~10°; il Sistema Solare (3 pianeti entro 400 d) ha dispersione simile ai sistemi Kepler della stessa molteplicità; `η_Kepler = 30 ± 3%` delle stelle di tipo solare ha pianeti «alla Kepler» (R ≳ R⊕, P < 400 d), in media `3,0 ± 0,3` pianeti per sistema. — [Zhu e altri 2018, arXiv:1802.09526](https://arxiv.org/abs/1802.09526)
+- [V] Modello «AMD massimo»: tutti i sistemi al limite di stabilità AMD riproducono la popolazione di Kepler; mediane `μ̃_i,n = 1,10° (+0,15/−0,11)·(n/5)^(−1,73)` e `μ̃_e,n = 0,031 (+0,004/−0,003)·(n/5)^(−1,74)`; i pianeti singoli hanno σ_e ~ 0,25. **Ricetta**: (1) calcolare AMD_crit del sistema (condizioni di collisione e di sovrapposizione delle risonanze, cioè dalla coppia più stretta); (2) ripartire AMD_tot = AMD_crit tra i pianeti *per unità di massa*; (3) per ogni pianeta dividere il suo AMD tra `x = e·sin ω`, `y = e·cos ω`, `z = sin i_m` con x², y², z² estratti da una Dirichlet simmetrica (due uniformi ordinati a < b: x² ∝ a, y² ∝ b − a, z² ∝ 1 − b). AMD: `Σ_k Λ_k·(1 − √(1−e_k²)·cos i_m,k)`. La tendenza con n nasce perché AMD_crit dipende dal rapporto di periodi minimo. — [He e altri 2020, arXiv:2007.14473](https://arxiv.org/abs/2007.14473)
+- [V‑calc] Dalla legge di He: mediana 5,4° (n = 2); 2,7° (3); 1,6° (4); 1,1° (5); 0,80° (6); 0,49° (8); 0,33° (10). Rapporto mediano i/e ≈ 0,62 rad/rad (vicino all'equipartizione i = e/2).
+- [V] Eccentricità misurate: sistemi a più pianeti in transito `σ_e = 0,083 (+0,015/−0,020)`; singoli `σ_e = 0,32 ± 0,06` (semi‑gaussiana). — [Van Eylen e altri 2019, arXiv:1807.00549](https://arxiv.org/abs/1807.00549)
+- [R] Riscontro Sistema Solare: inclinazioni sul piano invariabile ≈ 6,3° (Mercurio), 2,2°, 1,6°, 1,7°, 0,3°, 0,9°, 1,0°, 0,7° (Nettuno): mediana ≈ 1,3°. — [Souami & Souchay 2012](https://ui.adsabs.harvard.edu/abs/2012A&A...543A.133S)
+
+**Fuga dell'involucro e valle dei raggi**
+- [V] Perdita limitata dall'energia: `Ṁ_env = η·π·R_p³·L_HE/(4π·a²·G·M_p)`; `L_HE = L_sat` per t < t_sat, poi `L_sat·(t/t_sat)^(−1−a₀)`, con `L_sat ≈ 10^−3,5 L☉·(M_*/M☉)`, t_sat = 100 Ma, a₀ = 0,5; tempo di perdita `t_Ẋ ≈ 210 Ma·(η/0,1)⁻¹·(L_HE/10^−3,5 L☉)⁻¹·(P/10 d)^1,41·(M_*/M☉)^0,52·(M_c/5 M⊕)^1,42·…`; `dX/dt = −X/t_Ẋ`; frazione d'involucro al massimo del tempo di perdita `X₂ ≈ 0,027·(P/10 d)^0,08·(M_*/M☉)^−0,15·(τ_KH/100 Ma)^0,37·(M_c/5 M⊕)^0,17`; densità del nucleo `ρ_c = ρ_M⊕·(M_c/M⊕)^(1/4)`; popolazione iniziale: `dN/d log P ∝ P^1,9` sotto 7,6 d e costante oltre; nuclei Rayleigh con moda 3 M⊕; la valle a 1,8 R⊕ richiede nuclei di composizione terrestre. — [Owen & Wu 2017, arXiv:1705.10810](https://arxiv.org/abs/1705.10810)
+- [V] Osservazione: deficit di un fattore ≥ 2 tra 1,5 e 2,0 R⊕; due popolazioni (< 1,5 e 2,0–3,0 R⊕) di frequenza quasi uguale, per P < 100 d. — [Fulton e altri 2017, arXiv:1703.10375](https://arxiv.org/abs/1703.10375)
+
+**Tassi di occorrenza (bersagli di prova)**
+- [V] Giganti: `dN = C·M^α·P^β·d ln M·d ln P`, α = −0,31 ± 0,2, β = 0,26 ± 0,1, con C tale che il **10,5%** delle stelle di tipo solare ha un pianeta di 0,3–10 M_J con P = 2–2000 d; aumento di un fattore ~5 oltre 300 d; estrapolazione: 17–20% entro 20 UA. — [Cumming e altri 2008, arXiv:0803.3357](https://arxiv.org/abs/0803.3357)
+- [V] Giganti in funzione della distanza (0,03–30 UA): massimo tra 1 e 10 UA (salto di ~4 volte a ~1 UA); **14,1 (+2,0/−1,8)** giganti ogni 100 stelle tra 2 e 8 UA; **8,9 (+3,0/−2,4)** tra 8 e 32 UA. — [Fulton e altri 2021, arXiv:2105.11584](https://arxiv.org/abs/2105.11584)
+- [V] Dipendenza da massa e metallicità: `f(M, [Fe/H]) = 0,07·(M/M☉)^1,0·10^(1,2·[Fe/H])` (dal 3% attorno alle nane M di 0,5 M☉ al 14% attorno alle A di 2 M☉). — [Johnson e altri 2010, arXiv:1005.3084](https://arxiv.org/abs/1005.3084)
+- [V] Piccoli: 20 super‑Terre calde (1,0–1,7 R⊕, P = 10–100 d) ogni 100 stelle a ogni metallicità; sub‑Nettuni (1,7–4,0 R⊕) da 20 a 40 ogni 100 stelle tra [Fe/H] = −0,4 e +0,4. — [Petigura e altri 2018, arXiv:1712.04042](https://arxiv.org/abs/1712.04042)
+- [V] Pianeti di taglia terrestre in zona temperata (0,75–1,5 R⊕, P = 237–500 d): < 0,27 per stella FGK (84° percentile); intervallo prudente 0,03–0,40. — [Hsu e altri 2019, arXiv:1902.01417](https://arxiv.org/abs/1902.01417)
+
+### Inferences
+- **Inclinazioni mediane 0,54° (vero 1–2°): che cosa manca.** (i) *L'ultimo atto*: dopo il gas, le catene compatte diventano instabili e una fase di urti giganti porta il sistema al limite AMD; `disco.js` oggi smorza (DS15) e non rieccita. (ii) *Il legame con la spaziatura*: l'inclinazione non è un numero unico (Rayleigh/2, OR2) ma `AMD_crit` della coppia più stretta ripartito per massa: sistemi radi e con pochi pianeti → 2–5°; sistemi compatti con molti pianeti → 0,3–0,8°. (iii) *Il confronto*: «1–2°» è la mediana per n ≈ 4–5 pianeti entro 400 d; con fino a 16 pianeti per sistema una mediana di 0,5° è compatibile con la legge di He (n = 8 → 0,49°), ma **non** con il Sistema Solare (n = 8, mediana 1,3°): i sistemi larghi con giganti sono più caldi perché l'AMD viene dai giganti (instabilità alla «Nizza», diffusione gigante–gigante) e si diffonde ai piccoli per via secolare (§7). **Modello ridotto**: (1) costruire il sistema; (2) calcolare C_c con la formula di Petit–Laskar–Boué [V‑prec] per ogni coppia; (3) AMD_tot = f·AMD_crit con f ~ 1 (evento per indirizzo, f log‑normale stretta); (4) ripartizione di He; (5) lasciare che la teoria secolare (§7) la faccia circolare tra i pianeti nel tempo.
+- **Troppi/pochi giganti**: i tre freni del rapporto precedente ora hanno coefficienti verificati: contrazione (Bitsch: ∝ M_c^(11/3)/κ), lacuna (`Σ/(1+0,034K)`), migrazione (`(1+0,04K)·τ_I`). Bersaglio: 10,5% (P < 2000 d), 14 su 100 a 2–8 UA, scala `0,07·M·10^(1,2[Fe/H])`.
+- **Costo**: tutte le formule sono algebriche; l'integrazione di ~30 embrioni per 10⁴ passi è nell'ordine dei millisecondi (stima già data nei rapporti). 
+- **Collegamenti**: sopra = L(t), L_X(t) della stella (§4), massa/raggio/vita del disco e ²⁶Al dall'ammasso (§3); sotto = lune (il disco del pianeta eredita h, α, flusso: §6), impatti e acqua, clima (e, i, obliquità: §7).
+
+### Gaps
+- Sintesi di popolazione di Berna (NGPPS) e Ida & Lin: nessun numero nuovo oltre a [V‑prec]; Izidoro e altri 2021 («rompere le catene», sorgente scaricato) non letto: la frazione di catene che diventa instabile (~95%) resta [R].
+- Criterio di Crida 2006 per l'apertura della lacuna: ancora [R] (sostituibile con «K ≈ 20–25» di Kanagawa, [V]).
+- Massa di isolamento dei ciottoli di Bitsch 2018 [V‑prec]; Lambrechts & Johansen 2012/2014 letti solo attraverso Bitsch 2015.
+- Fuga «alimentata dal nucleo» (Ginzburg 2018; Gupta & Schlichting 2019) e pendenza della valle con il periodo: non verificate.
+- Consegna dell'acqua: nessuna formula nuova verificata (solo il ruolo di ²⁶Al, §3).
+- Fischer & Valenti 2005 (`0,03·10^(2[Fe/H])`), Dressing & Charbonneau (nane M), Bryson 2021 (η⊕): restano [R].
