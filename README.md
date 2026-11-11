@@ -352,26 +352,66 @@ calcola in secondo piano (`src/camera/superficie.worker.js`): la mappa resta
 viva, il pianeta si vede com'è da lontano, e quando la superficie è pronta
 compare da sé.
 
-**Le galassie dalle loro cause** (`src/camera/galassie.js`, non ancora
-collegato). Dall'alone (massa dal picco del campo, momento angolare dalle maree
-dei vicini) escono la taglia del disco, il tipo, la storia della formazione
-stellare, i metalli nel tempo e nel raggio dal bilancio di ciò che le stelle
-morte restituiscono, i bracci, il ritmo delle supernove. Due parametri sono
-tarati e lo dice: la scala delle masse (da cui dipende la frazione di
-ellittiche) e il vento.
+**Le galassie dalle loro cause** (`src/camera/galassie.js`). Dall'alone (massa
+dal picco del campo, momento angolare dalle maree dei vicini) escono la taglia
+del disco, il tipo, la storia della formazione stellare, i metalli nel tempo e
+nel raggio dal bilancio di ciò che le stelle morte restituiscono, i bracci, il
+ritmo delle supernove; ogni stella del catalogo nasce quando e dove quella
+storia lo dice. Senza niente tarato sulla Via Lattea, un alone come il suo dà
+un disco di 2,6 kpc, 189 km/s di rotazione (vera 220–240), 3,3·10¹⁰ masse
+solari di stelle (vere 5–6). Sulla mappa galassie, sistemi e pianeti hanno la
+taglia vera: dal pianeta al cosmo intero si esce e si rientra senza salti.
+Limiti detti: gli aloni piccoli fanno troppe stelle, metà delle galassie esce
+ellittica (mancano le piccole), le velocità rispetto al fondo cosmico sono
+troppo alte.
+
+**Dentro la materia** (`src/camera/materia.js`, `atomi3d.js`). In fondo allo
+zoom non c'è più un'immagine e basta. Sulla roccia si scende ancora: il
+cristallo con la sua memoria (gli anelli che le particelle alfa di un granello
+ricco di uranio hanno annerito nella mica in milioni di anni; le tracce di
+fissione, tante quante l'età della roccia e il suo uranio ne danno), la figura
+che una particella disegna attraversando quel cristallo (con la simmetria del
+suo reticolo: sei nel quarzo e nel ghiaccio, quattro nel sale), e gli atomi del
+reticolo in tre dimensioni. Sull'acqua: le molecole e gli ioni in tre
+dimensioni, e l'evento vero di quel punto (il decadimento di un potassio-40,
+con l'elettrone e la sua luce, e quanto è raro). Con un clic si entra nella
+finestra di quel punto: le particelle corrono dentro la materia, frenate
+secondo la sua composizione. Dalla superficie, a scala di chilometri, si entra
+nello sciame di un raggio cosmico nell'aria. Limiti detti: gli anelli degli
+aloni si leggono male; la fluidità della vista 3D non è misurata su una scheda
+grafica vera.
+
+**La chimica generale** (`src/camera/molecole.js` e `molecole_*.js`). Le
+molecole non sono un elenco: qualsiasi grafo di atomi e legami che le valenze
+ammettono è una molecola, con la sua forma, la sua energia (in aria e in
+acqua), le sue reazioni (famiglie generali di passi sui siti reattivi, con le
+barriere stimate) e le forze con le altre. La rete delle reazioni si espande a
+richiesta dalle molecole di un luogo: senza ricette scritte trova la glicina da
+acido cianidrico, ammoniaca e formaldeide, gli zuccheri e il loro ciclo che si
+alimenta da solo, l'acido acetico e il piruvico da anidride carbonica e
+idrogeno su solfuri di ferro. Il modulo elenca in testa ciò che le sue regole
+ancora vietano e la realtà permette (copiarsi su stampo, catalizzare da
+ripiegata, scegliere una mano): è il lavoro che resta perché una storia di
+chimica possa arrivare a una macchina molecolare. Non è ancora collegata al
+resto.
 
 **Il mare** (`src/camera/mare.js`). L'acqua non è una tinta: i sali vengono
 dalle rocce di quel pianeta consumate dall'acqua e dall'anidride carbonica, dai
 gas dei vulcani e dalle sorgenti calde, portati dai fiumi per l'età del pianeta;
-escono quando superano la solubilità (che dipende dalla temperatura). Salinità,
-miscela di ioni e pH escono dal bilancio. Le correnti vengono dal vento e dalla
-rotazione sulla forma vera dei bacini; portano calore, sale e fango. In fondo
-allo zoom, sul mare o su un lago, non c'è la roccia ma un campione di
-quell'acqua: di dieci in dieci, i granelli sospesi, i colloidi in moto
-browniano, poi gli ioni con i loro gusci e le molecole, nelle quantità vere di
-quel punto. Limiti detti: quattro parametri sono tarati sulla Terra (che così
-dà 37 g/kg e pH 8,1); in mare aperto alle scale intermedie l'acqua è limpida e
-si vede poco (il pannello dice che cosa c'è davvero in quel campione).
+escono quando superano la solubilità. Salinità, miscela di ioni e pH escono dal
+bilancio; aria e mare sono un solo serbatoio di carbonio. Le correnti vengono
+dal vento e dalla rotazione sulla forma vera dei bacini; le maree dalle lune e
+dalla stella di quel pianeta; ghiaccio e strato rimescolato seguono le
+stagioni. Il mare si vede com'è: il colore dall'ottica vera, da ciò che è
+sospeso e dal fondale dove la luce arriva, e avvicinandosi le onde di quel
+punto, che si accorciano e frangono sul basso fondale. In fondo allo zoom c'è
+un campione di quell'acqua, di dieci in dieci fino alle molecole. Nessun
+parametro è più tarato sulla Terra; senza ritocchi il mare terrestre esce a 71
+g/kg e pH 8,5 (vero 35 e 8,2), perché sulla carta di prova non ci sono i mari
+chiusi che nella realtà hanno sepolto metà del sale. Limiti detti: correnti di
+bordo larghe una cella, niente correnti equatoriali né circumpolare, onde basse
+(manca il vento delle tempeste), il campione a millimetri e micrometri in mare
+aperto è acqua limpida uniforme.
 
 **La temperatura ha una fonte sola.** La stima rapida del clima di ogni pianeta
 è lo stesso bilancio di energia della mappa, risolto per fasce di latitudine; la

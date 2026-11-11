@@ -105,18 +105,22 @@ export function equilibrioRete(r, { quali = null } = {}) {
 }
 // ---------- la cinetica nel tempo
 // evolvi(reazioni, concentrazioni, tempo, { fisse, attivita }) → { c, converge }: integra le velocità (mol/L/s) per un
-// tempo dato. Metodo di Eulero «alla Patankar» (1980): c' = (c + dt·produzione)/(1 + dt·perdita/c): resta positivo e non
-// esplode nemmeno con reazioni di tempi lontanissimi tra loro; i passi crescono in progressione geometrica (primo
-// ordine: va bene per i rilassamenti e le crescite, non per contare le oscillazioni). L'acqua e H⁺ hanno attività fissa
-// (la loro energia la contiene già); «fisse» sono le specie tenute alla loro concentrazione (un luogo aperto).
+// tempo dato. A ogni passo ogni reazione avanza, una dopo l'altra, di ξ = dt·(avanti − indietro)/(1 + dt·Σ velocità/c):
+// è Eulero implicito linearizzato su una reazione alla volta. Conserva gli atomi esattamente (ogni reazione sposta
+// materia secondo la sua stechiometria), non va sotto zero, non esplode con reazioni di tempi lontanissimi, e per dt
+// grande porta ogni reazione al suo equilibrio. I passi crescono in progressione geometrica (primo ordine: va bene per
+// rilassamenti e crescite). L'acqua e H⁺ hanno attività fissa; «fisse» sono le specie tenute ferme (un luogo aperto).
 export function evolvi(reazioni, c0, tempo, { fisse = [], passi = 160, attivita = { O: 1, '[H+]': 1 } } = {}) {
   const c = new Map(Object.entries(c0)); for (const x of reazioni) for (const k of [...x.reagenti, ...x.prodotti]) if (!c.has(k)) c.set(k, 0);
-  const ferme = new Set(fisse), a = (k) => attivita[k] ?? c.get(k), nomi = [...c.keys()], P = new Map(), L = new Map(), r = 1.18; let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0;
-  for (let n = 0; n < passi; n++, dt *= r) { for (const k of nomi) { P.set(k, 0); L.set(k, 0); }
-    for (const x of reazioni) { let av = x.k, ind = x.kInversa ?? 0; for (const k of x.reagenti) av *= a(k); for (const k of x.prodotti) ind *= a(k); if (!(av > 0) && !(ind > 0)) continue;
-      for (const k of x.prodotti) { P.set(k, P.get(k) + av); const ck = c.get(k); if (ind > 0 && ck > 0) L.set(k, L.get(k) + ind / ck); }
-      for (const k of x.reagenti) { P.set(k, P.get(k) + ind); const ck = c.get(k); if (av > 0 && ck > 0) L.set(k, L.get(k) + av / ck); } }
-    cambia = 0; for (const k of nomi) { if (ferme.has(k) || attivita[k] != null) continue; const ck = c.get(k), nuovo = (ck + dt * P.get(k)) / (1 + dt * L.get(k)); if (nuovo > 1e-30) cambia = Math.max(cambia, Math.abs(nuovo - ck) / nuovo); c.set(k, nuovo); } }
+  const ferme = new Set(fisse), libera = (k) => !ferme.has(k) && attivita[k] == null, a = (k) => attivita[k] ?? c.get(k), r = 1.18, fin = (v) => (v > 1e60 ? 1e60 : v > 0 ? v : 0);
+  const rz = reazioni.map((x) => ({ re: x.reagenti, pr: x.prodotti, k: fin(x.k), ki: fin(x.kInversa ?? 0) })).filter((x) => x.k > 0 || x.ki > 0);
+  let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0;
+  for (let n = 0; n < passi; n++, dt *= r) { cambia = 0;
+    for (const x of rz) { let av = x.k, ind = x.ki, den = 0, maxAv = Infinity, maxInd = Infinity; for (const k of x.re) av *= a(k); for (const k of x.pr) ind *= a(k); if (!(av > 0) && !(ind > 0)) continue;
+      for (const k of x.re) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += av / ck; maxAv = Math.min(maxAv, ck); }
+      for (const k of x.pr) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += ind / ck; maxInd = Math.min(maxInd, ck); }
+      let xi = (dt * (av - ind)) / (1 + dt * den); if (xi > 0) xi = Math.min(xi, 0.5 * maxAv === Infinity ? xi : 0.5 * maxAv); else xi = Math.max(xi, maxInd === Infinity ? xi : -0.5 * maxInd); if (!xi || !isFinite(xi)) continue;
+      for (const k of x.re) if (libera(k)) c.set(k, c.get(k) - xi); for (const k of x.pr) if (libera(k)) { const prima = c.get(k), dopo = prima + xi; c.set(k, dopo); if (dopo > 1e-30) cambia = Math.max(cambia, Math.abs(xi) / dopo); } } }
   return { c: Object.fromEntries(c), converge: cambia < 1e-3 };
 }
 // le concentrazioni stazionarie con le sorgenti tenute fisse (un luogo aperto: ciò che arriva dall'aria o dal camino
