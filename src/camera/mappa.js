@@ -133,7 +133,8 @@ export function colpisciMappa(cam, sx, sy, W, H) {
   const x = cam.cx + (sx - W / 2) / cam.z, y = cam.cy + (sy - H / 2) / cam.z, px = 9 / cam.z;
   if (cam.livello === 5) return null;
   if (cam.livello === 4) { // sulla superficie: la quota e la temperatura del punto
-    const S = superficieDi(cam.via), L = livelloTessere(cam.z), n = 4 ** L, u = ((x % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, y * 2));
+    const S = superficieDi(cam.via); if (!S) return null;
+    const L = livelloTessere(cam.z), n = 4 ** L, u = ((x % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, y * 2));
     const t = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (!t) return null;
     const i = Math.floor((u * n - Math.floor(u * n)) * t.sf.W), j = Math.floor((v * n - Math.floor(v * n)) * t.sf.H), c = j * t.sf.W + i, h = t.sf.alt[c];
     const T = S.cl.media[Math.min(S.cl.H - 1, Math.floor(v * S.cl.H)) * S.cl.W + Math.min(S.cl.W - 1, Math.floor(u * S.cl.W))];
@@ -183,7 +184,7 @@ export function percorso(cam) {
   if (cam.livello >= 2) out.push(`stella ${v.stella + 1}`);
   if (cam.livello >= 3) out.push(`pianeta ${v.pianeta + 1}`);
   if (cam.livello >= 4) out.push('la superficie');
-  if (cam.livello >= 5) out.push(rocciaDi(cam).nome);
+  if (cam.livello >= 5) out.push(rocciaDi(cam)?.nome || 'la roccia');
   return out;
 }
 
@@ -241,7 +242,7 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
   } else if (cam.livello === 2) {
     disegnaSistema(ctx, sistema(v.cosmo, v.galassia, v.stella), X, Y, z, dpr, v);
   } else if (cam.livello === 5) {
-    const r = rocciaDi(cam); ctx.imageSmoothingEnabled = false; ctx.drawImage(r.cv, X(0), Y(0), z, z); ctx.imageSmoothingEnabled = true;
+    const r = rocciaDi(cam); if (r) { ctx.imageSmoothingEnabled = false; ctx.drawImage(r.cv, X(0), Y(0), z, z); ctx.imageSmoothingEnabled = true; }
   } else if (cam.livello === 4) {
     disegnaSuperficie(ctx, W, H, cam, dpr);
   } else {
@@ -249,7 +250,7 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
   }
   // il metro: le distanze vere
   {
-    const mpp = (cam.livello === 5 ? rocciaDi(cam).larghezzaM : metriPerUnita(cam.livello, v)) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
+    const mpp = (cam.livello === 5 ? rocciaDi(cam)?.larghezzaM || 0.01 : metriPerUnita(cam.livello, v)) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
     const L = passo / mpp, x0 = 18 * dpr, y0 = H - 22 * dpr;
     ctx.strokeStyle = 'rgba(235,230,215,0.85)'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x0, y0 - 5 * dpr); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0); ctx.lineTo(x0 + L, y0 - 5 * dpr); ctx.stroke();
     ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(235,230,215,0.9)'; ctx.fillText(fmtLunghezza(passo), x0 + L + 8 * dpr, y0); if (cam.livello === 3) ctx.fillText(`il tempo scorre ${ACCELERA} volte più in fretta`, x0, y0 - 20 * dpr);
@@ -377,7 +378,8 @@ const dischi = new Map();
 export function discoPianeta(v, P) {
   if (P.tipo === 'gassoso' || !P.interno) return null;
   const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
-  const sf0 = superficiePianeta(k, P, P.interno, P.origine), cl = climaSuperficie(k, P, sf0), sf = erosione(k, sf0, cl), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
+  const S = superficieDi(v); if (!S) return null; // si sta ancora calcolando: intanto il pianeta si vede come da lontano
+  const cl = S.cl, sf = S.se, px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -392,18 +394,40 @@ export function discoPianeta(v, P) {
 }
 
 // ---------- la superficie esplorabile: tessere sempre più fini mentre ci si avvicina (geologia.js, tessera)
-const superfici = new Map(), tessereFatte = new Map();
-function superficieDi(v) {
+// La superficie (tettonica, clima, aria, erosione) costa alcuni secondi: si calcola IN SECONDO PIANO
+// (superficie.worker.js) e intanto la mappa resta viva; superficieDi dà null finché non è pronta, poi avvisa.
+const superfici = new Map(), tessereFatte = new Map(), inCalcolo = new Set();
+let operaio = null, avvisa = null;
+export function quandoSuperficiePronta(f) { avvisa = f; }
+export const superficieInCalcolo = (v) => inCalcolo.has(JSON.stringify(v));
+function tieni(k, out) { superfici.set(k, out); if (superfici.size > 4) superfici.delete(superfici.keys().next().value); return out; }
+export function superficieDi(v) {
   const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
   const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; const seme = P.origine;
-  const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
-  const out = { k, P, cl, se, seme }; superfici.set(k, out); if (superfici.size > 4) superfici.delete(superfici.keys().next().value);
-  return out;
+  if (P.tipo === 'gassoso' || !P.interno) return null;
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') { // senza fili in secondo piano (le prove): subito
+    const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
+    return tieni(k, { k, P, cl, se, seme });
+  }
+  if (!inCalcolo.has(k)) {
+    if (!operaio) {
+      operaio = new Worker(new URL('./superficie.worker.js', import.meta.url), { type: 'module' });
+      operaio.onmessage = (e) => {
+        const d = e.data; inCalcolo.delete(d.k);
+        if (d.errore) { console.error('la superficie non si è potuta calcolare:', d.errore); return; }
+        const w = JSON.parse(d.k), Pw = sistema(w.cosmo, w.galassia, w.stella).pianeti[w.pianeta];
+        tieni(d.k, { k: d.k, P: Pw, cl: d.cl, se: d.se, seme: Pw.origine }); if (avvisa) avvisa(w);
+      };
+    }
+    inCalcolo.add(k); operaio.postMessage({ k, v });
+  }
+  return null;
 }
 const livelloTessere = (z) => Math.max(0, Math.min(7, Math.floor(Math.log(z / 420) / Math.log(4))));
 export let tessereInAttesa = 0;
 function disegnaSuperficie(ctx, W, H, cam, dpr) {
   const S = superficieDi(cam.via), z = cam.z, Lmax = livelloTessere(z);
+  if (!S) { ctx.fillStyle = 'rgba(235,230,215,0.85)'; ctx.font = `${14 * dpr}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText('la superficie si sta formando: tettonica, clima, aria, erosione…', W / 2, H / 2); ctx.textAlign = 'start'; return; }
   const x0 = cam.cx - W / 2 / z, x1 = cam.cx + W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), y1 = Math.min(0.5, cam.cy + H / 2 / z);
   ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0;
   // dal più grosso al più fine: si disegna quello che c'è, e si calcola una tessera nuova per fotogramma
@@ -428,7 +452,8 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
 // (crosta continentale o vulcanica, fiume o lago, ghiaccio), e la sua tessitura nasce da come si è formata
 const rocceFatte = new Map();
 export function rocciaDi(cam) {
-  const S = superficieDi(cam.via), u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)), k = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}`;
+  const S = superficieDi(cam.via); if (!S) return null;
+  const u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)), k = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}`;
   if (rocceFatte.has(k)) return rocceFatte.get(k);
   // il punto, letto alla risoluzione più fine già calcolata (o sulla mappa intera)
   let t = S.se; for (let L = 7; L >= 1; L--) { const n = 4 ** L, q = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (q) { t = q.sf; break; } }

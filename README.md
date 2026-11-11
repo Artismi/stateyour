@@ -326,6 +326,19 @@ usa la pioggia vera di ogni punto. Limiti detti: la cella di Hadley è due volte
 troppo forte, non ci sono stagioni, i rilievi non deviano il vento. Costa circa
 due secondi in più a pianeta.
 
+La superficie di un pianeta (deriva dei continenti, clima, aria, erosione) si
+calcola in secondo piano (`src/camera/superficie.worker.js`): la mappa resta
+viva, il pianeta si vede com'è da lontano, e quando la superficie è pronta
+compare da sé.
+
+**Le galassie dalle loro cause** (`src/camera/galassie.js`, non ancora
+collegato). Dall'alone (massa dal picco del campo, momento angolare dalle maree
+dei vicini) escono la taglia del disco, il tipo, la storia della formazione
+stellare, i metalli nel tempo e nel raggio dal bilancio di ciò che le stelle
+morte restituiscono, i bracci, il ritmo delle supernove. Due parametri sono
+tarati e lo dice: la scala delle masse (da cui dipende la frazione di
+ellittiche) e il vento.
+
 **La coerenza tra i livelli** (`test/test_coerenza.mjs`). Una prova a sé
 controlla che le stesse grandezze valgano lo stesso a ogni scala, su centinaia
 di sistemi veri: tempo (niente è più vecchio di ciò che lo contiene), massa,
