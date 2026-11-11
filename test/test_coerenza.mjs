@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import * as CO from '../src/camera/cosmo.js';
 import * as LG from '../src/camera/leggi.js';
+import * as ST from '../src/camera/stelle.js'; // le stelle vengono da qui (struttura), non più dalle curve di leggi.js
 import * as GE from '../src/camera/geologia.js';
 import * as DI from '../src/camera/disco.js';
 import * as LU from '../src/camera/lune.js';
@@ -77,11 +78,11 @@ prova('ogni stella è più giovane dell\'universo ed è nata dopo la sua galassi
 prova('una stella viva ha età < vita; un resto viene da una stella la cui vita è finita, e pesa meno di lei', () => {
   let vive = 0, resti = 0;
   for (const { Gx } of GALASSIE) for (const s of Gx.stelle) {
-    if (s.stato === 'in vita' || s.stato === 'gigante rossa') { vive++; assert.ok(s.eta < LG.stella(s.massa).vita, `viva oltre la sua vita: ${s.eta} > ${LG.stella(s.massa).vita}`); if (s.stato === 'gigante rossa') assert.ok(s.eta > 0.9 * LG.stella(s.massa).vita); }
+    if (s.stato === 'in vita' || s.stato === 'gigante rossa') { vive++; const vv = ST.stella(s.massa, { Z: s.Z }).vita; assert.ok(s.eta < vv, `viva oltre la sua vita: ${s.eta} > ${vv}`); if (s.stato === 'gigante rossa') assert.ok(s.eta > 0.9 * vv); }
     else {
       resti++; assert.ok(s.morta >= 0 && s.massaNascita > s.massa, `resto più pesante della stella: ${s.massa} da ${s.massaNascita}`);
-      tra(s.eta / (LG.stella(s.massaNascita).vita + s.morta), 1 - 1e-9, 1 + 1e-9, 'età di un resto = vita della stella + anni dalla morte');
-      const f = LG.fine(s.massaNascita); assert.equal(s.stato, f.tipo); assert.ok(Math.abs(s.massa - f.massa) < 1e-9);
+      tra(s.eta / (ST.stella(s.massaNascita, { Z: s.Z }).vita + s.morta), 1 - 1e-9, 1 + 1e-9, 'età di un resto = vita della stella + anni dalla morte');
+      const f = ST.fine(s.massaNascita, 1e-4, { Z: s.Z }); assert.equal(s.stato, f.tipo); assert.ok(Math.abs(s.massa - f.massa) < 1e-9);
       if (s.stato === 'nana bianca') assert.ok(s.massa < LG.massaChandrasekhar() / MSOLE); else if (s.stato === 'stella di neutroni') assert.ok(s.massa < LG.massaMassimaNeutroni() / MSOLE);
     }
   }
@@ -243,7 +244,7 @@ prova('l\'aria di ogni pianeta: le frazioni fanno 1, e non c\'è nessuna molecol
 prova('la linea della neve è la stessa in disco.js e in lune.js: 170 K a 2,7·√L unità astronomiche', () => {
   for (const M of [0.3, 1, 2.5]) {
     const D = DI.disco({ massa: M, Z: 1, eta: 4.5e9 }, 1), Tdisco = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(D.neve); // la temperatura che formaPianeti usa per il ferro
-    tra(Tdisco, 168, 172, 'temperatura del disco sulla linea della neve'); tra(D.neve / (2.7 * Math.sqrt(LG.stella(M).L)), 0.999, 1.001, 'linea della neve');
+    tra(Tdisco, 168, 172, 'temperatura del disco sulla linea della neve'); tra(D.neve / (2.7 * Math.sqrt(ST.stella(M, { Z: 1 }).L)), 0.999, 1.001, 'linea della neve');
   }
 });
 
@@ -319,7 +320,7 @@ prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco) appl
 prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e della loro temperatura (4πR²σT⁴)', () => {
   const wd = PIANETI.filter((x) => x.S0.stato === 'nana bianca'); assert.ok(wd.length > 50);
   for (const x of wd) tra(x.p.Lw / (4 * Math.PI * x.S0.raggioM ** 2 * K.sigma * x.S0.T ** 4), 1 - 1e-9, 1 + 1e-9, 'luce della nana bianca');
-  for (const x of PIANETI.filter((y) => y.viva)) tra(x.p.Lw / (LG.stella(x.S0.massa).L * LSOLE), 1 - 1e-9, 1 + 1e-9, 'luce della stella viva');
+  for (const x of PIANETI.filter((y) => y.viva)) tra(x.p.Lw / (ST.stella(x.S0.massa, { Z: x.S0.Z, eta: x.S0.eta }).L * LSOLE), 1 - 1e-9, 1 + 1e-9, 'luce della stella viva');
 });
 { // 4. la pressione e l'ebollizione
   const conAria = PIANETI.filter(({ p }) => isFinite(p.clima.pressione) && p.clima.pressione > 0 && p.atmosfera), r = conAria.map(({ p }) => p.atmosfera.pressione / p.clima.pressione);
@@ -452,7 +453,7 @@ prova('il metro: sul pianeta l\'unità è il suo raggio, sulla superficie il gir
 { // i salti di scala tra un livello e l'altro (dichiarati in cosmo.js: «lo zoom fa un salto»), misurati
   const rG = []; for (const n of [1, 2]) for (const G of CO.cosmo(n).galassie) rG.push((G.r * CO.metriPerUnita(0, { cosmo: n })) / CO.metriPerUnita(1, { cosmo: n, galassia: G.id }));
   const rS = GALASSIE.map(({ n, gid }) => (CO.RAGGIO_SISTEMA * CO.metriPerUnita(1, { cosmo: n, galassia: gid })) / CO.metriPerUnita(2, {}));
-  const conPianeti = SISTEMI.filter((s) => s.S.pianeti.length), rSt = conPianeti.map((s) => (s.S.stella.r * 30 * UA) / (s.viva ? LG.stella(s.S0.massa).R * RSOLE : s.S0.raggioM)), rP = PIANETI.map(({ p }) => (p.r * 30 * UA) / p.raggioM);
+  const conPianeti = SISTEMI.filter((s) => s.S.pianeti.length), rSt = conPianeti.map((s) => (s.S.stella.r * 30 * UA) / (s.viva ? ST.stella(s.S0.massa, { Z: s.S0.Z, eta: s.S0.eta }).R * RSOLE : s.S0.raggioM)), rP = PIANETI.map(({ p }) => (p.r * 30 * UA) / p.raggioM);
   nota(3, 'i figli sono disegnati molto più grandi del vero dentro il livello di sopra (il metro in basso cambia di colpo a ogni passaggio)',
     { casi: 4, su: 4, tipico: `galassia nel cosmo ×${num(mediana(rG))}; sistema nella galassia ×${num(mediana(rS))}; stella nel sistema ×${num(mediana(rSt))}; pianeta nel sistema ×${num(mediana(rP))}`, massimo: `fino a ×${num(massimo(rG))}, ×${num(massimo(rS))}, ×${num(massimo(rSt))}, ×${num(massimo(rP))}`, dove: 'cosmo.js cosmo() «G.r», RAGGIO_SISTEMA, sistema() «r:» contro metriPerUnita()' });
   const dentro = PIANETI.filter((x) => x.p.a < x.S.stella.r + x.p.r).length; let coppie = 0, toccano = 0;

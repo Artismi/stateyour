@@ -19,7 +19,7 @@ for (const massa of [0.08, 0.3, 1, 2, 8, 40]) for (const Z of [0.01, 0.3, 1, 3.5
 prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), quattro volte più solidi oltre la neve, massa di qualche centesimo', () => {
   for (const s of SEMI) {
     const D = disco(SOLE, s);
-    assert.ok(Math.abs(D.neve - 2.7) < 1e-9);
+    assert.ok(Math.abs(D.neve - 2.7) < 0.1, `neve a ${D.neve}`); // (il Sole a metà vita è poco più luminoso di oggi: stelle.js)
     assert.ok(Math.abs(D.sigmaGas(1) / D.sigmaGas(4) - 8) < 1e-9, 'la densità del gas cala come r^(3/2)');
     assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - 4) < 0.02, 'oltre la neve anche il ghiaccio è solido');
     assert.ok(Math.abs(D.sigmaSolidi(5) / D.sigmaGas(5) - 0.0134) < 1e-9, 'i solidi sono i metalli del gas');

@@ -23,7 +23,8 @@
 // Che cosa manca: la migrazione delle orbite nel disco (niente «Giovi caldi»),
 // le risonanze, i sistemi con due stelle.
 
-import { COSTANTI, MSOLE, ANNO, UA, stella as stellaVera } from './leggi.js';
+import { COSTANTI, MSOLE, ANNO, UA } from './leggi.js';
+import { stella as stellaVera } from './stelle.js';
 import { generatore } from './mondo.js';
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
@@ -51,7 +52,7 @@ const casoDi = (seme, sale) => generatore((Math.imul((Math.floor(Number(seme) ||
 // ---------- 1. il disco
 // Restituisce il disco di una stella { massa, Z, eta }: distanze in UA, densità in kg/m², tempi in anni.
 export function disco(st, seme = 1) {
-  const c = casoDi(seme, 0x51ed), M = Math.max(0.01, st.massa ?? 1), Z = Math.max(0, st.Z ?? 1), L = stellaVera(M).L;
+  const c = casoDi(seme, 0x51ed), M = Math.max(0.01, st.massa ?? 1), Z = Math.max(0, st.Z ?? 1), L = stellaVera(M, { Z }).L; // (la luce della stella a metà della vita: la linea della neve a 2,7 UA·√L è tarata così sul Sole)
   // la linea della neve: dove il disco scende sotto i 170 K e il ghiaccio non evapora più
   const neve = 2.7 * Math.sqrt(L);
   // LEGGE EMPIRICA: i dischi osservati arrivano a qualche decina di UA, più larghi attorno alle stelle più grandi

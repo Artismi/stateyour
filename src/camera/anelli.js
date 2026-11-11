@@ -68,7 +68,8 @@
 //   staccata dalle lune piccole (gli anelli tenui di Giove), la migrazione passata delle lune (la larghezza
 //   vera della divisione di Cassini: qui viene stretta, come la divisione di Huygens).
 
-import { COSTANTI, LSOLE, MSOLE, ANNO, stella as stellaVera, clima } from './leggi.js';
+import { COSTANTI, LSOLE, MSOLE, ANNO, clima } from './leggi.js';
+import { stella as stellaVera } from './stelle.js';
 import { MATERIALI, limiteRoche, raggioHill, periodoOrbita, raggioRotondo, densitaCorpo, orbitaDopoLeMaree } from './lune.js';
 import { sorgente } from './eventi.js';
 

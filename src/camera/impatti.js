@@ -77,7 +77,8 @@
 //   «urto gigante k/angolo|piano|verso|dove|quando», «classe c/nube p/quanti», «impatto k/quando|corpo|angolo|dove|sorte».
 // L'impatto k è sempre lo stesso evento: un ramo che ne cambia uno lascia identici tutti gli altri.
 
-import { COSTANTI, MSOLE, stella as stellaVera } from './leggi.js';
+import { COSTANTI, MSOLE } from './leggi.js';
+import { stella as stellaVera } from './stelle.js';
 import { DISCO, MTERRA, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
 import { MATERIALI, densitaCorpo, limiteRoche } from './lune.js';
 import { MOLECOLE } from './chimica.js';
@@ -242,7 +243,7 @@ function formazioneDi(cx, i, caso) {
     let sigma = null;
     if (D?.sigmaSolidi) sigma = D.sigmaSolidi(rUA);
     else if (/cresciuto piano/.test(q.storia || '')) {
-      const MsS = Mst / MSOLE, neve = 2.7 * Math.sqrt(stellaVera(MsS).L), f = cx.Z * DISCO.metalliSole * (rUA < neve ? DISCO.roccia : 1);
+      const MsS = Mst / MSOLE, neve = 2.7 * Math.sqrt(stellaVera(MsS, { Z: cx.Z }).L), f = cx.Z * DISCO.metalliSole * (rUA < neve ? DISCO.roccia : 1);
       // M = M_iso·(t/t_iso)³ con t_iso = 3·tempoCrescita(M_iso) ∝ M_iso^⅓: la massa di isolamento si semplifica, e resta
       // tempoCrescita(M⊕, Σ) = t / (3·(M/M⊕)^⅓): la Σ che lo soddisfa si trova per bisezione (più solidi, più in fretta)
       const serve = (tGas + (eta - tGas) / DISCO.senzaGas) / (3 * Math.cbrt(Ms / MTERRA)); let poco = 1e-9, tanto = 1e9;

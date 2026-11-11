@@ -22,7 +22,8 @@
 //   · quanti e quanto grandi sono i corpi catturati (contati nel Sistema Solare);
 //   · lo scarto dalla risonanza esatta che fissa l'eccentricità forzata (misurato su Io ed Europa).
 
-import { COSTANTI, MSOLE, LSOLE, ANNO, UA, stella as stellaVera, temperaturaEquilibrio } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio } from './leggi.js';
+import { stella as stellaVera } from './stelle.js';
 import { generatore } from './mondo.js';
 
 const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
@@ -346,7 +347,7 @@ export function lune(P, stella = {}, seme = 1) {
   const caso = { c, tra: (a, b) => a + c() * (b - a), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) * Math.SQRT2; } };
   // l'ambiente: fin dove comanda il pianeta, quanto è vecchio il sistema, e quanto scalda la stella lì
   // (170 K sulla «linea della neve», 2,7 UA·√L come in cosmo.js; la temperatura cala come 1/√distanza)
-  const Lgiovane = stellaVera(stella.massaNascita || stella.massa || P.Mstella / MSOLE).L;
+  const Lgiovane = stellaVera(stella.massaNascita || stella.massa || P.Mstella / MSOLE, { Z: stella.Z ?? 1 }).L;
   const amb = { RH: raggioHill(P), eta: (stella.eta ?? ETA) + (stella.morta ?? 0), Tstella: NEVE * Math.sqrt((2.7 * UA * Math.sqrt(Lgiovane)) / P.aM) };
   const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, caso, stella.urto) : regolari(P, amb, caso);
   const tutte = [...grandi, ...catturati(P, amb, caso, grandi)].sort((x, y) => x.aM - y.aM);

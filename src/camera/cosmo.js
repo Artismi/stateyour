@@ -20,7 +20,8 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { COSTANTI, etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
+import { COSTANTI, etaUniverso, massaNascita, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
+import { stella as stellaVera, fine } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
@@ -147,16 +148,18 @@ export const galassia = memo((n, id) => {
     // (ogni stella, viva o morta, porta la sua «eta»: gli anni dalla nascita a oggi. È l'unica età del sistema: quella
     // dei pianeti, del loro interno e delle lune.) La stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
     // misurata, e un campo magnetico suo; poi vive secondo le sue equazioni fino a «adesso»
-    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 * ANNO : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita, vita = stellaVera(m0);
+    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 * ANNO : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita;
     // la METALLICITÀ (in unità del Sole): il gas da cui nasce è stato arricchito dalle supernove delle
     // generazioni prima; cresce con il tempo passato dalla nascita della galassia, ed è più alta al centro
     // (dove le stelle si sono formate prima e più fitte)
     const Z = 2.2 * (1 - Math.exp(-(nascita - G.formazione) / (2e9 * ANNO))) * Math.exp(-Math.hypot(x, y) / 0.7) * (G.tipo === 'ellittica' ? 1.6 : 1) + 0.01;
+    // quanto vive e com'è adesso: dalla sua massa, dai suoi metalli e dalla sua età (stelle.js)
+    const vita = stellaVera(m0, { Z });
     if (eta < vita.vita * ANNO) {
-      const gigante = eta > 0.9 * vita.vita * ANNO, T = gigante ? Math.min(vita.T, 4200) : vita.T;
+      const ora = stellaVera(m0, { Z, eta: eta / ANNO }), gigante = eta > 0.9 * vita.vita * ANNO, T = gigante ? Math.min(ora.T, 4200) : ora.T;
       stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0, Z });
     } else {
-      const f = fine(m0, B0), morta = (eta - vita.vita * ANNO) / ANNO;
+      const f = fine(m0, B0, { Z }), morta = (eta - vita.vita * ANNO) / ANNO;
       stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, eta: eta / ANNO, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z });
     }
   }
@@ -221,7 +224,7 @@ export const sistema = memo((n, gid, sid) => {
   if (S.stato === 'nana bianca' || S.stato === 'gigante rossa') { const k = S.stato === 'nana bianca' ? (S.massaNascita || 1) / S.massa : 1; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
   // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è piccola: la sua luce è quella di una
   // sfera con il suo raggio e la sua temperatura, 4πR²σT⁴: da un decimo del Sole appena nata a meno di un millesimo)
-  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
+  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa, { Z: S.Z ?? 1, eta: S.eta }).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
   // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
   // stella, il disco e gli altri pianeti
   const Sis = { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
