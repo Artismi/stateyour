@@ -265,7 +265,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     if (r >= 1 && mare.albedo.length === W * H * r * r) { albedoMare = new Float32Array(W * H).fill(-1); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let x = 0, n = 0; for (let b = 0; b < r; b++) for (let c = 0; c < r; c++) { const v = mare.albedo[(j * r + b) * W * r + i * r + c]; if (v > 0) { x += v; n++; } } if (n && !terra[j * W + i]) albedoMare[j * W + i] = x / n; } }
   }
   // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; senza meteo, quelle attese dalla stessa legge)
-  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null);
+  const albedo = (k, t, luce) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t, luce) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null, luce);
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
@@ -303,7 +303,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
     // 1. in ogni cella: la luce assorbita meno quella irradiata
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, t = T[k], entra = (P.bloccato ? sole[k] : soleJ[j]) * (1 - albedo(k, t)) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
+      const k = j * W + i, t = T[k], arriva = P.bloccato ? sole[k] : soleJ[j], entra = arriva * (1 - albedo(k, t, arriva)) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
       const dT = frenaPasso(t, (dt * (entra - esce)) / (C(k) + dt * molla));
       nuovo[k] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }

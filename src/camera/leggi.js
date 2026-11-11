@@ -146,9 +146,11 @@ export const luceDellaNube = (acqua) => { const x = ((1 - NUVOLE.asimmetria) * 1
 // la pressione del vapore d'acqua sopra il liquido o il ghiaccio (Clausius-Clapeyron dal punto triplo: 611,2 Pa a 273,16 K;
 // calore di evaporazione 45,05 kJ/mol, di sublimazione 51,06: misurati)
 export const vaporeSaturo = (T) => 611.2 * Math.exp(((T < 273.16 ? 51060 : 45050) / R_GAS) * (1 / 273.16 - 1 / T));
-// la luce che le nuvole ATTESE rimandano sopra un mare a temperatura T (già per la loro copertura)
-export function riflessoNuvoleAtteso(T) {
-  const N = NUVOLE, pioggia = (N.ce * N.ventoAtteso * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T);
+// la luce che le nuvole ATTESE rimandano sopra un mare a temperatura T (già per la loro copertura). «luce» è la luce
+// che arriva lì (W/m²): l'acqua non può evaporare, e poi piovere, più in fretta di quanto quella luce la faccia evaporare
+// (2,5 MJ per chilo: il calore di evaporazione)
+export function riflessoNuvoleAtteso(T, luce = Infinity) {
+  const N = NUVOLE, pioggia = Math.min((N.ce * N.ventoAtteso * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T), luce / 2.5e6);
   return N.coperturaAttesa * luceDellaNube(pioggia / (N.coperturaAttesa * N.kessler)) + (1 - N.coperturaAttesa) * N.stratiAttesi * luceDellaNube(pioggia / N.kessler);
 }
 // quanto le nuvole attese ci sono (0…1), dove non c'è una circolazione calcolata: servono mare che evapora e un'aria di
@@ -160,9 +162,9 @@ export const coperturaDelCielo = NUVOLE.coperturaAttesa + (1 - NUVOLE.coperturaA
 // loro copertura; se manca, quella attesa dalla stessa legge, per quanto ce ne sono: «nuvole» = nuvoleAttese())
 // («sotto»: quanto rimanda la superficie, se chi chiama lo sa già — il mare di mare.js, con il suo ghiaccio —; allora
 // qui si aggiungono solo le nuvole)
-export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto = null) {
+export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto = null, luce = Infinity) {
   const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = sotto ?? ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
-  const cielo = riflesso ?? (nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t) : 0);
+  const cielo = riflesso ?? (nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce) : 0);
   return suolo + cielo * (1 - suolo);
 }
 // il calore portato dai vicini (W/m²/K): tanto più quanto più l'aria è densa
@@ -196,8 +198,8 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   // gli stessi numeri: è il conto che si ripete di più; lontano dal gelo la tangente iperbolica vale già −1 o 1)
   const { albedoTerra: aT, albedoMare: aM, albedoGhiaccio: aG, geloTerra: gT, geloMare: gM } = CLIMA;
   const gelo = (t, soglia) => (t > soglia + 80 ? 0 : t < soglia - 80 ? ghiaccioAcqua : ghiaccioAcqua * 0.5 * (1 - Math.tanh((t - soglia) / 4)));
-  const albedo = (t) => {
-    const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t) : 0; let a = 0;
+  const albedo = (t, luce) => {
+    const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce) : 0; let a = 0;
     if (mare < 1) { const g = gelo(t, gT), suolo = g * aG + (1 - g) * aT; a += (1 - mare) * (suolo + cielo * (1 - suolo)); }
     if (mare > 0) { const g = gelo(t, gM), suolo = g * aG + (1 - g) * aM; a += mare * (suolo + cielo * (1 - suolo)); }
     return a;
@@ -220,7 +222,7 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
     const ultimo = n >= totale - passiAnno, dt = n < lenti && (giro === 0 || bloccato) ? dtAdesso : dtVero; // (gli anni lenti solo al primo giro: poi anni veri)
     if (!bloccato) { const o = (n % passiAnno) * H; for (let j = 0; j < H; j++) sole[j] = luci[o + j]; }
     for (let j = 0; j < H; j++) {
-      const t = T[j], entra = sole[j] * (1 - albedo(t)), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
+      const t = T[j], entra = sole[j] * (1 - albedo(t, sole[j])), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
       nuovo[j] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
