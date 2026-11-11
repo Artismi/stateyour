@@ -48,7 +48,7 @@
 import { COSTANTI, MSOLE } from './leggi.js';
 import { DISCO, MGIOVE, RGIOVE } from './disco.js';
 import { IMPATTI, giganteDi } from './impatti.js';
-import { MATERIALI, densitaCorpo, tempoBlocco } from './lune.js';
+import { densitaCorpo, tempoBlocco } from './lune.js';
 
 const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, sfera = (R) => (4 / 3) * PI * R ** 3;
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -129,7 +129,7 @@ export function rotazione(P, sistema, caso, { urto, luna = null, storia = null }
   const wLuna = luna?.giornoPianeta ? Math.min(w0, (2 * PI) / luna.giornoPianeta) : w0;
   // 4. LA STELLA. La rotazione lungo la normale all'orbita (negativa: al contrario) va verso l'equilibrio della marea,
   // con la frenata costante, per tutto il tempo dalla nascita a oggi
-  const n = Math.sqrt((G * (P.Mstella + P.massaKg)) / P.aM ** 3), equilibrio = equilibrioMareale(P.eccentricita ?? 0);
+  const anno = P.anno ?? 2 * PI * Math.sqrt(P.aM ** 3 / (G * P.Mstella)), n = (2 * PI) / anno, equilibrio = equilibrioMareale(P.eccentricita ?? 0);
   // un corpo solido ha una forma sua e resta agganciato alla risonanza più vicina (1:1, 3:2, 2:1…); uno di gas no
   const giri = origine === 'gas' ? equilibrio : Math.max(1, Math.round(2 * equilibrio) / 2), meta = giri * n;
   const frenata = P.aM > 0 && P.Mstella > 0 ? frenataMareale(P, gas) : 0, s0 = eps0 > 90 ? -wLuna : wLuna, cammino = Math.abs(s0 - meta), fatto = frenata * Math.max(0, eta - nascita) * ANNO_S;
@@ -139,7 +139,7 @@ export function rotazione(P, sistema, caso, { urto, luna = null, storia = null }
   const retrogrado = s < 0, storto = eps0 > 90 ? 180 - eps0 : eps0;
   return {
     origine, nascita, giornoNascita: (2 * PI) / w0, obliquitaNascita: eps0, suRottura: w0 / wr, giornoRottura: Tr, frenata, tempoFreno: frenata > 0 ? cammino / frenata / ANNO_S : Infinity, equilibrio,
-    giorno: (2 * PI) / Math.abs(s), obliquita: fermo ? 0 : storto * (1 - quanto), retrogrado, bloccato: fermo && Math.abs(giri - 1) < 0.02,
+    giorno: fermo ? anno / giri : (2 * PI) / Math.abs(s), obliquita: fermo ? 0 : storto * (1 - quanto), retrogrado, bloccato: fermo && Math.abs(giri - 1) < 0.02,
     risonanza: fermo && giri > 1.02 ? (origine === 'gas' ? 'equilibrio' : `${Math.round(2 * giri)}:2`.replace('4:2', '2:1').replace('6:2', '3:1')) : null,
   };
 }

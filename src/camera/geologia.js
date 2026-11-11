@@ -23,7 +23,7 @@ import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { acquaInSuperficie } from './leggi.js';
+import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -200,8 +200,10 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     if (m && m.regime === 'aria') { const cl = climaSuperficie(`${chiave}|con l'aria`, P, sf, { W, H, anni, passiAnno, meteo: m }); cl.meteo = m; memoClima.set(chiave, cl); return cl; }
     memoClima.set(chiave, primo); return primo;
   }
-  const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = isFinite(P.clima.pressione) ? 0.8 * Math.pow(P.clima.pressione / 1e5, 0.6) : 2;
-  const D = meteo ? Math.max(0, meteo.diffusivita) : isFinite(P.clima.pressione) ? 0.6 * Math.pow(Math.max(1e-4, P.clima.pressione / 1e5), 0.5) : 1, kx = sf.W / W, ky = sf.H / H;
+  // (la serra, il calore portato e la temperatura di partenza sono quelli di clima(), leggi.js: è la stessa legge, risolta
+  // lì per fasce e qui sulla mappa; se il pianeta non li porta con sé, valgono le stesse formule di riserva)
+  const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = P.clima.tau ?? serraDaPressione(P.clima.pressione);
+  const D = meteo ? Math.max(0, meteo.diffusivita) : P.clima.D ?? trasportoCalore(P.clima.pressione), kx = sf.W / W, ky = sf.H / H;
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
@@ -209,20 +211,19 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // lontano dalla sua stella «caldo» vuol dire un quarto sopra la temperatura a cui lo porterebbe la sola luce (Tfine:
   // quanto basta per essere sopra qualunque equilibrio, anche senza ghiaccio né nuvole), non 310 K
   const Tfine = Math.max(30, P.clima.Teq * Math.pow(1 + 0.75 * tau, 0.25));
-  const T = new Float32Array(W * H).fill(Math.max(P.clima.Teq, Math.min(310, 1.25 * Tfine))), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
-  const C = (k) => (terra[k] ? 1e7 : 1e8), anno = P.anno, eps = (P.obliquita * Math.PI) / 180;
+  const T = new Float32Array(W * H).fill(P.clima.Tavvio ?? Math.max(P.clima.Teq, Math.min(310, 1.25 * Tfine))), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
+  const C = (k) => (terra[k] ? CLIMA.capacitaTerra : CLIMA.capacitaMare), anno = P.anno, eps = (P.obliquita * Math.PI) / 180;
   // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
   // dove c'è acqua che evapora e un'atmosfera che la tiene si formano le nuvole, che riflettono la luce
   let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
-  // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta. Le nuvole coprono fino a metà
-  // cielo e rimandano indietro il 38% della luce che le colpisce (TARATO sulla Terra: così riflette in tutto 0,30)
-  const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = meteo ? meteo.bilancio.piovuta > 1 : mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
-  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = meteo ? meteo.nuvole[k] : t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.38 * (1 - suolo); };
+  // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta. Quanta luce torna indietro
+  // (suolo, ghiaccio, nuvole) lo dice riflette() di leggi.js, con le nuvole vere di meteo.js quando ci sono
+  const acquaPerGhiaccio = acquaPerIlGhiaccio(mareFraz), piove = meteo ? meteo.bilancio.piovuta > 1 : mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = nuvoleAttese(mareFraz, P.clima.pressione);
+  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? meteo.nuvole[k] : null);
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
-    const del = eps * Math.sin(2 * Math.PI * f), x = -Math.tan(ph) * Math.tan(del), h0 = x >= 1 ? 0 : x <= -1 ? Math.PI : Math.acos(x);
-    return (S0 / Math.PI) * (h0 * Math.sin(ph) * Math.sin(del) + Math.cos(ph) * Math.cos(del) * Math.sin(h0));
+    return luceDelGiorno(S0, ph, eps * Math.sin(2 * Math.PI * f));
   };
   // IL TEMPO. Il passo è un 240-esimo d'anno (le stagioni si vedono). Perché l'energia si conservi con qualunque
   // passo, anche lungo rispetto al tempo in cui la terraferma si scalda:
@@ -234,7 +235,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // C/(4σT³); dodici se è bloccato: il ghiaccio della faccia buia avanza piano). Se quattordici anni non bastano (anni corti, o mondi freddi coperti d'acqua), nei primi dieci il passo
   // si allunga quanto serve (le stagioni scorrono al rallentatore: la media è quella giusta) e gli ultimi quattro
   // sono anni veri; un pianeta bloccato non ha stagioni, e lì il passo è lungo sempre.
-  const serra = 1 + 0.75 * tau, memoria = ((mareFraz > 0 ? 1e8 : 1e7) * serra) / (4 * sigma * Tfine ** 3), veri = Math.min(4, anni - 1);
+  const serra = 1 + 0.75 * tau, memoria = ((mareFraz > 0 ? CLIMA.capacitaMare : CLIMA.capacitaTerra) * serra) / (4 * sigma * Tfine ** 3), veri = Math.min(4, anni - 1);
   const totale = anni * passiAnno, lenti = P.bloccato ? totale : (anni - veri) * passiAnno, dtVero = anno / passiAnno;
   const dtLento = dtVero * Math.max(1, P.bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
   const cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H), sole = new Float64Array(W * H), soleJ = new Float64Array(H);

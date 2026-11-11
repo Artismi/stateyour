@@ -97,10 +97,11 @@ export function statoAcqua(T, P) {
 // quanta ne sta in superficie. In un pianeta roccioso quasi tutta resta sciolta nella roccia del mantello, e fuori
 // ne esce qualche centesimo (sulla Terra: gli oceani). In un mondo ghiacciato (più di un quinto di ghiaccio) non
 // c'è roccia che la tenga: sta tutta sopra, in un guscio d'acqua o di ghiaccio profondo quanto una parte del raggio.
+export const PARTE_FUORI = 0.04; // la parte dell'acqua (e dei gas arrivati con lei) che un pianeta di roccia ha liberato in superficie
 export function acquaInSuperficie({ tipo, massaKg = 0, composizione = {} } = {}) {
   if (tipo === 'gassoso') return { frazione: 0, kg: 0 };
   const frazione = composizione.acqua ?? composizione.ghiaccio ?? 0;
-  return { frazione, kg: massaKg * frazione * (tipo === 'ghiacciato' ? 1 : 0.04) };
+  return { frazione, kg: massaKg * frazione * (tipo === 'ghiacciato' ? 1 : PARTE_FUORI) };
 }
 // ---------- IL CLIMA: UNA LEGGE SOLA, A DUE RISOLUZIONI. Il bilancio di energia di un pianeta (modello di
 // Budyko-Sellers): in ogni punto  C·∂T/∂t = luce assorbita − luce irradiata + calore portato dai vicini.
@@ -154,21 +155,28 @@ export function mareAtteso({ acquaKg = 0, raggioM, placche = false }) {
 // e hanno la stessa temperatura. Il passo nel tempo è quello di climaSuperficie: la luce irradiata linearizzata, il
 // calore dei vicini implicito (l'energia si conserva con qualunque passo), i primi anni al rallentatore se il mare ha
 // la memoria lunga. → { T (media sul pianeta, K), ghiaccio (0…1), assorbita, irradiata, arriva (W/m²), lat, fasce }
-export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 24, anni = 12, passiAnno = 36 }) {
+export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 18, anni = 10, passiAnno = 24 }) {
   const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
   const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
   for (let j = 0; j < H; j++) { lat[j] = Math.PI / 2 - (j + 0.5) * dphi; cosLat[j] = Math.cos(lat[j]); cosN[j] = Math.max(0, Math.cos(lat[j] + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)); }
   const C = mare * CLIMA.capacitaMare + (1 - mare) * CLIMA.capacitaTerra, ghiaccioAcqua = acquaPerIlGhiaccio(mare), nuvole = nuvoleAttese(mare, pressione);
-  const albedo = (t) => mare * riflette(t, 1, ghiaccioAcqua, nuvole) + (1 - mare) * riflette(t, 0, ghiaccioAcqua, nuvole);
+  const albedo = mare >= 1 ? (t) => riflette(t, 1, ghiaccioAcqua, nuvole) : mare <= 0 ? (t) => riflette(t, 0, ghiaccioAcqua, nuvole) : (t) => mare * riflette(t, 1, ghiaccioAcqua, nuvole) + (1 - mare) * riflette(t, 0, ghiaccioAcqua, nuvole);
   const T = new Float64Array(H).fill(Tavvio), nuovo = new Float64Array(H), media = new Float64Array(H), sole = new Float64Array(H);
   const memoria = (C * serra) / (4 * sigma * Math.max(30, Tavvio / 1.25) ** 3), veri = Math.min(4, anni - 1), totale = anni * passiAnno, lenti = bloccato ? totale : (anni - veri) * passiAnno, dtVero = anno / passiAnno;
   const dtLento = dtVero * Math.max(1, bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
   const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H);
+  // la luce di ogni fascia in ogni momento dell'anno (si calcola una volta)
+  const luci = bloccato ? null : new Float64Array(passiAnno * H);
   if (bloccato) for (let j = 0; j < H; j++) sole[j] = S0 * Math.max(0, Math.sin(lat[j]));
-  let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0;
+  else for (let f = 0; f < passiAnno; f++) { const del = eps * Math.sin((2 * Math.PI * f) / passiAnno); for (let j = 0; j < H; j++) luci[f * H + j] = luceDelGiorno(S0, lat[j], del); }
+  // se alla fine il pianeta irradia ancora più (o meno) di quanto assorbe, non è a regime (il ghiaccio che avanza è
+  // lento): si va avanti, con gli anni lenti sempre più lunghi, finché il bilancio torna
+  let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0, dtAdesso = dtLento;
+  for (let giro = 0; giro < 7; giro++, dtAdesso *= 3) {
+  assorbita = 0; irradiata = 0; pesi = 0; ghiaccio = 0; media.fill(0);
   for (let n = 0; n < totale; n++) {
-    const ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
-    if (!bloccato) { const del = eps * Math.sin((2 * Math.PI * (n % passiAnno)) / passiAnno); for (let j = 0; j < H; j++) sole[j] = luceDelGiorno(S0, lat[j], del); }
+    const ultimo = n >= totale - passiAnno, dt = n < lenti ? dtAdesso : dtVero;
+    if (!bloccato) { const o = (n % passiAnno) * H; for (let j = 0; j < H; j++) sole[j] = luci[o + j]; }
     for (let j = 0; j < H; j++) {
       const t = T[j], entra = sole[j] * (1 - albedo(t)), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t, dT = Math.max(-50, Math.min(50, (dt * (entra - esce)) / (C + dt * molla)));
       nuovo[j] = Math.max(3, t + dT);
@@ -182,6 +190,8 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
     for (let j = H - 2; j >= 0; j--) nuovo[j] -= cp[j] * nuovo[j + 1];
     for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; ghiaccio += (cosLat[j] * ghiaccioAcqua * (mare * (nuovo[j] < 271 ? 1 : 0) + (1 - mare) * (nuovo[j] < CLIMA.geloTerra ? 1 : 0))) / passiAnno; } }
   }
+  if (Math.abs(irradiata - assorbita) < 0.004 * assorbita) break;
+  }
   let Tm = 0, w = 0; for (let j = 0; j < H; j++) { Tm += media[j] * cosLat[j]; w += cosLat[j]; }
   return { T: Tm / w, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media) };
 }
@@ -192,9 +202,12 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
 // pressione; se è vapore il mare non c'è (l'acqua è nell'aria, o è fuggita) e il bilancio è quello di un mondo asciutto.
 //   acqua     la parte della massa che è acqua; acquaKg quanta ne sta in superficie (se manca: acquaInSuperficie)
 //   placche   se la crosta è a placche (il rilievo è più alto: a parità d'acqua emerge più terra)
+//   aria      { pressione, tau }: la pressione vera dell'aria e la sua serra, quando i gas sono noti (chimica.js,
+//             climaEAria); se manca, valgono le leggi di riserva: gas liberati per un milionesimo della massa, e la
+//             serra dalla sola pressione
 // → { Teq, T, g, pressione, tenuti, acqua, albedo } come sempre, e in più ciò che climaSuperficie deve condividere:
 //   tau (la serra), D (il calore portato), Tavvio (da dove parte), mare e ghiaccio attesi, nuvole, bilancio, fasce
-export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, obliquita = 0, bloccato = false, placche = false }) {
+export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, obliquita = 0, bloccato = false, placche = false, aria = null }) {
   const g = (COSTANTI.G * massaKg) / (raggioM * raggioM), mu = COSTANTI.mp;
   if (tipo === 'gassoso') {
     const albedo = 0.35, Teq = temperaturaEquilibrio(Lw, aM, albedo), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
@@ -202,9 +215,10 @@ export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = nul
   }
   // che cosa la gravità trattiene: decide la temperatura dell'aria alta, che non sa del ghiaccio in basso (albedo 0,3)
   const Tnuda = temperaturaEquilibrio(Lw, aM, 0.3), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Tnuda, m * mu)).map(([n]) => n);
-  // i gas che il pianeta ha liberato dall'interno (circa un milionesimo della sua massa, come la Terra), se riesce a trattenerli
-  const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.3 + 3 * acqua) : 0;
-  const pressione = (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = serraDaPressione(pressione), D = trasportoCalore(pressione);
+  // LEGGE DI RISERVA, quando l'aria vera non è data: i gas liberati dall'interno sono un milionesimo della massa (la
+  // Terra: 0,86 milionesimi, cioè 1 bar), un po' di più se c'è molta acqua; se la gravità li trattiene
+  const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.85 + 3 * acqua) : 0;
+  const pressione = aria ? aria.pressione : (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = aria ? aria.tau : serraDaPressione(pressione), D = trasportoCalore(pressione);
   const S0 = Lw / (4 * Math.PI * aM * aM), periodo = anno ?? ANNO * Math.pow(aM / UA, 1.5), kg = acquaKg ?? acquaInSuperficie({ tipo, massaKg, composizione: { acqua } }).kg;
   // si parte caldo (un pianeta nasce caldo e si raffredda), ma non più di un quarto sopra dove lo porterebbe la sola luce
   const Tavvio = Lw > 0 ? Math.max(Tnuda, Math.min(310, 1.25 * Math.max(30, Tnuda * Math.pow(1 + 0.75 * tau, 0.25)))) : 30;

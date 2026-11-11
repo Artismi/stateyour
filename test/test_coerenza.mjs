@@ -308,14 +308,24 @@ prova('il calore che esce dall\'interno ha una fonte sola, interno().q: anche la
   nota(2, 'la radioattività cala con l\'età in due modi: quattro isotopi con i loro tempi di dimezzamento (lune) contro exp(−(età − 4,5)/3 Ga)·√Z·M^0,3 (pianeti)',
     { casi: r2.filter((x) => x < 0.2 || x > 1).length, su: r2.length, tipico: `caloreRadioattivo / interno.q: mediana ${num(mediana(r2))} (sulla Terra di oggi 0,46: il resto è calore iniziale)`, massimo: `da ${num(minimo(r2))} a ${num(massimo(r2))}`, dove: 'lune.js caloreRadioattivo() (ISOTOPI) contro geologia.js interno() «q = …»' });
 }
-prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco) applicata alla stella e al pianeta', () => {
-  let bloccati = 0, liberi = 0;
+prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco), che rotazione.js integra dalla nascita del pianeta a oggi', () => {
+  let bloccati = 0, liberi = 0, risonanti = 0, controllati = 0;
   for (const x of PIANETI) {
-    const { p } = x, t = LU.tempoBlocco({ massaKg: p.Mstella }, { massaKg: p.massaKg, raggioM: p.raggioM, aM: p.aM, composizione: p.composizione });
-    assert.equal(p.bloccato, p.tipo !== 'gassoso' && t < x.eta * ANNO, `pianeta a ${p.aM / UA} UA: tempo di blocco ${t / ANNO} anni, età ${x.eta}`);
-    if (p.bloccato) bloccati++; else liberi++;
+    const { p } = x, g = p.giro;
+    assert.ok(g && p.giorno === g.giorno && p.bloccato === g.bloccato && p.obliquita === g.obliquita, `pianeta a ${p.aM / UA} UA: il giorno non è quello di rotazione.js`);
+    // fermo (bloccato, o in risonanza su un'orbita allungata) se e solo se il tempo che serve alla stella è più corto del tempo che ha avuto
+    if (!p.lune.some((l) => l.origine === 'urto')) assert.equal(p.bloccato || !!p.risonanza, g.tempoFreno <= x.eta - g.nascita, `pianeta a ${p.aM / UA} UA: freno ${g.tempoFreno} anni, età ${x.eta}`);
+    // per un corpo di roccia o di ghiaccio quel tempo è tempoBlocco di lune.js, partendo dal giorno con cui è nato (meno il pezzo
+    // di strada che non serve: non si ferma del tutto, arriva a girare con l'orbita)
+    if (g.origine !== 'gas' && g.obliquitaNascita < 90 && g.giornoNascita < p.anno / 2 && !p.lune.some((l) => l.origine === 'urto')) { controllati++;
+      const t = LU.tempoBlocco({ massaKg: p.Mstella }, { massaKg: p.massaKg, raggioM: p.raggioM, aM: p.aM, composizione: p.composizione }, g.giornoNascita) / ANNO, giri = Math.max(1, Math.round(2 * g.equilibrio) / 2);
+      tra(g.tempoFreno / (t * (1 - (giri * g.giornoNascita) / p.anno)), 1 - 1e-6, 1 + 1e-6, 'tempo di frenata di rotazione.js / tempoBlocco di lune.js'); }
+    if (p.bloccato) bloccati++; else liberi++; if (p.risonanza) risonanti++;
   }
-  assert.ok(bloccati > 100 && liberi > 100, `${bloccati} bloccati, ${liberi} no`);
+  assert.ok(bloccati > 100 && liberi > 100 && controllati > 300, `${bloccati} bloccati, ${liberi} no (${risonanti} in risonanza), ${controllati} controllati contro tempoBlocco`);
+});
+prova('nessun pianeta gira più in fretta di quanto un corpo fluido può (0,53 volte la rottura): il giorno non è più sorteggiato', () => {
+  for (const { p } of PIANETI) { const rottura = 2 * Math.PI * Math.sqrt(p.raggioM ** 3 / (K.G * p.massaKg)); assert.ok(p.giorno >= (rottura / 0.53) * (1 - 1e-9), `giorno ${p.giorno / 3600} ore, rottura ${rottura / 3600} ore`); }
 });
 prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e della loro temperatura (4πR²σT⁴)', () => {
   const wd = PIANETI.filter((x) => x.S0.stato === 'nana bianca'); assert.ok(wd.length > 50);
@@ -340,8 +350,8 @@ prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e de
   nota(2, 'gli anelli sono una probabilità (0,6 per i mondi freddi, 0,08 per gli altri) tra 1,3 e 2,5 raggi: non vengono dalle lune né dal limite di Roche',
     { casi: conAnelli, su: PIANETI.length, tipico: `${oltre} hanno il bordo esterno oltre il limite di Roche di lune.js (lì i frammenti si riunirebbero in una luna)`, massimo: `${caldi} sono dove il ghiaccio sublima (oltre 170 K)`, dove: 'cosmo.js sistema() «anelli: …c() < 0.6…» e pianeta() «anello = [tra(1.3, 1.6), tra(2.0, 2.5)]» contro lune.js limiteRoche()' });
   const alTetto = PIANETI.filter(({ p }) => p.schiacciamento >= 0.3).length;
-  nota(3, 'il giorno è sorteggiato (10–40 ore, 9–16 per i giganti) senza guardare la densità: alcuni pianeti girano più in fretta di quanto possono stare insieme (schiacciamento tagliato a 0,3)',
-    { casi: alTetto, su: PIANETI.length, dove: 'cosmo.js sistema() «giorno = … tra(10, 40)» e «Math.min(0.3, …)»' });
+  nota(3, 'lo schiacciamento ai poli usa la formula dei corpi che girano piano (5/4·ω²R³/GM) anche per chi esce da un urto gigante vicino al limite dei fluidi: lì è tagliato a 0,3',
+    { casi: alTetto, su: PIANETI.length, dove: 'cosmo.js sistema() «Math.min(0.3, …)» (il giorno ora viene da rotazione.js)' });
 }
 { // 6. l'acqua: composizione → interno.acquaKg → mare; clima.acqua
   prova('l\'acqua alla superficie ha una fonte sola (leggi.js): la stessa per il clima e per il mare, rocciosi e ghiacciati', () => {

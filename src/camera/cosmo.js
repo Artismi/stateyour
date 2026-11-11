@@ -25,6 +25,7 @@ import { stella as stellaVera, fine } from './stelle.js'; // le stelle calcolate
 import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
+import { rotazione } from './rotazione.js';
 import { sorgente } from './eventi.js';
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
@@ -232,28 +233,21 @@ export const sistema = memo((n, gid, sid) => {
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
-    // la ROTAZIONE viene dalla formazione (gli urti che l'hanno messo a girare: un giorno di qualche ora,
-    // l'asse inclinato a caso, di solito poco); le maree della stella la frenano finché il pianeta le mostra
-    // sempre la stessa faccia: succede se è vicino (il tempo cresce come la distanza alla sesta) e la stella
-    // è pesante; allora il giorno dura quanto l'anno (Keplero)
     // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
     const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
-    // IL BLOCCO MAREALE ha una legge sola, quella di lune.js (la stessa delle lune attorno ai pianeti): il tempo in cui
-    // la marea della stella frena la rotazione, dalla massa, dal raggio e dalla rigidità del pianeta; è bloccato se
-    // quel tempo è più corto della sua età. (Un gigante di gas non è un corpo rigido: non si blocca.)
-    const eta = S.eta, bloccato = p.tipo !== 'gassoso' && tempoBlocco({ massaKg: Mst }, { massaKg, raggioM: p.raggioM, aM, composizione: p.composizione }) < eta * ANNO;
-    const giorno = bloccato ? anno : (p.tipo === 'gassoso' ? tra(9, 16) : tra(10, 40)) * 3600;
-    const omega = (2 * Math.PI) / giorno;
-    Object.assign(p, { aM, Lw, Mstella: Mst, anno, giorno, bloccato, obliquita: bloccato ? 0 : Math.min(85, Math.abs((c() + c() + c() - 1.5) * 30) + (c() < 0.08 ? tra(30, 90) : 0)) });
-    // L'URTO GIGANTE (impatti.js): l'ultimo della formazione del pianeta, con i numeri veri di disco.js. È lui che ha dato
-    // al pianeta il giorno e l'inclinazione dell'asse (i due sorteggi qui sopra restano per chi non ne ha avuti e per i
-    // giganti). I suoi eventi incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
+    const eta = S.eta;
+    Object.assign(p, { aM, Lw, Mstella: Mst, anno });
+    // L'URTO GIGANTE (impatti.js): l'ultimo della formazione del pianeta, con i numeri veri di disco.js. I suoi eventi
+    // incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
     const casoP = sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${p.id}`, ramiCosmo(n));
     p.urto = p.tipo === 'gassoso' ? null : giganteDi(p, Sis, casoP);
-    // (un mondo con un involucro di gas non gira come l'ha lasciato l'urto dei nuclei: il gas che cade dopo porta la sua
-    // rotazione, come nei giganti; per quelli resta il sorteggio, finché la cattura del gas non darà anche il giro)
-    const giroDaUrto = p.urto && !bloccato && p.involucro < 0.01;
-    if (giroDaUrto) { p.giorno = p.urto.giornoDopo; p.retrogrado = p.urto.obliquita > 90; p.obliquita = p.retrogrado ? 180 - p.urto.obliquita : p.urto.obliquita; }
+    // LA ROTAZIONE (rotazione.js): il giorno e l'asse sono una conseguenza, non un sorteggio. Il giro nasce dagli urti
+    // giganti, o dal gas caduto attraverso un disco (giganti e mondi con involucro), o dalla crescita dell'embrione; poi
+    // la marea della stella lo frena per tutta l'età del sistema (la legge di lune.js, tempoBlocco, integrata): fino a
+    // mostrarle sempre la stessa faccia (bloccato) o a una risonanza, se l'orbita è allungata (p.risonanza: «3:2»)
+    const giroDi = (luna) => { p.giro = rotazione(p, Sis, casoP, { urto: p.urto, luna }); Object.assign(p, { giorno: p.giro.giorno, bloccato: p.giro.bloccato, obliquita: p.giro.obliquita, retrogrado: p.giro.retrogrado, risonanza: p.giro.risonanza }); };
+    giroDi(null);
+    const omega = (2 * Math.PI) / p.giorno;
     // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
@@ -272,7 +266,7 @@ export const sistema = memo((n, gid, sid) => {
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
-    if (giroDaUrto) { const luna = p.lune.find((l) => l.origine === 'urto'); if (luna?.giornoPianeta) p.giorno = luna.giornoPianeta; p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); }
+    { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); } }
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
     // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
     // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere

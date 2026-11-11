@@ -24,7 +24,7 @@
 // è in MOLECOLE[formula].nome. (leggi.js ha una sua piccola MOLECOLE, con le masse dei gas del clima:
 // qui la si legge per sapere quali molecole la gravità trattiene.)
 
-import { R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua } from './leggi.js';
+import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI } from './leggi.js';
 
 // ---------- 1. GLI ELEMENTI (dati misurati)
 // massa atomica (u) · valenza più comune · elettronegatività di Pauling · abbondanza nel Sole, come
@@ -246,15 +246,23 @@ export function potereRiducente(gas = {}) { const { rid, oss } = redox(gas); ret
 //     tutto è gelato), pO2 (bar), ferro (la forma stabile, da ferroStabile), fuliggine (parte del carbonio) }
 const NEI_GHIACCI = { C: 0.3, N: 0.1, S: 0.3 }, ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
 const ossigenoNellaRoccia = (ab) => ab.Mg + 2 * ab.Si + 1.5 * ab.Al + ab.Ca + (ab.Na + ab.K) / 2 + FE_NEI_SILICATI * ab.Fe;
-export function atmosfera(P, { Z } = {}) {
+export function atmosfera(P, { Z, inventario = false, co2 = 0 } = {}) {
   const cl = P.clima || {}, tenuti = cl.tenuti || [], gigante = P.tipo === 'gassoso', comp = P.composizione || {};
   const niente = { gas: {}, riducente: false, potere: 0, pressione: 0, pO2: 0, ferro: null, fuliggine: 0 };
-  if (!gigante && (!tenuti.length || !(cl.pressione > 0))) return niente; // un sasso nudo, come la Luna
+  // CON L'INVENTARIO (è così che la chiama climaEAria, cioè ogni pianeta del cosmo) la pressione non è data: discende
+  // da quanti gas il pianeta ha in superficie, meno ciò che fugge, gela, piove o finisce nel calcare (vedi più sotto)
+  const conInventario = inventario && !gigante && P.massaKg > 0 && P.raggioM > 0;
+  if (!gigante && (!tenuti.length || !(conInventario || cl.pressione > 0))) return niente; // un sasso nudo, come la Luna
   // un gigante È il suo idrogeno; per gli altri decide la gravità
   const tieneH = gigante || tenuti.includes('idrogeno'), massaMinima = gigante ? 0 : Math.min(...tenuti.map((g) => GAS_DEL_CLIMA[g] ?? Infinity));
   const z = Z ?? P.Z ?? P.metallicita ?? (comp.pesanti ? comp.pesanti / 0.02 : 1), sole = abbondanze(z), Oacqua = Math.max(0, sole.O - ossigenoNellaRoccia(sole));
-  let el;
-  if (tieneH) el = { H: sole.H, He: gigante || tenuti.includes('elio') ? sole.He : 0, C: sole.C, N: sole.N, O: Oacqua, S: sole.S };
+  // L'INVENTARIO di un pianeta solido. I gas arrivano con il ghiaccio (C, N, S in proporzione all'acqua, come nelle
+  // comete) e ne esce in superficie la stessa parte che esce dell'acqua (PARTE_FUORI di leggi.js: il resto è nel
+  // mantello). In più, se il disco gli ha lasciato un velo di idrogeno ed elio («involucro») e la gravità trattiene
+  // l'idrogeno, quel velo è ancora lì: è l'aria primordiale, con la miscela della stella. Se non lo trattiene, è fuggito.
+  const velo = conInventario && tenuti.includes('idrogeno') ? (P.involucro || 0) * P.massaKg : 0, primordiale = gigante || (conInventario ? velo > 0 : tieneH);
+  let el, colonna = 0; // (kg/m²) quanta materia volatile c'è sopra ogni metro quadrato, se fosse tutta gas
+  if (primordiale) { el = { H: sole.H, He: gigante || tenuti.includes('elio') ? sole.He : 0, C: sole.C, N: sole.N, O: Oacqua, S: sole.S }; colonna = velo / (4 * Math.PI * P.raggioM ** 2); }
   else {
     // acqua W, e i volatili in proporzione, la stessa per ogni metallicità: il ghiaccio è fatto degli
     // stessi atomi pesanti (anche una roccia asciutta ne porta un poco); il carbonio
@@ -262,18 +270,36 @@ export function atmosfera(P, { Z } = {}) {
     const W = comp.acqua ?? comp.ghiaccio ?? 0, sol = abbondanze(1), V = Math.max(W, 0.001) / (sol.O - ossigenoNellaRoccia(sol));
     const C = NEI_GHIACCI.C * sol.C * V, N = NEI_GHIACCI.N * sol.N * V, S = ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, secco = String(cl.acqua || '').startsWith('vapore');
     const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
-    el = { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
+    // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente)
+    el = conInventario && tieneH ? { H: 2 * W, C, N, O, S } : { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
+    // la massa di quei volatili per ogni chilo d'acqua (acqua 18, e il resto contato come CO2, N2, SO2), e quanta ne sta fuori
+    if (conInventario) colonna = (PARTE_FUORI * P.massaKg * Math.max(W, 0.001) * ((secco ? 0 : 18.015 * W) + 44.01 * C + 14.007 * N + 64.06 * S)) / (18.015 * Math.max(W, 0.001)) / (4 * Math.PI * P.raggioM ** 2);
   }
-  const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : 1e5; // nei giganti: il livello di 1 bar
+  const gSup = conInventario ? (COSTANTI.G * P.massaKg) / P.raggioM ** 2 : 0;
+  const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : 1e5; // nei giganti: il livello di 1 bar
   const eq = equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas };
   for (const f in x) if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f];
   // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
   // mare, la CO2 fino all'equilibrio di Urey e niente SO2
-  const tetto = (f) => (cl.acqua === 'liquida' && f === 'SO2' ? 0 : Math.min(pressioneVapore(T, f), cl.acqua === 'liquida' && f === 'CO2' ? pressioneCO2Urey(T) : Infinity));
+  // («co2»: la pressione di CO2 che il termostato del carbonio lascia nell'aria, se supera quella dell'equilibrio: vedi climaEAria)
+  const tetto = (f) => (cl.acqua === 'liquida' && f === 'SO2' ? 0 : Math.min(pressioneVapore(T, f), cl.acqua === 'liquida' && f === 'CO2' ? Math.max(pressioneCO2Urey(T), co2) : Infinity));
   // chi supererebbe il suo tetto si ferma lì; gli altri si dividono la pressione che resta. Se di altri
   // non ce n'è (tutto è gelato) resta solo un velo di vapori, ciascuno alla sua pressione
   const fermi = new Set(), p = {};
-  for (let giro = 0; giro < 12; giro++) {
+  if (conInventario) {
+    // con l'inventario ciò che gela, piove o diventa calcare ESCE dall'aria, e la pressione cala: si tolgono moli al gas
+    // che supera il suo tetto finché la sua pressione parziale (la sua parte di moli × il peso di tutta la colonna) ci sta
+    const n = {}; let massa = 0; for (const f in x) massa += x[f] * MOLECOLE[f].massa;
+    for (const f in x) n[f] = massa > 0 ? (x[f] * colonna) / massa : 0; // («moli» per m², a meno di un fattore: massa = Σ n·M)
+    for (let giro = 0; giro < 60; giro++) {
+      let N = 0, peso = 0, sopra = 0; for (const f in n) { N += n[f]; peso += n[f] * MOLECOLE[f].massa * gSup; }
+      if (!(N > 0)) break;
+      for (const f in n) { const pf = (n[f] / N) * peso, tt = tetto(f); if (pf > tt * 1.0001) { n[f] *= Math.max(1e-12, tt / pf); sopra++; } }
+      if (!sopra) break;
+    }
+    let N = 0, peso = 0; for (const f in n) { N += n[f]; peso += n[f] * MOLECOLE[f].massa * gSup; }
+    for (const f in n) p[f] = N > 0 ? (n[f] / N) * peso : 0;
+  } else for (let giro = 0; giro < 12; giro++) {
     let liberi = 0, resto = Pr; for (const f in x) { if (fermi.has(f)) resto -= tetto(f); else liberi += x[f]; }
     const veri = liberi > 1e-6 && resto > 0; let nuovi = 0;
     for (const f in x) { p[f] = fermi.has(f) ? tetto(f) : veri ? (x[f] / liberi) * resto : 0; if (p[f] > tetto(f)) { fermi.add(f); nuovi++; } }
