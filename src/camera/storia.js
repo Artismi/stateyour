@@ -30,8 +30,10 @@
 //     [V]: 17,8·π·R·v·(spessore che fonde)·φ con v = 0,05·(κ/d)·(Ra_i/θ)^(2/3);
 //   · calore radiogenico: leggi.js caloreDellaRoccia (ISOTOPI: condriti) per la massa di roccia e ferro, come lune.js:
 //     una legge sola per pianeti e lune. Sparisce il fattore √Z che interno() aveva in più (parametro libero);
-//   · calore di marea: la stella su un'orbita allungata, Ė = (21/2)·(k₂/Q)·G·M*²·R⁵·n·e²/a⁶ (la formula di lune.js,
-//     Peale e altri 1979), con k₂/Q = 0,3/100 di un pianeta di roccia asciutto (lune.js k2QPianeta);
+//   · calore di marea (maree.js, la fonte unica): −Im(k₂*)·[(21/2)e² + (3/2)sin²ε]·G·M²·R⁵·n/a⁶, con k₂* dalla viscosità e
+//     dalla rigidità che il mantello ha in quel momento (reologia di Andrade). IL CICLO marea → temperatura → viscosità →
+//     marea si chiude qui, dentro l'integrazione: il ramo caldo (Io) è dove il calore che esce uguaglia quello di marea.
+//     Chi alza la marea: la stella sull'orbita del pianeta, o il pianeta sulla luna (P.marea);
 //   · IL REGIME DELLA CROSTA (Korenaga 2010, arXiv:1008.4782 [V]): la litosfera si rompe in placche se il contrasto di
 //     viscosità che la attraversa, Δη_L = exp(0,327·γ^0,647·θ), resta sotto 0,25·Ra_i^(1/2); γ = μ_eff/(α·ΔT),
 //     θ = E·ΔT/(R·T_u²), ΔT = T_u − T_superficie. L'UNICA IPOTESI è l'attrito efficace: μ_eff = μ_secco·(1 − λ·w), con
@@ -122,6 +124,7 @@
 
 import { COSTANTI, MSOLE, LSOLE, UA, R_GAS, caloreDellaRoccia, temperaturaEquilibrio, acquaInSuperficie, mareAtteso, LIMITE_VAPORE } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
+import { MAREE, epsilonFuso, dissipazione, forzanteMareale, motoMedio } from './maree.js'; // la marea e la viscosità della roccia: una fonte sola
 import { ROCCE, climaEAria } from './chimica.js'; // il carbonio del mantello e il ciclo del carbonio: una fonte sola (§8)
 
 const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, MU0 = 4e-7 * PI;
@@ -129,7 +132,7 @@ const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, MU0 = 4e-7 * PI;
 // ---------- le costanti, ognuna con la sua fonte
 export const STORIA = Object.freeze({
   // il mantello (ThermInt [V] dove non è detto altro)
-  nuRif: 6e7, Enu: 3e5, // (m²/s, J/mol) viscosità cinematica: ν_rif·exp(E_ν/RT)
+  nuRif: MAREE.roccia.nuRif, Enu: MAREE.roccia.Enu, // (m²/s, J/mol) viscosità cinematica: ν_rif·exp(E_ν/RT): la stessa che maree.js usa per la dissipazione
   saltoViscosita: 2.4, // la viscosità del mantello inferiore su quella del superiore
   RaC: 660, // il numero di Rayleigh critico dello strato limite
   alfa: 3e-5, cp: 1265, // (1/K, J/kg/K)
@@ -139,7 +142,7 @@ export const STORIA = Object.freeze({
   // ρ = 4100 + 0,00161·P^0,541. L'esponente e il livello a cui la temperatura è quella media sono i due numeri che sulla
   // Terra (133 GPa al confine col nucleo) ridanno T_UM = 0,7·T_m e T_LM = 1,3·T_m di ThermInt [D da due V]
   eosRoccia: Object.freeze([4100, 0.00161, 0.541]), gruneisenMantello: 1.805, livelloMedio: 0.314,
-  costa: Object.freeze({ B: 2.5, fiStar: 0.8, delta: 6, gamma: 6, xi: 5e-4 }), // la viscosità con il fuso (forma di Costa)
+  costa: MAREE.costa, // la viscosità con il fuso (forma di Costa): in maree.js (epsilonFuso)
   erutta: 0.1, portataFuso: 1.16, // la parte del fuso che erutta; Ṁ = 1,16·κ·A·ρ·φ/δ
   latenteMantello: 3.2e5, fusoPerKelvin: 8e17 / 9.06e20, // (J/kg; 1/K) calore latente; quanta parte del mantello fonde per kelvin: dV_liq/dT = 8·10¹⁷ m³/K di ThermInt [V] sul volume del mantello terrestre [D]
   // la fusione (Katz e altri 2003, letti nel sorgente di pyMelt [V]; T in K, P in Pa); i polinomi valgono fino a ~8 GPa
@@ -160,7 +163,6 @@ export const STORIA = Object.freeze({
   // la superficie e la stella
   albedoNuda: 0.3, Tghiaccio: 273, // come leggi.js clima() (Tnuda); la base di un guscio di ghiaccio
   seager: Object.freeze({ ferro: 8300, roccia: 4100, ghiaccio: 1460 }), // (kg/m³) densità a pressione zero (Seager e altri 2007, tab. 3 [V])
-  k2QPianeta: 0.3 / 100, // l'attrito di marea di un pianeta di roccia asciutto (lune.js k2QPianeta)
   ribas: Object.freeze({ F: 29.7e-3, esponente: -1.23, saturo: 0.1e9 }), // (W/m² a 1 UA, —, anni) Ribas e altri 2005 [V]
   efficienzaFuga: 0.1, // ε della fuga limitata dall'energia (VPLanet [V-prec])
   vulcaniPerFlusso: 0.02, // (W/m²) CONVENZIONE RIMASTA di interno(): quanti edifici vulcanici disegnare, uno ogni 0,02 W/m²
@@ -170,23 +172,16 @@ export const APERTI = Object.freeze({
   conducibilitaNucleo: Object.freeze({ valore: 70, intervallo: Object.freeze([20, 160]), unita: 'W/m/K a 4000 K', fonte: 'Zhang e Rogers 2022 (40; provano 80 e 160); Pozzo e altri 2012 (100): aperto [V]' }),
   dipolo: Object.freeze({ valore: 0.2, intervallo: Object.freeze([0.14, 0.28]), unita: 'γ_d, forma con 2μ₀', fonte: 'Olson e Christensen 2006; Driscoll e Barnes 2015 (0,2); ThermInt (0,155) [V]' }),
   poriAcqua: Object.freeze({ valore: 0.97, intervallo: Object.freeze([0.85, 0.97]), unita: 'λ: μ_eff = 0,65·(1 − λ)', fonte: 'Korenaga 2010: μ_eff ≈ 0,02 di riferimento [V]; il valore vero è aperto (0,02–0,1)' }),
+  andradeAlfa: Object.freeze({ valore: MAREE.andrade.alfa, intervallo: MAREE.andrade.intervalloAlfa, unita: 'α di Andrade', fonte: 'Renaud e Henning 2018: 0,1–0,4 sull\'olivina, 1/3 per Io [V]' }),
+  andradeZeta: Object.freeze({ valore: MAREE.andrade.zeta, intervallo: MAREE.andrade.intervalloZeta, unita: 'ζ = τ_A/τ_M', fonte: 'Renaud e Henning 2018: nominale 1; in laboratorio 10⁻¹⁰–10⁻⁴ [V]: aperto' }),
   leggeriNucleo: Object.freeze({ valore: 0.10, intervallo: Object.freeze([0.05, 0.15]), unita: 'frazione in massa (come zolfo)', fonte: 'ThermInt: 10% [V]; quali elementi, aperto' }),
 });
 // la Terra di riferimento per la costante del numero di Rossby (i numeri di test/test_fili.mjs)
 const TERRA_RIF = Object.freeze({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: Object.freeze({ ferro: 0.32, roccia: 0.674, acqua: 0.006 }), Lw: LSOLE, aM: UA, Mstella: MSOLE, giorno: 86164 });
 
 // ---------- piccoli attrezzi
-// la funzione degli errori (Abramowitz e Stegun 7.1.26: sbaglia meno di 1,5·10⁻⁷)
-function erf(x) { const s = x < 0 ? -1 : 1, a = Math.abs(x), t = 1 / (1 + 0.3275911 * a); return s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a)); }
 const simon = ([T0, P0, n], P) => T0 * Math.pow(Math.max(0, P) / P0 + 1, n);
 const poli = (c, P) => { const p = Math.min(Math.max(0, P), STORIA.pMaxFusione); return c[0] + c[1] * p + c[2] * p * p; };
-// quanto il fuso abbassa la viscosità (Costa; F = frazione fusa): ε_fuso ≥ 1
-function epsilonFuso(F) {
-  if (!(F > 0)) return 1;
-  const { B, fiStar, delta, gamma, xi } = STORIA.costa, fi = Math.min(1, F) / fiStar, Ft = (1 - xi) * erf((Math.sqrt(PI) / (2 * (1 - xi))) * fi * (1 + Math.pow(fi, gamma)));
-  return (1 + Math.pow(fi, delta)) / Math.pow(1 - Ft, B * fiStar);
-}
-
 // ---------- STADIO 3: la stella nel tempo
 // la luce della stella (in unità solari) a t anni, tenuta in memoria per (massa, metalli): quaranta punti in logaritmo
 const memoStelle = new Map();
@@ -235,11 +230,14 @@ function struttura(P, stella, rami) {
   let ac = 0; for (let k = 0; k < 200; k++) { const u = (k + 0.5) / 200; ac += 3 * u * u * Math.exp(((Rc * Rc) / DN2) * (1 - u * u)) / 200; }
   // la superficie: l'acqua che lubrifica le faglie
   const acqua = acquaInSuperficie(P), bagnato = ghiacciato ? 1 : acqua.kg > 0 ? mareAtteso({ acquaKg: acqua.kg, raggioM: R, placche: false }) : 0;
-  // la marea della stella (W), se l'orbita è allungata
-  const e = P.eccentricita ?? 0, Mst = P.Mstella ?? 0, marea = e > 0 && Mst > 0 && P.aM > 0 && P.tipo !== 'ghiacciato' ? (10.5 * S.k2QPianeta * G * Mst * Mst * R ** 5 * Math.sqrt((G * Mst) / P.aM ** 3) * e * e) / P.aM ** 6 : 0;
+  // LA MAREA (maree.js): chi la alza — P.marea = { Mospite, aM, eccentricita, obliquita } per una luna attorno al suo pianeta,
+  // se no la stella sull'orbita del pianeta —, la sua frequenza e la forzante (W per unità di −Im k₂*). Quanto ne diventa
+  // calore lo decide lo stato del mantello a ogni istante (flussi). Sotto un guscio di ghiaccio non è ancora calcolata
+  const orbita = ghiacciato ? null : P.marea ? { ...P.marea, raggioM: R } : P.Mstella > 0 && P.aM > 0 ? { Mospite: P.Mstella, aM: P.aM, eccentricita: P.eccentricita ?? 0, obliquita: 0, raggioM: R } : null;
+  const forzante = orbita ? forzanteMareale(orbita) : 0, omegaMarea = orbita ? motoMedio(orbita.Mospite, orbita.aM) : 0;
   // la partenza calda
   const Taccr = (0.6 * G * M) / (R * S.cp), TumZero = Math.min(poli(S.liquidus, Ptop), 300 + Taccr), TcmbZero = Math.max((TumZero / eSu) * eGiu, Math.min(simon(S.simonSilicato, Pcmb), 300 + Taccr));
-  return { M, R, Ri, Rc, D, Mi, Mc, Mm, rhoM, g, gc, A, Ac, Ptop, Pcmb, Pcentro, Kp, PD, DN2, eSu, eGiu, ac, rr, Gr, nBuoni, neve: nBuoni < 2, bagnato, marea, Mrad: Mi, TumZero, TcmbZero,
+  return { M, R, Ri, Rc, D, Mi, Mc, Mm, rhoM, g, gc, A, Ac, Ptop, Pcmb, Pcentro, Kp, PD, DN2, eSu, eGiu, ac, rr, Gr, nBuoni, neve: nBuoni < 2, bagnato, forzante, omegaMarea, parteMantello: 1 - (Rc / Ri) ** 3, Mrad: Mi, TumZero, TcmbZero,
     kappaSu: S.kSu / (S.rhoSu * S.cp), kappaGiu: S.kGiu / (rhoM * S.cp), nucleo: Rc / R, ghiacciato, haNucleo: Mc > 1e-4 * M && Rc > 1e3 };
 }
 // il raggio del nucleo interno (m) e la sua derivata rispetto a T_cmb (m/K, negativa), dalla tabella della struttura
@@ -298,7 +296,11 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   let Qcmb = 0, qcmb = 0;
   if (st.haNucleo) { const d = Tcmb - Tlm, nuGiu = S.saltoViscosita * arr, // (il fuso alla base del mantello non è modellato: lì la viscosità è quella della roccia solida)
      dl = Math.min(st.D, Math.cbrt((S.RaC * nuGiu * st.kappaGiu) / (S.alfa * st.gc * Math.max(1e-6, Math.abs(d))))); qcmb = (S.kGiu * d) / dl; Qcmb = st.Ac * qcmb; }
-  const Qrad = amb.Qrad, Qmarea = st.marea;
+  // IL CALORE DI MAREA dallo stato del mantello: la stessa viscosità (con il suo fuso) che fa la convezione, la rigidità
+  // che cala con il fuso; dissipa il mantello (la sua parte del volume). È il ciclo marea → temperatura → viscosità → marea
+  let Qmarea = 0, imK2 = 0, k2re = 0;
+  if (st.forzante > 0) { const dz = dissipazione({ massaKg: st.Mi, raggioM: st.Ri, rigidita: MAREE.roccia.rigidita / eps, viscosita: MAREE.roccia.densita * nu }, st.omegaMarea, rami.reologia); imK2 = dz.imK2; k2re = dz.k2Reale; Qmarea = st.forzante * imK2 * st.parteMantello; }
+  const Qrad = amb.Qrad;
   // il calore latente del mantello che gela: una capacità in più finché è in parte fuso
   const capM = st.Mm * (S.cp + (Fv > 0 ? S.latenteMantello * S.fusoPerKelvin : 0));
   o.dTm = ((Qrad + Qmarea + Qcmb - Qconv - Qfuso) / capM) * ANNO_S; // (K per anno)
@@ -307,7 +309,7 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   const Ric = o.r, capC = st.Mc * S.cNucleo * st.ac + (S.latenteFerro + S.gravitazionale) * S.rhoNucleo * 4 * PI * Ric * Ric * -o.dr;
   o.dTc = st.haNucleo ? (-Qcmb / capC) * ANNO_S : 0;
   o.Tum = Tum; o.Tlm = Tlm; o.Ts = Ts; o.delta = delta; o.lid = lid; o.mob = mob; o.lnEta = lnEta; o.lnCrit = lnCrit; o.attrito = attrito; o.teta = teta; o.Fv = Fv; o.eps = eps; o.nu = nu;
-  o.Qconv = Qconv; o.Qfuso = Qfuso; o.Qcmb = Qcmb; o.Qrad = Qrad; o.Qmarea = Qmarea; o.qcmb = qcmb; o.Mfuso = Mfuso; o.fi = fi; o.colonna = colonna; o.Ric = Ric; o.dRic = o.dr * o.dTc / ANNO_S; // (m/s)
+  o.Qconv = Qconv; o.Qfuso = Qfuso; o.Qcmb = Qcmb; o.Qrad = Qrad; o.Qmarea = Qmarea; o.imK2 = imK2; o.k2re = k2re; o.qcmb = qcmb; o.Mfuso = Mfuso; o.fi = fi; o.colonna = colonna; o.Ric = Ric; o.dRic = o.dr * o.dTc / ANNO_S; // (m/s)
   o.vapore = vapore; o.convette = !fermoDelTutto;
   return o;
 }
@@ -323,7 +325,7 @@ function dinamo(st, rami, Tcmb, f) {
 // ---------- l'integrazione: Rosenbrock a due stadi (ROS2, L-stabile: le equazioni sono rigide quando il mantello è in
 // parte fuso), jacobiano per differenze, passo adattivo dall'errore tra il primo e il secondo ordine. Il passo non supera
 // il 10% del tempo trascorso: la tabella ha così qualche centinaio di righe, fitte dove la storia cambia in fretta.
-const COLONNE = ['t', 'Tm', 'Tcmb', 'Tum', 'Ts', 'Qconv', 'Qfuso', 'Qcmb', 'Qrad', 'Qmarea', 'Ric', 'dRic', 'mob', 'lid', 'delta', 'Mfuso', 'fi', 'F', 'Fth', 'Fchi', 'M', 'Rem', 'qad', 'qcmb', 'accesa', 'lnEta', 'lnCrit', 'Fv', 'crosta'];
+const COLONNE = ['t', 'Tm', 'Tcmb', 'Tum', 'Ts', 'Qconv', 'Qfuso', 'Qcmb', 'Qrad', 'Qmarea', 'Ric', 'dRic', 'mob', 'lid', 'delta', 'Mfuso', 'fi', 'F', 'Fth', 'Fchi', 'M', 'Rem', 'qad', 'qcmb', 'accesa', 'lnEta', 'lnCrit', 'Fv', 'crosta', 'imK2', 'k2re'];
 const T_INIZIO = 1e5; // (anni) da dove parte l'integrazione: prima c'è la formazione (disco.js, impatti.js)
 function integra(voce, finoA) {
   const { st, sv, rami, tab } = voce, b = {}, gR = 1 + Math.SQRT1_2, fine = voce.fine, tol = 1 / fine; // (K) l'errore ammesso per passo
@@ -332,7 +334,7 @@ function integra(voce, finoA) {
   const scrivi = (f) => { const d = dinamo(st, rami, Tc, f);
     tab.t.push(t); tab.Tm.push(Tm); tab.Tcmb.push(Tc); tab.Tum.push(f.Tum); tab.Ts.push(f.Ts); tab.Qconv.push(f.Qconv); tab.Qfuso.push(f.Qfuso); tab.Qcmb.push(f.Qcmb); tab.Qrad.push(f.Qrad); tab.Qmarea.push(f.Qmarea);
     tab.Ric.push(f.Ric); tab.dRic.push(f.dRic); tab.mob.push(f.mob); tab.lid.push(f.lid); tab.delta.push(f.delta); tab.Mfuso.push(f.Mfuso); tab.fi.push(f.fi); tab.F.push(d.F); tab.Fth.push(d.Fth); tab.Fchi.push(d.Fchi); tab.M.push(d.M); tab.Rem.push(d.Rem);
-    tab.qad.push(d.qad); tab.qcmb.push(f.qcmb); tab.accesa.push(d.accesa ? 1 : 0); tab.lnEta.push(f.lnEta); tab.lnCrit.push(f.lnCrit); tab.Fv.push(f.Fv); tab.crosta.push(crosta); };
+    tab.qad.push(d.qad); tab.qcmb.push(f.qcmb); tab.accesa.push(d.accesa ? 1 : 0); tab.lnEta.push(f.lnEta); tab.lnCrit.push(f.lnCrit); tab.Fv.push(f.Fv); tab.crosta.push(crosta); tab.imK2.push(f.imK2); tab.k2re.push(f.k2re); };
   ambiente(st, sv, t, qui); flussi(st, qui, rami, Tm, Tc, a);
   if (!tab.t.length) scrivi(a);
   let passi = 0;
@@ -366,11 +368,13 @@ function integra(voce, finoA) {
 
 // ---------- la memoria: una storia per pianeta (e per ramo dei parametri aperti)
 const memoStorie = new WeakMap();
-const ramiDi = (r = null) => { const o = {}; for (const k in APERTI) o[k] = r && Number.isFinite(r[k]) ? r[k] : APERTI[k].valore; return o; };
+const ramiDi = (r = null) => { const o = {}; for (const k in APERTI) o[k] = r && Number.isFinite(r[k]) ? r[k] : APERTI[k].valore;
+  // (la reologia della marea: Andrade con α e ζ aperti; { maxwell: 1 } per il confronto)
+  Object.defineProperty(o, 'reologia', { enumerable: false, value: Object.freeze({ reologia: r?.maxwell ? 'maxwell' : 'andrade', alfa: o.andradeAlfa, zeta: o.andradeZeta }) }); if (r?.maxwell) o.maxwell = 1; return o; };
 function voceDi(P, opz = {}) {
   const stella = opz.stella || null, rami = ramiDi(opz.rami), comp = P.composizione || {};
   const massaStella = stella?.massaNascita || stella?.massa || (P.Mstella > 0 ? P.Mstella / MSOLE : 1), Z = stella?.Z ?? 1;
-  const firma = [P.tipo, P.massaKg, P.raggioM, comp.ferro, comp.acqua, comp.ghiaccio, P.Lw, P.aM, P.Mstella, P.eccentricita, stella ? `${massaStella}|${Z}|${stella.stato ?? ''}|${stella.massa ?? ''}` : '', Object.values(rami).join(','), opz.Tsuperficie ? `Ts${typeof opz.Tsuperficie === 'function' ? '' : opz.Tsuperficie}` : '', opz.fine > 1 ? opz.fine : ''].join('|');
+  const firma = [P.tipo, P.massaKg, P.raggioM, comp.ferro, comp.acqua, comp.ghiaccio, P.Lw, P.aM, P.Mstella, P.eccentricita, P.marea ? `${P.marea.Mospite},${P.marea.aM},${P.marea.eccentricita},${P.marea.obliquita}` : '', stella ? `${massaStella}|${Z}|${stella.stato ?? ''}|${stella.massa ?? ''}` : '', Object.values(rami).join(','), opz.Tsuperficie ? `Ts${typeof opz.Tsuperficie === 'function' ? '' : opz.Tsuperficie}` : '', opz.fine > 1 ? opz.fine : ''].join('|');
   let lista = memoStorie.get(P); if (!lista) { lista = []; memoStorie.set(P, lista); }
   // (chi chiede senza dire la stella trova la storia che il pianeta ha già: quella calcolata con la sua stella)
   let voce = lista.find((v) => v.firma === firma) || (!stella && !opz.rami && !opz.Tsuperficie && !(opz.fine > 1) ? lista.find((v) => v.principale) : null);
@@ -434,7 +438,7 @@ function statoA(P, voce, t, opz) {
   if (!voce.eventi) voce.eventi = eventiDi(voce);
   const sole = voce.sv.stella ? stellaA(voce.sv.stella, t) : null;
   const interno = { eta: t, nucleo: st.nucleo, crosta: basalto / st.R, q, dinamo: accesa, B0, tettonica: regime, vulcani, ...(rossby != null ? { rossby, dipolo } : {}) };
-  return { t, Tm: v('Tm'), Tcmb: v('Tcmb'), Tum: v('Tum'), Ts: v('Ts'), q, Q: { conv: Qconv, fuso: Qfuso, cmb: v('Qcmb'), rad: Qrad, marea: v('Qmarea') }, urey: Qrad / Math.max(1, Qconv + Qfuso),
+  return { t, Tm: v('Tm'), Tcmb: v('Tcmb'), Tum: v('Tum'), Ts: v('Ts'), q, Q: { conv: Qconv, fuso: Qfuso, cmb: v('Qcmb'), rad: Qrad, marea: v('Qmarea') }, marea: { potenza: v('Qmarea'), imK2: v('imK2'), k2: v('k2re'), Q: v('imK2') > 0 ? v('k2re') / v('imK2') : Infinity, frequenza: st.omegaMarea, fusoSottoIlCoperchio: v('Fv') }, urey: Qrad / Math.max(1, Qconv + Qfuso),
     nucleoInterno: { raggio: Ric, cresce: v('dRic') }, dinamo: { accesa, F, Fth: v('Fth'), Fchi: v('Fchi'), qad: v('qad'), qcmb: v('qcmb'), Rem: v('Rem'), guscio, momento: M, rossby, dipolo: accesa && dipolo, B0 },
     crosta: { regime, mobilita: mob, lnContrasto: v('lnEta'), lnCritico: v('lnCrit'), coperchio: v('lid'), basalto }, fuso: { kgAnno: Mfuso * ANNO_S, frazione: v('fi'), vulcani },
     // STADIO 4 (in parte): la CO2 che esce con il fuso (mol/anno) e il tetto energetico della fuga dell'aria

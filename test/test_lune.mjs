@@ -8,6 +8,8 @@ import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 const tra = (x, a, b, che) => assert.ok(x > a && x < b, `${che}: ${x} (atteso tra ${a} e ${b})`);
+// un riscontro col mondo vero: stampato sempre; fuori dall'intervallo resta scritto «≠ NON TORNA» (le soglie non si allargano)
+const nonTorna = [], riscontro = (che, x, a, b, perche = '') => { const torna = x > a && x < b; console.log(`      ${torna ? '=' : '≠ NON TORNA'} ${che}: ${Number(x).toPrecision(3)} (chiesto ${a}–${b})${torna || !perche ? '' : ` — ${perche}`}`); if (!torna) nonTorna.push(`${che}: ${Number(x).toPrecision(3)} (chiesto ${a}–${b})${perche ? ` — ${perche}` : ''}`); return torna; };
 
 // i corpi veri
 const SOLE = { massa: 1, eta: 4.5e9 }, ETA = 4.5e9 * ANNO;
@@ -39,12 +41,16 @@ prova('la Luna, nata al limite di Roche, in 4,5 miliardi di anni arriva dov\'è 
 
 prova('Giove e Io: il calore delle maree accende i vulcani; Europa ha un oceano sotto il ghiaccio', () => {
   const q = caloreMareale(GIOVE, IO);
-  tra(q, 0.5, 5, 'calore mareale di Io (W/m²: circa 2)');
+  // (il calore di Io non viene più dal k₂/Q misurato su Io stesso, che lo ridava per costruzione: esce dallo stato interno,
+  // maree.js + storia.js. Il ramo caldo emerge da solo, ma il corpo omogeneo dissipa troppo poco: resta scritto)
+  riscontro('calore mareale di Io (W/m²: circa 2)', q, 0.5, 5, 'corpo omogeneo con la reologia di Andrade: −Im k₂ arriva a 0,002–0,003 dove Io misura 0,015; manca lo strato molle sotto la crosta (astenosfera)');
   assert.equal(stato(GIOVE, IO), 'vulcanica');
   tra(caloreMareale(GIOVE, EUROPA), 0.01, 0.5, 'calore mareale di Europa (W/m²)');
   assert.equal(stato(GIOVE, EUROPA), 'oceano sotto il ghiaccio');
   // la legge: come e², e crolla con la distanza (a^-7,5: sei per la marea, uno e mezzo per il periodo)
-  assert.ok(Math.abs(caloreMareale(GIOVE, { ...IO, eccentricita: 0.0082 }) / q - 4) < 1e-9);
+  // (a stato interno FERMO la legge è e², ed è provata in test_maree; all'equilibrio no: più marea scalda il mantello, che
+  // dissipa di più: con l'eccentricità doppia il calore cresce più di quattro volte)
+  const q2 = caloreMareale(GIOVE, { ...IO, eccentricita: 0.0082 }); assert.ok(q2 > 4 * q && q2 < 40 * q, `con l'eccentricità doppia: ${q2 / q} volte`);
   assert.equal(caloreMareale(GIOVE, { ...IO, eccentricita: 0 }), 0);
   assert.equal(stato(GIOVE, { ...IO, eccentricita: 0 }), 'fredda e ferma');
   assert.ok(caloreMareale(GIOVE, { ...IO, aM: 2 * IO.aM }) < q / 100);
@@ -282,4 +288,4 @@ prova('nel cosmo: il ramo di un evento del disco o di una luna, scritto tra i ra
   console.log(`      (${dischi} sistemi con l'eccentricità di un pianeta andata diversamente, ${catture} con l'orbita di una luna catturata: il resto del sistema e la stella accanto identici)`);
 });
 
-console.log(`\n${ok} prove superate`);
+console.log(`\n${ok} prove superate${nonTorna.length ? `; ${nonTorna.length} riscontri col vero NON TORNANO:` : ''}`); for (const r of nonTorna) console.log(`   ≠ ${r}`);

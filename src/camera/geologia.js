@@ -368,15 +368,17 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //    da 10⁻³ a 10⁻²). Il LETTO di un fiume non è un pendio: una cella che riceve acqua da altre non viene spianata; ciò
 //    che i versanti le portano entra nel carico del fiume.
 //  · IL SEDIMENTO scende col fiume. È di due specie. Fin dove il SUOLO riesce a formarsi (al più P₀ = 0,31 mm/anno: Heimsath
-//    e altri 1997, misure da 0,05 a 2 mm/anno, media geometrica) la roccia esce dai versanti disfatta in grani: sabbia e
-//    argilla, che l'acqua porta SOSPESE senza un tetto (numero di Rouse < 1) e che si posano solo dove l'acqua si ferma:
-//    nei laghi e sulle coste (i delta). Ciò che è scavato più in fretta di P₀ viene da roccia nuda, a BLOCCHI: ghiaia, che
-//    il fiume porta sul fondo al più quanto la sua capacità, Q_s = 0,041·I·Q·S^(7/6), con I = 0,01 la parte del tempo in
-//    piena (Wickert e Schildgen 2019), e che per strada si consuma in carico fine: del 0,42% al km il granito, del 2% le
-//    vulcaniche, del 20% le rocce tenere (Attal e Lavé 2009: granito 0,3–0,6, classi tipo 0,2 / 2 / 20). Se la ghiaia
-//    supera la capacità, il fiume non scava il di più (lo lascia dov'è, dal fondo dello scavo), e quella che arriva da
-//    monte in più si posa lì: una conoide. (Prima la capacità della ghiaia era il tetto di TUTTO il carico: da sola
-//    teneva la denudazione 25 volte sotto, misurato togliendola; il sedimento vero ai mari è per nove decimi sospeso.)
+//    e altri 1997, misure da 0,05 a 2 mm/anno, media geometrica) la roccia esce dai versanti disfatta in grani, qui
+//    contati tutti come CARICO FINE: l'acqua lo porta sospeso senza un tetto (limo e argilla hanno numero di Rouse sotto
+//    0,8; la sabbia grossa no: manca) e lo posa solo dove si ferma, nei laghi e sulle coste (i delta). Ciò che è scavato
+//    più in fretta di P₀ viene da roccia nuda, a BLOCCHI: ghiaia, che il fiume porta sul fondo al più quanto la sua
+//    capacità, Q_s = 0,041·I·Q·S^(7/6), con I = 0,01 la parte del tempo in piena (Wickert e Schildgen 2019), e che per
+//    strada si consuma in carico fine: dello 0,42% al km il granito, del 2% le vulcaniche e la copertura litificata, del
+//    20% il sedimento sciolto (Attal e Lavé 2009, perdita di massa: granito 0,3–0,6% al km, classi tipo 0,2 / 2 / 20). Se
+//    la ghiaia supera la capacità, il fiume non scava il di più (lo lascia dov'è, dal fondo dello scavo), e quella che
+//    arriva da monte in più si posa lì: una conoide. (Prima la capacità della ghiaia era il tetto di TUTTO il carico: da
+//    sola teneva la denudazione 25 volte sotto, misurato togliendola. E una conca era giudicata sulla quota già scavata:
+//    ogni cella incisa si riprendeva metà dello scavo, e il 98% della roccia tolta «si posava» lungo i fiumi.)
 //    Il conto torna: eroso = depositato + portato al mare.
 //  · LA CROSTA RISPONDE: tolto un carico, risale di ρ_crosta/ρ_mantello = 2800/3300 dello spessore tolto (isostasia), sulla
 //    media della regione (la crosta è rigida: flette su ~200 km). E LE PLACCHE LA SOLLEVANO: sf.sollevamento (m/anno, da

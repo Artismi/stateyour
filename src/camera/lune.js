@@ -25,6 +25,8 @@
 import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
+import { forzanteMareale } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
+import { storia } from './storia.js'; // lo stato interno di una luna di roccia è la sua storia (le stesse equazioni dei pianeti)
 
 const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
 const sfera = (R) => (4 / 3) * Math.PI * R ** 3;
@@ -117,8 +119,29 @@ const fusoDentro = (s) => (s.ghiacciata ? s.d < s.strato : s.d < 2e5);
 // diviso per la superficie. Il k₂/Q ha due valori (dichiarati in MATERIALI): un corpo nasce caldo, e se
 // il calore delle maree basta a tenerlo in parte fuso resta molle e dissipa molto (roccia 0,015, come Io;
 // guscio di ghiaccio sopra un oceano 0,01); se non basta si irrigidisce e dissipa poco (k₂ elastico / Q)
-const potenzaMareale = (P, L, kq) => (10.5 * kq * COSTANTI.G * P.massaKg ** 2 * L.raggioM ** 5 * Math.sqrt((COSTANTI.G * P.massaKg) / L.aM ** 3) * (L.eccentricita ?? 0) ** 2) / L.aM ** 6;
+// (la formula è scritta una volta sola, in maree.js: forzanteMareale; qui si moltiplica per il k₂/Q della luna)
+const potenzaMareale = (P, L, kq) => forzanteMareale({ Mospite: P.massaKg, raggioM: L.raggioM, aM: L.aM, eccentricita: L.eccentricita ?? 0 }) * kq;
+// LE LUNE DI ROCCIA NELLA STORIA (storia.js + maree.js). Lo stato interno di una luna di roccia è quello di un piccolo
+// pianeta scaldato dalla radioattività e dalla marea del suo pianeta: le stesse due equazioni, con la dissipazione che
+// viene dalla viscosità e dalla rigidità che il mantello ha in quel momento (Andrade). Non ci sono più i due stati
+// «calda/fredda» né il k₂/Q fisso di Io: il ramo caldo è dove il calore che esce uguaglia quello di marea.
+//   · Dove nemmeno la dissipazione più grande possibile (−Im k₂ = 3/4) darebbe un centesimo del calore radiogenico, la
+//     marea non cambia lo stato del corpo: si risparmia la storia e resta il k₂/Q elastico da fredda (k2QFreddo).
+//   · LE LUNE GHIACCIATE NON SONO ANCORA QUI: serve il corpo a strati (guscio, oceano, roccia); per loro restano il
+//     guscio a sola conduzione e i due valori di k₂/Q di prima (MATERIALI.ghiaccio).
+const memoInterni = new Map();
+const mareaConta = (P, L, eta) => 0.75 * forzanteMareale({ Mospite: P.massaKg, raggioM: L.raggioM, aM: L.aM, eccentricita: L.eccentricita ?? 0 }) > 0.01 * caloreDellaRoccia(eta) * L.massaKg;
+function internoDiRoccia(P, L, eta) {
+  const Ts = tSuperficie(P, false), chiave = `${L.massaKg}|${L.raggioM}|${L.aM}|${L.eccentricita ?? 0}|${P.massaKg}|${Ts}|${eta}`; let s = memoInterni.get(chiave); if (s) return s;
+  s = storia({ tipo: 'roccioso', massaKg: L.massaKg, raggioM: L.raggioM, composizione: { ferro: L.composizione?.ferro, acqua: 0 }, marea: { Mospite: P.massaKg, aM: L.aM, eccentricita: L.eccentricita ?? 0, obliquita: 0 } }, eta, { Tsuperficie: Ts });
+  memoInterni.set(chiave, s); if (memoInterni.size > 3000) memoInterni.delete(memoInterni.keys().next().value);
+  return s;
+}
 export function k2QLuna(P, L, eta = ETA) {
+  if (!dentro(L).ghiacciata) { // roccia: dalla storia del corpo (la parte del volume che dissipa è già dentro)
+    if (!mareaConta(P, L, eta)) return k2QFreddo(L);
+    const s = internoDiRoccia(P, L, eta), f = forzanteMareale({ Mospite: P.massaKg, raggioM: L.raggioM, aM: L.aM, eccentricita: L.eccentricita ?? 0 }); return f > 0 ? s.Q.marea / f : 0;
+  }
   const kc = dentro(L).mat.k2Qcaldo, qc = potenzaMareale(P, L, kc) / (4 * Math.PI * L.raggioM ** 2);
   return fusoDentro(guscio(P, L, qc + caloreRadioattivo(L, eta))) ? kc : k2QFreddo(L);
 }
@@ -132,6 +155,10 @@ export function caloreMareale(P, L, eta = ETA) {
 //   ghiaccio: se alla base dello strato si superano 273 K c'è un 'oceano sotto il ghiaccio' (Europa);
 //   se si arriva a tre quarti della fusione il ghiaccio profondo scorre ('geologicamente attiva')
 export function stato(P, L, eta = ETA) {
+  // roccia con una marea che conta: dalla sua storia. «vulcanica» se il calore esce soprattutto con il magma (Q_fuso >
+  // Q_conv: il regime di Io); «attiva» se la marea scalda più della radioattività o il coperchio è più sottile di 200 km
+  // (la soglia di prima, RIMASTA); se no «fredda e ferma»
+  if (!dentro(L).ghiacciata && mareaConta(P, L, eta)) { const x = internoDiRoccia(P, L, eta); return x.Q.fuso > x.Q.conv ? 'vulcanica' : x.Q.marea > x.Q.rad || x.crosta.coperchio < 2e5 ? 'geologicamente attiva' : 'fredda e ferma'; }
   const s = guscio(P, L, caloreMareale(P, L, eta) + caloreRadioattivo(L, eta));
   if (s.ghiacciata) return s.d < s.strato ? 'oceano sotto il ghiaccio' : s.Tbase > 0.75 * s.mat.fusione ? 'geologicamente attiva' : 'fredda e ferma';
   return s.d < 1e4 ? 'vulcanica' : s.d < 2e5 ? 'geologicamente attiva' : 'fredda e ferma';
@@ -248,7 +275,10 @@ function regolari(P, amb, c) {
     L.legami = legami.filter(([x, y]) => x === i || y === i).map(([x, y, nome]) => [x === i ? y : x, nome]);
     if (forzata) {
       const tetto = Math.max(...legami.filter(([x, y]) => x === i || y === i).map(([x]) => fornita(corpi[x])));
-      L.eccentricita = 1; L.eccentricita = Math.min(0.02, forzata, Math.sqrt(tetto / potenzaMareale(P, L, dentro(L).mat.k2Qcaldo)));
+      if (dentro(L).ghiacciata) { L.eccentricita = 1; L.eccentricita = Math.min(0.02, forzata, Math.sqrt(tetto / potenzaMareale(P, L, dentro(L).mat.k2Qcaldo))); }
+      else { // roccia: il calore all'equilibrio viene dalla storia del corpo; se supera ciò che il pianeta può cedere, l'eccentricità
+        // scende (un passo solo, come se il calore andasse con e²: all'equilibrio non è esatto, ed è dichiarato)
+        L.eccentricita = Math.min(0.02, forzata); const Q = potenzaMareale(P, L, k2QLuna(P, L, amb.eta)); if (Q > tetto) L.eccentricita *= Math.sqrt(tetto / Q); }
     } else L.eccentricita = eccentricitaResidua(P, L, amb.eta);
     return L;
   });
