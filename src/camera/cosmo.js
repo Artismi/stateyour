@@ -24,6 +24,7 @@ import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA,
 import { interno } from './geologia.js';
 import { formaPianeti } from './disco.js';
 import { lune } from './lune.js';
+import { atmosfera, prebiotica, minerali } from './chimica.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 16, STELLE = 2500, GALASSIE_MAX = 200;
@@ -209,6 +210,13 @@ export const sistema = memo((n, gid, sid) => {
     p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
     p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.04; // quasi tutta l'acqua resta nel mantello; in superficie pochi centesimi (sulla Terra: gli oceani)
     p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
+    // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero (ciò che trattiene, all'equilibrio
+    // chimico), e quanto rendono lì le reazioni che fanno aminoacidi e zuccheri (scariche e ultravioletto)
+    try {
+      p.atmosfera = atmosfera(p, { Z: S.Z ?? 1 });
+      p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua === 'liquida',
+        minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
+    } catch { p.atmosfera = null; p.prebiotica = null; }
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1 }, hash('lune', n, gid, sid, p.id));
   }

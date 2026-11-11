@@ -4,34 +4,42 @@
 // Non è una fotografia: si parte da un pianeta senza continenti e lo si lascia vivere per la sua età.
 //   1. IL MANTELLO, scaldato dal basso, si organizza da solo in celle (l'equazione di Swift-Hohenberg,
 //      come in fluidi.js, in regime a celle: pennacchi caldi che salgono, circondati da una rete di
-//      discese fredde). Avanza nel tempo insieme alla crosta. Larghezza delle celle dallo spessore
-//      del mantello, vigore dal calore dell'interno. La crosta è trascinata: si allontana da dove il
-//      mantello sale e converge dove scende.
-//   2. LA CROSTA CONTINENTALE è una quantità che si conserva (uno spessore su griglia), portata da quella
-//      velocità. È leggera e non affonda: si raccoglie dove il flusso converge; dove è compressa
-//      si ispessisce (le catene), fino a quanto la spinta riesce a reggere, poi si ingorga e il
-//      continente si allarga. Nuova crosta si separa lentamente dal mantello, sopra le fosse (gli archi
-//      di vulcani), e viene poi raccolta dai continenti. Un continente fa da coperta: il mantello sotto
-//      si scalda, la discesa si spegne e diventa una salita, e il continente si spacca (il ciclo dei
-//      supercontinenti: nessuno lo impone, viene da questo).
-//   3. LA CROSTA OCEANICA nasce alle dorsali (dove la crosta si apre), invecchia allontanandosi, affonda
-//      dove il mantello scende. Raffreddandosi si contrae: l'oceano è più profondo dove è più vecchio.
+//      discese fredde), e avanza nel tempo insieme alla crosta. La larghezza delle celle viene dallo
+//      spessore del mantello, il vigore dal calore dell'interno. Trascina la crosta: via da dove sale,
+//      verso dove scende. La litosfera è rigida: ogni placca va tutta alla stessa velocità, e le dorsali
+//      e le fosse sono i bordi stretti dove quella velocità cambia verso.
+//   2. LA CROSTA CONTINENTALE è una quantità che si conserva (uno spessore su griglia). È leggera e non
+//      affonda. Nasce a poco a poco sopra le fosse (gli archi di vulcani), il mantello la raccoglie dove
+//      converge, e lì si salda in continenti. Un continente è una zattera rigida e coesa: va tutto insieme,
+//      e tirato da due parti non si assottiglia ma si strappa. Dove è compresso si ispessisce (le catene)
+//      finché la spinta lo regge; poi si ingorga, e si allarga. Sotto un continente che resta fermo a
+//      lungo il mantello, coperto, si scalda: la discesa si spegne, diventa una salita, e il continente
+//      si spacca. I pezzi vanno alla deriva e si scontrano altrove (il ciclo dei supercontinenti: nessuno
+//      lo impone, viene da questo).
+//   3. LA CROSTA OCEANICA nasce alle dorsali e dietro i continenti che si separano, invecchia
+//      allontanandosi, affonda nelle fosse. Raffreddandosi si contrae: l'oceano è più profondo dove è
+//      più vecchio.
 //   4. LE QUOTE vengono dal galleggiamento (isostasia): la crosta spessa sta alta, come un iceberg.
 //
-// LEGGI EMPIRICHE (misurate sulla Terra e usate così, non derivate): la profondità dell'oceano con l'età
-// (2500 m + 350 m·√milioni di anni, fino a 6000 m); quanta crosta continentale si è separata nel tempo
-// (crostaAttesa); la velocità delle placche (4 cm/anno sulla Terra, ∝ q²); lo spessore che la
-// crosta regge (da 42 a 70 km secondo la spinta); l'erosione (una catena si consuma in ~200 milioni di
-// anni); la profondità in più delle fosse (fino a 2500 m). Sono tutte in COSTANTI qui sotto.
+// LEGGI EMPIRICHE (misurate sulla Terra e usate così, non derivate; i numeri sono in COSTANTI):
+//   · la profondità dell'oceano con l'età: 2500 m + 350 m·√(milioni di anni), fino a 6000 m (profonditaOceano);
+//   · quanta crosta continentale si è separata dal mantello nel tempo (crostaAttesa);
+//   · la velocità delle placche: 4 cm/anno sulla Terra, e cresce come q² (legge di scala della convezione);
+//   · lo spessore che la crosta regge sotto spinta: da 39 km (spinta debole) a 70 km (il Tibet);
+//   · l'erosione, che spiana una catena in ~200 milioni di anni, e la fossa, fino a 2500 m più fonda;
+//   · la coesione dei continenti e il tempo con cui scaldano il mantello sotto di sé: scelti perché i
+//     continenti si spacchino e si riuniscano in tempi dell'ordine di quelli terrestri (centinaia di
+//     milioni di anni).
 // SEMPLIFICAZIONI: la carta è trattata come piana (longitudine periodica, i poli sono muri): vicino ai
-// poli le forme sono stirate. La crosta segue il mantello punto per punto: non ci sono placche rigide
-// (niente faglie trasformi, niente rotazioni). Il calore q è quello di oggi per tutta la storia.
+// poli le forme sono stirate. La rigidità delle placche è approssimata (velocità uguale in modulo ovunque,
+// continenti rigidi entro un quarto di cella del mantello): niente faglie trasformi né rotazioni. Il calore
+// q è quello di oggi per tutta la storia. Il mantello è un'equazione delle celle, non le equazioni dei fluidi.
 
 export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
   hZero: 35e3, // la crosta spessa così galleggia a quota 0 (il livello di riferimento: all'incirca il mare terrestre)
   hMargine: 25e3, // sopra è continente; sotto è crosta di transizione (archi, altopiani sommersi)
-  hLibero: 36e3, hFermo: 40e3, hMassimo: 70e3, // fino a hLibero la crosta si lascia comprimere; oltre resiste; il massimo retto dalla spinta va da hFermo (spinta debole) a hMassimo (Tibet)
+  hLibero: 28e3, hFermo: 39e3, hMassimo: 70e3, // fino a hLibero la crosta si lascia comprimere; oltre resiste; il massimo retto dalla spinta va da hFermo (spinta debole) a hMassimo (Tibet)
   galleggia: 0.15, // 1 − densità della crosta / densità del mantello (2800 / 3300): quanto sporge ciò che galleggia
   dorsale: 2500, raffredda: 350, abisso: 6000, // la profondità dell'oceano (m) con l'età (milioni di anni)
   radice: 5250, // la quota (−m) a cui starebbe un continente senza crosta: così hZero sta a 0
@@ -39,9 +47,9 @@ export const COSTANTI = {
   vTerra: 0.04, qTerra: 0.087, // (m/anno, W/m²) la velocità media delle placche terrestri e il calore che la muove
   qPlacche: 0.05, qVivo: 0.02, // sotto qPlacche (o senz'acqua) la crosta non si rompe; sotto qVivo il mantello è fermo
   erosione: 800, // (m²/anno) quanto in fretta i rilievi si spianano e i sedimenti allargano i continenti
-  coesione: 0.9, // quanto forte la crosta robusta tira a sé quella vicina (celle per passo, per unità di differenza)
+  coesione: 0.5, // quanto forte la crosta robusta tira a sé quella vicina (celle per passo, per unità di differenza)
   inerzia: 4, // in quanti giri di cella il mantello sotto un continente si scalda (o si raffredda quando se ne va)
-  coperta: 0.8, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
+  coperta: 1.3, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
 };
 const C = COSTANTI, C_PASSO = 0.3, CEDE = 0.03, PASSI_GROSSI = 2400;
 
@@ -71,38 +79,41 @@ function fft2(re, im, W, H, inversa) {
 }
 
 // ---------- IL MANTELLO: ∂u/∂t = εu − (1+∇²)²u + g·u² − u³ + coperta. u > 0 dove sale (caldo), u < 0 dove scende.
-// «onde» celle lungo l'equatore; la carta è larga il doppio di quanto è alta. Il caso iniziale è un rumore minuscolo.
+// «onde» celle lungo l'equatore. La carta (Wm × Hm, larga il doppio di quanto è alta) è la metà di un quadrato
+// periodico, l'altra metà è la sua immagine allo specchio: così ai poli il mantello non attraversa il bordo (come la
+// crosta, che lì trova un muro). Il caso iniziale è un rumore minuscolo.
 function mantello({ onde, epsilon, seme }) {
-  const Wm = onde <= 6 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, dk = 1 / onde, g = 1.2;
+  const Wm = onde <= 8 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, Nq = Wm * Wm, dk = 1 / onde, g = 1.2;
   let s = seme % 2147483647 || 1; if (s < 0) s += 2147483647; const caso = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  const u = new Float64Array(Nm).map(() => 0.05 * (caso() - 0.5)), re = new Float64Array(Nm), im = new Float64Array(Nm), sr = new Float64Array(Nm), si = new Float64Array(Nm), k4 = new Float64Array(Nm);
-  for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const kx = (x < Wm / 2 ? x : x - Wm) * dk, ky = (y < Hm / 2 ? y : y - Hm) * 2 * dk; k4[y * Wm + x] = (1 - kx * kx - ky * ky) ** 2; }
+  const u = new Float64Array(Nm).map(() => 0.05 * (caso() - 0.5)), re = new Float64Array(Nq), im = new Float64Array(Nq), k4 = new Float64Array(Nq);
+  for (let y = 0; y < Wm; y++) for (let x = 0; x < Wm; x++) { const kx = (x < Wm / 2 ? x : x - Wm) * dk, ky = (y < Wm / 2 ? y : y - Wm) * dk; k4[y * Wm + x] = (1 - kx * kx - ky * ky) ** 2; }
   // un passo: la parte che si piega da sé (u², u³) e la coperta in modo esplicito, la diffusione in modo implicito
   const passo = (dt, coperta = null) => {
-    for (let i = 0; i < Nm; i++) { const v = u[i]; re[i] = v + dt * (g * v * v - v * v * v + (coperta ? coperta[i] : 0)); im[i] = 0; }
-    fft2(re, im, Wm, Hm, false);
-    for (let i = 0; i < Nm; i++) { const l = 1 / (1 - dt * (epsilon - k4[i])); re[i] *= l; im[i] *= l; }
+    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const i = y * Wm + x, v = u[i], f = v + dt * (g * v * v - v * v * v + (coperta ? coperta[i] : 0)); re[i] = f; re[(Wm - 1 - y) * Wm + x] = f; }
+    im.fill(0); fft2(re, im, Wm, Wm, false);
+    for (let i = 0; i < Nq; i++) { const l = 1 / (1 - dt * (epsilon - k4[i])); re[i] *= l; im[i] *= l; }
     re[0] = 0; im[0] = 0; // la media non cambia: il moto sposta il calore, non lo crea
-    sr.set(re); si.set(im); fft2(re, im, Wm, Hm, true); u.set(re);
+    fft2(re, im, Wm, Wm, true);
+    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) u[y * Wm + x] = 0.5 * (re[y * Wm + x] + re[(Wm - 1 - y) * Wm + x]);
   };
-  // il campo visto su una griglia W×H qualsiasi (centri delle celle): media a blocchi se più grossa,
-  // interpolazione esatta (in Fourier) se più fine
-  const fine = {}, su = (W, H, out = new Float64Array(W * H)) => {
+  // il campo visto su una griglia W×H qualsiasi (centri delle celle): media a blocchi se è più grossa,
+  // interpolazione liscia (cubica, prima lungo x poi lungo y) se è più fine
+  const tmp = {}, su = (W, H, out = new Float64Array(W * H)) => {
     if (W === Wm) out.set(u);
     else if (W < Wm) { const r = Wm / W; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let a = 0; for (let b = 0; b < r; b++) for (let c = 0; c < r; c++) a += u[(j * r + b) * Wm + i * r + c]; out[j * W + i] = a / (r * r); } }
     else {
-      const R = (fine.R?.length === W * H ? fine.R : (fine.R = new Float64Array(W * H))).fill(0), I = (fine.I?.length === W * H ? fine.I : (fine.I = new Float64Array(W * H))).fill(0), sc = (W * H) / Nm, dx = 0.5 / W - 0.5 / Wm, dy = 0.5 / H - 0.5 / Hm;
-      for (let y = 0; y < Hm; y++) { const ky = y < Hm / 2 ? y : y - Hm; if (2 * ky === -Hm) continue;
-        for (let x = 0; x < Wm; x++) { const kx = x < Wm / 2 ? x : x - Wm; if (2 * kx === -Wm) continue;
-          const f = 2 * Math.PI * (kx * dx + ky * dy), co = Math.cos(f) * sc, se = Math.sin(f) * sc, a = sr[y * Wm + x], b = si[y * Wm + x], k = ((ky + H) % H) * W + ((kx + W) % W);
-          R[k] = a * co - b * se; I[k] = a * se + b * co; } }
-      fft2(R, I, W, H, true); out.set(R);
+      const r = W / Wm, T = (tmp[W] ??= new Float64Array(W * Hm)), pesi = (t) => [(-t + 2 * t * t - t * t * t) / 2, (2 - 5 * t * t + 3 * t * t * t) / 2, (t + 4 * t * t - 3 * t * t * t) / 2, (-t * t + t * t * t) / 2];
+      for (let i = 0; i < W; i++) { const x = (i + 0.5) / r - 0.5, x0 = Math.floor(x), [a, b, c, d] = pesi(x - x0), i0 = (x0 - 1 + Wm) % Wm, i1 = (x0 + Wm) % Wm, i2 = (x0 + 1) % Wm, i3 = (x0 + 2) % Wm;
+        for (let y = 0; y < Hm; y++) { const o = y * Wm; T[y * W + i] = a * u[o + i0] + b * u[o + i1] + c * u[o + i2] + d * u[o + i3]; } }
+      const sp = (y) => (y < 0 ? -1 - y : y >= Hm ? 2 * Hm - 1 - y : y) * W;
+      for (let j = 0; j < H; j++) { const y = (j + 0.5) / r - 0.5, y0 = Math.floor(y), [a, b, c, d] = pesi(y - y0), o0 = sp(y0 - 1), o1 = sp(y0), o2 = sp(y0 + 1), o3 = sp(y0 + 2);
+        for (let i = 0; i < W; i++) out[j * W + i] = a * T[o0 + i] + b * T[o1 + i] + c * T[o2 + i] + d * T[o3 + i]; }
     }
     return out;
   };
   // quante celle: i pennacchi che salgono (i massimi del campo)
   const celle = () => { let mx = 0, n = 0; for (const v of u) if (v > mx) mx = v;
-    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const v = u[y * Wm + x]; if (v < 0.35 * mx) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) if ((a || b) && u[((y + b + Hm) % Hm) * Wm + ((x + a + Wm) % Wm)] > v) { cima = false; break; } if (cima) n++; }
+    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const v = u[y * Wm + x]; if (v < 0.35 * mx) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) { const yy = y + b; if ((a || b) && yy >= 0 && yy < Hm && u[yy * Wm + ((x + a + Wm) % Wm)] > v) { cima = false; break; } } if (cima) n++; }
     return n; };
   return { Wm, Hm, u, passo, su, celle };
 }
@@ -116,7 +127,7 @@ function mantello({ onde, epsilon, seme }) {
 export function campoDaPotenziale(u, W, H, c0, ca = null) {
   const N = W * H; ca ??= { cx: new Float64Array(N), cy: new Float64Array(N), cap: new Float64Array(N), conv: new Float32Array(N), vx: new Float64Array(N), vy: new Float64Array(N) };
   const { cx, cy, cap, conv, vx, vy } = ca; let s2 = 0;
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, a = 0.5 * (u[j * W + ((i + 1) % W)] - u[j * W + ((i + W - 1) % W)]), b = j > 0 && j < H - 1 ? 0.5 * (u[k + W] - u[k - W]) : 0; vx[k] = a; vy[k] = b; s2 += a * a + b * b; }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, a = 0.5 * (u[j * W + ((i + 1) % W)] - u[j * W + ((i + W - 1) % W)]), b = 0.5 * (u[j < H - 1 ? k + W : k] - u[j > 0 ? k - W : k]); vx[k] = a; vy[k] = b; s2 += a * a + b * b; }
   const d2 = 0.06 * (s2 / N) + 1e-300; // (sotto un quarto della pendenza media la crosta rallenta: i bordi delle placche)
   for (let k = 0; k < N; k++) { const m = -c0 / Math.sqrt(vx[k] * vx[k] + vy[k] * vy[k] + d2); vx[k] *= m; vy[k] *= m; }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; cx[k] = 0.5 * (vx[k] + vx[j * W + ((i + 1) % W)]); cy[k] = j < H - 1 ? 0.5 * (vy[k] + vy[k + W]) : 0; }
@@ -156,7 +167,7 @@ export function velocitaCrosta(h, ca, W, H, R) {
   if (c && C.coesione > 0) { sfoca(p, P, T, W, H, 2); const kc = C.coesione * c0 / 0.3;
     for (let j = 0; j < H; j++) { const nj = (Math.min(H - 1, j + 2) - Math.max(0, j - 2) + 1) * 5; for (let i = 0; i < W; i++) P[j * W + i] /= nj; }
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] += kc * (P[j * W + ((i + 1) % W)] - P[k]); if (j < H - 1) hy[k] += kc * (P[k + W] - P[k]); } }
-  const is = c0 > 0 ? 1 / (0.25 * c0) : 0;
+  const is = c0 > 0 ? 1 / (0.03 * c0) : 0; // (basta poco: la lastra non si lascia comprimere)
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, e = hx[k], o = hx[j * W + ((i + W - 1) % W)], s = hy[k], n = j > 0 ? hy[k - W] : 0;
     const esce = Math.max(e, 0) + Math.max(-o, 0) + Math.max(s, 0) + Math.max(-n, 0);
@@ -247,17 +258,31 @@ export const crostaAttesa = (t) => 0.5 * (1 - Math.exp(-Math.max(0, t) / 4e9));
 // crosta nuova è calda e alta (la dorsale), raffreddandosi si contrae e scende.
 export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raffredda * Math.sqrt(Math.max(0, etaMa)));
 
-// ---------- LA STORIA INTERA. nucleo: raggio del nucleo / raggio del pianeta; q: calore interno (W/m²); eta: anni;
-// acqua: se la crosta è indebolita dall'acqua (senza, non si rompe in placche); passi: quanti passi sulla griglia
-// più fine. Il passato lontano si simula a grana grossa (griglie 4 e 2 volte più larghe: il rimescolamento ne
-// cancella comunque i dettagli), il passato recente a grana fine. La velocità è quella vera: se la storia chiede
-// più di PASSI_GROSSI passi a grana grossa, il tratto più antico si salta (storia.saltati) e si parte con la
-// crosta separata fino a quel momento stesa in un velo uniforme. «placche» forza il regime (true/false).
-// Restituisce { W, H, alt, cont, spinta, etaCrosta, celle } più: spessore (m di crosta continentale), fosse (0…1,
-// dove la crosta oceanica affonda), regime, bilancio (m di spessore medio: prodotta e presente), storia.
-// Se la crosta NON si rompe (q ≤ qPlacche o niente acqua): un COPERCHIO UNICO. Nessuna deriva: cont = 0 ovunque,
-// spinta = 0, spessore = 0, etaCrosta = l'età del pianeta; alt = solo i rigonfiamenti sopra i pennacchi del
-// mantello (fino a ~1,5 km, come Tharsis o gli altopiani di Venere), o piatto se il mantello è fermo (q ≤ qVivo).
+// ---------- LA STORIA INTERA. raggioM: raggio del pianeta; nucleo: raggio del nucleo / raggio del pianeta (il
+// resto è mantello); q: calore interno oggi (W/m²; Terra 0,087); eta: età in anni; acqua: se la crosta è indebolita
+// dall'acqua (senza, non si rompe in placche); seme: il caso iniziale; passi: quanti passi sulla griglia finale.
+// IL TEMPO. La velocità è quella vera, e in un passo la crosta non può fare più di un terzo di cella: quindi il
+// passato lontano si simula a grana grossa (griglie larghe 64, 128… celle: tanto il rimescolamento ne cancella i
+// dettagli) e solo gli ultimi «passi» passi su ogni griglia più fine, fino a W×H (sulla Terra: gli ultimi 370
+// milioni di anni a 128, gli ultimi 125 a 256). Se la storia chiede più di PASSI_GROSSI passi sulla griglia più
+// grossa (pianeti molto caldi o molto vecchi), il tratto più antico si salta (storia.saltati) e si parte con la
+// crosta separata fino a quel momento, stesa in un velo uniforme.
+// RESTITUISCE { W, H, alt, cont, spinta, etaCrosta, celle } e in più { spessore, fosse, regime, bilancio, storia }:
+//   alt        Float32Array, metri rispetto al livello a cui galleggia la crosta normale (35 km): circa il mare terrestre
+//   cont       Uint8Array, 1 dove c'è crosta continentale (spessore ≥ 25 km)
+//   spinta     Float32Array 0…1, dove oggi la crosta dei continenti è compressa: lì i monti stanno crescendo
+//   etaCrosta  Float32Array, milioni di anni della crosta oceanica (0 sui continenti)
+//   celle      quanti pennacchi del mantello salgono oggi
+//   spessore   Float32Array, metri di crosta continentale (anche i veli sottili fuori dai continenti)
+//   fosse      Float32Array 0…1, dove la crosta oceanica sta affondando (lì alt è più fonda, fino a 2500 m)
+//   regime     'a placche' | 'coperchio unico' | 'fermo'
+//   bilancio   { prodotta, presente }: metri di spessore medio di crosta continentale, nata e rimasta (devono coincidere)
+//   storia     { simulati, saltati (anni), passi, velocita (m/anno) }
+// SE LA CROSTA NON SI ROMPE (q ≤ 0,05 o niente acqua; «placche» true/false forza la scelta, per esempio per
+// seguire interno() di geologia.js, che guarda anche la massa): un COPERCHIO UNICO. Nessuna deriva: cont = 0,
+// spinta = 0, spessore = 0, fosse = 0, etaCrosta = l'età del pianeta ovunque; alt = solo i rigonfiamenti sopra i
+// pennacchi del mantello (fino a 1,5 km, come Tharsis o gli altopiani di Venere), o piatta (tutta 0) se anche il
+// mantello è fermo (q ≤ 0,02).
 export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null } = {}) {
   if (W !== 2 * H || W < 32 || (W & (W - 1))) throw new Error('tettonica: serve W = 2H, potenza di 2, almeno 32');
   const N = W * H, alt = new Float32Array(N), cont = new Uint8Array(N), spinta = new Float32Array(N), etaCrosta = new Float32Array(N), spessore = new Float32Array(N), fosse = new Float32Array(N);
@@ -274,7 +299,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // LEGGE DI SCALA (strato limite della convezione): la velocità delle placche cresce come il quadrato del calore che esce
   const V = C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
   // i livelli di griglia e quanti passi su ciascuno, partendo dal presente e andando indietro
-  const larghezze = []; for (let w = W; larghezze.length < 3 && w >= Math.min(64, W); w /= 2) larghezze.unshift(w);
+  const larghezze = []; for (let w = W; w >= Math.min(64, W); w /= 2) larghezze.unshift(w);
   const liv = larghezze.map((w) => ({ W: w, H: w / 2, dt: (C_PASSO * 2 * Math.PI * raggioM) / w / V, n: 0 }));
   let resto = eta, saltati = 0;
   for (let l = liv.length - 1; l >= 0; l--) { const L = liv[l], vuole = Math.ceil(resto / L.dt - 1e-9), n = Math.max(0, Math.min(l > 0 ? passi : PASSI_GROSSI, vuole)); L.n = n; if (n) { if (l === 0 && vuole > n) saltati = resto - n * L.dt; L.dt = Math.min(L.dt, (resto - (l === 0 ? saltati : 0)) / n); resto -= n * L.dt; } }
@@ -286,7 +311,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     ca = null; if (!n && l < liv.length - 1) continue;
     c0 = (dt * V * w) / (2 * Math.PI * raggioM);
     const R = Math.max(2, Math.round(w / (4 * onde))), ogni = Math.max(1, Math.min(4, Math.round((0.25 * tau) / dt))), dtM = (ogni * dt) / tau, kappa = Math.min(0.04, (C.erosione * dt) / ((2 * Math.PI * raggioM) / w) ** 2);
-    const coperta = new Float64Array(man.Wm * man.Hm), lento = 1 - Math.exp(-dtM / C.inerzia), uL = new Float64Array(Nl), rm = w / man.Wm, ihw = 1 / C.hMargine;
+    const coperta = new Float64Array(man.Wm * man.Hm), lento = 1 - Math.exp(-dtM / C.inerzia), uL = new Float64Array(Nl), rm = w / man.Wm;
     const aggiorna = (avanza) => {
       // la coperta: quanta parte di ogni cella del mantello sta sotto un continente (rispetto alla media)
       let m = 0;

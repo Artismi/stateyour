@@ -19,6 +19,7 @@
 // scende lungo la pendenza più ripida e si raccoglie: i fiumi e le loro valli.
 
 import { celle } from './fluidi.js';
+import { minerali, coloreRoccia } from './chimica.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -118,6 +119,13 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   }
   // di che cosa è fatta la superficie: crosta leggera (continenti) o basalto; quanto ferro, e se l'acqua l'ha ossidato
   const materiali = { ferro: P.composizione.ferro ?? 0.1, ghiacciato: P.tipo === 'ghiacciato', ossidato: (int.acquaKg || 0) > 0 || (isFinite(P.clima?.pressione) && P.clima.pressione > 100) };
+  // i MINERALI (chimica.js): di che cosa sono fatte la crosta dei continenti e quella vulcanica, dalla
+  // composizione del pianeta, dalla temperatura, dall'ossigeno e dall'acqua; il colore è il loro
+  try {
+    const base = { composizione: P.composizione, T: P.clima?.T ?? P.clima?.Teq ?? 280, ossidato: materiali.ossidato, acqua: (int.acquaKg || 0) > 0 };
+    materiali.continente = minerali({ ...base, continente: true }); materiali.basalto = minerali({ ...base, continente: false });
+    materiali.coloreContinente = coloreRoccia(materiali.continente); materiali.coloreBasalto = coloreRoccia(materiali.basalto);
+  } catch { /* senza chimica restano i colori di riserva */ }
   const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: nCrateri, crateriConservati: conservati };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
@@ -142,8 +150,8 @@ export function immagineSuperficie(sf, T, cl = null) {
       // il rosso del ferro ossidato dall'acqua e dall'aria, il ghiaccio sporco dei mondi ghiacciati, i sedimenti
       // pallidi dove i fiumi depositano. Nessun verde: la vegetazione ci sarà solo se la vita emergerà.
       const e = Math.min(1, (h - Math.max(0, mare)) / 4000), mat = sf.materiali || { ferro: 0.25, ossidato: true }, continente = sf.cont ? sf.cont[k] : 1;
-      c = mat.ghiacciato ? [172, 180, 186] : continente ? [148, 138, 124] : [84, 80, 76];
-      if (mat.ossidato && !mat.ghiacciato) { const r = Math.min(0.65, Math.max(0, (mat.ferro - 0.12) * 2.4)); c = [c[0] + (170 - c[0]) * r, c[1] + (98 - c[1]) * r, c[2] + (66 - c[2]) * r]; }
+      if (mat.coloreContinente) c = (continente ? mat.coloreContinente : mat.coloreBasalto).slice(); // il colore dei minerali veri
+      else { c = mat.ghiacciato ? [172, 180, 186] : continente ? [148, 138, 124] : [84, 80, 76]; if (mat.ossidato && !mat.ghiacciato) { const r = Math.min(0.65, Math.max(0, (mat.ferro - 0.12) * 2.4)); c = [c[0] + (170 - c[0]) * r, c[1] + (98 - c[1]) * r, c[2] + (66 - c[2]) * r]; } }
       if (sf.depositato && sf.depositato[k] > 3) { const d = Math.min(0.6, sf.depositato[k] / 60); c = [c[0] + (196 - c[0]) * d, c[1] + (182 - c[1]) * d, c[2] + (150 - c[2]) * d]; } // sedimenti: pianure e delta
       c = c.map((x) => x * (0.82 + 0.3 * e)); if (flusso[k] > (sf.passiErosione ? 18 * Math.pow(4, sf.livello || 0) : 60) && gelo < 0.5) c = [60, 110, 170]; }
     // il ghiaccio copre in proporzione a quanta parte dell'anno quel punto passa sotto lo zero: bordi sfumati

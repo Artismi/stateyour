@@ -10,12 +10,15 @@
 //                gli atomi conservati;
 //              · la pressione del vapore sull'acqua e sul ghiaccio, l'anidride carbonica che il mare lascia
 //                nell'aria (equilibrio di Urey), quale ossido di ferro è stabile: tutte dalla stessa tabella;
+//              · l'atmosfera di un pianeta: ciò che c'era, meno ciò che fugge, lasciato reagire e condensare;
 //              · la roccia: il mantello ha le proporzioni del Sole, la crosta è ciò che ne fonde per primo
 //                (legge della fusione parziale), i minerali sono quelli che gli atomi permettono (norma);
 //              · il colore di una miscela di polveri (legge di Kubelka-Munk).
 //   MISURATO   · la tavola degli elementi (masse, elettronegatività, abbondanze nel Sole, legami semplici);
-//              · entalpie ed entropie di formazione; i coefficienti di ripartizione tra roccia e fuso;
-//              · i colori dei minerali; le rese degli esperimenti di Miller-Urey (legge empirica).
+//              · entalpie ed entropie di formazione; calori di evaporazione e punti di ebollizione;
+//              · quanto carbonio, azoto e zolfo stanno nei ghiacci (comete); i coefficienti di ripartizione
+//                tra roccia e fuso; i colori dei minerali;
+//              · le rese degli esperimenti di Miller-Urey (legge empirica).
 // Unità: kJ/mol per le energie, J/(mol·K) per le entropie, K, Pa. Le frazioni dei gas sono in moli,
 // quelle dei minerali in massa. Le specie si chiamano con la formula ('H2O', 'CO2'): il nome italiano
 // è in MOLECOLE[formula].nome. (leggi.js ha una sua piccola MOLECOLE, con le masse dei gas del clima:
@@ -108,9 +111,15 @@ export const REAZIONI = {
 };
 // la costante di equilibrio di una reazione (nome in REAZIONI, o [reagenti, prodotti]): pressioni in bar
 export const costanteEquilibrio = (reazione, T) => Math.exp(-dG(typeof reazione === 'string' ? REAZIONI[reazione] : reazione, T) / (R_GAS * T));
-// la pressione del vapore sopra l'acqua o il ghiaccio (Pa): la K di H2O(l) ⇌ H2O(gas); tra liquido e
-// ghiaccio comanda quello che ne lascia in aria di meno (è lui il più stabile). A 288 K dà 1,7 kPa.
-export const pressioneVapore = (T) => 1e5 * Math.min(costanteEquilibrio([{ 'H2O(l)': 1 }, { H2O: 1 }], T), costanteEquilibrio([{ 'H2O(s)': 1 }, { H2O: 1 }], T));
+// la pressione del vapore sopra il liquido o il ghiaccio di una specie (Pa): oltre, il gas condensa in
+// gocce, neve o brina. Per l'acqua è la K di H2O(l) ⇌ H2O(gas) dalla tabella; tra liquido e ghiaccio
+// comanda quello che ne lascia in aria di meno (è lui il più stabile): a 288 K dà 1,7 kPa. Per gli altri
+// gas la legge di Clausius-Clapeyron con due dati misurati: il calore di evaporazione (kJ/mol; per la
+// CO2, che a 1 bar non ha liquido, di sublimazione) e la temperatura a cui bolle a 1 bar (K).
+// Idrogeno ed elio non condensano mai. (Lo zolfo: dalla sua pressione di vapore a 393 K e a 718 K.)
+const EVAPORAZIONE = { CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8] };
+export const pressioneVapore = (T, f = 'H2O') => (f === 'H2O' ? 1e5 * Math.min(costanteEquilibrio([{ 'H2O(l)': 1 }, { H2O: 1 }], T), costanteEquilibrio([{ 'H2O(s)': 1 }, { H2O: 1 }], T))
+  : EVAPORAZIONE[f] ? 1e5 * Math.exp(((-1000 * EVAPORAZIONE[f][0]) / R_GAS) * (1 / T - 1 / EVAPORAZIONE[f][1])) : Infinity);
 // equilibrio di Urey: dove c'è acqua liquida la pioggia scioglie i silicati e l'anidride carbonica finisce
 // nel calcare (CaSiO3 + CO2 ⇌ CaCO3 + SiO2). Questa è la pressione di CO2 che resta nell'aria (Pa):
 // un nulla a 288 K, un centinaio di bar a 735 K (è, quasi, la pressione di Venere).
@@ -203,11 +212,12 @@ export function equilibrio({ T, P = 1e5, elementi = {}, dettagli = false } = {})
 // H2: un H2 vale 1, un metano 4, un'ammoniaca 1,5, un CO 1: è ciò che manca alla molecola per essere
 // CO2, H2O, N2, SO2) contro quello che servirebbe per ridurre a metano il carbonio ossidato (4 per CO2)
 // e per consumare l'ossigeno libero (2 per O2). Azoto e acqua sono neutri.
-export function potereRiducente(gas = {}) {
+const redox = (gas) => {
   let rid = 0, oss = 4 * (gas.CO2 || 0);
   for (const f in gas) { const a = MOLECOLE[f]?.atomi; if (!a) continue; const h = 2 * (a.C || 0) + 0.5 * (a.H || 0) - (a.O || 0) + 2 * (a.S || 0); if (h > 0) rid += h * gas[f]; else oss -= h * gas[f]; }
-  return rid > 1e-6 ? rid / (rid + oss) : 0;
-}
+  return { rid, oss };
+};
+export function potereRiducente(gas = {}) { const { rid, oss } = redox(gas); return rid > 1e-6 ? rid / (rid + oss) : 0; }
 
 // ---------- 5. L'ATMOSFERA DI UN PIANETA
 // Si parte da ciò che c'era, si toglie ciò che fugge, si lascia reagire.
@@ -222,15 +232,18 @@ export function potereRiducente(gas = {}) {
 //    Se poi l'acqua è tutta vapore (niente mare né ghiaccio che la trattenga in basso) sale in alto, la
 //    luce la spezza e l'idrogeno se ne va: il pianeta perde anche l'acqua, come Venere; l'ossigeno che
 //    avanza lo prende il ferro della crosta, che arrugginisce.
-//  · Poi si tolgono le molecole più leggere di quelle che la gravità tiene (clima.tenuti), l'acqua
-//    oltre la pressione del vapore (piove, o nevica), e dove c'è un mare l'anidride carbonica oltre
-//    l'equilibrio di Urey (diventa calcare) e l'anidride solforosa (si scioglie, diventa solfato).
+//  · Poi si tolgono le molecole più leggere di quelle che la gravità tiene (clima.tenuti), ogni gas
+//    oltre la sua pressione di vapore (l'acqua piove o nevica; al freddo gelano l'ammoniaca, la CO2,
+//    il metano, perfino l'azoto), e dove c'è un mare l'anidride carbonica oltre l'equilibrio di Urey
+//    (diventa calcare) e l'anidride solforosa (si scioglie, diventa solfato).
 // Dati misurati: quanta parte di C, N, S sta nei ghiacci insieme all'acqua (nelle comete: circa 0,3,
 // 0,1 e 0,3 di quella del Sole; l'azoto è quasi tutto N2, che non congela) e il ferro che resta ossidato
 // nei silicati (15%, sulla Terra); lo zolfo eruttato che torna quasi tutto nella crosta, come solfuri e
-// solfati (in aria ne resta un millesimo: su Venere 150 parti per milione). Sotto 300 K le reazioni tra gas sono ferme: la miscela resta quella
-// dell'ultima volta che ha reagito, e si prende 300 K (semplificazione dichiarata).
-// → { gas: { formula: frazione }, riducente, potere, pressione (Pa), pO2 (bar), ferro (la forma stabile), fuliggine }
+// solfati (in aria ne resta un millesimo: su Venere 150 parti per milione).
+// Sotto 300 K le reazioni tra gas sono ferme: la miscela resta quella dell'ultima volta che ha reagito,
+// e si prende 300 K (semplificazione dichiarata). La pressione totale è quella di clima(), non ricalcolata.
+// → { gas: { formula: frazione }, riducente, potere (0…1), pressione (Pa: quella del clima, o meno se quasi
+//     tutto è gelato), pO2 (bar), ferro (la forma stabile, da ferroStabile), fuliggine (parte del carbonio) }
 const NEI_GHIACCI = { C: 0.3, N: 0.1, S: 0.3 }, ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
 const ossigenoNellaRoccia = (ab) => ab.Mg + 2 * ab.Si + 1.5 * ab.Al + ab.Ca + (ab.Na + ab.K) / 2 + FE_NEI_SILICATI * ab.Fe;
 export function atmosfera(P, { Z } = {}) {
@@ -243,9 +256,10 @@ export function atmosfera(P, { Z } = {}) {
   let el;
   if (tieneH) el = { H: sole.H, He: gigante || tenuti.includes('elio') ? sole.He : 0, C: sole.C, N: sole.N, O: Oacqua, S: sole.S };
   else {
-    // acqua W, e i volatili in proporzione (anche una roccia asciutta ne porta un poco); il carbonio
+    // acqua W, e i volatili in proporzione, la stessa per ogni metallicità: il ghiaccio è fatto degli
+    // stessi atomi pesanti (anche una roccia asciutta ne porta un poco); il carbonio
     // arriva in media come CO (nei ghiacci: CO, CO2, metanolo, composti organici)
-    const W = comp.acqua ?? comp.ghiaccio ?? 0, V = Math.max(W, 0.001) / (Oacqua || 1), sol = abbondanze(1);
+    const W = comp.acqua ?? comp.ghiaccio ?? 0, sol = abbondanze(1), V = Math.max(W, 0.001) / (sol.O - ossigenoNellaRoccia(sol));
     const C = NEI_GHIACCI.C * sol.C * V, N = NEI_GHIACCI.N * sol.N * V, S = ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, secco = String(cl.acqua || '').startsWith('vapore');
     const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
     el = { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
@@ -253,20 +267,24 @@ export function atmosfera(P, { Z } = {}) {
   const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : 1e5; // nei giganti: il livello di 1 bar
   const eq = equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas };
   for (const f in x) if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f];
-  // i tetti: l'acqua oltre il vapore saturo, e con un mare la CO2 oltre Urey e tutta la SO2
-  const tetti = { H2O: pressioneVapore(T) / Pr };
-  if (cl.acqua === 'liquida') { tetti.CO2 = pressioneCO2Urey(T) / Pr; tetti.SO2 = 0; }
-  let somma = 0; for (const f in x) somma += x[f];
-  if (!(somma > 0)) return niente;
-  for (let giro = 0; giro < 4; giro++) { // chi supera il suo tetto si ferma lì, gli altri si dividono il resto
-    let fissi = 0, liberi = 0; for (const f in x) { if (f in tetti && x[f] / somma >= tetti[f]) fissi += Math.min(1, tetti[f]); else liberi += x[f]; }
-    if (!(liberi > 0)) break;
-    for (const f in x) x[f] = f in tetti && x[f] / somma >= tetti[f] ? Math.min(1, tetti[f]) : (x[f] / liberi) * Math.max(0, 1 - fissi);
-    somma = 1;
+  // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
+  // mare, la CO2 fino all'equilibrio di Urey e niente SO2
+  const tetto = (f) => (cl.acqua === 'liquida' && f === 'SO2' ? 0 : Math.min(pressioneVapore(T, f), cl.acqua === 'liquida' && f === 'CO2' ? pressioneCO2Urey(T) : Infinity));
+  // chi supererebbe il suo tetto si ferma lì; gli altri si dividono la pressione che resta. Se di altri
+  // non ce n'è (tutto è gelato) resta solo un velo di vapori, ciascuno alla sua pressione
+  const fermi = new Set(), p = {};
+  for (let giro = 0; giro < 12; giro++) {
+    let liberi = 0, resto = Pr; for (const f in x) { if (fermi.has(f)) resto -= tetto(f); else liberi += x[f]; }
+    const veri = liberi > 1e-6 && resto > 0; let nuovi = 0;
+    for (const f in x) { p[f] = fermi.has(f) ? tetto(f) : veri ? (x[f] / liberi) * resto : 0; if (p[f] > tetto(f)) { fermi.add(f); nuovi++; } }
+    if (!nuovi) break;
   }
-  const gas = Object.fromEntries(Object.entries(x).map(([f, v]) => [f, v / somma]).filter(([, v]) => v > 1e-12).sort((a, b) => b[1] - a[1]));
-  const potere = potereRiducente(gas), pO2 = ((eq.gas.O2 || 0) * Pr) / 1e5;
-  return { gas, riducente: potere > 0.5, potere, pressione: Pr, pO2, ferro: ferroStabile(Tr, pO2), fuliggine: eq.grafite };
+  const pressione = Object.values(p).reduce((a, v) => a + v, 0);
+  if (!(pressione > 0)) return niente;
+  const gas = Object.fromEntries(Object.entries(p).map(([f, v]) => [f, v / pressione]).filter(([, v]) => v > 1e-12).sort((a, b) => b[1] - a[1]));
+  const { rid, oss } = redox(gas), potere = potereRiducente(gas), pO2 = ((eq.gas.O2 || 0) * Pr) / 1e5;
+  // riducente: l'idrogeno che l'aria può cedere supera quello che servirebbe a ridurla, e non è una traccia (almeno l'1%)
+  return { gas, riducente: rid > oss && rid > 0.01, potere, pressione, pO2, ferro: ferroStabile(Tr, pO2), fuliggine: eq.grafite };
 }
 
 // ---------- 6. I MINERALI DELLA SUPERFICIE E IL LORO COLORE

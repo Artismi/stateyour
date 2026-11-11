@@ -965,6 +965,12 @@ function pannelloCosmo(h) {
     if (camMappa.livello >= 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
+      // L'ARIA e la prima tappa verso la vita
+      if (P.atmosfera) {
+        const gas = Object.entries(P.atmosfera.gas).sort((x, y) => y[1] - x[1]).filter(([, f]) => f > 0.001).slice(0, 5).map(([g, f]) => `${g} ${(f * 100).toFixed(f < 0.1 ? 1 : 0)}%`).join(', ');
+        const pre = P.prebiotica, idro = cl.acqua === 'liquida' && P.interno?.vulcani > 0;
+        h.push(`<h2>l'aria e i mattoni della vita</h2><p class="nota">${gas ? `L'aria: ${gas}` : "Nessun'aria"}${P.atmosfera.riducente ? ' (ricca di idrogeno: riducente)' : gas ? " (senza idrogeno libero: ossidata)" : ''}. Viene dai gas che la gravità trattiene, all'equilibrio chimico a quella temperatura.${pre ? ` Le reazioni che fanno i mattoni (scariche elettriche e ultravioletto nell'aria, come nel famoso esperimento): ${pre.HCN > 0.1 ? 'rendono molto' : pre.HCN > 1e-3 ? 'rendono poco' : 'non rendono quasi niente'}${P.atmosfera.riducente ? '' : ", perché l'aria è ossidata"}.` : ''} ${idro ? "Sul fondo del mare l'interno caldo alimenta sorgenti idrotermali: un altro posto dove i mattoni si formano e si concentrano." : cl.acqua === 'liquida' ? "C'è acqua liquida, ma l'interno è freddo: niente sorgenti calde." : "Senza acqua liquida i mattoni non hanno dove incontrarsi."}${pre?.autocatalisi ? ' Ci sono le condizioni perché gli zuccheri si moltiplichino da soli (formaldeide, acqua liquida, un minerale basico).' : ''} Nessuna vita: solo le condizioni.</p>`);
+      }
       // PERCHÉ È FATTO COSÌ: la catena delle cause, dall'inizio al suo nucleo
       {
         const v = camMappa.via, Gx = galassiaDi(v.cosmo, v.galassia), St = Gx.stelle[v.stella], Gg = Gx.G, ANNI = 3.156e7;

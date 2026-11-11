@@ -1,7 +1,8 @@
 // rocce.js — ciò che si vede zoomando sotto la cella di terreno: dal metro al micron.
 //
 // Quattro modi in cui la materia solida prende forma da sola, ciascuno simulato
-// nel tempo su una griglia N×N (tutte periodiche: i bordi combaciano, come piastrelle):
+// nel tempo su una griglia N×N (cristalli e fratture si richiudono sui bordi, come
+// piastrelle; il sedimento solo di lato; il fiocco è un oggetto solo, al centro):
 //   · CRISTALLI. Un fuso che si raffredda: i cristalli nascono a caso e crescono
 //     finché si toccano. Lento = pochi e grandi (granito), rapido = tanti e piccoli
 //     (basalto), rapidissimo = non fa in tempo e resta vetro (ossidiana).
@@ -97,9 +98,9 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
     return { tipo: 'cristalli', N, grano, minerale, minerali, nGrani, orientamento: Float32Array.from(orientamento), mineraleDelGrano: Uint8Array.from(gm),
       // il grano medio: il diametro del cerchio che ha l'area media di un cristallo, in celle
       granoMedio: nGrani ? 2 * Math.sqrt(solido / nGrani / Math.PI) : 0,
-      frazioneNelTempo, passo, sottoraffreddamento: u, cristallino: solido / n2, vetro: liquido / n2, frazioni: quota.map((q) => (solido ? q / solido : 0)) };
+      frazioneNelTempo, passo, invaso, sottoraffreddamento: u, cristallino: solido / n2, vetro: liquido / n2, frazioni: quota.map((q) => (solido ? q / solido : 0)) };
   };
-  let liquido = n2;
+  let liquido = n2, invaso = false;
   if (!(G > 0) || !(I > 0)) return fine(0); // arrivato al vetro senza cristallizzare
   // IL PLATEAU. Quando i cristalli decollano, il calore latente che liberano compensa quello
   // che esce: la temperatura resta quasi ferma finché c'è fuso. Per questo nascita I e
@@ -107,7 +108,14 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
   // frazione solida X(t) = 1 − exp(−(π/3)·I·G²·t³) (in sezione, cioè in due dimensioni: esponente 3).
   // Il plateau dura al più il tempo che resta prima del vetro: ciò che avanza resta vetro.
   const aspetto = minerali.map((m) => 1 + 3 * limita(m.anisotropia || 0, 0, 1)), vmax = 2 * Math.sqrt(Math.max(...aspetto));
-  const dt = 1 / (G * vmax), passi = Math.min(6000, Math.floor((1 - u) / r / dt)); // il passo di tempo: nessun fronte avanza più di una cella
+  const dt = 1 / (G * vmax), passi = Math.floor((1 - u) / r / dt); // il passo di tempo: nessun fronte avanza più di una cella
+  // Se i cristalli sono molto più grandi del quadro, nel quadro può non nascerne nessuno per tantissimo tempo: si salta
+  // l'attesa fino al primo germe. E se il resto della roccia fa in tempo a solidificare prima (1,7 tempi di Avrami),
+  // il quadro viene invaso da un cristallo nato fuori: lo si fa nascere in un punto a caso.
+  const perPasso = I * dt * n2, pieno = (1.7 * Math.cbrt(3 / (Math.PI * I * G * G))) / dt;
+  let attesa = perPasso < 0.05 ? Math.floor(-Math.log(1 - caso()) / perPasso) : 0;
+  if (attesa >= pieno && pieno < passi) { attesa = Math.floor(pieno); invaso = true; }
+  if (attesa >= passi) return fine(dt); // il vetro arriva prima del primo germe
   const area = new Float64Array(M), R = new Float64Array(M), vel = new Float64Array(M), conc = new Float64Array(M), marca = new Int32Array(n2).fill(-1);
   // la distanza «a modo del cristallo»: più corta lungo l'asse veloce; le facce piane vengono dal fatto
   // che un cristallo avanza più lento di fronte alle sue facce dense (miscela fra cerchio e rettangolo)
@@ -119,14 +127,15 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
   let coda = [];
   const vicini = (c, lista) => { const x = c % N, y = (c - x) / N; lista.push(y * N + (x + 1) % N, y * N + (x + N - 1) % N, ((y + 1) % N) * N + x, ((y + N - 1) % N) * N + x); };
   const quattro = [];
-  for (let passo = 0; passo < passi && liquido > 0; passo++) {
+  for (let k = Math.min(attesa, 2000); k > 0; k--) frazioneNelTempo.push(0);
+  for (let passo = attesa; passo < passi && liquido > 0; passo++) {
     // IL FUSO HA UNA COMPOSIZIONE. Ogni minerale consuma i suoi ingredienti: se ne ha già presi più della sua
     // parte, il fuso ne è povero e lui rallenta (e ne nascono meno); gli altri accelerano. Così le proporzioni
     // finali sono quelle della ricetta, e gli ultimi arrivati riempiono gli interstizi.
     let sc = 0;
     for (let k = 0; k < M; k++) { conc[k] = Math.max(0, f[k] * n2 - area[k]) / liquido; sc += conc[k]; vel[k] = limita(conc[k] / f[k], 0.1, 2); R[k] += vel[k] / vmax; }
     // NASCITA: germi a caso nello spazio; quelli che cadono nel già solido non nascono (i «fantasmi» di Avrami)
-    for (let k = poisson(I * dt * n2, caso); k > 0; k--) {
+    for (let k = passo === attesa && attesa ? 1 : poisson(perPasso, caso); k > 0; k--) {
       const c = (caso() * n2) | 0, giro = caso() * Math.PI, dado = caso() * sc;
       if (grano[c] >= 0) continue;
       let m = 0, acc = conc[0]; while (m < M - 1 && dado > acc) acc += conc[++m];
@@ -181,16 +190,17 @@ export function nakaya(T, umidita) {
   const b = limita((eccesso / 0.2) * finestra, 0, 1);
   // nell'automa conta quanta parte del vapore arriva «da fuori piano», uguale per tutti (gamma), rispetto a quella
   // che deve diffondere nel piano e premia le punte: tanta = piastra, poca = rami. Taratura sul diagramma.
-  return { eccesso, ramificazione: b, alfa: 1, beta: 0.6, gamma: 0.1 * Math.pow(0.03, Math.pow(b, 1.6)) };
+  return { eccesso, ramificazione: b, alfa: 1, beta: 0.6, gamma: 0.1 * Math.pow(0.03, b * b) };
 }
 
 // T in kelvin; umidita relativa all'acqua liquida (1 = dentro una nube). parametri = { alfa, beta, gamma } per forzare l'automa.
-export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametri = null } = {}) {
+// celle = raggio del fiocco in celle esagonali: il fiocco è sempre lo stesso oggetto, N è solo la finezza dell'immagine.
+export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametri = null, celle = 59 } = {}) {
   const caso = generatore(seme), nk = nakaya(T, umidita), { alfa, beta, gamma } = { ...nk, ...(parametri || {}) };
   // il fiocco cresce fino a Rf celle; l'aria «lontana» sta a Rc. Regole e germe sono simmetrici, quindi il
   // risultato lo è per forza: si calcola un solo spicchio (un dodicesimo: q ≥ r ≥ 0) e i vicini fuori dallo
   // spicchio si leggono nelle celle specchiate. È un risparmio di calcolo, non una simmetria imposta alla fisica.
-  const Rf = Math.max(8, Math.round((0.46 * N) / 1.5)), Rc = Math.ceil(1.45 * Rf), L = Rc + 3;
+  const Rf = Math.max(8, Math.round(celle)), Rc = Math.ceil(1.45 * Rf), L = Rc + 3;
   const canonica = (q, r) => { let a = q, b = r, c = -q - r, s; if (a < b) { s = a; a = b; b = s; } if (b < c) { s = b; b = c; c = s; } if (a < b) { s = a; a = b; b = s; } return b >= 0 ? a * L + b : -c * L - b; };
   const indice = new Int32Array(L * L).fill(-1), cq = [], cr = [];
   for (let q = 0; q < L; q++) for (let r = 0; r <= q; r++) if (q * q + q * r + r * r <= (Rc + 1.5) ** 2) { indice[q * L + r] = cq.length; cq.push(q); cr.push(r); }
@@ -218,15 +228,19 @@ export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametr
     }
     for (let k = 0; k < ni; k++) { const i = interne[k]; s[i] = s2[i]; if (!ghiaccioS[i] && s2[i] >= 1) { gela(i, passo + 1); if (raggio2[i] > estensione2) estensione2 = raggio2[i]; } }
   }
-  // CHE FORMA È: lo si misura sul risultato, non sui parametri. «pienezza» = quanta parte dell'esagono che lo
-  // circoscrive è ghiaccio; «rami» = quanta parte del ghiaccio sta sul bordo (tutto, se è fatto di rametti sottili).
-  let areaG = 0, bordo = 0, rMax2 = 0;
+  // CHE FORMA È: lo si misura sul risultato, non sui parametri (le soglie sono solo i nomi che diamo alle forme).
+  //   «rami» = quanta parte del ghiaccio sta sul bordo: quasi tutto, se è fatto di rametti sottili → dendrite;
+  //   «frastaglio» = lunghezza del bordo rispetto a quello di un esagono pieno della stessa area: vicino a 1–2 → piastra;
+  //   in mezzo (sei bracci larghi, piastre a settori) → stella.
+  //   «pienezza» = area rispetto all'esagono entro cui sta il 95% del ghiaccio (1,2 = esagono pieno).
+  let areaG = 0, bordo = 0, rMax2 = 0; const anelli = new Float64Array(L + 1);
   for (let i = 0; i < n; i++) if (ghiaccioS[i]) {
-    const peso = !cq[i] ? 1 : !cr[i] || cq[i] === cr[i] ? 6 : 12; areaG += peso; if (raggio2[i] > rMax2) rMax2 = raggio2[i]; // quante volte lo spicchio ripete la cella
+    const peso = !cq[i] ? 1 : !cr[i] || cq[i] === cr[i] ? 6 : 12; areaG += peso; anelli[Math.floor(Math.sqrt(raggio2[i]))] += peso; if (raggio2[i] > rMax2) rMax2 = raggio2[i]; // peso: quante volte lo spicchio ripete la cella
     for (let k = 0; k < 6; k++) if (!ghiaccioS[vic[i * 6 + k]]) { bordo += peso; break; }
   }
-  const pienezza = areaG / Math.max(1, 3 * rMax2), rami = bordo / Math.max(1, areaG);
-  const forma = rami > 0.4 ? 'dendrite' : pienezza > 0.85 ? 'piastra' : 'stella';
+  let r95 = 0; for (let dentro = 0; r95 < L && dentro < 0.95 * areaG; r95++) dentro += anelli[r95];
+  const pienezza = areaG / Math.max(1, 3 * r95 * r95), rami = bordo / Math.max(1, areaG), frastaglio = bordo / Math.max(1, 6 * Math.sqrt(areaG / 3));
+  const forma = areaG < 19 ? 'piastra' : rami > 0.45 ? 'dendrite' : frastaglio < 3 ? 'piastra' : 'stella'; // il germe che non cresce è un prisma esagonale minuscolo
   // dallo spicchio all'immagine: ogni punto del quadrato N×N guarda (in nove punti) le celle esagonali in cui cade
   const ghiaccio = new Uint8Array(N * N), copertura = new Float32Array(N * N), quando = new Float32Array(N * N), passoCella = (0.46 * N) / Rf, r3 = Math.sqrt(3);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -240,7 +254,7 @@ export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametr
     }
     const k = y * N + x; copertura[k] = quanti / 9; ghiaccio[k] = quanti >= 5 ? 1 : 0; quando[k] = quanti ? e / quanti : 0;
   }
-  return { tipo: 'fiocco', N, ghiaccio, copertura, eta: quando, forma, pienezza, rami, passi: passo, raggio: Math.sqrt(rMax2) * passoCella, eccesso: nk.eccesso, ramificazione: nk.ramificazione, parametri: { alfa, beta, gamma } };
+  return { tipo: 'fiocco', N, ghiaccio, copertura, eta: quando, forma, pienezza, rami, frastaglio, passi: passo, raggio: Math.sqrt(rMax2) * passoCella, eccesso: nk.eccesso, ramificazione: nk.ramificazione, parametri: { alfa, beta, gamma } };
 }
 
 // =====================================================================================
@@ -259,17 +273,20 @@ export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametr
 // L'energia poi cambia nel tempo (piene e magre): ogni periodo lascia la sua lamina.
 // IPOTESI dichiarata: gli ambienti energici sono anche i più incostanti (torrenti,
 // tempeste), quelli calmi i più regolari (laghi, fondali): osservato, non derivato.
-// Sezione verticale: il tempo va dal basso (riga N−1) verso l'alto. energia fra 0 e 1.
+// Sezione verticale: il tempo va dal basso (riga N−1) verso l'alto. energia fra 0 (acqua quasi ferma)
+// e 1 (piena); grano = −1 dove fra i granelli restano pori e fango.
 export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
   const caso = generatore(seme), E = limita(energia, 0.02, 1.5), n2 = N * N;
   const grano = new Int32Array(n2).fill(-1), quota = new Float32Array(N), diam = [], specie = [], energiaNelTempo = [];
-  const COMPETENZA = 24, SOSPENSIONE = 2.6, memoria = 14, incostanza = 0.09 + 0.3 * E;
+  const COMPETENZA = 24, SOSPENSIONE = 2.6, incostanza = 0.09 + 0.3 * E;
+  // la memoria della corrente: una lamina è spessa una quindicina di celle (o un solo evento, se i granelli sono più grossi di così)
+  const ricordo = Math.exp(-Math.max(1, 0.6 * COMPETENZA * E * E) / 14);
   let x = 0, sommaArea = 0, sommaD = 0, sommaL = 0, sommaL2 = 0, minimo = 0, tentativi = 0;
   const altezzaDi = (cx, a, b) => { let top = 0; for (let i = Math.floor(cx - a); i <= Math.floor(cx + a); i++) { const o = (i + 0.5 - cx) / a; if (o * o >= 1) continue; const q = quota[((i % N) + N) % N] + b * Math.sqrt(1 - o * o); if (q > top) top = q; } return top; };
   while (minimo < N && tentativi < 60 * n2) {
     // l'energia di questo momento: oscilla attorno alla media con una memoria (processo di Ornstein-Uhlenbeck sul logaritmo)
-    x += -x / memoria + incostanza * Math.sqrt(2 / memoria) * campana(caso);
-    const e = E * Math.exp(x), dMax = COMPETENZA * e * e, dMin = Math.min(SOSPENSIONE * Math.sqrt(e), 0.7 * dMax), lMin = Math.log(dMin), lMax = Math.log(dMax);
+    x = ricordo * x + incostanza * Math.sqrt(1 - ricordo * ricordo) * campana(caso);
+    const e = E * Math.exp(x), dMax = Math.min(N / 3, COMPETENZA * e * e), dMin = Math.min(SOSPENSIONE * Math.sqrt(e), 0.7 * dMax), lMin = Math.log(dMin), lMax = Math.log(dMax);
     energiaNelTempo.push(e);
     // in questo intervallo si posa uno straterello spesso circa un granello
     for (let posato = 0, daPosare = N * Math.max(1, 0.6 * dMax); posato < daPosare && tentativi < 60 * n2; tentativi++) {
@@ -314,8 +331,9 @@ export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
 // sta sotto: resta in TRAZIONE, uguale in tutte le direzioni, e la trazione cresce nel
 // tempo. Dove supera la resistenza di un difetto nasce una crepa, che corre.
 //   · Una crepa SCARICA la trazione ai suoi lati, fino a una distanza h dell'ordine
-//     dello spessore dello strato (σ = σ₀·(1 − e^(−d/h)), dal modello «shear-lag»):
-//     vicino a una crepa non ne nascono altre, in mezzo a un pezzo grande sì.
+//     dello spessore dello strato (σ = σ₀·(1 − e^(−d/h)), dal modello «shear-lag»;
+//     qui troncata a 1,6·h, oltre cui la trazione è piena): vicino a una crepa non
+//     ne nascono altre, in mezzo a un pezzo grande sì.
 //   · Accanto a una crepa resta solo la trazione PARALLELA ad essa: perciò una crepa
 //     che si avvicina a un'altra curva e la incontra ad angolo retto (giunti a T), e
 //     lì si ferma. Lontano da tutto corre dritta, deviando appena per i difetti.
@@ -332,29 +350,34 @@ export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
 // lenta, più scatti di assestamento (maturazione ≈ 2,5/sforzo − 2,5; si può forzare).
 // Un fango che secca una volta sola non matura: maturazione 0.
 // sforzo: velocità di contrazione, fra 0,05 (lenta) e 2 (brusca).
+const H_CREPE = 11; // la distanza di scarico, in celle, quando sforzo = 1 (sceglie solo l'inquadratura)
 export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, colore = [78, 76, 80] } = {}) {
   const caso = generatore(seme), S = limita(sforzo, 0.05, 2), n2 = N * N, meta = N / 2;
-  const h = limita(13 / Math.sqrt(S), 4, N / 5), Rmax = Math.min(N / 2 - 1, 3 * h), sonda = limita(0.6 * h, 3, 14);
+  const h = limita(H_CREPE / Math.sqrt(S), 3, N / 6), Rmax = Math.min(N / 2 - 1, 1.6 * h), sonda = limita(0.6 * h, 3, 14), ogni = Math.max(1, Math.floor(sonda / 2));
   const crepe = new Uint8Array(n2), chi = new Int32Array(n2).fill(-1), quando = new Int32Array(n2), dist = new Float64Array(n2).fill(1e9), vic = new Int32Array(n2).fill(-1);
   const avvolgi = (d) => (d > meta ? d - N : d < -meta ? d + N : d), mod = (i) => ((i % N) + N) % N;
-  // segna una cella come crepa e aggiorna, lì attorno, «quanto dista la crepa più vicina e qual è»
-  const fila = new Int32Array(n2), OTTO_X = [1, -1, 0, 0, 1, 1, -1, -1], OTTO_Y = [0, 0, 1, -1, 1, -1, 1, -1];
-  const segna = (c, id, passo) => {
-    crepe[c] = 1; chi[c] = id; quando[c] = passo; dist[c] = 0; vic[c] = c;
-    const x0 = c % N, y0 = (c / N) | 0; let testa = 0, coda = 0; fila[coda++] = c;
+  const OTTO_X = [1, -1, 0, 0, 1, 1, -1, -1], OTTO_Y = [0, 0, 1, -1, 1, -1, 1, -1], nuove = [], fila = [];
+  let cap = 1; while (cap < 4 * n2) cap *= 2;
+  const anello = new Int32Array(cap), maschera = cap - 1; // una fila ad anello
+  const segna = (c, id, passo) => { crepe[c] = 1; chi[c] = id; quando[c] = passo; dist[c] = 0; vic[c] = c; nuove.push(c); };
+  // aggiorna, attorno alle celle appena rotte, «quanto dista la crepa più vicina e qual è»: un fronte che si allarga da tutte insieme
+  const aggiorna = () => {
+    let testa = 0, coda = 0; for (let i = 0; i < nuove.length; i++) anello[coda++ & maschera] = nuove[i]; nuove.length = 0;
     while (testa < coda) {
-      const p = fila[testa++], px = p % N, py = (p / N) | 0;
+      const p = anello[testa++ & maschera], px = p % N, py = (p - px) / N, o = vic[p], ox = o % N, oy = (o - ox) / N;
       for (let k = 0; k < 8; k++) {
-        const qx = mod(px + OTTO_X[k]), qy = mod(py + OTTO_Y[k]), q = qy * N + qx, dx = avvolgi(qx - x0), dy = avvolgi(qy - y0), d = Math.sqrt(dx * dx + dy * dy);
-        if (d < Rmax && d < dist[q]) { dist[q] = d; vic[q] = c; fila[coda++] = q; }
+        let qx = px + OTTO_X[k], qy = py + OTTO_Y[k]; if (qx === N) qx = 0; else if (qx < 0) qx = N - 1; if (qy === N) qy = 0; else if (qy < 0) qy = N - 1;
+        let dx = qx - ox, dy = qy - oy; if (dx > meta) dx -= N; else if (dx < -meta) dx += N; if (dy > meta) dy -= N; else if (dy < -meta) dy += N;
+        const q = qy * N + qx, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < Rmax && d < dist[q]) { dist[q] = d; vic[q] = o; anello[coda++ & maschera] = q; }
       }
     }
   };
   // la resistenza di ogni punto (Weibull, modulo 6) e l'ordine in cui i punti cederebbero
-  const resistenza = new Float32Array(n2), ordine = new Int32Array(n2), scarico = new Float32Array(Math.ceil(Rmax) + 2).map((_, d) => 1 - Math.exp(-d / h));
+  const resistenza = new Float32Array(n2), ordine = new Int32Array(n2), scarico = new Float32Array(Math.ceil(Rmax) + 2).map((_, d) => (1 - Math.exp(-d / h)) / (1 - Math.exp(-Rmax / h)));
   for (let i = 0; i < n2; i++) { resistenza[i] = Math.pow(-Math.log(1 - caso()), 1 / 6); ordine[i] = i; }
   ordine.sort((a, b) => resistenza[a] - resistenza[b]);
-  const sigma0 = resistenza[ordine[0]], sigmaFine = 1.5, durata = Math.ceil(24 / S);
+  const sigma0 = resistenza[ordine[0]], sigmaFine = 1, durata = Math.ceil(24 / S);
   const px = [], py = [], pf = [], pid = []; let vive = [], nCrepe = 0, pronti = 0;
   const fatto = new Uint8Array(n2);
   for (let passo = 0; passo < durata + 8 * N && (passo <= durata || vive.length); passo++) {
@@ -367,54 +390,64 @@ export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, 
         const d = dist[c]; if (sigma * (d >= Rmax ? 1 : scarico[d | 0]) < resistenza[c]) continue;
         // la direzione: perpendicolare alla trazione più forte. Vicino a una crepa quella è parallela alla crepa, quindi si parte verso di lei; lontano, a caso
         let fi = caso() * Math.PI; if (d < Rmax) { const v = vic[c]; fi = Math.atan2(avvolgi(((v / N) | 0) - ((c / N) | 0)), avvolgi((v % N) - (c % N))); }
-        fatto[c] = 1; const id = nCrepe++; segna(c, id, passo);
+        fatto[c] = 1; const id = nCrepe++; segna(c, id, passo); aggiorna();
         for (const verso of [0, Math.PI]) { vive.push(px.length); px.push((c % N) + 0.5); py.push(((c / N) | 0) + 0.5); pf.push(fi + verso); pid.push(id); }
       }
     }
-    // PROPAGAZIONE: ogni punta avanza di una cella; sente le crepe davanti a sé e curva per incontrarle ad angolo retto
+    // PROPAGAZIONE: ogni punta avanza di una cella. Da sola va dritta (deviando appena per i difetti); se davanti a sé sente
+    // un'altra crepa, la trazione lì è rimasta solo lungo quella: la punta ruota fino a mettersi perpendicolare ad essa
     const ancora = [];
     for (const t of vive) {
       const sx = mod(Math.floor(px[t] + sonda * Math.cos(pf[t]))), sy = mod(Math.floor(py[t] + sonda * Math.sin(pf[t]))), s = sy * N + sx, v = vic[s];
-      if (v >= 0 && dist[s] < sonda - 1 && (chi[v] !== pid[t] || passo - quando[v] > 3 * sonda)) {
-        let giro = Math.atan2(avvolgi(((v / N) | 0) - sy), avvolgi((v % N) - sx)) - pf[t]; giro = Math.atan2(Math.sin(giro), Math.cos(giro)); pf[t] += limita(giro, -0.35, 0.35);
-      } else pf[t] += 0.07 * campana(caso);
+      if (v >= 0 && dist[s] < sonda - 1 && (chi[v] !== pid[t] || passo - quando[v] > meta)) {
+        let svolta = Math.atan2(avvolgi(((v / N) | 0) - sy), avvolgi((v % N) - sx)) - pf[t]; svolta = Math.atan2(Math.sin(2 * svolta), Math.cos(2 * svolta)) / 2;
+        pf[t] += limita((svolta * Math.exp(-dist[s] / h) * 2.5) / sonda, -0.3, 0.3);
+      }
+      pf[t] += 0.025 * campana(caso);
       const ox = Math.floor(px[t]), oy = Math.floor(py[t]); px[t] = (px[t] + Math.cos(pf[t]) + N) % N; py[t] = (py[t] + Math.sin(pf[t]) + N) % N;
       const nx = Math.floor(px[t]), ny = Math.floor(py[t]);
       if (nx === ox && ny === oy) { ancora.push(t); continue; }
       if (nx !== ox && ny !== oy) { const lato = oy * N + nx; if (crepe[lato]) continue; segna(lato, pid[t], passo); } // in diagonale si passa per la cella di lato: la crepa non lascia varchi
-      const c = ny * N + nx; if (crepe[c]) continue; // ha incontrato un'altra crepa: si ferma lì
+      const c = ny * N + nx; if (crepe[c]) continue; // ha incontrato un'altra crepa: si ferma lì (giunto a T)
       segna(c, pid[t], passo); ancora.push(t);
     }
-    vive = ancora;
+    vive = ancora; if (passo % ogni === 0) aggiorna();
   }
   // i pezzi: le regioni chiuse dalle crepe (le schegge minuscole si sbriciolano nella crepa)
-  let poligono = new Int32Array(n2).fill(-1), nP = 0; const centri = [];
+  let poligono = new Int32Array(n2).fill(-1), nP = 0; const cx = [], cy = [];
   for (let c0 = 0; c0 < n2; c0++) {
     if (crepe[c0] || poligono[c0] >= 0) continue;
-    let testa = 0, coda = 0, cxs = 0, sxs = 0, cys = 0, sys = 0; fila[coda++] = c0; poligono[c0] = nP;
-    while (testa < coda) {
-      const p = fila[testa++], x = p % N, y = (p / N) | 0, ax = (2 * Math.PI * x) / N, ay = (2 * Math.PI * y) / N; cxs += Math.cos(ax); sxs += Math.sin(ax); cys += Math.cos(ay); sys += Math.sin(ay);
-      for (const q of [y * N + mod(x + 1), y * N + mod(x - 1), mod(y + 1) * N + x, mod(y - 1) * N + x]) if (!crepe[q] && poligono[q] < 0) { poligono[q] = nP; fila[coda++] = q; }
+    let cxs = 0, sxs = 0, cys = 0, sys = 0; fila.length = 0; fila.push(c0); poligono[c0] = nP;
+    for (let testa = 0; testa < fila.length; testa++) {
+      const p = fila[testa], x = p % N, y = (p / N) | 0, ax = (2 * Math.PI * (x + 0.5)) / N, ay = (2 * Math.PI * (y + 0.5)) / N; cxs += Math.cos(ax); sxs += Math.sin(ax); cys += Math.cos(ay); sys += Math.sin(ay);
+      for (let k = 0; k < 4; k++) { const q = mod(y + OTTO_Y[k]) * N + mod(x + OTTO_X[k]); if (!crepe[q] && poligono[q] < 0) { poligono[q] = nP; fila.push(q); } }
     }
-    if (coda < 8) { for (let k = 0; k < coda; k++) { poligono[fila[k]] = -1; crepe[fila[k]] = 1; } continue; }
+    if (fila.length < 8) { for (const p of fila) { poligono[p] = -1; crepe[p] = 1; } continue; }
     // il baricentro (su una griglia che si richiude: media degli angoli)
-    centri.push([mod(Math.round((Math.atan2(sxs, cxs) / (2 * Math.PI)) * N * 1000) / 1000 + N), mod(Math.round((Math.atan2(sys, cys) / (2 * Math.PI)) * N * 1000) / 1000 + N)]); nP++;
+    cx.push(mod((Math.atan2(sxs, cxs) / (2 * Math.PI)) * N)); cy.push(mod((Math.atan2(sys, cys) / (2 * Math.PI)) * N)); nP++;
   }
   // MATURAZIONE: a ogni scatto del fronte le crepe si riformano a metà strada fra i baricentri delle colonne
   const scatti = Math.round(limita(maturazione ?? 2.5 / S - 2.5, 0, 40));
   if (scatti > 0 && nP > 1) {
-    const lato = Math.max(4, Math.ceil(2 * Math.sqrt(n2 / nP))), nb = Math.max(1, Math.floor(N / lato)), lb = N / nb, zona = new Int32Array(n2);
+    const nb = Math.max(1, Math.floor(N / Math.sqrt(n2 / nP))), lb = N / nb, zona = new Int32Array(n2), inizio = new Int32Array(nb * nb + 1), lista = new Int32Array(nP), sx = new Float64Array(nP), sy = new Float64Array(nP), sa = new Float64Array(nP);
+    const secchio = (k) => Math.min(nb - 1, Math.floor(cy[k] / lb)) * nb + Math.min(nb - 1, Math.floor(cx[k] / lb));
     for (let giro = 0; giro <= scatti; giro++) {
-      const secchi = Array.from({ length: nb * nb }, () => []); centri.forEach(([x, y], k) => secchi[Math.min(nb - 1, Math.floor(y / lb)) * nb + Math.min(nb - 1, Math.floor(x / lb))].push(k));
-      const sx = new Float64Array(nP), sy = new Float64Array(nP), sa = new Float64Array(nP);
-      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-        const bx = Math.min(nb - 1, Math.floor((x + 0.5) / lb)), by = Math.min(nb - 1, Math.floor((y + 0.5) / lb)); let meglio = -1, dm = 1e18;
-        const prova = (k) => { const dx = avvolgi(x + 0.5 - centri[k][0]), dy = avvolgi(y + 0.5 - centri[k][1]), d = dx * dx + dy * dy; if (d < dm) { dm = d; meglio = k; } };
-        for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) for (const k of secchi[((by + j + nb) % nb) * nb + ((bx + i + nb) % nb)]) prova(k);
-        if (meglio < 0 || dm > lb * lb || nb < 3) for (let k = 0; k < nP; k++) prova(k); // caso raro: il più vicino potrebbe stare più in là
-        zona[y * N + x] = meglio; sx[meglio] += avvolgi(x + 0.5 - centri[meglio][0]); sy[meglio] += avvolgi(y + 0.5 - centri[meglio][1]); sa[meglio]++;
+      // i centri, ordinati per riquadro, così ogni punto cerca il suo solo fra quelli vicini
+      inizio.fill(0); for (let k = 0; k < nP; k++) inizio[secchio(k) + 1]++;
+      for (let b = 0; b < nb * nb; b++) inizio[b + 1] += inizio[b];
+      const posto = inizio.slice(0, nb * nb); for (let k = 0; k < nP; k++) lista[posto[secchio(k)]++] = k;
+      sx.fill(0); sy.fill(0); sa.fill(0);
+      const salto = giro < scatti ? 2 : 1; // negli scatti intermedi basta un punto ogni quattro per trovare i baricentri
+      for (let y = 0; y < N; y += salto) for (let x = 0; x < N; x += salto) {
+        const X = x + 0.5, Y = y + 0.5, bx = Math.min(nb - 1, Math.floor(X / lb)), by = Math.min(nb - 1, Math.floor(Y / lb)); let meglio = -1, dm = 1e18, mx = 0, my = 0;
+        for (let largo = 1; largo <= 2 && (meglio < 0 || dm > largo * lb * largo * lb - 1e-9) && 2 * largo + 1 <= nb; largo++) for (let j = -largo; j <= largo; j++) for (let i = -largo; i <= largo; i++) {
+          const b = ((by + j + nb) % nb) * nb + ((bx + i + nb) % nb);
+          for (let a = inizio[b]; a < inizio[b + 1]; a++) { const k = lista[a]; let dx = X - cx[k], dy = Y - cy[k]; if (dx > meta) dx -= N; else if (dx < -meta) dx += N; if (dy > meta) dy -= N; else if (dy < -meta) dy += N; const d = dx * dx + dy * dy; if (d < dm) { dm = d; meglio = k; mx = dx; my = dy; } }
+        }
+        if (meglio < 0 || dm > 4 * lb * lb || nb < 5) for (let k = 0; k < nP; k++) { const dx = avvolgi(X - cx[k]), dy = avvolgi(Y - cy[k]), d = dx * dx + dy * dy; if (d < dm) { dm = d; meglio = k; mx = dx; my = dy; } } // caso raro: il più vicino sta più in là
+        zona[y * N + x] = meglio; sx[meglio] += mx; sy[meglio] += my; sa[meglio]++;
       }
-      if (giro < scatti) for (let k = 0; k < nP; k++) if (sa[k]) centri[k] = [mod(centri[k][0] + sx[k] / sa[k]), mod(centri[k][1] + sy[k] / sa[k])];
+      if (giro < scatti) for (let k = 0; k < nP; k++) if (sa[k]) { cx[k] = mod(cx[k] + sx[k] / sa[k]); cy[k] = mod(cy[k] + sy[k] / sa[k]); }
     }
     crepe.fill(0); poligono = zona;
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const c = y * N + x; if (zona[c] !== zona[y * N + mod(x + 1)] || zona[c] !== zona[mod(y + 1) * N + x]) crepe[c] = 1; }
