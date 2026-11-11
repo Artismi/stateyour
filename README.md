@@ -3,6 +3,10 @@
 Scomposizione e codifica dei pattern: la loro origine e la loro replica
 tramite regole di generazione geometrica.
 
+Le regole che tengono insieme tutti i livelli, dal cosmo alla particella, stanno in
+[INTRECCIO.md](INTRECCIO.md): l'indirizzo, l'evento e il collasso, il dettaglio
+condizionato, il mondo compatibile, il tempo, una grandezza una fonte.
+
 ## La camera: il pattern come sezione di un universo possibile
 
 `index.html` è l'app (anche come programma da scrivania, vedi sotto). Ogni

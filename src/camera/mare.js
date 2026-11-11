@@ -86,7 +86,7 @@ import { COSTANTI, R_GAS, ANNO, MSOLE, stella as stellaDi } from './leggi.js';
 import { MOLECOLE, atmosfera, pressioneVapore, pressioneCO2Urey, rocceDelPianeta, rilascio, vulcani, co2DelCiclo, ROCCE, MINERALI_ROCCIA } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
 export { rocceDelPianeta, rilascio, MINERALI_ROCCIA };
-import { sorgente } from './eventi.js';
+import { sorgente, numero } from './eventi.js';
 
 const NA = 6.022e23, KB = COSTANTI.kB, E0 = 8.854e-12, QE = COSTANTI.e, RAD = Math.PI / 180;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -930,7 +930,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
     particelle, cristalli: particelle.filter((p) => p.tipo === 'cristallo'), bolle: particelle.filter((p) => p.tipo === 'bolla'), velo, fuoriScala, quanteDavvero,
     classi: classi.map((x) => ({ tipo: x.tipo, materiale: x.materiale, diametroM: x.d, perM3: x.n, perche: x.perche })), sospeso: { ...qui.sospeso }, torbidita: qui.sospeso.sabbia + qui.sospeso.limo + qui.sospeso.argilla + qui.sospeso.fiocchi,
     luogo: { foce: qui.foce, camino: qui.camino ? { id: qui.camino.id, distanzaM: qui.camino.distanzaM, parteDiFluido: qui.camino.parteDiFluido, T: qui.camino.T } : null, vulcano: qui.vulcano, ghiaccio: qui.ghiaccio, vento: qui.vento, lago: qui.lago ? qui.lago.id : null, salamoia },
-    radice: c.radice, rami: c.rami || null };
+    luce: stato.luce || [1, 1, 1], coloreFondale: stato.coloreContinente ? stato.coloreContinente.map((v, i) => 0.5 * (v + OTTICA.sabbia[i])) : OTTICA.sabbia, radice: c.radice, rami: c.rami || null };
   out.descrizione = descrivi(out, qui, note, stato);
   return out;
 }
@@ -981,9 +981,28 @@ export function disegnabili(campione, t = campione.t || 0) { const pos = muovi(c
 // UN'IMMAGINE RGBA N×N del campione al tempo t (come immagine() di rocce.js): l'acqua vista da dentro, in controluce.
 // Lo sfondo è l'acqua (più torbida, più bruna); le particelle più lontane sono più scure; ogni forma è quella del cristallo.
 export function immagineAcqua(campione, { N = 192, t = campione.t || 0 } = {}) {
-  const px = new Uint8ClampedArray(N * N * 4), sp = campione.sospeso || {}, C = (sp.sabbia || 0) + (sp.limo || 0) + (sp.argilla || 0) + (sp.fiocchi || 0), velato = 1 - Math.exp(-C * 1000 * 0.03 * Math.max(campione.latoM || 0, 0.2));
-  const nano = campione.latoM <= 1.2e-7, f0 = campione.asciutto ? [60, 52, 44] : nano ? [8, 14, 30] : [10 + 96 * velato, 34 + 62 * velato, 62 + 22 * velato];
-  for (let k = 0; k < N * N; k++) { const y = Math.floor(k / N) / N; px[k * 4] = f0[0] * (1.15 - 0.3 * y); px[k * 4 + 1] = f0[1] * (1.15 - 0.3 * y); px[k * 4 + 2] = f0[2] * (1.15 - 0.3 * y); px[k * 4 + 3] = 255; }
+  const px = new Uint8ClampedArray(N * N * 4), sp = campione.sospeso || {}, C = 1000 * ((sp.sabbia || 0) + (sp.limo || 0) + (sp.argilla || 0) + (sp.fiocchi || 0)), L = campione.latoM || 1;
+  const nano = L <= 1.2e-7;
+  if (campione.asciutto || nano) { const f0 = campione.asciutto ? [60, 52, 44] : [8, 14, 30]; for (let k = 0; k < N * N; k++) { const y = Math.floor(k / N) / N; px[k * 4] = f0[0] * (1.15 - 0.3 * y); px[k * 4 + 1] = f0[1] * (1.15 - 0.3 * y); px[k * 4 + 2] = f0[2] * (1.15 - 0.3 * y); px[k * 4 + 3] = 255; } }
+  else {
+    // L'ACQUA VISTA DA DENTRO, di lato. Il colore è quello della luce che l'acqua di quel punto rimanda (la stessa ottica
+    // del mare visto da sopra: blu dove è limpida, verde e bruna col fango), e si spegne scendendo come exp(−K·z), il
+    // rosso per primo. In alto, se il cubetto arriva alla superficie, si vede la superficie mossa e l'aria; in basso, se
+    // arriva al fondo, il fondo. Vicino alla superficie la luce arriva a fasci che ondeggiano (le onde corte sopra fanno
+    // da lenti: le caustiche). Tutto è funzione del punto e del tempo: lo stesso istante dà la stessa immagine.
+    const luce = campione.luce || [1, 1, 1], z0 = Math.max(0, campione.profondita - L / 2), fondo = campione.fondoM ?? 1e9, K = [0, 0, 0], col = [0, 0, 0], sup = campione.profondita < L / 2 && campione.tipo !== 'piana di sale';
+    for (let i = 0; i < 3; i++) { const a = OTTICA.acqua[i] + OTTICA.fango[i] * 1e-3 * C, b = OTTICA.indietro[i] + OTTICA.fangoIndietro * 1e-3 * C; K[i] = a + b; col[i] = luce[i] * Math.pow(Math.min(1, 14 * ((0.33 * b) / (a + b) + 0.004)), 1 / 2.2); }
+    const seme = numero(campione.radice || 'acqua'), fa = (n) => ((seme >>> (n * 5)) & 31) / 31 * 6.283, onda = (x, tt) => 0.045 * Math.sin((x / 0.3) * 6.283 + fa(0) - 4.5 * tt) + 0.02 * Math.sin((x / 0.11) * 6.283 + fa(1) - 7.5 * tt) + 0.008 * Math.sin((x / 0.045) * 6.283 + fa(2) - 11.7 * tt);
+    const vento = campione.luogo?.vento ?? 3, mosso = Math.min(1.5, vento / 6), cf = campione.coloreFondale || OTTICA.sabbia;
+    for (let ix = 0; ix < N; ix++) { const x = (ix / N) * L, eta = sup ? Math.max(-0.3 * L, Math.min(0.3 * L, mosso * onda(x, t))) : 0, ySup = sup ? Math.round((0.18 * L - eta) / L * N) : -1;
+      // la luce che arriva in questa colonna: più dove la superficie sopra fa da lente convergente
+      const lente = 1 + 0.5 * mosso * (Math.sin((x / 0.3) * 6.283 + fa(0) - 4.5 * t) * 0.5 + Math.sin((x / 0.11) * 6.283 + fa(1) - 7.5 * t) * 0.35 + Math.sin((x / 0.045) * 6.283 + fa(2) - 11.7 * t) * 0.15) * (L > 0.004 ? 1 : 0);
+      for (let iy = 0; iy < N; iy++) { const o = (iy * N + ix) * 4, z = z0 + Math.max(0, (iy - Math.max(ySup, 0)) / N) * L; px[o + 3] = 255;
+        if (iy < ySup) { px[o] = 178 + 30 * (iy / N); px[o + 1] = 205 + 20 * (iy / N); px[o + 2] = 236; continue; } // l'aria sopra
+        const fasci = 1 + (lente - 1) * Math.exp(-z / 8), bordo = sup && iy - ySup < 2 ? 1.5 : 1;
+        if (z > fondo) { const g = 0.75 + 0.5 * (((ix * 73856093) ^ (iy * 19349663)) >>> 0) % 97 / 97; for (let i = 0; i < 3; i++) px[o + i] = Math.min(255, cf[i] * g * Math.min(1.2, 0.35 + Math.exp(-K[i] * Math.min(fondo, 60)) * fasci * luce[i])); continue; } // il fondo, coi suoi granelli
+        for (let i = 0; i < 3; i++) px[o + i] = Math.min(255, 255 * col[i] * (0.12 + 0.88 * Math.exp(-K[i] * z)) * fasci * bordo); } }
+  }
   if (campione.asciutto) return px;
   const lista = disegnabili(campione, t).sort((a, b) => a.z - b.z);
   const punto = (x, y, col, a) => { if (x < 0 || y < 0 || x >= N || y >= N || !(a > 0)) return; const o = (y * N + x) * 4; px[o] += (col[0] - px[o]) * a; px[o + 1] += (col[1] - px[o + 1]) * a; px[o + 2] += (col[2] - px[o + 2]) * a; };
@@ -1027,15 +1046,18 @@ function ottica(stato, lon, lat, d0, forzata, scalaM, ombra, c) {
   const F = stato.fine, k = cellaFine(stato, lon, lat); let tipo = F.tipo[k]; if (tipo === 0 && forzata) tipo = 1; if (tipo === 0) return false;
   if (tipo === 4) { c[0] = SALE[0]; c[1] = SALE[1]; c[2] = SALE[2]; return true; }
   const L = F.lago[k] >= 0 ? stato.laghi[F.lago[k]] : null, d = d0 ?? F.fondo[k], luce = stato.luce || [1, 1, 1], x = ((lon + 180) / 360) * F.W - 0.5, y = ((90 - lat) / 180) * F.H - 0.5;
-  let C = 0; // (g/m³ di fango sospeso)
-  if (tipo === 1) { let dx = 0, dy = 0; if (scalaM > 0 && scalaM < 3e4) { const u = (stato.raggioVortici || 4e4) / ((2 * Math.PI * stato.raggioM) / F.W), fx = x / (2.5 * u), fy = y / (2.5 * u); dx = 3 * u * (rumore2(fx, fy, 11) + 0.5 * rumore2(2.3 * fx, 2.3 * fy, 12) - 0.75); dy = 3 * u * (rumore2(fx, fy, 21) + 0.5 * rumore2(2.3 * fx, 2.3 * fy, 22) - 0.75); }
-    C = 1000 * Math.max(0, bil(F.torbida, F.W, F.H, x + dx, y + dy)); }
+  let C = 0, bianco = 0, dx = 0, dy = 0; // (g/m³ di fango sospeso; g/m³ di calcare appena nato, bianco)
+  if (tipo === 1) { if (scalaM > 0 && scalaM < 3e4) { const u = (stato.raggioVortici || 4e4) / ((2 * Math.PI * stato.raggioM) / F.W), fx = x / (2.5 * u), fy = y / (2.5 * u); dx = 3 * u * (rumore2(fx, fy, 11) + 0.5 * rumore2(2.3 * fx, 2.3 * fy, 12) - 0.75); dy = 3 * u * (rumore2(fx, fy, 21) + 0.5 * rumore2(2.3 * fx, 2.3 * fy, 22) - 0.75); }
+    C = 1000 * Math.max(0, bil(F.torbida, F.W, F.H, x + dx, y + dy));
+    // dove l'acqua calda supera la soglia il calcare nasce in cristalli minuti che restano sospesi qualche giorno: l'acqua
+    // diventa lattiginosa e turchese (sulla Terra: i «whitings» delle Bahamas). Quanto: un decimo del carbonato in eccesso
+    if (stato.saturazione) { const om = bil(stato.saturazione.calcite, stato.W, stato.H, ((x + dx + 0.5) / F.W) * stato.W - 0.5, ((y + dy + 0.5) / F.H) * stato.H - 0.5), sg = stato.soglia || 20; if (om > sg) bianco = 0.1 * 1e5 * (stato.ioni['CO3(2-)'] || 0) * (1 - sg / om); } }
   else C = 1000 * (L && L.tipo === 'aperto' ? 0.02 * stato.fiume.sospeso : 0.002);
   const Fe = tipo === 1 ? stato.totali.Fe || 0 : 0, bacino = tipo === 1 && F.bacino && F.bacino[k] >= 0 ? stato.bacini[F.bacino[k]] : null;
   // il fondo: fango dove i fiumi depositano, roccia scura sui fondali vulcanici, sabbia dei continenti; carbonato bianco nei mari caldi e bassi dove il calcare precipita
   const tf = F.fondale ? F.fondale[k] : 0, calc = tipo === 1 && d < 60 && stato.saturazione && campo(stato, stato.saturazione.calcite, lon, lat) > 1.05 * (stato.soglia || 20);
   const cf = calc ? OTTICA.carbonato : tf === 1 ? stato.coloreFondo : tf === 2 ? stato.coloreContinente : OTTICA.sabbia, mf = calc ? 1 : tf === 2 ? 0.55 : tf === 0 ? 0.5 : 1;
-  for (let i = 0; i < 3; i++) { const a = OTTICA.acqua[i] + OTTICA.fango[i] * 1e-3 * C + OTTICA.ferro[i] * Fe * 230, b = OTTICA.indietro[i] + OTTICA.fangoIndietro * 1e-3 * C, R = (0.33 * b) / (a + b);
+  for (let i = 0; i < 3; i++) { const a = OTTICA.acqua[i] + OTTICA.fango[i] * 1e-3 * C + OTTICA.ferro[i] * Fe * 230, b = OTTICA.indietro[i] + OTTICA.fangoIndietro * 1e-3 * (C + bianco), R = (0.33 * b) / (a + b);
     const fondoC = tf === 0 && !calc ? 0.5 * (cf[i] + stato.coloreContinente[i]) : cf[i], Rf = 0.3 * mf * ombra * Math.pow(fondoC / 255, 2.2);
     c[i] = 255 * Math.pow(Math.min(1, OTTICA.esposizione * luce[i] * (R + (Rf - R) * Math.exp(-2 * (a + b) * Math.max(0, d)) + OTTICA.cielo[i])), 1 / 2.2); }
   // le croste di sale: sulle rive di un lago saturo e nei mari chiusi arrivati al sale; il ghiaccio copre in proporzione al tempo che il punto passa sotto il gelo
@@ -1063,16 +1085,16 @@ export function coloraMare(stato, sf, px) {
 }
 
 // LE ONDE COME SI VEDONO. La superficie è una somma di onde semplici: 16 lunghezze, da 2 cm a 2 km, tre per ogni fattore
-// dieci, per 8 direzioni; ognuna con la sua fase, che è un evento del pianeta (la stessa a ogni scala e in ogni istante:
+// dieci, per 12 direzioni; ognuna con la sua fase, che è un evento del pianeta (la stessa a ogni scala e in ogni istante:
 // una cresta vista da lontano è la stessa che da vicino diventa un'onda sola). Quanto è alta ciascuna in un punto lo
 // dice lo spettro del mare di quel punto: quello di Pierson e Moskowitz, k⁻³·exp(−1,25·(k_p/k)²), col picco dal
 // periodo e la somma dall'altezza che campoOnde ha calcolato lì (vento, tratto libero, fondale), sparso attorno alla
-// direzione del vento come cos⁴; più il mare lungo, stretto attorno alla sua direzione. Ogni onda corre con la
+// direzione del vento come cos²; più il mare lungo, stretto attorno alla sua direzione. Ogni onda corre con la
 // frequenza ω = √(g·k) dell'acqua profonda e la tiene anche sul basso fondale, dove invece rallenta e si accorcia
 // (k cresce: ω² = g·k·tanh(k·d)), cresce (legge di Green, d^−¼) e accumula ritardo: le creste girano e si mettono
 // parallele alla riva (la rifrazione), e dove sono più alte di 0,39 volte il fondale frangono in schiuma.
 // A ogni scala si disegnano solo le onde che quella scala risolve (più lunghe di ~2 punti dell'immagine).
-const ONDE = { n: 16, dir: 8, memo: new Map() };
+const ONDE = { n: 16, dir: 12, memo: new Map() };
 function componentiOnde(stato) {
   let c = ONDE.memo.get(stato.radice); if (c) return c; const ev = sorgente(`${stato.radice}/onde`), n = ONDE.n * ONDE.dir, g = stato.gravita;
   c = { k: new Float64Array(n), cx: new Float64Array(n), cy: new Float64Array(n), fase: new Float64Array(n), om: new Float64Array(n), lam: new Float64Array(n), az: new Float64Array(n) };
@@ -1088,7 +1110,7 @@ export function ondeNelPunto(stato, lon, lat) {
 }
 // le ampiezze (m) delle componenti in un punto, dallo spettro di lì
 function ampiezzeOnde(stato, co, m, out) {
-  const g = stato.gravita, parti = [[m.H, m.T, m.ax, m.ay, 4], [m.Hl, m.Tl, m.lx, m.ly, 10]];
+  const g = stato.gravita, parti = [[m.H, m.T, m.ax, m.ay, 2], [m.Hl, m.Tl, m.lx, m.ly, 10]];
   out.fill(0);
   for (const [Hs, Tp, dx, dy, punta] of parti) { if (!(Hs > 1e-4) || !(Tp > 0)) continue; const kp = (2 * Math.PI / Tp) ** 2 / g; let somma = 0; const D = new Float64Array(ONDE.dir);
     for (let j = 0; j < ONDE.n; j++) { somma = 0; for (let a = 0; a < ONDE.dir; a++) { const q = j * ONDE.dir + a, cs = Math.max(0, co.cx[q] * dx + co.cy[q] * dy); D[a] = Math.pow(cs, punta); somma += D[a]; }
@@ -1102,33 +1124,45 @@ function ampiezzeOnde(stato, co, m, out) {
 // La parte ferma si calcola una volta per superficie e si tiene (aspettoFermo): a ogni fotogramma si rifà solo il moto.
 // → px; in più aspettoMare.ultimo = { scalaM, onde (quante componenti disegnate), lunghezze: [min, max] (m), periodo (s) }
 const fermi = new WeakMap();
-export function aspettoFermo(stato, sf) { let f = fermi.get(sf); if (!f || f.stato !== stato) { const px = new Uint8ClampedArray(sf.W * sf.H * 4); coloraMare(stato, sf, px); f = { stato, px }; fermi.set(sf, f); } return f.px; }
-export function aspettoMare(stato, sf, px, { t = 0 } = {}) {
+export function aspettoFermo(stato, sf) { return fermo(stato, sf).px; }
+function fermo(stato, sf) { let f = fermi.get(sf); if (f && f.stato === stato) return f;
+  const { W, H } = sf, px = new Uint8ClampedArray(W * H * 4), d = new Float32Array(W * H), pend = new Float32Array(W * H).fill(0.01), [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1], scalaM = ((v1 - v0) * Math.PI * stato.raggioM) / H, alt = sf.alt || null, F = stato.fine; coloraMare(stato, sf, px);
+  // (la profondità e la pendenza del fondo, che servono alle onde: dalle quote della superficie se ci sono, altrimenti dalla carta del mare)
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!px[k * 4 + 3]) continue;
+    if (alt) { d[k] = alt[k] < sf.mare ? sf.mare - alt[k] : sf.lago ? sf.lago[k] : 10; if (d[k] < 200) pend[k] = Math.max(0.002, Math.hypot(alt[j * W + Math.min(W - 1, i + 1)] - alt[j * W + Math.max(0, i - 1)], alt[Math.min(H - 1, j + 1) * W + i] - alt[Math.max(0, j - 1) * W + i]) / (2 * scalaM)); }
+    else d[k] = F.fondo[cellaFine(stato, (u0 + ((i + 0.5) / W) * (u1 - u0)) * 360 - 180, 90 - (v0 + ((j + 0.5) / H) * (v1 - v0)) * 180)] || 10; }
+  f = { stato, px, d, pend }; fermi.set(sf, f); return f; }
+export function aspettoMare(stato, sf, px, { t = 0, onde = 8 } = {}) {
   aspettoMare.ultimo = { scalaM: 0, onde: 0, lunghezze: null, periodo: 0 };
-  if (!stato || !stato.esiste) return px; const { W, H } = sf, N = W * H, base = aspettoFermo(stato, sf), [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1], R = stato.raggioM, g = stato.gravita;
+  if (!stato || !stato.esiste) return px; const { W, H } = sf, N = W * H, fm = fermo(stato, sf), base = fm.px, [u0, v0, u1, v1] = sf.rett || [0, 0, 1, 1], R = stato.raggioM;
   for (let k = 0; k < N; k++) if (base[k * 4 + 3]) { px[k * 4] = base[k * 4]; px[k * 4 + 1] = base[k * 4 + 1]; px[k * 4 + 2] = base[k * 4 + 2]; px[k * 4 + 3] = 255; }
   const latC = 90 - 90 * (v0 + v1), scalaM = ((v1 - v0) * Math.PI * R) / H, scalaX = ((u1 - u0) * 2 * Math.PI * R * Math.cos(latC * RAD)) / W; aspettoMare.ultimo.scalaM = scalaM;
   if (scalaM > 900) return px; // (da qui in su nessuna onda è più lunga di due punti dell'immagine)
   // il mare ai quattro angoli e al centro della tessera (cambia piano: tra quelli si interpola), e le componenti che questa scala risolve
   const co = componentiOnde(stato), nC = ONDE.n * ONDE.dir, P5 = [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]].map(([a, b]) => ondeNelPunto(stato, (u0 + a * (u1 - u0)) * 360 - 180, 90 - (v0 + b * (v1 - v0)) * 180));
   const A5 = P5.map((m) => ampiezzeOnde(stato, co, m, new Float64Array(nC))), attive = []; let lMin = Infinity, lMax = 0, pMax = 0;
-  for (let q = 0; q < nC; q++) { if (co.lam[q] < 2.2 * scalaM || co.lam[q] > 0.8 * W * scalaM) continue; const a = Math.max(...A5.map((x) => x[q])); if (a * co.k[q] < 0.004) continue; attive.push(q); lMin = Math.min(lMin, co.lam[q]); lMax = Math.max(lMax, co.lam[q]); pMax = Math.max(pMax, (2 * Math.PI) / co.om[q]); }
-  attive.sort((a, b) => Math.max(...A5.map((x) => x[b])) * co.k[b] - Math.max(...A5.map((x) => x[a])) * co.k[a]); attive.length = Math.min(attive.length, 14);
-  const creste = P5[4].creste, alt = sf.alt || null, F = stato.fine;
+  for (let q = 0; q < nC; q++) { if (co.lam[q] < 2.6 * scalaM || co.lam[q] > 0.8 * W * scalaM) continue; const a = Math.max(...A5.map((x) => x[q])); if (a * co.k[q] < 0.004) continue; attive.push(q); lMin = Math.min(lMin, co.lam[q]); lMax = Math.max(lMax, co.lam[q]); pMax = Math.max(pMax, (2 * Math.PI) / co.om[q]); }
+  // (quelle che si vedono di più: le più ripide, contando meno quelle appena risolte da questa scala)
+  const peso = (q) => Math.max(...A5.map((x) => x[q])) * co.k[q] * limita((co.lam[q] / scalaM - 2.6) / 4, 0.15, 1);
+  attive.sort((a, b) => peso(b) - peso(a)); attive.length = Math.min(attive.length, onde);
+  const creste = P5[4].creste;
   Object.assign(aspettoMare.ultimo, { onde: attive.length, lunghezze: attive.length ? [lMin, lMax] : null, periodo: pMax, altezza: P5[4].H, vento: P5[4].U });
   const nA = attive.length, kk = new Float64Array(nA), cx = new Float64Array(nA), cy = new Float64Array(nA), f0 = new Float64Array(nA), a00 = new Float64Array(nA), a10 = new Float64Array(nA), a01 = new Float64Array(nA), a11 = new Float64Array(nA);
-  for (let n = 0; n < nA; n++) { const q = attive[n]; kk[n] = co.k[q]; cx[n] = co.cx[q]; cy[n] = co.cy[q]; f0[n] = co.fase[q] - co.om[q] * t; a00[n] = A5[0][q]; a10[n] = A5[1][q]; a01[n] = A5[2][q]; a11[n] = A5[3][q]; }
+  for (let n = 0; n < nA; n++) { const q = attive[n]; kk[n] = co.k[q]; cx[n] = co.cx[q]; cy[n] = co.cy[q]; f0[n] = co.fase[q] - co.om[q] * t; const vede = limita((co.lam[q] / scalaM - 2.6) / 4, 0.15, 1); a00[n] = vede * A5[0][q]; a10[n] = vede * A5[1][q]; a01[n] = vede * A5[2][q]; a11[n] = vede * A5[3][q]; }
+  const Hq = P5.map((m) => Math.hypot(m.H, m.Hl));
   const Lx = -0.6, Ly = 0.8; // (la luce viene da nord-ovest, come nell'ombreggiatura delle terre)
-  for (let j = 0; j < H; j++) { const fv = (j + 0.5) / H, latR = (90 - (v0 + fv * (v1 - v0)) * 180) * RAD, Y = R * latR, cosL = Math.cos(latR);
-    for (let i = 0; i < W; i++) { const k = j * W + i; if (!base[k * 4 + 3]) continue; const fu = (i + 0.5) / W, lonR = ((u0 + fu * (u1 - u0)) * 360 - 180) * RAD, X = R * cosL * lonR;
-      let d = 4000, pend = 0.01; if (alt) { d = alt[k] < sf.mare ? sf.mare - alt[k] : sf.lago ? sf.lago[k] : 10; if (d < 200) pend = Math.max(0.002, Math.hypot(alt[j * W + Math.min(W - 1, i + 1)] - alt[j * W + Math.max(0, i - 1)], alt[Math.min(H - 1, j + 1) * W + i] - alt[Math.max(0, j - 1) * W + i]) / (2 * scalaM)); }
-      else d = F.fondo[cellaFine(stato, lonR / RAD, latR / RAD)] || 10;
-      let ombra = 0, ripida = 0, alta = 0;
-      for (let n = 0; n < nA; n++) { let a = (a00[n] * (1 - fu) + a10[n] * fu) * (1 - fv) + (a01[n] * (1 - fu) + a11[n] * fu) * fv; if (a <= 0) continue; let kq = kk[n], fase = kq * (X * cx[n] + Y * cy[n]) + f0[n];
-        if (kq * d < 3) { const th = Math.tanh(kq * d), kb = kq / Math.sqrt(th); fase += (0.5 * (kb - kq) * d) / pend; a *= Math.min(2.2, Math.pow(th, -0.25)); kq = kb; } // sul basso fondale: più corta, più alta, in ritardo
+  const fr = new Float64Array(nA), dfr = new Float64Array(nA), DUE_PI = 2 * Math.PI;
+  for (let j = 0; j < H; j++) { const fv = (j + 0.5) / H, latR = (90 - (v0 + fv * (v1 - v0)) * 180) * RAD, Y = R * latR, cosL = Math.cos(latR), X0 = R * cosL * ((u0 + (0.5 / W) * (u1 - u0)) * 360 - 180) * RAD, dX = (R * cosL * (u1 - u0) * 360 * RAD) / W;
+    // (la fase di ogni onda all'inizio della riga, ridotta a un giro; lungo la riga cresce di passo in passo)
+    for (let n = 0; n < nA; n++) { const f = kk[n] * (X0 * cx[n] + Y * cy[n]) + f0[n]; fr[n] = f - DUE_PI * Math.floor(f / DUE_PI); dfr[n] = kk[n] * cx[n] * dX; }
+    for (let i = 0; i < W; i++) { const k = j * W + i; if (!base[k * 4 + 3]) continue; const fu = (i + 0.5) / W, d = fm.d[k], pend = fm.pend[k];
+      // (dove il fondale è basso l'onda non può essere più alta di 0,6 volte la profondità: frange, e lì c'è schiuma)
+      const Hs = (Hq[0] * (1 - fu) + Hq[1] * fu) * (1 - fv) + (Hq[2] * (1 - fu) + Hq[3] * fu) * fv, regge = Hs > 0 ? Math.min(1, (0.6 * d) / Hs) : 1; let ombra = 0, ripida = 0, alta = 0;
+      for (let n = 0; n < nA; n++) { let a = (a00[n] * (1 - fu) + a10[n] * fu) * (1 - fv) + (a01[n] * (1 - fu) + a11[n] * fu) * fv; if (a <= 0) continue; a *= regge; let kq = kk[n], fase = fr[n] + i * dfr[n];
+        if (kq * d < 3) { const x = kq * d, th = (x * (27 + x * x)) / (27 + 9 * x * x), rq = Math.sqrt(th), kb = kq / rq; fase += (0.5 * (kb - kq) * d) / pend; a *= Math.min(2.2, 1 / Math.sqrt(rq)); kq = kb; } // sul basso fondale: più corta, più alta, in ritardo (tanh approssimata)
         const sn = Math.sin(fase), cs = Math.cos(fase); ombra += a * kq * sn * (cx[n] * Lx + cy[n] * Ly); ripida += a * kq * cs; alta += a * cs; }
-      let schiuma = creste * 0.6; if (nA) { if (ripida > 0.22) schiuma += Math.min(1, (ripida - 0.22) * 6); if (alta > 0.39 * d || (d < 3 && alta > 0)) schiuma += Math.min(1, 0.5 + alta / Math.max(d, 0.05)); }
-      const lume = 1 + 2.2 * ombra, sc = Math.min(1, schiuma);
+      let schiuma = creste * 0.6; if (nA) { if (ripida > 0.3) schiuma += Math.min(1, (ripida - 0.3) * 5); if (regge < 1 && alta > 0.12 * Hs * regge) schiuma += Math.min(0.9, (1 - regge) * 1.5); }
+      const lume = limita(1 + 1.3 * ombra, 0.62, 1.45), sc = Math.min(1, schiuma);
       for (let c = 0; c < 3; c++) { const v = base[k * 4 + c] * lume; px[k * 4 + c] = v + (SCHIUMA[c] - v) * sc; } } }
   return px;
 }
