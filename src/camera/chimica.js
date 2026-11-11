@@ -95,6 +95,9 @@ const atomiDi = (f) => { const a = {}; for (const [, s, n] of f.replace(/\(.*\)/
 const massaDi = (f) => Object.entries(atomiDi(f)).reduce((m, [s, n]) => m + n * ELEMENTI[s].massa, 0);
 export const MOLECOLE = Object.fromEntries(SPECIE.map(([formula, nome, fase, dH, S]) => [formula, { formula, nome, fase, dH, S, atomi: atomiDi(formula), massa: massaDi(formula) }]));
 const GAS = Object.values(MOLECOLE).filter((m) => m.fase === 'gas'), NEI_GAS = new Set(GAS.flatMap((m) => Object.keys(m.atomi)));
+// L'ARGON non entra negli equilibri (non reagisce con niente: per questo sta fuori da GAS e dalla tavola degli elementi):
+// serve a pesare e a nominare quello radiogenico che sale dall'interno («inerti» di atmosfera(); massa atomica misurata)
+MOLECOLE.Ar = { formula: 'Ar', nome: 'argon', fase: 'gas', dH: 0, S: 154.85, atomi: { Ar: 1 }, massa: 39.948 };
 
 // l'energia di Gibbs di una specie a T (J/mol): g = ΔH − T·S. Il calore tira verso le specie più
 // legate, il disordine verso quelle più libere: a T bassa vince il primo, a T alta il secondo.
@@ -117,7 +120,7 @@ export const costanteEquilibrio = (reazione, T) => Math.exp(-dG(typeof reazione 
 // gas la legge di Clausius-Clapeyron con due dati misurati: il calore di evaporazione (kJ/mol; per la
 // CO2, che a 1 bar non ha liquido, di sublimazione) e la temperatura a cui bolle a 1 bar (K).
 // Idrogeno ed elio non condensano mai. (Lo zolfo: dalla sua pressione di vapore a 393 K e a 718 K.)
-const EVAPORAZIONE = { CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8],
+const EVAPORAZIONE = { Ar: [6.43, 87.3], CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8],
   C2H6: [14.7, 184.6], C2H2: [21.3, 189.3], HCl: [16.2, 188.1], H2CO: [23.3, 254.0], NO: [13.8, 121.4], Cl2: [20.4, 239.1] };
 export const pressioneVapore = (T, f = 'H2O') => (f === 'H2O' ? 1e5 * Math.min(costanteEquilibrio([{ 'H2O(l)': 1 }, { H2O: 1 }], T), costanteEquilibrio([{ 'H2O(s)': 1 }, { H2O: 1 }], T))
   : EVAPORAZIONE[f] ? 1e5 * Math.exp(((-1000 * EVAPORAZIONE[f][0]) / R_GAS) * (1 / T - 1 / EVAPORAZIONE[f][1])) : Infinity);
@@ -261,7 +264,7 @@ export const SOLE = (() => {
   const acqua = (ab.O - Oroccia) * (ELEMENTI.O.massa + 2 * ELEMENTI.H.massa), altri = NEI_GHIACCI.C * ab.C * (ELEMENTI.C.massa + ELEMENTI.O.massa) + NEI_GHIACCI.N * ab.N * (ELEMENTI.N.massa + 3 * ELEMENTI.H.massa);
   return Object.freeze({ X: m('H') / tutto, Y: m('He') / tutto, Z: metalli / tutto, roccia: (sassi + ferro) / metalli, acqua: acqua / metalli, ghiacci: (acqua + altri) / metalli, ferro: ferro / (ferro + sassi), ghiaccio: (acqua + altri) / (acqua + altri + sassi + ferro) });
 })();
-export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } = {}) {
+export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, inerti = null } = {}) {
   const cl = P.clima || {}, tenuti = cl.tenuti || [], gigante = P.tipo === 'gassoso', comp = P.composizione || {};
   const niente = { gas: {}, riducente: false, potere: 0, pressione: 0, pO2: 0, ferro: null, fuliggine: 0 };
   // CON L'INVENTARIO (è così che la chiama climaEAria, cioè ogni pianeta del cosmo) la pressione non è data: discende
@@ -308,6 +311,10 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } 
     // che supera il suo tetto finché la sua pressione parziale (la sua parte di moli × il peso di tutta la colonna) ci sta
     const n = {}; let massa = 0; for (const f in x) massa += x[f] * MOLECOLE[f].massa;
     for (const f in x) n[f] = massa > 0 ? (x[f] * colonna) / massa : 0; // («moli» per m², a meno di un fattore: massa = Σ n·M)
+    // I GAS SALITI DALL'INTERNO («inerti», in Pa: l'argon-40 del potassio decaduto e l'elio-4 delle α, da risalita.js
+    // gasRadiogenici, già passati dal vaglio della gravità): si aggiungono a ciò che c'è. Sono gas nobili: non entrano
+    // negli equilibri; pesano, allargano le righe degli altri, e al freddo l'argon gela come ogni altro gas (il suo tetto)
+    if (inerti && gSup > 0) for (const f in inerti) if (inerti[f] > 0 && MOLECOLE[f]) n[f] = (n[f] || 0) + inerti[f] / gSup / MOLECOLE[f].massa;
     for (let giro = 0; giro < 60; giro++) {
       let N = 0, peso = 0, sopra = 0; for (const f in n) { N += n[f]; peso += n[f] * MOLECOLE[f].massa * gSup; }
       if (!(N > 0)) break;
@@ -345,7 +352,7 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } 
 //     di un'aria satura fino in cima (sulla Terra: 25 kg/m²).
 // Che cosa manca: le nuvole e le foschie che assorbono o riflettono (su Titano raffreddano), le finestre tra le righe.
 export const SERRA = Object.freeze({ esponente: 0.39, H2O: 0.174, CO2: 0.103, CH4: 0.018, altri: 0.1, urti: 3.1e-6, Turti: 94, vaporeInBasso: 0.25 });
-const TRASPARENTI = new Set(['H2', 'He', 'N2', 'O2', 'Cl2', 'S2']);
+const TRASPARENTI = new Set(['H2', 'He', 'N2', 'O2', 'Cl2', 'S2', 'Ar']);
 export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
   if (!isFinite(pressione)) return 2;
   if (!(pressione > 0) || !(g > 0)) return 0;
@@ -358,17 +365,6 @@ export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
     tau += TRASPARENTI.has(f) ? (SERRA.urti * x * SERRA.Turti) / Math.max(T, 10) : (SERRA[f] ?? (Object.values(MOLECOLE[f].atomi).reduce((a, b) => a + b, 0) >= 3 ? SERRA.altri : SERRA.altri / 5)) * Math.pow(x, SERRA.esponente);
   }
   return tau;
-}
-
-// I GAS RADIOGENICI (risalita.js, gasRadiogenici): l'argon-40 del potassio decaduto e l'elio-4 delle α, saliti dall'interno
-// nell'età del pianeta, si aggiungono all'aria che c'è già (frazioni in volume). Sono gas nobili: non reagiscono, non
-// toccano l'equilibrio né la serra. (La pressione del clima resta quella di prima: sulla Terra l'argon ne è l'1,4%.)
-export function conRadiogenici(atm, g) {
-  if (!atm || !g || !(atm.pressione > 0) || !isFinite(atm.pressione)) return atm;
-  const fAr = g.argon40?.frazione > 1e-9 ? g.argon40.frazione : 0, fHe = g.elio4?.frazione > 1e-9 ? g.elio4.frazione : 0, piu = fAr + fHe; if (!(piu > 0) || piu >= 1) return atm;
-  const gas = {}; for (const f in atm.gas) gas[f] = atm.gas[f] * (1 - piu);
-  if (fAr > 0) gas.Ar = (gas.Ar || 0) + fAr; if (fHe > 0) gas.He = (gas.He || 0) + fHe;
-  return { ...atm, gas, pressione: atm.pressione + (g.perLAria?.Ar || 0) + (g.perLAria?.He || 0), radiogenici: { Ar: g.perLAria?.Ar || 0, He: g.perLAria?.He || 0 } };
 }
 
 // IL CLIMA E L'ARIA INSIEME. La temperatura dipende dall'aria (quanta ce n'è, quanto trattiene il calore) e l'aria
@@ -386,7 +382,14 @@ export function climaEAria(dati, { Z } = {}) {
   const P = { tipo: dati.tipo, massaKg: dati.massaKg, raggioM: dati.raggioM, composizione: dati.composizione || {}, involucro: dati.involucro || 0 };
   const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
   if (dati.tipo === 'gassoso') return { clima: primo, atmosfera: atmosfera({ ...P, clima: primo }, { Z }) };
-  const memoria = new Map(), ariaDi = (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria });
+  // («dati.gas»: i gas che non condensano e non reagiscono, dati da chi chiama come pressioni in Pa ({ N2: 7.8e4, O2: 2.1e4 })
+  // al posto dell'inventario del pianeta: serve a provare le leggi su un mondo vero con la sua aria vera. L'acqua (satura
+  // sopra un mare, o al più quella data) e la CO2 sopra un mare (Urey, ciclo, termostato) restano calcolate qui)
+  const ariaData = (T, stato, co2 = 0) => { const p = { ...dati.gas }; for (const f in dati.inerti || {}) if (dati.inerti[f] > 0) p[f] = (p[f] || 0) + dati.inerti[f];
+    if (stato === 'liquida') { p.H2O = pressioneVapore(T); p.CO2 = Math.min(p.CO2 ?? Infinity, Math.max(pressioneCO2Urey(T), co2)); } else for (const f in p) p[f] = Math.min(p[f], pressioneVapore(T, f));
+    let pressione = 0; for (const f in p) pressione += p[f];
+    return { gas: Object.fromEntries(Object.entries(p).filter(([, v]) => v > 0).map(([f, v]) => [f, v / pressione]).sort((a, b) => b[1] - a[1])), riducente: false, potere: 0, pressione, pO2: (p.O2 || 0) / 1e5, ferro: null, fuliggine: 0 }; };
+  const memoria = new Map(), ariaDi = dati.gas ? ariaData : (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria, inerti: dati.inerti || null });
   // (Taria: la temperatura a cui quell'aria è stata calcolata; a giri fermi è quella del clima)
   const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } }), { Taria: T });
   // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
@@ -396,6 +399,27 @@ export function climaEAria(dati, { Z } = {}) {
   // aria e mare sono un serbatoio solo (mare.js legge questa pressione, e la ricalcola con le terre e le piogge vere).
   const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), continenti: dati.placche ? 1 : 0 }) : 0);
   const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null, cc = co2; for (let k = 0; k < (stato === 'liquida' && dati.calore > 0 ? giri + 3 : giri); k++) { if (stato === 'liquida') cc = Math.max(co2, ciclo(T, r?.c)); const a = ariaDi(T, stato, cc), c = climaDi(a, T); r = { a, c, co2: cc }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } if (r && stato === 'liquida' && cc > 0) r.c.co2Ciclo = cc; return r; };
+  // SOPRA UN MARE temperatura, vapore e CO2 non si trovano a giri alterni: la CO2 che pareggia i vulcani cala di ordini di
+  // grandezza in pochi gradi (e il vapore cresce col caldo), e i giri rimbalzano tra un'aria e un clima che non si corrispondono (un'aria calcolata a
+  // 520 K accanto a un clima a 285 K; e quanti giri si fanno decide se il mare bolle). Si cerca invece la radice di una
+  // funzione sola, g(T) = (temperatura del clima sotto l'aria che c'è a T, con la CO2 che il mare lascia a T: quella
+  // del ciclo se ci sono vulcani, l'equilibrio di Urey se no) − T, salendo dal
+  // gelo: il primo punto dove g passa da positiva a negativa è lo stato stabile (Walker, Hays e Kasting 1981: se fa più
+  // caldo le rocce si consumano più in fretta, la CO2 cala, e torna il freddo). Se g è positiva fino in cima, il mare
+  // bolle; se è negativa già al gelo, il mare gela (e decide il punto 3).
+  const conIlMare = (co2 = 0) => {
+    // (g dipende solo da T. Le terre che la pioggia consuma sono quelle fuori dal mare e dal ghiaccio; ma il ghiaccio
+    // dipende dal clima, che dipende dalla CO2, che dipende dalle terre scoperte: più ghiaccio, meno rocce consumate, più
+    // CO2, più caldo, meno ghiaccio. Dove conta si cerca, dimezzando, il ghiaccio che torna uguale a sé stesso)
+    const terre0 = 1 - (primo.mare ?? 0.7), con = (T, ghiaccio) => { const cc = Math.max(co2, ciclo(T, { mare: primo.mare, ghiaccio })), a = ariaDi(T, 'liquida', cc), c = climaDi(a, T); return { a, c, co2: cc, T, d: c.T - T }; };
+    const g = (T) => { let r = con(T, 0); if (!(r.c.ghiaccio > 0.02) || !(terre0 > 0.005)) return r;
+      let lo = 0, hi = 1; for (let k = 0; k < 5; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; } return r; };
+    let sotto = g(273.5); if (!(sotto.d > 0)) return sotto; // (gelato anche con la CO2 che il ciclo lascia al gelo)
+    let sopra = null; for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
+    if (!sopra) return sotto; // (più caldo a ogni temperatura: il mare bolle)
+    for (let k = 0; k < 9 && sopra.T - sotto.T > 0.3; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
+    const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra; if (dati.calore > 0) r.c.co2Ciclo = r.co2; return r;
+  };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
   if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));
   // 0. un mondo di ghiaccio è nato al freddo, oltre la linea della neve, e non è mai stato caldo abbastanza a lungo da
@@ -403,10 +427,12 @@ export function climaEAria(dati, { Z } = {}) {
   // gelato è. (Un pianeta di roccia nasce caldo: per lui si parte dal mare, e gelato è solo se non può fare altro.)
   if (dati.tipo === 'ghiacciato') { const gelo = cerca('ghiaccio', Math.min(primo.T, 150)); if (gelo.c.acqua === 'ghiaccio') return esce(gelo); }
   // 1. con il mare liquido (e quindi senza anidride carbonica nell'aria)
-  const mare = cerca('liquida', Math.max(primo.T, 275));
+  const mare = conIlMare();
   if (mare.c.acqua === 'liquida') return esce(mare);
   // 2. troppo caldo: il mare non c'è, l'acqua è persa, tutta la CO2 è nell'aria
-  if (mare.c.acqua.startsWith('vapore')) return esce(cerca('vapore', mare.c.T));
+  // (l'aria è quella di un mondo che l'acqua l'ha persa: lo stato resta «vapore» anche se poi, asciutto, si assesta a una
+  // temperatura e a una pressione a cui l'acqua, se ci fosse ancora, sarebbe liquida)
+  if (mare.c.acqua.startsWith('vapore')) { const secco = cerca('vapore', mare.c.T); return esce(secco, secco.c.acqua.startsWith('vapore') ? {} : { acqua: 'vapore' }); }
   // 3. il mare gela: il termostato. Con tutta la CO2 che ha, si scioglie? Se sì, si cerca la minima che basta
   const prova = (co2) => { const a = ariaDi(275, 'liquida', co2), c = climaDi(a, 275); return { a, c, co2 }; };
   const tutta = prova(1e12);
@@ -613,6 +639,9 @@ export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, t
   const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre);
   const prende = consumo || ((p) => massa * (continenti * rilascio(v.rocce.granito, T, p).cariche + (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche));
   if (prende(100) < fonte) return 100; // nemmeno sotto cento bar le rocce tengono il passo: la CO2 si accumula (qui ci si ferma)
-  let lo = Math.log(1e-9), hi = Math.log(100); for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
+  // il pavimento è l'equilibrio di Urey a quella temperatura: lì la reazione è ferma, la roccia non può prenderne altra
+  // (è lo stesso tetto che atmosfera() mette alla CO2 sopra un mare: una grandezza, una legge)
+  const pavimento = Math.max(1e-9, pressioneCO2Urey(T) / 1e5); if (prende(pavimento) >= fonte) return pavimento;
+  let lo = Math.log(pavimento), hi = Math.log(100); for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
   return Math.exp(0.5 * (lo + hi));
 }

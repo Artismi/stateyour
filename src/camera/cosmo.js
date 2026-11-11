@@ -32,6 +32,8 @@ import { motiRegione } from './spazio3d.js'; // (i due moduli si chiamano a vice
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
 import { climaEAria, prebiotica, minerali } from './chimica.js';
+import { gasRadiogenici, energiaPerLaChimica, ventoStellare, increspatura } from './risalita.js'; // ciò che il piccolo fa al grande
+import { luogoDaAria } from './materia.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
 export const REGIONI = 12, PIANETI_MAX = 16, STELLE = 2500, GALASSIE_MAX = 200;
@@ -191,11 +193,13 @@ export const sistema = memo((n, gid, sid) => {
     // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
     const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
     const eta = S.eta;
-    Object.assign(p, { aM, Lw, Mstella: Mst, anno });
+    Object.assign(p, { aM, Lw, Mstella: Mst, anno, ...(S.T > 0 ? { Tstella: S.T } : {}) }); // (Tstella: la temperatura vera di questa stella, per chi ne vuole lo spettro: il mare, l'ultravioletto)
     // L'URTO GIGANTE (impatti.js): l'ultimo della formazione del pianeta, con i numeri veri di disco.js. I suoi eventi
     // incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
     const casoP = sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${p.id}`, ramiCosmo(n));
     p.urto = p.tipo === 'gassoso' ? null : giganteDi(p, Sis, casoP);
+    // il seme del tempo atmosferico: un evento alla sorgente del pianeta (risalita.js); un ramo su «…/pianeta k/meteo/seme/0» è un altro tempo, stesso clima
+    p.semeMeteo = increspatura(casoP);
     // LA ROTAZIONE (rotazione.js): il giorno e l'asse sono una conseguenza, non un sorteggio. Il giro nasce dagli urti
     // giganti, o dal gas caduto attraverso un disco (giganti e mondi con involucro), o dalla crescita dell'embrione; poi
     // la marea della stella lo frena per tutta l'età del sistema (la legge di lune.js, tempoBlocco, integrata): fino a
@@ -214,14 +218,20 @@ export const sistema = memo((n, gid, sid) => {
     // latitudine (leggi.js: lo stesso che climaSuperficie risolve poi sulla mappa), con la serra dei gas veri; l'aria
     // è ciò che il pianeta ha liberato o trattenuto (anche il velo di idrogeno del disco, se la gravità lo tiene),
     // meno ciò che a quella temperatura gela, piove o finisce nel calcare
+    // I GAS RADIOGENICI (risalita.js): l'argon del potassio-40 e l'elio delle α usciti dall'interno nell'età del pianeta, se
+    // la gravità li tiene (in Pa: entrano nell'aria insieme agli altri, dentro climaEAria)
+    let inerti = null;
+    try { const gr = gasRadiogenici({ pianeta: { g: (6.674e-11 * massaKg) / p.raggioM ** 2, raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
+      inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
     const ariaDelPianeta = () => {
-      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
+      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
+        calore: p.interno.vulcani > 0 ? p.interno.q : 0, inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
       p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato }; // (con quale asse e quale giorno è stato calcolato)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
       // aminoacidi e zuccheri (scariche e ultravioletto)
       try {
         p.atmosfera = r.atmosfera;
-        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua === 'liquida',
+        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica?.relativa ?? Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua, // (lo stato dell'acqua, non un sì/no: prebiotica lo confronta con «liquida»)
           minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
       } catch { p.atmosfera = null; p.prebiotica = null; }
     };
@@ -229,7 +239,9 @@ export const sistema = memo((n, gid, sid) => {
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
-    { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); } }
+    { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
+      // la dinamo sente il giorno (geologia.interno: il numero di Rossby): con il giorno di oggi il campo si rifà
+      const oggi = interno(p, S); Object.assign(p.interno, { B0: oggi.B0, ...(oggi.rossby != null ? { rossby: oggi.rossby, dipolo: oggi.dipolo } : {}) }); p.B0 = oggi.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8))); } }
     // (il clima è stato calcolato prima delle lune, che lo leggono: se la luna dell'urto ha poi cambiato l'asse o il blocco, si rifà)
     if (p.clima.giro.obliquita !== p.obliquita || p.clima.giro.bloccato !== p.bloccato) ariaDelPianeta();
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
@@ -237,6 +249,19 @@ export const sistema = memo((n, gid, sid) => {
     // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere
     p.anello = anelli(p, p.lune, { massa: S.massa, massaNascita: S.massaNascita, eta: eta - (S.morta ?? 0), morta: S.morta, Z: S.Z ?? 1 }, sorgente(`anelli/${cosmoBase(n)}/${gid}/${sid}/${p.id}`, ramiCosmo(n)));
     p.anelli = !!p.anello;
+    // CIÒ CHE IL PICCOLO FA AL GRANDE (risalita.js), con il campo, il giorno e l'aria di oggi: il vento della stella ferma la
+    // magnetosfera a p.magnetopausa raggi (oltre, niente fascia: attorno a una stella morta non c'è vento che la fermi);
+    // l'energia vera per la chimica dell'aria (ultravioletto sotto 200 nm, fulmini, aurore, raggi cosmici: 1 = la Terra)
+    // al posto della sola luce
+    try {
+      const qui = luogoDaAria({ P: p }), dalPiccolo = { P: p, stella: { T: S.T > 0 ? S.T : undefined, eta: S.eta, massa: S.massa } }, vento = viva ? ventoStellare(qui, dalPiccolo) : null;
+      p.magnetopausa = vento ? vento.magnetopausa : Infinity;
+      if (p.atmosfera) {
+        p.energiaChimica = energiaPerLaChimica(qui, dalPiccolo);
+        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica.relativa, pressione: p.clima.pressione, acqua: p.clima.acqua,
+          minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
+      }
+    } catch { /* restano l'aria e la chimica di prima */ }
     // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti
     Object.defineProperty(p, 'impatti', { configurable: true, enumerable: false, get() { const v = storiaImpatti(p, Sis, casoP); Object.defineProperty(p, 'impatti', { value: v, enumerable: false }); return v; } });
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
@@ -316,11 +341,12 @@ export const magnetosfera = memo((n, gid, sid, pid) => {
 // p in MeV/c, B in tesla → raggio del giro in metri
 const raggioGiro = (pMeV, B) => (pMeV * 3.336e-3) / Math.max(B, 1e-15);
 export const fascia = (P, Pl, r) => {
-  if (r < 1.15) return 0;
+  if (r < 1.15 || r > (P.magnetopausa ?? Infinity)) return 0; // (oltre la magnetopausa il vento della stella porta via tutto: risalita.js, ventoStellare)
   const B = P.B0 / r ** 3, tiene = raggioGiro(450, B) < 0.1 * r * P.raggioM ? 1 : 0; // un protone da 100 MeV
   return (tiene * Math.max(0, 1 - 1.12 / r) * Math.exp(-25 * Pl.densitaAnello(r))) / r;
 };
-const FASCIA_MAX = 0.17;
+// il massimo di fascia() senza anello e dove il campo tiene: (1 − 1,12/r)/r è massima a r = 2,24 e lì vale 1/(4·1,12)
+export const FASCIA_MAX = 1 / (4 * 1.12);
 // le particelle di una fascia in un quadrato (coordinate del motore), con le energie dei neutroni che decadono
 function particelleFascia(P, Pl, r, u, lato, quante, caso, prefisso, { fini = false } = {}) {
   const out = [], B = P.B0 / r ** 3, f = fascia(P, Pl, r) / FASCIA_MAX;

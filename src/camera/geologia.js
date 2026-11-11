@@ -24,7 +24,7 @@ import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
 import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
-const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
+const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000, giorno: 86164, rossby: 0.09 };
 
 export function interno(P, stella) {
   if (P.tipo === 'gassoso') {
@@ -39,10 +39,16 @@ export function interno(P, stella) {
   const q = TERRA.q * (M / TERRA.M) / (R / TERRA.R) ** 2 * Math.sqrt(Math.max(0.05, Z)) * (caloreDellaRoccia(eta) / caloreDellaRoccia(4.5e9)) * Math.pow(M / TERRA.M, 0.3); // (cala con l'età come la radioattività della roccia: la stessa legge delle lune)
   // il nucleo resta liquido se il pianeta è abbastanza grande da non essersi raffreddato (tempo ∝ R²)
   const nucleoLiquido = q > 0.025 && R > 3.5e6;
-  const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) : 1e-9;
+  // LA ROTAZIONE (P.giorno, da rotazione.js; se manca, la dinamo resta quella di prima). Una dinamo dà un campo a dipolo
+  // solo se la rotazione ordina i moti del nucleo: il numero di Rossby locale deve stare sotto 0,12; sopra, il campo è a
+  // molti poli e alla superficie è almeno dieci volte più debole (Olson e Christensen 2006, EPSL 250, 561). Lì
+  // Ro_l ∝ Ra_Q^(1/2)·E^(−1/3): con il flusso di galleggiamento ∝ q·Rc², la gravità ∝ Rc e lo spessore del guscio ∝ Rc
+  // viene Ro_l ∝ q^(1/2)·Ω^(−7/6)·Rc^(1/6). DATO: la Terra ha Ro_l ≈ 0,09 (ivi; ricordato). Nessuna taratura.
+  const rossby = P.giorno > 0 && nucleoLiquido ? TERRA.rossby * Math.sqrt(q / TERRA.q) * Math.pow(P.giorno / TERRA.giorno, 7 / 6) * Math.pow(Rc / TERRA.Rc, 1 / 6) : null, dipolo = !(rossby > 0.12);
+  const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) * (dipolo ? 1 : 0.1) : 1e-9;
   const acqua = acquaInSuperficie(P).frazione > 0.005;
   const tettonica = q > 0.05 && acqua && M > 0.3 * TERRA.M ? 'a placche' : q > 0.02 ? 'coperchio unico, con vulcani' : 'ferma';
-  return { eta, nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0 };
+  return { eta, nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0, ...(rossby != null ? { rossby, dipolo } : {}) };
 }
 
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
@@ -106,9 +112,15 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     const ci = Math.floor(caso() * W), cj = Math.floor(caso() * H), prof = 180 * raggio, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI));
     for (let dj = -R2; dj <= R2; dj++) { const y = cj + dj; if (y < 0 || y >= H) continue; for (let di = -Math.ceil(R2 * allarga); di <= R2 * allarga; di++) { const d = Math.hypot(di / allarga, dj) / raggio; if (d > 1.6) continue; const k = y * W + ((ci + di + W * 4) % W); alt[k] += d < 1 ? -prof * (1 - d * d) + (raggio > 9 && d < 0.18 ? prof * 0.5 : 0) : prof * 0.28 * Math.exp(-(d - 1) * 5); } }
   }
-  // i vulcani: sopra i pennacchi caldi del mantello e lungo i confini che si aprono
-  const vulcani = [];
-  for (let k = 0; k < int.vulcani; k++) { const p = casuale(), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const i = Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, j = Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H)); vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
+  // i vulcani: sopra i pennacchi caldi del mantello e lungo i confini che si aprono. Dove la tettonica ha il campo del
+  // mantello (tt.salite) stanno sulle sue cime più alte, la più calda per prima e non due nello stesso pennacchio; se
+  // le cime non bastano, o il mantello non è stato calcolato (i mondi senza placche), i restanti cadono dove capita
+  const vulcani = [], cime = [];
+  if (tt && tt.salite) { const u = tt.salite, tutte = [];
+    for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const v = u[j * W + i]; if (!(v > 0)) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) if ((a || b) && u[(j + b) * W + ((i + a + W) % W)] > v) { cima = false; break; } if (cima) tutte.push([v, i, j]); }
+    tutte.sort((a, b) => b[0] - a[0] || a[2] - b[2] || a[1] - b[1]);
+    for (const [, i, j] of tutte) { const pi = sfera(i, j); if (cime.every(([a, b]) => dot(pi, sfera(a, b)) < Math.cos(0.25))) cime.push([i, j]); } } // (almeno un quarto di radiante tra due vulcani)
+  for (let k = 0; k < int.vulcani; k++) { const p = casuale(), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = acquaKg / 1000;
@@ -198,20 +210,33 @@ const memoClima = new Map();
 // quando il pianeta ha un giorno e un'aria, si fa un secondo giro: dal primo clima si calcolano i venti, il vapore, le
 // nuvole e la pioggia veri (meteo.js), e con quelli si rifà il bilancio (meteo: nuvole punto per punto, e quanto calore
 // l'aria porta davvero). La pioggia che l'erosione usa viene da lì (cl.meteo).
-export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, passiAnno = 240, meteo = null, aria = true } = {}) {
-  if (memoClima.has(chiave)) return memoClima.get(chiave);
+// FINCHÉ NON SI RISPONDONO PIÙ. Clima e aria si cercano a giri: dal clima i venti e le nuvole, dai venti e dalle nuvole
+// il clima; ci si ferma quando la temperatura media cambia meno di mezzo grado da un giro all'altro (al più GIRI_ARIA
+// giri d'aria: ognuno costa una circolazione).
+// IL MARE CHE TORNA AL CLIMA (opzione «mare»: lo stato di mare.js, che è stato calcolato su un clima): le correnti
+// portano calore (mare.caloreDalMare, W/m² sulla griglia del clima) e la superficie del mare rimanda la luce che dice
+// mare.albedo (acqua aperta, ghiaccio marino). Il mare non crea energia: del calore si usa solo ciò che sposta (tolta
+// la media sul pianeta). climaConIlMare() rifà il giro con quei due termini.
+const GIRI_ARIA = 3;
+export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, passiAnno = 240, meteo = null, aria = true, mare = null, Dprima = null } = {}) {
+  if (chiave != null && memoClima.has(chiave)) return memoClima.get(chiave);
   if (!meteo && aria && P.giorno > 0 && isFinite(P.clima.pressione) && P.clima.pressione > 1) {
     const primo = climaSuperficie(`${chiave}|primo giro`, P, sf, { W, H, anni, passiAnno, aria: false });
-    let m = null; try { m = meteoPianeta(P, sf, primo); } catch { m = null; }
-    if (m && m.regime === 'aria') { const cl = climaSuperficie(`${chiave}|con l'aria`, P, sf, { W, H, anni, passiAnno, meteo: m }); cl.meteo = m; memoClima.set(chiave, cl); return cl; }
-    memoClima.set(chiave, primo); return primo;
+    let cl = primo; const storia = [primo.Tglobale];
+    for (let giro = 1; giro <= GIRI_ARIA; giro++) {
+      let m = null; try { m = meteoPianeta(P, sf, cl); } catch { m = null; }
+      if (!m || m.regime !== 'aria') break;
+      const prima = cl, dopo = climaSuperficie(null, P, sf, { W, H, anni, passiAnno, meteo: m, Dprima: cl.D }); dopo.meteo = m; cl = dopo; storia.push(cl.Tglobale);
+      if (prima.meteo && Math.abs(cl.Tglobale - prima.Tglobale) < 0.5) break;
+    }
+    cl.giri = storia.length; cl.storiaGiri = storia; memoClima.set(chiave, cl); return cl;
   }
   // (la serra, il calore portato e la temperatura di partenza sono quelli di clima(), leggi.js: è la stessa legge, risolta
   // lì per fasce e qui sulla mappa; se il pianeta non li porta con sé, valgono le stesse formule di riserva)
   const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = P.clima.tau ?? serraDaPressione(P.clima.pressione);
   // (nel secondo giro il calore portato è la media tra quello atteso del primo giro e quello che i venti hanno portato
   // davvero: i due si rispondono, e a metà strada non rimbalzano)
-  const Dattesa = P.clima.D ?? trasportoCalore(P.clima.pressione), D = meteo ? (Dattesa + Math.max(0, meteo.diffusivita)) / 2 : Dattesa, kx = sf.W / W, ky = sf.H / H;
+  const Dattesa = Dprima ?? P.clima.D ?? trasportoCalore(P.clima.pressione), D = meteo ? (Dattesa + Math.max(0, meteo.diffusivita)) / 2 : Dattesa, kx = sf.W / W, ky = sf.H / H;
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
@@ -227,7 +252,16 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta. Quanta luce torna indietro
   // (suolo, ghiaccio, nuvole) lo dice riflette() di leggi.js, con le nuvole vere di meteo.js quando ci sono
   const acquaPerGhiaccio = acquaPerIlGhiaccio(mareFraz), piove = meteo ? meteo.bilancio.piovuta > 1 : mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = nuvoleAttese(mareFraz, P.clima.pressione);
-  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? meteo.nuvole[k] : null);
+  // il mare di mare.js, se c'è: il calore che sposta (W/m², a media nulla) e quanto rimanda la sua superficie (sulla
+  // griglia del mare, che può essere più fine: qui la media delle celle bagnate)
+  let fonte = null, albedoMare = null;
+  if (mare && mare.caloreDalMare && mare.caloreDalMare.length === W * H) {
+    fonte = new Float32Array(W * H); let s = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { s += w * mare.caloreDalMare[j * W + i]; a += w; } }
+    for (let k = 0; k < W * H; k++) fonte[k] = mare.caloreDalMare[k] - s / a;
+    const r = mare.albedo ? Math.round(Math.sqrt(mare.albedo.length / (W * H))) : 0;
+    if (r >= 1 && mare.albedo.length === W * H * r * r) { albedoMare = new Float32Array(W * H).fill(-1); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let x = 0, n = 0; for (let b = 0; b < r; b++) for (let c = 0; c < r; c++) { const v = mare.albedo[(j * r + b) * W * r + i * r + c]; if (v > 0) { x += v; n++; } } if (n && !terra[j * W + i]) albedoMare[j * W + i] = x / n; } }
+  }
+  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? meteo.nuvole[k] : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null);
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
@@ -263,7 +297,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
     // 1. in ogni cella: la luce assorbita meno quella irradiata
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, t = T[k], entra = (P.bloccato ? sole[k] : soleJ[j]) * (1 - albedo(k, t)), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
+      const k = j * W + i, t = T[k], entra = (P.bloccato ? sole[k] : soleJ[j]) * (1 - albedo(k, t)) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
       const dT = frenaPasso(t, (dt * (entra - esce)) / (C(k) + dt * molla));
       nuovo[k] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
@@ -285,14 +319,29 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
   const quotaMedia = quota; // la quota media della cella del clima: la neve in quota si calcola punto per punto
   let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
-  const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio,
+  const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio, D,
     // il bilancio dell'ultimo anno, in media sul pianeta (W/m²): la luce assorbita e quella irradiata; a regime sono uguali
     bilancio: { assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4 },
     // la temperatura media dei quattro quarti dell'ultimo anno (le stagioni: per meteo.js); un pianeta bloccato non ne ha
     stagioni,
     // quanto in fretta i pendii si consumano: con la pioggia molto, con il solo vento poco, senz'aria quasi niente
     sgretola: piove ? 0.05 : isFinite(P.clima.pressione) && P.clima.pressione > 1000 ? 0.015 : 0.002 };
-  memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);
+  if (chiave != null) { memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value); }
+  return out;
+}
+// il clima rifatto con il mare che c'è (mare.js: mare(P, se, cl, …)): lo stesso bilancio, con i venti e le nuvole di cl,
+// più il calore che le correnti spostano e l'albedo della superficie del mare. → un clima come cl (con cl.meteo), e in
+// più conIlMare: { caloreMedioTolto (W/m²: ciò che mare.js aveva in più o in meno in media, e che qui non entra),
+// caloreSpostato (W/m², medio in valore assoluto), dT (K: di quanto cambia la temperatura media) }
+export function climaConIlMare(chiave, P, sf, cl, mare) {
+  if (!cl || !mare || !mare.caloreDalMare) return cl;
+  const k = `${chiave}|con il mare`; if (memoClima.has(k)) return memoClima.get(k);
+  const out = climaSuperficie(null, P, sf, { W: cl.W, H: cl.H, meteo: cl.meteo || null, aria: false, mare, Dprima: cl.meteo ? 2 * cl.D - Math.max(0, cl.meteo.diffusivita) : cl.D });
+  let s = 0, a = 0, w = 0; for (let j = 0; j < cl.H; j++) { const c = Math.cos(Math.PI / 2 - ((j + 0.5) / cl.H) * Math.PI); for (let i = 0; i < cl.W; i++) { s += c * mare.caloreDalMare[j * cl.W + i]; w += c; } }
+  for (let j = 0; j < cl.H; j++) { const c = Math.cos(Math.PI / 2 - ((j + 0.5) / cl.H) * Math.PI); for (let i = 0; i < cl.W; i++) a += c * Math.abs(mare.caloreDalMare[j * cl.W + i] - s / w); }
+  if (cl.meteo) out.meteo = cl.meteo; out.giri = cl.giri; out.storiaGiri = cl.storiaGiri;
+  out.conIlMare = { caloreMedioTolto: s / w, caloreSpostato: a / w, dT: out.Tglobale - cl.Tglobale };
+  memoClima.set(k, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);
   return out;
 }
 

@@ -156,8 +156,9 @@
 //   · I tempi di amplificazione sono stime d'ordine di grandezza, non uscite di un modello: quello dell'aria viene da
 //     due formule (cascata + Eady), gli altri da «N giri» dichiarati.
 //   · Il campo iniziale di cosmo.js: vedi `fluttuazioniDellInizio()`.
-import { ELEMENTI, atomiDi, mezzo, perdita, CATENE, SOLI, CONDRITI, VOLATILI_RIMASTI, ETA_RIFERIMENTO, radioelementi, concentrazioni, attivita, calore, raggiCosmici, radonNellAria, fmtTempo, ritenzione, luogoDaAria, luogoDaRoccia } from './materia.js';
-import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, stella as stellaDiMassa } from './leggi.js';
+import { ELEMENTI, atomiDi, mezzo, perdita, CATENE, SOLI, CONDRITI, VOLATILI_RIMASTI, ETA_RIFERIMENTO, radioelementi, concentrazioni, attivita, calore, raggiCosmici, energiaDeiPrimari, sogliaStormer, radonNellAria, fmtTempo, ritenzione, luogoDaAria, luogoDaRoccia } from './materia.js';
+import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio } from './leggi.js';
+import { stella as stellaDiMassa } from './stelle.js'; // le stelle dalla loro struttura
 import { rocceDelPianeta } from './chimica.js';
 import { sorgente } from './eventi.js';
 import { puoToccare } from './intreccio.js';
@@ -223,7 +224,7 @@ export function mondoDi(luogo = {}, opz = {}) {
   const eta = luogo.etaPianeta ?? pn.eta ?? I.eta ?? ETA_RIFERIMENTO, B0 = pn.B0 ?? P?.B0 ?? I.B0 ?? 0, lat = luogo.latitudine ?? 45;
   // la stella
   const s0 = luogo.stella || {}, Lw = s0.Lw ?? P?.Lw ?? 0, aM = s0.aM ?? P?.aM ?? 0, S = Lw > 0 && aM > 0 ? Lw / (4 * Math.PI * aM * aM) : 0;
-  const Ms = opz.stella?.massa ?? (P?.Mstella ? P.Mstella / MSOLE : null), Tst = opz.stella?.T ?? (Ms ? stellaDiMassa(Ms).T : Lw > 0 ? 5772 * Math.pow(Lw / LSOLE, 0.14) : 0);
+  const Ms = opz.stella?.massa ?? (P?.Mstella ? P.Mstella / MSOLE : null), Tst = opz.stella?.T ?? P?.Tstella ?? (Ms ? stellaDiMassa(Ms).T : Lw > 0 ? 5772 * Math.pow(Lw / LSOLE, 0.14) : 0);
   const Rst = Tst > 0 && Lw > 0 ? Math.sqrt(Lw / (4 * Math.PI * SIGMA * Tst ** 4)) : RSOLE, etaStella = opz.stella?.eta ?? eta;
   const albedo = P?.clima?.albedo ?? 0.3, assorbita = P?.clima?.bilancio?.assorbita ?? (S * (1 - albedo)) / 4;
   const acqua = P?.clima ? P.clima.acqua ?? null : luogo.denudazione > 0 || luogo.tipo === 'acqua' ? 'liquida' : undefined, mare = P?.clima?.mare ?? (acqua === 'liquida' ? 0.7 : 0); // (undefined: non si sa)
@@ -233,7 +234,9 @@ export function mondoDi(luogo = {}, opz = {}) {
   let Kmantello = CONDRITI.K * VOLATILI_RIMASTI * 1.83; try { Kmantello = rocceDelPianeta(P || {}).mantello.K * 39.098e-3; } catch { /* resta la stima */ }
   const silicati = gassoso ? 0 : (P?.composizione?.roccia ?? 0.68) * M;
   let dT = 0.14 * Ts; const fT = P?.clima?.fasce?.T; if (fT && fT.length > 1) { let lo = Infinity, hi = -Infinity; for (const t of fT) { if (t < lo) lo = t; if (t > hi) hi = t; } if (hi > lo) dT = hi - lo; }
-  const m = { P, R, g, M, area, gas, mu, cp, Ts, Talta, Teq, H, Hm, p0, colonna: p0 / g, massaAria: (p0 / g) * area, eta, B0, lat, q: pn.q ?? I.q ?? 0.087,
+  // (la temperatura a cui si decide che cosa la gravità trattiene: la stessa di clima() in leggi.js, albedo 0,3)
+  const Tfuga = S > 0 ? temperaturaEquilibrio(Lw, aM, 0.3) : Teq;
+  const m = { P, R, g, M, area, gas, mu, cp, Ts, Talta, Teq, Tfuga, H, Hm, p0, colonna: p0 / g, massaAria: (p0 / g) * area, eta, B0, lat, q: pn.q ?? I.q ?? 0.087,
     Lw, aM, S, Tst, Rst, etaStella, Ms, assorbita, acqua, mare, tettonica, vulcani: I.vulcani ?? null, dinamo: B0 > 1e-9, nucleo: I.nucleo ?? 0.55, gassoso,
     giorno: P?.bloccato ? P?.anno ?? 86400 : P?.giorno ?? 86400, dT, mantello: radioelementi([], { K: Kmantello }), silicati, vita: !!(opz.vita ?? P?.prebiotica?.autocatalisi) };
   if (!opz.P && !opz.stella && typeof luogo === 'object') mondi.set(luogo, m);
@@ -272,11 +275,7 @@ function frenataPrimari(rc, bersaglio) {
   return per.get(bersaglio);
 }
 // l'energia media di un nucleone primario (GeV) sopra la soglia del campo, e il flusso di energia in cima (W/m²)
-const energiePrimari = new WeakMap();
-export function energiaDeiCosmici(rc) {
-  if (!energiePrimari.has(rc)) { let s = 0; const n = 400; for (let i = 0; i < n; i++) s += rc.primarioTipico((i + 0.5) / n); energiePrimari.set(rc, s / n); }
-  const media = energiePrimari.get(rc); return { media, flusso: rc.primari * media * 1e3 * MEV_J };
-}
+export function energiaDeiCosmici(rc) { const e = energiaDeiPrimari(rc.soglia, rc.relativo); return { media: e.media, flusso: e.flusso * 1e3 * MEV_J }; }
 // CIÒ CHE I COSMICI LASCIANO in un grammo di `bersaglio` messo in quel punto (MeV per grammo e per secondo), per componente.
 // rc: raggiCosmici(luogo). I flussi di materia.js attraversano una superficie orizzontale: da tutte le direzioni ne
 // passano di più (2 volte in cima, dove arrivano da mezzo cielo; 1,3 in fondo, dove scendono quasi dritti).
@@ -366,7 +365,7 @@ export function colonnaMedia(luogo, opz = {}) {
   const m = mondoDi(luogo, opz), pr = profiloIonizzazione(luogo, { ...opz, senzaSuolo: true }); if (!(pr.energiaPrimari > 0)) return 0;
   return (pr.coppie * energiaMedia(luogo, m)) / pr.energiaPrimari;
 }
-function energiaMedia(luogo, m) { let s = 0; for (const [lat, peso] of [[15, 0.5], [45, 0.366], [75, 0.134]]) s += peso * energiaDeiCosmici(raggiCosmici(luogoInAria({ ...luogo, latitudine: lat }, { ...m, lat }, { p: m.p0 }, 0))).flusso; return s; }
+function energiaMedia(luogo, m) { let s = 0; for (const [lat, peso] of [[15, 0.5], [45, 0.366], [75, 0.134]]) s += peso * energiaDeiPrimari(sogliaStormer(luogo.pianeta, lat), luogo.raggi?.relativo ?? 1).flusso * 1e3 * MEV_J; return s; }
 
 // =====================================================================================
 // A2. I FULMINI, IL CIRCUITO ELETTRICO, CIÒ CHE LA IONIZZAZIONE PRODUCE
@@ -403,7 +402,7 @@ export function prodotti(luogo, opz = {}) {
     nuclei: { tetto: quota, sensibilita: D.SENSIBILITA_NUCLEI, frase: `ogni coppia di ioni può fare al più un nucleo: ${cifre(quota)} per cm³ al secondo tra le nubi. Ma raddoppiare i raggi cosmici cambierebbe i nuclei di condensazione del ${cifre(100 * (Math.pow(2, D.SENSIBILITA_NUCLEI) - 1), 1)}% al più (CLOUD): quasi tutte le gocce nascono su polveri e acidi già presenti.` } };
 }
 let rifCosmici = null;
-const TERRA = { massaKg: 5.972e24, raggioM: 6.371e6, B0: 3.1e-5, Lw: LSOLE, aM: UA, Mstella: MSOLE, giorno: 86164, clima: { g: 9.81, pressione: 101325, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 }, atmosfera: { gas: ARIA_TERRA }, interno: { eta: 4.5e9, q: 0.087, B0: 3.1e-5, tettonica: 'a placche', vulcani: 1, nucleo: 0.546 }, composizione: { ferro: 0.32, roccia: 0.68 } };
+const TERRA = { massaKg: 5.972e24, raggioM: 6.371e6, B0: 3.1e-5, Lw: LSOLE, aM: UA, Mstella: MSOLE, Tstella: 5772, giorno: 86164, clima: { g: 9.81, pressione: 101325, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 }, atmosfera: { gas: ARIA_TERRA }, interno: { eta: 4.5e9, q: 0.087, B0: 3.1e-5, tettonica: 'a placche', vulcani: 1, nucleo: 0.546 }, composizione: { ferro: 0.32, roccia: 0.68 } };
 function cosmiciDiRiferimento() { if (!rifCosmici) { const L = luogoDaAria({ P: TERRA }); rifCosmici = { energia: energiaMedia(L, mondoDi(L, { P: TERRA })) }; } return rifCosmici; }
 
 // =====================================================================================
@@ -452,7 +451,7 @@ export function gasRadiogenici(luogo, opz = {}) {
   const degassata = opz.degassata ?? D.DEGASSATA[m.tettonica] ?? 0.5;
   // argon-40: il potassio-40 decaduto dalla nascita, per il ramo di cattura
   const n40 = (el.K / (ELEMENTI.K.A * 1e-3)) * N_A * k40.abbondanza * resta(k40.mezza, eta), decaduti = n40 * (Math.pow(2, eta / k40.mezza) - 1);
-  const ramo = k40.rami.find((r) => r.tipo === 'cattura').ramo, prodotto = (decaduti * ramo * 39.962e-3 * m.silicati) / N_A, tieneAr = !m.gassoso && trattiene(m.M, m.R, m.Teq, 39.96 * UMA);
+  const ramo = k40.rami.find((r) => r.tipo === 'cattura').ramo, prodotto = (decaduti * ramo * 39.962e-3 * m.silicati) / N_A, tieneAr = !m.gassoso && trattiene(m.M, m.R, m.Tfuga, 39.96 * UMA);
   // sui mondi freddi l'argon gela al suolo: nell'aria ne resta al più la pressione di vapore a quella temperatura
   const tetto = D.ARGON_VAPORE[1] * Math.exp(-(D.ARGON_VAPORE[2] / R_GAS) * (1 / m.Ts - 1 / D.ARGON_VAPORE[0])), uscito = tieneAr ? (prodotto * degassata) / m.area : 0;
   const moliAria = m.colonna / m.mu, colAr = Math.min(uscito, tetto / m.g), molAr = colAr / 39.962e-3;
@@ -460,7 +459,7 @@ export function gasRadiogenici(luogo, opz = {}) {
   let ora = 0, sempre = 0;
   for (const c of Object.values(CATENE)) { const nAlfa = c.passi.reduce((s, p) => s + (p[3] === 'α' ? p[6] ?? 1 : 0), 0), n = ((el[c.elemento] || 0) / (ELEMENTI[c.elemento].A * 1e-3)) * N_A * c.abbondanza * resta(c.mezza, eta);
     ora += (n * Math.LN2 * nAlfa) / (c.mezza * ANNO); sempre += n * (Math.pow(2, eta / c.mezza) - 1) * nAlfa; }
-  const flusso = (ora * m.silicati * degassata) / m.area, tieneHe = !m.gassoso && trattiene(m.M, m.R, D.ECCESSO_ESOSFERA * m.Teq, 4.0026 * UMA);
+  const flusso = (ora * m.silicati * degassata) / m.area, tieneHe = !m.gassoso && trattiene(m.M, m.R, D.ECCESSO_ESOSFERA * m.Tfuga, 4.0026 * UMA);
   const atomiHe = m.gassoso ? 0 : tieneHe ? (sempre * m.silicati * degassata) / m.area : flusso * D.PERMANENZA_ELIO * ANNO, molHe = atomiHe / N_A, colHe = molHe * 4.0026e-3;
   const tot = moliAria + molAr + molHe || 1, conAria = moliAria + molAr > 1; // (meno di una mole per m²: non è un'aria, gli atomi non si urtano)
   return { degassata, potassio: el.K, argon40: { prodotto, nellAria: colAr * m.area, trattenuto: tieneAr, gelato: uscito > colAr ? (uscito - colAr) * m.area : 0, colonna: colAr, pressione: colAr * m.g, frazione: conAria ? molAr / tot : 0 },
@@ -537,10 +536,10 @@ export function dose(luogo, opz = {}) {
 //   qui: { … } o null, domina (nel luogo), relativa (1 = la Terra: ciò che `prebiotica` di chimica.js chiama «energia») }
 export function energiaPerLaChimica(luogo, opz = {}) {
   const m = mondoDi(luogo, opz), nome = (o) => Object.keys(o).filter((k) => typeof o[k] === 'number').sort((a, b) => o[b] - o[a])[0];
-  const rcCima = raggiCosmici({ pianeta: luogo.pianeta, latitudine: m.lat, raggi: luogo.raggi, tipo: 'aria', quotaM: 0, aria: { ...(luogo.aria || {}), pressione: m.p0, gas: m.gas }, sopra: {} });
+  const inCima = energiaDeiPrimari(sogliaStormer(luogo.pianeta, m.lat), luogo.raggi?.relativo ?? 1).flusso * 1e3 * MEV_J, colonnaAria = m.p0 / m.g / 10; // (W/m²; g/cm²)
   const uv = (m.S / 4) * (D.RIGHE * sottoLaSoglia(m.Tst) + D.CROMOSFERA), v = ventoStellare(luogo, opz), f = fulmini(luogo, opz);
   const crosta = luogo.tipo === 'roccia' ? luogo : m.gassoso ? null : luogoDaRoccia({ P: pianetaDa(m), continente: true });
-  const superficie = { ultravioletto: uv, fulmini: f.perM2, cosmici: energiaDeiCosmici(rcCima).flusso * (m.p0 > 0 ? -Math.expm1(-rcCima.colonnaAria / 126) : 1), aurore: v ? v.aurora.perM2 : 0, radioattivita: crosta ? calore(crosta) * mezzo(crosta).densita * 1000 * 1000 : 0 };
+  const superficie = { ultravioletto: uv, fulmini: f.perM2, cosmici: inCima * (m.p0 > 0 ? -Math.expm1(-colonnaAria / 126) : 1), aurore: v ? v.aurora.perM2 : 0, radioattivita: crosta ? calore(crosta) * mezzo(crosta).densita * 1000 * 1000 : 0 };
   superficie.domina = nome(superficie);
   let qui = null; const s = sopraDi(luogo), sotto = sepolto(luogo) > 0;
   if (sotto) { const mz = mezzo(luogo), rho = mz.densita * 1000, dep = depositoCosmico(raggiCosmici(luogo), ACQUA);

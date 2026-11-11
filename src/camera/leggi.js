@@ -43,6 +43,8 @@ export function raggioNeutroni(M, k = COSTANTI) {
 
 // una stella in sequenza principale, con il Sole come unità (le relazioni di scala vengono dalla
 // struttura stellare; i loro coefficienti si misurano sul Sole)
+// (LE STELLE VERE stanno in stelle.js, dalla loro struttura: nessun modulo usa più questa. Resta come termine di
+// confronto di test/test_stelle.mjs. La vecchia fine() — che cosa resta di una stella — è stata tolta: c'è stelle.fine)
 export function stella(Msol) {
   const L = Msol < 0.43 ? 0.23 * Msol ** 2.3 : Msol < 2 ? Msol ** 4 : Msol < 55 ? 1.4 * Msol ** 3.5 : 32000 * Msol;
   const R = Msol < 1 ? Msol ** 0.8 : Msol ** 0.57;
@@ -50,23 +52,6 @@ export function stella(Msol) {
   // quanto vive: brucia circa il 10% del suo idrogeno, con un'efficienza di 0,7% (E = mc²)
   const vita = (0.1 * 0.007 * Msol * MSOLE * COSTANTI.c ** 2) / (L * LSOLE) / ANNO;
   return { L, R, T, vita };
-}
-
-// che cosa diventa una stella quando muore, e quanto è forte il suo campo: il flusso magnetico
-// si conserva mentre si contrae (B·R² costante), così una stella che diventa piccolissima ha un
-// campo enorme
-export function fine(Msol, B0 = 1e-4) {
-  const Rs = stella(Msol).R * RSOLE, Mc = massaChandrasekhar() / MSOLE;
-  if (Msol < 8) { // perde gli strati esterni; resta il nucleo, una nana bianca
-    const Mr = Math.min(0.98 * Mc, 0.48 + 0.08 * Msol), R = raggioNanaBianca(Mr * MSOLE);
-    return { tipo: 'nana bianca', massa: Mr, raggio: R, B: B0 * (Rs / R) ** 2, supernova: false };
-  }
-  const nucleo = 1.2 + 0.04 * (Msol - 8);
-  if (nucleo < massaMassimaNeutroni() / MSOLE) { // il nucleo collassa: una supernova, e resta una stella di neutroni
-    const R = raggioNeutroni(nucleo * MSOLE);
-    return { tipo: 'stella di neutroni', massa: nucleo, raggio: R, B: B0 * (Rs / R) ** 2, supernova: true };
-  }
-  return { tipo: 'buco nero', massa: nucleo, raggio: (2 * COSTANTI.G * nucleo * MSOLE) / COSTANTI.c ** 2, B: 0, supernova: true };
 }
 
 // la distribuzione delle masse delle stelle che nascono (misurata: Kroupa); u tra 0 e 1
@@ -149,8 +134,10 @@ export const acquaPerIlGhiaccio = (mare) => (mare > 0 ? Math.min(1, 0.15 + 2.5 *
 export const nuvoleAttese = (mare, pressione) => (mare > 0.02 && isFinite(pressione) && pressione > 1e4 ? CLIMA.nuvoleMassime * Math.min(1, mare * 2 + 0.3) : 0);
 // quanta luce rimanda un punto a temperatura t: il suolo (terra o mare: «mare» vale 0 o 1), il ghiaccio che lo copre
 // se fa freddo e c'è acqua, e sopra le nuvole («copertura»: quella vera di meteo.js; se manca, quella attesa)
-export function riflette(t, mare, acquaGhiaccio, nuvole, copertura = null) {
-  const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
+// («sotto»: quanto rimanda la superficie, se chi chiama lo sa già — il mare di mare.js, con il suo ghiaccio —; allora
+// qui si aggiungono solo le nuvole)
+export function riflette(t, mare, acquaGhiaccio, nuvole, copertura = null, sotto = null) {
+  const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = sotto ?? ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
   const cielo = copertura ?? (t > CLIMA.geloTerra ? nuvole : nuvole * CLIMA.nuvoleAlFreddo);
   return suolo + cielo * CLIMA.riflessoNuvole * (1 - suolo);
 }

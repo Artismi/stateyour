@@ -481,6 +481,13 @@ const energiaDaRigidita = (GV) => Math.sqrt(GV * GV + M_P * M_P) - M_P;
 // l'integrale di una funzione su una griglia logaritmica
 const integraLog = (f, a, b, n = 60) => { if (!(b > a)) return 0; const h = Math.log(b / a) / n; let s = 0; for (let i = 0; i <= n; i++) { const x = a * Math.exp(i * h); s += (i === 0 || i === n ? 0.5 : 1) * f(x) * x; } return s * h; };
 
+// L'ENERGIA CHE I PRIMARI PORTANO in cima all'aria, sopra una soglia di rigidità (GV): il flusso attraverso una superficie
+// orizzontale (GeV per m² e per secondo), quanti sono (per m² e per secondo) e l'energia media per nucleone (GeV). È lo
+// stesso spettro di raggiCosmici, integrato: serve a chi vuole solo il bilancio (risalita.js) senza muoni né sciami
+export function energiaDeiPrimari(sogliaGV = 0, relativo = 1) {
+  const a = Math.max(energiaDaRigidita(sogliaGV), 0.02), n = integraLog(primari, a, 1e6, 80), e = integraLog((E) => E * primari(E), a, 1e6, 80);
+  return { flusso: Math.PI * relativo * e, numero: Math.PI * relativo * n, media: n > 0 ? e / n : 0 };
+}
 // → { soglia (GV), colonnaAria, colonnaSopra (g/cm²), quotaNascita (m), primari, nucleoni, muoni, elettroni, neutroni: flussi
 //     attraverso una superficie orizzontale in quel punto (per m² e per secondo); muoniVerticali (per m²·s·sr),
 //     energiaMuoni (GeV, la mediana), spettroMuoni(u) (GeV al quantile u), produzioneC14 (atomi per m² e per secondo) }

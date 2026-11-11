@@ -14,7 +14,7 @@
 // (Ω = √(G·M / (rR)³)), con la massa vera del pianeta (quella che gli ha dato
 // il disco: la stessa di tutti gli altri calcoli).
 
-import { sistema, pianeta, fascia, semeEvento } from './cosmo.js';
+import { sistema, pianeta, fascia, FASCIA_MAX, semeEvento } from './cosmo.js';
 
 const Q = 1.602e-19, MEV = 1.602e-13, G = 6.674e-11;
 export const ACCELERA = 40; // il tempo della mappa scorre 40 volte più in fretta
@@ -24,7 +24,7 @@ export function nebbiaPianeta(n, gid, sid, pid) {
   const k = `${n}|${gid}|${sid}|${pid}`; if (memo.has(k)) return memo.get(k);
   const P = sistema(n, gid, sid).pianeti[pid], Pl = pianeta(n, gid, sid, pid);
   let s = semeEvento('nebbia', n, gid, sid, pid) % 2147483646 + 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  const fascia_ = [], anello = [], fmax = 0.17;
+  const fascia_ = [], anello = [], fmax = FASCIA_MAX;
   for (let i = 0; i < 40000 && fascia_.length < 2600; i++) {
     const r = 1.15 + caso() * 4.85; if (caso() > fascia(P, Pl, r) / fmax) continue;
     const elettrone = caso() < 0.5, E = elettrone ? 0.05 + 0.73 * caso() : 10 * Math.pow(30, caso()), m = elettrone ? 0.511 : 938.27;
@@ -48,7 +48,7 @@ export function conteggioVero(cella) {
   const a = cella.indirizzo, d = cella.dipoli?.[0]; if (!a || !d || !cella.scala) return null;
   const P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], Pl = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta);
   const r = Math.hypot(cella.larghezza / 2 - d.centro[0], cella.altezza / 2 - d.centro[1]) / d.R, V = cella.scala.latoM ** 2;
-  const raggi = 1.7e-4 * V * (cella.sorgenti.some((s) => s.specie === 'protone') ? 1 : 0), fasciaN = 20 * (fascia(P, Pl, r) / 0.17) * V;
+  const raggi = 1.7e-4 * V * (cella.sorgenti.some((s) => s.specie === 'protone') ? 1 : 0), fasciaN = 20 * (fascia(P, Pl, r) / FASCIA_MAX) * V;
   return { raggi, fascia: fasciaN, r, disegnate: cella.sorgenti.length };
 }
 export const fmtGrande = (x) => (x < 1e3 ? Math.round(x).toString() : x < 1e6 ? `${Math.round(x / 1e3)} mila` : x < 1e9 ? `${(x / 1e6).toFixed(0)} milioni` : x < 1e12 ? `${(x / 1e9).toFixed(0)} miliardi` : `${(x / 1e12).toFixed(0)} mila miliardi`);

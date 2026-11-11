@@ -17,11 +17,11 @@ const nonTorna = (che, mio, vero, perche = '') => console.log(`      ≠ ${che}:
 const nota = (t) => console.log(`      · ${t}`);
 
 // i mondi di prova (ciò che cosmo.js dà di un pianeta)
-const TERRA = { massaKg: 5.972e24, raggioM: 6.371e6, B0: 3.1e-5, Lw: 3.828e26, aM: 1.496e11, Mstella: 1.989e30, giorno: 86164, clima: { g: 9.81, pressione: 101325, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 },
+const TERRA = { massaKg: 5.972e24, raggioM: 6.371e6, B0: 3.1e-5, Lw: 3.828e26, aM: 1.496e11, Mstella: 1.989e30, Tstella: 5772, giorno: 86164, clima: { g: 9.81, pressione: 101325, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 },
   atmosfera: { gas: { N2: 0.781, O2: 0.209, Ar: 0.0093, CO2: 0.0004 } }, interno: { eta: 4.5e9, q: 0.087, B0: 3.1e-5, acquaKg: 1.4e21, tettonica: 'a placche', vulcani: 1, nucleo: 0.546 }, composizione: { ferro: 0.32, roccia: 0.68 } };
-const MARTE = { massaKg: 6.417e23, raggioM: 3.3895e6, B0: 0, Lw: 3.828e26, aM: 2.279e11, Mstella: 1.989e30, giorno: 88775, clima: { g: 3.71, pressione: 636, T: 210, Teq: 210, acqua: 'ghiaccio', mare: 0, albedo: 0.25 },
+const MARTE = { massaKg: 6.417e23, raggioM: 3.3895e6, B0: 0, Lw: 3.828e26, aM: 2.279e11, Mstella: 1.989e30, Tstella: 5772, giorno: 88775, clima: { g: 3.71, pressione: 636, T: 210, Teq: 210, acqua: 'ghiaccio', mare: 0, albedo: 0.25 },
   atmosfera: { gas: { CO2: 0.951, N2: 0.027, Ar: 0.016 } }, interno: { eta: 4.5e9, q: 0.02, B0: 0, tettonica: 'ferma', vulcani: 0, nucleo: 0.5 }, composizione: { ferro: 0.25, roccia: 0.75 } };
-const LUNA = { massaKg: 7.35e22, raggioM: 1.737e6, B0: 0, Lw: 3.828e26, aM: 1.496e11, Mstella: 1.989e30, clima: { g: 1.62, pressione: 0, T: 250, Teq: 270, acqua: null, mare: 0 }, atmosfera: null, interno: { eta: 4.5e9, q: 0.015, B0: 0, tettonica: 'ferma', vulcani: 0, nucleo: 0.2 }, composizione: { ferro: 0.02, roccia: 0.98 } };
+const LUNA = { massaKg: 7.35e22, raggioM: 1.737e6, B0: 0, Lw: 3.828e26, aM: 1.496e11, Mstella: 1.989e30, Tstella: 5772, clima: { g: 1.62, pressione: 0, T: 250, Teq: 270, acqua: null, mare: 0 }, atmosfera: null, interno: { eta: 4.5e9, q: 0.015, B0: 0, tettonica: 'ferma', vulcani: 0, nucleo: 0.2 }, composizione: { ferro: 0.02, roccia: 0.98 } };
 const conCampo = (k) => ({ ...TERRA, B0: 3.1e-5 * k, interno: { ...TERRA.interno, B0: 3.1e-5 * k } });
 const MARE_K = { K: 0.0102, Na: 0.469, Cl: 0.546 }, STATO = { carbonio: 0.0022, pO2: 0.2 };
 const sulMare = (lat = 45, P = TERRA) => M.luogoDaAria({ P, suMare: true, lat });
@@ -181,7 +181,7 @@ prova("l'energia per la chimica: l'ultravioletto domina di ordini di grandezza i
   assert.ok(m2k.qui.cosmici < 1e-3 * m10.qui.cosmici && m10.superficie.ultravioletto === s.ultravioletto);
   // altri mondi: Marte più lontano dalla stella; una nana rossa (corpo nero freddo: resta la cromosfera, e i fulmini contano)
   const em = R.energiaPerLaChimica(M.luogoDaAria({ P: MARTE }), { P: MARTE }); tra(em.relativa, 0.3, 0.6, 'Marte (1,52 UA: 0,43)');
-  const NANA = { ...TERRA, Lw: 3.828e24, aM: 1.496e10, Mstella: 0.3 * 1.989e30 }, en = R.energiaPerLaChimica(sulMare(45, NANA), { P: NANA });
+  const NANA = { ...TERRA, Lw: 3.828e24, aM: 1.496e10, Mstella: 0.3 * 1.989e30, Tstella: undefined }, en = R.energiaPerLaChimica(sulMare(45, NANA), { P: NANA });
   assert.ok(en.relativa < 0.3 && en.superficie.fulmini / en.superficie.ultravioletto > 5 * (s.fulmini / s.ultravioletto), `sotto una nana rossa, stessa luce: ${en.relativa}`);
   nota(`Terra (W/m²): UV ${n(s.ultravioletto)}, radioattività ${n(s.radioattivita)}, aurore ${n(s.aurore)}, fulmini ${n(s.fulmini)}, cosmici ${n(s.cosmici)}; «energia» per prebiotica: Terra 1, Marte ${n(em.relativa)}, nana rossa a pari luce ${n(en.relativa)}`);
   nota(`sotto 10 m di mare (W/m² in un metro): cosmici ${n(m10.qui.cosmici)}, potassio-40 ${n(m10.qui.radioattivita)}; a 2 km: ${n(m2k.qui.cosmici)} e ${n(m2k.qui.radioattivita)}`);

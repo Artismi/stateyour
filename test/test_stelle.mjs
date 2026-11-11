@@ -5,7 +5,7 @@
 // numero, e ricapitolato in fondo. Le soglie non si allargano: ciò che il modello sbaglia resta scritto.
 import assert from 'node:assert/strict';
 import { stella, fine, massaMinima, massaMassima, nucleoElio, composizione, DATI, ALFA, dentro } from '../src/camera/stelle.js';
-import { stella as stellaVecchia, fine as fineVecchia, massaNascita, massaChandrasekhar, massaMassimaNeutroni, MSOLE, RSOLE, LSOLE, ANNO, etaUniverso } from '../src/camera/leggi.js';
+import { stella as stellaVecchia, massaNascita, massaChandrasekhar, massaMassimaNeutroni, MSOLE, RSOLE, LSOLE, ANNO, etaUniverso } from '../src/camera/leggi.js';
 
 let ok = 0;
 const nonTorna = [];
@@ -156,7 +156,7 @@ prova('la fine: nana bianca, stella di neutroni, buco nero; i confini vengono da
   assert.equal(ns.tipo, 'stella di neutroni'); tra(ns.massa, 1.2, 1.5, 'massa di una stella di neutroni (1,2–1,5)'); tra(ns.raggio / 1e3, 9, 15, 'raggio (km)'); assert.ok(ns.massa * MSOLE < massaMassimaNeutroni() && ns.B > s1.B * 1e4);
   confronta('confine nana bianca / supernova (M☉)', c1, 7, 11, '8–10'); confronta('confine stella di neutroni / buco nero (M☉)', c2, 18, 30, '20–25');
   tra(nucleoElio(c1 * 1.001), Mch * 0.99, Mch * 1.02, 'al confine il nucleo di elio è la massa di Chandrasekhar');
-  console.log(`      nucleo di elio a fine sequenza: ${[5, 10, 20, 40].map((M) => `${M} → ${n(nucleoElio(M))}`).join(', ')} M☉; fine(1): ${n(s1.massa)} M☉ (leggi.js ${n(fineVecchia(1).massa)}); fine(40): ${quaranta.tipo} di ${n(quaranta.massa)} M☉ (leggi.js: ${fineVecchia(40).tipo} di ${n(fineVecchia(40).massa)})`);
+  console.log(`      nucleo di elio a fine sequenza: ${[5, 10, 20, 40].map((M) => `${M} → ${n(nucleoElio(M))}`).join(', ')} M☉; fine(1): ${n(s1.massa)} M☉; fine(40): ${quaranta.tipo} di ${n(quaranta.massa)} M☉`);
 });
 
 prova('la forma dei dati è quella di leggi.js, per ogni massa, metallicità ed età (come le usa cosmo.js)', () => {

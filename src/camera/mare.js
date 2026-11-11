@@ -87,7 +87,8 @@
 // le righe da nord a sud come geologia.js. Deterministico: ogni esito incerto viene dalla sorgente degli eventi.
 // Lo «stato» che mare() restituisce è fatto solo di dati (numeri, testi, vettori): può passare tra fili.
 
-import { COSTANTI, R_GAS, ANNO, MSOLE, stella as stellaDi } from './leggi.js';
+import { COSTANTI, R_GAS, ANNO, MSOLE } from './leggi.js';
+import { stella as stellaDi } from './stelle.js'; // le stelle dalla loro struttura
 import { MOLECOLE, atmosfera, pressioneVapore, pressioneCO2Urey, rocceDelPianeta, rilascio, vulcani, co2DelCiclo, ROCCE, MINERALI_ROCCIA } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
 import { maree as mareaDi } from './lune.js';
@@ -450,7 +451,8 @@ export function mare(P, sf, cl, se = null, caso = null) {
   // l'aria non ha contato i vulcani e le rocce (la CO2 è rimasta all'equilibrio di Urey o al minimo che tiene il mare
   // aperto), qui la si calcola: quella a cui le terre VERE di questo pianeta, con le loro temperature e le loro piogge,
   // consumano tanta CO2 quanta i vulcani ne emettono (co2DelCiclo di chimica.js: la stessa legge di climaEAria)
-  const pCO2Ciclo = co2DelCiclo({ calore: P.interno?.q ?? 0, raggioM: R, massaKg: P.massaKg, composizione: P.composizione, consumo: (p) => cedono(p).cariche });
+  const pCO2Ciclo = co2DelCiclo({ calore: (P.interno?.vulcani ?? 1) > 0 ? P.interno?.q ?? 0 : 0, // (senza vulcani niente sorgente: come in cosmo.js)
+    massaKg: P.massaKg, composizione: P.composizione, consumo: (p) => cedono(p).cariche });
   const ariaSenzaCiclo = P.clima?.co2Ciclo == null && pCO2Ciclo > 0 && (pCO2Aria <= (3 * pressioneCO2Urey(cl.Tglobale || 288)) / 1e5 || (P.clima?.termostato > 0 && Math.abs(Math.log(pCO2Aria / (P.clima.termostato / 1e5))) < 0.4));
   // (se nemmeno sotto tutta la pressione dell'aria le rocce tengono il passo coi vulcani, la CO2 si accumula: qui ci si ferma alla pressione dell'aria che c'è, e lo si segnala)
   const nonRegge = ariaSenzaCiclo && pCO2Ciclo > pAria / 1e5, pCO2 = ariaSenzaCiclo ? Math.min(pCO2Ciclo, pAria / 1e5) : pCO2Aria, ceduto = cedono(pCO2), apporto = { Na: ceduto.Na, K: ceduto.K, Ca: ceduto.Ca, Mg: ceduto.Mg, Si: ceduto.Si }, argilla = ceduto.argilla, sabbia = ceduto.sabbia;

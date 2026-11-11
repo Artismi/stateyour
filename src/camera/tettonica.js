@@ -312,6 +312,7 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 //   spinta     Float32Array 0…1, dove oggi la crosta dei continenti è compressa: lì i monti stanno crescendo
 //   etaCrosta  Float32Array, milioni di anni della crosta oceanica (0 sui continenti)
 //   celle      quanti pennacchi del mantello salgono oggi
+//   salite     Float32Array, il campo del mantello oggi (> 0 dove sale, caldo: lì stanno i vulcani; < 0 dove scende); null se è fermo
 //   spessore   Float32Array, metri di crosta continentale (anche i veli sottili fuori dai continenti)
 //   fosse      Float32Array 0…1, dove la crosta oceanica sta affondando (lì alt è più fonda, fino a 2500 m)
 //   regime     'a placche' | 'coperchio unico' | 'fermo'
@@ -334,7 +335,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   if (!aPlacche) {
     etaCrosta.fill(eta / 1e6);
     if (vivo) { const u = man.su(W, H), A = 1500 * Math.min(1, q / C.qTerra); let mx = 1e-9; for (const v of u) mx = Math.max(mx, Math.abs(v)); for (let k = 0; k < N; k++) alt[k] = (A * u[k]) / mx; }
-    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [], impronta: origine } };
+    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, salite: vivo ? Float32Array.from(man.su(W, H)) : null, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [], impronta: origine } };
   }
   // LEGGE DI SCALA (strato limite della convezione): la velocità delle placche cresce come il quadrato del calore che esce
   const V = C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
@@ -382,5 +383,5 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     // ISOSTASIA: il fondo (oceano secondo l'età, o la radice fredda del continente) più quanto sporge la crosta leggera
     alt[k] = -(wo * profonditaOceano(a[k]) + (1 - wo) * C.radice) + C.galleggia * hk - C.fossa * fosse[k];
   }
-  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, anni: L.n * L.dt })), impronta: origine } };
+  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), salite: Float32Array.from(man.su(W, H)), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, anni: L.n * L.dt })), impronta: origine } };
 }

@@ -9,6 +9,10 @@
 //    tutti: non ruotano); `assetto` dà la matrice 3×3 che porta dagli assi del corpo (che gira) a quelli inerziali.
 //    Tutto in doppia precisione sulla CPU. La camera è ATTACCATA a un corpo: la sua posizione è riferita a lui, e ne
 //    eredita il moto (l'orbita sempre; la rotazione quando è «solidale», cioè vicina al suolo).
+//    Un corpo può anche essere solo un RIFERIMENTO (un sistema dentro la galassia, una galassia nel cosmo): con `assi`
+//    (3×3 per righe, o una funzione del tempo) dice come sono girati, rispetto al riferimento in cui sta lui, gli assi
+//    in cui sono date le posizioni e gli assetti dei suoi figli. Con `influenza` (metri) dice fin dove la camera, entrando,
+//    si attacca a lui: il passaggio da un livello all'altro è solo questo cambio di riferimento, la camera resta dov'è.
 //  · L'ORIGINE MOBILE. Alla scheda grafica non arrivano mai coordinate assolute: di ogni cosa si calcola in doppia
 //    precisione il vettore occhio → cosa (risalendo l'albero dei corpi fino all'antenato comune), e solo quello diventa
 //    un numero a 32 bit. Così un sasso a due metri e una stella a cento miliardi di chilometri stanno nella stessa scena.
@@ -21,6 +25,11 @@
 //    cui si è attaccati; l'immagine si disegna in virgola mobile (una stella vale decine di migliaia, la notte millesimi)
 //    e alla fine l'ESPOSIZIONE e una curva di tonalità la portano sullo schermo. L'esposizione segue da sé la luce che
 //    c'è (di notte l'occhio si apre), o la si fissa.
+//    In S.E0 c'è l'irradianza (W/m²) che vale «1» in questo fotogramma: gli strati la propongono (S.proponiLuce(E):
+//    la luce della stella dove si è; tra le stelle, il flusso delle più brillanti) e ognuno moltiplica la sua luce per
+//    S.espo(E) = E / E0.
+//  · I BERSAGLI. Ogni strato può dire che cosa c'è da raggiungere (S.bersaglio({ p, raggio, corpo })): la rotella porta
+//    verso quello che sta sotto il cursore, il volo va veloce quanto è lontana la cosa più vicina.
 //  · GLI STRATI. Chi disegna si aggiunge come strato: { nome, aggiorna(S), disegna(S, passata), dopo(S, da, a), sopra(S),
 //    libera() }, tutti facoltativi. Le passate: 'fondo' (il cielo lontano, senza profondità), 'solido' (ciò che copre),
 //    'velato' (ciò che è trasparente, mescolato sopra); poi `dopo` può riscrivere l'immagine intera (l'aria: legge
@@ -120,19 +129,24 @@ export function creaNucleo(tela, opzioni = {}) {
   // ---------- i corpi
   const corpi = [];
   function corpo(def) {
-    const c = { nome: '', genitore: null, raggio: 1, posizione: null, assetto: null, quota: null, colpisci: null, verticale: null, luce: null, ...def, profondita: 0 };
+    const c = { nome: '', genitore: null, raggio: 1, posizione: null, assetto: null, assi: null, influenza: 0, quota: null, colpisci: null, verticale: null, luce: null, ...def, profondita: 0 };
     for (let g = c.genitore; g; g = g.genitore) c.profondita++;
     corpi.push(c); return c;
   }
-  const _p = [0, 0, 0];
-  // il vettore dal centro di a al centro di b (assi inerziali), risalendo fino all'antenato comune
+  const _p = [0, 0, 0], _q = [0, 0, 0], quadri = new Map(); let tQuadri = NaN;
+  // come sono girati, negli assi del mondo (quelli della radice), gli assi in cui un corpo dà posizioni e assetti dei figli
+  function quadro(c, t) {
+    if (!c) return null; if (t !== tQuadri) { quadri.clear(); tQuadri = t; } let m = quadri.get(c); if (m !== undefined) return m;
+    const sopra = quadro(c.genitore, t), suoi = c.assi ? (typeof c.assi === 'function' ? c.assi(t) : c.assi) : null;
+    m = suoi ? (sopra ? V.mm(sopra, suoi) : suoi) : sopra; quadri.set(c, m); return m;
+  }
+  // il vettore dal centro di a al centro di b (assi del mondo), risalendo fino all'antenato comune: i numeri grandi dei
+  // livelli sopra non entrano mai nel conto di due cose vicine
   function tra(a, b, t, out = [0, 0, 0]) {
-    out[0] = out[1] = out[2] = 0; let x = a, y = b;
-    while (x !== y) {
-      if (x && (!y || x.profondita >= y.profondita)) { if (x.posizione) { x.posizione(t, _p); out[0] -= _p[0]; out[1] -= _p[1]; out[2] -= _p[2]; } x = x.genitore; }
-      else { if (y.posizione) { y.posizione(t, _p); out[0] += _p[0]; out[1] += _p[1]; out[2] += _p[2]; } y = y.genitore; }
-    }
-    return out;
+    let ox = 0, oy = 0, oz = 0, x = a, y = b;
+    const passo = (c, segno) => { if (!c.posizione) return; c.posizione(t, _p); const m = quadro(c.genitore, t), v = m ? V.mv(m, _p, _q) : _p; ox += segno * v[0]; oy += segno * v[1]; oz += segno * v[2]; };
+    while (x !== y) { if (x && (!y || x.profondita >= y.profondita)) { passo(x, -1); x = x.genitore; } else { passo(y, 1); y = y.genitore; } }
+    out[0] = ox; out[1] = oy; out[2] = oz; return out;
   }
 
   // ---------- il tempo del mondo
@@ -140,8 +154,8 @@ export function creaNucleo(tela, opzioni = {}) {
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
-  const cam = { corpo: null, solidale: false, pos: [0, 0, 1], assi: V.identita(), fov: O.fov };
-  const assettoDi = (c, t) => (c && c.assetto ? c.assetto(t, new Array(9)) : V.identita());
+  const cam = { corpo: null, solidale: false, pos: [0, 0, 1], assi: V.identita(), fov: O.fov, perno: null };
+  const assettoDi = (c, t) => { if (!c || !c.assetto) return V.identita(); const a = c.assetto(t, new Array(9)), m = quadro(c.genitore, t); return !a ? V.identita() : m ? V.mm(m, a) : a; };
   const quotaSuolo = (c, dirCorpo) => (c.quota ? c.quota(dirCorpo) : c.raggio);
   // la verticale del luogo (per un corpo schiacciato non è la direzione del centro: il corpo la dà con `verticale`)
   const suDi = (p) => (cam.corpo && cam.corpo.verticale ? cam.corpo.verticale(p) : V.norma(p));
@@ -156,13 +170,24 @@ export function creaNucleo(tela, opzioni = {}) {
   const colonna = (m, k) => [m[k], m[3 + k], m[6 + k]];
   // quando si passa la soglia della quota, la camera cambia riferimento restando dov'è
   function scegliRiferimento(t) {
-    const c = cam.corpo; if (!c) return; const solidale = V.lungo(cam.pos) - c.raggio < O.quotaSolidale * c.raggio && !!c.assetto;
+    const c = cam.corpo; if (!c) return; const solidale = !!c.assetto && !!c.quota && V.lungo(cam.pos) - c.raggio < O.quotaSolidale * c.raggio;
     if (solidale === cam.solidale) return; const A = assettoDi(c, t);
     if (solidale) { const At = V.trasposta(A); cam.pos = V.mv(At, cam.pos); cam.assi = V.mm(At, cam.assi); } else { cam.pos = V.mv(A, cam.pos); cam.assi = V.mm(A, cam.assi); }
     cam.solidale = solidale;
   }
   // non si attraversa il suolo
-  function sopraIlSuolo(c) { const r = V.lungo(c.p), dir = V.per(c.p, 1 / r), suolo = quotaSuolo(cam.corpo, dir); if (r < suolo + O.quotaMinima) c.p = V.per(dir, suolo + O.quotaMinima); return r - suolo; }
+  function sopraIlSuolo(c) { if (!cam.corpo.quota && !cam.corpo.solido) return V.lungo(c.p); const r = V.lungo(c.p), dir = V.per(c.p, 1 / (r || 1)), suolo = quotaSuolo(cam.corpo, dir), minima = cam.corpo.quota ? O.quotaMinima : suolo * 0.02; if (r < suolo + minima) c.p = V.per(dir, suolo + minima); return r - suolo; }
+  // cambiare il corpo a cui si è attaccati restando dove si è (stessa posizione, stesso sguardo): è il passaggio di livello
+  function riattacca(nuovo) {
+    const c = cam.corpo; if (!c || nuovo === c) return; const t = tempo.t, A = cam.solidale ? assettoDi(c, t) : null, p = A ? V.mv(A, cam.pos) : cam.pos, d = tra(nuovo, c, t);
+    cam.pos = [p[0] + d[0], p[1] + d[1], p[2] + d[2]]; if (A) cam.assi = V.mm(A, cam.assi); cam.corpo = nuovo; cam.solidale = false; cam.perno = null; scegliRiferimento(t);
+  }
+  // il corpo più piccolo, tra quelli che dichiarano un'influenza, dentro la cui influenza sta l'occhio
+  function scegliCorpo() {
+    if (!O.attaccoDaSe || !cam.corpo) return; const t = tempo.t, A = cam.solidale ? assettoDi(cam.corpo, t) : null, p = A ? V.mv(A, cam.pos) : cam.pos; let meglio = null;
+    for (const c of corpi) { if (!(c.influenza > 0)) continue; const d = tra(c, cam.corpo, t), dist = Math.hypot(d[0] + p[0], d[1] + p[1], d[2] + p[2]); if (dist < c.influenza * (c === cam.corpo ? 1.15 : 1) && (!meglio || c.influenza < meglio.influenza)) meglio = c; }
+    if (!meglio) { meglio = cam.corpo; while (meglio.genitore) meglio = meglio.genitore; } if (meglio !== cam.corpo) { const prima = cam.corpo; riattacca(meglio); if (O.alPassaggio) O.alPassaggio(meglio, prima); }
+  }
   function attacca(c, { distanza = null, lon = 0, lat = 0, guarda = true } = {}) {
     cam.corpo = c; cam.solidale = false; const d = distanza ?? 3 * c.raggio, cl = Math.cos(lat), dir = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)];
     const A = assettoDi(c, tempo.t); cam.pos = V.mv(A, V.per(dir, d)); if (guarda) cam.assi = assiDa(V.norma(V.per(cam.pos, -1)), V.mv(A, [0, 1, 0])); scegliRiferimento(tempo.t); cambia();
@@ -172,37 +197,58 @@ export function creaNucleo(tela, opzioni = {}) {
   // dove il raggio tocca il corpo (assi del corpo): la distanza, o Infinity
   function tocca(o, d) {
     const c = cam.corpo; if (c.colpisci) return c.colpisci(o, d);
-    const b = -V.scal(o, d), q = b * b - V.scal(o, o) + c.raggio * c.raggio; return q < 0 || b - Math.sqrt(q) < 0 ? Infinity : b - Math.sqrt(q);
+    if (!c.solido) return Infinity; const b = -V.scal(o, d), q = b * b - V.scal(o, o) + c.raggio * c.raggio; return q < 0 || b - Math.sqrt(q) < 0 ? Infinity : b - Math.sqrt(q);
+  }
+  // il bersaglio (tra quelli detti dagli strati nell'ultimo fotogramma) più vicino al raggio dato, negli assi del mondo
+  function bersaglioLungo(dW) {
+    let meglio = null, vm = Infinity; const tol = (18 * 2 * Math.tan(cam.fov / 2)) / Math.max(1, tela.clientHeight);
+    for (const b of S.bersagli) { const lungo = V.scal(b.p, dW); if (lungo <= 0) continue; const fuori = Math.hypot(b.p[0] - dW[0] * lungo, b.p[1] - dW[1] * lungo, b.p[2] - dW[2] * lungo), largo = Math.max(b.raggio, tol * lungo); if (fuori > largo) continue; const v = fuori / largo + (b.raggio > tol * lungo ? -1 : 0) + 1e-3 * Math.log10(lungo); if (v < vm) { vm = v; meglio = b; } }
+    return meglio;
   }
   const quota = () => (cam.corpo ? V.lungo(cam.pos) - quotaSuolo(cam.corpo, V.norma(nelCorpo(tempo.t).p)) : 0);
 
   // --- i gesti (tutti lavorano negli assi del corpo e poi riportano la camera nel suo riferimento)
   // avvicinarsi (k < 1) o allontanarsi verso il punto sotto il cursore
   function avvicina(x, y, k) {
-    const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = suDi(c.p);
-    let Q; if (isFinite(s)) Q = V.somma(c.p, V.per(d, s)); else { const h = Math.max(V.lungo(c.p) - cam.corpo.raggio, cam.corpo.raggio * 0.05); Q = V.somma(c.p, V.per(d, h)); }
-    c.p = V.somma(Q, V.per(V.meno(c.p, Q), k));
-    const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (k > 1 && O.alFuori) O.alFuori(); }
-    c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); cambia();
+    const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = suDi(c.p), corpo0 = cam.corpo;
+    if (isFinite(s)) { const Q = V.somma(c.p, V.per(d, s)); c.p = V.somma(Q, V.per(V.meno(c.p, Q), k)); cam.perno = null; }
+    else {
+      const A = assettoDi(cam.corpo, tempo.t), dW = V.mv(A, d), b = bersaglioLungo(dW);
+      if (b) { // verso la cosa sotto il cursore: mai più vicino del suo bordo
+        const dist = V.lungo(b.p), nuova = Math.max(dist * k, b.raggio * 1.25), passo = dist - nuova, dir = V.tv(A, V.per(b.p, 1 / dist));
+        c.p = V.somma(c.p, V.per(dir, passo)); cam.perno = V.somma(c.p, V.per(dir, nuova));
+      } else { const h = cam.corpo.quota || cam.corpo.solido ? Math.max(V.lungo(c.p) - cam.corpo.raggio, cam.corpo.raggio * 0.05) : S.vicinoM || V.lungo(c.p) || 1; c.p = V.somma(c.p, V.per(d, h * (1 - k))); }
+    }
+    if (!O.attaccoDaSe) { const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (k > 1 && O.alFuori) O.alFuori(); } }
+    if (cam.corpo.quota) c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); scegliCorpo(); if (cam.corpo !== corpo0) cam.perno = null; cambia();
   }
   // trascinare: il punto afferrato segue il cursore (il corpo gira sotto la mano)
   let presa = null;
   function afferra(x, y) { const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d); presa = isFinite(s) ? { c, G: V.somma(c.p, V.per(d, s)), x, y } : { c, G: null, x, y }; }
   function trascina(x, y) {
     if (!presa) return; const c0 = presa.c;
-    if (!presa.G) { guarda((x - presa.x) * -0.003, (y - presa.y) * -0.003, presa); presa.x = x; presa.y = y; return; }
+    if (!presa.G) { (cam.corpo.quota ? guarda : orbitaLibera)((x - presa.x) * -0.004, (y - presa.y) * (cam.corpo.quota ? -0.003 : 0.004)); presa.x = x; presa.y = y; return; }
     const d = raggio(x, y, c0), R = V.lungo(presa.G), b = -V.scal(c0.p, d), q = b * b - V.scal(c0.p, c0.p) + R * R; if (q < 0) return;
     const G1 = V.somma(c0.p, V.per(d, b - Math.sqrt(q))), M = V.porta(V.norma(G1), V.norma(presa.G)), c = { p: V.mv(M, c0.p), a: V.mm(M, c0.a) };
     sopraIlSuolo(c); dalCorpo(c, tempo.t); cambia();
   }
   // guardarsi attorno: girare la testa (dx) e alzare o abbassare lo sguardo (dy), in radianti
   function guarda(dx, dy) {
+    if (!cam.corpo.quota) return guardaLibero(dx, dy);
     const c = nelCorpo(tempo.t), su = suDi(c.p), av = V.per(colonna(c.a, 2), -1), destra = colonna(c.a, 0);
     let a2 = V.mv(V.giro(su, dx), av); const d2 = V.mv(V.giro(su, dx), destra), alza = Math.asin(Math.max(-1, Math.min(1, V.scal(a2, su))));
     a2 = V.mv(V.giro(d2, Math.max(-1.55 - alza, Math.min(1.55 - alza, dy))), a2); c.a = assiDa(a2, su, d2); dalCorpo(c, tempo.t); cambia();
   }
+  // nello spazio: girare attorno al perno (l'ultima cosa verso cui ci si è avvicinati, o il centro del riferimento)
+  function orbitaLibera(dx, dy) {
+    const c = nelCorpo(tempo.t), perno = cam.perno || [0, 0, 0], su = colonna(c.a, 1), M1 = V.giro(su, dx), d2 = V.mv(M1, colonna(c.a, 0)), M = V.mm(V.giro(d2, -dy), M1);
+    c.p = V.somma(perno, V.mv(M, V.meno(c.p, perno))); c.a = V.mm(M, c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); cambia();
+  }
+  // guardarsi attorno nello spazio: la camera gira su sé stessa
+  function guardaLibero(dx, dy) { const c = nelCorpo(tempo.t), M1 = V.giro(colonna(c.a, 1), dx), M = V.mm(V.giro(V.mv(M1, colonna(c.a, 0)), dy), M1); c.a = V.mm(M, c.a); dalCorpo(c, tempo.t); cambia(); }
   // orbitare attorno al punto che sta al centro dello schermo
   function orbita(dx, dy) {
+    if (!cam.corpo.quota) return orbitaLibera(dx, -dy);
     const c = nelCorpo(tempo.t), av = V.per(colonna(c.a, 2), -1), s = tocca(c.p, av), h = Math.max(1, V.lungo(c.p) - quotaSuolo(cam.corpo, V.norma(c.p)));
     const Q = V.somma(c.p, V.per(av, isFinite(s) ? s : h)), suQ = suDi(Q), destra = colonna(c.a, 0);
     let M = V.giro(suQ, dx); const braccio = V.mv(M, V.meno(c.p, Q)), d2 = V.mv(M, destra), el = Math.asin(Math.max(-1, Math.min(1, V.scal(V.norma(braccio), suQ))));
@@ -211,11 +257,13 @@ export function creaNucleo(tela, opzioni = {}) {
   }
   // volare: avanti, di lato, in su (frazioni della quota al secondo)
   function vola(avanti, lato, su, dt) {
-    const c = nelCorpo(tempo.t), su0 = suDi(c.p), h = Math.max(2, V.lungo(c.p) - quotaSuolo(cam.corpo, V.norma(c.p))), passo = h * dt;
+    const c = nelCorpo(tempo.t), terra = !!cam.corpo.quota, su0 = terra ? suDi(c.p) : colonna(c.a, 1);
+    // il passo: quanto si è alti sul suolo, o (nello spazio) quanto è lontana la cosa più vicina
+    const h = terra ? Math.max(2, V.lungo(c.p) - quotaSuolo(cam.corpo, V.norma(c.p))) : Math.max(1, Math.min(S.vicinoM || Infinity, cam.corpo.solido ? V.lungo(c.p) - cam.corpo.raggio : Infinity, S.vicinoM ? Infinity : V.lungo(c.p) || 1)), passo = h * dt;
     const av = V.per(colonna(c.a, 2), -1), de = colonna(c.a, 0);
     c.p = [c.p[0] + (av[0] * avanti + de[0] * lato + su0[0] * su) * passo, c.p[1] + (av[1] * avanti + de[1] * lato + su0[1] * su) * passo, c.p[2] + (av[2] * avanti + de[2] * lato + su0[2] * su) * passo];
-    const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (O.alFuori) O.alFuori(); }
-    c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t);
+    if (!O.attaccoDaSe) { const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (O.alFuori) O.alFuori(); } }
+    if (terra) c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); scegliCorpo();
   }
   // mettersi sopra un punto del corpo: longitudine e latitudine (radianti), quota (m), verso cui si guarda e inclinazione
   function vai({ lon, lat, quota: h = 1000, direzione = 0, alza = -0.4 }) {
@@ -248,11 +296,13 @@ export function creaNucleo(tela, opzioni = {}) {
     void main() { vec3 x = max(texture(u_col, v_uv).rgb, 0.0); x = clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); o = vec4(pow(x, vec3(1.0 / 2.2)), 1.0); }`);
 
   // ---------- un fotogramma
-  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], esposizione: 1, quota: 0, luceQui: 1, conVirgola, schermo, lega };
+  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], esposizione: 1, quota: 0, luceQui: 1, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0 };
+  S.bersaglio = (b) => { S.bersagli.push(b); const d = V.lungo(b.p) - b.raggio; if (d > 0 && d < S._vicino) S._vicino = d; };
+  S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
   const _a = new Map(); let occhioInerziale = [0, 0, 0];
   S.assetto = (c) => { let a = _a.get(c); if (!a) { a = assettoDi(c, S.t); _a.set(c, a); } return a; };
   S.versoCorpo = (c, out = [0, 0, 0]) => { tra(cam.corpo, c, S.t, out); out[0] -= occhioInerziale[0]; out[1] -= occhioInerziale[1]; out[2] -= occhioInerziale[2]; return out; };
-  const stat = { cpuMs: 0, fotogrammi: 0 }; let esposto = 1, perso = false, ultimoMs = 0, giro = 0, quadro = 0;
+  const stat = { cpuMs: 0, fotogrammi: 0 }; let esposto = 1, perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
   const tasti = new Set();
   function fotogramma(ms = performance.now()) {
     if (perso || !cam.corpo || !tela.width || !tela.height) return;
@@ -264,20 +314,24 @@ export function creaNucleo(tela, opzioni = {}) {
       const av = k('w', 'arrowup') - k('s', 'arrowdown'), la = k('d', 'arrowright') - k('a', 'arrowleft'), su = k('r', ' ') - k('f', 'c'), gira = k('e') - k('q');
       if (av || la || su) vola(av * 1.2 * svelto, la * 1.2 * svelto, su * 0.9 * svelto, dtVero); if (gira) guarda(-gira * 1.2 * dtVero, 0);
     }
-    scegliRiferimento(tempo.t);
+    scegliRiferimento(tempo.t); scegliCorpo();
     S.t = tempo.t; S.dt = dtVero * (tempo.pausa ? 0 : tempo.velocita); S.dtVero = dtVero; _a.clear();
     preparaImmagini(); const W = S.W = tela.width, H = S.H = tela.height;
     // la camera negli assi inerziali: l'occhio rispetto al centro del suo corpo, e la matrice mondo → occhio
     const A = cam.solidale ? S.assetto(cam.corpo) : V.identita(), assi = cam.solidale ? V.mm(A, cam.assi) : cam.assi; occhioInerziale = cam.solidale ? V.mv(A, cam.pos) : cam.pos.slice();
     for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) S.vista[3 * j + i] = assi[3 * j + i]; // (per colonne, per WebGL: la trasposta degli assi)
     S.assi = assi; S.occhio = occhioInerziale; S.quota = quota(); S.distanza = V.lungo(cam.pos);
-    const tY = Math.tan(cam.fov / 2), tX = (tY * W) / H, lontano = O.lontano || 1e13, m = S.proj; m.fill(0); m[0] = 1 / tX; m[5] = 1 / tY; m[10] = -1; m[11] = -1; m[14] = -0.02;
+    const tY = Math.tan(cam.fov / 2), tX = (tY * W) / H, lontano = O.lontano || 1e28, m = S.proj; m.fill(0); m[0] = 1 / tX; m[5] = 1 / tY; m[10] = -1; m[11] = -1; m[14] = -0.02;
     S.tanX = tX; S.tanY = tY; S.fuoco = H / (2 * tY); S.fc = 2 / Math.log2(lontano + 1);
     // la stella che illumina: quella più in alto nell'albero del corpo a cui si è attaccati
-    let st = cam.corpo; while (st && !st.luce) st = st.genitore; S.stella = st || null;
+    let st = cam.corpo; while (st && !st.luce) st = st.genitore; if (!st) st = cam.corpo.stella || null; S.stella = st || null; // (un riferimento può dire qual è la sua stella: `stella`)
+    S.bersagli.length = 0; S._vicino = Infinity; S.luceVoluta = 0;
     if (st && st !== cam.corpo) { const v = tra(cam.corpo, st, S.t); S.distanzaStella = V.lungo(v); S.versoStella = V.norma(v); } else { S.versoStella = [0, 1, 0]; S.distanzaStella = 1; }
     S.coloreStella = st && st.luce.colore ? st.luce.colore : [1, 1, 1];
     for (const s of strati) if (s.aggiorna) s.aggiorna(S);
+    S.vicinoM = isFinite(S._vicino) ? S._vicino : 0;
+    // l'irradianza che vale «1»: quella proposta dagli strati, seguita come fa l'occhio (in fretta verso il chiaro, piano verso il buio)
+    if (S.luceVoluta > 0) { const v = Math.log(S.luceVoluta), o = Math.log(S.E0), k = Math.min(1, dtVero > 0 ? dtVero * (v > o ? 6 : 2.5) : 1); S.E0 = Math.exp(o + (v - o) * k); }
     // l'esposizione: quella fissata, o quella che la luce del posto chiede (gli strati dicono S.luceQui: 1 in pieno giorno)
     const voluta = O.esposizione > 0 ? O.esposizione : 1 / Math.max(0.004, S.luceQui); esposto += (voluta - esposto) * Math.min(1, dtVero > 0 ? dtVero * 2.5 : 1); S.esposizione = esposto;
     gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA); gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 1); gl.clearDepth(1); gl.depthMask(true); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -296,7 +350,7 @@ export function creaNucleo(tela, opzioni = {}) {
     gl.bindVertexArray(null);
     stat.cpuMs = performance.now() - t0; stat.fotogrammi++;
   }
-  function cambia() { if (O.alCambio) O.alCambio(); else if (!giro && !quadro) quadro = requestAnimationFrame((ms) => { quadro = 0; fotogramma(ms); }); }
+  function cambia() { if (O.alCambio) O.alCambio(); else if (!giro && !richiesto) richiesto = requestAnimationFrame((ms) => { richiesto = 0; fotogramma(ms); }); }
   function passo(ms) { if (!giro) return; fotogramma(ms); giro = requestAnimationFrame(passo); }
 
   // ---------- i gesti: trascinare gira il corpo sotto la mano; col tasto destro (o maiuscolo) si orbita attorno al
@@ -320,12 +374,12 @@ export function creaNucleo(tela, opzioni = {}) {
     if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; } cambia();
   }
   function libera() {
-    if (giro) cancelAnimationFrame(giro); if (quadro) cancelAnimationFrame(quadro); giro = quadro = 0;
+    if (giro) cancelAnimationFrame(giro); if (richiesto) cancelAnimationFrame(richiesto); giro = richiesto = 0;
     for (const [chi, che, f, o] of ascolti) chi.removeEventListener(che, f, o); ascolti.length = 0;
     for (const s of strati) if (s.libera) s.libera(); strati.length = 0;
     if (!perso) gl.getExtension('WEBGL_lose_context')?.loseContext(); perso = true;
   }
-  const N = { gl, tela, opzioni: O, V, tempo, camera: cam, corpo, corpi, tra, attacca, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
+  const N = { gl, tela, opzioni: O, V, tempo, camera: cam, corpo, corpi, tra, quadro, assettoDi, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
     avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; }, tasti };
   ridimensiona();
   return N;

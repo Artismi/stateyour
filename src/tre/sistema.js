@@ -1,0 +1,121 @@
+// sistema.js — UN SISTEMA PLANETARIO nello spazio, per il motore 3D (nucleo.js).
+//
+// La stella, i pianeti e le lune stanno dove sono davvero in quel momento (spazio3d.js `corpiSistema`: orbite
+// inclinate ed eccentriche, assi, giri), in metri, e si muovono col tempo del mondo. Da lontano ogni corpo è una sfera
+// illuminata dalla stella (un gigante gassoso con le sue fasce, un pianeta con gli anelli); la stella è una sfera che
+// brilla, col suo alone; le orbite sono linee sottili. Avvicinandosi a un pianeta solido, quello diventa il pianeta
+// vero di pianeta.js — lo STESSO corpo: stesso posto, stesso asse, stesso giro — con rilievo, mare, aria e nuvole.
+// La camera si attacca da sé al corpo dentro la cui influenza entra (nucleo.js: `influenza`).
+//
+// uso:  const sis = creaSistema(N, { via: { cosmo, galassia, stella }, superficie: (viaPianeta) => superficieDi(viaPianeta),
+//                                    genitore (il corpo-riferimento della galassia, o niente), posizione, assi });
+//       N.attacca(sis.nodo, { distanza: … });   sis.pianeta(i) → il corpo del pianeta i;   sis.libera()
+import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucleo.js';
+import { creaPianeta, fabbricaAnello, V_SFERA, F_SFERA } from './pianeta.js';
+import { creaPunti } from './luci.js';
+import { sistema } from '../camera/cosmo.js';
+import { corpiSistema, scenaSistema } from '../camera/spazio3d.js';
+
+const UA = 1.495978707e11;
+const V_ORBITA = `
+in vec3 a_p; uniform mat4 u_proj; uniform mat3 u_vista, u_quadro; uniform float u_fc; uniform vec3 u_C; out float v_w; out float v_d;
+void main() { vec3 e = u_vista * (u_C + u_quadro * a_p); v_d = length(e); gl_Position = u_proj * vec4(e, 1.0);${GLSL_PROFONDITA_V} }`;
+const F_ORBITA = `
+in float v_w; in float v_d; uniform float u_fc; uniform vec4 u_tinta; out vec4 o_col; // (una linea sottile, aggiunta alla luce che c'è)
+void main() { o_col = vec4(u_tinta.rgb, 0.0);${GLSL_PROFONDITA_F} }`;
+
+export function creaSistema(N, { via, superficie = () => null, genitore = null, posizione = null, assi = null, opzioni = {} } = {}) {
+  const gl = N.gl, O = { orbite: true, dettaglio: true, ...opzioni }, Sis = sistema(via.cosmo, via.galassia, via.stella), defs = corpiSistema(via.cosmo, via.galassia, via.stella);
+  if (!defs.length) return null; // la stella non è ancora nata
+  const Tstella = Sis.stella.T || 5772, nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c);
+  // il riferimento del sistema (il suo baricentro, coi suoi assi): dentro la galassia, se c'è, altrimenti la radice
+  const lontanoMax = Math.max(1, ...Sis.pianeti.map((P) => P.aM || 0));
+  const nodo = N.corpo({ nome: `sistema ${via.stella}`, genitore, posizione, assi, raggio: 0, influenza: Math.max(3 * lontanoMax, 40 * UA) });
+  const corpi = [], schede = [];
+  for (const c of defs) {
+    const g = c.genitore < 0 ? nodo : corpi[c.genitore], P = c.cosa === 'pianeta' ? Sis.pianeti[c.id] : null, L = c.cosa === 'luna' ? Sis.pianeti[c.pianeta].lune.find((l) => l.id === c.id) : null;
+    const corpo = N.corpo({ ...c, genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
+      // fin dove la camera si attacca a questo corpo: un pianeta 50 raggi (ma dentro l'orbita della sua prima luna larga), una luna 12
+      influenza: c.cosa === 'pianeta' ? 50 * c.raggio : c.cosa === 'luna' ? Math.min(12 * c.raggio, 0.3 * (L?.aM || 1e12)) : 0 });
+    corpi.push(corpo); schede.push({ c, corpo, P, L, anello: P && P.anello && typeof P.anello.densita === 'function' ? fabbricaAnello(N, P) : null, vero: null, rel: [0, 0, 0], sole: [1, 0, 0], E: 0 });
+  }
+  const stella = corpi[0]; nodo.stella = stella; stella.luminosita = defs[0].luminosita;
+  const punti = creaPunti(N), alone = punti.insieme(1), segni = punti.insieme(defs.length), posS = new Float32Array(3 * defs.length), luceS = new Float32Array(4 * defs.length), prgSfera = N.programma(V_SFERA, F_SFERA, { a_angolo: 0 });
+  const quadrato = (() => { const vao = gl.createVertexArray(), b = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null); return { vao, b }; })();
+  // le orbite: 256 punti ciascuna, riferiti al corpo attorno a cui girano (gli elementi sono quelli di oggi)
+  const orbite = (() => {
+    if (!O.orbite) return []; const sc = scenaSistema(via.cosmo, via.galassia, via.stella, 0), out = []; let k = 0;
+    for (const q of sc.corpi) { const s = schede[k++]; if (!q.orbita || !s) continue; const { a, e, assi: [Pv, Qv] } = q.orbita, n = 257, v = new Float32Array(3 * n), b = a * Math.sqrt(1 - e * e);
+      for (let i = 0; i < n; i++) { const E = (i / (n - 1)) * 2 * Math.PI, x = a * (Math.cos(E) - e), y = b * Math.sin(E); for (let d = 0; d < 3; d++) v[3 * i + d] = x * Pv[d] + y * Qv[d]; }
+      const vao = gl.createVertexArray(), buf = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
+      out.push({ vao, buf, n, attorno: s.corpo.genitore, luna: s.c.cosa === 'luna', a }); }
+    return out;
+  })();
+  let prgOrbita = null; const u9 = new Float32Array(9), pos1 = new Float32Array(3), luce1 = new Float32Array(4);
+
+  const strato = {
+    nome: 'sistema',
+    aggiorna(S) {
+      const cam = N.camera;
+      for (const s of schede) {
+        S.versoCorpo(s.corpo, s.rel); const d = V.lungo(s.rel);
+        if (s.corpo !== stella) { const vs = N.tra(s.corpo, stella, S.t); s.E = stella.luminosita / (4 * Math.PI * V.scal(vs, vs)); V.norma(vs, s.sole); }
+        S.bersaglio({ p: s.rel, raggio: s.corpo.raggio, corpo: s.corpo });
+        // il pianeta vero: lo si prepara quando ci si avvicina (uno alla volta), lo si lascia quando si è lontani
+        if (O.dettaglio && s.P && s.P.tipo !== 'gassoso' && s.P.interno) {
+          const vicino = d < 400 * s.corpo.raggio;
+          if (vicino && !s.vero) { for (const x of schede) if (x.vero && x !== s) { x.vero.libera(); x.vero = null; } const viaP = { ...via, pianeta: s.c.id }; s.vero = creaPianeta(N, { P: s.P, stella: Sis.stella, via: viaP, superficie: () => superficie(viaP), corpi: { pianeta: s.corpo, stella }, opzioni: O.pianeta || {} }); }
+          else if (!vicino && s.vero && d > 900 * s.corpo.raggio) { s.vero.libera(); s.vero = null; }
+        }
+      }
+      // la luce che l'occhio chiede: quella della stella dove si è (se non lo dice già un pianeta vero vicino)
+      const dS = V.lungo(schede[0].rel), suPianeta = schede.some((s) => s.vero && V.lungo(s.rel) < 400 * s.corpo.raggio);
+      if (!suPianeta && dS < 30 * nodo.influenza) S.proponiLuce((0.6 * stella.luminosita) / (4 * Math.PI * Math.max(dS, stella.raggio * 3) ** 2));
+      // i segnaposto: un pianeta lontano è molto più piccolo di un punto dello schermo e quasi buio; perché si veda dov'è gli si
+      // mette un puntino del suo colore, sempre della stessa forza (non è luce vera: è un segno)
+      { let k = 0; const forza = (0.35 * 4 * Math.PI * S.E0 * 20) / (Math.PI * S.fuoco * S.fuoco) / 1e20, px = (2 * S.tanY) / S.H;
+        for (const s of schede) { if (s.corpo === stella || s.c.cosa === 'luna') continue; const d2 = V.scal(s.rel, s.rel); if (s.corpo.raggio / Math.sqrt(d2) > 0.7 * px) continue; const col = s.c.colore || [170, 170, 165]; posS.set(s.rel, 3 * k); luceS.set([(col[0] / 255) * forza * d2, (col[1] / 255) * forza * d2, (col[2] / 255) * forza * d2, 1], 4 * k); k++; }
+        segni.metti(posS, luceS, k); }
+      pos1.set(schede[0].rel); luce1.set([nero[0] * stella.luminosita * 1e-20, nero[1] * stella.luminosita * 1e-20, nero[2] * stella.luminosita * 1e-20, 1]); alone.metti(pos1, luce1, 1);
+    },
+    disegna(S, passata) {
+      if (passata === 'solido') {
+        const u = prgSfera.u; gl.useProgram(prgSfera.p); gl.bindVertexArray(quadrato.vao);
+        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform1f(u.u_espo, 1); gl.uniform2f(u.u_minimo, (1.6 * S.tanY * 2) / S.H, 0);
+        for (const s of schede) {
+          if (s.vero) continue; const c = s.corpo; gl.uniform4f(u.u_sfera, s.rel[0], s.rel[1], s.rel[2], c.raggio);
+          if (c === stella) { gl.uniform4f(u.u_tinta, nero[0], nero[1], nero[2], Math.min(1e7, S.espo(stella.luminosita / (4 * Math.PI * c.raggio ** 2)))); gl.uniform4f(u.u_ombra, 0, 0, 0, 0); gl.uniform4f(u.u_asse, 0, 1, 0, 0); gl.uniform3f(u.u_luce, 0, 0, 0); gl.uniform3f(u.u_sole, 1, 0, 0); }
+          else {
+            const col = s.c.colore || [170, 170, 165], k = S.espo(s.E), gas = s.P && s.P.tipo === 'gassoso', A = c.assetto ? S.assetto(c) : null; gl.uniform4f(u.u_tinta, (col[0] / 255) ** 2.2, (col[1] / 255) ** 2.2, (col[2] / 255) ** 2.2, 0);
+            gl.uniform3f(u.u_luce, coloreLuce[0] * k, coloreLuce[1] * k, coloreLuce[2] * k); gl.uniform3fv(u.u_sole, s.sole); gl.uniform4f(u.u_asse, A ? A[1] : 0, A ? A[4] : 1, A ? A[7] : 0, gas ? 1 : 0);
+            // l'ombra del pianeta sulla sua luna
+            const g = s.c.cosa === 'luna' ? schede.find((x) => x.corpo === c.genitore) : null; if (g) gl.uniform4f(u.u_ombra, g.rel[0], g.rel[1], g.rel[2], g.corpo.raggio); else gl.uniform4f(u.u_ombra, 0, 0, 0, 0);
+          }
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+        gl.bindVertexArray(null); return;
+      }
+      if (passata !== 'velato') return;
+      for (const s of schede) if (s.anello) s.anello.disegna(S, { centro: s.rel, A: S.assetto(s.corpo), sole: s.sole, luce: coloreLuce, espo: S.espo(s.E), schiaccia: 1 - Math.min(0.3, s.P.schiacciamento || 0) });
+      alone.disegna(S, 1e20, 1.5); segni.disegna(S, 1e20, 1.5);
+      if (orbite.length) { // le orbite: più tenui da vicino (quando il corpo è grande sullo schermo non servono)
+        if (!prgOrbita) prgOrbita = N.programma(V_ORBITA, F_ORBITA, { a_p: 0 }); const u = prgOrbita.u, q = N.quadro(nodo, S.t) || V.identita(); gl.useProgram(prgOrbita.p);
+        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = q[3 * r + c]; gl.uniformMatrix3fv(u.u_quadro, false, u9);
+        const dS = V.lungo(schede[0].rel);
+        for (const o of orbite) { const c = S.versoCorpo(o.attorno), vista = Math.min(1, dS / (0.02 * o.a)) * (o.luna ? 0.5 : 1) * Math.min(1, (30 * nodo.influenza) / Math.max(dS, 1)); if (vista < 0.02) continue;
+          gl.uniform3f(u.u_C, c[0], c[1], c[2]); gl.uniform4f(u.u_tinta, 0.05 * vista, 0.065 * vista, 0.1 * vista, 1); gl.bindVertexArray(o.vao); gl.drawArrays(gl.LINE_STRIP, 0, o.n); }
+        gl.bindVertexArray(null);
+      }
+    },
+  };
+  N.aggiungi(strato);
+  return {
+    nodo, stella, corpi, schede, Sis, coloreLuce,
+    pianeta: (i) => schede.find((s) => s.c.cosa === 'pianeta' && s.c.id === i)?.corpo || null,
+    vero: () => schede.find((s) => s.vero)?.vero || null, scheda: (corpo) => schede.find((s) => s.corpo === corpo) || null,
+    // che cosa è un corpo, in parole (per la riga in basso)
+    descrivi(corpo) { const s = schede.find((x) => x.corpo === corpo); if (!s) return ''; if (s.c.cosa === 'stella') return `la stella: ${Tstella.toFixed(0)} K, raggio ${(corpo.raggio / 6.957e8).toFixed(2)} raggi solari`; if (s.P) return `il pianeta ${s.c.id + 1}: ${s.P.tipo}, raggio ${(corpo.raggio / 1000).toFixed(0)} km, a ${((s.P.aM || 0) / UA).toFixed(2)} UA${s.P.anello ? ', con gli anelli' : ''}${(s.P.lune || []).length ? `, ${(s.P.lune || []).length} lune` : ''}`; return `una luna del pianeta ${s.c.pianeta + 1}: raggio ${(corpo.raggio / 1000).toFixed(0)} km`; },
+    libera() { N.togli(strato); for (const s of schede) { if (s.vero) s.vero.libera(); if (s.anello) s.anello.libera(); } for (const o of orbite) { gl.deleteBuffer(o.buf); gl.deleteVertexArray(o.vao); } punti.libera(); gl.deleteBuffer(quadrato.b); gl.deleteVertexArray(quadrato.vao);
+      for (const c of [nodo, ...corpi]) { const i = N.corpi.indexOf(c); if (i >= 0) N.corpi.splice(i, 1); } },
+  };
+}

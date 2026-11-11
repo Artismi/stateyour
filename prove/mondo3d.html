@@ -28,62 +28,73 @@
 <script type="module">
 import { creaNucleo } from '../src/tre/nucleo.js';
 import { creaPianeta } from '../src/tre/pianeta.js';
+import { creaUniverso } from '../src/tre/universo.js';
 import { sistema, indirizzoDi, numeroDi } from '../src/camera/cosmo.js';
 import { superficieDi } from '../src/camera/mappa.js';
 
 const $ = (id) => document.getElementById(id), par = new URLSearchParams(location.search);
 if (par.has('nudo')) document.body.classList.add('nudo');
-// quale pianeta: ?n=numero dell'universo, oppure ?g=galassia&s=stella&p=pianeta (cosmo 1)
+// quale pianeta: ?n=numero dell'universo, oppure ?g=galassia&s=stella&p=pianeta (cosmo 1).
+// ?livello=cosmo | galassia | sistema | pianeta: l'universo intero (tutti i livelli, dal cosmo al suolo), partendo da lì;
+// senza `livello`: il pianeta da solo, con una stella e lune sue (com'era la prima tappa)
 const a = par.has('n') ? indirizzoDi(+par.get('n')) : { cosmo: 1, galassia: +(par.get('g') ?? 2), stella: +(par.get('s') ?? 839), pianeta: +(par.get('p') ?? 5) };
-const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }, Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta];
+const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }, Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta], livello = par.get('livello');
 const fermo = par.has('fermo'); let sporco = 3;
 const num = (k, d) => (par.has(k) ? +par.get(k) : d);
 const N = creaNucleo($('tela'), { densita: num('densita', 0), esposizione: num('esposizione', 0), alCambio: () => { sporco = 2; }, t0: num('t', 0) });
 const opz = {}; for (const k of ['magliePerPixel', 'puntiPerPixel', 'errorePixel', 'passiAria', 'nuvole', 'onde', 'rilievo', 'fili', 'massimoTessere']) if (par.has(k)) opz[k] = +par.get(k);
-const pianeta = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => superficieDi(via), opzioni: opz });
-N.attacca(pianeta.corpo, { distanza: num('dist', 3.2) * P.raggioM, lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 15) * Math.PI / 180 });
-if (par.has('quota')) N.vai({ lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 0) * Math.PI / 180, quota: num('quota', 1000), direzione: num('dir', 0) * Math.PI / 180, alza: num('alza', -20) * Math.PI / 180 });
+let soloPianeta = null, universo = null;
+if (!livello) {
+  soloPianeta = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => superficieDi(via), opzioni: opz });
+  N.attacca(soloPianeta.corpo, { distanza: num('dist', 3.2) * P.raggioM, lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 15) * Math.PI / 180 });
+  if (par.has('quota')) N.vai({ lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 0) * Math.PI / 180, quota: num('quota', 1000), direzione: num('dir', 0) * Math.PI / 180, alza: num('alza', -20) * Math.PI / 180 });
+} else universo = creaUniverso(N, { via, livello, superficie: (v) => superficieDi(v), opzioni: { sistema: { pianeta: opz } } });
+// il pianeta vero che c'è adesso (quello da solo, o quello a cui ci si è avvicinati nell'universo)
+const pianeta = () => soloPianeta || universo?.sistema()?.vero() || null;
 N.tempo.velocita = num('velocita', 1); N.tempo.pausa = par.has('pausa');
 $('nome').textContent = `universo n. ${numeroDi({ ...via, regione: 0 })} — pianeta ${P.tipo}, raggio ${(P.raggioM / 1000).toFixed(0)} km, giorno ${(P.giorno / 3600).toFixed(1)} h, asse ${(P.obliquita || 0).toFixed(0)}°${P.bloccato ? ', bloccato' : ''}, aria ${((P.clima?.pressione || 0) / 1e5).toFixed(2)} bar, ${(P.lune || []).length} lune${P.anello ? ', anelli' : ''}; stella a ${Sis.stella.T.toFixed(0)} K`;
 
 // il tempo: quanto vale, e i comandi
-const VELOCITA = [1, 60, 600, 3600, 21600, 86400, 604800, 2592000, 31557600];
-const dice = (v) => (v === 1 ? 'tempo vero' : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < 604800 ? `${v / 86400} giorni al secondo` : v < 31557600 ? `${Math.round(v / 86400)} giorni al secondo` : 'un anno al secondo');
+const ANNO = 31557600, VELOCITA = [1, 60, 600, 3600, 21600, 86400, 604800, 2592000, ANNO, 100 * ANNO, 1e4 * ANNO, 1e6 * ANNO, 1e8 * ANNO];
+const dice = (v) => (v === 1 ? 'tempo vero' : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < ANNO ? `${Math.round(v / 86400)} giorni al secondo` : v === ANNO ? 'un anno al secondo' : v < 1e6 * ANNO ? `${(v / ANNO).toLocaleString('it-IT')} anni al secondo` : `${(v / ANNO / 1e6).toLocaleString('it-IT')} milioni di anni al secondo`);
 function cambiaTempo(su) { const i = VELOCITA.findIndex((v) => v >= N.tempo.velocita); N.tempo.velocita = VELOCITA[Math.max(0, Math.min(VELOCITA.length - 1, (i < 0 ? VELOCITA.length - 1 : i) + su))]; sporco = 2; }
 $('lento').onclick = () => cambiaTempo(-1); $('svelto').onclick = () => cambiaTempo(1); $('pausa').onclick = () => { N.tempo.pausa = !N.tempo.pausa; sporco = 2; };
 addEventListener('keydown', (e) => { if (e.key === ',') cambiaTempo(-1); else if (e.key === '.') cambiaTempo(1); else if (e.key === 'p') { N.tempo.pausa = !N.tempo.pausa; sporco = 2; } });
 addEventListener('resize', () => N.ridimensiona());
-const lungo = (m) => (m >= 1e6 ? `${(m / 1000).toFixed(0)} km` : m >= 1e4 ? `${(m / 1000).toFixed(1)} km` : m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(m < 10 ? 1 : 0)} m`);
+const lungo = (m) => (m >= 9.46e18 ? `${(m / 9.461e15).toLocaleString('it-IT', { maximumFractionDigits: 0 })} anni luce` : m >= 9.46e14 ? `${(m / 9.461e15).toFixed(2)} anni luce` : m >= 1.5e10 ? `${(m / 1.496e11).toFixed(2)} UA` : m >= 1e6 ? `${(m / 1000).toFixed(0)} km` : m >= 1e4 ? `${(m / 1000).toFixed(1)} km` : m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(m < 10 ? 1 : 0)} m`);
 const gradi = (lon, lat) => `${Math.abs(lat * 180 / Math.PI).toFixed(3)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon * 180 / Math.PI).toFixed(3)}° ${lon >= 0 ? 'E' : 'O'}`;
-// che cosa c'è sotto il cursore
 let cursore = null;
 $('tela').addEventListener('pointermove', (e) => { const r = $('tela').getBoundingClientRect(); cursore = [e.clientX - r.left, e.clientY - r.top]; });
+const vuote = { pezze: 0, triangoli: 0, tessere: 0, memoriaMB: 0, inAttesa: 0, msPerTessera: 0, onde: null };
+const statistiche = () => pianeta()?.statistiche() || vuote, calmo = () => (universo ? universo.pronto() : true) && (!pianeta() || (pianeta().pronto() && pianeta().statistiche().inAttesa === 0));
 
 let contati = 0, daQuando = performance.now(), cpu = 0, fps = 0, disegnati = 0;
 function passo(ms) {
   requestAnimationFrame(passo);
-  const muove = !N.tempo.pausa && N.tempo.velocita > 1, attesa = pianeta.statistiche().inAttesa > 0 || !pianeta.pronto();
-  if (fermo && sporco <= 0 && !attesa && !N.tasti.size) return;
-  if (!fermo || sporco > 0 || attesa || N.tasti.size || muove) { sporco--; N.fotogramma(ms); disegnati++; window.prova.disegnati = disegnati; cpu += N.statistiche().cpuMs; contati++; }
+  const muove = !N.tempo.pausa && N.tempo.velocita > 1;
+  if (fermo && sporco <= 0 && calmo() && !N.tasti.size) return;
+  if (!fermo || sporco > 0 || !calmo() || N.tasti.size || muove) { sporco--; N.fotogramma(ms); disegnati++; window.prova.disegnati = disegnati; cpu += N.statistiche().cpuMs; contati++; }
   if (ms - daQuando > 500) {
-    fps = (contati * 1000) / (ms - daQuando); const s = pianeta.statistiche(), d = N.dove();
+    fps = (contati * 1000) / (ms - daQuando); const s = statistiche(), solido = !!N.camera.corpo?.quota, d = solido ? N.dove() : null;
     $('tempo').textContent = N.tempo.pausa ? 'in pausa' : dice(N.tempo.velocita);
-    $('dati').textContent = `${fps.toFixed(1)} fotogrammi/s · CPU ${(cpu / Math.max(1, contati)).toFixed(2)} ms\n${s.pezze} pezze · ${(s.triangoli / 1000).toFixed(0)} mila triangoli · ${s.tessere} tessere (${s.memoriaMB.toFixed(0)} MB), ${s.inAttesa} in arrivo\ngiorno ${(N.tempo.t / P.giorno).toFixed(2)} · anno ${(N.tempo.t / P.anno).toFixed(3)}${s.onde ? ` · onde ${s.onde.H.toFixed(1)} m ogni ${s.onde.T.toFixed(1)} s, vento ${s.onde.vento.toFixed(0)} m/s` : ''}`;
-    const q = cursore ? N.sotto(cursore[0], cursore[1]) : null, i = q ? pianeta.info(q.lon, q.lat) : null;
-    $('dove').textContent = `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` + (q ? ` · sotto il cursore, a ${lungo(q.distanza)}: ${gradi(q.lon, q.lat)}, ${i.acqua ? `acqua profonda ${lungo(i.profondita)}` : `terra a quota ${i.quota.toFixed(0)} m`}` : '');
+    $('dati').textContent = `${fps.toFixed(1)} fotogrammi/s · CPU ${(cpu / Math.max(1, contati)).toFixed(2)} ms\n${s.pezze} pezze · ${(s.triangoli / 1000).toFixed(0)} mila triangoli · ${s.tessere} tessere (${s.memoriaMB.toFixed(0)} MB), ${s.inAttesa} in arrivo\n${Math.abs(N.tempo.t) < 3 * ANNO ? `giorno ${(N.tempo.t / P.giorno).toFixed(2)}` : `${(N.tempo.t / ANNO).toLocaleString('it-IT', { maximumFractionDigits: 0 })} anni da oggi`}${s.onde ? ` · onde ${s.onde.H.toFixed(1)} m ogni ${s.onde.T.toFixed(1)} s, vento ${s.onde.vento.toFixed(0)} m/s` : ''}`;
+    const q = d && cursore ? N.sotto(cursore[0], cursore[1]) : null, i = q && pianeta() ? pianeta().info(q.lon, q.lat) : null;
+    $('dove').textContent = (universo ? universo.percorso().join(' › ') + ' · ' : '') + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(N.stato.vicinoM || 0)} dalla cosa più vicina`) + (i ? ` · sotto il cursore, a ${lungo(q.distanza)}: ${gradi(q.lon, q.lat)}, ${i.acqua ? `acqua profonda ${lungo(i.profondita)}` : `terra a quota ${i.quota.toFixed(0)} m`}` : '');
     contati = 0; cpu = 0; daQuando = ms;
   }
 }
 // per le prove automatiche
-window.prova = { N, pianeta, P, via, disegnati: 0,
-  // aspetta che le tessere chieste siano arrivate tutte (ridisegnando), poi fa un ultimo fotogramma
-  async quieto(massimoMs = 120000) { const t0 = performance.now(); let calmi = 0; const gl = N.gl, px = new Uint8Array(4); while (performance.now() - t0 < massimoMs) { N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); /* (si aspetta che la scheda abbia finito: se no i fotogrammi si accodano) */ const s = pianeta.statistiche(); calmi = pianeta.pronto() && s.inAttesa === 0 ? calmi + 1 : 0; if (calmi >= 3) break; await new Promise((r) => setTimeout(r, 120)); } N.fotogramma(); return { ...pianeta.statistiche(), ms: performance.now() - t0, cpuMs: N.statistiche().cpuMs, dove: N.dove() }; },
-  // un punto di costa (terra con acqua entro mezzo grado), cercato sulla carta che c'è: per le prove della discesa
-  costa(latMax = 50, alta = 600) { let meglio = null, vm = -Infinity; for (let lat = -latMax; lat <= latMax; lat += 0.5) for (let lon = -180; lon < 180; lon += 0.5) { const i = pianeta.info(lon * Math.PI / 180, lat * Math.PI / 180); if (i.acqua || i.quota < 100) continue; let mare = 0; for (const [dx, dy] of [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]]) { const j = pianeta.info((lon + dx) * Math.PI / 180, (lat + dy) * Math.PI / 180); if (j.acqua && j.profondita > 20) mare++; } if (mare < 1 || mare > 2) continue; const v = Math.min(i.quota, 2500) - 15 * Math.abs(lat - 20); if (v > vm) { vm = v; meglio = [lon, lat, i.quota]; } } return meglio; },
+window.prova = { N, P, via, universo, get pianeta() { return pianeta(); }, disegnati: 0,
+  // aspetta che tutto ciò che si è chiesto sia arrivato (ridisegnando e aspettando ogni volta la scheda), poi un ultimo fotogramma
+  async quieto(massimoMs = 120000) { const t0 = performance.now(); let calmi = 0; const gl = N.gl, px = new Uint8Array(4); while (performance.now() - t0 < massimoMs) { N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); calmi = calmo() ? calmi + 1 : 0; if (calmi >= 3) break; await new Promise((r) => setTimeout(r, 120)); } N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return { ...statistiche(), ms: performance.now() - t0, cpuMs: N.statistiche().cpuMs, dove: N.camera.corpo?.quota ? N.dove() : { quota: N.stato.vicinoM || 0 } }; },
+  // un punto di costa: terra con acqua vicino (per le prove della discesa)
+  costa(latMax = 50, alta = 600) { const pi = pianeta(); let meglio = null, vm = -Infinity; for (let lat = -latMax; lat <= latMax; lat += 0.5) for (let lon = -180; lon < 180; lon += 0.5) { const i = pi.info(lon * Math.PI / 180, lat * Math.PI / 180); if (i.acqua || i.quota < 100) continue; let mare = 0; for (const [dx, dy] of [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]]) { const j = pi.info((lon + dx) * Math.PI / 180, (lat + dy) * Math.PI / 180); if (j.acqua && j.profondita > 20) mare++; } if (mare < 1 || mare > 2) continue; const v = Math.min(i.quota, 2500) - 15 * Math.abs(lat - 20); if (v > vm) { vm = v; meglio = [lon, lat, i.quota]; } } return meglio; },
+  // il punto più alto (e quanto) entro una fascia di latitudini: per le prove sul rilievo
+  cima(latMax = 50) { const pi = pianeta(); let meglio = null; for (let lat = -latMax; lat <= latMax; lat += 0.5) for (let lon = -180; lon < 180; lon += 0.5) { const i = pi.info(lon * Math.PI / 180, lat * Math.PI / 180); if (!meglio || i.quota > meglio[2]) meglio = [lon, lat, i.quota]; } return meglio; },
   // porta il tempo all'istante (nel primo giorno) in cui la stella, lì, è alta quanto si chiede (seno dell'altezza) e sta salendo
-  mattino(lonGradi, latGradi, seno = 0.42) { const cl = Math.cos(latGradi * Math.PI / 180), lo = lonGradi * Math.PI / 180, q = [cl * Math.cos(lo), Math.sin(latGradi * Math.PI / 180), -cl * Math.sin(lo)], mu = (t) => { const A = pianeta.corpo.assetto(t), s = pianeta.versoStella(t), su = N.V.mv(A, q); return N.V.scal(su, s); };
+  mattino(lonGradi, latGradi, seno = 0.42) { const pi = pianeta(), cl = Math.cos(latGradi * Math.PI / 180), lo = lonGradi * Math.PI / 180, q = [cl * Math.cos(lo), Math.sin(latGradi * Math.PI / 180), -cl * Math.sin(lo)], mu = (t) => { const A = N.assettoDi(pi.corpo, t), s = N.V.norma(N.tra(pi.corpo, pi.stella, t)), su = N.V.mv(A, q); return N.V.scal(su, s); };
     let tm = 0, dm = Infinity; const g = P.bloccato ? P.anno : P.giorno; for (let k = 0; k < 720; k++) { const t = (k / 720) * g, m = mu(t), sale = mu(t + g / 720) > m; if (sale && Math.abs(m - seno) < dm) { dm = Math.abs(m - seno); tm = t; } } N.tempo.t = tm; return { t: tm, seno: mu(tm) }; },
-  misura(n = 5) { const gl = N.gl, b = new Uint8Array(4); let c = 0; N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); const t0 = performance.now(); for (let i = 0; i < n; i++) { N.fotogramma(); c += N.statistiche().cpuMs; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); } return { msPerFotogramma: (performance.now() - t0) / n, cpuMs: c / n, ...pianeta.statistiche() }; } };
+  misura(n = 5) { const gl = N.gl, b = new Uint8Array(4); let c = 0; N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); const t0 = performance.now(); for (let i = 0; i < n; i++) { N.fotogramma(); c += N.statistiche().cpuMs; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); } return { msPerFotogramma: (performance.now() - t0) / n, cpuMs: c / n, ...statistiche() }; } };
 window.prova.pronta = true;
 requestAnimationFrame(passo);
 </script>

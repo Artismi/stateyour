@@ -260,7 +260,9 @@ prova('l\'aria di ogni pianeta: le frazioni fanno 1, e non c\'è nessuna molecol
     tra(Object.values(p.atmosfera.gas).reduce((a, b) => a + b, 0), 1 - 1e-6, 1 + 1e-6, 'somma dei gas');
     if (p.tipo === 'gassoso') continue;
     const leggera = Math.min(...p.clima.tenuti.map((g) => LG.MOLECOLE[g]));
-    for (const f in p.atmosfera.gas) assert.ok(CH.MOLECOLE[f].massa >= leggera * 0.99, `${f} sfuggirebbe (il più leggero tenuto pesa ${leggera})`);
+    // (i gas saliti dall'interno — argon ed elio radiogenici, risalita.js — non sono tra i sei di leggi.js: per loro vale la stessa legge, con la loro massa)
+    const Tnuda = LG.temperaturaEquilibrio(p.Lw, p.aM, 0.3);
+    for (const f in p.atmosfera.gas) assert.ok(CH.MOLECOLE[f].massa >= leggera * 0.99 || LG.trattiene(p.massaKg, p.raggioM, Tnuda, CH.MOLECOLE[f].massa * K.mp), `${f} sfuggirebbe (il più leggero tenuto pesa ${leggera})`);
   }
   assert.ok(n > 500);
 });
