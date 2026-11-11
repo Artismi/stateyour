@@ -97,29 +97,27 @@
 // parte nevosa; vapore e suolo kg/m²; nuvole e umidità 0…1; trasportoCalore W/m² (positivo: calore che arriva).
 // Deterministico: nessun numero a caso.
 
-import { COSTANTI, R_GAS, ANNO } from './leggi.js';
+import { COSTANTI, R_GAS, ANNO, NUVOLE } from './leggi.js';
 import { pressioneVapore, atmosfera, MOLECOLE } from './chimica.js';
 
 export const PARAMETRI = {
   cdMare: 1.3e-3, cdTerra: 3e-3, // l'attrito dell'aria sul mare e sulla terra (coefficiente della formula di massa)
-  ce: 1.3e-3, // lo stesso per l'evaporazione e per il calore scambiato con la superficie
+  ce: NUVOLE.ce, // lo stesso per l'evaporazione e per il calore scambiato con la superficie
   raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
   secchio: 150, // (kg/m²) quanta acqua tiene il suolo
   stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
-  umiditaPioggia: 0.8, // piove quando il vapore della colonna supera questa frazione della saturazione
+  umiditaPioggia: NUVOLE.sogliaPioggia, // piove quando il vapore della colonna supera questa frazione della saturazione
   tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore cade
-  raggioGocce: 1e-5, // (m) il raggio efficace delle gocce di nube: 10 µm, MISURATO sulle nubi d'acqua terrestri (è l'incognita dichiarata delle nuvole)
-  umiditaNuvole: 0.6, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
+  raggioGocce: NUVOLE.raggioGocce, // (m) il raggio efficace delle gocce di nube: 10 µm, MISURATO sulle nubi d'acqua terrestri (è l'incognita dichiarata delle nuvole)
+  umiditaNuvole: NUVOLE.sereno, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
   vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
   viscosita: 0.003, // numerico: la viscosità, in unità di (velocità delle onde × passo della griglia)
   courant: 0.85, coriolis: 0.5, // numerici: quanta strada (e quanta rotazione) in un passo di tempo
   latCritica: 45, // numerico: oltre questa latitudine si lisciano le onde più corte del passo della griglia a 45°
   increspatura: 1, // (K) la perturbazione iniziale, fissa, che rompe la simmetria di un pianeta perfettamente liscio
 };
-// le nuvole: la velocità con cui l'acqua di nube diventa pioggia (Kessler, k₁ letto nel sorgente WRF), la densità dell'acqua,
-// quanto le gocce diffondono in avanti la luce (g, per gocce d'acqua nel visibile: Pierrehumbert), quanto assorbe
-// nell'infrarosso un chilo d'acqua di nube per metro quadro (Stephens 1978: MISURATO sulla Terra, non riletto)
-const K_AUTO = 1e-3, RHO_ACQUA = 1000, ASIMMETRIA = 0.85, ASSORBE_IR = 130;
+// le nuvole: le costanti e le formule sono in leggi.js (NUVOLE: una legge sola per il clima a fasce e per questa mappa)
+const K_AUTO = NUVOLE.kessler, RHO_ACQUA = NUVOLE.densitaAcqua, ASIMMETRIA = NUVOLE.asimmetria, ASSORBE_IR = NUVOLE.assorbeInfrarosso;
 const MOLARE_ACQUA = 0.018015, SIGMA = COSTANTI.sigma, DIAMETRO_MOLECOLA = 3.7e-10; // (m) il diametro d'urto di una molecola d'aria
 
 // ---------- la trasformata di Fourier per righe (lati potenze di 2)
@@ -267,7 +265,7 @@ function motore(W, H, par, forz) {
               // le NUBI BASSE che non piovono (strati sopra un'aria bassa stabile): la loro copertura cresce con quanto lo
               // strato basso è più «caldo» della superficie (Klein e Hartmann 1993: 5,7·LTS − 55,73 per cento); tengono
               // l'acqua che l'evaporazione di sotto dà loro nel tempo di Kessler; dove la convezione sfonda non ci sono
-              const cb = profonda || !(ev > 0) ? 0 : Math.max(0, Math.min(1, 0.057 * (a2 * kLts - ts) - 0.5573)) * (1 - c), lb = ev / K_AUTO, gb = ((1 - ASIMMETRIA) * 1.5 * lb) / (RHO_ACQUA * PARAMETRI.raggioGocce), qb = (a2 * w2) / ts, qb2 = qb * qb;
+              const cb = profonda || !(ev > 0) ? 0 : Math.max(0, Math.min(1, NUVOLE.strati[0] * (a2 * kLts - ts) + NUVOLE.strati[1])) * (1 - c), lb = ev / K_AUTO, gb = ((1 - ASIMMETRIA) * 1.5 * lb) / (RHO_ACQUA * PARAMETRI.raggioGocce), qb = (a2 * w2) / ts, qb2 = qb * qb;
               aNuvole[p] += c + cb; aRiflesso[p] += (c * g1) / (2 + g1) + (cb * gb) / (2 + gb); aAcquaNube[p] += c * lwp + cb * lb;
               if (q < 1) aSerra[p] += c * (1 - Math.exp(-ASSORBE_IR * lwp)) * (1 - q2 * q2); if (qb < 1) aSerra[p] += cb * (1 - Math.exp(-ASSORBE_IR * lb)) * (1 - qb2 * qb2); } }
         } }

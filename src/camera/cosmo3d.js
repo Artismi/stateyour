@@ -33,8 +33,7 @@
 // piatta di cosmo.js (la rete disegnata sulla mappa) non è la proiezione di questo campo: è il disegno di prima.
 
 import { COSMO } from './leggi.js';
-import { generatore } from './mondo.js';
-import { sorgente } from './eventi.js';
+import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U, SIGMA_CAMPO } from './galassie.js';
 
 const MPC = 3.0857e22, PI2 = 2 * Math.PI;
@@ -56,15 +55,25 @@ export function ondeDelToro(toroM, kmax) {
   }
   return { N: P.length, KX: Int16Array.from(kx), KY: Int16Array.from(ky), KZ: Int16Array.from(kz), PK: Float64Array.from(P) };
 }
+// IL CAMPO LIBERO DI UN INDIRIZZO: le due ampiezze (parte reale e immaginaria) di ogni onda, a campana, con varianza
+// metà della sua potenza. Ogni onda è UN EVENTO con il suo nome, dal suo vettore d'onda: «radice/campo/onda 3,-2,7»
+// (quattro estrazioni: due per campana). Così il campo non dipende dall'ordine in cui lo si genera né da quante onde
+// si prendono (alzando kmax le onde lunghe restano le stesse: regola 4), è identico al bit su ogni macchina (campana
+// di eventi.js: logaritmo e coseno esatti), e un ramo su un'onda cambia quell'onda sola (regola 3).
+// O: ciò che dà ondeDelToro. → { A, B }
+export function ampiezzeLibere(radice, rami, O) {
+  const c = sorgente(`${radice}/campo`, rami), A = new Float64Array(O.N), B = new Float64Array(O.N);
+  for (let m = 0; m < O.N; m++) { const s = c.serie(`onda ${O.KX[m]},${O.KY[m]},${O.KZ[m]}`), a = Math.sqrt(O.PK[m] / 2); A[m] = a * campana(s(0), s(1)); B[m] = a * campana(s(2), s(3)); }
+  return { A, B };
+}
 const campi = new WeakMap();
 // IL COSMO IN 3D. C: cosmo(n) di cosmo.js (le galassie con pos [x, y] e peso); radice e rami: l'indirizzo del cosmo
 // («cosmo 1») e i suoi rami; toroM: il lato. → vedi i campi restituiti in fondo.
 export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, kmax = 24, celle = 64 } = {}) {
   let F = campi.get(C); if (F) return F;
-  const L = toroM / MPC, caso = sorgente(radice, rami), c = generatore(caso.seme('campo')), gauss = () => Math.sqrt(-2 * Math.log(1 - c())) * Math.cos(PI2 * c());
-  // ---- le onde (ondeDelToro) e le loro ampiezze libere
-  const { N, KX, KY, KZ, PK } = ondeDelToro(toroM, kmax), A = new Float64Array(N), B = new Float64Array(N);
-  for (let i = 0; i < N; i++) { const s = Math.sqrt(PK[i] / 2); A[i] = s * gauss(); B[i] = s * gauss(); }
+  const L = toroM / MPC;
+  // ---- le onde (ondeDelToro) e le loro ampiezze libere (ampiezzeLibere: un evento per onda)
+  const O = ondeDelToro(toroM, kmax), { N, KX, KY, KZ, PK } = O, { A, B } = ampiezzeLibere(radice, rami, O);
   const A0 = Float64Array.from(A), B0 = Float64Array.from(B); // il campo LIBERO di questo indirizzo, prima di ogni vincolo (per bolle.js)
   // ---- le galassie: x, y dalla carta; z un evento di ognuna
   const G = C.galassie, ng = G.length, pos = G.map((g) => [g.pos[0], g.pos[1], sorgente(`${radice}/galassia ${g.id}`, rami)('profondità')]);

@@ -114,10 +114,6 @@ export const CLIMA = Object.freeze({
   capacitaTerra: 1e7, capacitaMare: 1e8, // (J/m²/K) quanto calore serve per scaldare di un grado il suolo, e lo strato di mare rimescolato
   albedoTerra: 0.25, albedoMare: 0.08, albedoGhiaccio: 0.62, // la parte di luce rimandata indietro (misurate)
   geloTerra: 268, geloMare: 266, // (K) sotto, la neve e il ghiaccio coprono (e sopra di 4 K non ce n'è più)
-  // le nuvole, dove c'è mare che evapora e un'aria che tiene il vapore: coprono fino a 0,63 del cielo (quanto ne esce da
-  // meteo.js per la Terra; misurato: 0,67) e rimandano indietro il 30% della luce che le colpisce. TARATO sulla Terra:
-  // così riflette in tutto 0,30. Al freddo l'aria tiene meno vapore: quattro decimi delle nuvole
-  nuvoleMassime: 0.63, riflessoNuvole: 0.3, nuvoleAlFreddo: 0.4,
   trasporto: 0.6, // (W/m²/K, a 1 bar) il calore che l'aria e il mare portano dal caldo al freddo; cresce come la radice della pressione
   // il rilievo che l'acqua deve coprire: la parte sommersa attesa è 1 − exp(−profondità media / rilievo). TARATO sulle
   // superfici che escono da superficiePianeta: 2 km con le placche (continenti e oceani), mezzo senza
@@ -130,16 +126,44 @@ export function luceDelGiorno(S0, lat, declinazione) {
 }
 // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina
 export const acquaPerIlGhiaccio = (mare) => (mare > 0 ? Math.min(1, 0.15 + 2.5 * mare) : 0);
-// le nuvole attese (0…1 del cielo), dove non c'è una circolazione calcolata: servono mare e un'aria di almeno 0,1 bar
-export const nuvoleAttese = (mare, pressione) => (mare > 0.02 && isFinite(pressione) && pressione > 1e4 ? CLIMA.nuvoleMassime * Math.min(1, mare * 2 + 0.3) : 0);
+// LE NUVOLE: UNA LEGGE SOLA, per il clima a fasce (qui) e per la mappa con i venti (meteo.js, che prende da qui costanti e
+// formule). Ciò che una nuvola rimanda dipende dall'acqua che tiene:
+//   · l'acqua di una nube (kg/m²) è quella che la condensazione le dà nel tempo che la pioggia impiega a formarsi, 1/k₁
+//     con k₁ = 10⁻³ s⁻¹ (Kessler, letto nel sorgente WRF); per le nubi basse che non piovono è l'evaporazione di sotto;
+//   · lo spessore ottico è 3·acqua/(2·ρ·r), con gocce di raggio r = 10 µm (MISURATO sulle nubi d'acqua terrestri: è
+//     l'incognita dichiarata delle nuvole); la luce rimandata è (1 − g)τ/(2 + (1 − g)τ), g = 0,85 (due flussi);
+//   · l'infrarosso trattenuto è 1 − exp(−130·acqua) (Stephens 1978, non riletto);
+//   · la copertura non ha una legge (lo dice la letteratura): Sundqvist 1989 dall'umidità, 1 − √((1 − U)/(1 − 0,6)), e per
+//     le nubi basse Klein e Hartmann 1993 dalla stabilità, 5,7·LTS − 55,73 per cento (empiriche e terrestri).
+// Dove non c'è una circolazione calcolata (il clima a fasce) servono i valori ATTESI di ciò che meteo.js calcola: la
+// pioggia attesa è l'evaporazione di massa alla soglia della pioggia, ce·V·e_s(T)·(1 − 0,8)/(R_v·T), con V = 5 m/s; sopra
+// un mare le colonne stanno in media al 90% della soglia (copertura 0,5) e le nubi basse coprono 0,35 del resto: sono
+// le medie che escono da meteo.js su un mondo d'acqua temperato (DICHIARATE: sono un riassunto, non una legge)
+export const NUVOLE = Object.freeze({ kessler: 1e-3, raggioGocce: 1e-5, asimmetria: 0.85, densitaAcqua: 1000, assorbeInfrarosso: 130,
+  sogliaPioggia: 0.8, sereno: 0.6, strati: Object.freeze([0.057, -0.5573]), ce: 1.3e-3, ventoAtteso: 5, coperturaAttesa: 0.5, stratiAttesi: 0.35 });
+// quanta luce rimanda una nube che tiene «acqua» kg/m² (due flussi, senza assorbimento)
+export const luceDellaNube = (acqua) => { const x = ((1 - NUVOLE.asimmetria) * 1.5 * acqua) / (NUVOLE.densitaAcqua * NUVOLE.raggioGocce); return x / (2 + x); };
+// la pressione del vapore d'acqua sopra il liquido o il ghiaccio (Clausius-Clapeyron dal punto triplo: 611,2 Pa a 273,16 K;
+// calore di evaporazione 45,05 kJ/mol, di sublimazione 51,06: misurati)
+export const vaporeSaturo = (T) => 611.2 * Math.exp(((T < 273.16 ? 51060 : 45050) / R_GAS) * (1 / 273.16 - 1 / T));
+// la luce che le nuvole ATTESE rimandano sopra un mare a temperatura T (già per la loro copertura)
+export function riflessoNuvoleAtteso(T) {
+  const N = NUVOLE, pioggia = (N.ce * N.ventoAtteso * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T);
+  return N.coperturaAttesa * luceDellaNube(pioggia / (N.coperturaAttesa * N.kessler)) + (1 - N.coperturaAttesa) * N.stratiAttesi * luceDellaNube(pioggia / N.kessler);
+}
+// quanto le nuvole attese ci sono (0…1), dove non c'è una circolazione calcolata: servono mare che evapora e un'aria di
+// almeno 0,1 bar che tenga il vapore. La copertura attesa del cielo è questo per coperturaDelCielo
+export const nuvoleAttese = (mare, pressione) => (mare > 0.02 && isFinite(pressione) && pressione > 1e4 ? Math.min(1, mare * 2 + 0.3) : 0);
+export const coperturaDelCielo = NUVOLE.coperturaAttesa + (1 - NUVOLE.coperturaAttesa) * NUVOLE.stratiAttesi;
 // quanta luce rimanda un punto a temperatura t: il suolo (terra o mare: «mare» vale 0 o 1), il ghiaccio che lo copre
-// se fa freddo e c'è acqua, e sopra le nuvole («copertura»: quella vera di meteo.js; se manca, quella attesa)
+// se fa freddo e c'è acqua, e sopra le nuvole («riflesso»: la luce che rimandano quelle vere di meteo.js, già per la
+// loro copertura; se manca, quella attesa dalla stessa legge, per quanto ce ne sono: «nuvole» = nuvoleAttese())
 // («sotto»: quanto rimanda la superficie, se chi chiama lo sa già — il mare di mare.js, con il suo ghiaccio —; allora
 // qui si aggiungono solo le nuvole)
-export function riflette(t, mare, acquaGhiaccio, nuvole, copertura = null, sotto = null) {
+export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto = null) {
   const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = sotto ?? ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
-  const cielo = copertura ?? (t > CLIMA.geloTerra ? nuvole : nuvole * CLIMA.nuvoleAlFreddo);
-  return suolo + cielo * CLIMA.riflessoNuvole * (1 - suolo);
+  const cielo = riflesso ?? (nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t) : 0);
+  return suolo + cielo * (1 - suolo);
 }
 // il calore portato dai vicini (W/m²/K): tanto più quanto più l'aria è densa
 export const trasportoCalore = (pressione) => (isFinite(pressione) ? CLIMA.trasporto * Math.pow(Math.max(1e-4, pressione / 1e5), 0.5) : 1);
@@ -170,10 +194,10 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   const C = mare * CLIMA.capacitaMare + (1 - mare) * CLIMA.capacitaTerra, ghiaccioAcqua = acquaPerIlGhiaccio(mare), nuvole = nuvoleAttese(mare, pressione);
   // la luce rimandata da una fascia: la media di riflette() sulla sua terra e sul suo mare (scritta qui per esteso, con
   // gli stessi numeri: è il conto che si ripete di più; lontano dal gelo la tangente iperbolica vale già −1 o 1)
-  const { albedoTerra: aT, albedoMare: aM, albedoGhiaccio: aG, geloTerra: gT, geloMare: gM, riflessoNuvole: rN, nuvoleAlFreddo: nF } = CLIMA;
+  const { albedoTerra: aT, albedoMare: aM, albedoGhiaccio: aG, geloTerra: gT, geloMare: gM } = CLIMA;
   const gelo = (t, soglia) => (t > soglia + 80 ? 0 : t < soglia - 80 ? ghiaccioAcqua : ghiaccioAcqua * 0.5 * (1 - Math.tanh((t - soglia) / 4)));
   const albedo = (t) => {
-    const cielo = (t > gT ? nuvole : nuvole * nF) * rN; let a = 0;
+    const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t) : 0; let a = 0;
     if (mare < 1) { const g = gelo(t, gT), suolo = g * aG + (1 - g) * aT; a += (1 - mare) * (suolo + cielo * (1 - suolo)); }
     if (mare > 0) { const g = gelo(t, gM), suolo = g * aG + (1 - g) * aM; a += mare * (suolo + cielo * (1 - suolo)); }
     return a;
@@ -249,5 +273,5 @@ export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = nul
   const stato = acqua > 0 ? (b.assorbita > LIMITE_VAPORE ? 'vapore' : statoAcqua(b.T, pressione)) : 'assente';
   if (mare > 0 && stato.startsWith('vapore')) { mare = 0; b = risolvi(0); }
   const albedo = b.arriva > 0 ? 1 - b.assorbita / b.arriva : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
-  return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione), bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };
+  return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione) * coperturaDelCielo, bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };
 }

@@ -86,7 +86,7 @@ const SPECIE = [
   ['O2', 'ossigeno', 'gas', 0, 205.15], ['Cl2', 'cloro', 'gas', 0, 223.08], ['S2', 'vapore di zolfo', 'gas', 128.6, 228.17],
   ['H2O', 'acqua', 'gas', -241.83, 188.84], ['CO', 'monossido di carbonio', 'gas', -110.53, 197.66],
   ['CO2', 'anidride carbonica', 'gas', -393.51, 213.79], ['CH4', 'metano', 'gas', -74.6, 186.25],
-  ['NH3', 'ammoniaca', 'gas', -45.94, 192.77], ['HCN', 'acido cianidrico', 'gas', 135.14, 201.82],
+  ['NH3', 'ammoniaca', 'gas', -45.94, 192.77], ['HCN', 'acido cianidrico', 'gas', 129.3, 201.82],
   ['H2CO', 'formaldeide', 'gas', -108.6, 218.76], ['CH3OH', 'metanolo', 'gas', -201.0, 239.9],
   ['H2S', 'idrogeno solforato', 'gas', -20.6, 205.81], ['SO2', 'anidride solforosa', 'gas', -296.81, 248.22],
   ['NO', 'ossido di azoto', 'gas', 91.3, 210.76], ['C2H2', 'acetilene', 'gas', 227.4, 200.9],
@@ -111,8 +111,8 @@ const SPECIE = [
 // Per H2O, CO, CO2, CH4, NH3, H2S, SO2, HCl, O2, H2, N2, S2 e per tutti i minerali: Robie e Hemingway 1995 (che riporta i
 // valori CODATA di Cox, Wagman e Medvedev 1989), coincidenti con quelli di qui entro l'arrotondamento; per HCN, H2CO,
 // CH3OH, NO, C2H2, C2H6 il confronto è con le Active Thermochemical Tables (ATcT 1.202, Argonne, lette l'11-2026): tornano
-// entro 1 kJ/mol tranne HCN, che qui ha 135,1 e in ATcT 129,3 kJ/mol: NON corretto qui, perché sposterebbe (di poco) le
-// tracce di HCN nell'aria dei pianeti già calcolati; molecole_energia.js usa già il valore di ATcT.
+// entro 1 kJ/mol; l'HCN, che qui aveva 135,1, ha ora il valore di ATcT, 129,3 kJ/mol, lo stesso di molecole_energia.js
+// (una grandezza, una fonte): le tracce di HCN nelle arie crescono di circa 1,7 volte.
 const SPECIE_METALLI = [
   ['Cu2O', 'cuprite', -170.6, 92.4], ['CuO', 'tenorite', -156.1, 42.6], ['SnO2', 'cassiterite', -577.6, 49.0], ['PbO', 'litargirio', -219.0, 66.5],
   ['ZnO', 'zincite', -350.5, 43.2], ['As2O3', 'arsenolite', -657.0, 107.4], ['TiO2', 'rutilo', -944.0, 50.6], ['NiO', 'bunsenite', -239.3, 38.0], ['HgO', 'montroydite', -90.8, 70.3],

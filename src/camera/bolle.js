@@ -20,9 +20,9 @@
 //    Per un cosmo della biblioteca il campo libero è quello di cosmo3d.js e i vincoli delle sue galassie (il campo
 //    filtrato alle onde lunghe vale l'altezza del picco di ognuna) restano vincoli tra gli altri: con nessuna bolla
 //    il risultato è il cosmo di sempre; con le bolle, le galassie restano dove e come sono.
-//    Per un indirizzo qualunque («prova 7») il campo libero viene dalla fonte unica (eventi.js): l'ampiezza di
-//    un'onda è un evento che dipende dal suo vettore d'onda e non dalla lista, così alzando kmax si aggiunge
-//    dettaglio senza cambiare le onde lunghe (regola 4).
+//    Il campo libero, per un cosmo come per un indirizzo qualunque («prova 7»), viene dalla fonte unica
+//    (cosmo3d.js ampiezzeLibere): ogni onda è un evento col suo nome, dal suo vettore d'onda, così alzando kmax si
+//    aggiunge dettaglio senza cambiare le onde lunghe (regola 4) e un ramo cambia un'onda sola (regola 3).
 //    DICHIARATO: la finestra di lisciatura è gaussiana, W(k) = e^(−k²R²/2) (R = 0: il valore nel punto); due vincoli
 //    sono «lo stesso» quando il secondo non aggiunge niente al primo oltre 10⁻¹² (RANGO): se chiedono valori diversi
 //    sono incompatibili (lo si dice), se chiedono lo stesso valore uno è di troppo (lo si toglie e lo si dice).
@@ -31,9 +31,7 @@
 //    ~0,05 s; 100 vincoli ~0,6 s; 1000 vincoli 33 s. Per questo la prova dei mille usa un campo più grosso
 //    (kmax = 10, 2 084 onde: 2,8 s). In memoria: la matrice n² e due copie delle ampiezze.
 //    CHE COSA NON C'È: i vincoli sono sul contrasto di densità LINEARE (una massa d'alone, una galassia di un certo
-//    tipo non sono lineari: lì si campiona, parte B); il campo del cosmo di cosmo3d.js non viene ancora dalla
-//    fonte unica (è il generatore di mondo.js con un seme dell'indirizzo): cambiarlo sposterebbe assi e moti di
-//    tutte le galassie, e non l'ho fatto qui.
+//    tipo non sono lineari: lì si campiona, parte B; il ponte è l'altezza del picco: vedi «nel cosmo» più sotto).
 //
 // B. CHE COSA CHIEDE UNA BOLLA, E DOVE SI INCONTRANO (bolla, chiede, giudica, incontra, causaComune, inFondo).
 //    Una bolla è { luogo (l'indirizzo di intreccio.js, anche solo l'inizio: «cosmo 1/galassia 0», o niente), grandezza
@@ -62,6 +60,22 @@
 //    causaComune(bolle): il peso di «stanno nello stesso mondo» (la media su mondi del prodotto delle parti) contro
 //    «ognuna nel suo» (il prodotto delle medie). Il primo è sempre almeno il secondo (i mondi non sono tutti uguali:
 //    ⟨f²⟩ ≥ ⟨f⟩²), tanto di più quanto più il contenuto è raro e concentrato in pochi mondi: è la causa comune.
+//    NEL COSMO (il ponte tra A e B). Bolle in pianeti di galassie DIVERSE si incontrano nel campo del cosmo. Una bolla
+//    trovata in un pianeta chiede al cosmo la sua galassia, e una galassia è, per galassie.js, un alone la cui massa
+//    viene dall'ALTEZZA DEL PICCO del campo filtrato alle onde lunghe (massaAlone: la stessa altezza che cosmo3d.js
+//    impone al campo dove sta ogni galassia). Quella richiesta è lineare: «qui il campo filtrato vale tanto». Così
+//    incontra(bolle, { nelCosmo }) mette le galassie delle bolle nei posti dati (o a una distanza data, o dove
+//    capita), passa i vincoli a campoCondizionato sul campo libero di un cosmo nominato dalle bolle stesse, e
+//    restituisce il PESO ESATTO della parte cosmica (χ², la sua probabilità, la densità) accanto a quello STIMATO
+//    della parte planetaria. ridiscendiNelCosmo() rifà la strada: dal campo l'altezza del picco, dall'altezza la
+//    massa dell'alone (galassie.js), dalla galassia il pianeta e il contenuto.
+//    DICHIARATO / CHE COSA NON TORNA nel ponte: (1) il vincolo è l'altezza, non «è un massimo» (come in cosmo3d.js);
+//    (2) il cosmo composto non è ancora un cosmo che cosmo.js sa aprire: è (indirizzo, vincoli), e dentro ogni galassia
+//    si scende con il suo indirizzo d'origine; ciò che in galassie.js dipende dai VICINI (metà del giro dell'alone,
+//    dal rango delle maree) resta quello del cosmo d'origine; (3) i mondi delle bolle sono scelti prima, ognuno per
+//    conto suo: la scelta non sente ancora il peso cosmico (a distanza piccola converrebbero galassie di pari
+//    altezza); (4) due galassie diverse nello stesso punto sono vietate dal campo (un valore solo per punto) solo se
+//    le altezze differiscono: non c'è ancora la legge che vieta due aloni a meno del loro raggio.
 //    PARAMETRI DELLA DOMANDA (non del mondo, dichiarati): quanti mondi provare (300), in quanti cosmi cercare quando
 //    il luogo è del tutto libero (2: ogni cosmo nuovo costa ~0,5 s), la probabilità a priori che due bolle di cui
 //    non si sa niente stiano nello stesso pianeta (½ in causaComune: «non lo so»).
@@ -81,9 +95,10 @@
 //      tempo (prima della stella) e sulla taglia (una bolla più grande del pianeta): non ancora quelle di distanza
 //      («una stella a un metro da un fiocco di neve») né quelle causali tra istanti diversi.
 
-import { sorgente, campana } from './eventi.js';
-import { ondeDelToro } from './cosmo3d.js';
+import { sorgente } from './eventi.js';
+import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
 import { TORO_M, STELLE, cosmo as cosmoDi, sistema, numeroDi } from './cosmo.js';
+import { massaAlone } from './galassie.js';
 import { campoCosmo, ANNI_OGGI } from './spazio3d.js';
 import { indirizzo, scrivi } from './intreccio.js';
 import { statoAcqua, ebollizione, ACQUA } from './leggi.js';
@@ -112,15 +127,11 @@ export const probabilitaChi2 = (chi2, gradi) => (gradi > 0 ? codaGamma(gradi / 2
 // =====================================================================================================
 const liste = new Map();
 const onde = (toroM, kmax) => { const k = `${toroM}|${kmax}`; if (!liste.has(k)) { if (liste.size > 6) liste.delete(liste.keys().next().value); liste.set(k, ondeDelToro(toroM, kmax)); } return liste.get(k); };
-// il numero d'ordine di un'onda: dal suo vettore (kx, ky, kz), non dal posto nella lista (fino a 512 giri per lato)
-const numeroOnda = (x, y, z) => (z * 1025 + (y + 512)) * 1025 + (x + 512);
-
-// IL CAMPO LIBERO DI UN INDIRIZZO qualunque: ogni onda ha due ampiezze a campana, quattro estrazioni dell'evento
-// «radice/campo libero» numerate dal vettore d'onda. → { radice, toroM, kmax, N, KX, KY, KZ, PK, A, B, fissi: [] }
+// IL CAMPO LIBERO DI UN INDIRIZZO qualunque: lo stesso di cosmo3d.js (ampiezzeLibere: ogni onda un evento
+// «radice/campo/onda kx,ky,kz»). → { radice, toroM, kmax, N, KX, KY, KZ, PK, A, B, fissi: [] }
 export function campoLibero(radice, { toroM = TORO_M, kmax = 24, rami = null } = {}) {
   if (!(kmax >= 1 && kmax <= 512)) throw new Error(`kmax deve stare tra 1 e 512 (${kmax})`);
-  const O = onde(toroM, kmax), s = sorgente(String(radice), rami).serie('campo libero'), A = new Float64Array(O.N), B = new Float64Array(O.N);
-  for (let m = 0; m < O.N; m++) { const k = 4 * numeroOnda(O.KX[m], O.KY[m], O.KZ[m]), a = Math.sqrt(O.PK[m] / 2); A[m] = a * campana(s(k), s(k + 1)); B[m] = a * campana(s(k + 2), s(k + 3)); }
+  const O = onde(toroM, kmax), { A, B } = ampiezzeLibere(String(radice), rami, O);
   return { radice: String(radice), toroM, kmax, N: O.N, KX: O.KX, KY: O.KY, KZ: O.KZ, PK: O.PK, A, B, fissi: [] };
 }
 // il campo libero e i vincoli già presi di un cosmo della biblioteca (cosmo3d.js): le sue galassie
@@ -136,24 +147,26 @@ const frazione = (v) => v - Math.floor(v);
 //   cosmo    un numero di cosmo («3», o con i suoi rami come lo scrive cosmo.js), oppure un indirizzo qualunque
 //            (una stringa: il campo libero viene da eventi.js), oppure un campo già fatto con campoLibero()
 //   vincoli  [{ posizione: [x, y, z] in metri sul toro (comoventi, oggi), scala: R in metri (0 = nel punto),
-//               valore: il contrasto lisciato che il campo deve avere lì }, …] in numero qualsiasi
+//               valore: il contrasto lisciato che il campo deve avere lì }, …] in numero qualsiasi; al posto di
+//               `scala` si può dare `taglio`: il campo filtrato alle onde lunghe fino a `taglio` giri per lato
+//               (taglio netto: è il campo in cui galassie.js legge l'altezza del picco di una galassia)
 //   opz      { toroM, kmax } per un indirizzo qualunque; { galassie: false } per un cosmo senza i vincoli delle galassie
 // → se i vincoli si contraddicono: { esiste: false, perche, incompatibili: [i, j] (posti nella lista data) }
 // → altrimenti { esiste: true, toroM, sigma (lo scarto del campo), vincoli (in ordine canonico, ognuno con `libero`:
 //     quanto valeva lì il campo libero, e `dato`: il suo posto nella lista data), ridondanti, gradi, chi2, probabilita,
 //     logPeso (−χ²/2), logDensita, chi2Libero, deltaChi2 (quanto costa rispetto al mondo di partenza),
-//     in(p) il campo nel punto p (metri), lisciato(p, R), libero(p) il campo libero, correzione(p),
-//     attesa(p, R) → { media, varianza } che la teoria dà per il campo vincolato in p, onde: { A, B, … } }
+//     in(p) il campo nel punto p (metri), lisciato(p, R), filtrato(p, taglio), libero(p) il campo libero, correzione(p),
+//     attesa(p, R, taglio) → { media, varianza, libera } che la teoria dà per il campo vincolato in p, onde: { A, B, … } }
 //   (con le galassie, χ² e gradi sono quelli delle bolle DATE le galassie: il pezzo in più che le bolle costano)
 export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
   const base = cosmo && cosmo.A && cosmo.PK ? cosmo : eUnCosmo(cosmo) ? campoDelCosmo(typeof cosmo === 'number' ? cosmo : String(cosmo), opz) : campoLibero(cosmo, opz);
   const { toroM, N, KX, KY, KZ, PK, A: A0, B: B0, kmax } = base, K2 = kmax * kmax, giri = PI2 / toroM;
   // ---- i vincoli in ordine canonico (così l'ordine in cui arrivano non conta)
   const dati = vincoli.map((v, i) => {
-    const p = v.posizione, R = v.scala ?? 0;
-    if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !(R >= 0) || !Number.isFinite(v.valore)) throw new Error(`vincolo ${i}: servono posizione [x, y, z] in metri, scala ≥ 0 e valore`);
-    return { dato: i, posizione: [...p], scala: R, valore: v.valore, x: p.map((q) => frazione(q / toroM)) };
-  }).sort((a, b) => a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || a.valore - b.valore || a.dato - b.dato);
+    const p = v.posizione, R = v.scala ?? 0, taglio = v.taglio ?? null;
+    if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !(R >= 0) || !Number.isFinite(v.valore) || (taglio != null && !(taglio >= 1 && taglio <= kmax))) throw new Error(`vincolo ${i}: servono posizione [x, y, z] in metri, scala ≥ 0 (o taglio tra 1 e ${kmax}) e valore`);
+    return { dato: i, posizione: [...p], scala: R, taglio, valore: v.valore, x: p.map((q) => frazione(q / toroM)) };
+  }).sort((a, b) => a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.taglio ?? 0) - (b.taglio ?? 0) || a.valore - b.valore || a.dato - b.dato);
   const tutti = [...base.fissi, ...dati], n = tutti.length, nf = base.fissi.length;
   // la finestra di ogni vincolo, per ogni |k|² intero: gaussiana per le bolle, taglio netto per le galassie
   const finestra = (v) => { const W = new Float64Array(K2 + 1); if (v.taglio != null) { for (let k2 = 0; k2 <= K2; k2++) W[k2] = k2 <= v.taglio * v.taglio ? 1 : 0; } else { const q = 0.5 * (giri * v.scala) ** 2; for (let k2 = 0; k2 <= K2; k2++) W[k2] = Math.exp(-q * k2); } return W; };
@@ -197,18 +210,18 @@ export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
     A[m] += PK[m] * a; B[m] += PK[m] * b;
   }
   // ---- il campo in un punto: funzione pura (nessuno stato: l'ordine delle domande non conta)
-  const valuta = (AA, BB, p, R = 0) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2; let d = 0;
-    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], t = kx * x + ky * y + kz * z, f = q ? Math.exp(-q * (kx * kx + ky * ky + kz * kz)) : 1; d += f * (AA[m] * Math.cos(t) - BB[m] * Math.sin(t)); }
+  const valuta = (AA, BB, p, R = 0, taglio = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio; let d = 0;
+    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const t = kx * x + ky * y + kz * z, f = q ? Math.exp(-q * k2) : 1; d += f * (AA[m] * Math.cos(t) - BB[m] * Math.sin(t)); }
     return 2 * d; };
   // ciò che la teoria dice del campo vincolato in un punto: media ξᵀC⁻¹c, varianza σ² − ξᵀC⁻¹ξ
-  const attesa = (p, R = 0) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, xi = new Float64Array(n); let var0 = 0;
-    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz, f = 2 * PK[m] * (q ? Math.exp(-q * k2) : 1), t0 = kx * x + ky * y + kz * z; var0 += f * (q ? Math.exp(-q * k2) : 1); for (let j = 0; j < n; j++) { const wj = Wt[j][k2]; if (wj) xi[j] += f * wj * Math.cos(t0 - (kx * X[j] + ky * Y[j] + kz * Z[j])); } }
+  const attesa = (p, R = 0, taglio = null) => { const x = PI2 * frazione(p[0] / toroM), y = PI2 * frazione(p[1] / toroM), z = PI2 * frazione(p[2] / toroM), q = 0.5 * (giri * R) ** 2, t2 = taglio == null ? Infinity : taglio * taglio, xi = new Float64Array(n); let var0 = 0;
+    for (let m = 0; m < N; m++) { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz; if (k2 > t2) continue; const f = 2 * PK[m] * (q ? Math.exp(-q * k2) : 1), t0 = kx * x + ky * y + kz * z; var0 += f * (q ? Math.exp(-q * k2) : 1); for (let j = 0; j < n; j++) { const wj = Wt[j][k2]; if (wj) xi[j] += f * wj * Math.cos(t0 - (kx * X[j] + ky * Y[j] + kz * Z[j])); } }
     let media = 0, tolta = 0; for (let j = 0; j < n; j++) { if (!vivo[j]) continue; let t = xi[j]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[j * n + k] * xi[k]; xi[j] = t / C[j * n + j]; media += xi[j] * yc[j]; tolta += xi[j] * xi[j]; }
     return { media, varianza: Math.max(0, var0 - tolta), libera: var0 }; };
   return { esiste: true, radice: base.radice, toroM, kmax, sigma: Math.sqrt(s2),
-    vincoli: dati.map((v, i) => ({ dato: v.dato, posizione: v.posizione, scala: v.scala, valore: v.valore, libero: d0[nf + i] })), fissi: nf, ridondanti,
+    vincoli: dati.map((v, i) => ({ dato: v.dato, posizione: v.posizione, scala: v.scala, taglio: v.taglio, valore: v.valore, libero: d0[nf + i] })), fissi: nf, ridondanti,
     gradi, chi2, probabilita: probabilitaChi2(chi2, gradi), logPeso: -chi2 / 2, logDensita: -chi2 / 2 - logDet - (gradi / 2) * Math.log(PI2), chi2Libero, deltaChi2: chi2 - chi2Libero,
-    in: (p) => valuta(A, B, p), lisciato: (p, R) => valuta(A, B, p, R), libero: (p, R = 0) => valuta(A0, B0, p, R), correzione: (p) => valuta(A, B, p) - valuta(A0, B0, p), attesa,
+    in: (p) => valuta(A, B, p), lisciato: (p, R) => valuta(A, B, p, R), filtrato: (p, taglio) => valuta(A, B, p, 0, taglio), libero: (p, R = 0) => valuta(A0, B0, p, R), correzione: (p) => valuta(A, B, p) - valuta(A0, B0, p), attesa,
     onde: { n: N, kx: KX, ky: KY, kz: KZ, A, B, potenza: PK, kmax } };
 }
 
@@ -442,9 +455,13 @@ function posa(b, via, g, c, nome) {
 //   opz.mondi     quanti indirizzi provare per ogni ricerca (300); opz.cosmi: in quanti cosmi, se il cosmo è libero (2)
 //   opz.etichetta un nome in più per la domanda (un'altra etichetta, un'altra scelta tra i mondi che vanno bene)
 //   opz.campione  un nome per un altro campione di mondi (gli stessi mondi per ogni domanda nello stesso luogo, se non lo si cambia)
+//   opz.nelCosmo  le bolle stanno in galassie DIVERSE di uno stesso cosmo, e si dice dove: { posizioni: [[x, y, z], …] }
+//                 (metri sul toro, una per bolla, nell'ordine dato), oppure { distanza: d } (in fila, a d metri l'una
+//                 dall'altra), oppure 'libero' (dove capita: posti estratti dagli eventi della domanda).
+//                 → in più `cosmo` (vedi cosmoDelleBolle) e `pesi: { cosmico (esatto), planetario (stimato) }`
 // → { esiste, perche, antenato, ricerche: [{ bolle (i loro posti nella lista), provati, esatto, frazione, forse, peso, motivi }],
 //     bolle: [{ …la bolla col luogo completo, giudizio, daVerificare }], mondi: gli indirizzi (e i numeri della biblioteca) }
-export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etichetta = '', campione = '' } = {}) {
+export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etichetta = '', campione = '', nelCosmo = null } = {}) {
   const B = (Array.isArray(bolle) ? bolle : [bolle]).map(bolla); if (!B.length) throw new Error('serve almeno una bolla');
   const A = antenatoComune(B), ordine = B.map(canonico), c = sorgente(`bolle/${[...ordine].sort().join('|')}${etichetta ? `/${etichetta}` : ''}`);
   const fuori = (perche, extra = {}) => ({ esiste: false, perche, antenato: A, ...extra });
@@ -455,9 +472,12 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
     if (dati.length > 1) return fuori(`le bolle dovrebbero stare nello stesso pianeta, ma i loro luoghi ne nominano ${dati.length} (${dati.join('; ')})`);
     const pre = dati.length ? B.find((b) => b.dove.pianeta != null).dove : A.dove; gruppi.push({ quali: B.map((b, i) => i), pre: { cosmo: pre.cosmo, galassia: pre.galassia, stella: pre.stella, pianeta: pre.pianeta } }); }
   else { const perPianeta = new Map(); B.forEach((b, i) => { if (b.dove.pianeta != null) { const k = percorsoDi(b.dove).slice(0, 4).join('/'); if (!perPianeta.has(k)) perPianeta.set(k, { quali: [], pre: b.dove }); perPianeta.get(k).quali.push(i); } else gruppi.push({ quali: [i], pre: b.dove }); }); gruppi.push(...perPianeta.values()); }
-  const esito = new Array(B.length), ricerche = [];
+  const esito = new Array(B.length), ricerche = [], prese = new Set(), galassiaDi = (v) => `${v.cosmo}|${v.galassia}`, libere = (v) => (nelCosmo ? v.filter((w) => !prese.has(galassiaDi(w.via))) : v);
   for (const g of gruppi) {
-    const Bg = g.quali.map((i) => B[i]), nome = g.quali.map((i) => ordine[i]).sort().join('|'), R = cerca(Bg, g.pre, c, nome, { mondi, cosmi, campione });
+    const Bg = g.quali.map((i) => B[i]), nome = g.quali.map((i) => ordine[i]).sort().join('|'); let R = cerca(Bg, g.pre, c, nome, { mondi, cosmi, campione });
+    // nel cosmo ogni gruppo vuole la SUA galassia: se i mondi buoni stanno tutti in galassie già prese, se ne provano altri
+    if (nelCosmo && (R.buoni.length || R.dubbi.length)) { let quanti = mondi; while (!libere(R.buoni).length && !libere(R.dubbi).length && g.pre.galassia == null && quanti < 4 * mondi) { quanti += 4 * GRAPPOLO; R = cerca(Bg, g.pre, c, nome, { mondi: quanti, cosmi, campione }); }
+      if (!libere(R.buoni).length && !libere(R.dubbi).length) return fuori(`i mondi buoni per ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')} stanno tutti in galassie già prese dalle altre bolle (${R.provati} provati): nel cosmo ogni bolla vuole la sua galassia`, { ricerche }); }
     ricerche.push({ bolle: g.quali, luogo: percorsoDi(g.pre).join('/') || 'la biblioteca', provati: R.provati, esatto: R.esatto, buoni: R.buoni.length, frazione: R.frazione, forse: R.forse, peso: R.peso, motivi: R.motivi });
     if (!R.buoni.length && !R.dubbi.length) {
       const m = R.motivi[0];
@@ -466,14 +486,57 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
     }
     // la scelta: in proporzione al peso tra i mondi che vanno bene; se nessuno è deciso, il primo dei «forse»
     let scelto = null, daVerificare = false;
-    if (R.buoni.length) { const tot = R.buoni.reduce((a, w) => a + w.peso, 0); let r = c(`${nome}/scelta`) * tot; scelto = R.buoni[R.buoni.length - 1]; for (const w of R.buoni) if ((r -= w.peso) < 0) { scelto = w; break; } }
-    else { scelto = R.dubbi[Math.min(R.dubbi.length - 1, Math.floor(c(`${nome}/scelta`) * R.dubbi.length))]; daVerificare = true; }
+    const buoni = libere(R.buoni), dubbi = libere(R.dubbi);
+    if (buoni.length) { const tot = buoni.reduce((a, w) => a + w.peso, 0); let r = c(`${nome}/scelta`) * tot; scelto = buoni[buoni.length - 1]; for (const w of buoni) if ((r -= w.peso) < 0) { scelto = w; break; } }
+    else { scelto = dubbi[Math.min(dubbi.length - 1, Math.floor(c(`${nome}/scelta`) * dubbi.length))]; daVerificare = true; }
+    prese.add(galassiaDi(scelto.via));
     g.quali.forEach((i, j) => { const gi = scelto.G[j], b = B[i].dove.punto ? bolla({ luogo: percorsoDi({ ...scelto.via, punto: B[i].dove.punto }), grandezza: B[i].grandezza, istante: B[i].istante, contenuto: B[i].contenuto }) : posa(B[i], scelto.via, gi, c, `${ordine[i]}/${j}`);
-      esito[i] = { bolla: b, luogo: scrivi(b.luogo).replace(/@.*$/, ''), giudizio: gi, daVerificare: daVerificare || gi.esito === 'forse', numero: numeroDi({ ...scelto.via, regione: 0 }), candidati: daVerificare ? R.dubbi.map((d) => d.via) : null }; });
+      esito[i] = { bolla: b, luogo: scrivi(b.luogo).replace(/@.*$/, ''), giudizio: gi, daVerificare: daVerificare || gi.esito === 'forse', numero: numeroDi({ ...scelto.via, regione: 0 }), candidati: daVerificare ? dubbi.map((d) => d.via) : null }; });
   }
+  // LA PARTE COSMICA: le galassie delle bolle come vincoli sul campo (posti dati: un cosmo nominato dalle bolle; stesso
+  // cosmo della biblioteca e galassie diverse: i posti sono quelli che hanno lì)
+  let nelCampo = null;
+  if (nelCosmo) { nelCampo = cosmoDelleBolle(esito, nelCosmo, c, `bolle/${[...ordine].sort().join('|')}`); if (!nelCampo.esiste) return fuori(nelCampo.perche, { ricerche, bolle: esito, cosmo: nelCampo }); }
+  else if (A.dove.cosmo != null && A.dove.galassia == null && new Set(esito.map((e) => e.bolla.dove.galassia)).size > 1) nelCampo = cosmoDelleBolle(esito, { biblioteca: A.dove.cosmo }, c, '');
   const mondiTrovati = [...new Set(esito.map((e) => percorsoDi(e.bolla.dove).slice(0, 4).join('/')))];
   return { esiste: true, antenato: antenatoComune(esito.map((e) => e.bolla)), chiesto: A, ricerche, bolle: esito, mondi: mondiTrovati, daVerificare: esito.some((e) => e.daVerificare),
+    cosmo: nelCampo, pesi: nelCampo ? { cosmico: { esatto: true, chi2: nelCampo.chi2, gradi: nelCampo.gradi, probabilita: nelCampo.probabilita, logPeso: nelCampo.logPeso, logDensita: nelCampo.logDensita }, planetario: ricerche.map((x) => ({ esatto: x.esatto, ...x.peso })) } : null,
     perche: esito.some((e) => e.daVerificare) ? 'le condizioni necessarie ci sono; per alcune bolle decide la superficie: scendi con inFondo()' : 'ogni bolla ha il suo contenuto nel luogo trovato' };
+}
+
+// CHE COSA CHIEDE AL COSMO una bolla trovata in un pianeta: la sua galassia, cioè un picco del campo filtrato alle onde
+// lunghe alto quanto serve all'alone che galassie.js le dà (massaAlone(altezza)). dove: { cosmo, galassia, … }
+// → { galassia, altezza (in scarti del campo filtrato), taglio (onde per lato), valore (= altezza·scarto: ciò che il
+//     campo filtrato deve valere lì), scarto, massaAlone (M☉), posizione (m: dove sta nel suo cosmo d'origine), perche, legge }
+export function chiedeAlCosmo(dove) {
+  const G = cosmoDi(dove.cosmo).galassie[dove.galassia], F = campoCosmo(dove.cosmo), massa = massaAlone(G.peso, { toroM: F.toroM, onde: F.vincoli.taglio });
+  return { galassia: `cosmo ${dove.cosmo}/galassia ${dove.galassia}`, altezza: G.peso, taglio: F.vincoli.taglio, valore: F.vincoli.valori[dove.galassia], scarto: F.sigmaOnde, massaAlone: massa, toroM: F.toroM, posizione: F.pos[dove.galassia].map((x) => x * F.toroM),
+    perche: `chiede una galassia come ${`cosmo ${dove.cosmo}/galassia ${dove.galassia}`}: un alone di ${cifre(massa)} M☉, che nasce da un picco alto ${cifre(G.peso)} scarti del campo filtrato a ${F.vincoli.taglio} onde per lato`, legge: 'galassie.js massaAlone (l\'altezza del picco → la massa dell\'alone) e cosmo3d.js (il campo filtrato vale quell\'altezza dove sta la galassia)' };
+}
+// IL COSMO DELLE BOLLE: le galassie delle bolle trovate, messe nei posti chiesti, come vincoli sul campo.
+//   come: { posizioni } | { distanza } | 'libero' → il campo libero è quello dell'indirizzo «<radice>/cosmo» (un cosmo
+//         nominato dalle bolle); { biblioteca: n } → i posti sono quelli che le galassie hanno nel cosmo n, e il peso
+//         è quello di quei picchi, lì, nel campo libero di quel cosmo
+// → { esiste, radice, richieste (una per bolla: chiedeAlCosmo, con `posizione` dove sta in QUESTO cosmo), gradi, chi2,
+//     probabilita, logPeso, logDensita, chi2Lontane (se le galassie fossero lontane: ognuna per conto suo), campo }
+function cosmoDelleBolle(esito, come, c, radice) {
+  const richieste = esito.map((e) => chiedeAlCosmo(e.bolla.dove)), L = richieste[0].toroM, diverse = [...new Set(richieste.map((q) => q.galassia))];
+  if (come.biblioteca == null) richieste.forEach((q, i) => { const k = diverse.indexOf(q.galassia), primo = richieste.findIndex((x) => x.galassia === q.galassia);
+    q.posizione = come.posizioni ? [...come.posizioni[primo]] : come.distanza != null ? [L / 2 + (k - (diverse.length - 1) / 2) * come.distanza, L / 2, L / 2] : ['x', 'y', 'z'].map((asse) => L * c(`cosmo/dove sta ${q.galassia}/${asse}`)); if (i !== primo) q.posizione = [...richieste[primo].posizione]; });
+  const vincoli = diverse.map((nome) => { const q = richieste.find((x) => x.galassia === nome); return { posizione: q.posizione, taglio: q.taglio, valore: q.valore }; });
+  const F = come.biblioteca != null ? campoCondizionato(come.biblioteca, vincoli, { galassie: false }) : campoCondizionato(campoLibero(`${radice}/cosmo`), vincoli);
+  if (!F.esiste) { const [a, b] = F.incompatibili.map((i) => diverse[i]); return { esiste: false, richieste, perche: `nel campo del cosmo non c'è posto: ${a ?? 'una galassia'} e ${b ?? 'un\'altra'} sono messe nello stesso punto, ma chiedono picchi di altezza diversa (un campo ha un valore solo in ogni punto)` }; }
+  const libera = F.attesa(vincoli[0].posizione, 0, vincoli[0].taglio).libera, lontane = vincoli.reduce((a, v) => a + (v.valore * v.valore) / libera, 0);
+  return { esiste: true, radice: come.biblioteca != null ? `cosmo ${come.biblioteca}` : `${radice}/cosmo`, daBiblioteca: come.biblioteca ?? null, richieste, galassie: diverse, gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, logPeso: F.logPeso, logDensita: F.logDensita, chi2Lontane: lontane,
+    campo: come.biblioteca != null ? campoCondizionato(come.biblioteca, []) : F };
+}
+// RIDISCENDERE DAL COSMO: per ogni bolla, dal campo l'altezza del picco dove sta la sua galassia, dall'altezza la massa
+// dell'alone (galassie.js), e dentro la galassia il pianeta e il contenuto (giudica). → [{ luogo, galassia, campo,
+//   chiesto, altezza, massaAlone, massaChiesta, contenuto ('sì' | 'no' | 'forse'), torna (tutto combacia) }]
+export function ridiscendiNelCosmo(r) {
+  if (!r.cosmo || !r.cosmo.esiste) throw new Error('questo incontro non ha una parte cosmica');
+  return r.bolle.map((e, i) => { const q = r.cosmo.richieste[i], v = r.cosmo.campo.filtrato(q.posizione, q.taglio), altezza = v / q.scarto, alone = massaAlone(altezza, { toroM: q.toroM, onde: q.taglio }), g = giudica({ luogo: e.luogo, grandezza: e.bolla.grandezza, istante: e.bolla.istante, contenuto: e.bolla.contenuto });
+    return { luogo: e.luogo, galassia: q.galassia, campo: v, chiesto: q.valore, altezza, massaAlone: alone, massaChiesta: q.massaAlone, contenuto: g.esito, torna: Math.abs(v - q.valore) < 1e-9 * q.scarto && Math.abs(alone / q.massaAlone - 1) < 1e-6 && g.esito === 'sì' }; });
 }
 
 // LA CAUSA COMUNE. Due o più bolle di cui non si sa se stanno nello stesso pianeta: il peso di «nello stesso»

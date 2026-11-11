@@ -3,7 +3,7 @@
 //   B. che cosa chiede una bolla a chi le sta sopra, dove più bolle si incontrano, il mondo che le contiene.
 // Con BOLLE_FONDO=1 si scende anche alla superficie vera (croste di sale, carbonato: ~11 s a pianeta).
 import assert from 'node:assert/strict';
-import { campoCondizionato, campoLibero, probabilitaChi2, RANGO, CONTENUTI, LIVELLI, GRAPPOLO, bolla, chiede, giudica, antenatoComune, incontra, causaComune, inFondo } from '../src/camera/bolle.js';
+import { campoCondizionato, campoLibero, probabilitaChi2, RANGO, CONTENUTI, LIVELLI, GRAPPOLO, bolla, chiede, giudica, antenatoComune, incontra, causaComune, inFondo, chiedeAlCosmo, ridiscendiNelCosmo } from '../src/camera/bolle.js';
 import { sorgente } from '../src/camera/eventi.js';
 import * as CO from '../src/camera/cosmo.js';
 import { campoCosmo } from '../src/camera/spazio3d.js';
@@ -23,6 +23,25 @@ const distanza = (a, b) => Math.hypot(...a.map((x, d) => { const q = Math.abs(x 
 console.log('A. il campo condizionato');
 prova('la coda del χ² (per il peso): i valori noti', () => {
   tra(probabilitaChi2(1, 1), 0.3172, 0.3174, 'P(χ²₁ > 1)'); tra(probabilitaChi2(3.84, 1), 0.0499, 0.0501, 'P(χ²₁ > 3,84)'); tra(probabilitaChi2(10, 4), 0.0403, 0.0405, 'P(χ²₄ > 10)'); tra(probabilitaChi2(1000, 1000), 0.49, 0.5, 'P(χ²₁₀₀₀ > 1000)'); assert.equal(probabilitaChi2(0, 3), 1);
+});
+
+prova('il campo libero viene dalla fonte unica: un evento per onda; lo spettro è quello vero; un ramo cambia un\'onda sola, e in un cosmo lascia le galassie dove sono', () => {
+  // lo spettro: ⟨A² + B²⟩ = la potenza di ogni onda, sulle onde lunghe e sulle corte (ogni termine ha media 1 e scarto 1)
+  const F = campoLibero('prova/bolle/spettro', { kmax: 24 }), conta = [[0, 0], [0, 0]];
+  for (let m = 0; m < F.N; m++) { const q = F.KX[m] ** 2 + F.KY[m] ** 2 + F.KZ[m] ** 2 <= 144 ? 0 : 1; conta[q][0] += (F.A[m] ** 2 + F.B[m] ** 2) / F.PK[m]; conta[q][1]++; }
+  for (const [somma, n] of conta) tra(somma / n, 1 - 4 / Math.sqrt(n), 1 + 4 / Math.sqrt(n), `potenza misurata / potenza vera su ${n} onde`);
+  // un ramo su un'onda: cambia quella, e nessun'altra
+  const r = 'prova/bolle/ramo', a = campoLibero(r, { kmax: 8 }), b = campoLibero(r, { kmax: 8, rami: { [`${r}/campo/onda 2,-1,3`]: 1 } }); let diverse = 0, quale = -1;
+  for (let m = 0; m < a.N; m++) if (a.A[m] !== b.A[m] || a.B[m] !== b.B[m]) { diverse++; quale = m; } assert.equal(diverse, 1); assert.deepEqual([a.KX[quale], a.KY[quale], a.KZ[quale]], [2, -1, 3]);
+  // in un cosmo della biblioteca: lo stesso ramo lascia le galassie dove e come sono viste dall'alto (posto, altezza del
+  // picco: la loro identità), cambia un'onda del campo libero, e il campo passa ancora per tutte
+  const n1 = 1, n2 = CO.cosmoRamo(1, 'cosmo 1/campo/onda 2,-1,3', 1), C1 = CO.cosmo(n1), C2 = CO.cosmo(n2), F1 = campoCosmo(n1), F2 = campoCosmo(n2);
+  assert.deepEqual(C2.galassie.map((g) => [g.pos, g.peso]), C1.galassie.map((g) => [g.pos, g.peso])); assert.deepEqual(F2.pos, F1.pos);
+  let d = 0; for (let m = 0; m < F1.onde.n; m++) if (F1.libere.A[m] !== F2.libere.A[m] || F1.libere.B[m] !== F2.libere.B[m]) d++; assert.equal(d, 1);
+  let peggio = 0; F2.pos.forEach((x, i) => { peggio = Math.max(peggio, Math.abs(F2.densitaLunga(x) - F2.vincoli.valori[i])); }); assert.ok(peggio < 1e-7, `nel ramo le galassie distano dal loro picco ${peggio}`);
+  const v1 = F1.motiGalassie(), v2 = F2.motiGalassie(); let dv = 0; v1.forEach((v, i) => { dv = Math.max(dv, Math.hypot(v[0] - v2[i][0], v[1] - v2[i][1], v[2] - v2[i][2])); });
+  assert.ok(dv > 0 && dv < 50, `il ramo di un'onda sposta le velocità di ${dv} km/s`);
+  console.log(`      (potenza misurata su quella vera: ${num(conta[0][0] / conta[0][1], 4)} sulle ${conta[0][1]} onde lunghe, ${num(conta[1][0] / conta[1][1], 4)} sulle ${conta[1][1]} corte; il ramo di un'onda nel cosmo 1: ${C1.galassie.length} galassie ferme viste dall'alto, velocità spostate al più di ${num(dv)} km/s)`);
 });
 
 prova('passa esattamente per ogni vincolo: uno, quattro e mille vincoli a caso; il peso è quello di un mondo tipico', () => {
@@ -205,6 +224,55 @@ prova('la causa comune: due croste di sale stanno più spesso nello stesso mondo
   const raro = causaComune(sale, { mondi: MONDI, aPriori: 0.01 }); tra(raro.probabilita, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) - 1e-12, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) + 1e-12, 'con a priori 1%');
   console.log(`      (due croste di sale su ${cc.provati} mondi${cc.dubbi ? ` (${cc.dubbi} «forse» lasciati fuori: il sale dei mari chiusi lo sa la superficie)` : ''}: nello stesso mondo ${num(cc.stesso.peso)} ± ${num(cc.stesso.errore, 2)}, in due ${num(cc.separati.peso)} ± ${num(cc.separati.errore, 2)}: la causa comune pesa ${num(cc.guadagno)} volte di più → stesso mondo con probabilità ${num(cc.probabilita)}; su ${N} domande: ${num(f)})`);
   console.log(`      (il sale copre in media ${num(100 * una)}% del mondo scelto da una crosta, ${num(100 * due)}% di quello scelto da due; mare e ghiaccio: stesso mondo ${num(mg.guadagno)} volte «separati», probabilità ${num(mg.probabilita)})`);
+});
+
+prova('bolle in galassie diverse si incontrano nel campo del cosmo: due a distanza data; peso cosmico esatto, peso planetario stimato; ridiscendendo tornano', () => {
+  const due = [{ contenuto: 'acqua liquida' }, { contenuto: 'anello' }], lontano = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 300 * MPC } });
+  assert.ok(lontano.esiste && lontano.cosmo.esiste && lontano.cosmo.gradi === 2 && lontano.cosmo.galassie.length === 2 && lontano.pesi.cosmico.esatto && lontano.pesi.planetario.length === 2 && lontano.pesi.planetario.every((w) => w.valore > 0 && w.errore > 0));
+  // ridiscendere: dal campo l'altezza del picco, dall'altezza la massa dell'alone, dalla galassia il pianeta e il contenuto
+  const giu = ridiscendiNelCosmo(lontano); assert.ok(giu.every((x) => x.torna), JSON.stringify(giu)); for (const x of giu) { tra(x.massaAlone / x.massaChiesta, 1 - 1e-9, 1 + 1e-9, 'la massa dell\'alone dal picco'); assert.equal(x.contenuto, 'sì'); }
+  // ciò che la bolla chiede al cosmo è ciò che galassie.js fa con quel picco: la massa dell'alone della galassia trovata
+  for (const q of lontano.cosmo.richieste) { const [, n, g] = /cosmo (\S+)\/galassia (\d+)/.exec(q.galassia), G = CO.cosmo(/^\d+$/.test(n) ? Number(n) : n).galassie[Number(g)]; assert.equal(q.altezza, G.peso); tra(q.massaAlone / G.forma.alone.massa, 1 - 1e-9, 1 + 1e-9, 'la massa chiesta è quella dell\'alone'); assert.ok(/massaAlone/.test(q.legge)); }
+  // il peso esatto: per due picchi è (v₁² + v₂² − 2ρ·v₁·v₂)/(σ²·(1 − ρ²)), con ρ la correlazione del campo filtrato a quella distanza
+  const [q1, q2] = lontano.cosmo.richieste, base = campoLibero('prova/bolle/due picchi'), chi2A = (d) => { const p1 = [L / 2 - d / 2, L / 2, L / 2], p2 = [L / 2 + d / 2, L / 2, L / 2], a = campoCondizionato(base, [{ posizione: p1, taglio: q1.taglio, valore: 1 }]).attesa(p2, 0, q1.taglio), rho = a.media, s2 = a.libera; return { rho, chi2: (q1.valore ** 2 + q2.valore ** 2 - 2 * rho * q1.valore * q2.valore) / (s2 * (1 - rho * rho)), lontane: (q1.valore ** 2 + q2.valore ** 2) / s2 }; };
+  const righe = [];
+  for (const dMpc of [300, 120, 60, 30, 5, 0.5]) { const r = incontra(due, { mondi: MONDI, nelCosmo: { distanza: dMpc * MPC } }), t = chi2A(dMpc * MPC); assert.ok(r.esiste); tra(r.cosmo.chi2 / t.chi2, 1 - 1e-7, 1 + 1e-7, `χ² a ${dMpc} Mpc contro la formula`); tra(r.cosmo.chi2Lontane / t.lontane, 1 - 1e-9, 1 + 1e-9, 'χ² da lontane'); assert.ok(ridiscendiNelCosmo(r).every((x) => x.torna));
+    // i mondi delle bolle sono gli stessi a ogni distanza (la domanda è la stessa): cambia solo il cosmo che li contiene
+    assert.deepEqual(r.mondi, lontano.mondi); righe.push(`${dMpc} Mpc: ρ ${num(t.rho)}, χ² ${num(r.cosmo.chi2, 4)}, probabilità ${num(r.cosmo.probabilita)}`); }
+  // A DISTANZA LIBERA (dove capita: quasi sempre lontane) pesa più che a distanza forzata piccola: due galassie diverse a
+  // mezzo megaparsec chiedono allo stesso punto del campo filtrato due altezze diverse
+  const libero = incontra(due, { mondi: MONDI, nelCosmo: 'libero' }), stretto = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 0.5 * MPC } }), dnu = Math.abs(q1.altezza - q2.altezza);
+  assert.ok(libero.esiste && stretto.esiste && ridiscendiNelCosmo(libero).every((x) => x.torna)); tra(libero.cosmo.chi2 / libero.cosmo.chi2Lontane, 0.5, 1.5, 'a distanza libera pesano quasi ognuna per conto suo');
+  if (dnu > 0.01) { assert.ok(stretto.cosmo.chi2 > libero.cosmo.chi2 && stretto.cosmo.logDensita < libero.cosmo.logDensita && stretto.cosmo.probabilita < libero.cosmo.probabilita, `χ² ${stretto.cosmo.chi2} a mezzo Mpc contro ${libero.cosmo.chi2} libere`); }
+  else console.log(`      NON TORNA (qui): le due galassie trovate hanno picchi alti uguali entro ${num(dnu)} scarti: a mezzo megaparsec il campo non le distingue da una sola`);
+  // nello stesso punto esatto, con altezze diverse: non esiste, e lo dice
+  const sopra = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 0 } }); if (dnu > 1e-6) assert.ok(!sopra.esiste && /stesso punto/.test(sopra.perche) && /altezza diversa/.test(sopra.perche), sopra.perche);
+  // CHE COSA DICONO I PESI a distanze di mezzo: due picchi dello stesso segno a qualche decina di Mpc costano MENO che
+  // lontani (ρ > 0): è l'ammassarsi delle galassie. Vale quando 2ρ·v₁·v₂ > ρ²·(v₁² + v₂²), e solo allora
+  for (const dMpc of [60, 30]) { const t = chi2A(dMpc * MPC), conviene = 2 * t.rho * q1.valore * q2.valore > t.rho ** 2 * (q1.valore ** 2 + q2.valore ** 2); assert.equal(t.chi2 < t.lontane, conviene); }
+  const t60 = chi2A(60 * MPC);
+  console.log(`      (${lontano.bolle.map((e, i) => `${e.bolla.contenuto.cosa} in ${e.luogo.replace(/\/punto.*/, '')}: picco di ${num(lontano.cosmo.richieste[i].altezza)} scarti, alone di ${num(lontano.cosmo.richieste[i].massaAlone)} M☉`).join('; ')})\n      (peso planetario stimato: ${lontano.pesi.planetario.map((w) => `${num(w.valore)} ± ${num(w.errore, 2)}`).join(' e ')}; peso cosmico esatto, due galassie a:  ${righe.join(';  ')})`);
+  console.log(`      (libere: χ² ${num(libero.cosmo.chi2, 4)}, densità e^${num(libero.cosmo.logDensita)}; a 0,5 Mpc: χ² ${num(stretto.cosmo.chi2, 4)}, densità e^${num(stretto.cosmo.logDensita)}; nello stesso punto: ${sopra.esiste ? 'esiste' : 'non esiste'}. A 60 Mpc costano ${t60.chi2 < t60.lontane ? 'MENO' : 'più'} che lontane (${num(t60.chi2, 4)} contro ${num(t60.lontane, 4)}): ${t60.chi2 < t60.lontane ? 'le galassie si ammassano; «libero pesa di più» vale solo sotto qualche megaparsec' : 'con queste altezze non conviene'})`);
+});
+
+prova('dieci bolle in dieci galassie a posti dati: un cosmo solo le contiene tutte, con il suo peso; due galassie di un cosmo della biblioteca: il peso dei loro picchi lì', () => {
+  const cose = ['ghiaccio', 'aurora', 'anello', { cosa: 'minerale', nome: 'quarzo' }, 'acqua liquida'], dieci = Array.from({ length: 10 }, (_, i) => ({ grandezza: 1 + Math.floor(i / 5), contenuto: cose[i % 5] }));
+  // dieci posti dentro un cubo di 500 Mpc, a caso (eventi della prova), lontani tra loro almeno 60 Mpc
+  const posti = []; for (let k = 0; posti.length < 10 && k < 500; k++) { const p = ['x', 'y', 'z'].map((a) => L / 2 + 500 * MPC * (c(`dieci/${k}/${a}`) - 0.5)); if (posti.every((q) => distanza(p, q) > 60 * MPC)) posti.push(p); }
+  const t0 = performance.now(), r = incontra(dieci, { mondi: MONDI, nelCosmo: { posizioni: posti } }), ms = performance.now() - t0; assert.ok(r.esiste, r.perche);
+  assert.ok(r.cosmo.gradi === 10 && r.cosmo.galassie.length === 10 && new Set(r.bolle.map((e) => `${e.bolla.dove.cosmo}/${e.bolla.dove.galassia}`)).size === 10 && r.pesi.planetario.length === 10);
+  const giu = ridiscendiNelCosmo(r); assert.ok(giu.every((x) => x.torna), JSON.stringify(giu.filter((x) => !x.torna))); r.cosmo.richieste.forEach((q, i) => assert.deepEqual(q.posizione, posti[i]));
+  tra(r.cosmo.probabilita, 0, 1 + 1e-12, 'la probabilità del χ² cosmico'); assert.ok(r.cosmo.chi2 > 0 && Number.isFinite(r.cosmo.logDensita)); tra(r.cosmo.chi2 / r.cosmo.chi2Lontane, 0.3, 3, 'dieci picchi a decine e centinaia di Mpc: non lontano dalla somma di ognuno');
+  // la stessa domanda, lo stesso cosmo; i posti in un altro ordine, con le bolle nello stesso ordine: un altro cosmo, stesso tipo di peso
+  const ancora = incontra(dieci, { mondi: MONDI, nelCosmo: { posizioni: posti } }); assert.equal(ancora.cosmo.chi2, r.cosmo.chi2); assert.deepEqual(ancora.bolle.map((e) => e.luogo), r.bolle.map((e) => e.luogo));
+  // il campo trovato è un campo intero: lo si può interrogare ovunque, e lontano dalle dieci galassie è quello libero
+  const F = r.cosmo.campo, fuori = [L * 0.05, L * 0.05, L * 0.05]; assert.ok(posti.every((p) => distanza(p, fuori) > 250 * MPC)); tra(Math.abs(F.in(fuori) - F.libero(fuori)) / F.sigma, -1, 0.05, 'lontano dalle dieci galassie');
+  // due galassie di uno stesso cosmo della biblioteca: i posti sono i loro, il peso è quello dei loro picchi lì
+  const dentro = incontra([{ luogo: 'cosmo 1/galassia 0', contenuto: 'ghiaccio' }, { luogo: 'cosmo 1/galassia 3', contenuto: 'aurora' }], { mondi: GRAPPOLO });
+  assert.ok(dentro.esiste && dentro.chiesto.livello === 'cosmo' && dentro.cosmo && dentro.cosmo.daBiblioteca === 1 && dentro.cosmo.gradi === 2 && ridiscendiNelCosmo(dentro).every((x) => x.torna));
+  const F1 = campoCosmo(1); dentro.cosmo.richieste.forEach((q, i) => assert.deepEqual(q.posizione, F1.pos[[0, 3][i]].map((x) => x * L))); tra(dentro.cosmo.chi2, 0, 100, 'χ² dei due picchi nel cosmo 1');
+  console.log(`      (dieci bolle → dieci galassie di ${new Set(r.bolle.map((e) => e.bolla.dove.cosmo)).size} cosmi d'origine, picchi da ${num(Math.min(...r.cosmo.richieste.map((q) => q.altezza)))} a ${num(Math.max(...r.cosmo.richieste.map((q) => q.altezza)))} scarti; ${num(ms / 1000)} s; peso cosmico: χ² ${num(r.cosmo.chi2, 4)} su 10 (lontane: ${num(r.cosmo.chi2Lontane, 4)}), probabilità ${num(r.cosmo.probabilita)}, densità e^${num(r.cosmo.logDensita)}; pesi planetari da ${num(Math.min(...r.pesi.planetario.map((w) => w.valore)))} a ${num(Math.max(...r.pesi.planetario.map((w) => w.valore)))})`);
+  console.log(`      (nel cosmo 1, galassie 0 e 3 (picchi di ${dentro.cosmo.richieste.map((q) => num(q.altezza)).join(' e ')} scarti, a ${num(distanza(dentro.cosmo.richieste[0].posizione, dentro.cosmo.richieste[1].posizione) / MPC)} Mpc): χ² ${num(dentro.cosmo.chi2, 4)} su 2, probabilità ${num(dentro.cosmo.probabilita)})`);
 });
 
 // ---------- in fondo: la superficie vera (costa ~11 s a pianeta: solo se chiesto)

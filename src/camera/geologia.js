@@ -23,7 +23,7 @@ import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
+import { acquaInSuperficie, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000, giorno: 86164, rossby: 0.09 };
 
 export function interno(P, stella) {
@@ -264,8 +264,8 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     const r = mare.albedo ? Math.round(Math.sqrt(mare.albedo.length / (W * H))) : 0;
     if (r >= 1 && mare.albedo.length === W * H * r * r) { albedoMare = new Float32Array(W * H).fill(-1); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let x = 0, n = 0; for (let b = 0; b < r; b++) for (let c = 0; c < r; c++) { const v = mare.albedo[(j * r + b) * W * r + i * r + c]; if (v > 0) { x += v; n++; } } if (n && !terra[j * W + i]) albedoMare[j * W + i] = x / n; } }
   }
-  // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; riflette() moltiplica per riflessoNuvole, e qui lo si toglie)
-  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] / CLIMA.riflessoNuvole : meteo.nuvole[k]) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null);
+  // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; senza meteo, quelle attese dalla stessa legge)
+  const albedo = (k, t) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null);
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
