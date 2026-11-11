@@ -58,7 +58,20 @@ export const RIFERIMENTI = [
 // molecola biatomica nel vapore [ricordati: servono solo alla regola di riserva, il cui errore è più grande del loro]
 const OMO = { H: 436, Li: 105, Be: 208, B: 293, C: 346, N: 167, O: 142, F: 155, Na: 72, Mg: 129, Al: 186, Si: 222, P: 201, S: 266, Cl: 240, K: 49, Ca: 105, Sc: 163, Ti: 118, V: 269, Cr: 152, Mn: 61, Fe: 118, Co: 167, Ni: 204, Cu: 201, Zn: 22, Ga: 106, Ge: 188, As: 146, Se: 172, Br: 190, Mo: 436 };
 const OMO_MULTIPLI = { C: [614, 839], N: [418, 945.36], O: [498.36, 0], S: [425, 0], P: [310, 490], Si: [310, 0] };
-const FOSFORO = { 'gO:YY': -34.0, 'gO:CY': 9.4, 'gO:Yc': -19.2 };
+// ('gP:DD': due P=O sullo stesso fosforo, cioè il METAFOSFATO monomero. Senza questo termine le regole lo davano 81 kJ/mol
+// SOTTO il fosfato (H3PO4 → HPO3 + H2O in discesa: ogni fosfato della rete si disfaceva in microsecondi); è invece un
+// intermedio fugace, circa 110 kJ/mol sopra [ricordato, incerto: stime di Guthrie 1977 per l'idratazione di PO3⁻]: il
+// termine è TARATO su quel numero, un parametro solo per tutti i metafosfati.)
+// ('gc:im': l'imminolo HO–C=N. Lo schema additivo dà la stessa coppia di vicini ('gc:DX') all'ammide O=C–N e al suo
+// tautomero N=C–OH, e l'idratazione per siti premia il secondo: in acqua l'imminolo risultava 33 kJ/mol SOTTO l'ammide,
+// e nelle reti ogni ammide — ogni peptide — scivolava lì. Misurato/calcolato: l'ammide è più stabile di circa 50 kJ/mol
+// [ricordato: formammide → acido formimidico, +46…+54 kJ/mol in fase gas e in acqua]. Il termine è TARATO perché in
+// acqua torni +50: un parametro solo per tutti gli imminoli (in fase gas dà +83: troppo, dichiarato).)
+// ('gc:am': l'ammidina N–C=N non aromatica. Per la stessa ragione — la coppia 'gc:DX' presa dagli acidi e dalle ammidi —
+// un nitrile con l'ammoniaca dava l'ammidina con ΔG = −94 kJ/mol in acqua, e nelle reti ogni nitrile (l'amminoacetonitrile
+// di Strecker) finiva lì invece di idrolizzarsi. In realtà l'addizione è circa in pari e l'ammidina si idrolizza
+// all'ammide [ricordato, incerto]: il termine è TARATO perché nitrile + NH3 → ammidina valga circa −9 kJ/mol.)
+const FOSFORO = { 'gO:YY': -34.0, 'gO:CY': 9.4, 'gO:Yc': -19.2, 'gP:DD': -191, 'gc:im': -83, 'gc:am': -85 };
 // lo stato di riferimento di questi elementi È la molecola biatomica: il suo legame vale due volte l'entalpia dell'atomo
 const BIATOMICI = { 'H-H': 1, 'N#N': 7, 'O=O': 8, 'F-F': 9, 'Cl-Cl': 17 };
 
@@ -85,6 +98,9 @@ export function termini(x) {
   // (un carbonio con il suo C=O legato a un ossigeno che dall'altra parte ha fosforo o zolfo: un'anidride mista, come l'acetil-fosfato)
   const acile = (j) => m.vic[j].some((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o === 2 && !m.legami[v.k].ar && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 16));
   m.atomi.forEach((a, k) => { const cl = [], centroPi = insaturo(k);
+    // (l'IMMINOLO, HO–C=N: il tautomero sfavorito dell'ammide; vedi 'gc:im' tra i termini tarati)
+    { const doppioN = a.Z === 6 && !a.ar && m.vic[k].some((v) => { const l = m.legami[v.k]; return l.t === 'c' && !l.ar && l.o === 2 && m.atomi[v.j].Z === 7; }), semplice = (Z) => m.vic[k].some((v) => { const l = m.legami[v.k]; return l.t === 'c' && l.o === 1 && m.atomi[v.j].Z === Z; });
+      if (doppioN && semplice(8)) piu('gc:im'); else if (doppioN && semplice(7)) piu('gc:am'); }
     for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t !== 'c') continue; const C = m.atomi[v.j].Z === 6; const o = l.ar ? (doppio.has(v.k) ? 2 : 1) : l.o; cl.push(o === 3 ? 't' : o === 2 ? (C ? 'd' : 'D') : C ? ((centroPi && insaturo(v.j)) || (a.Z !== 6 && acile(v.j) && m.vic[k].some((w) => m.atomi[w.j].Z === 15 || m.atomi[w.j].Z === 16)) ? 'c' : 'C') : m.atomi[v.j].Z === 7 || m.atomi[v.j].Z === 8 ? 'X' : 'Y'); }
     for (let i = 0; i < cl.length; i++) for (let j = i + 1; j < cl.length; j++) { piu(`g${a.Z === 6 ? (centroPi ? 'c' : 'C') : SIMBOLI[a.Z]}:${[cl[i], cl[j]].sort().join('')}`); }
     // (l'effetto anomerico non si somma oltre: tre ossigeni sullo stesso carbonio saturo valgono due coppie, non tre)

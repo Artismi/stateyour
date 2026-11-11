@@ -257,6 +257,13 @@ export function catalisi(r, c = {}) {
 
 // ---------- velocita(reazione, condizioni) → { dG, dH, barriera (kJ/mol), k (avanti), kInversa, K, catalisi }
 // k in 1/s se c'è un reagente solo, in L/(mol·s) se sono due (stato di riferimento 1 mol/L, o 1 bar in fase gas).
+// LA BARRIERA DI BLOWERS E MASEL (2000, AIChE J. 46, 2041), per confronto con quella di Marcus usata qui sotto: due curve
+// di legame (quello che si rompe e quello che si fa, di energia media w0) che si incrociano; E0 è la barriera
+// intrinseca della famiglia. Ea = 0 se ΔH < −4E0, = ΔH se ΔH > 4E0, altrimenti
+//   Ea = (w0 + ΔH/2)·(Vp − 2w0 + ΔH)² / (Vp² − 4w0² + ΔH²),  Vp = 2w0·(w0 + E0)/(w0 − E0).
+// Per w0 → ∞ è Marcus; per i legami veri (w0 = 300-450 kJ/mol) e |ΔH| < 100 kJ/mol ne differisce di meno di 2 kJ/mol:
+// NON è ciò che manca alla sostituzione sull'acile (vedi le prove: imidazolo + p-nitrofenil acetato).
+export function blowersMasel(E0, w0, dH) { if (dH < -4 * E0) return 0; if (dH > 4 * E0) return dH; const Vp = (2 * w0 * (w0 + E0)) / (w0 - E0); return ((w0 + dH / 2) * (Vp - 2 * w0 + dH) ** 2) / (Vp * Vp - 4 * w0 * w0 + dH * dH); }
 export function velocita(r, c = {}) {
   const T = c.T ?? 298.15, cond = { T, P: c.P ?? 1e5, solvente: c.solvente ?? null, pH: c.pH ?? 7, attivitaAcqua: c.attivitaAcqua ?? 1, misure: c.misure, forzaIonica: c.forzaIonica ?? 0 };
   // (memoria: chi chiede molte velocità nelle stesse condizioni — la rete — tiene le energie già calcolate)

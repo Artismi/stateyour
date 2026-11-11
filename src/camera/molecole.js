@@ -86,16 +86,43 @@
 //     quale sequenza si ripiega in quale forma (manca l'acqua esplicita, l'entropia della catena, la cooperatività).
 // Unità: kJ/mol, J/(mol·K), K, Pa, mol/L, Å (le coordinate; nm nella scena 3D).
 
+//
+// AGGIUNTE DELL'11-2026 (terzo giro: i divieti che restavano tra la chimica e la vita «in potenza»)
+//   · LA RETE NON HA PIÙ UN TETTO ALLA TAGLIA: rete() senza «atomiMassimi» usa il CRITERIO DEL FLUSSO di RMG (Gao e altri
+//     2016) in forma integrata nel tempo: entra ciò che nel tempo dato raccoglierebbe almeno ε della materia che si è
+//     mossa (molecole_rete.js › passoFlusso). PARAMETRI: ε = 10⁻³, cMinima = 10⁻¹² mol/L, «abbondante» = sopra un
+//     millesimo della specie più abbondante, fascio = 40 per generazione. Con «atomiMassimi» resta la rete di prima.
+//   · I POZZI (molecole_pozzi.js): vite MISURATE per classe di legame (ammide, glicoside, fosfodiestere con e senza
+//     ossidrile vicino, deamminazione delle basi, zuccheri), in forma di Arrhenius, con le fonti; pozzi(x, { T, pH, luce })
+//     le somma ai passi in discesa delle regole generali e alla fotolisi. La rete le usa (opzione «pozzi», di suo accesa).
+//     Il ΔG di condensazione del peptide esce dalle regole (+8 contro +9,2 kJ/mol); glicoside e fosfodiestere dal dato.
+//   · TRE TERMINI TARATI nell'energia (molecole_energia.js): il metafosfato ('gP:DD'), l'imminolo ('gc:im'), l'ammidina
+//     non aromatica ('gc:am'): senza, ogni fosfato, ogni ammide e ogni nitrile della rete scivolava in una forma che in
+//     natura è sfavorita. Valori [ricordati, incerti], un parametro per classe.
+//   · evolvi(): tolto il limite «metà per passo» (teneva troppo pieni i pozzi del primo ordine con passi lunghi) e
+//     ordinate le reazioni dentro il passo (sorgenti pure prima, pozzi ultimi): lo stato stazionario è sorgente × vita.
+//   · blowersMasel(E0, w0, ΔH): provata sull'imidazolo + p-nitrofenil acetato: NON sistema l'errore di 10⁵ (dà la barriera di
+//     Marcus entro 0,1 kJ/mol): manca la dipendenza della barriera intrinseca dal nucleofilo e dal gruppo uscente.
+//   · CRISTALLI (molecole_cristalli.js): conglomerato() amplifica uno sbilancio tra le mani (Viedma/Uwaha) e fa la
+//     cristallizzazione preferenziale; cristallo() dice se una specie precipita DATA la solubilità — la solubilità
+//     stimata dal reticolo (una coppia × Z/2) sbaglia di molti ordini di grandezza: è dichiarato, con il progetto.
+//   · FONTI: 18 ΔHf di riferimento ora da ATcT 1.202; le altre 71 dalla letteratura primaria via indice del WebBook (non rilette).
+// CHE COSA NON TORNA DI NUOVO (stampato dalle prove): l'adenina da 5 HCN non entra per flusso (solo con «verso»);
+// l'adenosina N9 resta sul bordo (10⁻¹⁰ mol/L); l'adenosina vive 9 anni a 25 °C (misurato: migliaia); la soglia di
+// fotolisi della glicina è 320 nm (misurato ~230); la rete con il flusso costa 10-25 s per 100 specie di nucleo.
 import { atomo as atomo_, NUMERI_ATOMICI } from './molecole_atomi.js';
 import { molecola as molecola_, chiave as chiave_, valida as valida_, stereoisomeri, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli } from './molecole_grafo.js';
 import { forma as forma_, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio } from './molecole_forma.js';
 import { energia as energia_, entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso, risolvi, IONI_MISURATI, statoRedox, debyeHuckel, pKaAllaT, R } from './molecole_energia.js';
-import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, bilancio, INTRINSECHE, espandiStereo } from './molecole_reazioni.js';
+import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, bilancio, INTRINSECHE, espandiStereo, blowersMasel } from './molecole_reazioni.js';
+export { blowersMasel };
 import { tensione, energiaStereo, campo, forze as forze_, minimizza, passo, insieme, cariche, aggregazione, polimero as polimero_, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa, scena3D as scena3D_ } from './molecole_forze.js';
 import { interazione, catalisiDa, copia, ripiega, superficie, adsorbi, CONCENTRAZIONE_EFFICACE } from './molecole_incontri.js';
 import { evolvi, scatole, rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche, velocitaVera } from './molecole_rete.js';
 import { POZZI, CONDENSAZIONE_MISURATA, classi, kDiClasse, pozziMisurati, misurato, pozziPropri } from './molecole_pozzi.js';
 export { POZZI, CONDENSAZIONE_MISURATA, classi, kDiClasse, pozziMisurati, misurato, velocitaVera };
+import { cristallo, conglomerato } from './molecole_cristalli.js';
+export { cristallo, conglomerato };
 
 // ---------- l'interfaccia (i nomi chiesti; il resto è esportato più sotto)
 export const atomo = atomo_, molecola = molecola_, chiave = chiave_, valida = valida_, forma = forma_;
@@ -121,8 +148,9 @@ export { NUMERI_ATOMICI, interazione, catalisiDa, copia, ripiega, superficie, ad
 // basi, zuccheri); (2) i passi in discesa (ΔG < −15 kJ/mol) che le REGOLE GENERALI le danno da sola o con l'acqua, esclusi
 // quelli già contati in (1); (3) con «luce» (lo spettro del luogo: { Tstella, diluizione, trasmissione }), la FOTOLISI.
 export function pozzi(x, c = {}) {
-  const cond = { T: 298.15, pH: 7, solvente: 'acqua', ...c }, m = x && x.m ? x.m : molecola_(x), mis = pozziMisurati(chiave_(m), cond), voci = [...mis.voci]; let k = mis.k;
-  for (const r of reazioni_(m, null, { tutte: false }).concat(reazioni_(m, 'O', { tutte: false, lente: false, metalli: false }))) { let v; try { if (misurato(r, cond)) continue; v = velocita_(r, cond); } catch { continue; }
+  const cond = { T: 298.15, pH: 7, solvente: 'acqua', ...c }, m = x && x.m ? x.m : molecola_(x), mis = pozziMisurati(chiave_(m), cond), voci = [...mis.voci], zuccheroIo = classi(chiave_(m)).zucchero > 0; let k = mis.k;
+  for (const r of reazioni_(m, null, { tutte: false }).concat(reazioni_(m, 'O', { tutte: false, lente: false, metalli: false }))) { let v; try { if (r.tipo === 'tautomeria' || misurato(r, cond)) continue; if (zuccheroIo && r.prodotti.length === 1 && classi(r.prodotti[0]).zucchero) continue; // (le forme di uno stesso zucchero — anelli, catena aperta — non sono la sua fine)
+      v = velocitaVera(r, cond); if (v.misurato) continue; } catch { continue; } // (un tautomero è la stessa sostanza; i legami misurati sono già contati)
     if (v.dG < -15 && isFinite(v.k) && v.k > 0) { voci.push({ classe: r.tipo, nome: `${r.tipo} (regola generale) → ${r.prodotti.join(' + ')}`, legami: 1, k: v.k, fonte: 'regola generale', misurato: false }); k += v.k; } }
   if (cond.luce) { let J = 0; try { for (const f of fotolisi(m, cond.luce)) J += f.J || 0; } catch { J = 0; } if (J > 0) { voci.push({ classe: 'fotolisi', nome: 'fotolisi (regola generale: soglia del cromoforo e flusso di fotoni)', legami: 1, k: J, fonte: 'regola generale', misurato: false }); k += J; } }
   voci.sort((a, b) => b.k - a.k);

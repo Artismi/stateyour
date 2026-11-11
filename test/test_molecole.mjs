@@ -342,6 +342,18 @@ await prova('lavorare: la catalisi da parte di qualsiasi molecola (stato di tran
   const PNPA = 'CC(=O)Oc1ccc(cc1)[N+](=O)[O-]', IM = 'c1c[nH]cn1', kIm = k1(M.reazioni(IM, PNPA).find((r) => r.tipo === 'sostituzione' && r.classe === 'acile')).k, kW = k1(M.reazioni('O', PNPA).find((r) => r.tipo === 'sostituzione' && r.prodotti.includes(k('CC(=O)O')))).k;
   console.log(`      imidazolo + p-nitrofenil acetato: k = ${kIm.toExponential(1)} L/mol/s (misurato 0,5); l'acqua da sola ${kW.toExponential(1)} 1/s (misurato ~6·10⁻⁷): l'imidazolo attacca ${(kIm / kW).toExponential(0)} volte meglio dell'acqua per mol/L (misurato ~10⁶)`); assert.ok(kIm > 10 * kW, 'l\'imidazolo è un nucleofilo migliore dell\'acqua (la sua basicità)');
   if (kIm < 0.005) stona(`imidazolo + p-nitrofenil acetato: k = ${kIm.toExponential(1)} contro 0,5 L/mol/s misurati: una barriera sola per famiglia non vede quanto è buono il gruppo uscente (il nitrofenolato)`);
+  // BLOWERS-MASEL al posto di Marcus (E0 per famiglia, w0 dalle energie dei legami rotti e formati): la sistema? No.
+  { const E0 = M.INTRINSECHE.sostituzione, marcus = (d, e = E0) => e * (1 + d / (4 * e)) ** 2, RT = 2.479, nec = (kk) => RT * Math.log(6.21e12 / kk);
+    const bde = M.fotolisi(PNPA, { Tstella: 5772, diluizione: 2.16e-5 }).map((f) => f.energiaDiLegame).filter((e) => e > 150), w = [Math.min(...bde), Math.max(...bde)];
+    const rIm = M.reazioni(IM, PNPA).find((r) => r.tipo === 'sostituzione' && r.classe === 'acile'), rW = M.reazioni('O', PNPA).find((r) => r.tipo === 'sostituzione' && r.prodotti.includes(k('CC(=O)O'))), rP = M.reazioni(GLYGLY, 'O', { lente: true }).find((r) => r.tipo === 'sostituzione' && r.prodotti.length === 2 && r.prodotti.every((q) => q === k(GLY)));
+    const casi = [['imidazolo + p-nitrofenil acetato', rIm, 0.5], ['acqua + p-nitrofenil acetato', rW, 6e-7], ['acqua + Gly-Gly', rP, Math.LN2 / (385 * 3.15576e7)]], righe = [], e0nec = [];
+    for (const [nome, r, kMis] of casi) { const v = M.velocita(r, ACQUA), mA = marcus(v.dG), b1 = M.blowersMasel(E0, w[0], v.dG), b2 = M.blowersMasel(E0, w[1], v.dG), serve = nec(kMis);
+      assert.ok(Math.abs(b1 - mA) < 4 && Math.abs(b2 - mA) < 4, `${nome}: Blowers-Masel ${b1} / ${b2} contro Marcus ${mA}`);
+      let lo = 20, hi = 250; for (let i = 0; i < 50; i++) { const m = 0.5 * (lo + hi); if (M.blowersMasel(m, 0.5 * (w[0] + w[1]), v.dG) < serve) lo = m; else hi = m; } e0nec.push(lo);
+      righe.push(`${nome}: ΔG ${v.dG.toFixed(0)}, Marcus ${mA.toFixed(1)}, Blowers-Masel ${b1.toFixed(1)}…${b2.toFixed(1)}, la misura chiede ${serve.toFixed(1)} (E0 ${lo.toFixed(0)})`); }
+    assert.ok(M.blowersMasel(E0, 1e7, -30) - marcus(-30) < 1e-3 && M.blowersMasel(E0, 350, -600) === 0 && M.blowersMasel(E0, 350, 600) === 600, 'i limiti della formula');
+    console.log(`      Blowers-Masel con E0 = ${E0} kJ/mol e w0 = ${w[0].toFixed(0)}…${w[1].toFixed(0)} (kJ/mol): ${righe.join('; ')}`);
+    stona(`Blowers-Masel NON sistema la barriera dell'imidazolo: con la stessa E0 dà la barriera di Marcus entro 4 kJ/mol (|ΔG| è piccolo davanti a 4·E0); per tornare alle misure la E0 dovrebbe valere ${e0nec.map((e) => e.toFixed(0)).join(', ')} kJ/mol nei tre casi: non è la forma della curva che manca, è che la barriera intrinseca dipende dal nucleofilo e dal gruppo uscente (pKa), non solo dalla famiglia`); }
   // (b) catalisi senza legami: tre peptidi qualsiasi e l'idratazione della formaldeide
   const idr = prendi('C=O', 'O', 'addizione', 'OCO'), peptidi = ['NCC(=O)N[C@@H](C)C(=O)N[C@@H](CO)C(=O)O', 'N[C@@H](CC(C)C)C(=O)NCC(=O)N[C@@H](CC(=O)O)C(=O)O', 'N[C@@H](CCCCN)C(=O)N[C@@H](C)C(=O)NCC(=O)O'], cc = peptidi.map((p) => M.catalisiDa(p, idr));
   console.log(`      tre tripeptidi qualsiasi sull'idratazione della formaldeide: ΔΔG‡ = ${cc.map((c) => c.ddG.toFixed(1)).join(', ')} kJ/mol; velocità catalizzata / libera per ogni mol/L di peptide: ${cc.map((c) => c.fattorePerMole.toExponential(0)).join(', ')} → un peptide a caso non catalizza niente`); assert.ok(cc.every((c) => c.fattorePerMole < 10 && Math.abs(c.ddG) < 15));
@@ -387,6 +399,110 @@ await prova('che cosa chiede (regola 5): le condizioni che un luogo deve offrire
   const a = pep.confronta(mare), b = pep.confronta(pozza), c = pep.confronta(ghiaccio), d = gly.confronta(mare); console.log(`      il peptide in un mare ossidato: mancano ${a.mancano.join('; ')}`); console.log(`      in una pozza che si asciuga sotto un'aria con idrogeno e HCN: ${b.possibile ? 'possibile' : 'mancano ' + b.mancano.join('; ')}`);
   assert.ok(!a.possibile && a.mancano.some((x) => x.includes('riducente')) && a.mancano.some((x) => x.includes('asciughi'))); assert.ok(b.mancano.length < a.mancano.length); assert.ok(c.mancano.includes('acqua liquida')); assert.ok(!d.possibile && d.mancano.some((x) => x.includes('riducente')));
   assert.ok(M.cheCosaChiede('OP(=O)(O)O').confronta(mare).mancano.some((x) => x.includes('fosforo')));
+});
+
+// ───────────── la rete senza tetto alla taglia: il criterio del flusso
+await prova('la rete potata dal flusso (non dalla taglia): da HCN, formaldeide e ammoniaca alla glicina; dal formosio ai pentosi; ribosio + adenina → nucleosidi; in aria ossidata niente', () => {
+  const ANNO_ = 3.15576e7, gen = (r, x) => r.specie.get(k(x))?.generazione, pesantiMax = (r) => Math.max(...[...r.specie.values()].map((s) => s.pesanti));
+  // (1) una pozza calda (80 °C, pH 8) con un millimolare di HCN e di formaldeide e ammoniaca: Strecker, poi l'idrolisi del nitrile
+  const t0 = Date.now(), r = M.rete({ 'C#N': 1e-3, 'C=O': 1e-3, N: 1e-2 }, { pH: 8, T: 353.15 }, { profondita: 5, fascio: 25 }), tS = Date.now() - t0;
+  assert.ok(r.flusso && r.flusso.epsilon === 1e-3 && r.flusso.limite > 0, 'senza atomiMassimi la rete usa il criterio del flusso'); assert.ok(r.ha(GLY), 'la glicina entra per flusso'); assert.ok(r.ha('NCC#N') && r.ha('NCC(N)=O') && gen(r, 'NCC#N') < gen(r, 'NCC(N)=O') && gen(r, 'NCC(N)=O') < gen(r, GLY), 'per la via di Strecker: amminoacetonitrile → glicinammide → glicina');
+  assert.ok(pesantiMax(r) > 8, 'nessun tetto a otto atomi pesanti'); assert.ok(r.specie.size < 200 && r.bordo.length > 20 * r.specie.size, 'il nucleo resta piccolo, il bordo è grande');
+  const c0 = Object.fromEntries([...r.specie.keys()].map((q) => [q, r.partenza[q] ?? 0])), a1 = M.evolvi(r.reazioni, c0, ANNO_).c[k(GLY)], a100 = M.evolvi(r.reazioni, c0, 100 * ANNO_).c[k(GLY)], glicolico = M.evolvi(r.reazioni, c0, 100 * ANNO_).c[k('OCC(=O)O')] || 0;
+  assert.ok(a100 > 1e-9 && a100 < 1e-3 && a100 >= a1, `glicina dopo cento anni: ${a100}`);
+  console.log(`      pozza a 80 °C: ${r.specie.size} specie nel nucleo, ${r.reazioni.length} reazioni, ${r.bordo.length} sul bordo, fino a ${pesantiMax(r)} atomi pesanti, ${tS} ms; glicina alla generazione ${gen(r, GLY)}: ${a1.toExponential(1)} mol/L dopo un anno, ${a100.toExponential(1)} dopo cento (acido glicolico ${glicolico.toExponential(1)})`);
+  // la stessa pozza a 25 °C: in cent'anni il nitrile non fa in tempo a idrolizzarsi → la glicina non passa il criterio
+  const fredda = M.rete({ 'C#N': 1e-3, 'C=O': 1e-3, N: 1e-2 }, { pH: 8, T: 298.15 }, { profondita: 3, fascio: 25, tempoMassimo: 10000 });
+  console.log(`      la stessa a 25 °C: glicina ${fredda.ha(GLY) ? 'nel nucleo' : `fuori (raccoglierebbe ${fredda.raccoltoDa(GLY).toExponential(1)} mol/L in cent'anni; il limite è ${fredda.flusso.limite.toExponential(1)})`}`);
+  // (2) il formosio: formaldeide con un po' di glicolaldeide a pH 11 → triosi, tetrosi, pentosi (il ribosio aperto e i suoi isomeri), poi l'anello
+  const t1 = Date.now(), f = M.rete({ 'C=O': 0.02, 'OCC=O': 2e-3 }, { pH: 11, T: 298.15 }, { profondita: 4, fascio: 30, flusso: 1e-4, verso: 'OCC1OC(O)C(O)C1O', tempoMassimo: 40000 }), PENTOSO = 'OCC(O)C(O)C(O)C=O';
+  assert.ok(f.ha('OCC(O)C=O') && f.ha('OCC(O)C(O)C=O') && f.ha(PENTOSO), 'gliceraldeide, tetrosi e pentosi per flusso'); const anello = f.ha('OCC1OC(O)C(O)C1O');
+  console.log(`      formosio: ${f.specie.size} specie in ${Date.now() - t1} ms; gliceraldeide gen. ${gen(f, 'OCC(O)C=O')}, tetrosi ${gen(f, 'OCC(O)C(O)C=O')}, pentosi aperti ${gen(f, PENTOSO)}, ribosio ad anello ${anello ? 'gen. ' + gen(f, 'OCC1OC(O)C(O)C1O') : 'non ancora'}; ma dopo cent'anni a 25 °C ne resta ${(f.concentrazioni[k(PENTOSO)] || 0).toExponential(1)} mol/L (gli zuccheri si disfano in meno di un anno: il pozzo misurato)`);
+  if (!anello) stona('formosio: il ribosio ad anello (furanosio) non entra in quattro generazioni: la chiusura dell\'anello arriva dopo i pentosi aperti');
+  // (3) ribosio + adenina + fosfato in una pozza quasi asciutta a 80 °C: i nucleosidi come specie possibili
+  const ADENOSINA_ = 'Nc1ncnc2c1ncn2C1OC(CO)C(O)C1O', t2 = Date.now(), n = M.rete({ 'OCC1OC(O)C(O)C1O': 0.1, [ADENINA]: 0.1, 'OP(=O)(O)O': 0.1 }, { pH: 7, T: 353.15, attivitaAcqua: 0.01 }, { profondita: 2, fascio: 30, tempoMassimo: 40000 });
+  const glicosidi = [...n.specie.keys()].filter((q) => M.classi(q).glicoside > 0 && /n|N/.test(q) && M.conta(q).N >= 5), raccolto = n.ha(ADENOSINA_) ? n.concentrazioni[k(ADENOSINA_)] : n.raccoltoDa(ADENOSINA_);
+  assert.ok(glicosidi.length >= 1 || n.ha(ADENOSINA_) || raccolto > 0, 'almeno un nucleoside (uno zucchero legato per il carbonio anomerico a un azoto della base) tra le specie possibili');
+  console.log(`      ribosio + adenina + fosfato quasi asciutti a 80 °C: ${n.specie.size} specie in ${Date.now() - t2} ms; ${glicosidi.length} N-glicosidi dell'adenina nel nucleo${glicosidi.length ? ' (il più abbondante: ' + glicosidi.sort((x, y) => (n.concentrazioni[y] || 0) - (n.concentrazioni[x] || 0))[0] + ', ' + (n.concentrazioni[glicosidi[0]] || 0).toExponential(1) + ' mol/L)' : ''}; l'adenosina vera (legata all'azoto 9) ${n.ha(ADENOSINA_) ? 'è nel nucleo' : `raccoglierebbe ${raccolto.toExponential(1)} mol/L: sta sul bordo`}`);
+  if (!n.ha(ADENOSINA_)) stona(`l'adenosina (N9) resta sul bordo (${raccolto.toExponential(1)} mol/L): ribosio e adenina scaldati insieme danno soprattutto i ribosidi dell'ammina esociclica — è il «problema del nucleoside» degli esperimenti (Fuller, Sanchez e Orgel 1972 [ricordato]), ma qui i numeri sono delle regole generali, non misurati`);
+  // (4) l'adenina da cinque HCN: con il flusso la rete degli oligomeri dell'HCN non ci arriva (ci arriva la ricerca guidata, più sopra)
+  const t3 = Date.now(), h = M.rete({ 'C#N': 1, N: 0.1 }, { pH: 9.2, T: 298.15 }, { profondita: 4, fascio: 25, tempoMassimo: 12000 });
+  assert.ok(h.ha('NC(C#N)C#N'), 'il trimero dell\'HCN (amminomalononitrile) entra per flusso'); console.log(`      HCN 1 mol/L a pH 9,2: ${h.specie.size} specie in ${Date.now() - t3} ms; amminomalononitrile ${(h.concentrazioni[k('NC(C#N)C#N')] || 0).toExponential(1)} mol/L; adenina ${h.ha(ADENINA) ? 'nel nucleo' : 'no'}`);
+  if (!h.ha(ADENINA)) stona('adenina da 5 HCN: con il criterio del flusso la rete si ferma agli oligomeri lineari (trimero, tetrameri): il diamminomaleonitrile e la chiusura degli anelli non raccolgono abbastanza; ci arriva solo la ricerca guidata («verso»), che non è un criterio fisico');
+  // (5) in aria ossidata (CO2, N2, acqua, fosfato): nessun riducente, nessuna di queste molecole
+  const oss = M.rete({ 'O=C=O': 1e-3, 'N#N': 1e-3, 'OP(=O)(O)O': 1e-4 }, { pH: 8, T: 353.15 }, { profondita: 5, fascio: 25, tempoMassimo: 20000 });
+  for (const x of [GLY, ADENINA, PENTOSO, 'OCC1OC(O)C(O)C1O', 'C#N', 'C=O']) assert.ok(!oss.ha(x), `in aria ossidata non c'è ${x}`); assert.ok(![...oss.specie.keys()].some((q) => { const c = M.conta(q); return c.C > 0 && c.N > 0; }), 'nessun legame tra carbonio e azoto');
+  console.log(`      CO2 + N2 + fosfato in acqua a 80 °C (aria ossidata): ${oss.specie.size} specie (${[...oss.specie.keys()].slice(0, 8).join(', ')}): niente glicina, niente zuccheri, niente basi`);
+});
+
+// ───────────── i pozzi: quanto dura ogni cosa (vite misurate per classe di legame)
+const ANNO = 3.15576e7, CITOSINA = 'Nc1cc[nH]c(=O)n1', URACILE = 'O=c1cc[nH]c(=O)[nH]1', ADENOSINA = 'Nc1ncnc2c1ncn2C1OC(CO)C(O)C1O', DMP = 'COP(=O)(O)OC', RNA2 = 'OCC(O)COP(=O)(O)OC';
+await prova('i pozzi: citosina 19 giorni a 100 °C e 340 anni a 25; ribosio 73 minuti a 100 °C; RNA 5 anni, peptide 385, DNA 31 milioni a 25 °C (entro 3 volte)', () => {
+  const t12 = (x, C, pH = 7) => M.pozzi(x, { T: 273.15 + C, pH }).mezzaVita, entro3 = (v, atteso, che) => assert.ok(v > atteso / 3 && v < atteso * 3, `${che}: ${v} contro ${atteso}`);
+  const misure = [[CITOSINA, 100, 19 * 86400, 'citosina a 100 °C'], [CITOSINA, 25, 340 * ANNO, 'citosina a 25 °C'], [ADENINA, 100, 1 * ANNO, 'adenina a 100 °C'], [ADENINA, 25, 1e4 * ANNO, 'adenina a 25 °C'], [URACILE, 100, 12 * ANNO, 'uracile a 100 °C'],
+    [RIBOSIO, 100, 73 * 60, 'ribosio a 100 °C'], [RIBOSIO, 0, 44 * ANNO, 'ribosio a 0 °C'], [RNA2, 25, 5 * ANNO, 'fosfodiestere con ossidrile vicino (RNA) a 25 °C'], [GLYGLY, 25, 385 * ANNO, 'legame peptidico a 25 °C'], [DMP, 25, 31e6 * ANNO, 'fosfodiestere (DNA) a 25 °C']];
+  for (const [x, C, atteso, che] of misure) entro3(t12(x, C), atteso, che);
+  // le classi sono regole sul grafo, non nomi: ogni ammide, ogni glicoside, ogni zucchero
+  const c = (x) => M.classi(M.chiave(x)); assert.equal(c('CC(=O)NC').ammide, 1); assert.equal(c('NCC(=O)NCC(=O)NCC(=O)O').ammide, 2); assert.equal(c(GLY).ammide, 0); assert.equal(c('NC(N)=O').ammide, 0); assert.equal(c(ADENOSINA).glicoside, 1); assert.equal(c(ADENOSINA).adenina, 1); assert.equal(c(RIBOSIO).zucchero, 1); assert.equal(c('OCC=O').zucchero, 1); assert.equal(c('CC(=O)C(=O)O').zucchero, 0); assert.equal(c(DMP).dna, 1); assert.equal(c(RNA2).rna, 1); assert.equal(c('CCO').zucchero + c('CCO').ammide, 0);
+  // il freddo conserva, il caldo distrugge: ogni vita cala con la temperatura; tre legami si rompono tre volte più in fretta di uno
+  for (const x of [CITOSINA, ADENINA, RIBOSIO, GLYGLY, DMP, RNA2, ADENOSINA]) assert.ok(t12(x, 0) > 10 * t12(x, 25) * 0.3 && t12(x, 25) > 30 * t12(x, 100), `${x}: 0 °C ${t12(x, 0)}, 25 °C ${t12(x, 25)}, 100 °C ${t12(x, 100)}`);
+  tra(M.pozziMisurati(M.chiave('NCC(=O)NCC(=O)NCC(=O)NCC(=O)O'), {}).k / M.pozziMisurati(M.chiave(GLYGLY), {}).k, 2.99, 3.01, 'tre legami peptidici contro uno');
+  // l'RNA sente il pH (l'ossidrile vicino attacca da anione), le basi no (ma fuori da pH 4,5-9 la misura non vale)
+  assert.ok(t12(RNA2, 25, 9) < t12(RNA2, 25, 7) / 10 && M.pozzi(CITOSINA, { pH: 11 }).fuoriIntervallo && !M.pozzi(CITOSINA, { pH: 7 }).fuoriIntervallo);
+  console.log(`      a 0 / 25 / 100 °C: ${[['citosina', CITOSINA], ['adenina', ADENINA], ['ribosio', RIBOSIO], ['RNA', RNA2], ['peptide', GLYGLY], ['DNA', DMP]].map(([n, x]) => `${n} ${[0, 25, 100].map((C) => { const a = t12(x, C) / ANNO; return a >= 1 ? a.toPrecision(2) + ' a' : a * 365.25 >= 1 ? (a * 365.25).toPrecision(2) + ' g' : (a * 525960).toPrecision(2) + ' min'; }).join(' / ')}`).join('; ')}`);
+  // che cosa darebbero le regole generali da sole (una barriera per famiglia): è il motivo per cui le vite entrano come dati
+  const regola = (x, atteso) => { let k = 0; for (const r of M.reazioni(x, 'O', { lente: true })) { if (r.prodotti.length !== 2 || !M.misurato(r, ACQUA)) continue; try { k = Math.max(k, M.velocita(r, ACQUA).k); } catch { /* */ } } return Math.LN2 / k / ANNO; };
+  const rg = [['peptide', regola(GLYGLY), 385], ['glicoside', regola('COC1OC(CO)C(O)C1O'), 4e6], ['fosfodiestere', regola(DMP), 31e6]];
+  for (const [n, v, m] of rg) stona(`${n}: le regole generali (barriera di famiglia) danno ${v.toPrecision(2)} anni a 25 °C, misurati ${m}: la vita entra come dato misurato per classe di legame`);
+  assert.ok(M.reazioni(CITOSINA, 'O', { lente: true, tutte: true }).every((r) => !r.prodotti.includes('N')), 'le regole generali non hanno la deamminazione: è un pozzo proprio');
+  const ad = t12(ADENOSINA, 25) / ANNO; if (ad < 1000) stona(`adenosina: ${ad.toPrecision(2)} anni a 25 °C (misurato: migliaia di anni [ricordato]): gli attacchi dall'interno sul carbonio anomerico restano troppo facili anche con la barriera corretta`);
+});
+
+await prova('i pozzi: ciò che resta è sorgente × vita; con la luce ultravioletta c\'è un pozzo in più; i ΔG di condensazione', () => {
+  // una sorgente costante di citosina in acqua a 100 °C: lo stato stazionario dell'integratore contro sorgente × vita
+  const C100 = { T: 373.15, pH: 7, solvente: 'acqua' }, p = M.pozzi(CITOSINA, C100), s = 1e-12, k = M.chiave(CITOSINA);
+  const e = M.evolvi([{ reagenti: ['sorgente'], prodotti: [k], k: s, kInversa: 0 }, { reagenti: [k], prodotti: [], k: p.k, kInversa: 0 }], { sorgente: 1 }, 100 * p.vita, { fisse: ['sorgente'] });
+  tra(e.c[k] / p.stazionario(s), 0.97, 1.03, 'stato stazionario / (sorgente × vita)'); tra(p.stazionario(s) / (s * p.mezzaVita / Math.LN2), 0.999, 1.001, 'sorgente × vita');
+  // lo stesso dentro una rete: la citosina messa in una rete a 100 °C ha il suo pozzo misurato, e il freddo ne conserva 6000 volte di più
+  const quanto = (T) => { const r = M.rete({ [CITOSINA]: 0 }, { T, pH: 7 }, { profondita: 1, atomiMassimi: 9 }), pz = r.reazioni.filter((x) => x.tipo === 'pozzo' && x.misurato === 'citosina' && x.reagenti.includes(k)); assert.equal(pz.length, 1);
+    const ev = M.evolvi([...r.reazioni, { reagenti: ['sorgente'], prodotti: [k], k: s, kInversa: 0 }], { sorgente: 1 }, 300 * M.pozzi(CITOSINA, { T }).vita, { fisse: ['sorgente'] }); return ev.c[k]; };
+  const caldo = quanto(373.15), freddo = quanto(298.15); tra(caldo / p.stazionario(s), 1 / 3, 3, 'citosina a regime nella rete a 100 °C / (sorgente × vita)'); tra(freddo / caldo, 2000, 20000, 'quanto di più ne conserva il freddo');
+  console.log(`      citosina che nasce a ${s} mol/L/s: a regime ${e.c[k].toExponential(2)} mol/L a 100 °C (sorgente × vita ${p.stazionario(s).toExponential(2)}); nella rete ${caldo.toExponential(2)} a 100 °C e ${freddo.toExponential(2)} a 25 °C`);
+  // la luce: la glicina in acqua al buio non ha pozzi; sotto l'ultravioletto di una stella come il Sole sì
+  const buio = M.pozzi(GLY, ACQUA), sole = M.pozzi(GLY, { ...ACQUA, luce: { Tstella: 5772, diluizione: 2.16e-5 } }); assert.ok(!(buio.k > 0) && sole.k > 0 && sole.voci[0].classe === 'fotolisi' && !sole.voci[0].misurato);
+  const sch = M.pozzi(GLY, { ...ACQUA, luce: { Tstella: 5772, diluizione: 2.16e-5, trasmissione: (nm) => (nm < 330 ? 0 : 1) } }); assert.ok(sch.k < sole.k / 100, 'uno schermo che taglia sotto 330 nm toglie il pozzo');
+  stona(`fotolisi della glicina: la soglia del cromoforo dalle regole è ${Math.max(...M.fotolisi(GLY, { Tstella: 5772, diluizione: 2.16e-5 }).map((f) => f.sottoNm)).toFixed(0)} nm (misurato: assorbe sotto ~230 nm [ricordato]): la vita alla luce è una stima per difetto`);
+  console.log(`      glicina sotto il Sole senza schermo: vita ${(sole.vita / 86400).toPrecision(2)} giorni (fotolisi, regola generale); con uno schermo sotto 330 nm ${sch.k > 0 ? (sch.vita / ANNO).toPrecision(2) + ' anni' : 'nessun pozzo'}`);
+  // la condensazione in acqua: il peptide esce dalle regole, il glicoside e il fosfodiestere dal dato misurato
+  const pep = M.passoDiCondensazione(GLY, GLY, 'peptide', ACQUA), gli = M.passoDiCondensazione(RIBOSIO, RIBOSIO, 'glicosidico', ACQUA), gliR = M.passoDiCondensazione(RIBOSIO, RIBOSIO, 'glicosidico', { ...ACQUA, misure: false });
+  assert.ok(!pep.misurato && gli.misurato && !gliR.misurato); tra(pep.dG, 9.2 - 4, 9.2 + 4, 'ΔG di Gly + Gly dalle regole (misurato +9,2)'); tra(gli.dG, 15.8, 16.0, 'ΔG del glicoside (dato misurato)');
+  tra(M.passoDiCondensazione(RIBOSIO, RIBOSIO, 'glicosidico', { ...ACQUA, attivitaAcqua: 0.001 }).dG, -2, 0, 'il glicoside in una pozza quasi asciutta');
+  if (Math.abs(gliR.dG - 15.9) > 4) stona(`ΔG di condensazione del glicoside dalle regole generali: ${gliR.dG.toFixed(1)} contro +15,9 kJ/mol misurati (si usa il dato)`);
+  // la rete usa le vite misurate: l'idrolisi di Gly-Gly ha k = ln2/385 anni, e la condensazione segue dal ΔG delle regole
+  const r = M.rete({ [GLYGLY]: 1 }, ACQUA, { profondita: 1, atomiMassimi: 9 }), idr = r.reazioni.find((x) => x.misurato === 'ammide' && x.prodotti.length === 2 && x.prodotti.every((q) => q === M.chiave(GLY))); assert.ok(idr, 'l\'idrolisi di Gly-Gly nella rete');
+  tra(Math.LN2 / idr.k / ANNO, 380, 390, 'vita del legame peptidico nella rete (anni)'); tra(-8.314e-3 * 298.15 * Math.log(idr.k / idr.kInversa), -12, -5, 'ΔG dell\'idrolisi nella rete (kJ/mol)');
+  console.log(`      condensazione in acqua: peptide ${pep.dG.toFixed(1)} kJ/mol dalle regole (misurato +9,2); glicoside ${gli.dG.toFixed(1)} (dato; le regole darebbero ${gliR.dG.toFixed(1)}); fosfodiestere: dato +13,8`);
+});
+
+// ───────────── i cristalli molecolari: precipitare, e un conglomerato che amplifica una mano
+await prova('i cristalli: sopra la solubilità si precipita; un conglomerato macinato che racemizza finisce di una mano sola (Viedma); semi di una mano → solo quella', () => {
+  // con la solubilità data (misurata): glicina 3,3 mol/L a 25 °C
+  const g = M.cristallo(GLY, { solubilita: 3.3, concentrazione: 5 }); assert.ok(g.precipita && !g.stimata && Math.abs(g.sovrasaturazione - 5 / 3.3) < 1e-9 && !g.chirale && !M.cristallo(GLY, { solubilita: 3.3, concentrazione: 1 }).precipita && M.cristallo(ALA, { solubilita: 1.9 }).chirale);
+  // la solubilità STIMATA dal reticolo (una coppia nel vuoto × tre): un ordine di grandezza, quando va bene
+  const misurate = [['acido benzoico', 'OC(=O)c1ccccc1', 0.028], ['naftalene', 'c1ccc2ccccc2c1', 2.4e-4], ['glicina', GLY, 3.3], ['adenina', ADENINA, 8e-3]], t0 = Date.now(), righe = [];
+  for (const [nome, x, mis] of misurate) { const c = M.cristallo(x); assert.ok(c.stimata && c.reticolo >= 0 && c.solubilita > 0 && isFinite(c.solubilita)); righe.push(`${nome} ${c.solubilita.toExponential(0)} (misurata ${mis})`); if (c.solubilita > 30 * mis || c.solubilita < mis / 30) stona(`solubilità stimata dal reticolo, ${nome}: ${c.solubilita.toExponential(1)} contro ${mis} mol/L misurati (E_ret stimata ${c.reticolo.toFixed(0)} kJ/mol): una coppia nel vuoto non è un reticolo`); }
+  console.log(`      solubilità stimate (mol/L): ${righe.join('; ')}; ${Date.now() - t0} ms`);
+  // Viedma: l'1% di sbilancio, con macinazione e racemizzazione in soluzione, diventa una mano sola; con l'altro segno, l'altra
+  const base = { totale: 1, solubilita: 0.1, L: 0.202, D: 0.198, tempo: 3e5 }, v = M.conglomerato(base), w = M.conglomerato({ ...base, L: 0.198, D: 0.202 });
+  assert.ok(Math.abs(v.eeIniziale - 0.01) < 1e-9 && v.ee > 0.99 && w.ee < -0.99 && Math.abs(v.ee + w.ee) < 1e-9, `ee ${v.ee} e ${w.ee}`); tra(v.L + v.D + v.soluto, 0.9999, 1.0001, 'la materia si conserva'); tra(v.soluto, 0.15, 0.25, 'il soluto resta vicino alla solubilità delle due mani');
+  for (let i = 1; i < v.storia.length; i++) assert.ok(v.storia[i].ee >= v.storia[i - 1].ee - 1e-9, 'lo sbilancio cresce sempre');
+  // senza macinazione non ci sono frammenti: lo sbilancio resta; senza racemizzazione le mani non si contendono il soluto: resta
+  const fermo = M.conglomerato({ ...base, macinazione: 0 }), separati = M.conglomerato({ ...base, racemizza: false }); assert.ok(Math.abs(fermo.ee) < 0.02 && Math.abs(separati.ee) < 0.02);
+  // esattamente pari resta pari (nessuna mano è preferita dalla legge: sceglie il caso dello sbilancio iniziale)
+  assert.ok(Math.abs(M.conglomerato({ ...base, L: 0.2, D: 0.2 }).ee) < 1e-12);
+  // cristallizzazione preferenziale: soluzione sovrasatura che racemizza, seminata con una mano sola → precipita tutta di quella
+  const pref = M.conglomerato({ ...base, L: 0.001, D: 0, macinazione: 0 }); assert.ok(pref.D === 0 && pref.L > 0.75 && pref.ee === 1);
+  console.log(`      conglomerato con l'1% di sbilancio: macinato e racemizzante → ee ${v.ee.toFixed(3)} (l'opposto → ${w.ee.toFixed(3)}); senza macinazione ${fermo.ee.toFixed(3)}; senza racemizzazione ${separati.ee.toFixed(3)}; semi di una mano sola: ${pref.L.toFixed(2)} mol/L di cristalli L, 0 di D`);
 });
 
 console.log(`\n${ok} prove superate; ${nonTorna} cose che non tornano con la realtà (stampate sopra).`);

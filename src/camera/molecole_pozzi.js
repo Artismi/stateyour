@@ -30,7 +30,7 @@
 //   deamminazione   –NH2 su un carbonio aromatico che ha accanto un azoto d'anello; tre sottoclassi dalla forma dell'anello:
 //               anello singolo (citosina), anelli fusi (adenina), anelli fusi con un C=O (guanina);
 //   apertura dell'anello   anello aromatico singolo con N–C(=O)–N e senza –NH2 (uracile; la timina, 5 volte più lenta, no);
-//   zucchero    un carbonile (aldeide o chetone) o un emiacetale con un O–H sul carbonio accanto.
+//   zucchero    un carbonile (aldeide o chetone), il suo idrato o un emiacetale, con un O–H sul carbonio accanto.
 // SEMPLIFICAZIONI: il pH conta solo per l'RNA (k ∝ [OH⁻] tra pH 5 e 13 [ricordato: Li e Breaker 1999]); fuori da pH
 // 4,5-9 le vite delle basi non valgono (lo dice «fuoriIntervallo»); niente catalisi da ioni metallici sui pozzi; i
 // prodotti degli zuccheri e dell'uracile non sono seguiti (escono dalla rete come «catrame»).
@@ -85,7 +85,8 @@ export function classi(x) {
   // lo zucchero: carbonile (non acido, non ammide, non estere) o emiacetale, con un O–H sul carbonio accanto
   for (let i = 0; i < n && !out.zucchero; i++) { if (Z(i) !== 6 || A[i].ar) continue; const etero1 = vic[i].filter((v) => v.o === 1 && (Z(v.j) === 8 || Z(v.j) === 7));
     const carbonile = haO2(i) && etero1.length === 0, emiacetale = vic[i].every((v) => v.o === 1) && OH(i) && vic[i].some((v) => Z(v.j) === 8 && A[v.j].h === 0);
-    if ((carbonile || emiacetale) && vic[i].some((v) => Z(v.j) === 6 && !A[v.j].ar && vic[v.j].every((w) => w.o === 1) && OH(v.j))) segna('zucchero', i); }
+    const idrato = vic[i].every((v) => v.o === 1) && vic[i].filter((v) => Z(v.j) === 8 && A[v.j].h > 0).length >= 2; // (l'aldeide idratata è ancora lo zucchero)
+    if ((carbonile || emiacetale || idrato) && vic[i].some((v) => Z(v.j) === 6 && !A[v.j].ar && vic[v.j].every((w) => w.o === 1) && OH(v.j))) segna('zucchero', i); }
   if (nome) CLASSI.set(nome, out); return out;
 }
 
@@ -109,6 +110,24 @@ export function misurato(r, cond = {}) {
   if (!classe || altri) return null;
   const mis = CONDENSAZIONE_MISURATA[CLASSE_DI_LEGAME[classe]];
   return { classe, verso, k: kDiClasse(classe, cond), dG: mis.regola ? null : -mis.dG };
+}
+
+// LA BARRIERA DELLA SOSTITUZIONE SU QUESTI CENTRI. La famiglia «sostituzione» ha una barriera intrinseca sola (135 kJ/mol):
+// sul carbonile di un'ammide, sul carbonio anomerico, sul fosforo di un diestere sbaglia sempre dalla stessa parte. Di
+// quanto, lo dicono le vite misurate dell'idrolisi (a 25 °C: Gly-Gly 11 anni dalle regole contro 385; metil-riboside 82
+// contro 4 milioni; dimetilfosfato 4,3 contro 31 milioni): RT·ln del rapporto, in kJ/mol. La stessa correzione vale
+// per ogni altro nucleofilo che attacca quel centro (un'ammina, un ossidrile della stessa molecola): è un dato per
+// CLASSE DI CENTRO, non per molecola. Per il fosfodiestere con l'ossidrile vicino vale direttamente la vita misurata.
+export const CORREZIONE_DI_CENTRO = { ammide: 8.8, glicoside: 26.8, dna: 39.2 };
+// correzioneDiCentro(r, cond) → null | { classe, dBarriera (kJ/mol) } | { classe: 'rna', k (1/s), verso }
+export function correzioneDiCentro(r, cond = {}) {
+  if (r.tipo !== 'sostituzione' || (r.classe !== 'anomerico' && r.classe !== 'acile')) return null;
+  const conta = (l) => { const s = { ammide: 0, glicoside: 0, rna: 0, dna: 0 }; for (const k of l) { if (k === 'O') continue; const c = classi(k); for (const cl of IDROLISI) s[cl] += c[cl]; } return s; }, a = conta(r.reagenti), b = conta(r.prodotti);
+  if (r.classe === 'anomerico') return a.glicoside + b.glicoside > 0 ? { classe: 'glicoside', dBarriera: CORREZIONE_DI_CENTRO.glicoside } : null;
+  if (a.rna !== b.rna) return { classe: 'rna', k: kDiClasse('rna', cond), verso: a.rna > b.rna ? 1 : -1 };
+  if (a.dna !== b.dna || (a.rna + a.dna > 0 && b.rna + b.dna > 0 && a.ammide === b.ammide)) return { classe: 'dna', dBarriera: CORREZIONE_DI_CENTRO.dna }; // (anche il diestere che cambia alcol)
+  if (a.ammide !== b.ammide || (a.ammide > 0 && b.ammide > 0)) return { classe: 'ammide', dBarriera: CORREZIONE_DI_CENTRO.ammide }; // (anche l'ammide che passa da un azoto a un altro: la dichetopiperazina)
+  return null;
 }
 
 // i pozzi che le regole generali non hanno come reazione: deamminazione (→ la forma con O–H al posto di NH2, più
