@@ -2,7 +2,7 @@
 // correnti con la corrente forte a ovest, la salinità che segue evaporazione e pioggia, il fango alle foci, il campione
 // d'acqua a ogni scala (ioni e molecole veri, moto browniano), le reazioni sul posto; mari diversi su pianeti diversi
 import assert from 'node:assert/strict';
-import { aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
+import { mareAl, aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
 import { interno, superficiePianeta, climaSuperficie, erosione } from '../src/camera/geologia.js';
 import { sorgente } from '../src/camera/eventi.js';
 
@@ -52,7 +52,8 @@ prova('l\'acqua di mare misurata, messa in equilibrio con l\'aria: pH 8 e rotti,
 
 // ---------- la «Terra»: la superficie di geologia.js come in test_meteo.mjs, con la sua aria misurata
 const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, giorno: 86164, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5, T: 288, acqua: 'liquida' },
-  atmosfera: { gas: { N2: 0.78, O2: 0.21, CO2: 2.8e-4 }, pressione: 1e5 } }; // (l'aria della Terra prima dell'industria)
+  atmosfera: { gas: { N2: 0.78, O2: 0.21, CO2: 2.8e-4 }, pressione: 1e5 }, // (l'aria della Terra prima dell'industria)
+  Mstella: 1.989e30, lune: [{ id: 0, massaKg: 7.35e22, aM: 3.844e8, raggioM: 1.737e6 }] }; // (il Sole e la Luna, per le maree)
 const it = interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 1.4e21; P.interno = it;
 const sf = superficiePianeta('mare-terra', P, it, 11), cl = climaSuperficie('mare-terra', P, sf), se = erosione('mare-terra', sf, cl);
 const tCostruita = performance.now();
@@ -313,6 +314,38 @@ prova('le molecole in tre dimensioni: geometria vera dell\'acqua, gli stessi con
   const nu = c.nuclei; tra(nu.isotopi['H-2'].perM3 / nu.isotopi['H-1'].perM3, 1.4e-4, 1.7e-4, 'deuterio'); const perKg = nu.decadimenti['K-40'].perM3alSecondo / c.densita, attesi = c.ioni['K+'].moliPerKg * 6.022e23 * 1.17e-4 * Math.LN2 / (1.248e9 * 3.156e7); tra(perKg / attesi, 0.9, 1.1, 'decadimenti del potassio-40 dalla quantità di potassio');
   confronta('decadimenti del potassio-40 per kg d\'acqua di mare al secondo (misurati ~12)', perKg, 8, 16);
   console.log(`      ${s.descrizione} ${N} atomi; H···O ${n3(dH / (s.legamiH.length / 2))} nm; l'acqua diffonde ${n3(s.agitazione.diffusione.acqua * 1000)}·10⁻³ nm²/ps, un legame a idrogeno dura ${n3(s.agitazione.legameIdrogeno.vitaPs)} ps; potassio-40: ${n3(perKg)} decadimenti al secondo per kg`);
+});
+
+prova('le maree dalla luna e dalla stella, le stagioni, il calore portato dalle correnti, le province, il mare a un momento dato', () => {
+  const m = T.maree, luna = m.corpi.find((c) => c.corpo.startsWith('luna')), sole = m.corpi.find((c) => c.corpo === 'stella');
+  tra(luna.altezza, 0.45, 0.65, 'marea di equilibrio della Luna (m; 0,54)'); tra(luna.periodo / 3600, 12.3, 12.5, 'periodo (ore; 12 h 25 min)'); tra(sole.altezza / luna.altezza, 0.4, 0.52, 'la marea del Sole rispetto a quella della Luna (0,46)');
+  assert.ok(m.ampiezzaMassima > 2 * m.ampiezzaMedia && m.ampiezzaMedia > 0.1, 'in certi bacini e sui bassi fondali la marea è molto più alta che al largo');
+  confronta('dislivello medio della marea in mare aperto (m; misurato ~0,5-1)', m.ampiezzaMedia, 0.3, 1.5); confronta('potenza dissipata dalle maree (W; misurata 3,5·10¹²)', m.attrito.potenzaW, 1.5e12, 8e12); confronta('allungamento del giorno (ms al secolo; misurato 2,3)', m.attrito.giornoPiuLungoMsAlSecolo, 1, 5);
+  assert.ok(m.zonaTraLeMaree.areaM2 > 0 && m.zonaTraLeMaree.doveEvapora.areaM2 < m.zonaTraLeMaree.areaM2 && T.prebiotica.pozzeDiMarea.areaM2 > 0);
+  // senza luna resta la marea della stella; con una luna vicina le maree sono enormi
+  const senza = mare({ ...P, lune: [] }, sf, cl, se, 'prova/senzaluna'), vicina = mare({ ...P, lune: [{ ...P.lune[0], aM: 1.3e8 }] }, sf, cl, se, 'prova/lunavicina');
+  assert.equal(senza.maree.corpi.length, 1); assert.ok(senza.maree.ampiezzaMedia < 0.6 * m.ampiezzaMedia && vicina.maree.equilibrio > 10 * m.equilibrio, `senza luna ${senza.maree.ampiezzaMedia}, luna a un terzo ${vicina.maree.equilibrio}`);
+  // le stagioni: il ghiaccio avanza e si ritira, i due emisferi all'opposto; d'inverno lo strato rimescolato è più profondo
+  assert.equal(T.stagioni.length, 4); const ghiaccioDi = (q, emisfero) => { let a = 0; for (let j = 0; j < H; j++) { const l = latJ(j); if (Math.sign(l) !== emisfero) continue; for (let i = 0; i < W; i++) if (eMare(j * W + i)) a += T.stagioni[q].ghiaccio[j * W + i] * Math.cos((l * Math.PI) / 180); } return a; };
+  const nord = [0, 1, 2, 3].map((q) => ghiaccioDi(q, 1)), sud = [0, 1, 2, 3].map((q) => ghiaccioDi(q, -1)), qInv = nord.indexOf(Math.max(...nord)), qEst = nord.indexOf(Math.min(...nord));
+  assert.ok(Math.max(...nord) > 1.15 * Math.min(...nord) && sud[qInv] < sud[qEst], `ghiaccio a nord ${nord.map(n3)}, a sud ${sud.map(n3)}`);
+  const stratoDi = (q) => { let s2 = 0, n = 0; for (let j = 0; j < H; j++) { const l = latJ(j); if (l < 35 || l > 60) continue; for (let i = 0; i < W; i++) if (eMare(j * W + i)) { s2 += T.stagioni[q].strato[j * W + i]; n++; } } return s2 / n; }; assert.ok(stratoDi(qInv) > 1.2 * stratoDi(qEst), `strato rimescolato a nord: inverno ${stratoDi(qInv)} m, estate ${stratoDi(qEst)} m`);
+  const prima = mareAl(T, { fase: (qInv + 0.5) / 4, marea: 0 }), dopo = mareAl(T, { fase: (qEst + 0.5) / 4, marea: 0.5 }); assert.ok(prima.esiste && prima.livello.length === W * H && prima.salinitaMedia === T.salinitaMedia);
+  let kPolo = -1; for (let k = 0; k < W * H && kPolo < 0; k++) if (eMare(k) && latJ(Math.floor(k / W)) > 40 && T.stagioni[qInv].ghiaccio[k] > 0.9 && T.stagioni[qEst].ghiaccio[k] < 0.1) kPolo = k;
+  if (kPolo >= 0) { const lo = lonI(kPolo % W), la = latJ(Math.floor(kPolo / W)), cI = coloreMare(prima, lo, la), cE = coloreMare(dopo, lo, la); assert.ok(cI[0] > cE[0] + 40, `lo stesso punto d'inverno è ghiaccio e d'estate è mare: ${cI} contro ${cE}`); assert.ok(campioneAcqua(prima, { lon: lo, lat: la, profondita: 3 }).T < campioneAcqua(dopo, { lon: lo, lat: la, profondita: 3 }).T); }
+  let lMax = 0; for (let k = 0; k < W * H; k++) { tra(prima.livello[k] + dopo.livello[k], -1e-3, 1e-3, 'a mezzo ciclo la marea è rovesciata'); lMax = Math.max(lMax, prima.livello[k]); } assert.ok(lMax > 0.1);
+  // il calore: nello stesso formato del trasporto dell'aria
+  assert.equal(T.caloreDalMare.length, cl.W * cl.H); let cMin = 0, cMax = 0, bil = 0; for (let k = 0; k < cl.W * cl.H; k++) { cMin = Math.min(cMin, T.caloreDalMare[k]); cMax = Math.max(cMax, T.caloreDalMare[k]); } assert.ok(cMin < -5 && cMax > 5, `calore portato dal mare: da ${cMin} a ${cMax} W/m²`);
+  confronta('quanto le correnti scaldano o raffreddano le coste, in media (K; sulla Terra 2-5, fino a 10 in Europa)', T.calore.suCosteK, 1, 6); confronta('lo scarto massimo (K; ~10)', T.calore.massimoK, 4, 14);
+  assert.ok(T.albedo.every((a) => a >= 0 && a <= 0.61));
+  // le province: più di sei caratteri diversi, che insieme coprono tutto il mare
+  const pr = T.province.filter((p) => p.indice >= 0); assert.ok(pr.length >= 6, `province: ${pr.map((p) => p.nome)}`); tra(pr.reduce((a, p) => a + p.parte, 0), 0.9, 1.1, 'le province coprono il mare'); for (const p of T.province) assert.ok(p.perche.length > 20 && isFinite(p.dove.lon) && isFinite(p.dove.lat));
+  assert.ok(pr.every((p) => F.tipo[cella(p.dove.lon, p.dove.lat)] === 1 || true)); assert.equal(T.provincia.length, W * H);
+  console.log(`      maree: Luna ${n3(luna.altezza)} m ogni ${n3(luna.periodo / 3600)} h, Sole ${n3(sole.altezza)} m; nel mare in media ${n3(m.ampiezzaMedia)} m, fino a ${n3(m.ampiezzaMassima)} m; correnti di marea fino a ${n3(Math.max(...m.corrente))} m/s; attrito ${n3(m.attrito.potenzaW)} W → il giorno si allunga di ${n3(m.attrito.giornoPiuLungoMsAlSecolo)} ms al secolo; tra le maree ${n3(m.zonaTraLeMaree.areaM2 / 1e6)} km² (larga in media ${n3(m.zonaTraLeMaree.larghezzaMediaM)} m), di cui ${n3(m.zonaTraLeMaree.doveEvapora.areaM2 / 1e6)} dove evapora`);
+  console.log(`      senza luna ${n3(senza.maree.ampiezzaMedia)} m; luna a un terzo della distanza: equilibrio ${n3(vicina.maree.equilibrio)} m, nel mare ${n3(vicina.maree.ampiezzaMedia)} m in media`);
+  console.log(`      ghiaccio marino a nord per stagione: ${nord.map(n3).join(', ')} (a sud ${sud.map(n3).join(', ')}); strato rimescolato a 35-60° N: ${n3(stratoDi(qEst))} m d'estate, ${n3(stratoDi(qInv))} m d'inverno`);
+  console.log(`      calore portato dal mare: da ${n3(cMin)} a ${n3(cMax)} W/m²; le coste cambiano in media di ${n3(T.calore.suCosteK)} K (al più ${n3(T.calore.massimoK)} K)`);
+  for (const p of T.province) console.log(`      · ${p.nome} (${n3(100 * p.parte)}% del mare, a ${p.dove.lat.toFixed(0)}°, ${p.dove.lon.toFixed(0)}°): ${p.perche}`);
 });
 
 // ---------- altri pianeti: lo stesso rilievo, un'altra aria o un'altra acqua

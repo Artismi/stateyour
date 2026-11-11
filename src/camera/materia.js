@@ -53,9 +53,10 @@
 //     fissione nell'apatite 110 °C, nello zircone 240 °C, nella mica 300 °C (Gleadow e Duddy 1981; Hurford 1986;
 //     Bernet 2009); tracce di rinculo α nella mica 50 °C (Gögen e Wagner 2000); aloni nella biotite 250 °C;
 //   · la dose che colora la biotite: ~3·10¹³ α/cm² (irraggiamenti con ioni elio: Gentry 1974);
-//   · i raggi cosmici primari presso il Sole: 1,8·10⁴·E^(−2,7) nucleoni/(m²·s·sr·GeV) (PDG), con la modulazione del
-//     vento solare (campo di forza, potenziale 0,55 GV; il Sole stesso non c'è: è un dato); i muoni: per ogni nucleone
-//     primario, 0,14/1,8 muoni alla stessa energia (dalla formula di Gaisser 1990, che al livello del mare è
+//   · i raggi cosmici primari presso il Sole: lo spettro interstellare di Burger e Usoskin (in alto 1,8·10⁴·E^(−2,7)
+//     nucleoni/(m²·s·sr·GeV): PDG), con la modulazione del vento solare (campo di forza, 0,55 GV: per un'altra stella
+//     non la sappiamo calcolare, resta questa); i muoni: per ogni nucleone primario, 0,14/1,8 muoni a un decimo
+//     dell'energia (dalla formula di Gaisser 1990, che al livello del mare è
 //     0,14·E^(−2,7)·[1/(1 + 1,1·E·cosθ/115 GeV) + 0,054/(1 + 1,1·E·cosθ/850 GeV)] per cm²·s·sr·GeV); lunghezza di
 //     attenuazione dei nucleoni 120 g/cm²; neutroni al suolo sulla Terra 0,013 per cm²·s (Gordon e altri 2004);
 //     elettroni: 0,3 dei muoni al livello del mare (PDG); produzione di C-14 sulla Terra: 2 atomi per cm²·s;
@@ -525,4 +526,146 @@ export function raggiCosmici(luogo = {}) {
     out.produzioneC14 = 2e4 * (medio(pn, rel) / medio(terra, 1)) * (suAzoto / 0.995) * (X0 > 0 ? -Math.expm1(-X0 / LamN) : 0);
   }
   return out;
+}
+
+// =====================================================================================
+// 5. CHE COSA ACCADE IN QUEL PUNTO, E OGNI QUANTO
+// =====================================================================================
+const fmt = (x, d = 2) => (x === 0 ? '0' : Math.abs(x) >= 1e5 || Math.abs(x) < 1e-2 ? x.toExponential(1).replace('.', ',').replace(/e\+?(-?)(\d+)/, (_, s, e) => `·10${[...(s + e)].map((c) => '⁻⁰¹²³⁴⁵⁶⁷⁸⁹'['-0123456789'.indexOf(c)]).join('')}`) : x.toLocaleString('it-IT', { maximumSignificantDigits: d + 1 }));
+// un tempo detto a parole (secondi)
+export function fmtTempo(s) {
+  if (!isFinite(s)) return 'mai';
+  const passi = [[1e-15, 1e-18, 'attosecondi'], [1e-12, 1e-15, 'femtosecondi'], [1e-9, 1e-12, 'picosecondi'], [1e-6, 1e-9, 'nanosecondi'], [1e-3, 1e-6, 'microsecondi'], [1, 1e-3, 'millisecondi'], [120, 1, 'secondi'], [7200, 60, 'minuti'], [172800, 3600, 'ore'], [2 * ANNO, 86400, 'giorni'], [2e3 * ANNO, ANNO, 'anni'], [2e6 * ANNO, 1e3 * ANNO, 'mila anni'], [2e9 * ANNO, 1e6 * ANNO, 'milioni di anni'], [Infinity, 1e9 * ANNO, 'miliardi di anni']];
+  for (const [fino, unitaS, nome] of passi) if (s < fino) return `${fmt(s / unitaS, 1)} ${nome}`;
+  return '';
+}
+const vocale = (n) => /^[aeiou]/i.test(n), del = (n) => (vocale(n) ? `dell'${n}` : `del ${n}`), nel = (n) => (vocale(n) ? `nell'${n}` : `nel ${n}`);
+// il carbonio-14 del carbonio che scambia con l'aria: a regime, ciò che i raggi cosmici producono in una vita media
+// (8267 anni) diviso per il carbonio che se lo spartisce (kg per m²: quello dell'aria e quello sciolto nel mare)
+export function rapportoC14(luogo) {
+  if (luogo.carbonio14 != null) return luogo.carbonio14;
+  const serbatoio = luogo.carbonioKgM2 ?? 0; if (!(serbatoio > 0)) return 0;
+  return (raggiCosmici(luogo).produzioneC14 * (5730 / Math.LN2) * ANNO) / ((serbatoio / 12.011e-3) * N_A);
+}
+// IL RADON NELL'ARIA sopra la terraferma (Bq/m³): il radio della roccia (in equilibrio con il suo uranio) lo produce; ne
+// esce dai grani una parte, diffonde nel suolo (cammino √(D/λ) ≈ 1 m) ed esce; l'aria lo rimescola in alto per √(K/λ)
+export function radonNellAria(luogo) {
+  const suolo = luogo.suolo; if (!suolo || luogo.sopra?.acquaM > 0) return 0;
+  const U = suolo.U ?? 2.7e-6, eta = luogo.etaPianeta ?? luogo.pianeta?.eta ?? ETA_RIFERIMENTO, c = CATENE['uranio-238'], lam = lambdaDi(3.8235 * G);
+  const radio = (U / 238.03e-3) * N_A * c.abbondanza * quantoResta(c.mezza, eta) * lambdaDi(c.mezza), flusso = 0.2 * radio * (suolo.densita ?? 1600) * Math.sqrt(lam * 2e-6);
+  return flusso / (lam * Math.sqrt(5 / lam));
+}
+// → { mezzo, processi: [{ id, nuclide, tipo, catena, perKg, perM3 (decadimenti al secondo), oppure flusso (per m² e per secondo,
+//     per i raggi cosmici), emette: [{ particella, energia (MeV), percorso (m) }], origine (a parole), visibile }], cosmici,
+//     totale: { perKg, perM3 }, calore (W/kg), neutrini: { perM2 (al secondo), frase },
+//     attesa(latoM): ogni quanto accade ciascun processo in un cubo di quel lato → [{ id, origine, secondi, frase }] }
+export function sorgentiNaturali(luogo) {
+  const m = mezzo(luogo), rho = m.densita * 1000, processi = [];
+  const qui = { ...luogo }; if (qui.tipo !== 'roccia' && qui.carbonio14 == null) qui.carbonio14 = rapportoC14(luogo);
+  const att = attivita(qui);
+  for (const a of att) {
+    const emette = [];
+    if (a.tipo === 'α') { emette.push({ particella: 'alfa', energia: a.energia, percorso: percorso('alfa', a.energia, m).m }); emette.push({ particella: a.figlia, energia: a.rinculo, percorso: percorso({ Z: a.Zf, A: a.A - 4 }, a.rinculo, m).m, rinculo: true }); }
+    else if (a.tipo === 'β') { emette.push({ particella: 'elettrone', energia: a.energia, massima: a.Q, percorso: percorso('elettrone', a.energia, m).m }); emette.push({ particella: 'antineutrino', energia: a.neutrino, percorso: Infinity }); if (a.gamma > 0.01) emette.push({ particella: 'fotone γ', energia: a.gamma, percorso: 1 / (0.0637 * Math.pow(Math.max(a.gamma, 0.1), -0.45) * m.ZsuA * 2 * rho / 10) }); }
+    else if (a.tipo === 'cattura') { emette.push({ particella: 'fotone γ', energia: a.gamma, percorso: 1 / (0.0637 * Math.pow(a.gamma, -0.45) * m.ZsuA * 2 * rho / 10) }); emette.push({ particella: 'neutrino', energia: a.neutrino, percorso: Infinity }); }
+    else { const AL = 96, AH = 238 - AL - 2, EL = (a.energia * AH) / (AL + AH), EH = a.energia - EL; emette.push({ particella: 'frammento leggero', energia: EL, percorso: percorso({ Z: 38, A: AL }, EL, m).m }); emette.push({ particella: 'frammento pesante', energia: EH, percorso: percorso({ Z: 54, A: AH }, EH, m).m }); emette.push({ particella: 'neutroni', energia: 4, percorso: Infinity }); }
+    processi.push({ id: `${a.nuclide} ${a.tipo}`, ...a, perM3: a.perKg * rho, emette, visibile: a.tipo !== 'cattura',
+      origine: a.tipo === 'fissione' ? "fissione spontanea dell'uranio-238" : a.tipo === 'cattura' ? `cattura di un elettrone ${nel(a.nuclide)} (un fotone γ da ${fmt(a.gamma)} MeV)` : `decadimento ${a.tipo} ${del(a.nuclide)}${a.catena && a.catena !== a.nuclide ? ` (catena ${del(a.catena)})` : ''}` });
+  }
+  // nell'aria sopra la terraferma: il radon e i suoi figli a vita breve (in equilibrio con lui)
+  if (m.tipo === 'aria') { const rn = radonNellAria(luogo); if (rn > 0) for (const [nome, Z, A, tipo, Q, mezza, , x, y] of CATENE['uranio-238'].passi.slice(6, 11)) {
+    const E = tipo === 'α' ? (Q * (A - 4)) / A : x, a = { nuclide: nome, catena: 'uranio-238', Z, A, tipo, mezza, Q, energia: E, gamma: y || 0, depositata: tipo === 'α' ? Q : x + y, neutrino: tipo === 'α' ? 0 : Q - x - y, figlia: `${NOMI_EL[tipo === 'α' ? Z - 2 : Z + 1]}-${tipo === 'α' ? A - 4 : A}`, Zf: tipo === 'α' ? Z - 2 : Z + 1, rinculo: tipo === 'α' ? (E * 4) / (A - 4) : 0 };
+    processi.push({ id: `${nome} ${tipo}`, ...a, perKg: rn / rho, perM3: rn, visibile: true, emette: [{ particella: tipo === 'α' ? 'alfa' : 'elettrone', energia: E, percorso: percorso(tipo === 'α' ? 'alfa' : 'elettrone', E, m).m }],
+      origine: `decadimento ${tipo} ${del(nome)}${nome === 'radon-222' ? ', un gas uscito dal suolo (lo fa il radio della roccia)' : ', figlio del radon uscito dal suolo'}` }); } }
+  // i raggi cosmici arrivati fin qui
+  const rc = raggiCosmici(luogo), km = (rc.quotaNascita / 1000).toLocaleString('it-IT', { maximumFractionDigits: 0 });
+  const sotto = rc.colonnaSopra > 0 ? `, sopravvissuto a ${fmtLunghezza((luogo.sopra.acquaM || 0) + (luogo.sopra.ghiaccioM || 0) + (luogo.sopra.rocciaM || 0))} di ${luogo.sopra.rocciaM > 0 ? 'roccia' : luogo.sopra.ghiaccioM > 0 ? 'ghiaccio' : 'acqua'}` : '';
+  const cosmico = (id, part, flusso, energia, origine) => { if (flusso > 0) processi.push({ id, tipo: 'cosmico', particella: part, flusso, energia, emette: [{ particella: part, energia, percorso: PARTICELLE[part] ? percorso(part, energia, m).m : Infinity }], origine, visibile: !!PARTICELLE[part] }); };
+  cosmico('muone cosmico', 'muone-', rc.muoni, rc.energiaMuoni * 1000, `muone di uno sciame nato a ${km} km di quota${sotto}`);
+  cosmico('elettrone cosmico', 'elettrone', rc.elettroni, 30, rc.colonnaSopra > 0 ? 'elettrone strappato da un muone cosmico' : `elettrone di uno sciame nato a ${km} km di quota`);
+  if (rc.colonnaAria < 300) cosmico('raggio cosmico primario', 'protone', rc.nucleoni, rc.primarioTipico(0.5) * 1000, rc.colonnaAria > 1 ? `raggio cosmico primario: l'aria è troppo poca per fermarlo (${fmt(rc.colonnaAria)} g/cm²)` : "raggio cosmico primario: qui non c'è aria che lo fermi");
+  else cosmico('protone cosmico', 'protone', rc.nucleoni / 2, 1000, `protone di uno sciame nato a ${km} km di quota`);
+  cosmico('neutrone cosmico', 'neutrone', rc.neutroni, 1, 'neutrone evaporato da un nucleo colpito da un raggio cosmico');
+  const perKg = processi.reduce((s, a) => s + (a.perKg || 0), 0);
+  // I NEUTRINI PASSANO E BASTA. Quelli della stella (2 per ogni 26,73 MeV di fusione) e quelli dei decadimenti β di qui
+  // attraversano la finestra senza lasciare niente: un neutrino da 1 MeV urta un elettrone con una sezione di ~10⁻⁴⁸ m²
+  const st = luogo.stella, daStella = st?.Lw > 0 && st?.aM > 0 ? (2 * st.Lw) / (26.73 * MEV_J * 4 * Math.PI * st.aM * st.aM) : 0, elettroniKg = m.ZsuA * N_A * 1000, urtiKg = daStella * 1e-49 * elettroniKg;
+  return { mezzo: m, processi, cosmici: rc, totale: { perKg, perM3: perKg * rho }, calore: att.reduce((s, a) => s + a.perKg * a.depositata * MEV_J, 0), carbonio14: qui.carbonio14 ?? 0,
+    neutrini: { perM2: daStella, urtiPerKg: urtiKg, frase: `I neutrini passano e basta${daStella > 0 ? `: dalla stella ne arrivano ${fmt(daStella)} per metro quadro al secondo, e in un chilo di questa materia ne urta un elettrone uno ogni ${fmtTempo(1 / urtiKg)}` : ''}; ogni decadimento β di qui ne aggiunge uno, che esce dal pianeta senza toccare niente.` },
+    attesa(latoM) { const V = latoM ** 3, A2 = latoM * latoM; return processi.map((p) => { const ritmo = p.tipo === 'cosmico' ? p.flusso * A2 : p.perM3 * V; return { id: p.id, origine: p.origine, ritmo, secondi: 1 / ritmo, frase: `${p.tipo === 'cosmico' ? `un ${p.id}` : p.origine} ogni ${fmtTempo(1 / ritmo)}` }; }).filter((x) => x.ritmo > 0).sort((a, b) => a.secondi - b.secondi); } };
+}
+
+// =====================================================================================
+// 6. I LUOGHI: dal punto della mappa (o dal campione d'acqua) al `luogo`
+// =====================================================================================
+const CONDUCIBILITA = 3, G_NEWTON = 6.674e-11; // (W/m/K) della roccia: con il calore che esce dal pianeta dà di quanto la temperatura cresce scendendo
+// ciò che del pianeta serve qui: gravità, campo, aria, stella, età. P è il pianeta di cosmo.js (sistema(…).pianeti[k])
+function delPianeta(P = {}, { lat = 45, quotaM = 0 } = {}) {
+  const g = P.clima?.g ?? (P.massaKg && P.raggioM ? (G_NEWTON * P.massaKg) / P.raggioM ** 2 : 9.81), p0 = isFinite(P.clima?.pressione) ? P.clima.pressione : 0, T = P.clima?.T ?? 288;
+  const gas = P.atmosfera?.gas && Object.keys(P.atmosfera.gas).length ? Object.fromEntries(Object.entries(P.atmosfera.gas).filter(([f, x]) => x > 1e-6 && (() => { try { MASSA_GAS(f); return true; } catch { return false; } })())) : null;
+  let mu = 28.96; if (gas) { let s = 0, t = 0; for (const f in gas) { s += gas[f] * MASSA_GAS(f); t += gas[f]; } if (t > 0) mu = s / t; }
+  const H = (8.314 * T) / (mu * 1e-3 * g), B0 = P.B0 ?? P.interno?.B0 ?? 0, sl = Math.sin((lat * Math.PI) / 180);
+  return { pianeta: { g, raggioM: P.raggioM ?? 6.371e6, B0, eta: P.interno?.eta ?? ETA_RIFERIMENTO, q: P.interno?.q ?? 0.087 }, latitudine: lat,
+    aria: { pressione: p0 * Math.exp(-Math.max(0, quotaM) / H), T, Talta: P.clima?.Teq ? P.clima.Teq / Math.pow(2, 0.25) : undefined, ...(gas ? { gas } : {}) },
+    B: B0 * Math.sqrt(1 + 3 * sl * sl), etaPianeta: P.interno?.eta ?? ETA_RIFERIMENTO, stella: P.Lw > 0 ? { Lw: P.Lw, aM: P.aM } : undefined, scalaAltezza: H };
+}
+// quanto carbonio scambia con l'aria (kg per m²): quello dei gas dell'aria e quello sciolto nel mare (stato.carbonio, mol/kg, se c'è)
+function carbonioScambiato(P, mare) {
+  const g = P.clima?.g ?? 9.81, p = isFinite(P.clima?.pressione) ? P.clima.pressione : 0, gas = P.atmosfera?.gas || {}; let mu = 0, c = 0, tot = 0;
+  for (const f in gas) { let a; try { a = atomiDi(f); } catch { continue; } mu += gas[f] * MASSA_GAS(f); c += gas[f] * (a.C || 0); tot += gas[f]; }
+  let kg = mu > 0 ? (p / g) * ((c * 12.011) / mu) : 0;
+  if (mare && P.interno?.acquaKg > 0 && P.raggioM) { const dic = typeof mare.carbonio === 'number' ? mare.carbonio : mare.carbonio?.totale ?? mare.carbonio?.DIC ?? 0; kg += (dic * 12.011e-3 * P.interno.acquaKg) / (4 * Math.PI * P.raggioM ** 2); }
+  return kg;
+}
+// UN PUNTO DI ROCCIA (o di ghiaccio, o di neve). Tutto è facoltativo tranne i minerali (o S, da cui si leggono):
+//   S          la superficie di mappa.js (superficieDi): { P, se, cl, mare, k }; oppure P da solo
+//   minerali   [{ nome, frazione }] di quel punto (se mancano: S.se.materiali.continente o .basalto)
+//   continente vero/falso (crosta dei continenti o basalto); ghiaccio: vero se il punto è ghiaccio o neve
+//   T, lat, lon, quotaM, profonditaM (sotto la superficie), acquaSopraM, etaRoccia (anni), bagnato (piove: c'è erosione)
+//   raggi      { relativo }: il cielo dei raggi cosmici di quella stella rispetto al Sole (cosmo.js); indirizzo: a parole
+// Le regole: nei continenti, se c'è acqua, il pirosseno della norma (chimica.js lavora senz'acqua) è biotite, con il
+// potassio che le serve preso al feldspato; i minerali accessori sono quelli del tipo di roccia (ACCESSORI); la
+// temperatura cresce scendendo di q/k (il calore che esce da quel pianeta diviso la conducibilità della roccia).
+export function luogoDaRoccia({ S = null, P = S?.P || {}, minerali = null, continente = true, ghiaccio = false, T = null, lat = 45, lon = 0, quotaM = 0, profonditaM = 0, acquaSopraM = 0, etaRoccia = null, bagnato = null, raggi = null, indirizzo = null, elementi = null } = {}) {
+  const dp = delPianeta(P, { lat, quotaM }), Ts = T ?? P.clima?.T ?? 288, gradiente = dp.pianeta.q / CONDUCIBILITA, qui = Ts + gradiente * profonditaM;
+  const acqua = bagnato ?? (P.clima?.acqua === 'liquida' || !!S?.mare?.esiste), mat = S?.se?.materiali || {};
+  const base = { ...dp, T: qui, Tsuperficie: Ts, gradiente, profonditaM, lon, raggi: raggi || undefined, indirizzo: indirizzo || (S?.k ? `${S.k}/roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}` : `roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}`),
+    sopra: { acquaM: acquaSopraM, rocciaM: profonditaM }, carbonioKgM2: carbonioScambiato(P, S?.mare),
+    // l'erosione dove piove: 30 m per milione di anni (la stessa legge di chimica.js e geologia.js); altrove niente
+    denudazione: acqua ? 3e-5 : 0 };
+  if (ghiaccio) return { ...base, tipo: 'ghiaccio', nome: 'ghiaccio', minerali: [{ nome: 'ghiaccio d\'acqua', frazione: 1 }], sopra: { acquaM: acquaSopraM, ghiaccioM: profonditaM }, etaRoccia: etaRoccia ?? 1e4, elementi: elementi || { K: 0, U: 0, Th: 0, Rb: 0 } };
+  let lista = (minerali || (continente ? mat.continente : mat.basalto) || (continente ? [{ nome: 'quarzo', frazione: 0.3 }, { nome: 'feldspato potassico', frazione: 0.35 }, { nome: 'plagioclasio', frazione: 0.25 }, { nome: 'pirosseno', frazione: 0.1 }] : [{ nome: 'plagioclasio', frazione: 0.5 }, { nome: 'pirosseno', frazione: 0.4 }, { nome: 'olivina', frazione: 0.1 }])).filter((m) => MATERIALI[m.nome]).map((m) => ({ nome: m.nome, frazione: m.frazione }));
+  if (continente && acqua && !lista.some((m) => m.nome === 'biotite')) { // KAlSi3O8 + 3 (Mg,Fe)SiO3 + H2O → biotite + 3 SiO2
+    const px = lista.find((m) => m.nome === 'pirosseno'), kf = lista.find((m) => m.nome === 'feldspato potassico');
+    if (px && kf) { const k = Math.min(px.frazione / (3 * 108), kf.frazione / 278.3), bio = k * 433.5; px.frazione -= k * 3 * 108; kf.frazione -= k * 278.3; const qz = lista.find((m) => m.nome === 'quarzo'); if (qz) qz.frazione += k * 3 * 60.08; lista.push({ nome: 'biotite', frazione: bio }); lista = lista.filter((m) => m.frazione > 1e-6); }
+  }
+  const tot = lista.reduce((a, m) => a + m.frazione, 0) || 1; lista.forEach((m) => { m.frazione /= tot; }); lista.sort((a, b) => b.frazione - a.frazione);
+  const accessori = Object.entries(continente ? ACCESSORI.continente : ACCESSORI.basalto).map(([nome, frazione]) => ({ nome, frazione }));
+  // l'età della roccia: quella data; se no, quella del pianeta (i continenti non affondano)
+  return { ...base, tipo: 'roccia', nome: continente ? 'roccia dei continenti' : 'basalto', continente, minerali: lista, accessori, etaRoccia: Math.min(etaRoccia ?? dp.etaPianeta, dp.etaPianeta), ...(elementi ? { elementi } : {}) };
+}
+// UN CAMPIONE D'ACQUA di mare.js (campioneAcqua) o lo stato del mare: da qui il potassio sciolto (totali, mol/kg), la
+// temperatura, la profondità (l'acqua che sta sopra), e se l'acqua è ossidata (l'uranio vi si scioglie)
+export function luogoDaAcqua({ S = null, P = S?.P || {}, stato = S?.mare || null, campione = null, lat = 45, lon = 0, profonditaM = campione?.profondita ?? 0, T = null, totali = null, raggi = null, indirizzo = null, crosta = null } = {}) {
+  const dp = delPianeta(P, { lat }), tot = totali || campione?.totali || stato?.totali || {}, cont = S?.se?.materiali?.continente;
+  return { ...dp, tipo: 'acqua', nome: 'acqua', T: T ?? campione?.T ?? P.clima?.T ?? 288, totali: tot, profonditaM, lon, sopra: { acquaM: profonditaM }, raggi: raggi || undefined,
+    ossidata: stato?.pO2 != null ? stato.pO2 > 1e-6 : undefined, crosta: crosta || (cont ? { U: radioelementi(cont).U } : undefined),
+    carbonio: (typeof stato?.carbonio === 'number' ? stato.carbonio : stato?.carbonio?.totale ?? stato?.carbonio?.DIC ?? 0) * 12.011e-3, carbonioKgM2: carbonioScambiato(P, stato),
+    indirizzo: indirizzo || (S?.k ? `${S.k}/acqua/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}` : `acqua/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}`) };
+}
+// L'ARIA sopra un punto (a una quota): per guardare uno sciame, o il radon uscito dal suolo
+export function luogoDaAria({ S = null, P = S?.P || {}, lat = 45, lon = 0, quotaM = 0, suMare = false, raggi = null, indirizzo = null, suolo = null } = {}) {
+  const dp = delPianeta(P, { lat, quotaM }), cont = S?.se?.materiali?.continente, gas = dp.aria.gas || { N2: 0.781, O2: 0.209, Ar: 0.0093, CO2: 0.0004 }; let mu = 0, c = 0, t = 0;
+  for (const f in gas) { mu += gas[f] * MASSA_GAS(f); c += gas[f] * (atomiDi(f).C || 0); t += gas[f]; }
+  return { ...dp, tipo: 'aria', nome: 'aria', T: dp.aria.T, quotaM, lon, sopra: {}, raggi: raggi || undefined, carbonio: mu > 0 ? (c * 12.011) / mu : 0, carbonioKgM2: carbonioScambiato(P, S?.mare) || undefined,
+    suolo: suMare ? null : suolo || { U: cont ? radioelementi(cont).U : 2.7e-6, densita: 1600 },
+    indirizzo: indirizzo || (S?.k ? `${S.k}/aria/${lon.toFixed(4)}/${lat.toFixed(4)}/${quotaM}` : `aria/${lon.toFixed(4)}/${lat.toFixed(4)}/${quotaM}`) };
+}
+// IL CIELO DEI RAGGI di una stella rispetto a quello del Sole. I raggi cosmici li fanno le supernove (un decimo della
+// loro energia) e il campo della galassia li trattiene: la loro densità va come il ritmo delle supernove diviso la
+// superficie del disco. Via Lattea: 2 supernove al secolo in un disco di 15 kpc di raggio (dati). «galassia» è ciò che
+// dà cosmo.js (galassia(n, id): ritmoSN all'anno, forma.unitaM il raggio che tiene quasi tutte le stelle).
+export function cieloRelativo(galassia) {
+  const ritmo = galassia?.ritmoSN, R = galassia?.forma?.unitaM; if (!(ritmo > 0) || !(R > 0)) return { relativo: 1 };
+  return { relativo: limita((ritmo / 0.02) / (R / (15 * 3.0857e19)) ** 2, 1e-3, 1e3) };
 }
