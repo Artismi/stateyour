@@ -21,6 +21,7 @@
 // (passo, con gli urti del solvente presi da una sorgente di eventi). Non è fatto per dinamiche lunghe.
 // Unità: Å, kJ/mol, kJ/mol/Å, fs, u.
 
+import { CONDENSAZIONE_MISURATA } from './molecole_pozzi.js';
 import { atomo } from './molecole_atomi.js';
 import { molecola, grezzo, chiave, anelli, viciniSigma, speculare, stereoisomeri } from './molecole_grafo.js';
 import { forma, dominio, lunghezzaLegame } from './molecole_forma.js';
@@ -187,9 +188,12 @@ export function polimero(unita, legame = 'peptide', condizioni = null) {
 export function passoDiCondensazione(a, b, legame = 'peptide', c = {}) {
   const dim = polimero([a, b], legame).m, T = c.T ?? 298.15, secco = c.solvente !== 'acqua', cond = { T, solvente: secco ? null : 'acqua', pH: c.pH ?? 7, attivitaAcqua: c.attivitaAcqua ?? 1 };
   const E = (x) => energia(x, cond).G; let dG = E(dim) + E('O') - E(a) - E(b), nota = secco ? 'a secco: l\'acqua esce come vapore' : `in acqua a pH ${cond.pH}`;
+  // (in acqua il ΔG del glicoside e del fosfodiestere NON esce dalle regole generali — +5 e +26 contro +15,9 e +13,8 kJ/mol
+  // misurati —: lì entra il dato misurato, dichiarato, corretto per l'attività dell'acqua; il peptide esce da sé)
+  const mis = CONDENSAZIONE_MISURATA[legame]; let misurato = false; if (!secco && mis && !mis.regola && c.misure !== false) { dG = mis.dG + R * T * Math.log(cond.attivitaAcqua); misurato = true; nota += ` (ΔG°′ misurato: ${CONDENSAZIONE_MISURATA.fonte})`; }
   if (secco) dG += R * T * Math.log(c.pAcqua ?? 0.01);
   let attivazione = 0; if (c.attivatore) { const att = molecola(c.attivatore), idr = c.prodottoAttivatore ? molecola(c.prodottoAttivatore) : null; if (idr) { attivazione = E(idr) - E(att) - E('O') - (secco ? R * T * Math.log(c.pAcqua ?? 0.01) : 0); dG += attivazione; nota += `, con ${chiave(att)} che prende l'acqua`; } }
-  return { dG, attivazione, dimero: dim, nota };
+  return { dG, attivazione, dimero: dim, nota, misurato };
 }
 // i diedri della spina dorsale di un peptide (φ, ψ, ω in gradi) da passare a forma(): eliche (−57, −47), foglietti (−139, 135)
 export function diedriPeptide(p, phi = -57, psi = -47, omega = 180) {

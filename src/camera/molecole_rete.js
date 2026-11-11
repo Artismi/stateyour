@@ -18,6 +18,16 @@ import { molecola, chiave, conta, valida } from './molecole_grafo.js';
 import { energia, neutra, sitiAcidoBase, risolvi, R } from './molecole_energia.js';
 import { reazioni, velocita, conservata, espandiStereo } from './molecole_reazioni.js';
 import { aggregazione } from './molecole_forze.js';
+import { misurato, pozziPropri, kDiClasse } from './molecole_pozzi.js';
+
+// la velocità di una reazione della rete: quella delle regole generali, tranne dove la reazione rompe (o fa) un legame di
+// una classe la cui vita in acqua è MISURATA (molecole_pozzi.js): lì vale la misura, e l'inversa segue dall'equilibrio
+export function velocitaVera(r, cond, pozzi = true) {
+  if (r.tipo === 'pozzo') return { k: (r.legami || 1) * kDiClasse(r.misurato, cond), kInversa: 0, dG: r.dG, barriera: null };
+  const v = velocita(r, cond); if (!pozzi || cond.solvente !== 'acqua') return v; const ms = misurato(r, cond); if (!ms) return v;
+  const dGi = ms.dG ?? (ms.verso > 0 ? v.dG : -v.dG), kC = ms.k * Math.exp(dGi / (R * (cond.T ?? 298.15))); // (idrolisi: k misurata; condensazione: k·exp(ΔG idrolisi/RT))
+  return { ...v, dG: ms.verso > 0 ? dGi : -dGi, k: ms.verso > 0 ? ms.k : kC, kInversa: ms.verso > 0 ? kC : ms.k, misurato: ms.classe };
+}
 
 const pesanti = (m) => m.atomi.filter((a) => a.Z > 1).length;
 const forma0 = (k) => { const m = molecola(k); return m.atomi.some((a) => a.q) ? chiave(neutra(m)) : chiave(m); };
@@ -28,17 +38,20 @@ function somiglianza(m, T) { const a = conta(m), b = conta(T), na = Object.value
 //   { specie: Map(chiave → { chiave, generazione, pesanti, da: reazione che l'ha data per prima }), reazioni: [...], generazioni: [quante specie nuove],
 //     ha(x), via(x) (le reazioni che dalla partenza portano a x), espandi(n) (altre n generazioni), condizioni, partenza, tempoMs }
 // partenza: lista di molecole, o { molecola: concentrazione (mol/L) }; condizioni: { T, P, pH, solvente, attivitaAcqua, ioni, minerali, luce, misure }
-export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000, atomiMassimi = 8, piccole = 3, sogliaDG = 60, kMinima = 1e-16, radicali = false, verso = null, fascio = Infinity, tempoMassimo = Infinity, lente: opzLente = null, soglia = null, famiglie = 'veloci', stereo = false, tempo = 3e9 } = {}) {
+export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000, atomiMassimi = 8, piccole = 3, sogliaDG = 60, kMinima = 1e-16, radicali = false, verso = null, fascio = Infinity, tempoMassimo = Infinity, lente: opzLente = null, soglia = null, famiglie = 'veloci', stereo = false, tempo = 3e9, pozzi = true } = {}) {
   const cond = { T: 298.15, solvente: 'acqua', pH: 7, ...condizioni, memoria: new Map() }, lente = opzLente ?? cond.T >= 340, t0 = Date.now(), bersaglio = verso ? molecola(verso) : null, bersaglioK = bersaglio ? chiave(bersaglio) : null;
   const iniziali = Array.isArray(partenza) ? Object.fromEntries(partenza.map((x) => [forma0(x), 1])) : Object.fromEntries(Object.entries(partenza).map(([k, v]) => [forma0(k), v]));
   if (cond.solvente === 'acqua' && !('O' in iniziali)) iniziali.O = 55.5;
   const specie = new Map(), lista = [], viste = new Set(), generazioni = [], coppieFatte = new Set();
-  const metti = (k, gen, da = null) => { if (specie.has(k)) return false; const m = molecola(k); specie.set(k, { chiave: k, generazione: gen, pesanti: pesanti(m), da }); return true; };
+  const metti = (k, gen, da = null) => { if (specie.has(k)) return false; const m = molecola(k); specie.set(k, { chiave: k, generazione: gen, pesanti: pesanti(m), da });
+    // i pozzi che le regole generali non hanno (deamminazione delle basi, zuccheri che si disfano): vite misurate per classe
+    if (pozzi && cond.solvente === 'acqua' && k !== 'O') for (const p of pozziPropri(k, cond)) lista.push({ tipo: 'pozzo', reagenti: p.prodotti.length ? [k, 'O'] : [k], prodotti: p.prodotti, k: p.k, kInversa: 0, dG: -40, barriera: null, misurato: p.classe, legami: 1 });
+    return true; };
   for (const k in iniziali) metti(k, 0);
   let fronte = [...specie.keys()], gen = 0;
   const provaReazioni = (rr0, nuove) => { const rr = stereo ? espandiStereo(rr0) : rr0; for (const r0 of rr) { const r = { ...r0, reagenti: r0.reagenti.map(forma0).sort(), prodotti: r0.prodotti.map(forma0).sort() }; const id = [r.reagenti.join('.'), r.prodotti.join('.')].sort().join('>'); if (viste.has(id) || r.reagenti.join('.') === r.prodotti.join('.')) continue; viste.add(id);
       if (r.prodotti.some((p) => { const s = specie.get(p); return (s ? s.pesanti : pesanti(molecola(p))) > atomiMassimi; })) continue;
-      let v; try { v = velocita(r, cond); } catch { continue; } if (!(v.dG <= sogliaDG) || !isFinite(v.dG) || !(v.k >= kMinima)) continue; // (kMinima: ciò che non avviene nemmeno in cento milioni di anni non entra)
+      let v; try { v = velocitaVera(r, cond, pozzi); } catch { continue; } if (!(v.dG <= sogliaDG) || !isFinite(v.dG) || !(v.k >= kMinima)) continue; if (v.misurato) r.misurato = v.misurato; // (kMinima: ciò che non avviene nemmeno in cento milioni di anni non entra)
       r.dG = v.dG; r.barriera = v.barriera; r.k = v.k; r.kInversa = v.kInversa; lista.push(r); for (const p of r.prodotti) if (!specie.has(p)) { const c = nuove.get(p); if (!c || r.barriera < c.barriera) nuove.set(p, r); } } };
   const passo = () => { gen++; const nuove = new Map(), tutte = [...specie.keys()], piccoleK = tutte.filter((k) => specie.get(k).pesanti <= piccole || k in iniziali), inFronte = new Set(fronte);
     // CON UNA SOGLIA DI CONCENTRAZIONE: reagiscono tra loro tutte le specie che, lasciando andare la rete per «tempo» con le
@@ -72,7 +85,7 @@ export function scatole(r, definizioni, { passa = null, tempo = 1e9, k0 = 1, ric
   const nomi = Object.keys(definizioni), reaz = [], c0 = {}, fisse = [], att = {}, T = r.condizioni.T;
   const overton = (k) => { try { const a = aggregazione(k, { T, pH: r.condizioni.pH }); return Math.abs(a.carica) > 0.5 ? 0 : k0 * Math.exp(-Math.max(0, a.trasferimento) / (R * T)); } catch { return 0; } };
   for (const n of nomi) { const d = definizioni[n], cond = { ...r.condizioni, ...(d.condizioni || {}), memoria: new Map() };
-    for (const x of r.reazioni) { let v; try { v = velocita(x, cond); } catch { continue; } reaz.push({ tipo: x.tipo, reagenti: x.reagenti.map((k) => `${k}@${n}`), prodotti: x.prodotti.map((k) => `${k}@${n}`), k: v.k, kInversa: v.kInversa }); }
+    for (const x of r.reazioni) { let v; try { v = velocitaVera(x, cond); } catch { continue; } reaz.push({ tipo: x.tipo, reagenti: x.reagenti.map((k) => `${k}@${n}`), prodotti: x.prodotti.map((k) => `${k}@${n}`), k: v.k, kInversa: v.kInversa }); }
     for (const k of r.specie.keys()) c0[`${k}@${n}`] = d.tenute?.[k] ?? d.inizio?.[k] ?? 0; for (const k in d.tenute || {}) fisse.push(`${k}@${n}`); att[`O@${n}`] = cond.attivitaAcqua ?? 1; att[`[H+]@${n}`] = 1; }
   for (const k of r.specie.keys()) { if (k === 'O' || k === '[H+]') continue; const p = passa ? (typeof passa === 'function' ? passa(k) : passa[k] ?? 0) : overton(k); if (p > 0) for (let i = 0; i < nomi.length - 1; i++) reaz.push({ tipo: 'scambio', reagenti: [`${k}@${nomi[i]}`], prodotti: [`${k}@${nomi[i + 1]}`], k: p, kInversa: p }); }
   const e = evolvi(reaz, c0, tempo, { fisse, attivita: att, ricambio, passi: 240 }), out = {}; for (const n of nomi) out[n] = {}; for (const kk in e.c) { const i = kk.lastIndexOf('@'); out[kk.slice(i + 1)][kk.slice(0, i)] = e.c[kk]; }
@@ -146,7 +159,7 @@ export function stazionarie(r, { tenute = r.partenza, tempo = 1e12, ricambio = 1
 export function autocatalitici(r, { lunghezza = 7, massimo = 40, cibo = null, tempoMassimo = 10000 } = {}) {
   const food = new Set(cibo || Object.keys(r.partenza)), t0 = Date.now(), archi = new Map(), out = [], visti = new Set();
   // (ciò che il cibo dà da solo — gli idrati, gli oligomeri della formaldeide — è ancora cibo: un ciclo deve passare per qualcosa che dal cibo solo non nasce)
-  for (let cresce = true; cresce;) { cresce = false; for (const x of r.reazioni) for (const [da, a] of [[x.reagenti, x.prodotti], [x.prodotti, x.reagenti]]) if (da.every((q) => food.has(q))) for (const q of a) if (!food.has(q)) { food.add(q); cresce = true; } }
+  for (let cresce = true; cresce;) { cresce = false; for (const x of r.reazioni) for (const [da, a] of [[x.reagenti, x.prodotti], [x.prodotti, x.reagenti]]) if (da.length && da.every((q) => food.has(q))) for (const q of a) if (!food.has(q)) { food.add(q); cresce = true; } }
   const aggiungi = (da, a, reag, prod, dG, barriera, rz) => { for (const x of da) { if (food.has(x)) continue; if (da.filter((q) => !food.has(q)).length !== 1) return; (archi.get(x) || archi.set(x, []).get(x)).push({ reag, prod, a: a.filter((q) => !food.has(q)), dG, barriera, rz }); } };
   for (const x of r.reazioni) { aggiungi(x.reagenti, x.prodotti, x.reagenti, x.prodotti, x.dG, x.barriera, x); aggiungi(x.prodotti, x.reagenti, x.prodotti, x.reagenti, -x.dG, x.barriera - x.dG, { tipo: 'inversa di ' + x.tipo }); }
   const cerca = (inizio) => { const cammino = [], dentro = new Set([inizio]);

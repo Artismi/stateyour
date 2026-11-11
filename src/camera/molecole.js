@@ -93,7 +93,9 @@ import { energia as energia_, entalpiaCon, entalpiaGas, entropiaGas, termica, te
 import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, bilancio, INTRINSECHE, espandiStereo } from './molecole_reazioni.js';
 import { tensione, energiaStereo, campo, forze as forze_, minimizza, passo, insieme, cariche, aggregazione, polimero as polimero_, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa, scena3D as scena3D_ } from './molecole_forze.js';
 import { interazione, catalisiDa, copia, ripiega, superficie, adsorbi, CONCENTRAZIONE_EFFICACE } from './molecole_incontri.js';
-import { evolvi, scatole, rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche } from './molecole_rete.js';
+import { evolvi, scatole, rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche, velocitaVera } from './molecole_rete.js';
+import { POZZI, CONDENSAZIONE_MISURATA, classi, kDiClasse, pozziMisurati, misurato, pozziPropri } from './molecole_pozzi.js';
+export { POZZI, CONDENSAZIONE_MISURATA, classi, kDiClasse, pozziMisurati, misurato, velocitaVera };
 
 // ---------- l'interfaccia (i nomi chiesti; il resto è esportato più sotto)
 export const atomo = atomo_, molecola = molecola_, chiave = chiave_, valida = valida_, forma = forma_;
@@ -112,6 +114,21 @@ export { NUMERI_ATOMICI, interazione, catalisiDa, copia, ripiega, superficie, ad
 
 // ---------- IL RACCORDO con chimica.js e mare.js
 // le specie di chimica.js (formule) come grafi: è un dizionario di nomi, non di chimica (una formula non dice la struttura)
+// ---------- I POZZI di una molecola in acqua: tutto ciò che la distrugge, con la sua vita
+// pozzi(x, { T, pH, luce }) → { k (1/s), vita (s), mezzaVita (s), voci: [{ classe, nome, k, fonte, misurato }], fuoriIntervallo,
+//   stazionario(sorgente in mol/L/s) → mol/L (= sorgente × vita: ciò che resta dove la molecola nasce a quel ritmo) }
+// Tre generi di voci: (1) i legami di una classe con la vita MISURATA (molecole_pozzi.js: ammide, glicoside, fosfodiesteri,
+// basi, zuccheri); (2) i passi in discesa (ΔG < −15 kJ/mol) che le REGOLE GENERALI le danno da sola o con l'acqua, esclusi
+// quelli già contati in (1); (3) con «luce» (lo spettro del luogo: { Tstella, diluizione, trasmissione }), la FOTOLISI.
+export function pozzi(x, c = {}) {
+  const cond = { T: 298.15, pH: 7, solvente: 'acqua', ...c }, m = x && x.m ? x.m : molecola_(x), mis = pozziMisurati(chiave_(m), cond), voci = [...mis.voci]; let k = mis.k;
+  for (const r of reazioni_(m, null, { tutte: false }).concat(reazioni_(m, 'O', { tutte: false, lente: false, metalli: false }))) { let v; try { if (misurato(r, cond)) continue; v = velocita_(r, cond); } catch { continue; }
+    if (v.dG < -15 && isFinite(v.k) && v.k > 0) { voci.push({ classe: r.tipo, nome: `${r.tipo} (regola generale) → ${r.prodotti.join(' + ')}`, legami: 1, k: v.k, fonte: 'regola generale', misurato: false }); k += v.k; } }
+  if (cond.luce) { let J = 0; try { for (const f of fotolisi(m, cond.luce)) J += f.J || 0; } catch { J = 0; } if (J > 0) { voci.push({ classe: 'fotolisi', nome: 'fotolisi (regola generale: soglia del cromoforo e flusso di fotoni)', legami: 1, k: J, fonte: 'regola generale', misurato: false }); k += J; } }
+  voci.sort((a, b) => b.k - a.k);
+  return { k, vita: 1 / k, mezzaVita: Math.LN2 / k, voci, fuoriIntervallo: mis.fuoriIntervallo, stazionario: (sorgente) => sorgente / k };
+}
+
 export const GAS_DI_CHIMICA = { H2: '[HH]', He: '[He]', N2: 'N#N', O2: 'O=O', Cl2: 'ClCl', S2: 'S=S', H2O: 'O', CO: '[C-]#[O+]', CO2: 'O=C=O', CH4: 'C', NH3: 'N', HCN: 'C#N', H2CO: 'C=O', CH3OH: 'CO', H2S: 'S', SO2: 'O=S=O', NO: '[N]=O', C2H2: 'C#C', C2H6: 'CC', HCl: 'Cl' };
 // l'equilibrio di una miscela di gas con le energie di QUI (stesso problema di equilibrio() di chimica.js: minimo
 // dell'energia di Gibbs a T e P con gli atomi conservati; g = ΔHf − T·S a 298 K, come là; senza la fuliggine).
@@ -172,7 +189,7 @@ export function cheCosaChiede(x, { tempo = 3.156e9, T = 298.15, pH = 7 } = {}) {
   const piccola = m.atomi.length <= 400, prova_ = poli ? molecola_(passoDiCondensazione(poli.unita[0].nome, poli.unita[Math.min(1, poli.unita.length - 1)].nome, poli.tipo, {}).dimero) : m;
   let formazione = NaN; if (piccola && !metalli.length && !altri.length) { formazione = energia_(m, cond).G; for (const k in n) formazione -= n[k] * energia_(k, cond).G; }
   // quanto dura: la somma delle velocità dei passi in discesa che può fare da sola o con l'acqua
-  const perdita = (cc) => { let k = 0; for (const r of reazioni_(prova_, null, { tutte: false }).concat(reazioni_(prova_, 'O', { tutte: false, lente: false, metalli: false }))) { let v; try { v = velocita_(r, cc); } catch { continue; } if (v.dG < -15 && isFinite(v.k)) k += v.k; } return k; }; // (solo i passi davvero in discesa: gli equilibri tra forme della stessa molecola non la distruggono)
+  const perdita = (cc) => pozzi(prova_, cc).k; // (vite misurate per classe di legame, più i passi in discesa delle regole generali) // (solo i passi davvero in discesa: gli equilibri tra forme della stessa molecola non la distruggono)
   const vita = (cc) => Math.LN2 / Math.max(perdita({ solvente: 'acqua', ...cc }), 1e-300), finestra = (lista, fa) => { const buoni = lista.filter((v) => vita(fa(v)) >= tempo); return buoni.length ? [Math.min(...buoni), Math.max(...buoni)] : null; };
   const limiteMolecola = prova_.atomi.length <= 40, Ts = [273.15, 298.15, 323.15, 348.15, 373.15, 423.15, 473.15], pHs = [1, 3, 5, 7, 9, 11, 13];
   const finT = limiteMolecola ? finestra(Ts, (t) => ({ T: t, pH })) : null, finPH = limiteMolecola ? finestra(pHs, (p) => ({ T, pH: p })) : null, mezzaVita = limiteMolecola ? { 298: vita({ T: 298.15, pH }), 373: vita({ T: 373.15, pH }) } : null;

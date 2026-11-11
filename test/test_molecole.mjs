@@ -200,7 +200,7 @@ await prova('la rete da HCN + NH3 + formaldeide in acqua: che cosa trova (alla c
   // la via di Strecker, passo per passo, è nella rete: immina → amminonitrile → ammide → amminoacido
   const c = (a, b) => r.reazioni.some((x) => [x.reagenti, x.prodotti].some((l) => l.includes(k(a))) && [x.reagenti, x.prodotti].some((l) => l.includes(k(b)))); assert.ok(c('C=N', 'NCC#N') && c('NCC#N', 'NCC(=N)O') && c('NCC(=N)O', 'NCC(N)=O') && c('NCC(N)=O', GLY), 'i passi di Strecker');
   console.log('      la via più rapida che la rete trova per la glicina: ' + r.via(GLY).map((x) => `${x.reagenti.join(' + ')} → ${x.prodotti.join(' + ')} [${x.tipo}, ΔG ${x.dG.toFixed(0)}]`).join('; '));
-  for (const x of r.reazioni.slice(0, 400)) assert.ok(M.conservata(x)); if (gen(r, 'CC(N)C(=O)O') == null) console.log('      (l\'alanina chiede l\'acetaldeide: da questi tre ingredienti a 6 atomi pesanti non c\'è)');
+  for (const x of r.reazioni.slice(0, 400)) assert.ok(M.conservata(x) || (x.tipo === 'pozzo' && !x.prodotti.length), 'ogni reazione conserva gli atomi (tranne i pozzi dichiarati senza prodotti seguiti: zuccheri, uracile)'); if (gen(r, 'CC(N)C(=O)O') == null) console.log('      (l\'alanina chiede l\'acetaldeide: da questi tre ingredienti a 6 atomi pesanti non c\'è)');
   // determinismo
   const r2 = M.rete(['C=O', 'N', 'C#N'], { pH: 8, T: 298.15 }, { profondita: 3, atomiMassimi: 6 }), r3 = M.rete(['C#N', 'N', 'C=O'], { pH: 8, T: 298.15 }, { profondita: 3, atomiMassimi: 6 }); assert.deepEqual([...r2.specie.keys()].sort(), [...r3.specie.keys()].sort()); assert.equal(r2.reazioni.length, r3.reazioni.length);
 });
