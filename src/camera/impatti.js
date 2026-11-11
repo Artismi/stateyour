@@ -23,10 +23,11 @@
 // mantello smette di essere comandato dagli urti, quali crateri si vedono ancora.
 //
 // LEGGI EMPIRICHE (misurate, o tratte da simulazioni che qui non si possono rifare; i numeri sono in IMPATTI):
-//   · quanto reggono due orbite vicine (Chambers e altri 1996): la STESSA legge di disco.js (raggiNecessari), qui
-//     rovesciata: dice quando arriva l'ultimo urto gigante e quando un resto della striscia comincia a incrociare;
-//   · la crescita di un embrione nel gas (tempoCrescita di disco.js, e il suo «300 volte più lenta» senza gas): serve
-//     solo, finché disco.js non espone il disco, a risalire dalla massa di un embrione lento a quanto cibo gli resta;
+//   · quanto reggono due orbite vicine (Chambers e altri 1996): la legge di disco.js, importata da lì (raggiNecessari,
+//     giriCheRegge): dice quando un resto della striscia comincia a incrociare il pianeta, e (se disco.js non lo dà)
+//     quando arriva l'ultimo urto gigante;
+//   · la crescita di un embrione nel gas (tempoCrescita e DISCO.senzaGas, importati da disco.js): serve solo, quando
+//     «formazione» manca, a risalire dalla massa di un embrione lento a quanto cibo gli resta;
 //   · la parte del corpo che manca il bersaglio: un terzo resta in orbita, un dodicesimo sfugge (dalle simulazioni
 //     dell'urto che ha fatto la Luna, Canup 2004 e 2008); la luna che nasce da un disco (Ida, Canup e Stewart 1997);
 //   · ciò che un urto più veloce della fuga disperde, e la taglia dei frammenti (Leinhardt e Stewart 2012);
@@ -61,20 +62,23 @@
 //     volte più lento»): lontano dalla stella quasi tutto il cibo finisce in polvere o scagliato via;
 //   · gli urti arrivano da ogni direzione (nessuna preferenza per l'equatore o per la faccia avanti);
 //   · la luna, se c'è, è bersagliata alla distanza di oggi; la resistenza Q* è quella misurata a 3–5 km/s.
-// DATI CHE MANCANO E SI STIMANO (da esporre in disco.js e cosmo.js; se ci sono, si usano al posto delle stime):
-//   · sistema.disco = disco(stella, seme): la densità dei solidi e la vita del gas (oggi: la vita media dei dischi, e
-//     i solidi ricavati dalla massa dell'embrione);
-//   · P.formazione = { urti: [{ bersaglioKg, massaKg, delta | t, angolo?, v? }], cibo, tGas }: gli urti giganti veri, in
-//     ordine (delta: la distanza in raggi di Hill reciproci a cui disco.js li ha trovati instabili; cibo: i kg della
-//     striscia non mangiati). Oggi: il loro numero si legge dal testo di P.storia, gli embrioni si prendono tutti
-//     uguali e mangiati uno a uno, e quando è avvenuto l'ultimo è un evento.
+// I DATI DELLA FORMAZIONE. Se il pianeta porta P.formazione (la dà formaPianeti di disco.js: gli urti giganti veri
+// con masse e tempi, il cibo rimasto, la fine del gas) si usa quella. In un urto di formazione.urti contano:
+// bersaglioKg, massaKg, e uno tra t (quando è avvenuto, anni), tIncrocio (quando le orbite si sono incrociate: si
+// aggiunge il tempo per trovarsi) e delta (la distanza che ha ceduto: si applica Chambers); facoltativi angolo, v,
+// laterale (un urto precedente del corpo più piccolo: non conta per la rotazione del pianeta).
+// SE MANCA, LE STIME (ripiego dichiarato, elencate in bilancio.stime): il numero degli urti giganti letto dal testo
+// di P.storia, gli embrioni presi tutti uguali e mangiati uno a uno, il momento dell'ultimo un evento tra il primo
+// giro di urti e oggi; la fine del gas alla vita media dei dischi (o sistema.disco.vita, se c'è sistema.disco =
+// disco(stella, seme)); il cibo rimasto dalla massa di isolamento (da sistema.disco, o dal disco che serve a un
+// embrione «cresciuto piano» per arrivare a questa massa).
 //
 // IL CASO: tutto ciò che è incerto si chiede alla sorgente degli eventi (eventi.js), con indirizzi stabili:
 //   «urto gigante k/angolo|piano|verso|dove|quando», «classe c/nube p/quanti», «impatto k/quando|corpo|angolo|dove|sorte».
 // L'impatto k è sempre lo stesso evento: un ramo che ne cambia uno lascia identici tutti gli altri.
 
 import { COSTANTI, MSOLE, stella as stellaVera } from './leggi.js';
-import { DISCO, raggioPianeta } from './disco.js';
+import { DISCO, MTERRA, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
 import { MATERIALI, densitaCorpo, limiteRoche } from './lune.js';
 import { MOLECOLE } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
@@ -83,10 +87,6 @@ const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, UA_M = 1.496e11;
 
 // ---------- i numeri del modello, tutti qui
 export const IMPATTI = Object.freeze({
-  // Chambers e altri 1996, come in disco.js: log₁₀(giri) = b·Δ + c, con b e c secondo la massa
-  chambers: { b: 0.765, c: -0.03, db: 0.2055, dc: -0.8165 },
-  // tempoCrescita di disco.js (anni; Σ in kg/m², r in UA) e il rallentamento senza gas
-  crescita: { t: 1.2e5, sigma: 100, gas: 24000, esponenteGas: 0.4, esponenteR: 0.6, senzaGas: 300 },
   // della calotta che manca il bersaglio: un terzo resta in orbita, un dodicesimo sfugge (Canup 2004: ciò che sfugge è circa un quarto del disco)
   inOrbita: 1 / 3, sfugge: 1 / 12,
   // Leinhardt e Stewart 2012: sopra la velocità di fuga dei due corpi fusi l'energia in più disperde materia
@@ -121,9 +121,8 @@ const PASSO0 = 1e3, CRESCE = 1.4; // (anni) il primo passo di una nube, e di qua
 
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 // la legge di Chambers nei due versi: quanti giri regge un'orbita a Δ raggi di Hill, e viceversa
-const esponenti = (mu) => { const x = limita(Math.log10(mu) + 7, 0, 4), K = IMPATTI.chambers; return [K.b + K.db * x, K.c + K.dc * x]; };
-export const giriChambers = (delta, mu) => { const [b, c] = esponenti(mu); return Math.pow(10, b * delta + c); };
-export const deltaChambers = (giri, mu) => { const [b, c] = esponenti(mu); return (Math.log10(Math.max(1, giri)) - c) / b; };
+// (è la legge di disco.js, importata: giriCheRegge e raggiNecessari; entro il limite di Hill, 2√3, i giri sono zero)
+export const giriChambers = giriCheRegge, deltaChambers = raggiNecessari;
 
 // ---------- un pianeta visto da qui: orbita, velocità di fuga, fionda (il numero di Safronov, come in disco.js)
 const ghiaccioDi = (q) => (q.tipo === 'ghiacciato' ? q.composizione?.ghiaccio ?? 0.5 : q.tipo === 'gassoso' ? 0.5 : q.composizione?.acqua ?? 0);
@@ -185,13 +184,15 @@ function formazioneDi(cx, i, caso) {
   const out = { tGas, t0: tGas, urti: 0, ultimo: null, resti: null, rotazione: null, stime: [] };
   if (!D) out.stime.push('il disco non è esposto: vita del gas media');
   if (q.tipo === 'gassoso') return out; // un gigante ha inghiottito tutto: né detriti né superficie
-  // GLI URTI GIGANTI. Se disco.js li espone si usano; se no: il numero dal testo, e gli embrioni tutti uguali, mangiati uno a uno
+  // GLI URTI GIGANTI. Quelli veri di disco.js (formazione.urti); se mancano: il numero dal testo, e gli embrioni tutti
+  // uguali, mangiati uno a uno. Gli urti «laterali» (di un corpo poi caduto sul pianeta) non danno rotazione al pianeta
   const lista = Array.isArray(F.urti) ? F.urti : null, N = lista ? lista.length : typeof F.urti === 'number' ? F.urti : urtiDallaStoria(q.storia);
   if (!lista && N) out.stime.push('urti giganti: numero letto dal testo della storia, embrioni uguali');
   const raggio = (m) => raggioPianeta({ massaKg: m, ferro, ghiaccio: gh });
   const Lv = [0, 0, 0]; let ult = null;
   for (let k = 1; k <= N; k++) {
     const u = lista ? lista[k - 1] : { bersaglioKg: (Ms * k) / (N + 1), massaKg: Ms / (N + 1) }, ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${nome}`) : medio);
+    if (u.laterale) continue;
     // l'angolo: il parametro d'urto al quadrato è uniforme (chi arriva da lontano non mira): 45° il più probabile
     const angolo = u.angolo ?? (Math.acos(Math.sqrt(ev('angolo', 0.5))) * 180) / PI;
     const r = urtoGigante({ bersaglioKg: u.bersaglioKg, massaKg: u.massaKg, raggioBersaglioM: raggio(u.bersaglioKg), raggioM: raggio(u.massaKg), v: u.v, angolo, ghiaccio: gh });
@@ -205,34 +206,45 @@ function formazioneDi(cx, i, caso) {
   }
   if (ult) {
     const { k, u, r } = ult, ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${nome}`) : medio);
-    // QUANDO. disco.js fonde due corpi se la loro distanza regge meno giri di quelli fatti finora: il momento dell'urto
-    // è quello in cui quella distanza cede (Chambers). Due embrioni vicini stanno a C·2^⅔ raggi di Hill reciproci: il
-    // primo giro di urti arriva allora. Se gli urti sono stati più d'uno, l'ultimo è tra corpi già fusi, con orbite
-    // allungate: la loro distanza utile sta tra il limite di Hill (2√3: si incrociano subito) e il limite di oggi
-    // (oltre non si sarebbero fusi): dove, è un evento. Poi serve il tempo per trovarsi (Öpik, con la velocità a
-    // caso degli embrioni di disco.js: la sua media)
-    const d1 = DISCO.C * Math.pow(2, 2 / 3), dOggi = deltaChambers((eta - tGas) / me.T, muP), dMin = 2 * Math.sqrt(3);
-    const delta = Math.min(dOggi, Math.max(d1, N === 1 ? d1 : dMin + ev('quando', 0.5) * Math.max(0, dOggi - dMin)));
+    // QUANDO. disco.js fonde due corpi se la loro distanza regge meno giri di quelli fatti finora: il momento in cui le
+    // orbite si incrociano è quello in cui quella distanza cede (Chambers), e disco.js lo dà (tIncrocio). Poi serve il
+    // tempo per trovarsi (Öpik, con la velocità a caso degli embrioni di disco.js: la sua media).
+    // Se disco.js non lo dà: due embrioni vicini stanno a C·2^⅔ raggi di Hill reciproci, e il primo giro di urti arriva
+    // allora; se gli urti sono stati più d'uno, l'ultimo è tra corpi già fusi, con orbite allungate: la loro distanza
+    // utile sta tra il limite di Hill (2√3: si incrociano subito) e il limite di oggi (oltre non si sarebbero fusi):
+    // dove, è un evento
     const cerca = (DISCO.mescola * r.vFuga * me.T) / me.vK / ((3 / PI) * ((r.raggioM + raggio(u.bersaglioKg)) / me.a) ** 2 * (1 + 1 / DISCO.mescola ** 2));
-    const t0 = u.t ?? Math.min(0.9999 * eta, tGas + me.T * giriChambers(u.delta ?? delta, muP) + cerca);
-    if (u.t == null) out.stime.push('quando è avvenuto l\'ultimo urto gigante: dalla legge di Chambers');
+    let t0 = u.t;
+    if (t0 == null) {
+      let incrocio = u.tIncrocio;
+      if (incrocio == null) {
+        const d1 = DISCO.C * Math.pow(2, 2 / 3), dOggi = deltaChambers((eta - tGas) / me.T, muP), dMin = 2 * Math.sqrt(3);
+        const delta = u.delta ?? Math.min(dOggi, Math.max(d1, N === 1 ? d1 : dMin + ev('quando', 0.5) * Math.max(0, dOggi - dMin)));
+        incrocio = tGas + me.T * giriChambers(delta, muP);
+        if (u.delta == null) out.stime.push('quando è avvenuto l\'ultimo urto gigante: dalla legge di Chambers');
+      }
+      t0 = Math.min(0.9999 * eta, incrocio + cerca);
+    }
     const dove = caso ? punto(caso(`urto gigante ${k}/dove`)) : { lat: 0, lon: 0 };
     const Ln = Math.hypot(...Lv), I = IMPATTI.inerzia * q.massaKg * q.raggioM ** 2;
     out.rotazione = { momentoAngolare: Ln, giorno: Ln > 0 ? (2 * PI * I) / Ln : Infinity, obliquita: Ln > 0 ? (Math.acos(limita(Lv[2] / Ln, -1, 1)) * 180) / PI : 0 };
     out.t0 = t0; out.urti = N; out.ultimo = { ...r, t: t0, ...dove };
   }
   // IL CIBO RIMASTO. Un embrione mangia la striscia larga 2C raggi di Hill della sua massa di isolamento; se non ha
-  // finito, il resto è ancora lì. Con il disco esposto la massa di isolamento è la formula di disco.js; se no, per un
+  // finito, il resto è ancora lì: lo dice formazione.cibo. Se manca: con il disco esposto la massa di isolamento è la formula di disco.js; se no, per un
   // embrione che la storia dice «cresciuto piano», si risale al disco che serve perché in questo tempo sia arrivato a
-  // questa massa (la crescita di disco.js rovesciata: M = M⊕·(t/3A)³, con A che dipende solo dal disco)
+  // questa massa (la crescita di disco.js rovesciata)
   let cibo = F.cibo ?? null;
   if (cibo == null && !N) {
     let sigma = null;
     if (D?.sigmaSolidi) sigma = D.sigmaSolidi(rUA);
     else if (/cresciuto piano/.test(q.storia || '')) {
-      const K = IMPATTI.crescita, MsS = Mst / MSOLE, neve = 2.7 * Math.sqrt(stellaVera(MsS).L), f = cx.Z * DISCO.metalliSole * (rUA < neve ? DISCO.roccia : 1);
-      const tU = tGas + (eta - tGas) / K.senzaGas, A = tU / (3 * Math.cbrt(Ms / 5.972e24));
-      sigma = Math.pow((K.t * K.sigma * Math.pow(rUA, K.esponenteR) * Math.pow(MsS, -1 / 6) * Math.pow(K.gas * f, K.esponenteGas)) / A, 1 / (1 + K.esponenteGas));
+      const MsS = Mst / MSOLE, neve = 2.7 * Math.sqrt(stellaVera(MsS).L), f = cx.Z * DISCO.metalliSole * (rUA < neve ? DISCO.roccia : 1);
+      // M = M_iso·(t/t_iso)³ con t_iso = 3·tempoCrescita(M_iso) ∝ M_iso^⅓: la massa di isolamento si semplifica, e resta
+      // tempoCrescita(M⊕, Σ) = t / (3·(M/M⊕)^⅓): la Σ che lo soddisfa si trova per bisezione (più solidi, più in fretta)
+      const serve = (tGas + (eta - tGas) / DISCO.senzaGas) / (3 * Math.cbrt(Ms / MTERRA)); let poco = 1e-9, tanto = 1e9;
+      for (let giro = 0; giro < 60; giro++) { const m = Math.sqrt(poco * tanto); if (tempoCrescita(MTERRA, rUA, m, m / f, MsS) > serve) poco = m; else tanto = m; }
+      sigma = Math.sqrt(poco * tanto);
       out.stime.push('il cibo rimasto: dal disco che serve a un embrione lento per arrivare a questa massa');
     }
     // (come in disco.js, la striscia non può essere più larga di 0,4 volte l'orbita)
@@ -405,6 +417,20 @@ export function cratere({ diametroM, densita = MATERIALI.roccia.densita, v, ango
   return { transienteM: Math.min(Dt, 2 * raggioM), diametroM: Df, profonditaM: complesso ? IMPATTI.profondita.semplice * Dc * Math.pow(Df / Dc, IMPATTI.profondita.esponente) : IMPATTI.profondita.semplice * Df, complesso };
 }
 
+// ---------- L'URTO GIGANTE di un pianeta (l'ultimo: quello da cui comincia la sua storia), senza calcolare il resto: è
+// lo stesso oggetto di storiaImpatti(...).gigante, ma costa pochi microsecondi. Serve a chi deve sapere subito il
+// giorno, l'inclinazione e la luna che l'urto ha lasciato (cosmo.js, mentre costruisce il sistema: basta che il
+// pianeta abbia già aM, massaKg, raggioM, tipo, composizione e formazione; degli altri pianeti non guarda niente).
+function schedaGigante(form, P) {
+  const u = form.ultimo; if (!u) return null;
+  return { t: u.t, urti: form.urti, massaKg: u.massaKg, bersaglioKg: u.bersaglioKg, diametroM: 2 * u.raggioM, v: u.v, angolo: u.angolo, lat: u.lat, lon: u.lon, energiaJ: u.energiaJ, momentoAngolare: u.momentoAngolare,
+    detritiKg: u.detritiKg, discoKg: u.discoKg, lunaKg: u.lunaKg, luna: u.lunaKg > 0 ? { massaKg: u.lunaKg, mu: u.lunaKg / P.massaKg } : null, giornoDopo: form.rotazione.giorno, obliquita: form.rotazione.obliquita, fusione: u.fusione, frazioneFusa: u.frazioneFusa };
+}
+export function giganteDi(P, sistema, caso) {
+  const st = sistema.stella || {}, Mst = P.Mstella ?? (st.massaNascita || st.massa || 1) * MSOLE;
+  return schedaGigante(formazioneDi({ sistema, st, Mst, Z: st.Z ?? 1, eta: (st.eta ?? 4.5e9) + (st.morta ?? 0), sk: [scheda(P, Mst)] }, 0, caso), P);
+}
+
 // ---------- LA STORIA DEGLI IMPATTI.
 // P: un pianeta di sistema() (aM, massaKg, raggioM, Mstella, tipo, composizione, clima, atmosfera, interno, storia;
 //    se c'è, P.formazione: vedi in cima). sistema: { stella: { massa, eta, Z… }, pianeti: [...], disco? }.
@@ -517,11 +543,10 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
   let zQ = -1; for (let z = 0; z < nE; z++) if (potenza[z] > soglia) zQ = z;
   // il rimescolamento del mantello (la legge di tettonica.js: un giro di cella dura spessore / velocità delle placche)
   const mescola = P.interno?.q > TETTONICA.qVivo ? (P.raggioM * (1 - (P.interno.nucleo ?? 0.5))) / (TETTONICA.vTerra * (P.interno.q / TETTONICA.qTerra) ** 2) : Infinity;
-  const u = form.ultimo, mb = mia?.bilancio, altri = mb ? mb.colpiti.reduce((x, y) => x + y, 0) - mb.colpiti[i] : 0;
+  const mb = mia?.bilancio, altri = mb ? mb.colpiti.reduce((x, y) => x + y, 0) - mb.colpiti[i] : 0;
   return {
     formazione: t0, eta, raggioM: B.raggioM, gravita: gB, ghiacciato, mescolaAnni: mescola, grandi, taglio, piccoli, attesi: taglia(0, NC),
-    gigante: u && !luna ? { t: u.t, urti: form.urti, massaKg: u.massaKg, bersaglioKg: u.bersaglioKg, diametroM: 2 * u.raggioM, v: u.v, angolo: u.angolo, lat: u.lat, lon: u.lon, energiaJ: u.energiaJ, momentoAngolare: u.momentoAngolare,
-      detritiKg: u.detritiKg, discoKg: u.discoKg, lunaKg: u.lunaKg, luna: u.lunaKg > 0 ? { massaKg: u.lunaKg, mu: u.lunaKg / P.massaKg } : null, giornoDopo: form.rotazione.giorno, obliquita: form.rotazione.obliquita, fusione: u.fusione, frazioneFusa: u.frazioneFusa } : null,
+    gigante: luna ? null : schedaGigante(form, P),
     quiete: { t: zQ < 0 ? t0 : epoche[zQ + 1], potenzaW: soglia },
     popolazione: mia ? { diametroM: Array.from({ length: NC }, (_, k) => dMed(k)), iniziale: Array.from(mia.primi), oggi: Array.from(mia.ultimi) } : null,
     bilancio: { arrivataKg: arrivata, arrivataSuM: arrivata / B.massaKg, grandiKg: arrivataGrandi, numeroGrandi: grandi.length, numeroPiccoli: piccoli.numero.reduce((x, y) => x + y, 0), energiaJ: energia, nubi: nubi.map((b) => b.da),

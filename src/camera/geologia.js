@@ -21,6 +21,7 @@
 import { celle } from './fluidi.js';
 import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
+import { acquaInSuperficie } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -37,7 +38,7 @@ export function interno(P, stella) {
   // il nucleo resta liquido se il pianeta è abbastanza grande da non essersi raffreddato (tempo ∝ R²)
   const nucleoLiquido = q > 0.025 && R > 3.5e6;
   const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) : 1e-9;
-  const acqua = (P.composizione.acqua ?? 0) > 0.005 || P.tipo === 'ghiacciato';
+  const acqua = acquaInSuperficie(P).frazione > 0.005;
   const tettonica = q > 0.05 && acqua && M > 0.3 * TERRA.M ? 'a placche' : q > 0.02 ? 'coperchio unico, con vulcani' : 'ferma';
   return { eta, nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0 };
 }
@@ -85,9 +86,18 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = int.acquaKg / 1000 || 0;
-  let lo = -12000, hi = 12000;
-  for (let it = 0; it < 40; it++) { const m = (lo + hi) / 2; let v = 0; for (let j = 0; j < H; j++) { const A = area(j); for (let i = 0; i < W; i++) { const h = alt[j * W + i]; if (h < m) v += (m - h) * A; } } if (v > volumeAcqua) hi = m; else lo = m; }
-  const mare = volumeAcqua > 0 ? lo : -Infinity;
+  let lo = Infinity, hi = -Infinity, areaTutta = 0, capienza = 0;
+  for (let j = 0; j < H; j++) { const A = area(j); for (let i = 0; i < W; i++) { const h = alt[j * W + i]; if (h < lo) lo = h; if (h > hi) hi = h; areaTutta += A; capienza -= h * A; } }
+  capienza += hi * areaTutta; // quanta acqua sta sotto la cima più alta
+  // se l'acqua è più di quanta il rilievo ne contiene, copre tutto: un GUSCIO d'acqua (oceano o ghiaccio, lo decide il
+  // clima) spesso anche centinaia di chilometri, e il rilievo è il suo fondo. È il caso dei mondi ghiacciati. (Lo
+  // spessore è contato come su un piano: per un guscio profondo quanto una parte del raggio è una stima.)
+  let mare = -Infinity;
+  if (volumeAcqua >= capienza) mare = hi + (volumeAcqua - capienza) / areaTutta;
+  else if (volumeAcqua > 0) {
+    for (let it = 0; it < 44; it++) { const m = (lo + hi) / 2; let v = 0; for (let j = 0; j < H; j++) { const A = area(j); for (let i = 0; i < W; i++) { const h = alt[j * W + i]; if (h < m) v += (m - h) * A; } } if (v > volumeAcqua) hi = m; else lo = m; }
+    mare = lo;
+  }
   // i fiumi: la pioggia scende lungo la pendenza più ripida; dove se ne raccoglie molta c'è un fiume
   const flusso = new Float32Array(W * H).fill(1), ordine = [...alt.keys()].sort((a, b) => alt[b] - alt[a]), giu = new Int32Array(W * H).fill(-1);
   for (const k of ordine) {
@@ -159,8 +169,11 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
-  // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo
-  const T = new Float32Array(W * H).fill(Math.max(P.clima.Teq, 310)), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
+  // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo. Per un mondo
+  // lontano dalla sua stella «caldo» vuol dire un quarto sopra la temperatura a cui lo porterebbe la sola luce (Tfine:
+  // quanto basta per essere sopra qualunque equilibrio, anche senza ghiaccio né nuvole), non 310 K
+  const Tfine = Math.max(30, P.clima.Teq * Math.pow(1 + 0.75 * tau, 0.25));
+  const T = new Float32Array(W * H).fill(Math.max(P.clima.Teq, Math.min(310, 1.25 * Tfine))), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
   const C = (k) => (terra[k] ? 1e7 : 1e8), anno = P.anno, eps = (P.obliquita * Math.PI) / 180;
   // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
   // dove c'è acqua che evapora e un'atmosfera che la tiene si formano le nuvole, che riflettono la luce
@@ -181,11 +194,13 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   //    suo equilibrio senza scavalcarlo;
   //  · il calore portato dai vicini è calcolato in modo implicito (con le temperature nuove), prima lungo i
   //    paralleli e poi lungo i meridiani: ciò che esce da una cella entra nella vicina, niente si crea.
-  // Quanto dura: abbastanza perché il mare dimentichi la temperatura di partenza (alcune volte il suo tempo di
-  // risposta C/(4σT³)); un pianeta bloccato non ha stagioni, e lì il passo si allunga quanto serve.
-  const serra = 1 + 0.75 * tau, Tfine = Math.max(30, P.clima.Teq * Math.pow(serra, 0.25)), memoria = ((mareFraz > 0 ? 1e8 : 1e7) * serra) / (4 * sigma * Tfine ** 3);
-  const anniVeri = P.bloccato ? anni : Math.min(4 * anni, Math.max(anni, Math.ceil((4 * memoria) / anno)));
-  const totale = anniVeri * passiAnno, dt = P.bloccato ? Math.max(anni * anno, 12 * memoria) / totale : anno / passiAnno;
+  // Quanto dura: abbastanza perché il mare dimentichi la temperatura di partenza (otto volte il suo tempo di risposta
+  // C/(4σT³); dodici se è bloccato: il ghiaccio della faccia buia avanza piano). Se quattordici anni non bastano (anni corti, o mondi freddi coperti d'acqua), nei primi dieci il passo
+  // si allunga quanto serve (le stagioni scorrono al rallentatore: la media è quella giusta) e gli ultimi quattro
+  // sono anni veri; un pianeta bloccato non ha stagioni, e lì il passo è lungo sempre.
+  const serra = 1 + 0.75 * tau, memoria = ((mareFraz > 0 ? 1e8 : 1e7) * serra) / (4 * sigma * Tfine ** 3), veri = Math.min(4, anni - 1);
+  const totale = anni * passiAnno, lenti = P.bloccato ? totale : (anni - veri) * passiAnno, dtVero = anno / passiAnno;
+  const dtLento = dtVero * Math.max(1, P.bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
   const cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H), sole = new Float64Array(W * H), soleJ = new Float64Array(H);
   for (let j = 0; j < H; j++) { cosLat[j] = Math.cos(lat(j)); cosN[j] = Math.max(0, Math.cos(lat(j) + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat(j) - dphi / 2)); }
   if (P.bloccato) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) sole[j * W + i] = luce(j, i, 0);
@@ -199,7 +214,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   };
   let assorbita = 0, irradiata = 0, pesi = 0;
   for (let n = 0; n < totale; n++) {
-    const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno;
+    const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
     // 1. in ogni cella: la luce assorbita meno quella irradiata
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {

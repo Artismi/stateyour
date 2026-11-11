@@ -92,6 +92,16 @@ export function statoAcqua(T, P) {
   const Teb = 1 / (1 / 373.15 - (R_GAS * Math.log(P / 101325)) / 40700);
   return T < 273.15 ? 'ghiaccio' : T < Teb ? 'liquida' : 'vapore';
 }
+// L'ACQUA ALLA SUPERFICIE: una fonte sola per il clima, per il mare e per l'interno. «frazione» è la parte della
+// massa del pianeta che è acqua (i rocciosi la chiamano «acqua», i ghiacciati «ghiaccio»: è la stessa cosa), «kg»
+// quanta ne sta in superficie. In un pianeta roccioso quasi tutta resta sciolta nella roccia del mantello, e fuori
+// ne esce qualche centesimo (sulla Terra: gli oceani). In un mondo ghiacciato (più di un quinto di ghiaccio) non
+// c'è roccia che la tenga: sta tutta sopra, in un guscio d'acqua o di ghiaccio profondo quanto una parte del raggio.
+export function acquaInSuperficie({ tipo, massaKg = 0, composizione = {} } = {}) {
+  if (tipo === 'gassoso') return { frazione: 0, kg: 0 };
+  const frazione = composizione.acqua ?? composizione.ghiaccio ?? 0;
+  return { frazione, kg: massaKg * frazione * (tipo === 'ghiacciato' ? 1 : 0.04) };
+}
 // il clima di un pianeta: dalla luminosità della stella, dalla distanza, dalla massa e dalla composizione
 export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0 }) {
   const albedo = tipo === 'ghiacciato' ? 0.6 : tipo === 'gassoso' ? 0.35 : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);

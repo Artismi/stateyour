@@ -59,6 +59,8 @@
 //     sono già lì dentro: i parametri «obliquita» e «bloccato» non cambiano il calcolo; «bloccato» fa misurare il flusso
 //     giorno-notte). La fascia delle piogge equatoriali non migra con le stagioni: è più stretta e più intensa del vero;
 //   · la superficie ha la temperatura DATA: l'aria non la cambia qui dentro (lo fa il clima, con trasportoCalore);
+//   · il lavoro dei venti, che l'attrito e la viscosità consumano, non torna all'aria come calore: per questo la media
+//     di trasportoCalore su tutto il pianeta non è zero ma un poco negativa (sulla Terra di prova −9 W/m² su ±100);
 //   · i rilievi tolgono vapore (aria più fredda e più sottile in quota), frenano (la terra è più ruvida del mare), ma
 //     NON deviano il vento: nessuna onda di montagna, nessun blocco;
 //   · la griglia è grossa (64×32: 5,6°, 600 km): i vortici delle medie latitudini sono appena risolti, e su un pianeta

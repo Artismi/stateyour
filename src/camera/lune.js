@@ -255,29 +255,49 @@ function regolari(P, amb, caso) {
 }
 
 // ---------- 2. la luna da un grande urto, attorno a un pianeta roccioso
-function daUrto(P, amb, caso) {
+// urto: se è dato, è l'urto gigante VERO del pianeta, quello della sua storia degli impatti (impatti.js: il «gigante»
+// di storiaImpatti o giganteDi; null se il pianeta non ne ha avuti). Allora niente è sorteggiato: la luna c'è se e solo
+// se l'urto ha lasciato in orbita un disco che la fa (urto.luna), con quella massa; le maree lavorano da allora
+// (età − urto.t); e il giorno del pianeta parte da quello che l'urto gli ha dato (urto.giornoDopo).
+function daUrto(P, amb, caso, urto) {
   const { G } = COSTANTI, { c, tra } = caso, M = P.massaKg;
-  // gli ultimi urti della formazione sono tra corpi grandi come pianeti; serve però l'angolo giusto perché
-  // i detriti restino in orbita: DALLE SIMULAZIONI, succede a meno di un pianeta roccioso su due, e la luna
+  // SENZA L'URTO VERO (ripiego): gli ultimi urti della formazione sono tra corpi grandi come pianeti; serve però l'angolo
+  // giusto perché i detriti restino in orbita: DALLE SIMULAZIONI, succede a meno di un pianeta roccioso su due, e la luna
   // che ne nasce ha tra un millesimo e un quarantesimo della massa del pianeta (la nostra: 1/81)
-  const capita = c() < 0.45, mu = Math.pow(10, tra(-3, -1.6)), e0 = tra(0.01, 0.08);
+  const sorte = c() < 0.45, muSorte = Math.pow(10, tra(-3, -1.6)), e0 = tra(0.01, 0.08);
+  const capita = urto !== undefined ? !!urto?.luna : sorte, mu = urto?.luna ? urto.luna.massaKg / M : muSorte, anni = urto?.luna ? Math.max(0, amb.eta - urto.t) : amb.eta;
   if (P.tipo !== 'roccioso' || !capita) return [];
   // nasce dai detriti (roccia del mantello, quasi senza ferro) appena fuori dal limite di Roche...
   const m = mu * M, comp = { roccia: 0.98, ferro: 0.02 }, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0));
-  // ...e le maree la allontanano per tutta l'età del sistema (da/dt ∝ a^(-11/2))
-  let a = orbitaDopoLeMaree(P, m, a0, amb.eta);
-  // il momento angolare si conserva: quello che la luna guadagna lo perde la rotazione del pianeta (il
-  // giorno si allunga). Dal giorno di oggi si risale al giorno di allora (per la Terra viene 5 ore, come
-  // si stima); se servisse un pianeta che girava più in fretta di quanto può stare insieme, la luna si ferma prima
-  const I = 0.33 * M * P.raggioM ** 2, giorno = P.giorno || 24 * 3600, wOggi = (2 * Math.PI) / giorno, wMax = Math.sqrt((G * M) / P.raggioM ** 3), Lorb = (x) => m * Math.sqrt(G * M * x);
-  if (wOggi + (Lorb(a) - Lorb(a0)) / I > wMax) a = Math.max(a0, ((Lorb(a0) + I * (wMax - wOggi)) / m) ** 2 / (G * M));
+  // ...e le maree la allontanano per tutto il tempo che hanno avuto (da/dt ∝ a^(-11/2))
+  let a = orbitaDopoLeMaree(P, m, a0, anni);
+  const I = 0.33 * M * P.raggioM ** 2, wMax = Math.sqrt((G * M) / P.raggioM ** 3), Lorb = (x) => m * Math.sqrt(G * M * x);
+  let giorno = P.giorno || 24 * 3600, wPrima;
+  if (urto?.luna) {
+    // il momento angolare si conserva: quello che la luna guadagna allontanandosi lo perde la rotazione del pianeta.
+    // Si parte dal giorno che l'urto ha lasciato e si va avanti: il giorno di oggi ne discende. La luna si allontana
+    // solo finché il pianeta gira più in fretta di quanto lei orbita: se lo frena fino a lì si fermano insieme, faccia
+    // a faccia (come Plutone e Caronte); se già alla nascita orbita più in fretta del pianeta, ricade
+    wPrima = Math.min(wMax, (2 * Math.PI) / urto.giornoDopo);
+    const avanzo = (x) => wPrima - (Lorb(x) - Lorb(a0)) / I - Math.sqrt((G * (M + m)) / x ** 3);
+    if (avanzo(a0) <= 0) return [];
+    if (avanzo(a) < 0) { let lo = a0, hi = a; for (let giro = 0; giro < 60; giro++) { const x = 0.5 * (lo + hi); if (avanzo(x) > 0) lo = x; else hi = x; } a = lo; }
+    giorno = (2 * Math.PI) / (wPrima - (Lorb(a) - Lorb(a0)) / I);
+  } else {
+    // (ripiego) dal giorno di oggi si risale al giorno di allora (per la Terra viene 5 ore, come si stima); se servisse
+    // un pianeta che girava più in fretta di quanto può stare insieme, la luna si ferma prima
+    const wOggi = (2 * Math.PI) / giorno;
+    if (wOggi + (Lorb(a) - Lorb(a0)) / I > wMax) a = Math.max(a0, ((Lorb(a0) + I * (wMax - wOggi)) / m) ** 2 / (G * M));
+    wPrima = Math.min(wMax, wOggi + (Lorb(a) - Lorb(a0)) / I);
+  }
   // la luna si PERDE se: il pianeta è bloccato dalla stella (gira piano: la marea la tira giù invece che su,
   // e ricade: Mercurio e Venere non hanno lune), se orbita più in fretta di quanto il pianeta gira, o se
   // arriva oltre 0,4 raggi di Hill, dove la stella la porta via (pianeti vicini alla stella)
-  if (P.bloccato || periodoOrbita(P, a, m) < giorno || a > 0.4 * amb.RH) return [];
+  if (P.bloccato || periodoOrbita(P, a, m) < giorno * (1 - 1e-9) || a > 0.4 * amb.RH) return [];
   const L = corpoLuna('urto', m, a, 0, comp);
-  L.giornoInizialePianeta = (2 * Math.PI) / Math.min(wMax, wOggi + (Lorb(a) - Lorb(a0)) / I);
-  L.eccentricita = e0; L.eccentricita = eccentricitaResidua(P, L, amb.eta); // e0: lasciata dagli ultimi detriti raccolti
+  L.giornoInizialePianeta = (2 * Math.PI) / wPrima;
+  if (urto?.luna) L.giornoPianeta = giorno; // il giorno del pianeta oggi, dopo che la luna l'ha frenato
+  L.eccentricita = e0; L.eccentricita = eccentricitaResidua(P, L, anni); // e0: lasciata dagli ultimi detriti raccolti
   return [L];
 }
 
@@ -313,7 +333,10 @@ function corpoLuna(origine, massaKg, aM, ghiaccio, composizione = { ghiaccio, ro
 
 // ---------- tutte le lune di un pianeta
 // P: un pianeta di sistema() (tipo, massaKg, raggioM, aM, Mstella; se ci sono: giorno, bloccato, clima,
-// Lw, id). stella: { massa, massaNascita, eta (anni), morta }. seme: il caso, ripetibile.
+// Lw, id). stella: { massa, massaNascita, eta (anni), morta, urto }. seme: il caso, ripetibile.
+// urto (facoltativo): l'urto gigante vero del pianeta, dalla sua storia degli impatti (o null se non ne ha avuti):
+// decide lui se c'è la luna da urto, quanto pesa e da quando le maree lavorano; la luna dice allora anche
+// giornoPianeta, il giorno del pianeta oggi (secondi). Se «urto» non è dato, tutto è come prima (un sorteggio).
 // Origini: 'disco' | 'urto' | 'cattura'. In uscita le lune dalla più vicina alla più lontana, ognuna
 // { id, origine, massaKg, raggioM, densita, aM, periodo, eccentricita, composizione, forma: { rotonda,
 // assi }, bloccata, caloreMareale, stato, retrograda, risonanza } (assi: in raggi medi della luna;
@@ -325,7 +348,7 @@ export function lune(P, stella = {}, seme = 1) {
   // (170 K sulla «linea della neve», 2,7 UA·√L come in cosmo.js; la temperatura cala come 1/√distanza)
   const Lgiovane = stellaVera(stella.massaNascita || stella.massa || P.Mstella / MSOLE).L;
   const amb = { RH: raggioHill(P), eta: (stella.eta ?? ETA) + (stella.morta ?? 0), Tstella: NEVE * Math.sqrt((2.7 * UA * Math.sqrt(Lgiovane)) / P.aM) };
-  const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, caso) : regolari(P, amb, caso);
+  const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, caso, stella.urto) : regolari(P, amb, caso);
   const tutte = [...grandi, ...catturati(P, amb, caso, grandi)].sort((x, y) => x.aM - y.aM);
   tutte.forEach((L, i) => { L.id = i; });
   for (const L of tutte) {

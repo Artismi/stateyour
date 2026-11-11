@@ -334,15 +334,19 @@ prova('gravità, anno, giorno, schiacciamento e temperatura di equilibrio discen
     { casi: alTetto, su: PIANETI.length, dove: 'cosmo.js sistema() «giorno = … tra(10, 40)» e «Math.min(0.3, …)»' });
 }
 { // 6. l'acqua: composizione → interno.acquaKg → mare; clima.acqua
-  const ghiacciati = SOLIDI.filter(({ p }) => p.tipo === 'ghiacciato');
-  nota(1, 'i pianeti ghiacciati (più del 20% di ghiaccio) non hanno acqua in superficie: acquaKg legge composizione.acqua, che loro chiamano «ghiaccio». Niente mare, niente ghiaccio, niente pioggia, 900 crateri; per clima() invece l\'acqua c\'è',
-    { casi: ghiacciati.filter(({ p }) => !(p.interno.acquaKg > 0) && p.clima.acqua !== 'assente').length, su: ghiacciati.length, tipico: `sono ${num((100 * ghiacciati.length) / PIANETI.length)}% dei pianeti del campione`, massimo: `ghiaccio mediano ${num(mediana(ghiacciati.map(({ p }) => p.composizione.ghiaccio)))} della massa`, dove: 'cosmo.js sistema() «p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.04» contro la riga sotto «acqua: p.composizione.acqua ?? … ghiaccio»' });
+  prova('l\'acqua alla superficie ha una fonte sola (leggi.js): la stessa per il clima e per il mare, rocciosi e ghiacciati', () => {
+    let ghiacciati = 0;
+    for (const { p } of SOLIDI) {
+      const a = LG.acquaInSuperficie(p);
+      assert.equal(p.interno.acquaKg, a.kg); assert.equal(a.frazione, p.composizione.acqua ?? p.composizione.ghiaccio ?? 0);
+      assert.equal(p.clima.acqua !== 'assente', a.frazione > 0, 'il clima e l\'interno non sono d\'accordo se l\'acqua c\'è');
+      if (p.tipo === 'ghiacciato') { ghiacciati++; assert.ok(a.kg > 0.2 * p.massaKg, 'un mondo ghiacciato ha il suo ghiaccio in superficie'); }
+    }
+    assert.ok(ghiacciati > 500);
+  });
   const rocciosi = SOLIDI.filter(({ p }) => p.tipo === 'roccioso' && p.interno.acquaKg > 0), vapore = rocciosi.filter(({ p }) => p.clima.acqua.startsWith('vapore'));
   nota(2, 'pianeti dove per clima() l\'acqua è vapore (e chimica.js la fa fuggire) ma la superficie ha il mare pieno, e la pioggia cresce con la temperatura senza tetto',
     { casi: vapore.length, su: rocciosi.length, tipico: `temperatura mediana ${num(mediana(vapore.map(({ p }) => p.clima.T)))} K`, massimo: `${num(massimo(vapore.map(({ p }) => p.clima.T)))} K`, dove: 'leggi.js clima().acqua e chimica.js atmosfera() («secco») contro geologia.js superficiePianeta() (volumeAcqua) ed erosione() (pioggia)' });
-  const profondi = rocciosi.filter(({ p }) => p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 12000);
-  nota(3, 'l\'oceano medio sarebbe più profondo del tetto con cui si cerca il livello del mare (12 km): lì l\'acqua della mappa non è più quella dell\'interno',
-    { casi: profondi.length, su: rocciosi.length, massimo: `profondità media fino a ${num(massimo(rocciosi.map(({ p }) => p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) / 1000)))} km`, dove: 'geologia.js superficiePianeta() «let lo = -12000, hi = 12000»' });
 }
 
 // =====================================================================================================
@@ -352,6 +356,7 @@ const SCELTI = [
   ['un mondo ghiacciato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un mondo ghiacciato bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un mondo ghiacciato lontano dalla sua stella', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.aM > 8 * UA && p.interno.tettonica !== 'a placche')],
+  ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
   ['un roccioso con il mare e le placche', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
   ['un roccioso con il mare, bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un roccioso dove l\'acqua è vapore', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],
@@ -365,12 +370,16 @@ const SUPERFICI = SCELTI.map(([nome, x]) => {
   const S0 = p.Lw / (4 * Math.PI * p.aM ** 2), tau = 0.8 * Math.pow(p.clima.pressione / 1e5, 0.6), emesso = (K.sigma * cl.Tglobale ** 4) / (1 + 0.75 * tau);
   return { nome, x, p, chiave, sf, cl, volume, sommerso: sommerso / area, area, emessoSuArrivato: emesso / (S0 / 4), albedo: 1 - emesso / (S0 / 4) };
 });
-for (const s of SUPERFICI) console.log(`  · ${s.nome} (${s.x.n}/${s.x.gid}/${s.x.sid}/${s.p.id}): clima() ${num(s.p.clima.T, 4)} K, acqua «${s.p.clima.acqua.slice(0, 8)}», albedo ${num(s.p.clima.albedo)} · simulato ${num(s.cl.Tglobale, 4)} K, ghiaccio ${num(s.cl.ghiaccio, 2)}, mare ${num(100 * s.sommerso, 2)}%, irradia ${num(s.emessoSuArrivato)} volte la luce che arriva`);
+for (const s of SUPERFICI) console.log(`  · ${s.nome} (${s.x.n}/${s.x.gid}/${s.x.sid}/${s.p.id}): clima() ${num(s.p.clima.T, 4)} K, acqua «${s.p.clima.acqua.slice(0, 8)}», albedo ${num(s.p.clima.albedo)} · simulato ${num(s.cl.Tglobale, 4)} K, ghiaccio ${num(s.cl.ghiaccio, 2)}, mare ${num(100 * s.sommerso, 2)}%, assorbe ${num(s.cl.bilancio.assorbita)} e irradia ${num(s.cl.bilancio.irradiata)} W/m²`);
 
-prova('il mare sulla mappa contiene proprio l\'acqua che l\'interno dà alla superficie (entro il 2%)', () => {
-  let n = 0;
-  for (const s of SUPERFICI) { if (!(s.p.interno.acquaKg > 0)) { assert.equal(s.sf.mare, -Infinity); continue; } n++; tra(s.volume / (s.p.interno.acquaKg / 1000), 0.98, 1.02, `${s.nome}: volume del mare / acqua dell'interno`); }
-  assert.ok(n >= 1);
+prova('il mare sulla mappa contiene proprio l\'acqua che l\'interno dà alla superficie, anche quando copre tutto (i mondi ghiacciati: un guscio)', () => {
+  let n = 0, gusci = 0;
+  for (const s of SUPERFICI) {
+    if (!(s.p.interno.acquaKg > 0)) { assert.equal(s.sf.mare, -Infinity); continue; } n++;
+    tra(s.volume / (s.p.interno.acquaKg / 1000), 0.98, 1.02, `${s.nome}: volume del mare / acqua dell'interno`);
+    if (s.p.tipo === 'ghiacciato') { gusci++; assert.equal(s.sommerso, 1, `${s.nome}: il guscio copre tutto`); tra(s.cl.ghiaccio, s.cl.Tglobale < 250 ? 0.99 : 0, 1, `${s.nome}: ghiaccio`); }
+  }
+  assert.ok(n >= 3 && gusci >= 1);
 });
 
 prova('la crosta non è più vecchia del pianeta, e la crosta continentale si conserva', () => {
@@ -395,16 +404,20 @@ prova('le tessere: la stessa parte di mare, lo stesso livello e gli stessi conti
   }
 });
 
-{ // la temperatura due volte, e il bilancio dell'energia del clima simulato
-  const dT = SUPERFICI.map((s) => s.cl.Tglobale - s.p.clima.T), troppo = SUPERFICI.filter((s) => s.emessoSuArrivato > 1.05);
-  // la causa, misurata: il passo esplicito del calore portato dai vicini regge solo se dt·D·2·(1/Δλ² + 1/Δφ²)/C < 1 (all'equatore;
-  // ai poli è peggio). Sulla terraferma C = 10⁷: quanti pianeti del campione stanno sopra?
-  const numeroDiStabilita = (p) => ((p.anno / 240) * 0.6 * Math.sqrt(Math.max(1e-4, p.clima.pressione / 1e5)) * 2 * (1 / ((2 * Math.PI) / 64) ** 2 + 1 / (Math.PI / 32) ** 2)) / 1e7;
-  const instabili = SOLIDI.filter(({ p }) => numeroDiStabilita(p) > 1), senzaMare = instabili.filter(({ p }) => !(p.interno.acquaKg > 0));
-  nota(1, 'il clima simulato non conserva l\'energia: sui pianeti senza mare irradia più luce di quanta ne arrivi (il passo di tempo, un 240-esimo d\'anno, è troppo lungo per il calore che la terraferma scambia con i vicini: il calcolo oscilla tra i tetti di ±50 K e non scende dai 310 K di partenza)',
-    { casi: troppo.length, su: SUPERFICI.length, tipico: troppo.map((s) => `${s.nome}: ${num(s.cl.Tglobale, 4)} K simulati, ${num(s.p.clima.T, 4)} K per clima(), irradia ${num(s.emessoSuArrivato)} volte la luce che arriva`).join('; '), massimo: `passo instabile sulla terraferma (dt·D·2(1/Δλ²+1/Δφ²)/C > 1) in ${instabili.length} pianeti solidi su ${SOLIDI.length}; ${senzaMare.length} non hanno mare che li tenga (numero mediano ${num(mediana(senzaMare.map(({ p }) => numeroDiStabilita(p))))})`, dove: 'geologia.js climaSuperficie() «dt = anno / passiAnno», «C = terra ? 1e7 : 1e8», «D * lap», «Math.max(-50 / dt, Math.min(50 / dt, dT))»' });
+prova('il clima simulato conserva l\'energia: a regime il pianeta irradia quanta luce assorbe, e mai più di quanta ne arriva', () => {
+  for (const s of SUPERFICI) {
+    const b = s.cl.bilancio;
+    tra(b.irradiata / b.assorbita, 0.97, 1.03, `${s.nome}: luce irradiata / assorbita`);
+    assert.ok(b.assorbita <= b.arriva && b.assorbita > 0.2 * b.arriva, `${s.nome}: assorbe ${b.assorbita} W/m² su ${b.arriva}`);
+    // la media delle quarte potenze non è mai sotto la quarta potenza della media: da Tglobale un minimo di ciò che irradia
+    assert.ok(s.emessoSuArrivato <= (b.assorbita / b.arriva) * 1.03, `${s.nome}: a ${s.cl.Tglobale} K irradierebbe ${s.emessoSuArrivato} volte la luce che arriva`);
+  }
+});
+
+{ // la temperatura due volte
+  const dT = SUPERFICI.map((s) => s.cl.Tglobale - s.p.clima.T);
   nota(1, 'la temperatura del pianeta ha due valori che il pannello mostra insieme: clima().T (albedo fissa 0,3 o 0,6) e climaSuperficie().Tglobale (ghiaccio e nuvole simulati)',
-    { casi: dT.filter((d) => Math.abs(d) > 5).length, su: dT.length, tipico: `Tglobale − clima().T: ${SUPERFICI.map((s, i) => `${num(dT[i])} K`).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; albedo che esce dalla simulazione: ${SUPERFICI.map((s) => num(s.albedo, 2)).join(', ')}`, dove: 'leggi.js clima() contro geologia.js climaSuperficie(); usano T di clima(): chimica.js atmosfera(), minerali(), prebiotica(), lune.js k2QPianeta()' });
+    { casi: dT.filter((d) => Math.abs(d) > 5).length, su: dT.length, tipico: `Tglobale − clima().T: ${SUPERFICI.map((s, i) => `${num(dT[i])} K`).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; albedo che esce dalla simulazione: ${SUPERFICI.map((s) => num(1 - s.cl.bilancio.assorbita / s.cl.bilancio.arriva, 2)).join(', ')}`, dove: 'leggi.js clima() contro geologia.js climaSuperficie(); usano T di clima(): chimica.js atmosfera(), minerali(), prebiotica(), lune.js k2QPianeta()' });
 }
 
 // =====================================================================================================

@@ -20,7 +20,7 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima } from './leggi.js';
+import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
 import { interno } from './geologia.js';
 import { formaPianeti } from './disco.js';
 import { lune } from './lune.js';
@@ -234,8 +234,10 @@ export const sistema = memo((n, gid, sid) => {
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
     p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
-    p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.04; // quasi tutta l'acqua resta nel mantello; in superficie pochi centesimi (sulla Terra: gli oceani)
-    p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
+    // l'acqua alla superficie: la stessa per il mare, per il clima e per l'interno (leggi.js)
+    const acqua = acquaInSuperficie(p);
+    p.interno.acquaKg = acqua.kg;
+    p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione });
     // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero (ciò che trattiene, all'equilibrio
     // chimico), e quanto rendono lì le reazioni che fanno aminoacidi e zuccheri (scariche e ultravioletto)
     try {

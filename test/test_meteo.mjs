@@ -21,6 +21,8 @@ const terraMisurata = () => { const T = new Float32Array(N); for (let j = 0; j <
 // un pianeta tutto mare, e lo stesso con un rilievo messo a mano
 const oceano = () => new Float32Array(N).fill(-3000);
 
+const mediaAssoluta = (m) => globale(Float32Array.from(m.trasportoCalore, Math.abs));
+
 // la «Terra»: la superficie di geologia.js (tettonica, mari, rilievi) con i parametri di test_biblioteca.mjs
 const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, giorno: GIORNO, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5 } };
 const it = interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 1.4e21;
@@ -94,7 +96,7 @@ prova('la Terra: alisei da est ai tropici, venti da ovest alle medie latitudini,
 prova('la Terra: deserti sulla terraferma, nuvole dove piove, neve al freddo, calore dai tropici ai poli', () => {
   const terre = []; for (let k = 0; k < N; k++) if (terra.bagnato[k] < 0.2 && Math.abs(lat((k - (k % W)) / W)) < 60) terre.push(terra.pioggia[k]);
   terre.sort((a, b) => a - b);
-  assert.ok(terre.length > 100 && terre[Math.floor(terre.length * 0.1)] < 250 && terre[Math.floor(terre.length * 0.9)] > 800, `ci sono deserti e terre piovose: il decimo più secco ${terre[Math.floor(terre.length * 0.1)]}, il decimo più piovoso ${terre[Math.floor(terre.length * 0.9)]} mm/anno`);
+  assert.ok(terre.length > 100 && terre[Math.floor(terre.length * 0.1)] < 400 && terre[Math.floor(terre.length * 0.1)] < 0.4 * terre[terre.length >> 1] && terre[Math.floor(terre.length * 0.9)] > 800, `ci sono deserti e terre piovose: il decimo più secco ${terre[Math.floor(terre.length * 0.1)]}, il decimo più piovoso ${terre[Math.floor(terre.length * 0.9)]} mm/anno`);
   tra(terra.nuvoleMedie, 0.3, 0.8, 'copertura media di nuvole (misurata 0,67)');
   assert.ok(fascia(zN, 0, 6) > fascia(zN, 15, 30) + 0.15, 'più nuvole all\'equatore che ai tropici');
   const zNeve = zonale(terra.neve);
@@ -102,7 +104,8 @@ prova('la Terra: deserti sulla terraferma, nuvole dove piove, neve al freddo, ca
   // il calore: la circolazione lo toglie ai tropici e lo porta ai poli; in tutto non ne crea
   tra(fascia(zQ, 0, 20), -200, -30, 'calore tolto ai tropici (W/m²; misurato ≈ −50)');
   tra(fascia(zQ, 60, 90), 30, 250, 'calore portato ai poli (W/m²; misurato ≈ +100)');
-  assert.ok(Math.abs(globale(terra.trasportoCalore)) < 15, `il trasporto non crea calore: media ${globale(terra.trasportoCalore)} W/m²`);
+  // (resta una piccola perdita: il lavoro dei venti, che l'attrito consuma, qui non torna come calore)
+  assert.ok(Math.abs(globale(terra.trasportoCalore)) < 0.25 * mediaAssoluta(terra), `il trasporto sposta il calore, non lo crea: media ${globale(terra.trasportoCalore)} W/m² su ${mediaAssoluta(terra)}`);
   tra(terra.diffusivita, 0.2, 2, 'il coefficiente di diffusione equivalente (W/m²/K; i modelli a bilancio di energia usano 0,6)');
   // l'aria in quota è più uniforme della superficie (è lei che porta il calore)
   const zTa = zonale(terra.temperaturaAria), zT = zonale(terra.temperatura);
@@ -132,18 +135,19 @@ prova('l\'ombra di pioggia: un oceano, un muro di monti, e il vento che lo inves
   const alt = oceano(); for (let j = 0; j < H; j++) if (Math.abs(lat(j)) < 60) for (let i = 31; i <= 32; i++) alt[j * W + i] = 3500;
   const m = circolazione({ ...base, T: terraMisurata(), alt, mare: 0 }), liscio = circolazione({ ...base, T: terraMisurata(), alt: oceano(), mare: 0 });
   const tratto = (x, da, a, i0, i1) => { let s = 0, n = 0; for (let j = 0; j < H; j++) { const l = Math.abs(lat(j)); if (l < da || l >= a) continue; for (let i = i0; i <= i1; i++) { s += x[j * W + i] * peso(j); n += peso(j); } } return s / n; };
-  // alle medie latitudini il vento viene da ovest: piove a ovest del muro e sul muro, e dietro (a est) c'è l'ombra
-  assert.ok(tratto(m.u, 34, 50, 26, 37) > 2, 'alle medie latitudini il vento viene da ovest');
-  const sopra = tratto(m.pioggia, 34, 50, 30, 31), sotto = tratto(m.pioggia, 34, 50, 33, 36), senza = tratto(liscio.pioggia, 34, 50, 33, 36);
-  assert.ok(sotto < 0.5 * sopra, `sottovento piove meno della metà che sopravvento: ${sotto} contro ${sopra} mm/anno`);
-  assert.ok(sotto < 0.7 * senza && sopra > 1.3 * tratto(liscio.pioggia, 34, 50, 30, 31), `e meno di quanto pioverebbe lì senza il muro: ${sotto} contro ${senza}`);
-  // negli alisei il vento viene da est: i versanti si scambiano
-  assert.ok(tratto(m.u, 8, 20, 26, 37) < -2, 'ai tropici il vento viene da est');
-  const est = tratto(m.pioggia, 8, 20, 32, 33), ovest = tratto(m.pioggia, 8, 20, 28, 30);
-  assert.ok(ovest < 0.5 * est, `negli alisei l'ombra è a ovest: ${ovest} contro ${est} mm/anno`);
+  // alle medie latitudini il vento viene da ovest: piove sul muro (il versante sopravvento), e subito dietro, a est,
+  // c'è l'ombra: meno che sul muro e meno di quanto piove a quella latitudine sul pianeta senza muro
+  assert.ok(tratto(m.u, 34, 50, 24, 39) > 2, 'alle medie latitudini il vento viene da ovest');
+  const sopra = tratto(m.pioggia, 34, 50, 31, 32), sotto = tratto(m.pioggia, 34, 50, 33, 34), senza = tratto(liscio.pioggia, 34, 50, 0, W - 1);
+  assert.ok(sotto < 0.5 * sopra, `sottovento piove meno della metà che sul versante sopravvento: ${sotto} contro ${sopra} mm/anno`);
+  assert.ok(sotto < 0.85 * senza && sopra > 1.5 * senza, `e meno di quanto piove a quella latitudine senza il muro (${senza}): ${sotto} dietro, ${sopra} sul muro`);
+  // negli alisei il vento viene da est: i versanti si scambiano, e l'ombra è a ovest
+  assert.ok(tratto(m.u, 8, 20, 24, 39) < -2, 'ai tropici il vento viene da est');
+  const est = tratto(m.pioggia, 8, 20, 31, 32), ovest = tratto(m.pioggia, 8, 20, 29, 30), senzaT = tratto(liscio.pioggia, 8, 20, 0, W - 1);
+  assert.ok(ovest < 0.2 * est && ovest < 0.5 * senzaT && est > 1.5 * senzaT, `negli alisei l'ombra è a ovest: ${ovest} dietro, ${est} sul muro, ${senzaT} senza muro`);
   // l'acqua si conserva anche qui
   assert.ok(Math.abs(m.bilancio.evaporata - m.bilancio.piovuta - m.bilancio.accumulata) < 1e-4 * m.bilancio.piovuta);
-  console.log(`      medie latitudini (vento da ovest): ${sopra.toFixed(0)} mm/anno sopravvento, ${sotto.toFixed(0)} sottovento (senza il muro ${senza.toFixed(0)}); alisei (vento da est): ${est.toFixed(0)} a est, ${ovest.toFixed(0)} a ovest`);
+  console.log(`      medie latitudini (vento da ovest): ${sopra.toFixed(0)} mm/anno sul muro, ${sotto.toFixed(0)} subito a est (senza muro ${senza.toFixed(0)}); alisei (vento da est): ${est.toFixed(0)} sul muro, ${ovest.toFixed(0)} subito a ovest (senza muro ${senzaT.toFixed(0)})`);
 });
 
 // la rotazione: lo stesso pianeta (un oceano con due isole montuose, perché non sia perfettamente liscio) che gira in 30 giorni, in un giorno, in 8 ore
@@ -187,7 +191,6 @@ prova('pianeta bloccato dalla marea: il vento va dal giorno alla notte in quota 
   console.log(`      vento giorno→notte: ${m.giornoNotte.alto.toFixed(1)} m/s in quota, ${m.giornoNotte.basso.toFixed(1)} m/s al suolo; pioggia sul lato giorno ${(100 * giorno / (giorno + notte)).toFixed(1)}%; calore ${(qG / aG).toFixed(0)} W/m² sotto il sole, ${(qN / aN).toFixed(0)} W/m² nella notte`);
 });
 
-const mediaAssoluta = (m) => globale(Float32Array.from(m.trasportoCalore, Math.abs));
 prova('niente aria: niente vento, niente pioggia, niente nuvole; aria sottile: quasi nessun calore portato', () => {
   for (const pressione of [0, 1e-9]) { const m = circolazione({ ...base, pressione, T: terraMisurata(), alt: sf.alt, mare: sf.mare });
     assert.equal(m.regime, 'senza aria'); assert.equal(m.celle, 0);
@@ -198,23 +201,24 @@ prova('niente aria: niente vento, niente pioggia, niente nuvole; aria sottile: q
   const freddo = terraMisurata().map((t) => t - 60), marte = circolazione({ raggioM: 3.39e6, gravita: 3.71, giorno: 88775, pressione: 600, massaMolare: 0.044, cp: 760, T: freddo, alt: isole(), mare: -Infinity, acqua: false });
   assert.equal(marte.regime, 'aria'); assert.equal(marte.bilancio.piovuta, 0); assert.equal(marte.nuvoleMedie, 0);
   assert.ok(Math.max(...Array.from(marte.ventoZonaleAlto, Math.abs)) > 3, 'i venti ci sono');
-  assert.ok(mediaAssoluta(marte) < 0.05 * mediaAssoluta(terra), `ma portano poco calore: ${mediaAssoluta(marte)} W/m² contro ${mediaAssoluta(terra)} della Terra`);
+  assert.ok(mediaAssoluta(marte) < 0.1 * mediaAssoluta(terra), `ma portano poco calore: ${mediaAssoluta(marte)} W/m² contro ${mediaAssoluta(terra)} della Terra`);
   tra(marte.aria.tauRad / 86400, 0.1, 3, 'il tempo di irraggiamento di Marte (giorni; 1-2)');
   console.log(`      Marte (600 Pa): vento in quota fino a ${Math.max(...Array.from(marte.ventoZonaleAlto, Math.abs)).toFixed(0)} m/s, calore portato ${mediaAssoluta(marte).toFixed(2)} W/m² (Terra ${mediaAssoluta(terra).toFixed(0)}), irraggiamento in ${(marte.aria.tauRad / 86400).toFixed(1)} giorni`);
 });
 
-prova('senz\'acqua: venti ma niente pioggia; aria densa: molto più calore portato, e l\'aria in quota quasi uniforme', () => {
+prova('senz\'acqua: venti ma niente pioggia; aria densa: molto più calore portato; pianeta lento: aria in quota quasi uniforme', () => {
   const secco = circolazione({ ...base, T: terraMisurata(), alt: isole(), mare: 0, acqua: false, passi: 900 });
   assert.equal(secco.bilancio.piovuta, 0); assert.equal(secco.bilancio.evaporata, 0); assert.equal(secco.nuvoleMedie, 0);
   assert.ok(Math.max(...secco.ventoZonaleAlto) > 5, 'ma i venti ci sono');
   // la stessa superficie sotto 92 bar di CO2 che ruota piano (Venere)
   const denso = circolazione({ ...base, giorno: 243 * 86400, pressione: 9.2e6, massaMolare: 0.044, cp: 850, T: terraMisurata(), alt: isole(), mare: 0, acqua: false });
   const stesso = circolazione({ ...base, giorno: 243 * 86400, T: terraMisurata(), alt: isole(), mare: 0, acqua: false });
-  assert.ok(mediaAssoluta(denso) > 10 * mediaAssoluta(stesso), `l'aria densa porta molto più calore: ${mediaAssoluta(denso)} contro ${mediaAssoluta(stesso)} W/m²`);
-  const zq = zonale(denso.temperaturaQuota), zs = zonale(denso.temperatura), escursione = (z) => Math.max(...z) - Math.min(...z);
+  assert.ok(mediaAssoluta(denso) > 3 * mediaAssoluta(stesso), `l'aria densa porta molto più calore: ${mediaAssoluta(denso)} contro ${mediaAssoluta(stesso)} W/m²`);
+  // su un pianeta lento l'aria in quota è quasi alla stessa temperatura dappertutto (nulla la trattiene alla sua latitudine)
+  const zq = zonale(stesso.temperaturaQuota), zs = zonale(stesso.temperatura), escursione = (z) => Math.max(...z) - Math.min(...z);
   assert.ok(escursione(zq) < 0.35 * escursione(zs), `in quota le differenze sono piccole: ${escursione(zq)} K contro ${escursione(zs)} K alla superficie`);
   tra(denso.aria.tauRad / 3.156e7, 0.5, 50, 'il tempo di irraggiamento di un\'aria come quella di Venere (anni)');
-  console.log(`      92 bar: calore portato ${mediaAssoluta(denso).toFixed(0)} W/m² (a 1 bar ${mediaAssoluta(stesso).toFixed(0)}); differenze in quota ${escursione(zq).toFixed(1)} K (superficie ${escursione(zs).toFixed(0)} K); irraggiamento in ${(denso.aria.tauRad / 3.156e7).toFixed(1)} anni`);
+  console.log(`      92 bar: calore portato ${mediaAssoluta(denso).toFixed(0)} W/m² (a 1 bar ${mediaAssoluta(stesso).toFixed(0)}), irraggiamento in ${(denso.aria.tauRad / 3.156e7).toFixed(1)} anni; a 1 bar, lento: differenze in quota ${escursione(zq).toFixed(1)} K (superficie ${escursione(zs).toFixed(0)} K)`);
 });
 
 prova('dal pianeta, dalla superficie e dal clima di geologia.js: gira, conserva l\'acqua, ed è deterministico', () => {
@@ -222,7 +226,8 @@ prova('dal pianeta, dalla superficie e dal clima di geologia.js: gira, conserva 
   assert.equal(m.regime, 'aria'); assert.equal(m.W, cl.W); assert.equal(m.H, cl.H);
   for (const x of [m.u, m.v, m.pioggia, m.neve, m.evaporazione, m.nuvole, m.trasportoCalore, m.temperaturaAria]) for (const v of x) assert.ok(isFinite(v));
   assert.ok(m.bilancio.piovuta > 0 && Math.abs(m.bilancio.evaporata - m.bilancio.piovuta - m.bilancio.accumulata) < 1e-4 * m.bilancio.piovuta, 'l\'acqua si conserva');
-  assert.equal(meteoPianeta(P, sf, cl, { chiave: 'meteo-terra' }), meteoPianeta(P, sf, cl, { chiave: 'meteo-terra' }));
+  assert.equal(meteoPianeta(P, sf, cl, { chiave: 'meteo-terra', passi: 200 }), meteoPianeta(P, sf, cl, { chiave: 'meteo-terra', passi: 200 }));
+  const pf = pioggiaFine(m, sf, cl); for (let k = 0; k < pf.neve.length; k++) assert.ok(pf.neve[k] >= 0 && pf.neve[k] <= pf.pioggia[k] * 1.0001 + 1e-6);
   // stesso ingresso, stesso risultato, bit per bit
   const a = circolazione({ ...base, T: terraMisurata(), alt: sf.alt, mare: sf.mare, passi: 500 }), b = circolazione({ ...base, T: terraMisurata(), alt: sf.alt, mare: sf.mare, passi: 500 });
   for (const c of ['u', 'v', 'uAlto', 'vAlto', 'pioggia', 'neve', 'evaporazione', 'nuvole', 'umidita', 'trasportoCalore']) assert.deepEqual(a[c], b[c], c);

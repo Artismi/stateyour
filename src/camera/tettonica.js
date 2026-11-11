@@ -86,11 +86,29 @@ function fft2(re, im, W, H, inversa) {
 // ---------- IL MANTELLO: ∂u/∂t = εu − (1+∇²)²u + g·u² − u³ + coperta. u > 0 dove sale (caldo), u < 0 dove scende.
 // «onde» celle lungo l'equatore. La carta (Wm × Hm, larga il doppio di quanto è alta) è la metà di un quadrato
 // periodico, l'altra metà è la sua immagine allo specchio: così ai poli il mantello non attraversa il bordo (come la
-// crosta, che lì trova un muro). Il caso iniziale è un rumore minuscolo.
-function mantello({ onde, epsilon, seme }) {
+// crosta, che lì trova un muro).
+// LO STATO INIZIALE. Se è data «impronta» è l'anomalia termica lasciata dagli urti della formazione (impatti.js,
+// improntaMantello: caldo dove sono caduti gli urti più grandi e più tardi): una mappa lon × lat larga il doppio di
+// quanto è alta (un Float32Array di qualunque grana, o una funzione (W, H) → mappa), portata sulla griglia del
+// mantello, a media zero, e scalata perché il suo massimo valga 0,025 (la stessa ampiezza del rumore che sostituisce:
+// l'equazione parte piccola e cresce da sé; conta la forma, non la misura). Se manca, o è tutta uguale (un pianeta
+// che nessun urto ha segnato), resta il ripiego: un rumore minuscolo tirato da «seme», che sta per le irregolarità
+// del mantello appena solidificato che qui non si calcolano (in cosmo.js è un numero legato all'indirizzo del pianeta).
+function mantello({ onde, epsilon, seme, impronta = null }) {
   const Wm = onde <= 8 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, Nq = Wm * Wm, dk = 1 / onde, g = -1.2; // g < 0: il mantello è scaldato soprattutto da DENTRO (il decadimento radioattivo) e raffreddato da sopra, perciò le discese fredde sono concentrate e le salite sono larghe e formano una rete (le dorsali)
   let s = seme % 2147483647 || 1; if (s < 0) s += 2147483647; const caso = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const u = new Float64Array(Nm).map(() => 0.05 * (caso() - 0.5)), re = new Float64Array(Nq), im = new Float64Array(Nq), k4 = new Float64Array(Nq);
+  let daUrti = false;
+  if (impronta) {
+    const src = typeof impronta === 'function' ? impronta(Wm, Hm) : impronta, Ws = Math.round(Math.sqrt(2 * src.length)), Hs = Ws / 2, v = new Float64Array(Nm);
+    if (Ws * Hs !== src.length) throw new Error('tettonica: l\'impronta deve essere una mappa larga il doppio di quanto è alta');
+    // sulla griglia del mantello: la media delle celle dell'impronta che cadono in ogni cella (se è più grossa, quella in cui cade il centro)
+    let media = 0, massimo = 0;
+    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const i0 = Math.floor((x * Ws) / Wm), i1 = Math.max(i0 + 1, Math.floor(((x + 1) * Ws) / Wm)), j0 = Math.floor((y * Hs) / Hm), j1 = Math.max(j0 + 1, Math.floor(((y + 1) * Hs) / Hm)); let a = 0;
+      for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) a += src[j * Ws + i]; v[y * Wm + x] = a / ((i1 - i0) * (j1 - j0)); media += v[y * Wm + x] / Nm; }
+    for (let k = 0; k < Nm; k++) { v[k] -= media; massimo = Math.max(massimo, Math.abs(v[k])); }
+    if (massimo > 0 && Number.isFinite(massimo)) { for (let k = 0; k < Nm; k++) u[k] = (0.025 * v[k]) / massimo; daUrti = true; }
+  }
   for (let y = 0; y < Wm; y++) for (let x = 0; x < Wm; x++) { const kx = (x < Wm / 2 ? x : x - Wm) * dk, ky = (y < Wm / 2 ? y : y - Wm) * dk; k4[y * Wm + x] = (1 - kx * kx - ky * ky) ** 2; }
   // un passo: la parte che si piega da sé (u², u³) e la coperta in modo esplicito, la diffusione in modo implicito
   const passo = (dt, coperta = null) => {
@@ -120,7 +138,7 @@ function mantello({ onde, epsilon, seme }) {
   const celle = () => { let mx = 0, n = 0; for (const v of u) if (-v > mx) mx = -v;
     for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const v = -u[y * Wm + x]; if (v < 0.35 * mx) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) { const yy = y + b; if ((a || b) && yy >= 0 && yy < Hm && -u[yy * Wm + ((x + a + Wm) % Wm)] > v) { cima = false; break; } } if (cima) n++; }
     return n; };
-  return { Wm, Hm, u, passo, su, celle };
+  return { Wm, Hm, u, passo, su, celle, daUrti };
 }
 
 // ---------- dalla forma del mantello alla velocità della superficie. La crosta scivola giù dal «colle» caldo
@@ -279,7 +297,9 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 
 // ---------- LA STORIA INTERA. raggioM: raggio del pianeta; nucleo: raggio del nucleo / raggio del pianeta (il
 // resto è mantello); q: calore interno oggi (W/m²; Terra 0,087); eta: età in anni; acqua: se la crosta è indebolita
-// dall'acqua (senza, non si rompe in placche); seme: il caso iniziale; passi: quanti passi sulla griglia finale.
+// dall'acqua (senza, non si rompe in placche); passi: quanti passi sulla griglia finale; impronta: lo stato iniziale
+// del mantello, l'anomalia termica lasciata dagli urti (vedi mantello: una mappa lon × lat o una funzione (W, H) → mappa);
+// seme: il ripiego, se l'impronta manca o è piatta (storia.impronta dice quale dei due ha deciso: 'urti' o 'seme').
 // IL TEMPO. La velocità è quella vera, e in un passo la crosta non può fare più di un terzo di cella: quindi il
 // passato lontano si simula a grana grossa (griglie larghe 64, 128… celle: tanto il rimescolamento ne cancella i
 // dettagli) e solo gli ultimi «passi» passi su ogni griglia più fine, fino a W×H (sulla Terra, con 160 passi: fino
@@ -297,24 +317,24 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 //   regime     'a placche' | 'coperchio unico' | 'fermo'
 //   bilancio   { prodotta, presente, inViaggio }: metri di spessore medio di crosta continentale: quanta ne è nata,
 //              quanta ce n'è, quanta è sedimento portato dai fiumi nell'ultimo passo (prodotta = presente + inViaggio)
-//   storia     { simulati, saltati (anni), passi, velocita (m/anno), livelli: [{ W, passi, anni }] }
+//   storia     { simulati, saltati (anni), passi, velocita (m/anno), livelli: [{ W, passi, anni }], impronta: 'urti' | 'seme' }
 // SE LA CROSTA NON SI ROMPE (q ≤ 0,05 o niente acqua; «placche» true/false forza la scelta, per esempio per
 // seguire interno() di geologia.js, che guarda anche la massa): un COPERCHIO UNICO. Nessuna deriva: cont = 0,
 // spinta = 0, spessore = 0, fosse = 0, etaCrosta = l'età del pianeta ovunque; alt = solo i rigonfiamenti sopra i
 // pennacchi del mantello (fino a 1,5 km, come Tharsis o gli altopiani di Venere), o piatta (tutta 0) se anche il
 // mantello è fermo (q ≤ 0,02).
-export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null } = {}) {
+export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null, impronta = null } = {}) {
   if (W !== 2 * H || W < 32 || (W & (W - 1))) throw new Error('tettonica: serve W = 2H, potenza di 2, almeno 32');
   const N = W * H, alt = new Float32Array(N), cont = new Uint8Array(N), spinta = new Float32Array(N), etaCrosta = new Float32Array(N), spessore = new Float32Array(N), fosse = new Float32Array(N);
   // le celle del mantello sono larghe circa una volta e mezza il suo spessore: quante ce ne stanno in un giro
   const Dm = raggioM * (1 - nucleo), onde = Math.max(3, Math.min(11, Math.round((2 * Math.PI * raggioM) / (3 * Dm))));
   const aPlacche = placche ?? (q > C.qPlacche && !!acqua), vivo = q > C.qVivo;
-  const man = mantello({ onde, epsilon: Math.max(0.15, Math.min(0.8, 0.35 * (q / C.qTerra))), seme });
+  const man = mantello({ onde, epsilon: Math.max(0.15, Math.min(0.8, 0.35 * (q / C.qTerra))), seme, impronta }), origine = man.daUrti ? 'urti' : 'seme';
   if (vivo) for (let n = 0; n < 80; n++) man.passo(0.5); // il mantello convette da subito: le celle ci sono già quando la crosta comincia a separarsi
   if (!aPlacche) {
     etaCrosta.fill(eta / 1e6);
     if (vivo) { const u = man.su(W, H), A = 1500 * Math.min(1, q / C.qTerra); let mx = 1e-9; for (const v of u) mx = Math.max(mx, Math.abs(v)); for (let k = 0; k < N; k++) alt[k] = (A * u[k]) / mx; }
-    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [] } };
+    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [], impronta: origine } };
   }
   // LEGGE DI SCALA (strato limite della convezione): la velocità delle placche cresce come il quadrato del calore che esce
   const V = C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
@@ -362,5 +382,5 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     // ISOSTASIA: il fondo (oceano secondo l'età, o la radice fredda del continente) più quanto sporge la crosta leggera
     alt[k] = -(wo * profonditaOceano(a[k]) + (1 - wo) * C.radice) + C.galleggia * hk - C.fossa * fosse[k];
   }
-  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, anni: L.n * L.dt })) } };
+  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, anni: L.n * L.dt })), impronta: origine } };
 }

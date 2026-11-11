@@ -184,4 +184,25 @@ prova('pianeti diversi: giovani con poca crosta, caldi più veloci; e le griglie
   assert.throws(() => evolviTettonica({ W: 100, H: 50 })); assert.throws(() => evolviTettonica({ W: 256, H: 64 }));
 });
 
+prova('lo stato iniziale del mantello è l\'impronta degli urti: stessa impronta, stessa storia; impronte diverse, continenti diversi', () => {
+  // due impronte: una macchia calda (un grande urto) in due posti diversi; mappe lon × lat, in kelvin
+  const macchia = (lon0, lat0) => (W, H) => { const m = new Float32Array(W * H); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI, d = Math.acos(Math.min(1, Math.sin(lat) * Math.sin(lat0) + Math.cos(lat) * Math.cos(lat0) * Math.cos(lon - lon0))); m[j * W + i] = 300 * Math.exp(-((d / 0.5) ** 2)); } return m; };
+  const o = { W: 64, H: 32, seme: 7 }, a = evolviTettonica({ ...o, impronta: macchia(0.5, 0.3) }), b = evolviTettonica({ ...o, impronta: macchia(0.5, 0.3) }), c = evolviTettonica({ ...o, impronta: macchia(-2, -0.6) });
+  for (const campo of ['alt', 'cont', 'spinta', 'etaCrosta', 'spessore', 'fosse']) assert.deepEqual(a[campo], b[campo], campo);
+  assert.notDeepEqual(a.cont, c.cont); assert.equal(a.storia.impronta, 'urti'); assert.equal(a.regime, 'a placche');
+  assert.ok(a.alt.every(Number.isFinite) && somma(a.cont) > 0.1 * a.cont.length && somma(a.cont) < 0.6 * a.cont.length, `continenti: ${somma(a.cont) / a.cont.length}`);
+  // con l'impronta il seme non conta più; la sua misura non conta (solo la forma), e nemmeno la grana con cui è data
+  assert.deepEqual(evolviTettonica({ ...o, seme: 99, impronta: macchia(0.5, 0.3) }).cont, a.cont);
+  const tripla = (W, H) => macchia(0.5, 0.3)(W, H).map((v) => 3 * v + 40);
+  assert.deepEqual(evolviTettonica({ ...o, impronta: tripla }).cont, a.cont);
+  assert.equal(evolviTettonica({ ...o, impronta: macchia(0.5, 0.3)(256, 128) }).storia.impronta, 'urti');
+  assert.throws(() => evolviTettonica({ ...o, impronta: new Float32Array(100) }));
+  // senza impronta, o con un'impronta piatta (nessun urto), resta il ripiego: il rumore dal seme, come prima
+  const senza = evolviTettonica(o), piatta = evolviTettonica({ ...o, impronta: new Float32Array(64 * 32) });
+  assert.equal(senza.storia.impronta, 'seme'); assert.equal(piatta.storia.impronta, 'seme'); assert.deepEqual(piatta.cont, senza.cont); assert.notDeepEqual(senza.cont, a.cont);
+  // anche sotto un coperchio unico i rigonfiamenti nascono dall'impronta
+  const fermo = evolviTettonica({ ...o, acqua: false, impronta: macchia(0.5, 0.3) }), fermo2 = evolviTettonica({ ...o, acqua: false, impronta: macchia(-2, -0.6) });
+  assert.equal(fermo.regime, 'coperchio unico'); assert.notDeepEqual(fermo.alt, fermo2.alt);
+});
+
 console.log(`tettonica: ${ok} prove, tutto ok`);
