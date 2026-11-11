@@ -136,8 +136,11 @@ prova('l\'erosione: l\'acqua scende sempre, e scava', () => {
   const W = sf.W, incasso = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= sf.H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
   // LE VALLI SU UNA POPOLAZIONE. «Dove scorre molta acqua il terreno si incassa» è ciò che ci si aspetta da un fiume. Nel
   // modello NON vale: misurato su sedici Terre con i continenti diversi (semi da 11 a 26) l'incasso medio è positivo su 2,
-  // la mediana è −12 m (da −76 a +4), e delle celle dove scorre molta acqua 7 su 10 si ALZANO: l'erosione posa nel letto
-  // del fiume il materiale tolto ai versanti. È un difetto del modello (geologia.js erosione), non del seme: la prova lo
+  // la mediana è −12 m (da −76 a +4), e delle celle dove scorre molta acqua 7 su 10 si ALZANO. La causa più probabile, letta
+  // nella legge (geologia.js erosione): lo scavo avvicina la cella a quella a valle di 0,0009·√portata per passo (mezzo
+  // per cento con portata 30), mentre «i pendii si sgretolano» avvicina OGNI cella, anche il letto del fiume, alla media
+  // dei vicini del 5% ogni quattro passi: in 60 passi spiana metà dell'incasso che c'era; e la crescita dei monti alza
+  // tutte le terre dello 0,1% per passo. È un difetto del modello, non del seme: la prova lo
   // misura qui su sei mondi (questo e i semi da 11 a 15; ± 20%), lo stampa come «≠ NON TORNA» e non ferma la catena. Dura
   // resta solo l'asserzione che i fiumi ci siano.
   const valli = (sfx, sex) => { const inc = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= sfx.H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
