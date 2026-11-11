@@ -105,17 +105,52 @@ prova('la Luna, la Terra solida, Mercurio, TRAPPIST-1 b e c: lo stesso corpo omo
   console.log(`      Terra: Q = ${n(dT.Q)} a ${n((2 * Math.PI) / omega / 3600)} ore, k₂/Q = ${n(dT.imK2)} (lune.js k2QPianeta usa ancora 0,3/30 = 0,01 con il mare e 0,3/100 senza: è la marea DEL MARE, che qui non c'è); Mercurio: marea ${n(mer.Q.marea)} W, Q ${n(mer.marea.Q)}; TRAPPIST-1 b: T ${n(b.Tum, 4)} K, fuso ${n(b.marea.fusoSottoIlCoperchio)}, −Im k₂ ${n(b.marea.imK2)}, ${b.crosta.regime}; c: −Im k₂ ${n(c.marea.imK2)}`);
 });
 
-console.log('\nLE LUNE (lune.js legge la nuova fonte per la roccia; il ghiaccio non ancora)');
+console.log('\nLE LUNE (lune.js legge la nuova fonte: la roccia dalla storia del corpo, il ghiaccio dal guscio sopra l\'oceano)');
 prova('le firme di lune.js restano, e per la roccia leggono la storia: niente più due stati né il k₂/Q fisso di Io', () => {
   const GIOVE = { tipo: 'gassoso', massaKg: MGIOVE, raggioM: 7.15e7, aM: 5.2 * UA, Mstella: LG.MSOLE, giorno: 35730 }, IO = { massaKg: 8.93e22, raggioM: 1.82e6, aM: 4.22e8, eccentricita: 0.0041 }, EUROPA = { massaKg: 4.8e22, raggioM: 1.561e6, aM: 6.711e8, eccentricita: 0.0094 };
   const kq = LU.k2QLuna(GIOVE, IO); assert.ok(kq > 0 && kq !== LU.MATERIALI.roccia.k2Qcaldo && kq !== LU.k2QFreddo(IO), 'il k₂/Q di Io non è né il «caldo» fisso né l\'elastico da fredda'); assert.equal(LU.stato(GIOVE, IO), 'vulcanica');
   assert.equal(LU.stato(GIOVE, { ...IO, eccentricita: 0 }), 'fredda e ferma'); assert.equal(LU.caloreMareale(GIOVE, { ...IO, eccentricita: 0 }), 0);
   // dove nemmeno la dissipazione massima conterebbe, resta l'elastico da fredda (e non si calcola la storia)
   const lontana = { ...IO, aM: 20 * IO.aM }; assert.equal(LU.k2QLuna(GIOVE, lontana), LU.k2QFreddo(lontana));
-  // il ghiaccio: ancora la legge di prima (guscio a conduzione, due valori di k₂/Q): è dichiarato, e Europa ha il suo oceano come prima
-  assert.equal(LU.stato(GIOVE, EUROPA), 'oceano sotto il ghiaccio'); assert.equal(LU.k2QLuna(GIOVE, EUROPA), LU.MATERIALI.ghiaccio.k2Qcaldo);
-  for (const [nome, vero] of [['Europa: guscio di ghiaccio (km)', '15–25'], ['Europa: oceano (km)', '~100'], ['Encelado: potenza (GW)', '5–15 osservati; 1,1 di equilibrio (Meyer e Wisdom 2007): è noto che non torna'], ['Ganimede: oceano e dinamo', 'sì'], ['Titano', 'oceano sotto ~100 km di ghiaccio'], ['Tritone', 'marea di obliquità']]) tabella.push([nome, 'non calcolato', vero, 'NON FATTO (serve il corpo a strati)']);
-  console.log(`      Io: k₂/Q = ${n(kq)} (prima 0,015 fisso), ${n(LU.caloreMareale(GIOVE, IO))} W/m²; Europa: ${n(LU.caloreMareale(GIOVE, EUROPA))} W/m² con il k₂/Q fisso del ghiaccio (0,01)`);
+  // il ghiaccio: non più i due k₂/Q fissi (0,01 e l'elastico/100): dallo stato del guscio
+  assert.equal(LU.stato(GIOVE, EUROPA), 'oceano sotto il ghiaccio'); assert.notEqual(LU.k2QLuna(GIOVE, EUROPA), LU.MATERIALI.ghiaccio.k2Qcaldo); tra(LU.k2QLuna(GIOVE, EUROPA) / LU.internoGhiacciato(GIOVE, EUROPA).imK2, 1 - 1e-12, 1 + 1e-12, 'k2QLuna legge internoGhiacciato');
+  console.log(`      Io: k₂/Q = ${n(kq)} (prima 0,015 fisso), ${n(LU.caloreMareale(GIOVE, IO))} W/m²; Europa: k₂/Q = ${n(LU.k2QLuna(GIOVE, EUROPA))} (prima 0,01 fisso), ${n(LU.caloreMareale(GIOVE, EUROPA))} W/m²`);
+});
+
+console.log('\nIL GUSCIO DI GHIACCIO SOPRA UN OCEANO (membrana di Beuthe 2015) E LA STORIA DELLE LUNE GHIACCIATE');
+prova('la membrana: senza guscio il corpo fluido, con il guscio meno marea; l\'attrito è quello del ghiaccio', () => {
+  const M = 4.8e22, R = 1.5608e6, w = 2.048e-5, rhoB = M / ((4 / 3) * Math.PI * R ** 3), xi = 1000 / rhoB, mu = MR.rigiditaComplessa(4e9, MR.viscositaGhiaccio(250), w);
+  const zero = MR.dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: 0, rigidita: mu }); tra(zero.h2[0] / (5 / (5 - 3 * xi)), 1 - 1e-12, 1 + 1e-12, 'senza guscio: h₂° = 5/(5 − 3ξ) (Beuthe)'); tra(zero.k2Reale + 1 - zero.h2[0], -1e-12, 1e-12, 'k₂° + 1 = h₂°'); assert.equal(zero.imK2, 0);
+  let prima = zero.k2Reale; for (const d of [5e3, 2e4, 5e4, 1e5]) { const x = MR.dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: d, rigidita: mu }); assert.ok(x.k2Reale < prima && x.imK2 > 0, 'più spesso il guscio, meno marea'); prima = x.k2Reale;
+    // la relazione letta (eq. 75 all'ordine principale): k₂ + 1 = (1 + Λ)·h₂, parte reale e immaginaria
+    tra(x.k2[0] + 1 - ((1 + x.Lambda[0]) * x.h2[0] - x.Lambda[1] * x.h2[1]), -1e-12, 1e-12, 'k₂ + 1 = (1 + Λ)h₂ (reale)'); tra(x.k2[1] - (x.Lambda[1] * x.h2[0] + (1 + x.Lambda[0]) * x.h2[1]), -1e-12, 1e-12, '(immaginaria)');
+    tra(x.Lambda[0] / (((8 * 1.33) / 5.33) * (mu[0] / (1000 * ((G * M) / R ** 2) * R)) * (d / R)), 1 - 1e-9, 1 + 1e-9, 'Λ = 8(1+ν)/(5+ν)·μ/(ρgR)·d/R'); }
+  // un guscio elastico (viscosità enorme, Maxwell) non dissipa; il ghiaccio caldo dissipa più di quello freddo
+  tra(MR.dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: 2e4, rigidita: MR.rigiditaComplessa(4e9, 1e40, w, { reologia: 'maxwell' }) }).imK2, 0, 1e-15, 'guscio elastico');
+  const att = (T) => MR.dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: 2e4, rigidita: MR.rigiditaComplessa(4e9, MR.viscositaGhiaccio(T), w) }).imK2; assert.ok(att(260) > att(200) && att(200) > att(120));
+  const e = MR.dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: 2e4, rigidita: mu }); console.log(`      Europa con 20 km di guscio a 250 K: h₂ ${n(e.h2[0])}, k₂ ${n(e.k2Reale)} (fluido ${n(e.fluido.k2)}), −Im k₂ ${n(e.imK2)}, Λ ${n(e.Lambda[0])}`);
+});
+prova('le lune ghiacciate nella storia: lo spessore del guscio e dell\'oceano dal bilancio d\'energia, non da una soglia', () => {
+  const Lw = stellaVera(1, { Z: 1, eta: 4.5e9 }).L * LG.LSOLE, GIOVE = { tipo: 'gassoso', massaKg: MGIOVE, raggioM: 7.15e7, aM: 5.2 * UA, Mstella: LG.MSOLE, Lw }, SATURNO = { tipo: 'gassoso', massaKg: 5.683e26, raggioM: 5.82e7, aM: 9.58 * UA, Mstella: LG.MSOLE, Lw }, NETTUNO = { tipo: 'ghiacciato', massaKg: 1.024e26, raggioM: 2.46e7, aM: 30.07 * UA, Mstella: LG.MSOLE, Lw };
+  const EUROPA = { massaKg: 4.8e22, raggioM: 1.5608e6, aM: 6.711e8, eccentricita: 0.0094 }, eu = LU.internoGhiacciato(GIOVE, EUROPA);
+  // il bilancio all'arrivo: ciò che esce è ciò che entra (roccia + marea nel guscio), entro il poco che il guscio sta ancora gelando o fondendo
+  tra(eu.calore.esce / (eu.calore.roccia + eu.calore.mareaGuscio), 0.8, 1.25, 'Europa: calore che esce / calore che entra'); assert.ok(eu.oceano > 0 && eu.guscio + eu.oceano <= eu.strato + 1 && eu.Tacqua < 273.16 && eu.Tacqua > 250 && eu.idrotermale === eu.calore.roccia && eu.flussoFondo > 0);
+  // senza marea lo stesso corpo ha un guscio più spesso (o gela del tutto); con l'antigelo (ramo aperto) l'acqua è più fredda e l'oceano non è meno profondo
+  const senza = LU.internoGhiacciato(GIOVE, { ...EUROPA, eccentricita: 0 }), sale = LU.internoGhiacciato(GIOVE, EUROPA, 4.5e9, { antigelo: 30 }); assert.ok(senza.guscio > eu.guscio && senza.calore.mareaGuscio === 0); assert.ok(sale.Tacqua < eu.Tacqua - 25 && sale.oceano >= eu.oceano - 1);
+  riscontro('Europa: guscio di ghiaccio (km)', eu.guscio / 1e3, 15, 25, '15–25', 'di poco fuori: il guscio qui convette con η₀ = 10¹⁴ Pa·s; con 10¹⁵ viene ' + n(LU.internoGhiacciato(GIOVE, EUROPA, 4.5e9, { viscositaGhiaccio: 1e15 }).guscio / 1e3) + ' km');
+  riscontro('Europa: oceano (km)', eu.oceano / 1e3, 60, 150, '~100', 'lo strato d\'acqua è solo ' + n(eu.strato / 1e3) + ' km: lune.js ricava il ghiaccio dalla densità con roccia a 3300 kg/m³ (la struttura vera ne dà 80–170)');
+  riscontro('Europa: k₂', eu.k2, 0.2, 0.26, '0,2–0,26 (modelli; non ancora misurato)'); riscontro('Europa: calore totale (W)', eu.calore.esce, 3e11, 3e12, '~10¹² (stime)');
+  const ga = LU.internoGhiacciato(GIOVE, { massaKg: 1.4819e23, raggioM: 2.6341e6, aM: 1.0704e9, eccentricita: 0.0013 }), ca = LU.internoGhiacciato(GIOVE, { massaKg: 1.0759e23, raggioM: 2.4103e6, aM: 1.8827e9, eccentricita: 0.0074 });
+  const en = LU.internoGhiacciato(SATURNO, { massaKg: 1.08e20, raggioM: 2.521e5, aM: 2.3802e8, eccentricita: 0.0047 }), ti = LU.internoGhiacciato(SATURNO, { massaKg: 1.3452e23, raggioM: 2.5747e6, aM: 1.22187e9, eccentricita: 0.0288 }), tr = LU.internoGhiacciato(NETTUNO, { massaKg: 2.139e22, raggioM: 1.3534e6, aM: 3.5476e8, eccentricita: 0.000016, obliquita: 0.35 });
+  riscontro('Ganimede: ha un oceano (1 = sì)', ga.oceano > 0 ? 1 : 0, 1, 1, 'sì, tra i ghiacci (e una dinamo)', 'qui il ghiaccio che convette (650 km, senza ghiacci d\'alta pressione, più viscosi) porta via più calore di quanto la roccia ne dia, e gela tutto; la dinamo di Ganimede non è stata guardata');
+  riscontro('Ganimede: calore di marea (W)', ga.calore.mareaGuscio, 0, 1e10, 'trascurabile', 'gelato fino alla roccia risponde come ghiaccio omogeneo e tiepido, vicino al massimo dell\'attrito: è un difetto del corpo senza strati');
+  riscontro('Callisto: ha un oceano (1 = sì)', ca.oceano > 0 ? 1 : 0, 1, 1, 'forse (campo indotto)', 'come Ganimede: senza antigelo e senza ghiacci d\'alta pressione gela');
+  riscontro('Encelado: potenza di marea (GW)', en.calore.mareaGuscio / 1e9, 5, 15, '5–15 osservati al polo sud; 1,1 di equilibrio (Meyer e Wisdom 2007): è noto che non torna', 'qui nasce fredda (l\'energia di accrescimento non fonde il ghiaccio) e resta sul ramo freddo: nessuna marea');
+  riscontro('Titano: k₂', ti.k2, 0.55, 0.65, '0,6 (Cassini, Iess e altri 2012 [R])', 'il guscio è il ' + n(100 * ti.sottile) + '% del raggio (la membrana vale sotto il 5–10%), l\'interno sotto l\'oceano è rigido e l\'oceano ha la densità dell\'acqua pura');
+  riscontro('Titano: oceano (km)', ti.oceano / 1e3, 50, 500, 'profondo, sotto ~50–100 km di ghiaccio', 'resta un velo d\'acqua: gelato del tutto il corpo risponderebbe come ghiaccio omogeneo e tiepido e si riscalderebbe, con l\'oceano la membrana dissipa meno: il bilancio si ferma sul bordo tra le due risposte (è un artefatto del passaggio tra i due modelli)');
+  riscontro('Tritone: ha un oceano (1 = sì)', tr.oceano > 0 ? 1 : 0, 1, 1, 'forse (marea di obliquità: Nimmo e Spencer 2015 [R])', 'l\'obliquità di oggi (0,35°) dà ' + n(tr.calore.mareaGuscio) + ' W: nata fredda, resta gelata');
+  console.log(`      Europa: guscio ${n(eu.guscio / 1e3)} km (convette: ${eu.convette}; coperchio ${n(eu.coperchio / 1e3)} km), oceano ${n(eu.oceano / 1e3)} km a ${n(eu.Tacqua, 4)} K, calore: roccia ${n(eu.calore.roccia)} W (di cui marea ${n(eu.calore.mareaRoccia)}), marea nel guscio ${n(eu.calore.mareaGuscio)} W; flusso al fondo ${n(eu.flussoFondo * 1e3)} mW/m²; senza eccentricità: guscio ${n(senza.guscio / 1e3)} km; con antigelo 30 K: acqua a ${n(sale.Tacqua, 4)} K`);
+  console.log(`      Ganimede: guscio ${n(ga.guscio / 1e3)} km di ${n(ga.strato / 1e3)}, base a ${n(ga.Tbase, 4)} K; Callisto: ${n(ca.guscio / 1e3)} di ${n(ca.strato / 1e3)}; Titano: oceano ${n(ti.oceano / 1e3)} km sotto ${n(ti.guscio / 1e3)}; con antigelo 30 K: Ganimede ${n(LU.internoGhiacciato(GIOVE, { massaKg: 1.4819e23, raggioM: 2.6341e6, aM: 1.0704e9, eccentricita: 0.0013 }, 4.5e9, { antigelo: 30 }).oceano / 1e3)} km, Titano ${n(LU.internoGhiacciato(SATURNO, { massaKg: 1.3452e23, raggioM: 2.5747e6, aM: 1.22187e9, eccentricita: 0.0288 }, 4.5e9, { antigelo: 30 }).oceano / 1e3)} km di oceano`);
 });
 
 console.log('\nLA TABELLA DEI RISCONTRI (modello / vero / torna o no)');

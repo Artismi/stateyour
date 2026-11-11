@@ -41,6 +41,10 @@
 // frequenza è 2·(Ω − n), la legge di k₂* è la stessa: si può chiedere con la frequenza giusta, ma la potenza qui sotto
 // è quella del corpo sincrono); la dipendenza di ζ dalla frequenza.
 // PARAMETRI LIBERI: nessuno tarato; APERTI (con intervallo): α e ζ di Andrade, η₀ del ghiaccio.
+// CHE COSA NON TORNA delle lune ghiacciate (lune.js internoGhiacciato + la membrana): Europa torna quasi (guscio 26 km,
+// k₂ 0,23, 8·10¹¹ W; l'oceano è 40 km perché lo strato d'acqua di lune.js è 66); Ganimede, Callisto e Titano gelano (il
+// ghiaccio che convette, senza ghiacci d'alta pressione, porta via troppo calore); Encelado e Tritone nascono freddi e
+// restano sul ramo freddo; k₂ di Titano 0,44 contro 0,6 misurato.
 // CHE COSA NON TORNA (test/test_maree.mjs, con i numeri): Io trova da solo il ramo caldo (mantello in parte fuso, il
 // calore esce con il magma) ma dissipa 0,34 W/m² dove se ne osservano 2–2,5 (−Im k₂ = 0,002 contro 0,015 misurato): al
 // corpo omogeneo manca lo strato molle sotto una crosta rigida; k₂ della Terra 0,54 (vero 0,30: la rigidità qui non cresce

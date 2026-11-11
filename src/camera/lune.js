@@ -189,15 +189,21 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
   const fuso = (0.6 * COSTANTI.G * M) / R > 2000 * Math.max(0, Gh.Tfusione - Ts) + Gh.latente; let d = fuso ? Math.min(strato, 100) : strato;
   const N = 40, t0 = Math.min(1e7, 0.5 * eta), tempi = Array.from({ length: N + 1 }, (_, k) => t0 * Math.pow(eta / t0, k / N)), traccia = [];
   for (let k = 1; k <= N; k++) {
-    let resta = (tempi[k] - tempi[k - 1]) * ANNO; const Qr = Qroccia(tempi[k]);
-    for (let passo = 0; passo < 80 && resta > 0; passo++) {
+    let resta = (tempi[k] - tempi[k - 1]) * ANNO, parte = 0.15, verso = 0; const Qr = Qroccia(tempi[k]);
+    // (il guscio si assesta in migliaia–milioni di anni, molto meno di un passo: quando il bilancio cambia segno si è
+    // scavalcato l'equilibrio, e il passo si dimezza fino a fermarcisi sopra)
+    for (let passo = 0; passo < 200 && resta > 0 && parte > 1e-4; passo++) {
       const gu = guscioA(d), mr = mareaA(d, gu), rate = (gu.esce * A - Qr - mr.W) / (Gh.densita * Gh.latente * 4 * Math.PI * Math.max(Rr, R - d) ** 2); // m/s
       if ((d >= strato && rate >= 0) || (d <= 1 && rate <= 0)) break; // gelato del tutto (o tutto acqua) e il bilancio lo tiene lì
-      const dt = Math.min(resta, (0.15 * Math.max(d, 50)) / Math.max(1e-30, Math.abs(rate))); d = Math.min(strato, Math.max(1, d + rate * dt)); resta -= dt;
+      if (verso && Math.sign(rate) !== verso) parte *= 0.5; verso = Math.sign(rate);
+      const dt = Math.min(resta, (parte * Math.max(d, 50)) / Math.max(1e-30, Math.abs(rate))); d = Math.min(strato, Math.max(1, d + rate * dt)); resta -= dt;
     }
     traccia.push({ t: tempi[k], guscio: d });
   }
-  const Qr = Qroccia(eta), mareaRoccia = tab ? daTab('Qmarea', eta) : 0, oceano = d < strato - 1 ? strato - d : 0; let gu = guscioA(d), mg = mareaA(d, gu);
+  // (il passo si ferma a un decimillesimo dello spessore: un velo d'acqua più sottile di così, sotto un guscio che al suo
+  // spessore pieno porterebbe via più calore di quanto ne arriva, è il guscio che ha finito di gelare)
+  if (d > strato * (1 - 2e-4)) { const gp = guscioA(strato); if (gp.esce * A - Qroccia(eta) - mareaA(strato, gp).W >= 0) d = strato; }
+  const Qr = Qroccia(eta), mareaRoccia = tab ? daTab('Qmarea', eta) : 0, oceano = d < strato ? strato - d : 0; let gu = guscioA(d), mg = mareaA(d, gu);
   if (!oceano) { // gelato fino alla roccia: la base non è al punto di fusione; la sua temperatura è quella a cui il ghiaccio porta fuori
     // esattamente il calore che riceve (roccia + la sua marea, che dipende da quella temperatura): si cerca dimezzando
     let lo = Ts + 0.5, hi = gu.Tfus; for (let k = 0; k < 30; k++) { const Tm = 0.5 * (lo + hi), gm = guscioA(d, Tm); if (gm.esce * A - Qr - mareaA(d, gm).W > 0) hi = Tm; else lo = Tm; }

@@ -59,7 +59,7 @@
 //   · la sezione t′ = costante è un piano solo dove lo spaziotempo è quasi piatto (distanze ≪ c/H₀): oltre, lo scarto
 //     v·x/c² è la formula locale estesa, e `sezioneDi` lo dice (`curvatura`: x·H/c);
 //   · il cono cosmico usa la cosmologia di leggi.js (materia + Λ, niente radiazione): l'orizzonte delle particelle
-//     viene 14,3 Gpc contro i 14,2 veri;
+//     viene 14,4 Gpc contro i 14,2 veri;
 //   · la rotazione (a*) dei buchi neri non viene dal modello: `stelle.fine` non dà il momento angolare del resto e
 //     `galassie.js` non segue quello accresciuto dal buco centrale: qui a* è un ingresso (0 se non si sa);
 //   · Kerr: orizzonte, ergosfera, orbite e ombra sono esatti; le geodetiche integrate sono quelle di Schwarzschild
@@ -215,7 +215,11 @@ export function incrocio(s1, s2, x2 = [0, 0, 0]) {
 export function conoPassato(bolla, luogo) {
   const t0 = (bolla && bolla.t) || 0, cosmico = luogo.comovente != null || (luogo.cosmico && luogo.posizione);
   if (!cosmico) { const d = luogo.distanza ?? lungo(luogo.posizione); return { t: t0 - d / C, ritardo: d / C, z: 0, a: cosmo.scala(T_OGGI + t0), modo: 'piatto', visibile: true }; }
-  const chi = luogo.comovente ?? lungo(luogo.posizione), ao = cosmo.scala(T_OGGI + t0), ae = scalaDiPartenza(chi, ao);
+  const chi = luogo.comovente ?? lungo(luogo.posizione), ao = cosmo.scala(T_OGGI + t0), Ho = cosmo.H(ao), x = (Ho * ao * chi) / C;
+  // vicino (x = H·d/c < 10⁻⁴) la differenza tra due tempi enormi perderebbe le cifre: lo sviluppo al secondo ordine,
+  // Δt = (a·χ/c)(1 − x/2), z = HΔt + (1 + q/2)(HΔt)², q il parametro di decelerazione (le due vie coincidono a 10⁻¹² sulla soglia)
+  if (x < 1e-4) { const dt = ((ao * chi) / C) * (1 - x / 2), E2 = OM / ao ** 3 + OL, q = OM / (2 * ao ** 3 * E2) - OL / E2, hd = Ho * dt, z = hd + (1 + q / 2) * hd * hd; return { t: t0 - dt, ritardo: dt, z, a: ao / (1 + z), modo: 'cosmico', visibile: true }; }
+  const ae = scalaDiPartenza(chi, ao);
   if (!(ae > 0)) return { t: -T_OGGI, ritardo: T_OGGI + t0, z: Infinity, a: 0, modo: 'cosmico', visibile: false };
   const te = cosmo.tempo(ae); return { t: te - T_OGGI, ritardo: T_OGGI + t0 - te, z: ao / ae - 1, a: ae, modo: 'cosmico', visibile: true };
 }
@@ -297,7 +301,7 @@ export function ultimaOrbitaStabile(M, a = 0, verso = 1) {
 // l'energia (per unità di mc²) di un'orbita circolare equatoriale di raggio r (ivi, eq. 2.12) [R]; x = r/r_g
 const energiaOrbita = (x, a, verso = 1) => (1 - 2 / x + (verso * a) / x ** 1.5) / Math.sqrt(1 - 3 / x + (2 * verso * a) / x ** 1.5);
 // la resa dell'accrescimento: l'energia di legame all'ultima orbita stabile (5,72% per a = 0; 42,3% per a = 1)
-export const efficienza = (a = 0, verso = 1) => 1 - energiaOrbita(ultimaOrbitaStabile(1, a, verso) / raggioGravitazionale(1), a, verso);
+export const efficienza = (a = 0, verso = 1) => (a >= 1 && verso > 0 ? 1 - 1 / Math.sqrt(3) : 1 - energiaOrbita(ultimaOrbitaStabile(1, a, verso) / raggioGravitazionale(1), a, verso));
 // la velocità angolare dell'orizzonte (rad/s) e quella del trascinamento lontano (Lense–Thirring: 2GJ/c²r³)
 export const giroOrizzonte = (M, a = 0) => { const rg = raggioGravitazionale(M), rp = orizzonte(M, a); return (a * rg * C) / (rp * rp + a * a * rg * rg); };
 export const trascinamento = (J, r) => (2 * G * J) / (C2 * r ** 3); // rad/s all'equatore, lontano
@@ -352,7 +356,7 @@ export const tempoSalpeter = (eta = 0.1) => ((eta / (1 - eta)) * SIGMA_T * C) / 
 
 // IL DISCO SOTTILE (Novikov & Thorne 1973; Page & Thorne 1974): gas in orbite circolari che scende piano,
 // otticamente spesso, che irraggia come un corpo nero ciò che la viscosità dissipa. Il flusso da ciascuna faccia:
-//   F(r) = 3GMṀ/(8πr³) · x³·Q(x)/(x³ − 3x + 2a),  x = √(r/r_g),  Q la parentesi di Page & Thorne (eq. 15n)
+//   F(r) = 3GMṀ/(8πr³) · x²·Q(x)/(x³ − 3x + 2a),  x = √(r/r_g),  Q la parentesi di Page & Thorne (eq. 15n: Q → x lontano)
 // (lontano: 3GMṀ/(8πr³), il disco newtoniano di Shakura & Sunyaev 1973). T(r) = (F/σ)^(1/4).
 // M (kg), mdot (kg/s), a (spin, con il disco che gira nel verso del buco). → { interno, efficienza, luminosita,
 // flusso(r), temperatura(r), Tmax, rTmax, energia(r) (dell'orbita, per mc²), omega(r) (rad/s, tempo di lontano) }
@@ -361,7 +365,7 @@ export function discoSottile(M, mdot, a = 0) {
   const x1 = 2 * Math.cos((ac - PI) / 3), x2 = 2 * Math.cos((ac + PI) / 3), x3 = -2 * Math.cos(ac / 3);
   const pezzo = (xi, xj, xk) => (Math.abs(xi) < 1e-12 ? () => 0 : (x) => ((3 * (xi - a) ** 2) / (xi * (xi - xj) * (xi - xk))) * Math.log((x - xi) / (x0 - xi)));
   const p1 = pezzo(x1, x2, x3), p2 = pezzo(x2, x1, x3), p3 = pezzo(x3, x1, x2);
-  const flusso = (r) => { if (!(r > rin)) return 0; const x = Math.sqrt(r / rg), Q = x - x0 - 1.5 * a * Math.log(x / x0) - p1(x) - p2(x) - p3(x); return Math.max(0, ((3 * G * M * mdot) / (8 * PI * r ** 3)) * ((x ** 3 * Q) / (x ** 3 - 3 * x + 2 * a))); };
+  const flusso = (r) => { if (!(r > rin)) return 0; const x = Math.sqrt(r / rg), Q = x - x0 - 1.5 * a * Math.log(x / x0) - p1(x) - p2(x) - p3(x); return Math.max(0, ((3 * G * M * mdot) / (8 * PI * r ** 3)) * ((x * x * Q) / (x ** 3 - 3 * x + 2 * a))); };
   const temperatura = (r) => Math.pow(flusso(r) / K.sigma, 0.25);
   // il massimo della temperatura (cercato: sta poco fuori dal bordo interno)
   let rT = rin, Tm = 0; for (let k = 1; k <= 400; k++) { const r = rin * Math.exp((k / 400) * Math.log(8)), T = temperatura(r); if (T > Tm) { Tm = T; rT = r; } }
