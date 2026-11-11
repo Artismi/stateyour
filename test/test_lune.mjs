@@ -1,6 +1,6 @@
 // test_lune.mjs — le lune e le maree: i numeri veri del Sistema Solare, e lune che emergono da un seme
 import assert from 'node:assert/strict';
-import { limiteRoche, raggioHill, raggioRotondo, lune, caloreMareale, stato, maree, tempoBlocco, orbitaDopoLeMaree, k2QFreddo, MATERIALI } from '../src/camera/lune.js';
+import { limiteRoche, raggioHill, raggioRotondo, lune, caloreMareale, stato, maree, tempoBlocco, orbitaDopoLeMaree, k2QFreddo, k2QLuna, MATERIALI } from '../src/camera/lune.js';
 import { MSOLE, UA, ANNO } from '../src/camera/leggi.js';
 import { indirizzoDi, sistema, cosmoCon, cosmoRamo } from '../src/camera/cosmo.js';
 import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
@@ -65,7 +65,7 @@ prova('un corpo si arrotonda da solo sopra 150–400 km: prima il ghiaccio, poi 
 });
 
 prova('un gigante come Giove: più lune dal disco, tra Roche e Hill, in tutto circa 10⁻⁴ del pianeta', () => {
-  const RH = raggioHill(GIOVE), N = 60; let piu = 0, risonanti = 0, vulcaniche = 0, oceani = 0, contromano = 0, catturate = 0;
+  const RH = raggioHill(GIOVE), N = 60; let piu = 0, risonanti = 0, vulcaniche = 0, oceani = 0, contromano = 0, catturate = 0, rigide = 0;
   for (let s = 1; s <= N; s++) {
     const tutte = lune(GIOVE, SOLE, s), reg = tutte.filter((l) => l.origine === 'disco'), tot = reg.reduce((x, l) => x + l.massaKg, 0) / GIOVE.massaKg;
     assert.ok(reg.length >= 1 && !tutte.some((l) => l.origine === 'urto'), `seme ${s}`);
@@ -83,7 +83,14 @@ prova('un gigante come Giove: più lune dal disco, tra Roche e Hill, in tutto ci
       tra(l.densita, 900, 4000, 'densità');
       // in risonanza l'eccentricità resta forzata (millesimi); le altre vicine si circolarizzano
       if (l.risonanza) { risonanti++; tra(l.eccentricita, 1e-4, 0.0201, `eccentricità forzata (seme ${s})`); }
-      else if (l.aM < 8 * GIOVE.raggioM) assert.ok(l.eccentricita < 1e-4, `circolarizzata (seme ${s}): ${l.eccentricita}`);
+      else if (l.aM < 8 * GIOVE.raggioM) {
+        // (la legge: l'attrito nella luna consuma l'eccentricità in τ = (2/21)·(m/M)·(a/R)⁵/((k₂/Q)·n). Il k₂/Q non è più un
+        // numero fisso (Q = 40): viene dallo stato interno. Una luna di roccia piccola e fredda è rigida e quasi non dissipa
+        // (Q di decine di migliaia): la sua orbita resta schiacciata, come quelle di Amaltea e Tebe. Chi ha τ molto più
+        // breve dell'età invece deve essere tonda)
+        const tau = ((2 / 21) * (l.massaKg / GIOVE.massaKg) * (l.aM / l.raggioM) ** 5) / (k2QLuna(GIOVE, l) * ((2 * Math.PI) / l.periodo));
+        if (tau < ETA / 20) assert.ok(l.eccentricita < 1e-4, `circolarizzata (seme ${s}): ${l.eccentricita}`); else { rigide++; assert.equal(l.stato, 'fredda e ferma', 'chi tiene l\'eccentricità senza risonanza è freddo e rigido'); }
+      }
       assert.ok(l.caloreMareale < 50, `calore ${l.caloreMareale}`);
       if (l.stato === 'vulcanica') { vulcaniche++; assert.ok(l.risonanza && (l.composizione.ghiaccio ?? 0) < 0.01, 'i vulcani solo dove una risonanza tiene viva la marea'); }
       if (l.stato === 'oceano sotto il ghiaccio') oceani++;
@@ -101,7 +108,7 @@ prova('un gigante come Giove: più lune dal disco, tra Roche e Hill, in tutto ci
   assert.ok(piu >= 0.8 * N, `con più lune regolari: ${piu} su ${N}`);
   assert.ok(risonanti > 0 && vulcaniche > 0 && oceani > 0, `risonanti ${risonanti}, vulcaniche ${vulcaniche}, con oceano ${oceani}`);
   assert.ok(catturate > N && contromano > catturate / 2, `catturate ${catturate}, contromano ${contromano}`);
-  console.log(`      (${N} semi: ${piu} con più lune regolari; ${risonanti} lune in risonanza, ${vulcaniche} vulcaniche, ${oceani} con oceano; ${contromano} catturate contromano su ${catturate})`);
+  console.log(`      (${N} semi: ${piu} con più lune regolari; ${risonanti} lune in risonanza, ${vulcaniche} vulcaniche, ${oceani} con oceano, ${rigide} vicine rimaste su un'orbita schiacciata perché fredde e rigide; ${contromano} catturate contromano su ${catturate})`);
 });
 
 prova('una Terra: a volte una luna da un grande urto, a volte no; e quando c\'è somiglia alla nostra', () => {

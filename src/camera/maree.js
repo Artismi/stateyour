@@ -32,6 +32,11 @@
 // frequenza è 2·(Ω − n), la legge di k₂* è la stessa: si può chiedere con la frequenza giusta, ma la potenza qui sotto
 // è quella del corpo sincrono); la dipendenza di ζ dalla frequenza.
 // PARAMETRI LIBERI: nessuno tarato; APERTI (con intervallo): α e ζ di Andrade, η₀ del ghiaccio.
+// CHE COSA NON TORNA (test/test_maree.mjs, con i numeri): Io trova da solo il ramo caldo (mantello in parte fuso, il
+// calore esce con il magma) ma dissipa 0,34 W/m² dove se ne osservano 2–2,5 (−Im k₂ = 0,002 contro 0,015 misurato): al
+// corpo omogeneo manca lo strato molle sotto una crosta rigida; k₂ della Terra 0,54 (vero 0,30: la rigidità qui non cresce
+// con la pressione) e di Mercurio 0,16 (vero 0,57: il nucleo liquido non si deforma a parte). Tornano senza taratura: la
+// Luna (k₂ 0,024, Q 42 al mese), il Q della Terra solida (430; vero ~280), la marea nella Terra solida (0,16 TW).
 
 import { COSTANTI, R_GAS } from './leggi.js';
 
