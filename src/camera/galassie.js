@@ -439,9 +439,10 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
       if (f.passoArrivo !== j) continue;
       const { s, scala } = satellite(f.massaAlone, f.passo); let ms = 0, msZ = 0;
       // le sue stelle vanno nello sferoide (ciò che hanno restituito da quando è entrato nell'alone è finito nel gas caldo)
-      for (let i = 1; i <= f.passo; i++) {
-        const m = s.natiTot[i] * scala; if (m <= 0) continue;
-        const zb = s.natiZ[i], q = tabellaZ(zb / ZSOLE), La = f.passo - i, Lb = j - 1 - i, vive = 1 - P.tab[q].cR[Lb + 1] - P.tab[q].cI[Lb + 1] * P.MCH;
+      // (per passo di nascita e per tabella di metalli, le stesse con cui hanno vissuto là: così la massa torna esatta)
+      for (let q = 0; q < 4; q++) for (let i = 1; i <= f.passo; i++) {
+        const m = s.natiQ[q * (f.passo + 1) + i] * scala; if (m <= 0) continue;
+        const zb = (s.natiQZ[q * (f.passo + 1) + i] * scala) / m, La = f.passo - i, Lb = j - 1 - i, vive = 1 - P.tab[q].cR[Lb + 1] - P.tab[q].cI[Lb + 1] * P.MCH;
         est[q * NE + i] += m; estZ[q * NE + i] += m * zb; haEst[i] = 1; if (Lb > La) { rende(m, q, La, Lb, zb); caldo += R[0]; caldoZ += R[1]; }
         ms += m * vive; msZ += m * zb * vive;
       }
@@ -517,17 +518,17 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     S.sfr[j] = sfr / DT / 1e9; S.gas[j] = gas.reduce((x, y) => x + y, 0); S.stelle[j] = vd + vs; S.caldo[j] = caldo; S.collasso[j] = ncc / DT / 1e9; S.Ia[j] = nia / DT / 1e9;
   }
   // ---------- com'è oggi
-  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE); let nateTutte = 0, metStelle = 0;
+  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE), natiQ = new Float64Array(4 * NE), natiQZ = new Float64Array(4 * NE); let nateTutte = 0, metStelle = 0;
   for (let i = 1; i <= nt; i++) {
     const L = nt - i; let m1 = 0, z1 = 0;
-    for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (!(m > 0)) continue; const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); m1 += m; z1 += m * Zn[i * NR + k] * ZSOLE; metStelle += Zn[i * NR + k] * ZSOLE * v; if (i >= sferoideFino) sigStelle[k] += v / area[k]; }
+    for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (!(m > 0)) continue; const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); m1 += m; z1 += m * Zn[i * NR + k] * ZSOLE; natiQ[iz[i * NR + k] * NE + i] += m; natiQZ[iz[i * NR + k] * NE + i] += m * Zn[i * NR + k] * ZSOLE; metStelle += Zn[i * NR + k] * ZSOLE * v; if (i >= sferoideFino) sigStelle[k] += v / area[k]; }
     for (let q = 0; q < 4 && haEst[i]; q++) { metStelle += estZ[q * NE + i] * (1 - P.tab[q].cR[L + 1] - P.tab[q].cI[L + 1] * P.MCH); venute[i] += est[q * NE + i]; venuteZ[i] += estZ[q * NE + i]; }
     natiTot[i] = m1; natiZ[i] = m1 > 0 ? z1 / m1 : 0; nateTutte += m1 + venute[i];
   }
   let gasTot = 0, gasZ = 0; for (let k = 0; k < NR; k++) { sigGas[k] = gas[k] / area[k]; gasTot += gas[k]; gasZ += met[k]; dove[k] = sigStelle[k] * area[k] + gas[k]; }
   const aO = U.scala(nt * DT), RvO = raggioViriale(M0, aO), mod = { Mh: M0, c: concentrazione(M0, aO), Rv: RvO, Md: gasTot + Mdisco, Rd, Ms: Msfer, as: Math.max(Rsfer, 1e-3) / 2.414 };
   const raggioMeta = Mdisco + Msfer > 0 ? ((Mdisco + gasTot) * metaMassa() + Msfer * Rsfer) / (Mdisco + gasTot + Msfer) : Rd;
-  if (compagno) return { natiTot, natiZ, gasTot, gasZ, caldo, caldoZ, fuori, fuoriZ, raggioMeta, massaStelle: Mdisco + Msfer };
+  if (compagno) return { natiTot, natiZ, natiQ, natiQZ, gasTot, gasZ, caldo, caldoZ, fuori, fuoriZ, raggioMeta, massaStelle: Mdisco + Msfer };
   return { M0, spin, nt, Mh, inizio: Mh.inizio, bordo, rc, area, nati, Zn, iz, est: venute, estZ: venuteZ, Zt, S, B, gas, met, sigStelle, sigGas, caldo, caldoZ, fuori, fuoriZ, sferoideFino, ultimaMaggiore, Mdisco, Msfer, Rsfer, mod, gasTot, gasZ, nateTutte, metStelle, fusioni };
 }
 
@@ -655,7 +656,7 @@ export function curvaRotazione(forma, r, parti = false) {
 // ---------- IL CATALOGO: `quante` stelle come campione della galassia, più le ultime supernove (vedi l'intestazione)
 // caso: la stessa sorgente della galassia; gli eventi di ogni stella stanno a «stella N/…», quelli delle ultime
 // supernove a «supernova K/…»: cambiarne uno con un ramo non sposta le altre.
-// → { stelle: [{ id, pos, massa, massaNascita, eta (anni), Z, stato, T, colore, raggioM, B, morta, peso, componente }],
+// → { stelle: [{ id, pos, massa, massaNascita, eta (anni), Z, stato, T, colore, raggioM, B, morta, peso, componente, venuta (se è nata in un compagno poi fuso) }],
 //     sorgenti: [getto, resti, pulsar], buco, ritmoSN (all'anno), pesoCampione, stelleVere }
 const MU0 = 4e-7 * Math.PI, POTENZA = 1e31; // le potenze delle sorgenti sono in unità di 10³¹ W (10³⁸ erg/s: un resto giovane)
 export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 2500 } = {}) {
@@ -718,13 +719,13 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
     const m0 = massaNascita(c('massa')), B0 = campo0(c('campo')), vita = ST.stella(m0, { Z }).vita;
     if (eta < vita) {
       const adesso = ST.stella(m0, { Z, eta }), gigante = eta > 0.9 * vita, T = gigante ? Math.min(adesso.T, 4200) : adesso.T;
-      stelle.push({ id: s, pos, massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta, B: B0, Z, peso, componente });
+      stelle.push({ id: s, pos, massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta, B: B0, Z, peso, componente, ...(esterna ? { venuta: true } : {}) });
     } else {
       const f = ST.fine(m0, B0, { Z }), morta = eta - vita; let T = 0, colore = f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255];
       if (f.tipo === 'nana bianca') { // si raffredda irradiando il calore dei suoi ioni (Mestel 1952): L ∝ M·t^−7/5
         const L = LSOLE * Math.pow((8.8e6 * Math.pow(f.massa, 5 / 7)) / Math.max(morta, 1e4), 7 / 5); T = Math.min(1.5e5, Math.pow(L / (PI4 * f.raggio ** 2 * COSTANTI.sigma), 0.25)); colore = [225, 230, 255];
       }
-      stelle.push({ id: s, pos, massa: f.massa, massaNascita: m0, eta, T, colore, stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z, peso, componente });
+      stelle.push({ id: s, pos, massa: f.massa, massaNascita: m0, eta, T, colore, stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z, peso, componente, ...(esterna ? { venuta: true } : {}) });
     }
   }
   // ---- le sorgenti dei raggi cosmici: il getto del buco nero, i resti delle ultime supernove, le loro pulsar

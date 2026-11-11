@@ -183,8 +183,9 @@ prova('il ritmo delle supernove è quello della storia della galassia: le esplos
     // oggi: tante supernove da collasso quante stelle massicce sono nate nell'ultimo passo (vivono meno di un passo)
     if (st.sfr[GA.PASSI] > 0) tra(F.ritmoSN.collasso / (st.sfr[GA.PASSI] * GA.popolazione().tab[2].nSN), 0.6, 1.5, 'supernove da collasso oggi / (nascite di oggi × massicce per M☉)');
     // in tutta la storia: l'integrale del ritmo dei collassi è il numero di stelle di neutroni e buchi neri che il campione rappresenta
+    // (quelle nate qui: le stelle venute con le fusioni sono esplose, quasi tutte, nella galassia da cui venivano)
     let storia = 0; for (let j = 1; j <= GA.PASSI; j++) storia += st.collasso[j] * st.dt * 1e9;
-    const esplose = Gx.stelle.filter((s) => (s.stato === 'stella di neutroni' || s.stato === 'buco nero') && s.peso > 1); esploseTutte += esplose.length;
+    const esplose = Gx.stelle.filter((s) => (s.stato === 'stella di neutroni' || s.stato === 'buco nero') && s.peso > 1 && !s.venuta); esploseTutte += esplose.length;
     r.push((esplose.length * Gx.pesoCampione) / storia);
   }
   // (una decina di esplose per campione: lo scarto di conteggio è del 30%; in media deve tornare)

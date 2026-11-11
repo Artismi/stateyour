@@ -534,14 +534,16 @@ export function prebiotica({ atmosfera: atm = {}, T = 288, energia = 1, pression
 // nel minerale che la norma gli assegna. In più ciò che il mantello ha tenuto di cloro, zolfo e carbonio rispetto alle
 // proporzioni del Sole: DATI MISURATI sul mantello primitivo della Terra (McDonough e Sun 1995: Cl 17 ppm, S 250 ppm,
 // C 120 ppm).
-// QUANTO SE NE SCIOGLIE. Ogni minerale si scioglie con la velocità misurata in laboratorio (Palandri e Kharaka 2004,
-// USGS OFR 2004-1068): un termine «neutro» e uno «acido» che cresce con l'acidità dell'acqua, v = k_n + k_a·[H⁺]^n,
-// ciascuno con la sua energia di attivazione (Arrhenius: al caldo più in fretta). L'acqua del suolo è pioggia in
-// equilibrio con l'anidride carbonica dell'aria: [H⁺] = √(K·pCO2), con CO2 + H2O ⇌ H⁺ + HCO3⁻ (log K = −7,82 a 25 °C,
-// ΔH = −10,6 kJ/mol): più CO2, più acido, rocce consumate più in fretta. In natura un granello invecchia: la sua
-// velocità cala col tempo come t^−0,61 (White e Brantley 2003, su suoli da 10 a 3 milioni di anni; in laboratorio, dopo
-// un anno, è quella del minerale fresco), per unità di superficie misurata col gas (1 m²/g nei suoli: White e altri
-// 1996). Il granello resta nel suolo finché l'erosione non lo porta via: spessore del suolo / denudazione (1 m; 30 m
+// QUANTO SE NE SCIOGLIE. LEGGE EMPIRICA: nei suoli veri i silicati (plagioclasio, feldspato potassico, anfibolo, mica),
+// invecchiando, si sciolgono tutti alla stessa velocità entro un fattore tre, e sempre più piano:
+// v = 3,1·10⁻¹³·t^−0,61 mol/m²/s, con t l'età del suolo in anni (White e Brantley 2003, da suoli tra dieci e tre milioni
+// di anni), per unità di superficie misurata col gas (1 m²/g nei suoli: White e altri 1996). Il laboratorio dice come
+// quella velocità cambia con la temperatura e con l'acidità (Palandri e Kharaka 2004, USGS OFR 2004-1068): un termine
+// «neutro» e uno «acido», v ∝ k_n + k_a·[H⁺]^n, ciascuno con la sua energia di attivazione (Arrhenius), minerale per
+// minerale; il riferimento sono le condizioni in cui i suoli sono stati misurati (15 °C, pioggia in equilibrio con
+// l'aria di allora). L'acqua del suolo è pioggia in equilibrio con l'anidride carbonica: [H⁺] = √(K·pCO2), con
+// CO2 + H2O ⇌ H⁺ + HCO3⁻ (log K = −7,82 a 25 °C, ΔH = −10,6 kJ/mol): più CO2, più acido, rocce consumate più in
+// fretta. Il granello resta nel suolo finché l'erosione non lo porta via: spessore del suolo / denudazione (1 m; 30 m
 // per milione di anni dove piove: la stessa legge empirica di geologia.js).
 // IL CICLO. I vulcani emettono l'anidride carbonica del mantello che fonde (il magma porta un decimo del calore
 // dell'interno; il carbonio sta tutto nel fuso: sulla Terra ne escono così 8·10¹² mol l'anno, misurate 6-10). Ogni
@@ -549,7 +551,7 @@ export function prebiotica({ atmosfera: atm = {}, T = 288, energia = 1, pression
 // le due cose si pareggiano (Walker, Hays e Kasting 1981): co2DelCiclo cerca la pressione di CO2 a cui succede.
 // Che cosa manca: l'effetto della pioggia (qui le terre bagnate sono date), il carbonio dei sedimenti che torna con i
 // vulcani delle fosse (qui il carbonio del mantello non si consuma), la vita (che sulla Terra accelera il suolo).
-export const ROCCE = Object.freeze({ denudazione: 3e-5, densita: 2700, suolo: 1, superficieGrani: 1000, invecchia: 0.61,
+export const ROCCE = Object.freeze({ denudazione: 3e-5, densita: 2700, suolo: 1, superficieGrani: 1000, velocita: 3.1e-13, invecchia: 0.61, Tsuoli: 288, pCO2suoli: 2.8e-4,
   magma: 0.1, caloreMagma: 1.7e6, // il magma porta un decimo del calore; J per kg di magma (1300 K di salto + calore di fusione)
   rimasto: { Cl: 17e-6 / 35.45e-3, S: 250e-6 / 32.06e-3, C: 120e-6 / 12.011e-3 }, // mol per kg di mantello
   acidoCarbonico: [-7.82, -10.6] }); // log K a 25 °C e ΔH (kJ/mol) di CO2(gas) + H2O ⇌ H⁺ + HCO3⁻
@@ -572,12 +574,12 @@ export function rocceDelPianeta(P = {}) {
 // l'acidità dell'acqua del suolo sotto una pressione di CO2 (bar): [H⁺] (mol/kg), mai meno dell'acqua pura
 export const acidoDelSuolo = (pCO2, T = 288) => Math.max(1e-7, Math.sqrt(Math.pow(10, ROCCE.acidoCarbonico[0]) * Math.exp(((-1000 * ROCCE.acidoCarbonico[1]) / R_GAS) * (1 / T - 1 / 298.15)) * Math.max(0, pCO2)));
 // quanta parte di un minerale si scioglie nel tempo che il granello resta nel suolo (anni), a T, con l'acqua acida aH
-export function sciolto(minerale, T, anni, aH = 2.2e-6) {
-  const [ln, En, M, la, n, Ea] = MINERALI_ROCCIA[minerale], ar = (E) => Math.exp(((-1000 * E) / R_GAS) * (1 / T - 1 / 298.15));
-  const v = Math.pow(10, ln) * ar(En) + (la > -90 ? Math.pow(10, la) * ar(Ea) * Math.pow(aH, n) : 0);
-  // il tempo «utile»: il primo anno a velocità piena, poi sempre più piano (l'integrale di t^−0,61)
-  const utile = anni <= 1 ? anni : 1 + (Math.pow(anni, 1 - ROCCE.invecchia) - 1) / (1 - ROCCE.invecchia);
-  return 1 - Math.exp(-v * ROCCE.superficieGrani * M * utile * 3.156e7);
+const lab = (minerale, T, aH) => { const [ln, En, , la, n, Ea] = MINERALI_ROCCIA[minerale], ar = (E) => Math.exp(((-1000 * E) / R_GAS) * (1 / T - 1 / 298.15)); return Math.pow(10, ln) * ar(En) + (la > -90 ? Math.pow(10, la) * ar(Ea) * Math.pow(aH, n) : 0); };
+export function sciolto(minerale, T, anni, aH = acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)) {
+  const cambia = lab(minerale, T, aH) / lab(minerale, ROCCE.Tsuoli, acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)); // (dal laboratorio: solo il rapporto)
+  // l'integrale di 3,1·10⁻¹³·t^−0,61 sull'età del suolo (mol/m²)
+  const perMetroQuadro = (ROCCE.velocita * 3.156e7 * Math.pow(Math.max(anni, 1), 1 - ROCCE.invecchia)) / (1 - ROCCE.invecchia);
+  return 1 - Math.exp(-perMetroQuadro * cambia * ROCCE.superficieGrani * MINERALI_ROCCIA[minerale][2]);
 }
 // ciò che un kg di roccia consumata cede all'acqua (mol), a T e sotto pCO2 (bar); quanta della sua massa diventa argilla
 export function rilascio(roccia, T, pCO2 = 2.8e-4) {
