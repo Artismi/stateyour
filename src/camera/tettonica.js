@@ -29,6 +29,19 @@
 //   · l'erosione: i pendii si spianano (una catena larga 300 km in ~10 milioni di anni, se nulla la sostiene) e i
 //     fiumi portano alle coste ciò che sporge dal livello di riferimento (lo dimezzano in ~100 milioni di anni);
 //   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
+// CIÒ CHE PASSA ALL'EROSIONE (geologia.js erosione), senza cambiare niente di ciò che la crosta fa:
+//   · la COPERTURA SEDIMENTARIA: quanta della crosta di ogni cella è sedimento posato nella storia (dai fiumi sulle
+//     coste, dai pendii sulla cella accanto) e non più tolto. Va con la crosta, si ispessisce con lei, e ciò che finisce
+//     sepolto sotto (Tmetamorfismo − Tsuolo)·conducibilità/q metri (sulla Terra 9,8 km) è già roccia metamorfica:
+//     basamento. DATI: 300 °C, dove comincia la facies degli scisti verdi (ricordato, non riletto su una fonte); 3 W/m/K,
+//     la conducibilità della roccia (lo stesso numero di materia.js, ancora scritto in due posti); q è quello di oggi.
+//   · il SOLLEVAMENTO in m/anno: quanto la crosta si ispessisce oggi perché le placche la stringono (ciò che entra in una
+//     cella meno ciò che ne uscirebbe se andasse rigida con chi le sta dietro), meno ciò che cede di lato sotto il proprio
+//     peso, più la crosta nuova degli archi; per galleggia = 0,15 è la salita della superficie. Le velocità sono quelle
+//     di questo modello (vTerra·(q/qTerra)²). E «regge»: di quanto può ancora salire prima che la crosta ceda.
+//   · le due leggi empiriche dell'erosione qui sopra, cella per cella (consumata, posata): sono una SECONDA FONTE della
+//     denudazione, a grana grossa e con un altro livello di base (la quota 0 di qui, non il mare vero che geologia.js
+//     ricava dall'acqua: sulla Terra di prova sta ~850 m più in basso, e i continenti restano ~1 km troppo alti).
 // PARAMETRI LIBERI (non misurati: scelti guardando il risultato, perché i continenti restino interi, si spacchino
 // e si riuniscano): quanto è larga la zattera rigida, la coesione, quanto e in quanto tempo un continente scalda
 // il mantello che ha sotto (rigida, coesione, coperta, inerzia).
