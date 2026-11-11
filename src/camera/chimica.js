@@ -247,6 +247,20 @@ export function potereRiducente(gas = {}) { const { rid, oss } = redox(gas); ret
 //     tutto è gelato), pO2 (bar), ferro (la forma stabile, da ferroStabile), fuliggine (parte del carbonio) }
 const NEI_GHIACCI = { C: 0.3, N: 0.1, S: 0.3 }, ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
 const ossigenoNellaRoccia = (ab) => ab.Mg + 2 * ab.Si + 1.5 * ab.Al + ab.Ca + (ab.Na + ab.K) / 2 + FE_NEI_SILICATI * ab.Fe;
+// LA MISCELA DEL SOLE, in massa, dalla tavola degli elementi: è la fonte unica per chi fa i conti con la materia di una
+// stella (il disco da cui nascono i pianeti, disco.js; i giganti di gas). X idrogeno, Y elio, Z tutto il resto (dei
+// quindici elementi della tavola: con neon, argo e nichel, che qui non ci sono, il Sole arriva a 0,0134). Dei metalli:
+//   roccia   la parte solida anche al caldo (magnesio, silicio, alluminio, calcio, sodio, potassio e ferro, con l'ossigeno che prendono);
+//   ghiacci  ciò che è solido solo oltre la linea della neve: l'acqua che fa l'ossigeno rimasto, e il carbonio e l'azoto che
+//            gelano insieme a lei (NEI_GHIACCI: gli stessi che poi fanno l'aria dei pianeti), contati come CO e NH3;
+//   ferro    il ferro sulla somma di ferro e roccia; ghiaccio: la parte di ghiacci nei solidi oltre la neve.
+export const SOLE = (() => {
+  const ab = abbondanze(1), m = (el) => ab[el] * ELEMENTI[el].massa; let tutto = 0, metalli = 0;
+  for (const el in ab) { tutto += m(el); if (el !== 'H' && el !== 'He') metalli += m(el); }
+  const Oroccia = ossigenoNellaRoccia(ab), sassi = m('Mg') + m('Si') + m('Al') + m('Ca') + m('Na') + m('K') + Oroccia * ELEMENTI.O.massa, ferro = m('Fe');
+  const acqua = (ab.O - Oroccia) * (ELEMENTI.O.massa + 2 * ELEMENTI.H.massa), altri = NEI_GHIACCI.C * ab.C * (ELEMENTI.C.massa + ELEMENTI.O.massa) + NEI_GHIACCI.N * ab.N * (ELEMENTI.N.massa + 3 * ELEMENTI.H.massa);
+  return Object.freeze({ X: m('H') / tutto, Y: m('He') / tutto, Z: metalli / tutto, roccia: (sassi + ferro) / metalli, acqua: acqua / metalli, ghiacci: (acqua + altri) / metalli, ferro: ferro / (ferro + sassi), ghiaccio: (acqua + altri) / (acqua + altri + sassi + ferro) });
+})();
 export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } = {}) {
   const cl = P.clima || {}, tenuti = cl.tenuti || [], gigante = P.tipo === 'gassoso', comp = P.composizione || {};
   const niente = { gas: {}, riducente: false, potere: 0, pressione: 0, pO2: 0, ferro: null, fuliggine: 0 };
@@ -362,7 +376,8 @@ export function climaEAria(dati, { Z } = {}) {
   const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
   if (dati.tipo === 'gassoso') return { clima: primo, atmosfera: atmosfera({ ...P, clima: primo }, { Z }) };
   const memoria = new Map(), ariaDi = (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria });
-  const climaDi = (atm, T) => clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } });
+  // (Taria: la temperatura a cui quell'aria è stata calcolata; a giri fermi è quella del clima)
+  const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } }), { Taria: T });
   // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
   const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null; for (let k = 0; k < giri; k++) { const a = ariaDi(T, stato, co2), c = climaDi(a, T); r = { a, c }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } return r; };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });

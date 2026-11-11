@@ -110,11 +110,11 @@ prova('una gigante rossa ha inghiottito i pianeti entro 1,5 UA, e così la nana 
   assert.ok(gig > 50 && nane > 50);
 });
 
-{ // le giganti rosse: la luce è ancora quella di sequenza principale
-  let gig = 0;
-  for (const { Gx } of GALASSIE) for (const s of Gx.stelle) if (s.stato === 'gigante rossa') gig++;
-  nota(3, 'giganti rosse: la luce che scalda i pianeti rimasti è ancora quella di sequenza principale (stella(M).L), mentre la temperatura è scesa a 4200 K: raggio e luce della gigante non hanno una legge',
-    { casi: gig, su: gig, dove: 'cosmo.js galassia() «gigante ? Math.min(vita.T, 4200)» e sistema() «viva ? stellaVera(S.massa).L»' });
+{ // le giganti rosse: luce e raggio vengono da stelle.js all'età della stella; resta il tetto a 4200 K messo a mano sul colore
+  let gig = 0, tetto = 0;
+  for (const { Gx } of GALASSIE) for (const s of Gx.stelle) if (s.stato === 'gigante rossa') { gig++; if (ST.stella(s.massa, { Z: s.Z, eta: s.eta }).T > 4200 * 1.001) tetto++; }
+  nota(3, 'giganti rosse: «gigante» è chi ha passato nove decimi della vita, e la sua temperatura è tagliata a 4200 K anche quando stelle.js, a quell\'età, la dà più calda (la luce e il raggio invece sono quelli di stelle.js)',
+    { casi: tetto, su: gig, dove: 'cosmo.js galassia() «gigante = eta > 0.9 * vita.vita», «Math.min(ora.T, 4200)»' });
 }
 { // i resti di supernova sono messi sulla posizione di stelle che il catalogo dà ancora per vive
   let sn = 0, vive = 0, nane = 0;
@@ -192,16 +192,16 @@ prova('la massa del pianeta è una sola: anche i granelli dell\'anello (nebbia.j
   assert.ok(n >= 40 && conAnello >= 5);
 });
 
-{ // il velo di idrogeno ed elio che disco.js lascia ai mondi ghiacciati sparisce in sistema()
-  const r = []; let conVelo = 0;
-  for (const s of SISTEMI) {
-    if (!s.viva) continue;
-    const nati = DI.formaPianeti({ massa: s.S0.massa, Z: s.S0.Z ?? 1, eta: s.eta }, semeDi('disco', s.n, s.gid, s.sid)).slice(0, CO.PIANETI_MAX);
-    nati.forEach((q, k) => { const p = s.S.pianeti[k]; if (!(q.involucro > 0) || !p || !isFinite(p.clima.pressione)) return; conVelo++; r.push((p.clima.pressione * 4 * Math.PI * p.raggioM ** 2) / p.clima.g / (q.involucro * q.massaKg)); });
+prova('il velo di idrogeno ed elio lasciato dal disco è l\'aria primordiale del pianeta: resta se la gravità trattiene l\'idrogeno, se no è fuggito', () => {
+  let tenuto = 0, fuggito = 0;
+  for (const { p } of SOLIDI) {
+    if (!(p.involucro > 0)) continue;
+    const colonna = (p.involucro * p.massaKg) / (4 * Math.PI * p.raggioM ** 2), H2 = p.atmosfera?.gas?.H2 || 0;
+    if (p.clima.tenuti.includes('idrogeno')) { tenuto++; assert.ok(H2 > 0.7 && (p.atmosfera.gas.He || 0) > 0.1, `velo tenuto ma aria di ${foto(p.atmosfera.gas).slice(0, 80)}`); tra(p.clima.pressione / (colonna * p.clima.g), 0.9, 1.001, 'pressione dell\'aria / peso del velo'); }
+    else { fuggito++; assert.ok(H2 < 1e-6 && !(p.atmosfera?.gas?.He > 1e-6), 'velo non trattenuto ma ancora lì'); }
   }
-  nota(2, 'il velo di idrogeno ed elio (disco.js «involucro», 1–50% della massa, che gonfia il raggio) non arriva al pianeta: il clima gli dà un milionesimo di massa d\'aria',
-    { casi: conVelo, su: conVelo, tipico: `aria del clima / velo del disco: mediana ${num(mediana(r))}`, massimo: `da ${num(minimo(r))} a ${num(massimo(r))}`, dove: 'disco.js formaPianeti (involucro) contro cosmo.js sistema() (non lo copia) e leggi.js clima() (gas = 1e-6·M)' });
-}
+  assert.ok(tenuto >= 3 && fuggito >= 1, `${tenuto} veli tenuti, ${fuggito} fuggiti`);
+});
 { // le galassie contro i barioni del cosmo
   for (const n of [1]) {
     const C = CO.cosmo(n), stelle = C.galassie.reduce((a, G) => a + 2e10 * Math.min(4, G.peso + 0.5), 0);
@@ -248,14 +248,31 @@ prova('la linea della neve è la stessa in disco.js e in lune.js: 170 K a 2,7·�
   }
 });
 
+prova('la miscela del Sole ha una fonte sola (chimica.js SOLE): roccia, ghiacci, ferro, idrogeno ed elio del disco vengono da lì', () => {
+  const S = CH.SOLE, D = DI.DISCO;
+  for (const [k, v] of [['X', CHIM.X], ['Y', CHIM.Y], ['Z', CHIM.Z], ['ferro', CHIM.ferro], ['roccia', CHIM.rocciaSuMetalli], ['acqua', CHIM.acquaSuMetalli]]) tra(S[k] / v, 1 - 1e-9, 1 + 1e-9, `SOLE.${k} contro la tavola degli elementi`);
+  assert.equal(D.metalliSole, S.Z); assert.equal(D.roccia, S.roccia); assert.equal(D.solidiFreddi, S.roccia + S.ghiacci); assert.equal(D.ghiaccio, S.ghiaccio); assert.equal(D.ferro, S.ferro); tra(D.idrogeno / (S.X / (S.X + S.Y)), 1 - 1e-12, 1 + 1e-12, 'idrogeno del gas');
+  tra(S.ghiaccio, 0.55, 0.67, 'ghiacci nei solidi oltre la neve'); tra(S.roccia + S.ghiacci, 0.8, 1, 'solidi oltre la neve, sui metalli');
+  // un gigante: idrogeno ed elio nella proporzione del Sole; un mondo nato tutto oltre la neve: quel tanto di ghiaccio
+  let giganti = 0, freddi = 0;
+  for (const { p } of PIANETI) {
+    if (p.tipo === 'gassoso') { giganti++; tra(p.composizione.idrogeno / (p.composizione.idrogeno + p.composizione.elio), D.idrogeno - 1e-9, D.idrogeno + 1e-9, 'idrogeno di un gigante'); }
+    else if (p.tipo === 'ghiacciato') { freddi++; assert.ok(p.composizione.ghiaccio <= S.ghiaccio + 1e-9, `più ghiaccio (${p.composizione.ghiaccio}) di quanto il Sole ne dia`); }
+  }
+  assert.ok(giganti > 10 && freddi > 500);
+});
+prova('il ferro di un pianeta non dipende dai metalli della stella (ferro e roccia crescono insieme): dipende da dove è nato', () => {
+  const sorgente = readFileSync(new URL('../src/camera/disco.js', import.meta.url), 'utf8'), riga = sorgente.split('\n').find((r) => /ferroRoccia = /.test(r)) || '';
+  assert.ok(/P\.ferro/.test(riga) && !/D\.Z|st\.Z/.test(riga.split('//')[0]), 'la legge del ferro in disco.js guarda ancora la metallicità');
+  // dai pianeti: il ferro (sulla roccia) sta tra quello del Sole oltre la neve e il tetto di tre quarti, per stelle povere e ricche
+  const rocciosi = PIANETI.filter((x) => x.p.tipo === 'roccioso'), r = (x) => x.p.composizione.ferro / (x.p.composizione.ferro + x.p.composizione.roccia);
+  for (const x of rocciosi) tra(r(x), CH.SOLE.ferro / (1 + (170 / 600) ** 2) - 1e-9, 0.75 + 1e-9, 'ferro / (ferro + roccia)');
+  const povere = rocciosi.filter((x) => x.S0.Z < 0.5).map(r), ricche = rocciosi.filter((x) => x.S0.Z > 1).map(r);
+  if (povere.length > 20 && ricche.length > 20) tra(mediana(ricche) / mediana(povere), 0.85, 1.18, 'ferro mediano: stelle ricche / stelle povere');
+});
 {
-  const rocciosi = PIANETI.filter((x) => x.p.tipo === 'roccioso'), r = rocciosi.map(({ p }) => p.composizione.ferro / (p.composizione.ferro + p.composizione.roccia) / CHIM.ferro);
-  nota(2, 'il ferro dei pianeti rocciosi cresce con la metallicità (0,19 + 0,08·Z), ma in chimica.js ferro e roccia crescono insieme: il rapporto non dovrebbe dipendere da Z',
-    { casi: r.filter((x) => Math.abs(x - 1) > 0.2).length, su: r.length, tipico: `ferro/(ferro+roccia) del pianeta diviso per quello di chimica.js (${num(CHIM.ferro)}): mediana ${num(mediana(r))}`, massimo: `da ${num(minimo(r))} a ${num(massimo(r))}`, dove: 'disco.js formaPianeti «ferroRoccia» contro chimica.js abbondanze(Z)' });
-  nota(2, 'quanto ghiaccio c\'è nei solidi oltre la neve: tre numeri per la stessa miscela solare',
-    { casi: 2, su: 3, tipico: `disco.js 0,75 · lune.js 0,5 · chimica.js ${num(CHIM.ghiaccio)} (l'ossigeno che la roccia non prende, tutto in acqua)`, massimo: `il disco condensa in ghiaccio ${num(0.75 / CHIM.acquaSuMetalli)} volte l'acqua che l'ossigeno della stella permette`, dove: 'disco.js DISCO.roccia = 0,25 · lune.js regolari() «0.5 / (1 + …)» · chimica.js ossigenoNellaRoccia()' });
-  nota(3, 'idrogeno, elio e metalli del Sole: disco.js e chimica.js usano miscele diverse',
-    { casi: 3, su: 3, tipico: `X ${num(0.71 / 0.98)} contro ${num(CHIM.X)}; Y ${num(0.27 / 0.98)} contro ${num(CHIM.Y)}; metalli ${num(DI.DISCO.metalliSole)} contro ${num(CHIM.Z)}`, massimo: `roccia e ferro sui metalli: ${num(DI.DISCO.roccia)} contro ${num(CHIM.rocciaSuMetalli)}`, dove: 'disco.js (0,71 / 0,27 / 0,0134 / roccia 0,25) contro chimica.js TAVOLA' });
+  nota(3, 'le lune regolari nate oltre la neve sono «metà ghiaccio e metà roccia»; la miscela del Sole (chimica.js SOLE, che ora usa il disco) dà più ghiaccio',
+    { casi: 1, su: 1, tipico: `lune.js 0,5 · chimica.js ${num(CH.SOLE.ghiaccio)}`, dove: 'lune.js regolari() «b.ghiaccio = 0.5 / (1 + …)»' });
 }
 { // la metallicità contro le supernove: quanti metalli per supernova servirebbero perché Z discendesse da loro
   const rese = [], larghezze = [];
@@ -303,10 +320,19 @@ prova('il calore che esce dall\'interno ha una fonte sola, interno().q: anche la
   assert.ok(!/flussoInterno/.test(pannello), 'laboratorio.js usa ancora fluidi.flussoInterno'); assert.ok(/q = P\.interno\.q\b/.test(pannello), 'la pozza non legge P.interno.q');
   for (const { p } of SOLIDI) assert.ok(p.interno.q > 0 && Number.isFinite(p.interno.q));
 });
-{ // la radioattività: due leggi del decadimento
-  const r2 = SOLIDI.map((x) => LU.caloreRadioattivo({ massaKg: x.p.massaKg, raggioM: x.p.raggioM, composizione: { ghiaccio: x.p.composizione.ghiaccio ?? 0 } }, x.eta) / x.p.interno.q);
-  nota(2, 'la radioattività cala con l\'età in due modi: quattro isotopi con i loro tempi di dimezzamento (lune) contro exp(−(età − 4,5)/3 Ga)·√Z·M^0,3 (pianeti)',
-    { casi: r2.filter((x) => x < 0.2 || x > 1).length, su: r2.length, tipico: `caloreRadioattivo / interno.q: mediana ${num(mediana(r2))} (sulla Terra di oggi 0,46: il resto è calore iniziale)`, massimo: `da ${num(minimo(r2))} a ${num(massimo(r2))}`, dove: 'lune.js caloreRadioattivo() (ISOTOPI) contro geologia.js interno() «q = …»' });
+prova('la radioattività cala con l\'età con una legge sola (leggi.js caloreDellaRoccia): la stessa per i pianeti e per le lune', () => {
+  tra(LG.caloreDellaRoccia(1e9) / LG.caloreDellaRoccia(4.5e9), 4.5, 5, 'a un miliardo di anni'); tra(LG.caloreDellaRoccia(1e10) / LG.caloreDellaRoccia(4.5e9), 0.25, 0.33, 'a dieci miliardi di anni');
+  // le lune: watt per chilo di roccia; i pianeti: lo stesso andamento con l'età (a parità di tutto il resto)
+  const corpo = { massaKg: 7.35e22, raggioM: 1.737e6, composizione: { ghiaccio: 0 } }, P = { tipo: 'roccioso', massaKg: 5.97e24, raggioM: 6.371e6, composizione: { ferro: 0.32, roccia: 0.67, acqua: 0.01 } };
+  for (const eta of [5e8, 2e9, 4.5e9, 9e9, 1.3e10]) {
+    const atteso = LG.caloreDellaRoccia(eta) / LG.caloreDellaRoccia(4.5e9);
+    tra(LU.caloreRadioattivo(corpo, eta) / LU.caloreRadioattivo(corpo, 4.5e9) / atteso, 1 - 1e-9, 1 + 1e-9, 'lune');
+    tra(GE.interno(P, { eta, Z: 1 }).q / GE.interno(P, { eta: 4.5e9, Z: 1 }).q / atteso, 1 - 1e-9, 1 + 1e-9, 'pianeti');
+  }
+});
+{
+  nota(3, 'il calore interno di un pianeta cresce con i metalli della stella (√Z: più uranio e torio); quello di una luna no: caloreRadioattivo non riceve la metallicità',
+    { casi: 1, su: 1, dove: 'geologia.js interno() «Math.sqrt(Math.max(0.05, Z))» contro lune.js caloreRadioattivo(L, eta)' });
 }
 prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco), che rotazione.js integra dalla nascita del pianeta a oggi', () => {
   let bloccati = 0, liberi = 0, risonanti = 0, controllati = 0;
@@ -332,14 +358,43 @@ prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e de
   for (const x of wd) tra(x.p.Lw / (4 * Math.PI * x.S0.raggioM ** 2 * K.sigma * x.S0.T ** 4), 1 - 1e-9, 1 + 1e-9, 'luce della nana bianca');
   for (const x of PIANETI.filter((y) => y.viva)) tra(x.p.Lw / (ST.stella(x.S0.massa, { Z: x.S0.Z, eta: x.S0.eta }).L * LSOLE), 1 - 1e-9, 1 + 1e-9, 'luce della stella viva');
 });
-{ // 4. la pressione e l'ebollizione
-  const conAria = PIANETI.filter(({ p }) => isFinite(p.clima.pressione) && p.clima.pressione > 0 && p.atmosfera), r = conAria.map(({ p }) => p.atmosfera.pressione / p.clima.pressione);
-  nota(3, 'la pressione dell\'aria: chimica.atmosfera() ne dà meno di clima() quando i gas gelano, ma effetto serra, stato dell\'acqua e vento usano quella di clima()',
-    { casi: r.filter((x) => x < 0.9).length, su: r.length, tipico: `rapporto mediano tra i discordi ${num(mediana(r.filter((x) => x < 0.9)))}`, massimo: `fino a ${num(minimo(r))}`, dove: 'chimica.js atmosfera().pressione contro leggi.js clima().pressione (usata in geologia.js climaSuperficie)' });
-  const dT = [1e3, 1e4, 1e5, 1e6, 1e7].map((P) => { const leggi = 1 / (1 / 373.15 - (LG.R_GAS * Math.log(P / 101325)) / 40700); let lo = 200, hi = 800; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (CH.pressioneVapore(m) < P) lo = m; else hi = m; } return leggi - lo; });
-  nota(3, 'a che temperatura bolle l\'acqua: Clausius-Clapeyron in leggi.js (decide lo stato dell\'acqua) contro le costanti di equilibrio di chimica.js (decidono il vapore nell\'aria)',
-    { casi: dT.filter((d) => Math.abs(d) > 1).length, su: dT.length, tipico: `a 1 bar ${num(dT[2])} K`, massimo: `a 100 bar ${num(dT[4])} K`, dove: 'leggi.js statoAcqua() contro chimica.js pressioneVapore()' });
-}
+prova('la pressione dell\'aria è una sola: quella dei gas che restano (chimica.js), e da quei gas viene la serra del clima', () => {
+  let conAria = 0, nudi = 0;
+  for (const { p } of SOLIDI) {
+    const a = p.atmosfera, c = p.clima; assert.ok(a, 'un pianeta senza il conto dell\'aria');
+    assert.equal(c.pressione, a.pressione);
+    if (a.pressione > 0) { conAria++; tra((c.tau + 1e-12) / (Math.min(1e4, CH.serra(a.gas, a.pressione, c.g, c.Taria)) + 1e-12), 1 - 1e-6, 1 + 1e-6, 'serra del clima / serra dei gas dell\'aria'); } else { nudi++; assert.equal(c.tau, 0); }
+    assert.ok(c.tau >= 0 && c.tau <= 1e4);
+  }
+  assert.ok(conAria > 1000 && nudi >= 0);
+});
+prova('i riscontri della serra: con i gas veri la legge ridà Venere, la Terra, Marte e Titano', () => {
+  const T = (Teq, tau) => Teq * Math.pow(1 + 0.75 * tau, 0.25);
+  // [gas, pressione (Pa), gravità, temperatura senza serra (dalla luce assorbita, misurata), temperatura vera]
+  const mondi = { Terra: [{ N2: 0.767, O2: 0.206, H2O: 0.017, CO2: 4.2e-4, CH4: 1.9e-6 }, 1.013e5, 9.81, 255, 288], Venere: [{ CO2: 0.965, N2: 0.035, SO2: 1.5e-4, H2O: 2e-5 }, 9.2e6, 8.87, 229, 735], Marte: [{ CO2: 0.953, N2: 0.027, O2: 0.0013, CO: 8e-4, H2O: 2e-4 }, 610, 3.71, 210, 214], Titano: [{ N2: 0.95, CH4: 0.049, H2: 0.001 }, 1.47e5, 1.352, 82, 94] };
+  const riga = [];
+  for (const nome in mondi) { const [gas, pr, g, Teq, vera] = mondi[nome], t = T(Teq, CH.serra(gas, pr, g, vera)); riga.push(`${nome} ${num(t, 4)} K (vera ${vera})`); tra(t / vera, 0.97, 1.03, nome); }
+  console.log(`      ${riga.join(', ')}`);
+  // senz'aria niente serra; più gas, più serra; i gas che non assorbono contano solo se l'aria è fitta
+  assert.equal(CH.serra({}, 0, 9.8), 0); assert.ok(CH.serra({ CO2: 1 }, 1e6, 9.8) > CH.serra({ CO2: 1 }, 1e5, 9.8)); assert.ok(CH.serra({ N2: 1 }, 1e5, 9.8, 288) < 0.05 && CH.serra({ N2: 1 }, 1e5, 9.8, 288) < CH.serra({ CO2: 1 }, 1e5, 9.8, 288) / 20);
+});
+prova('l\'acqua bolle dove l\'aria è satura: leggi.js (stato dell\'acqua) e chimica.js (vapore nell\'aria) danno la stessa temperatura', () => {
+  for (const P of [1e3, 1e4, 1e5, 1e6, 1e7]) { let lo = 200, hi = 800; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (CH.pressioneVapore(m) < P) lo = m; else hi = m; } tra(LG.ebollizione(P) - lo, -0.05, 0.05, `ebollizione a ${P} Pa: leggi − chimica (K)`); }
+  assert.equal(LG.statoAcqua(300, 1e5), 'liquida'); assert.equal(LG.statoAcqua(380, 1e5), 'vapore'); assert.equal(LG.statoAcqua(700, 1e9), 'vapore'); assert.equal(LG.statoAcqua(260, 1e5), 'ghiaccio');
+});
+prova('il clima e l\'aria si tengono: il mare c\'è dove può, il termostato del carbonio lo tiene aperto, e i mondi di ghiaccio freddi restano gelati', () => {
+  const conta = {}; let venere = 0;
+  for (const { p } of SOLIDI) {
+    const c = p.clima, k = `${p.tipo} ${c.acqua.slice(0, 7)}${c.termostato ? ' (termostato)' : ''}`; conta[k] = (conta[k] || 0) + 1;
+    if (c.acqua === 'liquida') { assert.ok(c.T >= 273.15 && c.T < LG.ebollizione(c.pressione) && c.T < 647 && c.bilancio.assorbita <= LG.LIMITE_VAPORE, `mare a ${c.T} K e ${c.pressione} Pa`); assert.ok(!(p.atmosfera.gas.SO2 > 1e-9), 'anidride solforosa sopra un mare'); }
+    if (c.termostato) { assert.equal(c.acqua, 'liquida'); tra(c.T, 273.15, 300, 'temperatura al termostato'); assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= c.termostato * 1.01, 'più CO2 di quella che il termostato lascia'); }
+    else if (c.acqua === 'liquida') assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= CH.pressioneCO2Urey(c.T) * 3 + 1e-9 || p.clima.tenuti.includes('idrogeno'), 'CO2 sopra un mare senza termostato');
+    if (c.acqua.startsWith('vapore') && p.tipo === 'roccioso' && (p.atmosfera.gas.CO2 || 0) > 0.9 && c.pressione > 1e6) venere++;
+    if (c.acqua === 'ghiaccio') assert.ok(c.T < 273.15);
+  }
+  console.log(`      ${Object.entries(conta).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}; ${venere} come Venere (vapore, CO2, più di 10 bar)`);
+  assert.ok(Object.keys(conta).some((k) => k.includes('termostato')) && venere >= 3 && (conta['ghiacciato ghiacci'] || 0) > 300);
+});
 { // 5. gli anelli contro il limite di Roche e la temperatura
   let conAnelli = 0, oltre = 0, caldi = 0;
   for (const x of PIANETI) {
@@ -347,8 +402,7 @@ prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e de
     const ghiaccio = LG.temperaturaEquilibrio(p.Lw, p.aM, 0.6) < 170; if (!ghiaccio) caldi++;
     if (Pl.anello[1] > LU.limiteRoche(p, ghiaccio ? LU.MATERIALI.ghiaccio.densita : LU.MATERIALI.roccia.densita) / p.raggioM) oltre++;
   }
-  nota(2, 'gli anelli sono una probabilità (0,6 per i mondi freddi, 0,08 per gli altri) tra 1,3 e 2,5 raggi: non vengono dalle lune né dal limite di Roche',
-    { casi: conAnelli, su: PIANETI.length, tipico: `${oltre} hanno il bordo esterno oltre il limite di Roche di lune.js (lì i frammenti si riunirebbero in una luna)`, massimo: `${caldi} sono dove il ghiaccio sublima (oltre 170 K)`, dove: 'cosmo.js sistema() «anelli: …c() < 0.6…» e pianeta() «anello = [tra(1.3, 1.6), tra(2.0, 2.5)]» contro lune.js limiteRoche()' });
+  prova('gli anelli stanno dentro il limite di Roche del loro materiale (ora vengono da anelli.js, non da una probabilità)', () => { assert.ok(conAnelli > 10, `${conAnelli} pianeti con anelli`); assert.equal(oltre, 0, 'anelli oltre il limite di Roche'); assert.equal(caldi, 0, 'anelli di ghiaccio dove il ghiaccio sublima'); });
   const alTetto = PIANETI.filter(({ p }) => p.schiacciamento >= 0.3).length;
   nota(3, 'lo schiacciamento ai poli usa la formula dei corpi che girano piano (5/4·ω²R³/GM) anche per chi esce da un urto gigante vicino al limite dei fluidi: lì è tagliato a 0,3',
     { casi: alTetto, su: PIANETI.length, dove: 'cosmo.js sistema() «Math.min(0.3, …)» (il giorno ora viene da rotazione.js)' });
@@ -371,8 +425,6 @@ sezione('LA SUPERFICIE E IL CLIMA SIMULATI (pochi pianeti: costano secondi)');
 // =====================================================================================================
 const SCELTI = [
   ['un mondo ghiacciato, gelato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.clima.acqua === 'ghiaccio' && p.aM < 8 * UA && p.interno.tettonica !== 'a placche')],
-  ['un mondo ghiacciato bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.bloccato && p.clima.acqua === 'ghiaccio' && p.interno.tettonica !== 'a placche')],
-  ['un mondo ghiacciato lontano dalla sua stella', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.aM > 8 * UA && p.interno.tettonica !== 'a placche')],
   ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && !p.clima.acqua.startsWith('vapore') && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
   ['un roccioso con il mare e le placche', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
   ['un roccioso con il mare tenuto aperto dal termostato del carbonio', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && !p.bloccato && p.clima.mare < 0.97 && p.interno.tettonica !== 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && p.interno.tettonica !== 'a placche')],
@@ -486,12 +538,13 @@ prova('il metro: sul pianeta l\'unità è il suo raggio, sulla superficie il gir
   const rG = []; for (const n of [1, 2]) for (const G of CO.cosmo(n).galassie) rG.push((G.r * CO.metriPerUnita(0, { cosmo: n })) / CO.metriPerUnita(1, { cosmo: n, galassia: G.id }));
   const rS = GALASSIE.map(({ n, gid }) => (CO.RAGGIO_SISTEMA * CO.metriPerUnita(1, { cosmo: n, galassia: gid })) / CO.metriPerUnita(2, {}));
   const conPianeti = SISTEMI.filter((s) => s.S.pianeti.length), rSt = conPianeti.map((s) => (s.S.stella.r * 30 * UA) / (s.viva ? ST.stella(s.S0.massa, { Z: s.S0.Z, eta: s.S0.eta }).R * RSOLE : s.S0.raggioM)), rP = PIANETI.map(({ p }) => (p.r * 30 * UA) / p.raggioM);
-  nota(3, 'i figli sono disegnati molto più grandi del vero dentro il livello di sopra (il metro in basso cambia di colpo a ogni passaggio)',
-    { casi: 4, su: 4, tipico: `galassia nel cosmo ×${num(mediana(rG))}; sistema nella galassia ×${num(mediana(rS))}; stella nel sistema ×${num(mediana(rSt))}; pianeta nel sistema ×${num(mediana(rP))}`, massimo: `fino a ×${num(massimo(rG))}, ×${num(massimo(rS))}, ×${num(massimo(rSt))}, ×${num(massimo(rP))}`, dove: 'cosmo.js cosmo() «G.r», RAGGIO_SISTEMA, sistema() «r:» contro metriPerUnita()' });
-  const dentro = PIANETI.filter((x) => x.p.a < x.S.stella.r + x.p.r).length; let coppie = 0, toccano = 0;
-  for (const s of conPianeti) for (let i = 0; i + 1 < s.S.pianeti.length; i++) { coppie++; if (s.S.pianeti[i + 1].a - s.S.pianeti[i].a < s.S.pianeti[i].r + s.S.pianeti[i + 1].r) toccano++; }
-  nota(2, 'sulla mappa del sistema i pianeti vicini sono disegnati dentro il disco della stella, e orbite vicine hanno dischi più larghi della distanza che le separa',
-    { casi: dentro, su: PIANETI.length, tipico: `${toccano} coppie di orbite vicine su ${coppie} si toccano`, dove: 'cosmo.js sistema() «r: Math.max(0.006, …)» e «r: viva ? 0.012 + …» contro «a = q.aUA / 30»' });
+  nota(3, 'galassie e sistemi sono disegnati molto più grandi del vero dentro il livello di sopra (il metro in basso cambia di colpo passando di livello); stelle e pianeti invece ora hanno il raggio vero',
+    { casi: 2, su: 4, tipico: `galassia nel cosmo ×${num(mediana(rG))}; sistema nella galassia ×${num(mediana(rS))}`, massimo: `fino a ×${num(massimo(rG))}, ×${num(massimo(rS))}`, dove: 'cosmo.js cosmo() «G.r», RAGGIO_SISTEMA contro metriPerUnita()' });
+  prova('sulla mappa del sistema stella e pianeti hanno il raggio vero: nessun pianeta è disegnato dentro la stella, nessuna orbita ne tocca un\'altra', () => {
+    tra(mediana(rSt), 0.999, 1.001, 'raggio disegnato della stella / vero'); tra(mediana(rP), 0.999, 1.001, 'raggio disegnato del pianeta / vero'); tra(massimo(rP), 0.999, 1.001, 'pianeta'); 
+    assert.equal(PIANETI.filter((x) => x.p.a < x.S.stella.r + x.p.r).length, 0, 'pianeti dentro il disco della stella');
+    for (const s of conPianeti) for (let i = 0; i + 1 < s.S.pianeti.length; i++) assert.ok(s.S.pianeti[i + 1].a - s.S.pianeti[i].a > s.S.pianeti[i].r + s.S.pianeti[i + 1].r, 'due pianeti vicini si toccano');
+  });
 }
 { // i numeri della biblioteca: quanti sono alias di un altro numero
   const tot = CO.REGIONI * CO.PIANETI_MAX * CO.STELLE * CO.GALASSIE_MAX, N = 400; let alias = 0, chiusi = 0;

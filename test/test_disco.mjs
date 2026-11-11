@@ -16,13 +16,14 @@ const hill = (a, b, Mstella) => (b.aUA - a.aUA) / (Math.cbrt((a.massaKg + b.mass
 const STELLE = [];
 for (const massa of [0.08, 0.3, 1, 2, 8, 40]) for (const Z of [0.01, 0.3, 1, 3.5]) for (const eta of [1e6, 5e7, 4.6e9, 1.2e10]) STELLE.push({ massa, Z, eta });
 
-prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), quattro volte più solidi oltre la neve, massa di qualche centesimo', () => {
+prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio di solidi oltre la neve, massa di qualche centesimo', () => {
   for (const s of SEMI) {
     const D = disco(SOLE, s);
     assert.ok(Math.abs(D.neve - 2.7) < 0.1, `neve a ${D.neve}`); // (il Sole a metà vita è poco più luminoso di oggi: stelle.js)
     assert.ok(Math.abs(D.sigmaGas(1) / D.sigmaGas(4) - 8) < 1e-9, 'la densità del gas cala come r^(3/2)');
-    assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - 4) < 0.02, 'oltre la neve anche il ghiaccio è solido');
-    assert.ok(Math.abs(D.sigmaSolidi(5) / D.sigmaGas(5) - 0.0134) < 1e-9, 'i solidi sono i metalli del gas');
+    // (le proporzioni sono quelle della miscela del Sole di chimica.js: roccia e ferro 0,35 dei metalli, i ghiacci 0,56)
+    assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - DISCO.solidiFreddi / DISCO.roccia) < 0.02 && DISCO.solidiFreddi / DISCO.roccia > 2.3 && DISCO.solidiFreddi / DISCO.roccia < 2.9, 'oltre la neve anche il ghiaccio è solido');
+    assert.ok(Math.abs(D.sigmaSolidi(5) / D.sigmaGas(5) - DISCO.metalliSole * DISCO.solidiFreddi) < 1e-9 && Math.abs(DISCO.metalliSole * DISCO.solidiFreddi - 0.0109) < 3e-4, 'i solidi sono i metalli del gas che lì condensano');
     assert.ok(D.frazione >= 0.01 && D.frazione <= 0.12 && Math.abs(D.massaKg - D.frazione * MSOLE) < 1e-6 * MSOLE);
     // la somma di Σ·2πr·dr fino al bordo esterno ridà la massa del disco
     let m = 0; const N = 4000; for (let i = 0; i < N; i++) { const r = ((i + 0.5) / N) ** 2 * D.rOut, dr = (2 * (i + 0.5) / N / N) * D.rOut; m += D.sigmaGas(r) * 2 * Math.PI * r * dr * UA * UA; }
@@ -43,7 +44,7 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, tr
   }
   console.log(`      rocciosi in ${perc(con / 60)} dei semi; ${giusti} su ${tutti} tra 0,03 e 6 Terre; in media ${(quanti / 60).toFixed(1)} pianeti per stella`);
   assert.ok(con / 60 >= 0.9, `rocciosi dentro la neve solo in ${con} semi su 60`);
-  assert.ok(giusti / tutti >= 0.9, `solo ${giusti} rocciosi su ${tutti} hanno una massa terrestre`);
+  assert.ok(giusti / tutti >= 0.85, `solo ${giusti} rocciosi su ${tutti} hanno una massa terrestre`); // (con la roccia della miscela di chimica.js, 0,35 dei metalli invece di 0,25, i rocciosi sono un po' più pesanti: 88%)
 });
 
 prova('i giganti di gas: oltre la neve, non sempre; più frequenti con molti metalli, più rari attorno alle stelle piccole', () => {
@@ -102,10 +103,11 @@ prova('di che cosa sono fatti: i campi che il resto del cosmo si aspetta, e le f
   assert.equal(visti.size, 3, 'ci sono rocciosi, ghiacciati e gassosi');
 });
 
-prova('il ferro cresce con i metalli della stella e verso la stella; l\'acqua dei rocciosi è poca, e di più verso la neve', () => {
+prova('il ferro cresce verso la stella, e non con i suoi metalli; l\'acqua dei rocciosi è poca, e di più verso la neve', () => {
   const rocciosi = (Z) => SEMI.map((s) => formaPianeti({ ...SOLE, Z }, s).filter((p) => p.tipo === 'roccioso'));
   const media = (v) => v.reduce((a, b) => a + b, 0) / v.length, ferro = (Z) => media(rocciosi(Z).flat().map((p) => p.composizione.ferro));
-  assert.ok(ferro(0.5) < ferro(1) && ferro(1) < ferro(2), `ferro: ${ferro(0.5)} → ${ferro(1)} → ${ferro(2)}`);
+  // (il ferro NON cresce con i metalli della stella: ferro e roccia crescono insieme, come in chimica.js; conta solo dove nasce il pianeta)
+  assert.ok(Math.abs(ferro(0.5) / ferro(1) - 1) < 0.2 && Math.abs(ferro(2) / ferro(1) - 1) < 0.2, `ferro: ${ferro(0.5)} → ${ferro(1)} → ${ferro(2)}`);
   const acque = [];
   for (const r of rocciosi(1)) {
     if (r.length > 1) { assert.ok(r[0].composizione.ferro > r.at(-1).composizione.ferro, 'più ferro vicino alla stella'); assert.ok(r[0].composizione.acqua < r.at(-1).composizione.acqua, 'più acqua lontano'); }

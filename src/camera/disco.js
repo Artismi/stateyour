@@ -26,14 +26,20 @@
 import { COSTANTI, MSOLE, ANNO, UA } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { generatore } from './mondo.js';
+import { SOLE } from './chimica.js';
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
 const G = COSTANTI.G;
 
 // ---------- i parametri del modello (pochi, e tutti qui)
 export const DISCO = Object.freeze({
-  metalliSole: 0.0134, // la frazione di materia pesante nel Sole (misurata)
-  roccia: 0.25, // la parte dei metalli che è solida anche al caldo (ferro e roccia); il resto è ghiaccio, solido solo oltre la neve
+  // DI CHE COSA È FATTO IL DISCO: la miscela del Sole, dalla tavola degli elementi di chimica.js (SOLE), che è la fonte unica
+  metalliSole: SOLE.Z, // la frazione di materia pesante (dei quindici elementi della tavola: 0,0119)
+  roccia: SOLE.roccia, // la parte dei metalli che è solida anche al caldo (ferro e roccia con il loro ossigeno): 0,35
+  solidiFreddi: SOLE.roccia + SOLE.ghiacci, // oltre la neve si aggiungono i ghiacci (l'acqua, e il carbonio e l'azoto gelati con lei): in tutto 0,91 dei metalli
+  ghiaccio: SOLE.ghiaccio, // la parte di ghiacci nei solidi oltre la neve: 0,61
+  ferro: SOLE.ferro, // il ferro sulla somma di ferro e roccia: 0,31, uguale per ogni metallicità (ferro e roccia crescono insieme)
+  idrogeno: SOLE.X / (SOLE.X + SOLE.Y), // il gas: idrogeno ed elio, 75 a 25
   pendenza: 1.5, raggio: 30, // Σ ∝ r^(-3/2), fino a 30 UA·√M
   frazione: 0.055, sparpaglio: 0.5, // la massa del disco su quella della stella: mediana e larghezza (in logaritmo)
   vitaMinima: 1e6, vitaMedia: 3.5e6, // quanto dura il gas (anni): si osserva che metà dei dischi è sparita in 2–3 milioni di anni
@@ -74,7 +80,7 @@ export function disco(st, seme = 1) {
   const sigmaGas = (r) => sigma0 * Math.pow(r, -DISCO.pendenza);
   // i solidi: i metalli del gas (Z × 0,0134); al caldo solo un quarto è solido (ferro e roccia), oltre la neve
   // lo è anche il ghiaccio: quattro volte di più
-  const sigmaSolidi = (r) => Z * DISCO.metalliSole * (r < neve ? DISCO.roccia : 1) * sigmaGas(r);
+  const sigmaSolidi = (r) => Z * DISCO.metalliSole * (r < neve ? DISCO.roccia : DISCO.solidiFreddi) * sigmaGas(r);
   return { massaStella: M, Z, L, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi };
 }
 
@@ -157,8 +163,8 @@ export function formaPianeti(st, seme = 1) {
     // stella è metallica. L'acqua: oltre la neve i solidi sono per tre quarti ghiaccio; dentro sono asciutti, salvo
     // quella portata dai corpi caduti da oltre la neve, sempre meno andando verso la stella (regola semplice,
     // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
-    const T = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(r), ferroRoccia = Math.min(0.75, (0.19 + 0.08 * Math.min(D.Z, 4)) * (1 + (T / 600) ** 2));
-    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : 1 - P.roccia;
+    const T = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(r), ferroRoccia = Math.min(0.75, (P.ferro * (1 + (T / 600) ** 2)) / (1 + (170 / 600) ** 2)); // (sulla linea della neve, a 170 K, il ferro è quello del Sole)
+    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : P.ghiaccio;
     corpi.push({ a: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false,
       lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
   }
@@ -243,8 +249,8 @@ export function formaPianeti(st, seme = 1) {
     const raggioM = raggioPianeta({ massaKg: b.m, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: D.L / (b.a * b.a), eta });
     // di che cosa è fatto. Il gas di un gigante è quello della stella: idrogeno ed elio (71 a 27, la miscela misurata
     // del Sole) con i suoi metalli; i «pesanti» sono quelli più il nucleo
-    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * 0.0134 * D.Z) : 0;
-    const composizione = tipo === 'gassoso' ? { idrogeno: (1 - pesanti) * (0.71 / 0.98), elio: (1 - pesanti) * (0.27 / 0.98), pesanti }
+    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * P.metalliSole * D.Z) : 0;
+    const composizione = tipo === 'gassoso' ? { idrogeno: (1 - pesanti) * P.idrogeno, elio: (1 - pesanti) * (1 - P.idrogeno), pesanti }
       : tipo === 'ghiacciato' ? { ghiaccio, roccia: 1 - ghiaccio - ferro, ferro } : { ferro, roccia: 1 - ferro - ghiaccio, acqua: ghiaccio };
     // l'eccentricità di oggi: quella presa negli urti, smorzata dai detriti rimasti (che frenano chi corre fuori dal coro)
     const eccentricita = tipo === 'gassoso' ? b.e + 0.01 + 0.05 * c() : b.e * (0.15 + 0.35 * c()) + 0.002 + 0.01 * c();
