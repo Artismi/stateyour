@@ -382,7 +382,8 @@ export function climaEAria(dati, { Z } = {}) {
   if (tutta.c.acqua !== 'ghiaccio') {
     let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null;
     for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') lo = m; else { hi = m; if (r.c.acqua === 'liquida') scelto = r; } }
-    if (scelto) return esce(scelto, { termostato: scelto.co2 });
+    // (proprio sulla soglia il mare è in bilico e ci mette un'eternità ad assestarsi: il pianeta sta un passo sopra, un terzo di CO2 in più)
+    if (scelto) { const sopra = prova(scelto.co2 * 1.33); if (sopra.c.acqua === 'liquida') scelto = sopra; return esce(scelto, { termostato: scelto.co2 }); }
   }
   // 4. gelato: nemmeno tutta la sua anidride carbonica (che al freddo gela anche lei) lo scioglie
   return esce(cerca('ghiaccio', Math.min(mare.c.T, 270)));

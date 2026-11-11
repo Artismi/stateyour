@@ -259,19 +259,24 @@ export const sistema = memo((n, gid, sid) => {
     // latitudine (leggi.js: lo stesso che climaSuperficie risolve poi sulla mappa), con la serra dei gas veri; l'aria
     // è ciò che il pianeta ha liberato o trattenuto (anche il velo di idrogeno del disco, se la gravità lo tiene),
     // meno ciò che a quella temperatura gela, piove o finisce nel calcare
-    const ariaEClima = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
-    p.clima = ariaEClima.clima;
-    // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero (ciò che trattiene, all'equilibrio
-    // chimico), e quanto rendono lì le reazioni che fanno aminoacidi e zuccheri (scariche e ultravioletto)
-    try {
-      p.atmosfera = ariaEClima.atmosfera;
-      p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua === 'liquida',
-        minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
-    } catch { p.atmosfera = null; p.prebiotica = null; }
+    const ariaDelPianeta = () => {
+      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
+      p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato }; // (con quale asse e quale giorno è stato calcolato)
+      // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
+      // aminoacidi e zuccheri (scariche e ultravioletto)
+      try {
+        p.atmosfera = r.atmosfera;
+        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua === 'liquida',
+          minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
+      } catch { p.atmosfera = null; p.prebiotica = null; }
+    };
+    ariaDelPianeta();
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
     { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); } }
+    // (il clima è stato calcolato prima delle lune, che lo leggono: se la luna dell'urto ha poi cambiato l'asse o il blocco, si rifà)
+    if (p.clima.giro.obliquita !== p.obliquita || p.clima.giro.bloccato !== p.bloccato) ariaDelPianeta();
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
     // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
     // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere

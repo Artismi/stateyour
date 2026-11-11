@@ -1,5 +1,6 @@
 // stelle_nuove.js — IN COSTRUZIONE: le stelle con l'integrazione vera delle quattro equazioni (sostituirà stelle.js)
-import { COSTANTI, MSOLE, RSOLE, LSOLE, ANNO } from './leggi.js';
+import { COSTANTI, MSOLE, RSOLE, LSOLE, ANNO, etaUniverso, massaChandrasekhar, massaMassimaNeutroni, raggioNanaBianca, raggioNeutroni } from './leggi.js';
+import { TABELLA } from './stelle_tabella.js';
 
 const K = COSTANTI;
 export const ALFA = 1 / 137.036; // la costante di struttura fine (misurata): e²/(4πε₀) = α·ħ·c
@@ -15,7 +16,7 @@ export const DATI = {
   Q4: 26.731 * MEV, nuPP: 2 * 0.265 * MEV, nuCNO: 1.71 * MEV, // 4 ¹H → ⁴He, e ciò che si portano via i neutrini
   elio1: 24.587 * EV, // la prima ionizzazione dell'elio (la seconda è 4 Rydberg, quella dell'idrogeno 1: dalle costanti)
   H2: { D0: 4.478 * EV, rot: 85.4, vib: 6332 }, // la molecola H₂: energia di legame, temperature di rotazione e vibrazione (K)
-  Hmeno: 7.9e-34, molecole: 1e-11, HmenoLega: 0.754 * EV, HmenoSezione: 4e-21, // (e lo ione H⁻: energia di legame, sezione d'urto media in m²) // opacità dello ione H⁻ (Hansen, Kawaler & Trimble 2004) e delle molecole (Bell & Lin 1994), in m²/kg
+  Hmeno: 7.9e-34, molecole: 1e-11, HmenoLega: 0.754 * EV, // (e l'energia di legame dello ione H⁻) // opacità dello ione H⁻ (Hansen, Kawaler & Trimble 2004) e delle molecole (Bell & Lin 1994), in m²/kg
   ZSOLE: 0.0142, YSOLE: 0.2703, YPRIMO: 0.247, // la composizione del Sole alla nascita (Asplund et al. 2009) e l'elio del Big Bang
   // i metalli del Sole: [carica del nucleo, numero di massa, log₁₀ dell'abbondanza in numero con H = 12] (Asplund et al. 2009)
   metalli: [[6, 12, 8.43], [7, 14, 7.83], [8, 16, 8.69], [10, 20, 7.93], [12, 24, 7.60], [14, 28, 7.51], [16, 32, 7.12], [26, 56, 7.50]],
@@ -137,7 +138,7 @@ const C_FF = ((4 * E2 ** 3) / (3 * K.me * 2 * Math.PI * K.hbar * K.c)) * Math.sq
 function energiaAtomo(z, N) {
   let E = 0, dentroTot = 0;
   for (let n = 1; n <= 4; n++) {
-    const Nn = N[n]; if (Nn > 0) { const Q = z - (dentroTot - (n > 1 ? N[n - 1] : 0)) * DATI.slater[3] - (n > 1 ? N[n - 1] * DATI.slater[2] : 0) - Math.max(0, Nn - 1) * DATI.slater[n === 1 ? 0 : 1]; E -= (Nn * Q * Q) / (n * n); }
+    const Nn = N[n]; if (Nn > 0) { const Q = z - (dentroTot - (n > 1 ? N[n - 1] : 0)) * DATI.slater[3] - (n > 1 ? N[n - 1] * DATI.slater[2] : 0) - Math.max(0, Nn - 1) * DATI.slater[n === 1 ? 0 : 1]; if (Q > 0) E -= (Nn * Q * Q) / (n * n); }
     dentroTot += Nn;
   }
   return E * RY;
@@ -169,7 +170,6 @@ function opacitaAtomica(rho, T, X, Zm) {
     let legati = 0; for (let q = 1; q <= 4; q++) legati += NA[q];
     const dz = d1 * Math.max(1, z - legati + 1);
     for (let q = 1; q <= 4; q++) { BN[q] = lega(q, NA[q]); soglia(nel * NA[q], BN[q] - dz, Math.sqrt((Math.max(BN[q], 0) * q * q) / RY), q); }
-    if (globalThis.__spia) console.log('   Z', z, 'occupazioni', [...NA].slice(1).map((v) => v.toFixed(4)).join(' '), 'legami (eV)', [...BN].slice(1).map((v) => (v / EV).toFixed(1)).join(' '), 'dz (eV)', (dz / EV).toExponential(2), 'eta', eta.toFixed(2));
     ff += nel * (z - legati) ** 2;
   }
   // la media di Rosseland (armonica, pesata con la derivata della curva di Planck)
@@ -178,13 +178,11 @@ function opacitaAtomica(rho, T, X, Zm) {
   let k = WR0 / somma / rho;
   // a bassa temperatura: lo ione H⁻ (finché l'idrogeno è neutro) e le molecole
   if (T < 3e4) {
-    // H⁻ con gli elettroni dei metalli: la legge misurata (vale fino a 6000 K; oltre, i metalli che si ionizzano facilmente
-    // hanno già dato tutti i loro elettroni, e gli ioni H⁻ calano come vuole Saha: T^-3/2·e^(0,754 eV/kT))
-    const Tm = Math.min(T, 6000), tH = DATI.HmenoLega / K.kB;
-    k += DATI.Hmeno * (Zm / 0.02) * Math.sqrt(rho) * Tm ** 9 * (T > 6000 ? Math.pow(T / 6000, -1.5) * Math.exp(tH / T - tH / 6000) : 1) * (1 - st.xH);
-    // H⁻ con gli elettroni dell'idrogeno stesso (Saha per lo ione, sezione d'urto misurata)
-    k += (DATI.HmenoSezione * st.nH0 * st.ne * 0.25 * Math.exp(LQE - 1.5 * Math.log(T) + tH / T)) / rho;
-    k += DATI.molecole * (Zm / DATI.ZSOLE) * Math.cbrt(rho * rho) * T ** 3 * (1 - st.xH);
+    // lo ione H⁻: la legge misurata vale fino a 6000 K; oltre la si prolunga con la fisica (gli ioni H⁻ sono in equilibrio
+    // di Saha con atomi neutri ed elettroni: n(H⁻) ∝ n(H)·nₑ·T^-3/2·e^(0,754 eV/kT)), agganciata al valore a 6000 K
+    const tH = DATI.HmenoLega / K.kB, nH0 = st.nH0, neq = st.ne, xH = st.xH; let hm = DATI.Hmeno * (Zm / 0.02) * Math.sqrt(rho) * Math.min(T, 6000) ** 9;
+    if (T > 6000) { const s6 = stato(rho, 6000, X, Zm), f6 = s6.nH0 * s6.ne * Math.exp(tH / 6000) * 6000 ** -1.5; hm *= f6 > 0 ? (nH0 * neq * Math.exp(tH / T) * T ** -1.5) / f6 : 0; }
+    k += hm * (T > 6000 ? 1 : 1 - xH) + DATI.molecole * (Zm / DATI.ZSOLE) * Math.cbrt(rho * rho) * T ** 3 * (1 - xH);
   }
   return k;
 }
@@ -381,10 +379,11 @@ const PASSI = [1, 0.85, 0.7, 0.55, 0.4, 0.26, 0.14, 0.05, 0.01];
 const KPP = (4 * MB) / (DATI.Q4 - DATI.nuPP), KCNO = (4 * MB) / (DATI.Q4 - DATI.nuCNO); // kg di idrogeno per joule
 function traccia(Msol, Z, y0, { parla = false, passi = PASSI } = {}) {
   const { X: X0, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X0), rr = new Float64Array(NGU), stati = [];
-  let y = y0.slice(), yPrima = null, Jp = null, t = 0, rc0 = 0, xc0 = X0, s = 0, qmax = 2, k = 0, bersaglio = passi[0] * X0, tagli = 0;
+  let tuttaFine = false, y = y0.slice(), yPrima = null, Jp = null, t = 0, rc0 = 0, xc0 = X0, s = 0, qmax = 2, k = 0, bersaglio = passi[0] * X0, tagli = 0;
   const Xs = new Float64Array(NGU); // la composizione all'inizio del passo (per riprovare con un passo più corto)
   for (;;) {
     let sol = risolvi(M, Xp, Zm, tav, yPrima && stati.length > 1 ? y.map((v, i) => v + 0.7 * (v - yPrima[i])) : y, { J0: Jp }) || (yPrima ? risolvi(M, Xp, Zm, tav, y) : null);
+    if (sol && stati.length) { const u = stati[stati.length - 1]; if (Math.abs(Math.log(sol.L / LSOLE / u.L)) > 1.2 || Math.abs(Math.log(sol.R / RSOLE / u.R)) > 0.6) sol = null; } // un salto assurdo: non è la stessa stella
     if (!sol) {
       if (!stati.length || tagli > 3) break;
       // il passo era troppo lungo: metà strada
@@ -407,17 +406,20 @@ function traccia(Msol, Z, y0, { parla = false, passi = PASSI } = {}) {
     if (stati.length && s > 0) { const f = xarr / xc0, p = Math.log(rc / rc0) / Math.log(f); t += (s * (Math.abs(p - 1) < 1e-3 ? Math.log(1 / f) : (Math.pow(f, 1 - p) - 1) / (p - 1))) / (1 - f); }
     stati.push({ t: t / ANNO, L: sol.L / LSOLE, R: sol.R / RSOLE, T: sol.Teff, Tc: sol.Tc, rhoc: pr[0][4], Xc: xc, qcc: tutta ? 1 : qcc, qenv: tutta ? 1 : 1 - qenv, renv: tutta ? 0 : renv, cno: Ltot > 0 ? 1 - Lpp / Ltot : 0, y: y.slice() });
     if (parla) { const x = stati[stati.length - 1]; console.log(`  t ${x.t.toExponential(3)} Xc ${xc.toFixed(3)} L ${x.L.toPrecision(4)} R ${x.R.toFixed(4)} Teff ${x.T.toFixed(0)} Tc ${(x.Tc / 1e6).toFixed(2)} ρc ${(x.rhoc / 1e3).toFixed(1)} qcc ${x.qcc.toFixed(3)} qenv ${x.qenv.toExponential(2)} r_base ${x.renv.toFixed(3)} cno ${x.cno.toFixed(3)} (${sol.giri} giri)`); }
-    rc0 = rc; xc0 = xc; if (!tutta) qmax = qcc;
+    rc0 = rc; xc0 = xc; tuttaFine = tutta; if (!tutta) qmax = qcc;
     k++; if (xc <= passi[passi.length - 1] * X0 * 1.0001) break;
     // il prossimo bersaglio per l'idrogeno al centro
     let prossimo = passi.find((v) => v * X0 < xc * 0.999) * X0; bersaglio = prossimo; tagli = 0; Xs.set(Xp);
     s = (xc - bersaglio) / rc; for (let i = 0; i < NGU; i++) Xp[i] = Math.max(0, Xp[i] - rr[i] * s);
   }
   if (!stati.length) return null;
+  const ultimo = stati[stati.length - 1], finita = ultimo.Xc <= passi[passi.length - 1] * X0 * 1.01;
+  // se il calcolo si è fermato prima (le stelle più piccole, che alla fine diventano degeneri): il resto dell'idrogeno al ritmo raggiunto
+  const vita = finita ? ultimo.t : ultimo.t + xc0 / rc0 / ANNO;
   // il nucleo di elio che resta: fin dove l'idrogeno è finito (sotto un decimo di quello iniziale)
   let i = 0; while (i < NGU && Xp[i] < 0.1 * X0) i++;
   const mHe = i === 0 ? 0 : i >= NGU ? 1 : QC[i - 1] + ((0.1 * X0 - Xp[i - 1]) / (Xp[i] - Xp[i - 1])) * (QC[i] - QC[i - 1]);
-  return { M: Msol, Z, stati, vita: stati[stati.length - 1].t, mHe, finita: stati[stati.length - 1].Xc <= passi[passi.length - 1] * X0 * 1.01 };
+  return { M: Msol, Z, stati, vita, mHe: finita ? mHe : Math.max(mHe, tuttaFine ? 1 : 0), finita };
 }
 // ---------- LA SEQUENZA DI ETÀ ZERO: da una massa alla vicina, a piccoli passi (ogni soluzione è il punto di
 // partenza della successiva; se il passo è troppo lungo lo si dimezza). Restituisce le soluzioni alle masse chieste
@@ -456,25 +458,157 @@ function sequenza(Z, masse, { parla = false } = {}) {
 // gravità (viriale: E = −(3/7)·G·M²/R per un polìtropo n = 3/2, che è la struttura esatta di una sfera tutta convettiva
 // di gas con P ∝ ρ^5/3 a entropia fissa), finché gli elettroni degeneri la reggono. La luce che esce è quella della
 // fotosfera il cui involucro, integrato in dentro, raggiunge l'entropia dell'interno.
-const LE15 = (() => { let x = 1e-3, y = 1 - (x * x) / 6, z = -x / 3; const h = 0.005, f = (x, y, z) => -Math.pow(Math.max(y, 0), 1.5) - (2 * z) / x; for (;;) { const k1y = z, k1z = f(x, y, z), k2y = z + 0.5 * h * k1z, k2z = f(x + 0.5 * h, y + 0.5 * h * k1y, k2y), k3y = z + 0.5 * h * k2z, k3z = f(x + 0.5 * h, y + 0.5 * h * k2y, k3y), k4y = z + h * k3z, k4z = f(x + h, y + h * k3y, k4y), y1 = y + (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y), z1 = z + (h / 6) * (k1z + 2 * k2z + 2 * k3z + k4z); if (y1 <= 0) { const t = y / (y - y1), xi = x + t * h, d = z + t * (z1 - z); return { xi, rc: xi / (-3 * d), pc: 1 / (PI4 * 2.5 * d * d) }; } x += h; y = y1; z = z1; } })(); // ρc/ρ̄ e Pc/(GM²/R⁴)
+const LE15 = (() => { const l = laneEmden(1.5); return { xi: l.xi, rc: l.xi / (-3 * l.d), pc: 1 / (PI4 * 2.5 * l.d * l.d) }; })(); // ρc/ρ̄ e Pc/(GM²/R⁴) del polìtropo n = 3/2
 function raffreddamento(Msol, Z) {
   const { X, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X), t = [], lL = [], lR = [];
-  let R = RSOLE * Math.cbrt(Msol / 0.05), tt = 0, inv0 = 0, lT = Math.log(3500);
-  for (let k = 0; k < 60; k++) {
+  const luce = (R) => { // la luce che esce da una sfera di raggio R: [L, T_eff]
     const rhoc = (LE15.rc * 3 * M) / (PI4 * R ** 3), Pc = (LE15.pc * K.G * M * M) / R ** 4;
     // la temperatura al centro (da P e ρ) e l'entropia dell'interno
     let a = Math.log(1e3), b = Math.log(1e9); for (let it = 0; it < 50; it++) { const m = 0.5 * (a + b); if (stato(rhoc, Math.exp(m), X, Zm).P < Pc) a = m; else b = m; }
-    const Tc = Math.exp(0.5 * (a + b)), sc = stato(rhoc, Tc, X, Zm).s, zf = Math.log(1e-3 * Pc);
-    // la temperatura della fotosfera il cui involucro arriva a quell'entropia
+    const sc = stato(rhoc, Math.exp(0.5 * (a + b)), X, Zm).s, zf = Math.log(1e-3 * Pc);
+    // la temperatura della fotosfera il cui involucro, integrato in dentro, arriva a quell'entropia
     const sInv = (lt) => { const Te = Math.exp(lt), r = dentroDa(M, Xp, Zm, tav, R, PI4 * R * R * K.sigma * Te ** 4, zf); return r ? stato(r[5], r[1], X, Zm).s : NaN; };
-    let ta = Math.log(450), tb = Math.log(7000); for (let it = 0; it < 18; it++) { const m = 0.5 * (ta + tb), sv = sInv(m); if (!(sv < sc)) tb = m; else ta = m; }
-    lT = 0.5 * (ta + tb); const Te = Math.exp(lT), Ls = PI4 * R * R * K.sigma * Te ** 4;
-    if (k > 0) tt += (3 / 7) * K.G * M * M * (1 / R - 1 / (R / 0.88)) * 0.5 * (inv0 + 1 / Ls);
-    t.push(tt / ANNO); lL.push(Math.log(Ls / LSOLE)); lR.push(Math.log(R / RSOLE)); inv0 = 1 / Ls;
-    if (tt > 5e10 * ANNO || Te < 500) break;
-    R *= 0.88;
+    let ta = Math.log(700), tb = Math.log(7000); for (let it = 0; it < 18; it++) { const m = 0.5 * (ta + tb), sv = sInv(m); if (!(sv < sc)) tb = m; else ta = m; }
+    const Te = Math.exp(0.5 * (ta + tb)); return [PI4 * R * R * K.sigma * Te ** 4, Te];
+  };
+  let R = RSOLE * Math.cbrt(Msol / 0.05), tt = 0, f = 0.88, [L0, T0] = luce(R);
+  t.push(0); lL.push(Math.log(L0 / LSOLE)); lR.push(Math.log(R / RSOLE));
+  for (let k = 0; k < 80 && tt < 3e10 * ANNO && T0 > 1000; k++) {
+    let R1 = R * f, [L1, T1] = luce(R1);
+    while (T1 < 0.9 * T0 && f < 0.998) { f = Math.sqrt(f); R1 = R * f; [L1, T1] = luce(R1); } // vicino al raggio degenere si rallenta
+    tt += (3 / 7) * K.G * M * M * (1 / R1 - 1 / R) * 0.5 * (1 / L0 + 1 / L1);
+    R = R1; L0 = L1; T0 = T1; t.push(tt / ANNO); lL.push(Math.log(L1 / LSOLE)); lR.push(Math.log(R / RSOLE));
   }
   return { M: Msol, t, lL, lR };
 }
-export const dentro = { sequenza, raffreddamento, LE15, traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, mescolamento, fuori, dentroDa, fotosfera, idrogeno, NGU, QC, QB, registra: (r) => { registro = r; }, stato, densita, termo, elettroni, S, TD, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, A_RAD, MB };
-void MSOLE; void RSOLE; void LSOLE; void ANNO;
+// ---------- LA TABELLA: per una metallicità, le tracce di un po' di masse dalla minima in su, e le nane brune.
+// È questo che `node strumenti/tabella_stelle.mjs` scrive in stelle_tabella.js (minuti di calcolo, una volta).
+export const Z_NODI = [0.01, 0.03, 0.1, 0.3, 1, 2, 3.5];
+export const M_NODI = [0.1, 0.13, 0.17, 0.22, 0.28, 0.35, 0.42, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2.1, 2.5, 3.2, 4, 5, 6.5, 8, 10, 13, 17, 22, 30, 40, 55, 75, 100, 130];
+const cifre = (v) => +Number(v).toPrecision(5);
+export function calcolaRiga(Z, masse = M_NODI, parla = () => {}) {
+  const t0 = Date.now(), sq = sequenza(Z, masse); if (!sq) return null;
+  parla(`Z = ${Z}: massa minima ${sq.minima.toFixed(4)}, massima raggiunta ${sq.massima} (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
+  const tracce = [];
+  for (const M of [sq.minima, ...masse.filter((m) => m > 1.03 * sq.minima && sq.y.has(m))]) {
+    const tr = traccia(M, Z, sq.y.get(M)); if (!tr) { parla(`  ${M}: traccia mancata`); continue; }
+    if (tr.stati.length < 2) tr.stati.push({ ...tr.stati[0], t: tr.vita });
+    const col = (k, f = (v) => v) => tr.stati.map((x) => cifre(f(x[k])));
+    tracce.push({ M: cifre(M), vita: cifre(tr.vita), mHe: cifre(tr.mHe), finita: tr.finita, t: col('t'), lL: col('L', Math.log), lR: col('R', Math.log), lTc: col('Tc', Math.log), lrho: col('rhoc', Math.log), cno: col('cno'), qcc: col('qcc'), qenv: col('qenv'), renv: col('renv'), Xc: col('Xc') });
+    const a = tr.stati[0], b = tr.stati[tr.stati.length - 1];
+    parla(`  ${String(cifre(M)).padEnd(8)} L ${a.L.toPrecision(4)} → ${b.L.toPrecision(4)}  R ${a.R.toFixed(3)} → ${b.R.toFixed(3)}  T ${a.T.toFixed(0)}  vita ${tr.vita.toExponential(3)}  nucleo He ${tr.mHe.toFixed(3)}${tr.finita ? '' : '  (INTERROTTA)'}  (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
+  }
+  const brune = [0.3, 0.6, 0.97].map((f) => { const b = raffreddamento(f * sq.minima, Z); return { M: cifre(b.M), t: b.t.map(cifre), lL: b.lL.map(cifre), lR: b.lR.map(cifre) }; });
+  parla(`  nane brune fatte (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
+  return { Z, Mmin: cifre(sq.minima), tracce, brune };
+}
+
+// ---------- LA TABELLA GIÀ CALCOLATA (stelle_tabella.js, scritta da `node strumenti/tabella_stelle.mjs`): stella()
+// interpola tra le tracce, in logaritmo, su massa e metalli, alla stessa frazione della vita.
+const RIGHE = TABELLA.righe.map((r) => ({ Z: r.Z, Mmin: r.Mmin, lnM: Float64Array.from(r.tracce, (x) => Math.log(x.M)), tr: r.tracce.map((x) => ({ ...x, n: x.t.length })), brune: r.brune })).sort((a, b) => a.Z - b.Z);
+const LZ = RIGHE.map((r) => Math.log(r.Z)), C_ES = SIGMA_T / (2 * MB);
+function laneEmden(n, h = 0.005) { // il polìtropo di indice n: primo zero ξ₁ e massa −ξ₁²θ'(ξ₁) (Runge-Kutta 4)
+  let x = h, y = 1 - (x * x) / 6 + (n * x ** 4) / 120, z = -x / 3 + (n * x ** 3) / 30; const f = (x, y, z) => -Math.pow(Math.max(y, 0), n) - (2 * z) / x;
+  for (;;) { const k1y = z, k1z = f(x, y, z), k2y = z + 0.5 * h * k1z, k2z = f(x + 0.5 * h, y + 0.5 * h * k1y, k2y), k3y = z + 0.5 * h * k2z, k3z = f(x + 0.5 * h, y + 0.5 * h * k2y, k3y), k4y = z + h * k3z, k4z = f(x + h, y + h * k3y, k4y), y1 = y + (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y), z1 = z + (h / 6) * (k1z + 2 * k2z + 2 * k3z + k4z); if (y1 <= 0) { const t = y / (y - y1), xi = x + t * h, d = z + t * (z1 - z); return { xi, m: -xi * xi * d, d }; } x += h; y = y1; z = z1; }
+}
+const LE3 = laneEmden(3);
+// una traccia a una frazione τ della sua vita: [ln L, ln R, ln Tc, ln ρc, CNO, nucleo conv., involucro conv., X centro, fondo dell'involucro]
+const NQ = 9;
+function aTau(tr, tau, peso, out) {
+  const t = tau * tr.vita, n = tr.n; let k = 0; while (k < n - 2 && tr.t[k + 1] < t) k++;
+  const u = n > 1 ? Math.min(1, Math.max(0, (t - tr.t[k]) / (tr.t[k + 1] - tr.t[k]))) : 0, k1 = Math.min(n - 1, k + 1), a = (A) => A[k] + u * (A[k1] - A[k]);
+  out[0] += peso * a(tr.lL); out[1] += peso * a(tr.lR); out[2] += peso * a(tr.lTc); out[3] += peso * a(tr.lrho); out[4] += peso * a(tr.cno); out[5] += peso * a(tr.qcc); out[6] += peso * a(tr.qenv); out[7] += peso * a(tr.Xc); out[8] += peso * a(tr.renv);
+}
+const posto = (A, x) => { let i = 0; const n = A.length; while (i < n - 2 && A[i + 1] < x) i++; return i; };
+function pesiZ(Z) {
+  if (!RIGHE.length) throw new Error('stelle: la tabella è vuota; generarla con `node strumenti/tabella_stelle.mjs`');
+  if (RIGHE.length === 1) return [[RIGHE[0], 1]];
+  const lz = Math.log(Math.min(RIGHE[RIGHE.length - 1].Z, Math.max(RIGHE[0].Z, Z))), iz = posto(LZ, lz), uz = (lz - LZ[iz]) / (LZ[iz + 1] - LZ[iz]);
+  return uz <= 0 ? [[RIGHE[iz], 1]] : uz >= 1 ? [[RIGHE[iz + 1], 1]] : [[RIGHE[iz], 1 - uz], [RIGHE[iz + 1], uz]];
+}
+const MEZZA_ETA = 0.5 * etaUniverso() / ANNO;
+
+// ---------- CIÒ CHE SI USA DA FUORI
+
+// la massa più piccola che accende l'idrogeno (in masse solari), a una metallicità (in unità solari)
+export function massaMinima({ Z = 1 } = {}) { let s = 0; for (const [r, w] of pesiZ(Z)) s += w * Math.log(r.Mmin); return Math.exp(s); }
+
+// la massa più grande: dove al centro la pressione della luce uguaglia quella del gas (nel modello di Eddington la
+// massa fissa da sola questo rapporto: M ∝ √(1−β)/(μ²β²)·(ħc/G)^3/2/m_p²). Oltre, la stella è tenuta insieme a stento.
+export function massaMassima({ Z = 1 } = {}) {
+  const { X, Zm } = composizione(Z), mu = 1 / (2 * X + 0.75 * (1 - X - Zm) + 0.5 * Zm), beta = 0.5;
+  const Kp = Math.cbrt((3 * (1 - beta)) / A_RAD) * Math.pow(K.kB / (beta * mu * MB), 4 / 3);
+  return (PI4 * LE3.m * Math.pow(Kp / (Math.PI * K.G), 1.5)) / MSOLE;
+}
+
+// UNA STELLA in sequenza principale. Msol: massa in masse solari; Z: metalli in unità solari; eta: anni dalla nascita
+// (se manca: a metà della vita, o a metà dell'età dell'universo se vive di più).
+// → L, R in unità solari, T in K, vita in anni (come la vecchia stella() di leggi.js), e in più: Tc (K), densitaCentro
+// (kg/m³), cno (frazione di L dal ciclo CNO), nucleoConvettivo e involucroConvettivo (frazioni di massa), fondoInvolucro
+// (a che frazione del raggio comincia la zona convettiva esterna), struttura,
+// idrogenoCentro, eddington (L/L_Eddington), eta (quella usata), finita (ha esaurito l'idrogeno al centro), nanaBruna.
+export function stella(Msol, { Z = 1, eta = null } = {}) {
+  const righe = pesiZ(Z), lm = Math.log(Math.min(Msol, 300));
+  let lmin = 0; for (const [r, w] of righe) lmin += w * Math.log(r.Mmin);
+  if (lm < lmin - 1e-9) return nanaBruna(Msol, righe, eta);
+  // la vita, interpolata tra le tracce vicine (in logaritmo, su massa e metalli)
+  let lv = 0; const vicini = [];
+  for (const [r, w] of righe) {
+    const x = Math.max(lm, r.lnM[0]), i = posto(r.lnM, x), u = (x - r.lnM[i]) / (r.lnM[i + 1] - r.lnM[i]);
+    lv += w * ((1 - u) * Math.log(r.tr[i].vita) + u * Math.log(r.tr[i + 1].vita)); vicini.push(r.tr[i], w * (1 - u), r.tr[i + 1], w * u);
+  }
+  const vita = Math.exp(lv), anni = eta ?? Math.min(0.5 * vita, MEZZA_ETA), tau = Math.min(1, Math.max(0, anni / vita)), o = new Float64Array(NQ);
+  let vic = vicini[0], pmax = -1;
+  for (let i = 0; i < vicini.length; i += 2) { if (vicini[i + 1] !== 0) aTau(vicini[i], tau, vicini[i + 1], o); if (vicini[i + 1] > pmax) { pmax = vicini[i + 1]; vic = vicini[i]; } }
+  const L = Math.exp(o[0]), R = Math.exp(o[1]), T = Math.pow((L * LSOLE) / (PI4 * (R * RSOLE) ** 2 * K.sigma), 0.25), qe = aUno(vic, tau, 'qenv'), re = aUno(vic, tau, 'renv');
+  return {
+    L, R, T, vita, Tc: Math.exp(o[2]), densitaCentro: Math.exp(o[3]), cno: o[4], nucleoConvettivo: o[5], involucroConvettivo: o[6], fondoInvolucro: o[8], idrogenoCentro: o[7],
+    struttura: qe >= 1 ? 'tutta convettiva' : re < 0.97 ? 'nucleo radiativo, involucro convettivo' : aUno(vic, tau, 'qcc') > 0 ? 'nucleo convettivo, involucro radiativo' : 'radiativa',
+    eddington: (L * LSOLE * C_ES * (1 + composizione(Z).X)) / (PI4 * K.c * K.G * Msol * MSOLE), eta: anni, finita: anni >= vita, nanaBruna: false,
+  };
+}
+const aUno = (tr, tau, chiave) => { const t = tau * tr.vita; let k = 0; while (k < tr.n - 2 && tr.t[k + 1] < t) k++; return t - tr.t[k] < tr.t[Math.min(tr.n - 1, k + 1)] - t ? tr[chiave][k] : tr[chiave][Math.min(tr.n - 1, k + 1)]; };
+function nanaBruna(Msol, righe, eta) {
+  const anni = eta ?? MEZZA_ETA; let lL = 0, lR = 0;
+  for (const [r, w] of righe) {
+    const lm = Math.log(Msol), ms = r.brune.map((b) => Math.log(b.M)), i = posto(ms, lm), u = Math.min(1, Math.max(0, (lm - ms[i]) / (ms[i + 1] - ms[i])));
+    for (const [b, p] of [[r.brune[i], w * (1 - u)], [r.brune[i + 1], w * u]]) {
+      const n = b.t.length, lt = Math.log(Math.max(anni, 1)); let k = 1; while (k < n - 2 && Math.log(b.t[k + 1]) < lt) k++;
+      const q = n > 2 ? Math.min(1, Math.max(0, (lt - Math.log(b.t[k])) / (Math.log(b.t[k + 1]) - Math.log(b.t[k])))) : 0, k1 = Math.min(n - 1, k + 1);
+      lL += p * (b.lL[k] + q * (b.lL[k1] - b.lL[k])); lR += p * (b.lR[k] + q * (b.lR[k1] - b.lR[k]));
+    }
+  }
+  const L = Math.exp(lL), R = Math.exp(lR);
+  return { L, R, T: Math.pow((L * LSOLE) / (PI4 * (R * RSOLE) ** 2 * K.sigma), 0.25), vita: Infinity, Tc: NaN, densitaCentro: NaN, cno: 0, nucleoConvettivo: 1, involucroConvettivo: 1, fondoInvolucro: 0, idrogenoCentro: NaN, struttura: 'tutta convettiva', eddington: 0, eta: anni, finita: false, nanaBruna: true };
+}
+
+// il nucleo di elio che la stella si ritrova quando al centro l'idrogeno finisce (in masse solari)
+export function nucleoElio(Msol, { Z = 1 } = {}) {
+  let s = 0; const lm = Math.log(Msol);
+  for (const [r, w] of pesiZ(Z)) { const x = Math.max(lm, r.lnM[0]), i = posto(r.lnM, x), u = (x - r.lnM[i]) / (r.lnM[i + 1] - r.lnM[i]); s += w * ((1 - u) * r.tr[i].mHe + u * r.tr[i + 1].mHe); }
+  return Math.min(1, Math.max(0, s)) * Msol;
+}
+
+// CHE COSA DIVENTA quando muore, e quanto è forte il suo campo (il flusso magnetico si conserva mentre si contrae:
+// B·R² costante). Stessa forma della vecchia fine() di leggi.js, più nucleoElio.
+export function fine(Msol, B0 = 1e-4, { Z = 1 } = {}) {
+  const Rs = stella(Msol, { Z }).R * RSOLE, Mc = massaChandrasekhar() / MSOLE, He = nucleoElio(Msol, { Z });
+  if (He < Mc) { // il nucleo può farsi reggere dagli elettroni degeneri: perde gli strati esterni e resta una nana bianca
+    const seg = DATI.massaFinale.find((s) => Msol < s[0]), Mr = Math.min(Msol, 0.98 * Mc, seg[1] * Msol + seg[2]), R = raggioNanaBianca(Mr * MSOLE);
+    return { tipo: 'nana bianca', massa: Mr, raggio: R, B: B0 * (Rs / R) ** 2, supernova: false, nucleoElio: He };
+  }
+  if (He < DATI.elioBucoNero) { // il nucleo brucia fino al ferro e collassa: una supernova, e resta una stella di neutroni
+    // la massa: quella di Chandrasekhar (il nucleo di ferro cede quando la supera), meno l'energia di legame
+    // gravitazionale che se ne va in neutrini (3/5·G·M²/R, sfera omogenea)
+    const Mb = Mc * MSOLE, R = raggioNeutroni(Mb), Mg = Mb * (1 - (0.6 * K.G * Mb) / (R * K.c ** 2));
+    return { tipo: Mg < massaMassimaNeutroni() ? 'stella di neutroni' : 'buco nero', massa: Mg / MSOLE, raggio: raggioNeutroni(Mg), B: B0 * (Rs / raggioNeutroni(Mg)) ** 2, supernova: true, nucleoElio: He };
+  }
+  // l'esplosione non riesce a liberarsi del nucleo: ricade tutto, e resta un buco nero con la massa del nucleo di elio
+  return { tipo: 'buco nero', massa: He, raggio: (2 * K.G * He * MSOLE) / K.c ** 2, B: 0, supernova: true, nucleoElio: He };
+}
+
+// la composizione di una stella che nasce con Z metalli (in unità solari): l'elio cresce con i metalli, dal valore del
+// Big Bang a quello del Sole (le stelle che fanno i metalli fanno anche elio)
+
+// i pezzi, per i test e per chi vuole guardare dentro
+export const dentro = { calcolaRiga, sequenza, raffreddamento, traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, sigmaV, mescolamento, fuori, dentroDa, fotosfera, stato, densita, termo, elettroni, laneEmden, registra: (r) => { registro = r; }, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, C_ES, C_FF, A_RAD, MB, NGU, QC, QB, RIGHE };

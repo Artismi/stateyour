@@ -78,7 +78,7 @@
 // Lo «stato» che mare() restituisce è fatto solo di dati (numeri, testi, vettori): può passare tra fili.
 
 import { COSTANTI, R_GAS, ANNO } from './leggi.js';
-import { MOLECOLE, abbondanze, atmosfera } from './chimica.js';
+import { MOLECOLE, abbondanze, atmosfera, pressioneVapore } from './chimica.js';
 import { sorgente } from './eventi.js';
 
 const NA = 6.022e23, KB = COSTANTI.kB, E0 = 8.854e-12, QE = COSTANTI.e, RAD = Math.PI / 180;
@@ -109,6 +109,8 @@ export const DATI = {
   cd: 1.3e-3, ce: 1.3e-3, // l'attrito del vento sul mare e l'evaporazione (le formule di massa di meteo.js)
   // --- le particelle (m): sabbia, limo, argilla; densità dei granelli e dei fiocchi (kg/m³)
   taglie: { sabbia: 2e-4, limo: 2e-5, argilla: 2e-6 }, densitaGrani: 2650, densitaFiocchi: 1150, fiocco: 6e-5,
+  pennacchio: 5, // (m) lo spessore dello strato d'acqua dolce che un fiume stende sul mare
+  bolle: 1e9, profonditaBolle: 1, // bolle per m³ sotto una cresta che frange (per unità di copertura; Medwin e Breitz 1989); fin dove scendono (m)
   coagula: 0.08, // (mol/kg) la concentrazione di ioni a una carica a cui l'argilla coagula (per z cariche: diviso z⁶)
 };
 
@@ -146,8 +148,8 @@ export function costanti(T) {
   return out;
 }
 // il coefficiente di attività di uno ione alla forza ionica I (Debye-Hückel esteso, Truesdell-Jones)
-const gammaIone = (f, I, K) => { const x = IONI[f], r = Math.sqrt(I); return Math.pow(10, (-K.A * x[2] * x[2] * r) / (1 + x[3] * K.B * r) + x[4] * I); };
-const gammaCarica = (z, I, K) => { const r = Math.sqrt(I); return Math.pow(10, (-K.A * z * z * r) / (1 + 4.5 * K.B * r)); };
+const gammaIone = (f, I0, K) => { const x = IONI[f], I = Math.min(I0, 8), r = Math.sqrt(I); return Math.pow(10, (-K.A * x[2] * x[2] * r) / (1 + x[3] * K.B * r) + x[4] * I); };
+const gammaCarica = (z, I0, K) => { const r = Math.sqrt(Math.min(I0, 8)); return Math.pow(10, (-K.A * z * z * r) / (1 + 4.5 * K.B * r)); };
 // LE COPPIE DI IONI (Fuoss 1958): due ioni di segno opposto a contatto sono tenuti insieme dall'attrazione di Coulomb
 // attraverso l'acqua; K = (4/3)π·N·a³·exp(|z₁z₂|·ℓ/a), con ℓ la lunghezza di Bjerrum e a la distanza a contatto (i raggi;
 // il magnesio tiene così stretto il suo guscio che tra lui e l'altro ione resta una molecola d'acqua: +2,76 Å).
@@ -170,7 +172,7 @@ export function acqua(tot, T = 288, { pCO2 = 3e-4, omegaCalcite = null } = {}) {
   const lib = { 'Na+': Na, 'K+': Kk, 'Mg2+': Mg, 'Ca2+': Ca, 'SO4(2-)': S, 'CO3(2-)': 0, 'HCO3-': 0 }, g = {}, Kc = {};
   let I = 0.5 * (Na + Kk + Cl + 4 * (Mg + Ca + S)) + 1e-7, pH = 7, alk = 0, aw = 1, co2 = 0, H = 1e-7, OH = 1e-7, hco3T = 0, co3T = 0;
   const E = Na + Kk + 2 * Mg - Cl - 2 * S; // l'eccesso di cariche positive dei sali «forti» (senza il calcio)
-  for (let giro = 0; giro < 14; giro++) {
+  for (let giro = 0; giro < 9; giro++) {
     for (const f in IONI) g[f] = gammaIone(f, I, K);
     const g0 = Math.pow(10, 0.1 * Math.min(I, 8)); // le specie neutre (e l'effetto dei sali sui gas: i gas sono meno solubili nell'acqua salata)
     for (const c of CATIONI) { Kc[c] = {}; for (const l of LEGANTI) { const zp = IONI[c][2] + IONI[l][2]; Kc[c][l] = (KA[c][l] * g[c] * g[l]) / (zp === 0 ? g0 : gammaCarica(zp, I, K)); } }
@@ -185,7 +187,7 @@ export function acqua(tot, T = 288, { pCO2 = 3e-4, omegaCalcite = null } = {}) {
       return { hco3, co3, caLib, caTot, hT: hco3 * sH, cT: co3 * sC, h, oh, alk: hco3 * sH + 2 * co3 * sC + oh - h };
     };
     let lo = -2, hi = 15, r = null;
-    for (let it = 0; it < 54; it++) { pH = 0.5 * (lo + hi); r = prova(pH); if (r.alk - E - 2 * r.caTot > 0) hi = pH; else lo = pH; }
+    for (let it = 0; it < 38; it++) { pH = 0.5 * (lo + hi); r = prova(pH); if (r.alk - E - 2 * r.caTot > 0) hi = pH; else lo = pH; }
     if (cercaCa) { Ca = r.caTot; lib['Ca2+'] = r.caLib; }
     lib['CO3(2-)'] = r.co3; lib['HCO3-'] = r.hco3; alk = r.alk; H = r.h; OH = r.oh; hco3T = r.hT; co3T = r.cT;
     // gli ioni liberi: ciascuno diviso tra sé e le sue coppie
@@ -209,10 +211,10 @@ export function gasSciolti(gas = {}, pressionePa, T, I = 0) {
   for (const f of ['CO2', 'O2', 'N2', 'H2S']) if (gas[f] > 0) out[f] = K.henry[f] * gas[f] * bar * sale;
   return out;
 }
-// le proprietà dell'acqua salata: densità (kg/m³; il massimo a 4 °C sparisce col sale: qui la parabola dell'acqua
-// dolce più 0,78 per g/kg), viscosità (Pa·s, formula di Vogel, +0,2% per g/kg), punto di congelamento (la costante
+// le proprietà dell'acqua salata: densità (kg/m³: la parabola dell'acqua dolce attorno al suo massimo a 4 °C, più 0,78
+// per g/kg; col sale il massimo scende di 0,215 K per g/kg, e nell'acqua di mare sparisce sotto il punto di gelo), viscosità (Pa·s, formula di Vogel, +0,2% per g/kg), punto di congelamento (la costante
 // crioscopica viene dal calore di fusione di chimica.js: R·T²·M/ΔH = 1,86 K·kg/mol)
-export const densita = (T, S = 0) => 999.84 - 0.0067 * (T - 277.13) ** 2 * (1 - Math.min(1, S / 40) * 0.5) + 0.78 * S - 0.0012 * S * (T - 273.15);
+export const densita = (T, S = 0) => 999.84 + 0.78 * S - 0.0067 * (T - 277.13 + 0.215 * Math.min(S, 40)) ** 2;
 export const viscosita = (T, S = 0) => 2.414e-5 * Math.pow(10, 247.8 / (Math.max(T, 250) - 140)) * (1 + 0.002 * S);
 const CRIOSCOPICA = (R_GAS * 273.15 ** 2 * 0.018015) / (1000 * (MOLECOLE['H2O(l)'].dH - MOLECOLE['H2O(s)'].dH));
 export const congelamento = (moliPerKg) => 273.15 - CRIOSCOPICA * 0.92 * moliPerKg; // (0,92: il coefficiente osmotico dell'acqua di mare)
@@ -341,18 +343,23 @@ export function ebollizione(pressionePa) { const dH = 1000 * (MOLECOLE.H2O.dH - 
 // kg d'acqua), salinita }
 export function evapora(ioniIniziali, fattore, T, pCO2) {
   const c = {}; for (const e of ['Na', 'K', 'Mg', 'Ca', 'Cl', 'S', 'Si']) c[e] = (ioniIniziali[e] || 0) * fattore;
-  const prec = { calcite: 0, gesso: 0, salgemma: 0, silice: 0 }, K = costanti(T), soglia = omegaCritica('calcite', T);
+  const prec = { calcite: 0, magnesite: 0, gesso: 0, salgemma: 0, silice: 0, amari: 0 }, K = costanti(T), soglia = omegaCritica('calcite', T);
   { const x = Math.max(0, c.Si - K.sali['silice amorfa']); c.Si -= x; prec.silice = x; }
   let eq = acqua(c, T, { pCO2 });
   if (eq.omega.calcite > soglia) { // il calcio in più se ne va col carbonato: resta quello che l'equilibrio regge
     const alk = c.Na + c.K + 2 * c.Mg + 2 * c.Ca - c.Cl - 2 * c.S, x = Math.max(0, Math.min(c.Ca, alk / 2)), dopo = acqua({ ...c, Ca: undefined }, T, { pCO2, omegaCalcite: soglia });
     const resta = Math.min(c.Ca, Math.max(dopo.Ca, c.Ca - x)); prec.calcite = c.Ca - resta; c.Ca = resta; eq = acqua(c, T, { pCO2 });
   }
+  // se dopo il calcio resta alcalinità, la prende il magnesio (carbonato di magnesio idrato, Ksp 10⁻⁵·² misurato): finito
+  // anche lui, il lago è di soda; se invece finisce prima l'alcalinità, resta una salamoia neutra di cloruri e solfati
+  if (eq.gamma['Mg2+'] * eq.liberi['Mg2+'] * eq.gamma['CO3(2-)'] * eq.liberi['CO3(2-)'] > 6.3e-6) { const alk = c.Na + c.K + 2 * c.Mg + 2 * c.Ca - c.Cl - 2 * c.S, x = 0.97 * Math.max(0, Math.min(c.Mg, alk / 2)); c.Mg -= x; prec.magnesite = x; eq = acqua(c, T, { pCO2 }); }
   for (let giro = 0; giro < 3; giro++) {
     if (eq.omega.gesso > 1) { const fr = (eq.liberi['Ca2+'] / Math.max(c.Ca, 1e-30)) * (eq.liberi['SO4(2-)'] / Math.max(c.S, 1e-30)), x = toglieSale(c.Ca, c.S, K.sali.gesso / (eq.gamma['Ca2+'] * eq.gamma['SO4(2-)'] * eq.attivitaAcqua ** 2 * fr)); c.Ca -= x; c.S -= x; prec.gesso += x; }
     if (eq.omega.salgemma > 1) { const fr = eq.liberi['Na+'] / Math.max(c.Na, 1e-30), x = toglieSale(c.Na, c.Cl, K.sali.salgemma / (eq.gamma['Na+'] * eq.gamma['Cl-'] * fr)); c.Na -= x; c.Cl -= x; prec.salgemma += x; }
     eq = acqua(c, T, { pCO2 });
   }
+  // oltre una decina di moli per kg nemmeno i sali più solubili (di magnesio, di potassio, la soda) restano sciolti: il di più cristallizza
+  { const tot = c.Na + c.K + c.Mg + c.Ca + c.Cl + c.S; if (tot > 11) { const f = 11 / tot; for (const e of ['Na', 'K', 'Mg', 'Ca', 'Cl', 'S']) { prec.amari += c[e] * (1 - f); c[e] *= f; } eq = acqua(c, T, { pCO2 }); } }
   return { ioni: c, eq, precipitati: prec, salinita: grammiPerKg(c, eq) };
 }
 
@@ -422,8 +429,220 @@ export function mare(P, sf, cl, se = null, caso = null) {
     fine: { W: FW, H: FH, tipo, fondo: fondoF, lago: new Int16Array(FN).fill(-1) }, bagnato, fondo, ghiaccio, vento: { u: vu, v: vv }, radice: c0.radice };
   // l'acqua dei fiumi in equilibrio con l'aria
   { const f = bs.fiume, ef = acqua({ ...f, Ca: f.Ca || 0 }, Math.max(274, cl.Tglobale || 285), { pCO2 }); out.fiume = { ...f, pH: ef.pH, salinita: grammiPerKg(f, ef), portataKgAnno: fiumi, sedimentoKgAnno: sedimento, argillaKgAnno: argilla, sabbiaKgAnno: sabbia }; }
-  //§§CAMPI§§
+  // --- LE FOCI: dove i fiumi di erosione() entrano in mare, con la loro acqua e il loro fango (in proporzione alla portata)
+  const lonDi = (i, w) => ((i + 0.5) / w) * 360 - 180, latDi = (j, h) => 90 - ((j + 0.5) / h) * 180, foci = [], dolce = new Float64Array(N), fango = new Float64Array(N);
+  let sommaFoci = 0; if (s.flusso) for (let k = 0; k < FN; k++) if (tipo[k] === 1 && s.flusso[k] > 2) sommaFoci += s.flusso[k];
+  const kPortata = sommaFoci > 0 ? fiumi / sommaFoci : fiumi > 0 && areaTerra > 0 ? (fiumi / areaTerra) * areaF(FH >> 1) : 0, parteFine = sedimento > 0 ? argilla / sedimento : 0.3;
+  if (sommaFoci > 0) for (let k = 0; k < FN; k++) if (tipo[k] === 1 && s.flusso[k] > 2) { const i = k % FW, j = (k - i) / FW, parte = s.flusso[k] / sommaFoci, q = Math.floor(j / kx) * W + Math.floor(i / kx);
+    dolce[q] += (parte * fiumi) / 1000 / ANNO; fango[q] += (parte * argilla) / ANNO; // (m³/s d'acqua; kg/s d'argilla)
+    foci.push({ lon: lonDi(i, FW), lat: latDi(j, FH), portata: (parte * fiumi) / 1000 / ANNO, sedimento: (parte * sedimento) / ANNO, argilla: parteFine }); }
+  foci.sort((a, b) => b.portata - a.portata); out.foci = foci.slice(0, 400);
+  // --- LE CORRENTI (correnti(), più sotto) e i campi che portano
+  const rhoAria = pAria / ((m?.aria?.R ?? 287) * Tmare), tx = new Float64Array(N), ty = new Float64Array(N);
+  for (let k = 0; k < N; k++) { const v = Math.hypot(vu[k], vv[k]); tx[k] = rhoAria * DATI.cd * v * vu[k]; ty[k] = rhoAria * DATI.cd * v * vv[k]; }
+  let tMin = Infinity, tMax = -Infinity; for (let k = 0; k < N; k++) if (bagnato[k] >= 0.5) { tMin = Math.min(tMin, Math.max(out.congela, Tclima[k])); tMax = Math.max(tMax, Tclima[k]); }
+  if (!isFinite(tMin)) { tMin = tMax = Tmare; }
+  const co = correnti({ W, H, R, omega: (2 * Math.PI) / (P.giorno || 86400), bagnato, fondo, tx, ty, g, salto: Math.max(0.2, densita(tMin, salinitaMedia) - densita(tMax, salinitaMedia)), areaMare });
+  const righe = { A: Float64Array.from({ length: H }, (_, j) => area(j)), dx: Float64Array.from({ length: H }, (_, j) => R * dl * cosJ[j]), dxS: Float64Array.from({ length: H }, (_, j) => R * dl * Math.max(0, Math.cos(lat(j) - df / 2))), dy: R * df };
+  const h = DATI.strato, wMescola = DATI.mescola / co.termoclino, lambda = m?.scambio > 0 ? m.scambio : 4 * COSTANTI.sigma * Tmare ** 3, tauT = (1025 * 4000 * h) / lambda;
+  const sorg = new Float64Array(N), perd = new Float64Array(N), porta = (q, fondoQ) => trasporta({ W, H, co, righe, h, q, fondoQ, sorg, perd, wMescola });
+  // IL GHIACCIO MARINO: dove il clima tiene l'aria sotto il punto di gelo dell'acqua salata per una parte dell'anno, il
+  // ghiaccio cresce dall'alto (legge di Stefan: h = √(2·k·ΔT·t/(ρ·L)), col calore di fusione di chimica.js); cristallizzando
+  // lascia nell'acqua sotto quasi tutto il suo sale (l'85%: dato misurato), che la rende più densa
+  const spessoreGhiaccio = new Float32Array(N), Lfus = (1000 * (MOLECOLE['H2O(l)'].dH - MOLECOLE['H2O(s)'].dH)) / 0.018015;
+  for (let k = 0; k < N; k++) if (bagnato[k] > 0 && ghiaccio[k] > 0.01) spessoreGhiaccio[k] = Math.sqrt((2 * 2.2 * Math.max(1, out.congela - Tclima[k] + 5 * ghiaccio[k]) * ghiaccio[k] * (P.anno || ANNO)) / (917 * Lfus));
+  let Tfondo = tMin, Sfondo = salinitaMedia; const Tm = Float32Array.from(Tclima, (t) => Math.max(out.congela, t)), Sm = new Float32Array(N).fill(salinitaMedia), dense = [];
+  for (let giro = 0; giro < 2 && celleMare; giro++) {
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, A = righe.A[j]; sorg[k] = ((A * h) / tauT) * Math.max(out.congela, Tclima[k]); perd[k] = (A * h) / tauT; }
+    porta(Tm, Tfondo); for (let k = 0; k < N; k++) if (Tm[k] < out.congela) Tm[k] = out.congela;
+    // la salinità: l'evaporazione concentra, la pioggia e i fiumi diluiscono; la corrente e il fondo rimescolano
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, A = righe.A[j]; sorg[k] = (A * evap[k] * Sm[k]) / 1000 / ANNO; perd[k] = (A * piove[k]) / 1000 / ANNO + dolce[k]; }
+    for (let r = 0; r < 3; r++) { porta(Sm, Sfondo); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; sorg[k] = (righe.A[j] * evap[k] * Sm[k]) / 1000 / ANNO; } }
+    { let sA = 0, aA = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (co.mare[k]) { sA += Sm[k] * righe.A[j]; aA += righe.A[j]; } } const f = sA > 0 ? (salinitaMedia * aA) / sA : 1; for (let k = 0; k < N; k++) Sm[k] *= f; }
+    // L'ACQUA PIÙ DENSA (fredda e salata) affonda e riempie il fondo: è lei l'acqua profonda di tutto il mare
+    dense.length = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (co.mare[k]) dense.push([densita(Tm[k], Sm[k] * (1 + (0.85 * spessoreGhiaccio[k]) / h)), k, righe.A[j]]); }
+    dense.sort((a, b) => b[0] - a[0]); let aD = 0, tD = 0, sD = 0; for (const [, k, A] of dense) { if (aD > 0.02 * areaMare) break; aD += A; tD += Tm[k] * A; sD += Sm[k] * A; }
+    if (aD > 0) { Tfondo = tD / aD; Sfondo = sD / aD; }
+  }
+  // l'argilla dei fiumi: entra alle foci, viaggia con la corrente, cade con la velocità di Stokes
+  const wArgilla = Math.max(1e-7, stokes(DATI.taglie.argilla, DATI.densitaGrani, Tmare, salinitaMedia, g)), torb = new Float32Array(N);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; sorg[k] = fango[k]; perd[k] = righe.A[j] * wArgilla; }
+  if (celleMare) porta(torb, 0);
+  // --- le saturazioni: l'equilibrio calcolato su una tavola (temperatura × salinità) e interpolato
+  const tavola = { T: [271, 276, 282, 288, 294, 300, 306, 314], f: [0.3, 0.6, 0.85, 1, 1.2, 1.6], pH: [], calcite: [], gesso: [], salgemma: [] };
+  for (const T of tavola.T) for (const f of tavola.f) { const t = {}; for (const e in ioni) t[e] = ioni[e] * f; const a = acqua(t, T, { pCO2 }); tavola.pH.push(a.pH); for (const x of ['calcite', 'gesso', 'salgemma']) tavola[x].push(Math.log(Math.max(1e-30, a.omega[x]))); }
+  out.tavola = tavola;
+  const sat = { calcite: new Float32Array(N), gesso: new Float32Array(N), salgemma: new Float32Array(N) }, pHc = new Float32Array(N);
+  for (let k = 0; k < N; k++) { const x = dallaTavola(tavola, Tm[k], salinitaMedia > 0 ? Sm[k] / salinitaMedia : 1); pHc[k] = x.pH; sat.calcite[k] = x.calcite; sat.gesso[k] = x.gesso; sat.salgemma[k] = x.salgemma; }
+  // i campi valgono sul mare: sulle celle di terra si mette la media dei vicini bagnati (serve a interpolare lungo le coste)
+  for (const x of [Tm, Sm, torb, co.u, co.v, co.w, pHc, sat.calcite, sat.gesso, sat.salgemma]) riempiTerra(x, co.mare, W, H);
+  // la torbidità sulla griglia fine: l'argilla portata lontano, più il pennacchio di ogni foce nelle celle attorno
+  const torbidaFine = new Float32Array(FN); for (let j = 0; j < FH; j++) for (let i = 0; i < FW; i++) { const k = j * FW + i; if (tipo[k] === 1) torbidaFine[k] = bil(torb, W, H, ((i + 0.5) / FW) * W - 0.5, ((j + 0.5) / FH) * H - 0.5); }
+  out.fiume.sospeso = fiumi > 0 ? (sedimento / fiumi) * 1000 : 0; // (kg di fango per m³ d'acqua di fiume)
+  for (const f of out.foci.slice(0, 200)) { const i0 = Math.floor(((f.lon + 180) / 360) * FW), j0 = Math.floor(((90 - f.lat) / 180) * FH);
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const j = j0 + dj, i = (i0 + di + FW) % FW; if (j < 0 || j >= FH || tipo[j * FW + i] !== 1) continue;
+      const x = Math.max(0.3 * R * (Math.PI / FH), distanza(R, f.lon, f.lat, lonDi(i, FW), latDi(j, FH))), pn = pennacchio(f.portata, x, g); torbidaFine[j * FW + i] += out.fiume.sospeso * f.argilla * pn.parte * Math.exp((-x * wArgilla) / (pn.velocita * DATI.pennacchio)); } }
+  out.fine.torbida = torbidaFine; out.vulcani = (s.vulcani || []).map(([i, j]) => ({ lon: lonDi(i, FW), lat: latDi(j, FH), sommerso: tipo[j * FW + i] === 1 })); out.spessoreGhiaccio = spessoreGhiaccio;
+  out.coloreFondo = s.materiali?.coloreBasalto || [120, 110, 100]; out.eta = P.interno?.eta ?? 4.5e9;
+  Object.assign(out, { corrente: { u: co.u, v: co.v }, risalita: co.w, giri: co.psi, termoclino: co.termoclino, temperatura: Tm, salinita: Sm, torbidita: torb, saturazione: sat, pHcampo: pHc, eMenoP: Float32Array.from(evap, (e, k) => e - piove[k]),
+    profondo: { T: Tfondo, salinita: Sfondo, densita: densita(Tfondo, Sfondo), portataSv: (wMescola * areaMare) / 1e6, tempoGiroAnni: wMescola > 0 ? out.profonditaMedia / wMescola / ANNO : Infinity,
+      dove: dense.slice(0, 3).map(([, k]) => ({ lon: lonDi(k % W, W), lat: latDi(Math.floor(k / W), H) })) } });
+  // --- I LAGHI: dolci se traboccano, salati se l'acqua esce solo evaporando
+  const laghi = [], Tfine = (k) => { const i = k % FW, j = (k - i) / FW; return bil(cl.media, cl.W, cl.H, ((i + 0.5) / FW) * cl.W - 0.5, ((j + 0.5) / FH) * cl.H - 0.5); };
+  const eVapPot = (k) => { const i = k % FW, j = (k - i) / FW, x = ((i + 0.5) / FW) * W - 0.5, y = ((j + 0.5) / FH) * H - 0.5, T = Tfine(k), U = m ? Math.hypot(bil(vu, W, H, x, y), bil(vv, W, H, x, y)) + 1 : 3, rh = m ? bil(umid, W, H, x, y) : 0.5;
+    return { E: (DATI.ce * (pressioneVapore(T) / (461.5 * T)) * U * Math.max(0.1, 1 - 0.8 * rh) * ANNO) / 1000, P: m ? bil(piove, W, H, x, y) / 1000 : 0.3 }; }; // (m/anno: la formula di massa di meteo.js)
+  const gruppi = (dentro) => { const visto = new Uint8Array(FN), ris = []; for (let k0 = 0; k0 < FN; k0++) { if (visto[k0] || !dentro(k0)) continue; const celle = [k0]; visto[k0] = 1;
+    for (let n = 0; n < celle.length; n++) { const c = celle[n], i = c % FW, j = (c - i) / FW; for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= FH) continue; for (let di = -1; di <= 1; di++) { const q = jj * FW + ((i + di + FW) % FW); if (!visto[q] && dentro(q)) { visto[q] = 1; celle.push(q); } } } }
+    ris.push(celle); } return ris; };
+  const scheda = (celle, chiuso, livelloLago) => { let A = 0, V = 0, x = 0, y = 0, z = 0, fl = 0, kMin = celle[0];
+    for (const k of celle) { const i = k % FW, j = (k - i) / FW, a = areaF(j), d = chiuso ? Math.max(0.5, livelloLago - s.alt[k]) : s.lago[k]; A += a; V += a * d; const lo = lonDi(i, FW) * RAD, la = latDi(j, FH) * RAD; x += a * Math.cos(la) * Math.cos(lo); y += a * Math.cos(la) * Math.sin(lo); z += a * Math.sin(la); if (s.flusso && s.flusso[k] > fl) fl = s.flusso[k]; if (s.alt[k] < s.alt[kMin]) kMin = k; }
+    return { areaM2: A, volumeM3: V, profonditaM: V / A, lon: Math.atan2(y, x) / RAD, lat: Math.atan2(z, Math.hypot(x, y)) / RAD, afflussoKgAnno: kPortata * Math.max(fl, 1), T: Math.max(Tfine(kMin), 271), kMin }; };
+  const fiumeIoni = bs.fiume;
+  if (s.lago) for (const celle of gruppi((k) => tipo[k] === 2)) { const L = scheda(celle, false), ev = eVapPot(L.kMin), evapora_ = Math.min(0.97 * L.afflussoKgAnno, Math.max(0, ev.E - ev.P) * 1000 * L.areaM2), fatt = L.afflussoKgAnno / (L.afflussoKgAnno - evapora_);
+    const e = evapora(fiumeIoni, fatt, L.T, pCO2), id = laghi.length; for (const k of celle) out.fine.lago[k] = id;
+    laghi.push({ id, tipo: 'aperto', ...L, evaporaKgAnno: evapora_, etaAnni: null, concentrato: fatt, salinita: e.salinita, totali: e.ioni, ioni: nomiIoni(e.ioni, e.eq), pH: e.eq.pH, saturazione: { calcite: e.eq.omega.calcite, gesso: e.eq.omega.gesso, salgemma: e.eq.omega.salgemma }, precipitati: e.precipitati, ghiaccio: bil(cl.freddo, cl.W, cl.H, ((L.lon + 180) / 360) * cl.W - 0.5, ((90 - L.lat) / 180) * cl.H - 0.5),
+      descrizione: 'lago dolce: ha un emissario, l\'acqua resta poco e porta via i suoi sali' }); }
+  { const pieno = conche(s.alt, FW, FH, isFinite(livello) ? livello : -Infinity), tutte = gruppi((k) => tipo[k] === 0 && pieno[k] > s.alt[k] + 1).map((celle) => ({ celle, fl: celle.reduce((a, k) => Math.max(a, s.flusso ? s.flusso[k] : 1), 0) })).sort((a, b) => b.fl - a.fl || a.celle[0] - b.celle[0]);
+    for (const { celle } of tutte.slice(0, 40)) { celle.sort((a, b) => s.alt[a] - s.alt[b] || a - b); const k0 = celle[0], ev = eVapPot(k0), netto = Math.max(0.05, ev.E - ev.P), Q = kPortata * celle.reduce((a, k) => Math.max(a, s.flusso ? s.flusso[k] : 1), 1);
+      // il lago terminale: si allarga finché ciò che evapora dalla sua superficie pareggia ciò che arriva
+      const areaVoluta = Q / 1000 / netto, bagnate = []; let A = 0; for (const k of celle) { if (A >= areaVoluta) break; bagnate.push(k); A += areaF(Math.floor(k / FW)); }
+      const piena = areaVoluta >= areaF(Math.floor(k0 / FW)), id = laghi.length;
+      if (!piena) { // troppo poca acqua per una cella intera: una piana di sale, con al centro una pozza di salamoia
+        out.fine.tipo[k0] = 4; out.fine.lago[k0] = id; out.fine.fondo[k0] = 0.3; }
+      else { const liv = s.alt[bagnate[bagnate.length - 1]] + 1; for (const k of bagnate) { out.fine.tipo[k] = 3; out.fine.lago[k] = id; out.fine.fondo[k] = Math.max(0.5, liv - s.alt[k]); } }
+      const L = piena ? scheda(bagnate, true, s.alt[bagnate[bagnate.length - 1]] + 1) : { ...scheda([k0], true, s.alt[k0] + 0.3), areaM2: areaVoluta, volumeM3: areaVoluta * 0.3, profonditaM: 0.3 };
+      // da quanto tempo la conca è chiusa (l'ultima volta che ha traboccato, o che si è formata): un evento
+      const etaAnni = Math.min(P.interno?.eta ?? 4.5e9, Math.pow(10, c0.tra(`lago ${id}/da quanto è chiuso`, 4, 7))), fatt = Math.max(1, (Q * etaAnni) / (1000 * L.volumeM3));
+      const e = evapora(fiumeIoni, fatt, L.T, pCO2), satura = e.precipitati.salgemma > 0;
+      laghi.push({ id, tipo: piena ? 'chiuso' : 'piana di sale', ...L, afflussoKgAnno: Q, evaporaKgAnno: Q, etaAnni, concentrato: fatt, salinita: e.salinita, totali: e.ioni, ioni: nomiIoni(e.ioni, e.eq), pH: e.eq.pH, saturazione: { calcite: e.eq.omega.calcite, gesso: e.eq.omega.gesso, salgemma: e.eq.omega.salgemma },
+        precipitati: e.precipitati, ghiaccio: 0, descrizione: satura ? 'salamoia satura: l\'acqua esce solo evaporando e lascia qui tutti i suoi sali; sul fondo e sulle rive cresce il salgemma' : e.salinita > 3 ? 'lago salato: chiuso, i sali dei fiumi si accumulano' : 'lago chiuso ancora giovane: i sali non hanno avuto tempo di accumularsi' }); } }
+  out.laghi = laghi;
+  // --- LE SORGENTI CALDE DEL FONDO: dove la crosta è appena nata (le dorsali) e sui vulcani sommersi
+  out.sorgentiCalde = sorgentiCalde(P, s, out, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livello, g, pAria });
+  out.prebiotica = perLaChimicaPrebiotica(out, s);
+  out.storia = racconta(out, bs);
   return out;
+}
+
+// LE CORRENTI SPINTE DAL VENTO. Due pezzi, tutti e due dalla stessa forza (il vento sulla superficie) e dalla rotazione:
+//  · la DERIVA DI EKMAN: lo strato di superficie, spinto dal vento e deviato da Coriolis, va di traverso (a destra del
+//    vento nell'emisfero nord): trasporto = τ/(ρ·(r + i·f)), con un piccolo attrito r che lo tiene finito all'equatore.
+//    Dove questo trasporto diverge (lungo l'equatore, lungo le coste da cui il vento allontana l'acqua) risale acqua dal
+//    fondo; dove converge (il centro dei grandi giri) l'acqua scende.
+//  · i GIRI: l'acqua che scende o sale sotto lo strato di Ekman deve spostarsi verso l'equatore o verso i poli (bilancio
+//    di Sverdrup: β·V = rot τ/ρ), e torna indietro in una corrente stretta sul bordo OVEST di ogni bacino, perché la
+//    rotazione del pianeta cresce verso i poli (Stommel 1948): r·∇²ψ + β·∂ψ/∂x = rot τ/ρ, con ψ = 0 sulle coste.
+//    L'attrito r è scelto perché la corrente di bordo sia larga una cella (quella vera è larga cento chilometri: qui è
+//    più larga e più lenta, ma porta la stessa acqua). Si risolve con passate successive da est a ovest.
+// Lo spessore che il vento muove (il termoclino) viene dalla scala h = √(f²·w·L/(β·g′)): w la discesa di Ekman, L la
+// larghezza dei bacini, g′ la gravità ridotta dalla differenza di densità tra l'acqua calda e la fredda.
+function correnti({ W, H, R, omega, bagnato, fondo, tx, ty, g, salto, areaMare }) {
+  const N = W * H, dl = (2 * Math.PI) / W, df = Math.PI / H, rho = 1025, mare = new Uint8Array(N), rE = DATI.attritoEkman, dy = R * df;
+  const fi = (j) => Math.PI / 2 - (j + 0.5) * df, c = Float64Array.from({ length: H }, (_, j) => Math.cos(fi(j)));
+  const Mx = new Float64Array(N), My = new Float64Array(N), psi = new Float64Array(N), F = new Float64Array(N);
+  for (let j = 0; j < H; j++) { const f = 2 * omega * Math.sin(fi(j)); for (let i = 0; i < W; i++) { const k = j * W + i; mare[k] = bagnato[k] >= 0.5 ? 1 : 0; const d = rho * (rE * rE + f * f); Mx[k] = (rE * tx[k] + f * ty[k]) / d; My[k] = (rE * ty[k] - f * tx[k]) / d; } }
+  for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const k = j * W + i, e = j * W + ((i + 1) % W), w = j * W + ((i + W - 1) % W); F[k] = ((ty[e] - ty[w]) / (2 * dl) - (tx[k - W] * c[j - 1] - tx[k + W] * c[j + 1]) / (2 * df)) / (R * c[j] * rho); }
+  const aE = new Float64Array(H), aW = new Float64Array(H), aN = new Float64Array(H), aS = new Float64Array(H), aP = new Float64Array(H);
+  for (let j = 1; j < H - 1; j++) { const beta = (2 * omega * c[j]) / R, dx = R * c[j] * dl, r = Math.max(beta * dx, 1e-7), cn = Math.cos(fi(j) + df / 2), cs = Math.cos(fi(j) - df / 2);
+    aE[j] = r / (dx * dx) + beta / (2 * dx); aW[j] = r / (dx * dx) - beta / (2 * dx); aN[j] = (r * cn) / (c[j] * dy * dy); aS[j] = (r * cs) / (c[j] * dy * dy); aP[j] = (2 * r) / (dx * dx) + (r * (cn + cs)) / (c[j] * dy * dy); }
+  for (let giro = 0; giro < 220; giro++) for (let jj = 1; jj < H - 1; jj++) { const j = giro & 1 ? H - 1 - jj : jj; if (j < 3 || j > H - 4) continue; for (let i = W - 1; i >= 0; i--) { const k = j * W + i; if (!mare[k]) continue;
+    const e = j * W + ((i + 1) % W), w = j * W + ((i + W - 1) % W); psi[k] = (aE[j] * psi[e] + aW[j] * psi[w] + aN[j] * psi[k - W] + aS[j] * psi[k + W] - F[k]) / aP[j]; } }
+  // lo spessore mosso dal vento, dalla discesa di Ekman tipica alle medie latitudini
+  let w2 = 0, n2 = 0; for (let j = 1; j < H - 1; j++) { const la = Math.abs(fi(j)); if (la < 0.26 || la > 0.87) continue; const f = 2 * omega * Math.sin(fi(j)); for (let i = 0; i < W; i++) { const k = j * W + i; if (mare[k]) { w2 += (F[k] * rho / (rho * f)) ** 2; n2++; } } }
+  const wE = n2 ? Math.sqrt(w2 / n2) : 0, f30 = omega, beta30 = (1.73 * omega) / R, termoclino = limita(Math.sqrt((f30 * f30 * wE * 0.5 * Math.sqrt(areaMare)) / (beta30 * Math.max(1e-4, (g * salto) / rho))), 100, 1500);
+  // i flussi dello strato di superficie attraverso le facce delle celle (m³/s): Ekman, più la parte dei giri che gli tocca
+  const FE = new Float64Array(N), FS = new Float64Array(N), C = new Float64Array(N), u = new Float32Array(N), v = new Float32Array(N), w = new Float32Array(N), strato = DATI.strato;
+  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W; i++) { const k = j * W + i, e = j * W + ((i + 1) % W); C[k] = 0.25 * (psi[k] + psi[e] + psi[k + W] + psi[e + W]); }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, e = j * W + ((i + 1) % W), kw = j * W + ((i + W - 1) % W); if (!mare[k]) continue;
+    const parte = strato / Math.max(strato, Math.min(termoclino, fondo[k] || termoclino));
+    if (mare[e]) FE[k] = 0.5 * (Mx[k] + Mx[e]) * dy + parte * (C[k] - (j > 0 ? C[k - W] : 0));
+    if (j < H - 1 && mare[k + W]) FS[k] = 0.5 * (My[k] + My[k + W]) * R * dl * Math.cos(fi(j) - df / 2) + parte * (C[k] - C[kw]); }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, kw = j * W + ((i + W - 1) % W); if (!mare[k]) continue; const fn = j > 0 ? FS[k - W] : 0, dx = R * c[j] * dl;
+    u[k] = (FE[k] + FE[kw]) / (2 * dy * strato); v[k] = (fn + FS[k]) / (2 * dx * strato); w[k] = (FE[k] - FE[kw] + fn - FS[k]) / (dx * dy); }
+  return { mare, u, v, w, FE, FS, psi: Float32Array.from(psi, (x) => x / 1e6), termoclino, discesaEkman: wE };
+}
+// una grandezza portata dalla corrente, a regime: in ogni cella ciò che entra (dai vicini a monte, dal fondo dove
+// l'acqua risale, dalle sorgenti) pareggia ciò che esce; più il rimescolamento dei vortici (1000 m²/s, misurato) e lo
+// scambio lento col fondo. Passate successive (Gauss-Seidel): niente passo di tempo.
+function trasporta({ W, H, co, righe, h, q, fondoQ, sorg, perd, wMescola }) {
+  const { mare, FE, FS } = co, Kor = 1000 * h, daSotto = 1 - Math.exp((-2 * h) / co.termoclino); // l'acqua che risale viene da poco sotto lo strato: è già in parte acqua di superficie
+  for (let giro = 0; giro < 90; giro++) for (let jj = 0; jj < H; jj++) { const j = giro & 1 ? H - 1 - jj : jj, A = righe.A[j], dE = (Kor * righe.dy) / Math.max(righe.dx[j], 1), dS = (Kor * righe.dxS[j]) / righe.dy, dN = j > 0 ? (Kor * righe.dxS[j - 1]) / righe.dy : 0;
+    for (let ii = 0; ii < W; ii++) { const i = giro & 2 ? W - 1 - ii : ii, k = j * W + i; if (!mare[k]) continue;
+      const e = j * W + ((i + 1) % W), kw = j * W + ((i + W - 1) % W), fe = FE[k], fw = FE[kw], fs = FS[k], fn = j > 0 ? FS[k - W] : 0, div = fe - fw + fn - fs;
+      let num = sorg[k] + wMescola * A * fondoQ, den = perd[k] + wMescola * A;
+      if (div > 0) { num += div * daSotto * fondoQ; den += div * (daSotto - 1); } else den -= div;
+      if (fe > 0) den += fe; else if (fe < 0) num -= fe * q[e]; if (fw > 0) num += fw * q[kw]; else den -= fw;
+      if (fs > 0) num += fs * q[k + W]; else den -= fs; if (fn > 0) den += fn; else if (fn < 0) num -= fn * q[k - W];
+      if (mare[e]) { num += dE * q[e]; den += dE; } if (mare[kw]) { num += dE * q[kw]; den += dE; }
+      if (j < H - 1 && mare[k + W]) { num += dS * q[k + W]; den += dS; } if (j > 0 && mare[k - W]) { num += dN * q[k - W]; den += dN; }
+      q[k] = den > 0 ? num / den : q[k]; } }
+  return q;
+}
+// la distanza lungo il cerchio massimo (m), tra due punti dati in gradi
+export function distanza(R, lon1, lat1, lon2, lat2) { const a = Math.sin(((lat2 - lat1) * RAD) / 2) ** 2 + Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin(((lon2 - lon1) * RAD) / 2) ** 2; return 2 * R * Math.asin(Math.min(1, Math.sqrt(a))); }
+// IL PENNACCHIO DI UN FIUME IN MARE: l'acqua dolce, leggera, si allarga in superficie come una corrente di gravità di
+// spessore h (dato: qualche metro), alla velocità c = √(g′·h) con g′ la gravità ridotta dalla differenza di densità;
+// allargandosi su un semicerchio di raggio x ingloba acqua di mare: la parte di fiume che resta è
+// f = (Q/(π·x·h·√(0,027·g·h)))^(2/3). → { parte (0…1), velocita (m/s) }
+export function pennacchio(portata, x, g = 9.81) { const h = DATI.pennacchio, parte = Math.min(1, Math.pow(portata / (Math.PI * Math.max(x, 1) * h * Math.sqrt(0.027 * g * h)), 2 / 3)); return { parte, velocita: Math.max(0.02, Math.sqrt(0.027 * g * h * parte)) }; }
+function riempiTerra(x, mare, W, H) {
+  const N = W * H, fatto = Uint8Array.from(mare); let media = 0, n = 0; for (let k = 0; k < N; k++) if (mare[k]) { media += x[k]; n++; } media = n ? media / n : 0;
+  for (let giro = 0; giro < 4; giro++) { const nuovi = []; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (fatto[k]) continue; let s = 0, c = 0;
+    for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue; for (let di = -1; di <= 1; di++) { const q = jj * W + ((i + di + W) % W); if (fatto[q]) { s += x[q]; c++; } } } if (c) nuovi.push([k, s / c]); }
+    for (const [k, val] of nuovi) { x[k] = val; fatto[k] = 1; } }
+  for (let k = 0; k < N; k++) if (!fatto[k]) x[k] = media;
+}
+// il pH e le saturazioni a una temperatura e a una salinità (rispetto alla media), dalla tavola calcolata da mare()
+export function dallaTavola(tv, T, f) {
+  const pos = (v, x) => { let i = 0; while (i < v.length - 2 && x > v[i + 1]) i++; return [i, limita((x - v[i]) / (v[i + 1] - v[i]), 0, 1)]; }, [a, u] = pos(tv.T, T), [b, w] = pos(tv.f, f), nf = tv.f.length;
+  const leggi = (x) => (x[a * nf + b] * (1 - w) + x[a * nf + b + 1] * w) * (1 - u) + (x[(a + 1) * nf + b] * (1 - w) + x[(a + 1) * nf + b + 1] * w) * u;
+  return { pH: leggi(tv.pH), calcite: Math.exp(leggi(tv.calcite)), gesso: Math.exp(leggi(tv.gesso)), salgemma: Math.exp(leggi(tv.salgemma)) };
+}
+
+// LE SORGENTI CALDE. Sul fondo dove la crosta è giovane (geologia.js: il fondale sprofonda come la radice dell'età, quindi
+// l'età si legge dalla quota) il calore esce per conduzione, q = k·ΔT/√(π·κ·t), e l'acqua del mare entra nelle crepe, si
+// scalda e risale. Quanto calda: fino a bollire alla pressione di quel fondo (più profondo, più caldo), mai oltre il
+// punto critico. Che cosa porta: ha lasciato il magnesio nella roccia (prendendone acido: pH 3-4 misurato) e il solfato
+// (l'anidrite è meno solubile al caldo), ha preso calcio, potassio, la silice che il quarzo cede a quella temperatura,
+// il solfuro e il ferro del basalto (dato misurato: fino a qualche millimole per kg).
+function sorgentiCalde(P, s, st, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livello, g, pAria }) {
+  const q = P.interno?.q ?? 0; if (!(q > 0.02) || !isFinite(livello)) return [];
+  const cand = [], placche = bs.vivo === 1;
+  if (placche && s.cont) for (let k = 0; k < FW * FH; k++) { if (tipo[k] !== 1 || s.cont[k]) continue; const sotto = -s.alt[k] - 2500, eta = Math.max(0.05, (Math.max(0, sotto) / 350) ** 2); if (eta < 4) cand.push([eta, k, 'dorsale']); }
+  for (const [i, j] of s.vulcani || []) { const k = j * FW + i; if (tipo[k] === 1) cand.push([0.01, k, 'vulcano sommerso']); }
+  cand.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const scelte = [], lontano = (k) => scelte.every(([, q2]) => { const di = Math.abs((k % FW) - (q2 % FW)), dj = Math.abs(Math.floor(k / FW) - Math.floor(q2 / FW)); return Math.max(Math.min(di, FW - di), dj) >= 5; });
+  for (const c of cand) { if (scelte.length >= 40) break; if (lontano(c[1])) scelte.push(c); }
+  const mant = bs.flussi, rocce = rocceDelPianeta(P), olivina = (s.materiali?.basalto || []).find((x) => x.nome === 'olivina')?.frazione || 0;
+  return scelte.map(([eta, k, dove], id) => { const i = k % FW, j = (k - i) / FW, prof = fondoF[k], pressione = pAria + 1025 * g * prof, T = Math.min(DATI.critico, ebollizione(pressione)), K = costanti(T);
+    const calore = (DATI.conducibilita * (DATI.Tmantello - 275)) / Math.sqrt(Math.PI * DATI.diffusivita * eta * 1e6 * ANNO);
+    return { id, dove, lon: lonDi(i, FW), lat: latDi(j, FH), profonditaM: prof, pressione, etaCrostaMa: eta, calore, T, pH: 3.5,
+      fluido: { 'Mg2+': 0, 'Ca2+': st.totali.Ca + st.totali.Mg, 'K+': st.totali.K + rocce.basalto.K * DATI.potassioCaldo, 'Na+': st.totali.Na * (1 - DATI.sodioCaldo), 'Cl-': st.totali.Cl, 'SO4(2-)': 0,
+        H4SiO4: K.sali.quarzo, 'H2S(aq)': Math.min(0.012, rocce.mantello.S / DATI.fusione * 0.1), 'Fe2+': Math.min(0.006, rocce.basalto.Fe * 0.002) },
+      alcalina: olivina > 0.02, portataKgAnno: mant.caldo / Math.max(1, scelte.length) }; });
+}
+// CIÒ CHE SERVIREBBE ALLA CHIMICA PREBIOTICA (qui niente vita: solo dove ci sono gradienti, energia, minerali che
+// catalizzano). L'energia chimica di una sorgente: l'idrogeno che la roccia cede all'acqua (dato: fino a ~10 mmol/kg dove
+// c'è olivina che si idrata, ~0,1 altrove) contro l'anidride carbonica del mare, CO2 + 4H2 → CH4 + 2H2O, dalla tabella.
+function perLaChimicaPrebiotica(st, s) {
+  const T = st.Tmedia || 280, dG0 = gibbs('CH4', T) + 2 * gibbs('H2O(l)', T) - gibbs('CO2', T) - 4 * gibbs('H2', T);
+  const camini = (st.sorgentiCalde || []).map((v) => { const H2 = v.alcalina ? 0.01 : 1e-4, Q = (1e-6 / 1.4e-3) / ((Math.max(st.gas.CO2 || 1e-9, 1e-9) / costanti(T).henry.CO2) * (H2 / 7.8e-4) ** 4);
+    return { id: v.id, lon: v.lon, lat: v.lat, profonditaM: v.profonditaM, saltoDiTemperatura: v.T - (st.profondo?.T ?? T), saltoDiPH: st.pH - v.pH, energiaKJmol: -(dG0 + R_GAS * T * Math.log(Q)) / 1000,
+      minerali: ['solfuro di ferro', ...(v.alcalina ? ['olivina che si idrata (serpentino, magnetite)'] : []), 'argille'], alcalina: v.alcalina }; });
+  const pozze = (st.laghi || []).filter((l) => l.tipo !== 'aperto').map((l) => ({ id: l.id, lon: l.lon, lat: l.lat, concentrato: l.concentrato, salinita: l.salinita, pH: l.pH, T: l.T }));
+  return { camini, pozzeCheEvaporano: pozze, foci: (st.foci || []).slice(0, 12).map((f) => ({ lon: f.lon, lat: f.lat, portata: f.portata })),
+    gradienti: { pHmare: st.pH, anidrideCarbonica: st.gas.CO2 || 0, ferroSciolto: st.totali.Fe || 0, ossigeno: st.gas.O2 || 0 },
+    nota: 'gradienti di pH e di temperatura ai camini (di più se il mare è acido e il camino alcalino), minerali catalitici (solfuri di ferro, argille), pozze che si concentrano evaporando; con ossigeno nell\'aria il ferro sciolto e l\'idrogeno non durano' };
+}
+function racconta(st, bs) {
+  const i = st.ioni, ord = Object.entries(i).filter(([f]) => IONI[f]).sort((a, b) => b[1] * Math.abs(IONI[b[0]][2]) - a[1] * Math.abs(IONI[a[0]][2])), r = bs.bilancio.residenza, ma = (x) => (x >= 1e9 ? `${(x / 1e9).toFixed(1)} miliardi di anni` : `${Math.round(x / 1e6)} milioni di anni`);
+  if (!(st.massaMare > 1)) return 'Niente mare: solo laghi. I fiumi portano i sali delle rocce; dove un lago ha un emissario resta dolce, dove è chiuso li accumula.';
+  const tipoMare = st.pH < 6.5 ? 'acido' : st.pH > 9 ? 'di soda (alcalino)' : 'quasi neutro', sale = st.salinitaMedia > 150 ? 'una salamoia' : st.salinitaMedia > 20 ? 'salato' : st.salinitaMedia > 3 ? 'salmastro' : 'quasi dolce';
+  return `Mare ${sale} (${st.salinitaMedia.toFixed(1)} g/kg), ${tipoMare} (pH ${st.pH.toFixed(1)}); dominano ${ord[0][0]} e ${ord[1][0]}. ` +
+    `Il cloro è quello che i vulcani hanno portato fuori dal mantello in tutta la vita del pianeta, e non ha quasi modo di uscire dall'acqua (resta ${ma(r.Cl)}); il sodio lo cedono i feldspati consumati dalla pioggia e resta ${ma(r.Na)}; ` +
+    `il calcio arriva di più ma esce subito come calcare (resta ${ma(r.Ca)}): per questo i fiumi sono acqua di calcio e bicarbonato e il mare è acqua di sale. ` +
+    `Il magnesio lo trattiene la roccia calda del fondo (${ma(r.Mg)}). Il pH è quello a cui l'anidride carbonica dell'aria (${(st.pCO2 * 1e6).toPrecision(2)} milionesimi di bar) e il calcare stanno in equilibrio con le cariche dei sali.` +
+    (st.fondoDiSale ? ' L\'acqua è così poca che il sale non ci sta tutto: il resto è sul fondo.' : '');
 }
 // le moli per kg, con i nomi degli ioni (il carbonio sciolto è quasi tutto bicarbonato)
 const nomiIoni = (t, eq) => ({ 'Na+': t.Na || 0, 'K+': t.K || 0, 'Mg2+': t.Mg || 0, 'Ca2+': t.Ca || 0, 'Cl-': t.Cl || 0, 'SO4(2-)': t.S || 0, 'HCO3-': eq ? eq.bicarbonato : 0, 'CO3(2-)': eq ? eq.carbonato : 0, 'Fe2+': t.Fe || 0, H4SiO4: t.Si || 0 });

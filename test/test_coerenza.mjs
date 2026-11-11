@@ -370,24 +370,27 @@ prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e de
 sezione('LA SUPERFICIE E IL CLIMA SIMULATI (pochi pianeti: costano secondi)');
 // =====================================================================================================
 const SCELTI = [
-  ['un mondo ghiacciato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.interno.tettonica !== 'a placche')],
-  ['un mondo ghiacciato bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.bloccato && p.interno.tettonica !== 'a placche')],
+  ['un mondo ghiacciato, gelato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.clima.acqua === 'ghiaccio' && p.aM < 8 * UA && p.interno.tettonica !== 'a placche')],
+  ['un mondo ghiacciato bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.bloccato && p.clima.acqua === 'ghiaccio' && p.interno.tettonica !== 'a placche')],
   ['un mondo ghiacciato lontano dalla sua stella', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.aM > 8 * UA && p.interno.tettonica !== 'a placche')],
   ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && !p.clima.acqua.startsWith('vapore') && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
   ['un roccioso con il mare e le placche', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
-  ['un roccioso con il mare, bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && p.interno.tettonica !== 'a placche')],
+  ['un roccioso con il mare tenuto aperto dal termostato del carbonio', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && !p.bloccato && p.clima.mare < 0.97 && p.interno.tettonica !== 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && p.interno.tettonica !== 'a placche')],
+  ['un roccioso con il mare, bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && !p.clima.termostato && p.interno.tettonica !== 'a placche')],
   ['un roccioso dove l\'acqua è vapore', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],
-].filter(([, x]) => x);
+].filter(([, x]) => x).filter(([, x], i, tutti) => tutti.findIndex(([, y]) => y === x) === i);
 const SUPERFICI = SCELTI.map(([nome, x]) => {
   const { p } = x, chiave = `coerenza|${x.n}|${x.gid}|${x.sid}|${p.id}`, sf = GE.superficiePianeta(chiave, p, p.interno, p.origine), cl = GE.climaSuperficie(chiave, p, sf);
+  // lo stesso bilancio sulla mappa ma senza i venti di meteo.js (è il «primo giro» di climaSuperficie: già calcolato)
+  const senzAria = cl.meteo ? GE.climaSuperficie(`${chiave}|primo giro`, p, sf, { aria: false }) : cl;
   // il volume del mare sulla mappa, e la parte sommersa
   let volume = 0, sommerso = 0, area = 0;
   for (let j = 0; j < sf.H; j++) { const A = (Math.cos(Math.PI / 2 - ((j + 0.5) / sf.H) * Math.PI) * (2 * Math.PI * p.raggioM ** 2 * (Math.PI / sf.H))) / sf.W; for (let i = 0; i < sf.W; i++) { const h = sf.alt[j * sf.W + i]; area += A; if (h < sf.mare) { volume += (sf.mare - h) * A; sommerso += A; } } }
   // il bilancio dell'energia: ciò che il pianeta irradia (almeno σ·Tglobale⁴, attraverso la serra) contro la luce che gli arriva (S/4)
-  const S0 = p.Lw / (4 * Math.PI * p.aM ** 2), tau = 0.8 * Math.pow(p.clima.pressione / 1e5, 0.6), emesso = (K.sigma * cl.Tglobale ** 4) / (1 + 0.75 * tau);
-  return { nome, x, p, chiave, sf, cl, volume, sommerso: sommerso / area, area, emessoSuArrivato: emesso / (S0 / 4), albedo: 1 - emesso / (S0 / 4) };
+  const S0 = p.Lw / (4 * Math.PI * p.aM ** 2), emesso = (K.sigma * cl.Tglobale ** 4) / (1 + 0.75 * p.clima.tau);
+  return { nome, x, p, chiave, sf, cl, senzAria, volume, sommerso: sommerso / area, area, emessoSuArrivato: emesso / (S0 / 4) };
 });
-for (const s of SUPERFICI) console.log(`  · ${s.nome} (${s.x.n}/${s.x.gid}/${s.x.sid}/${s.p.id}): clima() ${num(s.p.clima.T, 4)} K, acqua «${s.p.clima.acqua.slice(0, 8)}», albedo ${num(s.p.clima.albedo)} · simulato ${num(s.cl.Tglobale, 4)} K, ghiaccio ${num(s.cl.ghiaccio, 2)}, mare ${num(100 * s.sommerso, 2)}%, assorbe ${num(s.cl.bilancio.assorbita)} e irradia ${num(s.cl.bilancio.irradiata)} W/m²`);
+for (const s of SUPERFICI) console.log(`  · ${s.nome} (${s.x.n}/${s.x.gid}/${s.x.sid}/${s.p.id}): acqua «${s.p.clima.acqua.slice(0, 8)}», ${num(s.p.clima.pressione / 1e5)} bar, serra ${num(s.p.clima.tau)} · per fasce ${num(s.p.clima.T, 4)} K (mare atteso ${num(100 * s.p.clima.mare, 2)}%, ghiaccio ${num(s.p.clima.ghiaccio, 2)}) · sulla mappa ${num(s.senzAria.Tglobale, 4)} K (mare ${num(100 * s.sommerso, 2)}%, ghiaccio ${num(s.senzAria.ghiaccio, 2)})${s.cl.meteo ? ` · con i venti ${num(s.cl.Tglobale, 4)} K (nuvole ${num(s.cl.meteo.nuvoleMedie, 2)} contro ${num(s.p.clima.nuvole, 2)} attese, calore portato ${num(s.cl.meteo.diffusivita, 2)} contro ${num(s.p.clima.D, 2)})` : ''}`);
 
 prova('il mare sulla mappa contiene proprio l\'acqua che l\'interno dà alla superficie, anche quando copre tutto (i mondi ghiacciati: un guscio)', () => {
   let n = 0, gusci = 0;
@@ -441,10 +444,29 @@ prova('il clima simulato conserva l\'energia: a regime il pianeta irradia quanta
   }
 });
 
-{ // la temperatura due volte
-  const dT = SUPERFICI.map((s) => s.cl.Tglobale - s.p.clima.T);
-  nota(1, 'la temperatura del pianeta ha due valori che il pannello mostra insieme: clima().T (albedo fissa 0,3 o 0,6) e climaSuperficie().Tglobale (ghiaccio e nuvole simulati)',
-    { casi: dT.filter((d) => Math.abs(d) > 5).length, su: dT.length, tipico: `Tglobale − clima().T: ${SUPERFICI.map((s, i) => `${num(dT[i])} K`).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; albedo che esce dalla simulazione: ${SUPERFICI.map((s) => num(1 - s.cl.bilancio.assorbita / s.cl.bilancio.arriva, 2)).join(', ')}`, dove: 'leggi.js clima() contro geologia.js climaSuperficie(); usano T di clima(): chimica.js atmosfera(), minerali(), prebiotica(), lune.js k2QPianeta()' });
+prova('la temperatura ha una fonte sola: clima() è il bilancio per fasce, e la mappa (la stessa legge, più fine) dà la stessa media', () => {
+  let n = 0;
+  for (const x of SOLIDI) {
+    const c = x.p.clima; n++;
+    // clima() porta con sé ciò che la mappa deve condividere, e il suo bilancio torna
+    assert.ok(c.tau >= 0 && c.D > 0 && c.Tavvio > 0 && c.mare >= 0 && c.mare <= 1 && c.fasce.T.length === c.fasce.lat.length, 'clima() senza i pezzi della legge');
+    if (c.bilancio.arriva > 1e-3) tra(c.bilancio.irradiata / c.bilancio.assorbita, 0.95, 1.05, `clima() a ${x.p.aM / UA} UA: luce irradiata / assorbita`);
+    tra(c.albedo, 0.05, 0.7, 'albedo'); tra(c.Teq / LG.temperaturaEquilibrio(x.p.Lw, x.p.aM, c.albedo), 1 - 1e-9, 1 + 1e-9, 'Teq');
+  }
+  assert.ok(n > 1500);
+  // le due risoluzioni: una colonna per parallelo contro 64 × 32 celle con terre e mari veri (senza i venti)
+  for (const s of SUPERFICI) {
+    const d = s.senzAria.Tglobale - s.p.clima.T, mareDiverso = Math.abs(s.sommerso - s.p.clima.mare) > 0.1;
+    // entro 6 K (o il 3%); di più solo dove la mappa ha molta più o molta meno terra di quella attesa, e si sa perché
+    assert.ok(Math.abs(d) < Math.max(6, 0.03 * s.p.clima.T) || mareDiverso, `${s.nome}: per fasce ${s.p.clima.T} K, sulla mappa ${s.senzAria.Tglobale} K`);
+    if (!mareDiverso) tra(s.senzAria.ghiaccio - s.p.clima.ghiaccio, -0.25, 0.25, `${s.nome}: ghiaccio sulla mappa − per fasce`);
+  }
+});
+
+{ // ciò che la mappa ha in più: dove sono le terre, e i venti e le nuvole veri di meteo.js
+  const conVenti = SUPERFICI.filter((s) => s.cl.meteo), dT = conVenti.map((s) => s.cl.Tglobale - s.p.clima.T), dMappa = SUPERFICI.map((s) => s.senzAria.Tglobale - s.p.clima.T);
+  nota(3, 'con i venti e le nuvole veri (meteo.js, secondo giro sulla mappa) la temperatura media si scosta da quella di clima(): le nuvole non sono quelle attese (0,63 dove c\'è mare) e il calore portato non è 0,6·√p. Lo stato dell\'acqua e l\'aria restano quelli di clima(); il pannello mostra solo la temperatura della mappa',
+    { casi: dT.filter((d) => Math.abs(d) > 6).length, su: conVenti.length, tipico: `con i venti − clima(): ${dT.map((d) => `${num(d)} K`).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; senza i venti la mappa si scosta al più di ${num(massimo(dMappa.map(Math.abs)))} K`, dove: 'geologia.js climaSuperficie() (meteo.nuvole, meteo.diffusivita) contro leggi.js nuvoleAttese(), trasportoCalore()' });
 }
 
 // =====================================================================================================

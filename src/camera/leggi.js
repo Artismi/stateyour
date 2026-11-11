@@ -193,7 +193,7 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   for (let giro = 0; giro < 8; giro++) {
   assorbita = 0; irradiata = 0; pesi = 0; ghiaccio = 0; media.fill(0);
   for (let n = 0; n < totale; n++) {
-    const ultimo = n >= totale - passiAnno, dt = n < lenti ? dtAdesso : dtVero;
+    const ultimo = n >= totale - passiAnno, dt = n < lenti && (giro === 0 || bloccato) ? dtAdesso : dtVero; // (gli anni lenti solo al primo giro: poi anni veri)
     if (!bloccato) { const o = (n % passiAnno) * H; for (let j = 0; j < H; j++) sole[j] = luci[o + j]; }
     for (let j = 0; j < H; j++) {
       const t = T[j], entra = sole[j] * (1 - albedo(t)), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
