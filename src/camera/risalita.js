@@ -157,7 +157,7 @@
 //     due formule (cascata + Eady), gli altri da «N giri» dichiarati.
 //   · Il campo iniziale di cosmo.js: vedi `fluttuazioniDellInizio()`.
 import { ELEMENTI, atomiDi, mezzo, perdita, CATENE, SOLI, CONDRITI, VOLATILI_RIMASTI, ETA_RIFERIMENTO, radioelementi, concentrazioni, attivita, calore, raggiCosmici, energiaDeiPrimari, sogliaStormer, radonNellAria, fmtTempo, ritenzione, luogoDaAria, luogoDaRoccia } from './materia.js';
-import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio } from './leggi.js';
+import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio, gravitaDiSuperficie, LIVELLO_GIGANTI } from './leggi.js';
 import { stella as stellaDiMassa } from './stelle.js'; // le stelle dalla loro struttura
 import { rocceDelPianeta } from './chimica.js';
 import { sorgente } from './eventi.js';
@@ -214,18 +214,20 @@ const mondi = new WeakMap();
 export function mondoDi(luogo = {}, opz = {}) {
   if (!opz.P && !opz.stella && mondi.has(luogo)) return mondi.get(luogo);
   const P = opz.P || luogo.P || null, pn = luogo.pianeta || {}, ar = luogo.aria || {}, I = P?.interno || {};
-  const R = pn.raggioM ?? P?.raggioM ?? 6.371e6, g = pn.g ?? P?.clima?.g ?? (P?.massaKg ? (G_N * P.massaKg) / R ** 2 : 9.81), M = P?.massaKg ?? (g * R * R) / G_N, area = 4 * Math.PI * R * R;
+  const R = pn.raggioM ?? P?.raggioM ?? 6.371e6, g = pn.g ?? P?.clima?.g ?? (P?.massaKg ? gravitaDiSuperficie(P.massaKg, R) : 9.81), M = P?.massaKg ?? (g * R * R) / G_N, area = 4 * Math.PI * R * R;
   const gas = gasPuliti(ar.gas) || gasPuliti(P?.atmosfera?.gas) || ARIA_TERRA; let mu = 0, tot = 0, cp = 0;
   for (const f in gas) { mu += gas[f] * massaGas(f); cp += gas[f] * (CP_MOLARE[f] ?? 4) * R_GAS; tot += gas[f]; } mu = (mu / tot) * 1e-3; cp = cp / tot / mu;
   const Ts = luogo.Tsuperficie ?? ar.T ?? P?.clima?.T ?? 288, Talta = ar.Talta ?? 0.76 * Ts, Teq = P?.clima?.Teq ?? Talta * Math.pow(2, 0.25);
   const H = (R_GAS * Ts) / (mu * g), Hm = (R_GAS * 0.5 * (Ts + Talta)) / (mu * g), pQui = ar.pressione ?? 0;
   // la pressione al suolo (in un gigante di gas non c'è un suolo: si parte dal livello di 1 bar, come fa chimica.js)
-  const gassoso = P?.tipo === 'gassoso', p0 = gassoso && !isFinite(P?.clima?.pressione) ? 1e5 : isFinite(P?.clima?.pressione) ? P.clima.pressione : luogo.tipo === 'aria' && luogo.quotaM > 0 ? pQui * Math.exp(luogo.quotaM / H) : pQui;
+  const gassoso = P?.tipo === 'gassoso', p0 = gassoso && !isFinite(P?.clima?.pressione) ? P?.clima?.livello ?? LIVELLO_GIGANTI : isFinite(P?.clima?.pressione) ? P.clima.pressione : luogo.tipo === 'aria' && luogo.quotaM > 0 ? pQui * Math.exp(luogo.quotaM / H) : pQui;
   const eta = luogo.etaPianeta ?? pn.eta ?? I.eta ?? ETA_RIFERIMENTO, B0 = pn.B0 ?? P?.B0 ?? I.B0 ?? 0, lat = luogo.latitudine ?? 45;
   // la stella
   const s0 = luogo.stella || {}, Lw = s0.Lw ?? P?.Lw ?? 0, aM = s0.aM ?? P?.aM ?? 0, S = Lw > 0 && aM > 0 ? Lw / (4 * Math.PI * aM * aM) : 0;
   const Ms = opz.stella?.massa ?? (P?.Mstella ? P.Mstella / MSOLE : null), Tst = opz.stella?.T ?? P?.Tstella ?? (Ms ? stellaDiMassa(Ms).T : Lw > 0 ? 5772 * Math.pow(Lw / LSOLE, 0.14) : 0);
-  const Rst = Tst > 0 && Lw > 0 ? Math.sqrt(Lw / (4 * Math.PI * SIGMA * Tst ** 4)) : RSOLE, etaStella = opz.stella?.eta ?? eta;
+  // (il raggio della stella si LEGGE: da chi chiama, o dal pianeta, che lo porta in P.Rstella (cosmo.js, da stelle.js stellaOggi).
+  // Solo se nessuno lo dà — un pianeta fatto a mano in una prova — lo si ricava da luce e temperatura, √(L/4πσT⁴))
+  const Rst = opz.stella?.raggioM ?? s0.raggioM ?? P?.Rstella ?? (Tst > 0 && Lw > 0 ? Math.sqrt(Lw / (4 * Math.PI * SIGMA * Tst ** 4)) : RSOLE), etaStella = opz.stella?.eta ?? eta;
   const albedo = P?.clima?.albedo ?? 0.3, assorbita = P?.clima?.bilancio?.assorbita ?? (S * (1 - albedo)) / 4;
   const acqua = P?.clima ? P.clima.acqua ?? null : luogo.denudazione > 0 || luogo.tipo === 'acqua' ? 'liquida' : undefined, mare = P?.clima?.mare ?? (acqua === 'liquida' ? 0.7 : 0); // (undefined: non si sa)
   const tettonica = I.tettonica ?? (luogo.denudazione > 0 ? 'a placche' : null);

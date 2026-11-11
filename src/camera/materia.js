@@ -105,6 +105,8 @@ import { ANNO, ISOTOPI } from './leggi.js';
 import { sorgente } from './eventi.js';
 import { casoEvento } from './mondo.js';
 import { unita, catalogoVero, fmtLunghezza, ME_MEV, C_LUCE, C_MOTORE } from './unita.js';
+import { ROCCE } from './chimica.js'; // la denudazione attesa (dove l'erosione vera non c'è): una fonte sola
+import { COSTANTI as TETTONICA } from './tettonica.js'; // la conducibilità della crosta: una fonte sola
 
 const K_BETHE = 0.307075, N_A = 6.02214e23, ALFA_FINE = 1 / 137.036, U_MEV = 931.494, MEV_J = 1.602177e-13;
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -624,7 +626,7 @@ export function sorgentiNaturali(luogo) {
 // =====================================================================================
 // 6. I LUOGHI: dal punto della mappa (o dal campione d'acqua) al `luogo`
 // =====================================================================================
-const CONDUCIBILITA = 3, G_NEWTON = 6.674e-11; // (W/m/K) della roccia: con il calore che esce dal pianeta dà di quanto la temperatura cresce scendendo
+const CONDUCIBILITA = TETTONICA.conducibilita, G_NEWTON = 6.674e-11; // (W/m/K, 3: sta in tettonica.js) della roccia della crosta: con il calore che esce dal pianeta dà di quanto la temperatura cresce scendendo
 // ciò che del pianeta serve qui: gravità, campo, aria, stella, età. P è il pianeta di cosmo.js (sistema(…).pianeti[k])
 function delPianeta(P = {}, { lat = 45, quotaM = 0 } = {}) {
   const g = P.clima?.g ?? (P.massaKg && P.raggioM ? (G_NEWTON * P.massaKg) / P.raggioM ** 2 : 9.81), p0 = isFinite(P.clima?.pressione) ? P.clima.pressione : 0, T = P.clima?.T ?? 288;
@@ -657,9 +659,10 @@ export function luogoDaRoccia({ S = null, P = S?.P || {}, minerali = null, conti
   const acqua = bagnato ?? (P.clima?.acqua === 'liquida' || !!S?.mare?.esiste), mat = S?.se?.materiali || {};
   const base = { ...dp, T: qui, Tsuperficie: Ts, gradiente, profonditaM, lon, raggi: raggi || undefined, indirizzo: indirizzo || (S?.k ? `${S.k}/roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}` : `roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}`),
     sopra: { acquaM: acquaSopraM, rocciaM: profonditaM }, carbonioKgM2: carbonioScambiato(P, S?.mare),
-    // l'erosione dove piove: 30 m per milione di anni (la stessa legge di chimica.js e geologia.js); ma dura solo dove le
-    // placche continuano a sollevare la crosta: su un mondo fermo il rilievo si spiana e non c'è più niente da togliere
-    denudazione: acqua && (P.interno?.tettonica ?? 'a placche') === 'a placche' ? 3e-5 : 0 };
+    // l'erosione dove piove: quella che geologia.js ha calcolato per questo pianeta (S.se.denudazione, m/anno in media sulle
+    // terre), se la superficie c'è; se no la stima attesa di chimica.js (ROCCE.denudazione, 30 m per milione di anni), che
+    // dura solo dove le placche continuano a sollevare la crosta: su un mondo fermo il rilievo si spiana e non c'è più niente da togliere
+    denudazione: !acqua ? 0 : S?.se?.denudazione > 0 ? S.se.denudazione : (P.interno?.tettonica ?? 'a placche') === 'a placche' && !(S?.se?.denudazione === 0) ? ROCCE.denudazione : 0 };
   if (ghiaccio) return { ...base, tipo: 'ghiaccio', nome: 'ghiaccio', minerali: [{ nome: 'ghiaccio d\'acqua', frazione: 1 }], sopra: { acquaM: acquaSopraM, ghiaccioM: profonditaM }, etaRoccia: etaRoccia ?? 1e4, elementi: elementi || { K: 0, U: 0, Th: 0, Rb: 0 } };
   let lista = (minerali || (continente ? mat.continente : mat.basalto) || (continente ? [{ nome: 'quarzo', frazione: 0.3 }, { nome: 'feldspato potassico', frazione: 0.35 }, { nome: 'plagioclasio', frazione: 0.25 }, { nome: 'pirosseno', frazione: 0.1 }] : [{ nome: 'plagioclasio', frazione: 0.5 }, { nome: 'pirosseno', frazione: 0.4 }, { nome: 'olivina', frazione: 0.1 }])).filter((m) => MATERIALI[m.nome]).map((m) => ({ nome: m.nome, frazione: m.frazione }));
   if (continente && acqua && !lista.some((m) => m.nome === 'biotite')) { // KAlSi3O8 + 3 (Mg,Fe)SiO3 + H2O → biotite + 3 SiO2

@@ -46,7 +46,8 @@
 //   · il colore del cielo non viene spostato (solo l'intensità), e le stelle sono macchie di una carta: ingrandite
 //     dalla lente si allargano invece di restare punti più brillanti (la luce totale è giusta);
 //   · nel modo 'scena' (dentro universo.js) si deforma solo ciò che è già sullo schermo: quello che la lente
-//     porterebbe in vista da fuori campo non c'è.
+//     porterebbe in vista da fuori campo non c'è (resta nero, o la carta `cielo` se chi chiama la dà: da vicino è
+//     gran parte dell'immagine; da lontano, quando il buco è largo pochi pixel, quasi niente).
 import { V } from './nucleo.js';
 import { COSTANTI } from '../camera/leggi.js';
 import { PASSO_RAGGIO, raggioGravitazionale, discoSottile } from '../camera/relativita.js';
@@ -147,7 +148,9 @@ void main() {
   if (fuori) {
     vec3 dir = normalize(v); float gc = dopp / A0, g4 = gc * gc * gc * gc;
     if (u_c.y < 0.5) colore = textureLod(u_cielo, vec2(atan(dir.y, dir.x) / (2.0 * PI) + 0.5, asin(clamp(dir.z, -1.0, 1.0)) / PI + 0.5), 0.0).rgb * u_c.x * g4;
-    else { vec3 q = transpose(u_assi) * dir; vec2 uv = q.xy / (-q.z * u_tan) * 0.5 + 0.5; if (q.z < 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) colore = textureLod(u_scena, uv, 0.0).rgb * g4; }
+    else { vec3 q = transpose(u_assi) * dir; vec2 uv = q.xy / (-q.z * u_tan) * 0.5 + 0.5; if (q.z < 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) colore = textureLod(u_scena, uv, 0.0).rgb * g4;
+      // (fuori campo la scena non c'è: se chi chiama ha dato anche una carta del cielo si prende quella, altrimenti resta nero)
+      else colore = textureLod(u_cielo, vec2(atan(dir.y, dir.x) / (2.0 * PI) + 0.5, asin(clamp(dir.z, -1.0, 1.0)) / PI + 0.5), 0.0).rgb * u_c.x * g4; }
   }
   o_col = vec4(colore, 1.0);
 }`;

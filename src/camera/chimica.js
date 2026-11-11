@@ -24,7 +24,7 @@
 // è in MOLECOLE[formula].nome. (leggi.js ha una sua piccola MOLECOLE, con le masse dei gas del clima:
 // qui la si legge per sapere quali molecole la gravità trattiene.)
 
-import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI, ACQUA, vaporeSaturo } from './leggi.js';
+import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI, ACQUA, vaporeSaturo, gravitaDiSuperficie, LIVELLO_GIGANTI } from './leggi.js';
 
 // ---------- 1. GLI ELEMENTI (dati misurati)
 // massa atomica (u) · valenza più comune · elettronegatività di Pauling · abbondanza nel Sole, come
@@ -329,8 +329,8 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
     // la massa di quei volatili per ogni chilo d'acqua (acqua 18, e il resto contato come CO2, N2, SO2), e quanta ne sta fuori
     if (conInventario) colonna = (PARTE_FUORI * P.massaKg * Math.max(W, 0.001) * ((secco ? 0 : 18.015 * W) + 44.01 * C + 14.007 * N + 64.06 * S)) / (18.015 * Math.max(W, 0.001)) / (4 * Math.PI * P.raggioM ** 2);
   }
-  const gSup = conInventario ? (COSTANTI.G * P.massaKg) / P.raggioM ** 2 : 0;
-  const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : 1e5; // nei giganti: il livello di 1 bar
+  const gSup = conInventario ? gravitaDiSuperficie(P.massaKg, P.raggioM) : 0;
+  const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : cl.livello ?? LIVELLO_GIGANTI; // nei giganti: il livello di riferimento (leggi.js)
   // («memoria»: chi chiede molte arie dello stesso pianeta a temperature vicine non rifà ogni volta l'equilibrio)
   const chiaveEq = memoria ? `${Math.round(Tr / 5)}|${Pr.toPrecision(6)}|${Object.values(el).map((v) => v.toPrecision(6)).join(',')}` : null;
   const eq = (memoria && memoria.get(chiaveEq)) || equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas }; if (memoria) memoria.set(chiaveEq, eq);

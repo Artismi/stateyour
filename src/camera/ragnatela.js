@@ -61,8 +61,8 @@
 //    vuoto», sono vincoli LINEARI sulle onde. campoCondizionato() di bolle.js accetta solo vincoli di densità lisciata
 //    in un punto: quelli passano di lì così come sono; e così anche una macchia di cielo senza il termine Doppler
 //    (il suo nucleo è isotropo: è un vincolo di «densità» su un campo riscalato onda per onda, ed è esatto). Per i
-//    vincoli che NON sono isotropi (marea, Doppler) qui c'è la stessa correzione di Hoffman & Ribak (1991) scritta
-//    per una forma lineare qualunque: è una SECONDA VIA della stessa legge, provata uguale a bolle.js dove entrambe
+//    vincoli che NON sono isotropi (marea, pendenza della densità, Doppler) qui c'è la stessa correzione di Hoffman &
+//    Ribak (1991) scritta per una forma lineare qualunque: è una SECONDA VIA della stessa legge, provata uguale a bolle.js dove entrambe
 //    valgono; le righe per portarla dentro bolle.js sono nel rapporto.
 //
 // E. L'UNIVERSO OSSERVABILE (distanze, orizzonti, conoDiLuce): dalla cosmologia di leggi.js / galassie.js (U.E, U.tempo)
@@ -86,12 +86,19 @@
 //     debole del vero, le frazioni di volume stanno tra quelle gaussiane e quelle delle simulazioni; dove Dλ₁ > 1 la
 //     materia è già crollata e la densità di Zel'dovich non vale (lo si dice: `crollato`);
 //   · il fondo: manca l'effetto Sachs–Wolfe integrato (primo e tardo), la lente, la polarizzazione; l'ultima
-//     diffusione è un istante (il suo spessore entra solo nello smorzamento); l'elio è contato solo nei barioni;
+//     diffusione è un istante (τ = 1; il suo spessore entra solo nello smorzamento); l'elio è contato solo nei barioni;
+//     l'opacità della reionizzazione e^(−τ) è applicata a tutte le scale (sotto ℓ ~ 10 non dovrebbe). Ne segue (misurato):
+//     il primo picco esce a ℓ ≈ 240 invece di 220 e alto 3700 µK² invece di 5750; il secondo e il terzo tornano;
+//   · lo spettro del campo (BBKS in galassie.js, normalizzato a σ₈) sottintende un seme primordiale A_s = 1,85·10⁻⁹,
+//     il 12% sotto quello misurato (2,10·10⁻⁹): il cielo esce più debole del 6% in ampiezza anche per questo;
+//   · «qui c'è un filamento»: il tensore di marea e la pendenza sono vincolati, la curvatura della densità no: lo
+//     scheletro del campo vincolato passa esattamente per il punto detto in 2 casi su 3;
 //   · il toro (vedi C): il cielo vero a ℓ < 73 qui non c'è;
 //   · tempi e distanze oltre z ~ 100 usano Ω_r, che U.tempo di galassie.js non ha (differenza stampata nella prova).
-// COSTI (misurati in test/test_ragnatela.mjs, che li stampa): un punto (doveSono) ~0,4 ms; la griglia 48³ di tutto il
-//   toro con le classi ~0,2 s; lo scheletro di una regione 32³ ~0,1 s; le tabelle del fondo (una volta) ~0,5 s; una
-//   direzione di cielo ~0,4 ms; 100 vincoli di cielo ~0,3 s.
+// COSTI (misurati in test/test_ragnatela.mjs, che li stampa): un punto (doveSono) ~1,5 ms; la griglia 48³ di tutto il
+//   toro con le classi ~0,2 s (la somma diretta ne chiederebbe 40); lo scheletro di una regione 32³ ~0,1–0,2 s; raffina
+//   fino a 25 Mpc ~0,25 s; la ricombinazione 25 ms e le tabelle del fondo 0,4 s (una volta); una direzione di cielo
+//   ~1,3 ms; 49 vincoli di cielo ~0,25 s; un filamento detto (8 vincoli) ~50 ms; la scena di una regione ~70 ms.
 
 import { COSTANTI, COSMO, ANNO, MSOLE } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
@@ -390,32 +397,39 @@ export function raffina(cosmo, kmax, opz = {}) {
   if (!raffinati.has(O.A)) raffinati.set(O.A, new Map()); const M = raffinati.get(O.A); if (M.size > 1) M.delete(M.keys().next().value); M.set(chiave, R); memoOnde.set(R.A, R); return R;
 }
 // quanto costa un toro (lato in m) con le onde fino a una lunghezza minima (m): onde, memoria, tempo per punto
-export const costoDelToro = (latoM, lambdaMinM, msPerOnda = 1.4e-5) => { const kmax = Math.ceil(latoM / lambdaMinM), onde = (2 * Math.PI / 3) * kmax ** 3; return { kmax, onde, memoriaByte: onde * 30 /* due ampiezze, la potenza, tre interi */, msPerPunto: onde * msPerOnda, msPerGenerarle: onde * 6e-4 }; };
+export const costoDelToro = (latoM, lambdaMinM, msPerOnda = 5e-5 /* misurato: 1,5 ms per 28 888 onde */) => { const kmax = Math.ceil(latoM / lambdaMinM), onde = (2 * Math.PI / 3) * kmax ** 3; return { kmax, onde, memoriaByte: onde * 30 /* due ampiezze, la potenza, tre interi */, msPerPunto: onde * msPerOnda, msPerGenerarle: onde * 1e-3 /* misurato: ~0,25 s per 2·10⁵ onde */ }; };
 
 // =====================================================================================================
 // B. CHE COSA C'È LÌ
 // =====================================================================================================
 // LA NEBBIA DEGLI ALONI (regola 9): quanti aloni di materia oscura ci si aspetta entro un raggio (m comoventi) attorno a
 // un punto, per fasce di massa. LEGGE: la funzione di massa di Press & Schechter 1974 CONDIZIONATA all'ambiente
-// (insiemi di escursione: Bond et al. 1991, ApJ 379, 440; Mo & White 1996 [R]): in una regione il cui contrasto lineare,
-// mediato sulla sfera, è δ₀ (con varianza S₀ per le onde che ci sono), la soglia del collasso è più lontana o più vicina:
+// (insiemi di escursione: Bond et al. 1991, ApJ 379, 440; Mo & White 1996, MNRAS 282, 347 [R]): in una regione il cui
+// contrasto lineare, mediato sulla sfera, è δ₀ (con varianza S₀ per le onde che ci sono), la soglia del collasso è più
+// lontana o più vicina:
 //   dn/dlnM = √(2/π)·(ρ̄/M)·ν·|dlnσ/dlnM|·(S/(S−S₀))·e^(−ν²/2),  ν = (δc/D − δ₀)/√(S − S₀),  S = σ²(M)
-// (σ(M) e δc sono quelli di galassie.js; con δ₀ = S₀ = 0 è U.aloni: la stessa legge). Il volume vero della sfera contiene
-// la materia di un volume iniziale (1+δ) volte più grande, con 1+δ = (1 − 2Dδ₀/3)^(−3/2) (collasso sferico: Bernardeau
-// 1994 [R]). In un vuoto gli aloni grandi spariscono e i piccoli restano: è ciò che si trova zoomando nel vuoto.
+// (σ(M) e δc sono quelli di galassie.js; con δ₀ = S₀ = 0 è U.aloni: la stessa legge). Questo è il numero per unità di
+// MATERIA (per Mpc³ di volume iniziale): la sua media sugli ambienti ridà la funzione di massa del cosmo. Nel volume di
+// OGGI la materia della regione è (1+δ) volte più fitta, con δ dal collasso sferico: δ_lin = 1,68647 − 1,35/(1+δ)^(2/3)
+// − 1,12431/(1+δ)^(1/2) + 0,78785/(1+δ)^0,58661 (Mo & White 1996, eq. 18 [R]: vale 0 in δ = 0 e 1,686 al collasso).
+// In un vuoto gli aloni grandi spariscono e i piccoli restano: è ciò che si trova zoomando nel vuoto.
 //   opz: { fasce: [[Mmin, Mmax], …] in M☉, t }
-// → { raggioM, delta0 (lineare, oggi, mediato sulla sfera), sigma0, rapportoDiDensita (1+δ), fasce: [{ da, a, attesi (quanti
-//     nella sfera), perMpc3, senzaAmbiente (quanti con la densità media del cosmo), probabilitaNessuno (e^(−attesi)) }], fonte }
+// → { raggioM, delta0 (lineare, oggi, mediato sulla sfera), sigma0, rapportoDiDensita (1+δ), dentroUnAlone (δ₀ oltre 0,9·δc:
+//     la regione stessa è crollata; si conta come a 0,9·δc, come massaAlone di galassie.js), fasce: [{ da, a, attesi (quanti
+//     nella sfera, oggi), perMpc3 (oggi), perMpc3DiMateria (per volume iniziale), senzaAmbiente (quanti nella sfera con la
+//     densità media del cosmo), probabilitaNessuno (e^(−attesi)) }], fonte }
+const linDaNonLin = (r) => 1.68647 - 1.35 * Math.pow(r, -2 / 3) - 1.12431 / Math.sqrt(r) + 0.78785 * Math.pow(r, -0.58661); // r = 1+δ
+const nonLinDaLin = (d) => { let lo = 1e-3, hi = 1e4; for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi); if (linDaNonLin(m) < d) lo = m; else hi = m; } return Math.sqrt(lo * hi); };
 export function aloniAttesi(cosmo, punto, raggioM, { fasce = [[1e6, 1e8], [1e8, 1e10], [1e10, 1e12], [1e12, 1e16]], t = 0 } = {}) {
   const O = ondeDi(cosmo), x = punto.map((p) => frazione(p / O.toroM)), K2 = O.kmax * O.kmax, W = new Float64Array(K2 + 1), q = (PI2 * raggioM) / O.toroM;
   for (let k2 = 1; k2 <= K2; k2++) { const y = q * Math.sqrt(k2); W[k2] = y < 1e-2 ? 1 - (y * y) / 10 : (3 * (Math.sin(y) - y * Math.cos(y))) / y ** 3; } // la finestra a sfera piena: la media vera nella sfera
   let d0 = 0, S0 = 0, dentroUnAlone = false; for (let m = 0; m < O.N; m++) { const a = O.KX[m], b = O.KY[m], c = O.KZ[m], w = W[a * a + b * b + c * c], tt = PI2 * (a * x[0] + b * x[1] + c * x[2]); d0 += 2 * w * (O.A[m] * Math.cos(tt) - O.B[m] * Math.sin(tt)); S0 += 2 * O.PK[m] * w * w; }
-  const D = U.D(scalaAl(t)), dc = LEGGI_GALASSIE.deltaC / D; if (d0 > 0.9 * dc) { dentroUnAlone = true; d0 = 0.9 * dc; } // (come massaAlone di galassie.js: oltre, la regione stessa è crollata)
-  const rapporto = Math.pow(Math.max(1 - (2 * D * d0) / 3, 1e-3), -1.5), rho = U.Om * U.rhoC * 1e9 /* M☉/Mpc³ */, V = ((4 / 3) * Math.PI * raggioM ** 3) / MPC ** 3;
+  const D = U.D(scalaAl(t)), dc = LEGGI_GALASSIE.deltaC / D; if (d0 > 0.9 * dc) { dentroUnAlone = true; d0 = 0.9 * dc; }
+  const rapporto = nonLinDaLin(D * d0), rho = U.Om * U.rhoC * 1e9 /* M☉/Mpc³ */, V = ((4 / 3) * Math.PI * raggioM ** 3) / MPC ** 3;
   const conta = (M0, M1, delta, S00) => { let s = 0; const nn = 80, l0 = Math.log(M0), dl = (Math.log(M1) - l0) / nn; for (let i = 0; i < nn; i++) { const m = Math.exp(l0 + (i + 0.5) * dl), sg = U.sigma(m), S = sg * sg; if (S <= S00) continue; const p = -(Math.log(U.sigma(m * 1.05)) - Math.log(U.sigma(m / 1.05))) / (2 * Math.log(1.05)), nu = (dc - delta) / Math.sqrt(S - S00); s += Math.sqrt(2 / Math.PI) * (rho / m) * nu * p * (S / (S - S00)) * Math.exp((-nu * nu) / 2) * dl; } return s; };
   return { raggioM, delta0: d0, sigma0: Math.sqrt(S0), rapportoDiDensita: rapporto, crescita: D, dentroUnAlone,
-    fasce: fasce.map(([a, b]) => { const n = conta(a, b, d0, S0) * rapporto, medio = conta(a, b, 0, 0); return { da: a, a: b, attesi: n * V, perMpc3: n, senzaAmbiente: medio * V, probabilitaNessuno: Math.exp(-n * V) }; }),
-    fonte: '[R] Press & Schechter 1974 condizionata (Bond et al. 1991; Mo & White 1996) con σ(M) e δc di galassie.js; [R] Bernardeau 1994 per 1+δ' };
+    fasce: fasce.map(([a, b]) => { const nL = conta(a, b, d0, S0), n = nL * rapporto, medio = conta(a, b, 0, 0); return { da: a, a: b, attesi: n * V, perMpc3: n, perMpc3DiMateria: nL, senzaAmbiente: medio * V, perMpc3Medio: medio, probabilitaNessuno: Math.exp(-n * V) }; }),
+    fonte: '[R] Press & Schechter 1974 condizionata (Bond et al. 1991; Mo & White 1996) con σ(M) e δc di galassie.js; [R] Mo & White 1996 eq. 18 per 1+δ' };
 }
 // CHE COSA C'È in un punto e a un tempo. Ogni voce: { valore…, unita, fonte } con la marca [V]/[R]/[D].
 // La densità locale è quella media per il rapporto di Zel'dovich ρ/ρ̄ del punto (doveSono; se lì la materia è crollata,
@@ -427,7 +441,7 @@ export function contenutoCosmico(cosmo, punto, t = 0, { scala = 0, raggio = 10 *
   const nb = ((OmB * RHO_C) / mp) * (1 + z) ** 3 * ro, nH = (1 - Y_ELIO) * nb, nHe = (Y_ELIO / 4) * nb;
   // lo stato del gas: prima della ricombinazione plasma; poi neutro (con il residuo di Peebles); dopo z_re ionizzato dalla luce delle prime stelle
   const dopo = z < R.zReionizzazione, xe = dopo ? 1 : R.xe(z), stato = dopo ? 'ionizzato (dalla luce di stelle e quasar, dopo la reionizzazione)' : xe > 0.5 ? 'plasma (prima della ricombinazione)' : 'neutro (tra la ricombinazione e la reionizzazione)';
-  const Tfondo = DATI.T0 * (1 + z), Tgas = dopo ? DATI.gasIonizzato.T0 * Math.pow(Math.min(ro, 10), DATI.gasIonizzato.gamma - 1) : z > R.zTermico ? Tfondo : DATI.T0 * (1 + R.zTermico) * ((1 + z) / (1 + R.zTermico)) ** 2;
+  const Tfondo = DATI.T0 * (1 + z), Tgas = dopo ? DATI.gasIonizzato.T0 * Math.pow(Math.min(ro, 10) /* la legge vale per il gas diffuso, ρ/ρ̄ ≲ 10 [R Hui & Gnedin 1997] */, DATI.gasIonizzato.gamma - 1) : z > R.zTermico ? Tfondo : DATI.T0 * (1 + R.zTermico) * ((1 + z) / (1 + R.zTermico)) ** 2;
   const ne = dopo ? nH + nHe * (z < DATI.elioDoppio ? 2 : 1) : xe * nH;
   // l'idrogeno rimasto neutro nel gas ionizzato: equilibrio di fotoionizzazione x_HI = α_A(T)·n_e/Γ [R: Osterbrock: α_A = 4,2·10⁻¹³ cm³/s a 10⁴ K, ∝ T^−0,7]
   const G = DATI.gammaHI, gamma = (() => { if (z >= G[G.length - 1][0]) return G[G.length - 1][1]; let i = 0; while (G[i + 1][0] < z) i++; const f = (z - G[i][0]) / (G[i + 1][0] - G[i][0]); return Math.exp(Math.log(G[i][1]) * (1 - f) + Math.log(G[i + 1][1]) * f); })();
@@ -435,7 +449,7 @@ export function contenutoCosmico(cosmo, punto, t = 0, { scala = 0, raggio = 10 *
   const rhoDM = OmC * RHO_C * (1 + z) ** 3 * ro, nFot = N_FOTONI * (1 + z) ** 3, uEBL = (4 * Math.PI * (DATI.luceGalassie.ottico + DATI.luceGalassie.infrarosso)) / C_LUCE;
   return {
     dove: w, z, a, etaAnni: (U.tempo(1) + t / GA) * 1e9,
-    barioni: { nucleoni: nb, idrogeno: nH, elio: nHe, elettroniLiberi: ne, unita: 'm⁻³', mediaCosmica: nb / ro, stato, frazioneNeutra: neutra, idrogenoNeutro: neutra * nH, temperatura: Tgas, unitaTemperatura: 'K', incerto: dopo ? 'T entro un fattore ~2; nei filamenti e nei nodi il gas scaldato dagli urti (10⁵–10⁷ K) non è calcolato; Γ entro un fattore ~2' : null,
+    barioni: { nucleoni: nb, idrogeno: nH, elio: nHe, elettroniLiberi: ne, unita: 'm⁻³', mediaCosmica: nb / ro, stato, frazioneNeutra: neutra, idrogenoNeutro: neutra * nH, temperatura: Tgas, unitaTemperatura: 'K', incerto: dopo ? 'T entro un fattore ~2; nei filamenti e nei nodi il gas scaldato dagli urti (10⁵–10⁷ K) non è calcolato; Γ entro un fattore ~2' : z < 30 ? 'tra le prime stelle e la reionizzazione i raggi X scaldano già il gas: qui c\'è solo il raffreddamento adiabatico (un limite inferiore)' : null,
       fonte: '[D] Ω_b·ρ_c/m_p·(1+z)³·ρ/ρ̄ con Ω_b, H₀ di leggi.js e Y di stelle.js; stato: [D] Peebles 1968 e z_re da τ [V Planck 2018]; T: [R] Hui & Gnedin 1997 dopo z_re, T_γ fino a z_t [R Peebles 1993] poi ∝ (1+z)²; neutri: [R] Haardt & Madau 2012' },
     materiaOscura: { densita: rhoDM, unita: 'kg/m³', energia: (rhoDM * C_LUCE ** 2) / COSTANTI.e / 1e9 / 1e6, unitaEnergia: 'GeV/cm³', particelle: null, incerto: 'la massa della particella non è nota: il numero per m³ non si può dire', fonte: '[D] (Ω_m − Ω_b)·ρ_c·(1+z)³·ρ/ρ̄ (leggi.js)' },
     fotoniDelFondo: { numero: nFot, unita: 'm⁻³', perCm3: nFot / 1e6, temperatura: Tfondo, energia: U_FOTONI * (1 + z) ** 4, unitaEnergia: 'J/m³', perBarione: N_FOTONI / ((OmB * RHO_C) / mp), fonte: '[D] corpo nero: n = (2ζ(3)/π²)(kT/ħc)³ con T₀ = 2,7255 K [V Fixsen 2009], ×(1+z)³: 411 per cm³ oggi; uniforme (le sue pieghe sono 10⁻⁵: fondoCosmico)' },
@@ -499,6 +513,16 @@ function bessel(x, lmax, out) {
   }
   const f = Math.abs(j0) > Math.abs(j1) ? j0 / v0 : j1 / v1; for (let l = 0; l <= cima; l++) out[l] *= f; return out;
 }
+// le funzioni di Legendre associate GIÀ NORMALIZZATE, Y_ℓm(θ, φ) = P̄_ℓ^m(cos θ)·e^(imφ) (con la fase di Condon–Shortley), per
+// m ≥ 0, indice ℓ(ℓ+1)/2 + m. La ricorrenza è quella stabile sulle funzioni normalizzate (quella sulle P_ℓ^m nude perde
+// i termini di m alto già a ℓ ~ 90: il fattore (ℓ−m)!/(ℓ+m)! esce dai numeri in doppia precisione).
+function legendre(lmax, ct, st, P) {
+  P[0] = Math.sqrt(1 / (4 * Math.PI));
+  for (let m = 1; m <= lmax; m++) P[(m * (m + 1)) / 2 + m] = -Math.sqrt((2 * m + 1) / (2 * m)) * st * P[((m - 1) * m) / 2 + m - 1];
+  for (let m = 0; m < lmax; m++) { P[((m + 1) * (m + 2)) / 2 + m] = Math.sqrt(2 * m + 3) * ct * P[(m * (m + 1)) / 2 + m];
+    for (let l = m + 2; l <= lmax; l++) P[(l * (l + 1)) / 2 + m] = Math.sqrt((4 * l * l - 1) / (l * l - m * m)) * (ct * P[((l - 1) * l) / 2 + m] - Math.sqrt(((l - 1) * (l - 1) - m * m) / (4 * (l - 1) * (l - 1) - 1)) * P[((l - 2) * (l - 1)) / 2 + m]); }
+  return P;
+}
 // le tabelle del fondo per un toro (una volta): per ogni |k|² intero presente, i pesi W0 = q·D·e^(−τ)·[Θ₀+Ψ] e
 // W1 = 3·q·D·e^(−τ)·Θ₁ (ΔT/T di un'onda di ampiezza δ_k: W0 + i·μ·W1, μ = k̂·n)
 const tabelleFondo = new Map();
@@ -553,22 +577,17 @@ export function fondoCosmico(cosmo, osservatore = {}, { raggioM = null, doppler 
   let var0 = 0; for (let k2 = 1; k2 <= T.K2; k2++) var0 += 2 * T.molt[k2] * T.pk[k2] * (T.W0[k2] ** 2 + (doppler ? T.W1[k2] ** 2 / 3 : 0));
   // le armoniche: a_ℓm = 4π·i^ℓ·Σ_onde F_ℓ(k)·Y*_ℓm(k̂)·[c + (−1)^ℓ·c*], c = (A + iB)·e^(ik·x₀), F_ℓ = W0·j_ℓ(kχ) + W1·j_ℓ'(kχ)
   const armoniche = (lmax) => { const nl = ((lmax + 1) * (lmax + 2)) / 2, re = new Float64Array(nl), im = new Float64Array(nl), jl = new Float64Array(lmax + 2), Fl = new Map(), P = new Float64Array(nl), Lm = O.Lmpc, chi = chiM / MPC;
-    const norma = new Float64Array(nl); for (let l = 0; l <= lmax; l++) { let f = (2 * l + 1) / (4 * Math.PI); for (let m = 0; m <= l; m++) { norma[(l * (l + 1)) / 2 + m] = Math.sqrt(f); f /= (l - m) * (l + m + 1) || 1; } }
     for (let w = 0; w < N; w++) { const kx = KX[w], ky = KY[w], kz = KZ[w], k2 = kx * kx + ky * ky + kz * kz, k = Math.sqrt(k2); let F = Fl.get(k2);
       if (!F) { const X = ((PI2 * k) / Lm) * chi; bessel(X, lmax + 1, jl); F = new Float64Array(lmax + 1); for (let l = 0; l <= lmax; l++) F[l] = T.W0[k2] * jl[l] + (doppler ? T.W1[k2] * ((l * jl[l]) / X - jl[l + 1]) : 0); Fl.set(k2, F); }
       const t = PI2 * (kx * x0[0] + ky * x0[1] + kz * x0[2]), cr = O.A[w] * Math.cos(t) - O.B[w] * Math.sin(t), ci = O.A[w] * Math.sin(t) + O.B[w] * Math.cos(t), ct = kz / k, st = Math.sqrt(Math.max(0, 1 - ct * ct)), fi = Math.atan2(ky, kx);
-      // i polinomi di Legendre associati P_ℓ^m(cos θ) (con la fase di Condon–Shortley)
-      P[0] = 1; for (let m = 1; m <= lmax; m++) P[(m * (m + 1)) / 2 + m] = -(2 * m - 1) * st * P[((m - 1) * m) / 2 + m - 1];
-      for (let m = 0; m < lmax; m++) { P[((m + 1) * (m + 2)) / 2 + m] = (2 * m + 1) * ct * P[(m * (m + 1)) / 2 + m]; for (let l = m + 2; l <= lmax; l++) P[(l * (l + 1)) / 2 + m] = ((2 * l - 1) * ct * P[((l - 1) * l) / 2 + m] - (l + m - 1) * P[((l - 2) * (l - 1)) / 2 + m]) / (l - m); }
+      legendre(lmax, ct, st, P);
       for (let l = 0; l <= lmax; l++) { // 4π·i^ℓ·[c + (−1)^ℓ c*]: per ℓ pari 2·Re c·i^ℓ, per ℓ dispari 2i·Im c·i^ℓ
         const base = 4 * Math.PI * F[l] * 2 * (l % 2 === 0 ? cr : ci), fase = l % 2 === 0 ? l : l + 1, segno = fase % 4 === 0 ? 1 : -1, g = segno * base; // i^ℓ (ℓ pari) o i^(ℓ+1) (ℓ dispari): reale, ±1
-        for (let m = 0; m <= l; m++) { const q = (l * (l + 1)) / 2 + m, yv = norma[q] * P[q] * g; re[q] += yv * Math.cos(m * fi); im[q] -= yv * Math.sin(m * fi); } } }
+        for (let m = 0; m <= l; m++) { const q = (l * (l + 1)) / 2 + m, yv = P[q] * g; re[q] += yv * Math.cos(m * fi); im[q] -= yv * Math.sin(m * fi); } } }
     const C = new Float64Array(lmax + 1); for (let l = 0; l <= lmax; l++) { let s = 0; for (let m = 0; m <= l; m++) { const q = (l * (l + 1)) / 2 + m; s += (m ? 2 : 1) * (re[q] ** 2 + im[q] ** 2); } C[l] = s / (2 * l + 1); }
-    return { lmax, re, im, C, norma }; };
-  const daArmoniche = (alm, n) => { const { lmax, re, im, norma } = alm, ct = n[2], st = Math.sqrt(Math.max(0, 1 - ct * ct)), fi = Math.atan2(n[1], n[0]), P = new Float64Array(re.length); let s = 0;
-    P[0] = 1; for (let m = 1; m <= lmax; m++) P[(m * (m + 1)) / 2 + m] = -(2 * m - 1) * st * P[((m - 1) * m) / 2 + m - 1];
-    for (let m = 0; m < lmax; m++) { P[((m + 1) * (m + 2)) / 2 + m] = (2 * m + 1) * ct * P[(m * (m + 1)) / 2 + m]; for (let l = m + 2; l <= lmax; l++) P[(l * (l + 1)) / 2 + m] = ((2 * l - 1) * ct * P[((l - 1) * l) / 2 + m] - (l + m - 1) * P[((l - 2) * (l - 1)) / 2 + m]) / (l - m); }
-    for (let l = 0; l <= lmax; l++) for (let m = 0; m <= l; m++) { const q = (l * (l + 1)) / 2 + m; s += (m ? 2 : 1) * norma[q] * P[q] * (re[q] * Math.cos(m * fi) - im[q] * Math.sin(m * fi)); } return s; };
+    return { lmax, re, im, C }; };
+  const daArmoniche = (alm, n) => { const { lmax, re, im } = alm, ct = n[2], st = Math.sqrt(Math.max(0, 1 - ct * ct)), fi = Math.atan2(n[1], n[0]), P = legendre(lmax, ct, st, new Float64Array(re.length)); let s = 0;
+    for (let l = 0; l <= lmax; l++) for (let m = 0; m <= l; m++) { const q = (l * (l + 1)) / 2 + m; s += (m ? 2 : 1) * P[q] * (re[q] * Math.cos(m * fi) - im[q] * Math.sin(m * fi)); } return s; };
   // la topologia: le copie dell'osservatore a distanza d = L·|m| < 2χ tagliano la sfera in due cerchi che mostrano gli
   // STESSI punti del toro (Cornish, Spergel & Starkman 1998 [R]): raggio angolare α con cos α = d/2χ
   const cerchio = (m, quanti = 180) => { const d = Math.hypot(...m), ca = d / (2 * giri); if (!(ca < 1)) return null; const u = m.map((v) => v / d), sa = Math.sqrt(1 - ca * ca), t = Math.abs(u[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0], e1 = [u[1] * t[2] - u[2] * t[1], u[2] * t[0] - u[0] * t[2], u[0] * t[1] - u[1] * t[0]], n1 = Math.hypot(...e1), p = e1.map((v) => v / n1), q = [u[1] * p[2] - u[2] * p[1], u[2] * p[0] - u[0] * p[2], u[0] * p[1] - u[1] * p[0]], a = [], b = [];
@@ -603,7 +622,8 @@ export function doroshkevich(n = 40000) {
 // quello di un filamento tipico» (così la classe in quel punto, a quella scala, è garantita). Con `forma: false` si dà
 // solo la densità (UN vincolo, δ_R = la somma di quegli autovalori: passa da campoCondizionato di bolle.js così com'è):
 // dice «qui è vuoto quanto un vuoto tipico», ma non garantisce la classe (la prova misura quante volte la dà).
-export function vincoliDi(cosmo, { cosa, posizione, scala = 0, direzione = null, altezza = 1, forma = true }) {
+// → i vincoli ({ tipo: 'marea' | 'pendenza' | 'densita', … }) da dare a campoVincolato, anche insieme ad altri (regola 12)
+export function vincoliDi(cosmo, { cosa, posizione, scala = 0, direzione = null, altezza = 1, forma = true, centrato = true }) {
   const O = ondeDi(cosmo), k = CLASSI.indexOf(cosa); if (k < 0) throw new Error(`vincoliDi: cosa = ${CLASSI.join(' | ')}`);
   const W = finestra(O, scala); let s2 = 0; for (let m = 0; m < O.N; m++) { const w = W ? W[O.KX[m] ** 2 + O.KY[m] ** 2 + O.KZ[m] ** 2] : 1; s2 += 2 * O.PK[m] * w * w; }
   const sR = Math.sqrt(s2), lam = doroshkevich().autovalori[k].map((v) => v * sR * altezza);
@@ -616,6 +636,10 @@ export function vincoliDi(cosmo, { cosa, posizione, scala = 0, direzione = null,
   } else assi = doveSono(O, posizione, { scala }).assi;
   const out = [];
   for (const [i, j] of [[0, 0], [1, 1], [2, 2], [0, 1], [0, 2], [1, 2]]) out.push({ tipo: 'marea', posizione: [...posizione], scala, i, j, valore: lam[0] * assi[0][i] * assi[0][j] + lam[1] * assi[1][i] * assi[1][j] + lam[2] * assi[2][i] * assi[2][j] });
+  // «qui»: la cosa è centrata nel punto. La pendenza della densità lisciata è zero lungo gli assi che crollano (per un
+  // filamento i due perpendicolari: la cresta passa di lì; per un foglio la normale; per un nodo e per un vuoto tutti e
+  // tre: è un massimo, o un minimo, non solo un valore). Sono altri vincoli lineari (guadagno i·(k·e)·W).
+  if (centrato) for (const e of cosa === 'filamento' ? [assi[0], assi[1]] : cosa === 'foglio' ? [assi[0]] : assi) out.push({ tipo: 'pendenza', posizione: [...posizione], scala, direzione: [...e], valore: 0 });
   return out;
 }
 // I VINCOLI DI UNA MACCHIA DI CIELO: per ogni direzione osservata, il valore ΔT/T (già tolto il dipolo dell'osservatore,
@@ -627,6 +651,7 @@ export const vincoliDelCielo = (fondo, direzioni, valori, { doppler = fondo.dopp
 // IL CAMPO VINCOLATO da vincoli lineari qualunque sulle onde (Hoffman & Ribak 1991, come bolle.js):
 //   δ_c = δ + ξᵀC⁻¹(c − c₀),  χ² = cᵀC⁻¹c,  ogni vincolo j una forma lineare  c_j = Σ_onde 2·Re[(A + iB)·g_j·e^(ik·x_j)]
 // con g_j il «guadagno» dell'onda in quel vincolo: densità lisciata g = W(k) (reale, isotropo); marea ij g = W·k_i k_j/k²;
+// pendenza della densità lungo e: g = i·(k·e)·W (in giri per lato: ∂δ/∂x·L/2π);
 // cielo g = W0(k) + i·(k̂·n)·W1(k) nel punto x₀ + χ·n. C_ij = Σ 2P·Re[g_i e^(iθ_i)·(g_j e^(iθ_j))*], ΔA = P·Σ_j w_j·Re[…], ΔB = −P·Σ_j w_j·Im[…].
 // QUALE VIA: se i vincoli sono tutti di densità, o tutti di cielo dello stesso fondo senza Doppler, il conto lo fa
 // campoCondizionato di bolle.js (per il cielo: sul campo riscalato A·W0, P·W0², dove il vincolo È una densità in un punto;
@@ -673,19 +698,19 @@ export function campoVincolato(cosmo, vincoli = [], opz = {}) {
 }
 // i vincoli in ordine canonico e, per ogni onda, il loro guadagno già moltiplicato per la fase: G_j = g_j·e^(iθ_j)
 function prepara(O, vincoli) {
-  const { KX, KY, KZ, kmax } = O, K2 = kmax * kmax, ordineTipo = { densita: 0, marea: 1, cielo: 2 }, radici = new Float64Array(K2 + 1); for (let k2 = 0; k2 <= K2; k2++) radici[k2] = Math.sqrt(k2);
+  const { KX, KY, KZ, kmax } = O, K2 = kmax * kmax, ordineTipo = { densita: 0, marea: 1, pendenza: 2, cielo: 3 }, radici = new Float64Array(K2 + 1); for (let k2 = 0; k2 <= K2; k2++) radici[k2] = Math.sqrt(k2);
   const taglio = (t) => { const W = new Float64Array(K2 + 1); for (let k2 = 0; k2 <= K2; k2++) W[k2] = k2 <= t * t ? 1 : 0; return W; }, uno = new Float64Array(K2 + 1).fill(1);
   const fissi = O.libere ? O.fissi.map((f) => ({ tipo: 'densita', x: f.x.map(frazione), W: taglio(f.taglio), valore: f.valore, nome: f.nome })) : [];
   const dati = vincoli.map((v, i) => {
     if (v.tipo === 'cielo') { const F = v.fondo, x = v.direzione.map((n, d) => frazione((F.osservatore.posizione[d] + F.raggioM * n) / O.toroM)); return { tipo: 'cielo', x, W: F.pesi.W0, W1: v.doppler ? F.pesi.W1 : null, n: v.direzione, valore: v.valore, dato: i, dato0: v, scala: 0 }; }
-    if (v.tipo !== 'densita' && v.tipo !== 'marea') throw new Error(`campoVincolato: vincolo ${i}: tipo sconosciuto (${v.tipo})`);
+    if (v.tipo !== 'densita' && v.tipo !== 'marea' && v.tipo !== 'pendenza') throw new Error(`campoVincolato: vincolo ${i}: tipo sconosciuto (${v.tipo})`);
     if (!Array.isArray(v.posizione) || !Number.isFinite(v.valore)) throw new Error(`campoVincolato: vincolo ${i}: servono posizione e valore`);
-    return { tipo: v.tipo, x: v.posizione.map((p) => frazione(p / O.toroM)), W: finestra(O, v.scala ?? 0) ?? uno, i: v.i ?? 0, j: v.j ?? 0, valore: v.valore, dato: i, dato0: v, scala: v.scala ?? 0 };
-  }).sort((a, b) => ordineTipo[a.tipo] - ordineTipo[b.tipo] || a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.i ?? 0) - (b.i ?? 0) || (a.j ?? 0) - (b.j ?? 0) || a.valore - b.valore || a.dato - b.dato);
+    return { tipo: v.tipo, x: v.posizione.map((p) => frazione(p / O.toroM)), W: finestra(O, v.scala ?? 0) ?? uno, i: v.i ?? 0, j: v.j ?? 0, n: v.direzione ?? null, valore: v.valore, dato: i, dato0: v, scala: v.scala ?? 0 };
+  }).sort((a, b) => ordineTipo[a.tipo] - ordineTipo[b.tipo] || a.x[0] - b.x[0] || a.x[1] - b.x[1] || a.x[2] - b.x[2] || a.scala - b.scala || (a.i ?? 0) - (b.i ?? 0) || (a.j ?? 0) - (b.j ?? 0) || (a.n?.[0] ?? 0) - (b.n?.[0] ?? 0) || (a.n?.[1] ?? 0) - (b.n?.[1] ?? 0) || (a.n?.[2] ?? 0) - (b.n?.[2] ?? 0) || a.valore - b.valore || a.dato - b.dato);
   const tutti = [...fissi, ...dati], n = tutti.length, X = tutti.map((v) => v.x.map((q) => PI2 * q));
   const guadagni = (m, Gr, Gi) => { const kx = KX[m], ky = KY[m], kz = KZ[m], k2 = kx * kx + ky * ky + kz * kz, kk = [kx, ky, kz];
     for (let j = 0; j < n; j++) { const v = tutti[j], w = v.W[k2]; let gr = w, gi = 0;
-      if (v.tipo === 'marea') gr = (w * kk[v.i] * kk[v.j]) / k2; else if (v.tipo === 'cielo' && v.W1) gi = (v.W1[k2] * (kx * v.n[0] + ky * v.n[1] + kz * v.n[2])) / radici[k2];
+      if (v.tipo === 'marea') gr = (w * kk[v.i] * kk[v.j]) / k2; else if (v.tipo === 'pendenza') { gr = 0; gi = w * (kx * v.n[0] + ky * v.n[1] + kz * v.n[2]); } else if (v.tipo === 'cielo' && v.W1) gi = (v.W1[k2] * (kx * v.n[0] + ky * v.n[1] + kz * v.n[2])) / radici[k2];
       if (gr === 0 && gi === 0) { Gr[j] = 0; Gi[j] = 0; continue; }
       const t = kx * X[j][0] + ky * X[j][1] + kz * X[j][2], c = Math.cos(t), s = Math.sin(t); Gr[j] = gr * c - gi * s; Gi[j] = gr * s + gi * c; } };
   return { tutti, n, nf: fissi.length, guadagni };
@@ -744,4 +769,4 @@ export function scenaRagnatela(cosmo, regione = null, t = 0, opz = {}) {
 }
 
 // per le prove e per chi vuole i numeri della cosmologia usata qui
-export const dentro = { OmR, OmG, OmNu, F_NU, RB0, E: E_, TAB, ETA0, T_OGGI, N_FOTONI, U_FOTONI, RHO_C, H0s, CH, MPC, GA, nelPunto, autovalori, autovettore, bessel, phiSuDelta, ZETA_SU_PHI, G0, T2BBKS, tabelle, f0Crescita };
+export const dentro = { OmR, OmG, OmNu, F_NU, RB0, E: E_, TAB, ETA0, T_OGGI, N_FOTONI, U_FOTONI, RHO_C, H0s, CH, MPC, GA, nelPunto, autovalori, autovettore, bessel, phiSuDelta, ZETA_SU_PHI, G0, T2BBKS, tabelle, f0Crescita, legendre };

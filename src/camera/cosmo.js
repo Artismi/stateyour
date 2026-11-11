@@ -20,8 +20,8 @@
 
 import { simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
-import { stella as stellaVera } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
+import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie, gravitaDiSuperficie } from './leggi.js';
+import { stellaOggi } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
@@ -188,17 +188,18 @@ export const sistema = memo((n, gid, sid) => {
   if (S.stato === 'nana bianca' || S.stato === 'gigante rossa') { const k = S.stato === 'nana bianca' ? (S.massaNascita || 1) / S.massa : 1; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
   // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è piccola: la sua luce è quella di una
   // sfera con il suo raggio e la sua temperatura, 4πR²σT⁴: da un decimo del Sole appena nata a meno di un millesimo)
-  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa, { Z: S.Z ?? 1, eta: S.eta }).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
+  // (luce, raggio e temperatura di oggi vengono da una via sola, viva o morta che sia la stella: stelle.js stellaOggi)
+  const oggiStella = stellaOggi(S), viva = oggiStella.viva, Lw = oggiStella.L;
   // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
   // stella, il disco e gli altri pianeti
-  const Sis = { stella: { ...S, r: (viva ? stellaVera(S.massa, { Z: S.Z ?? 1, eta: S.eta }).R * 6.957e8 : S.raggioM || 1e4) / (30 * UA) } /* il raggio vero, nelle unità del sistema */, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
+  const Sis = { stella: { ...S, r: oggiStella.R / (30 * UA) } /* il raggio vero, nelle unità del sistema */, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
     // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
     const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
     const eta = S.eta;
-    Object.assign(p, { aM, Lw, Mstella: Mst, anno, ...(S.T > 0 ? { Tstella: S.T } : {}) }); // (Tstella: la temperatura vera di questa stella, per chi ne vuole lo spettro: il mare, l'ultravioletto)
+    Object.assign(p, { aM, Lw, Mstella: Mst, anno, Rstella: oggiStella.R, ...(S.T > 0 ? { Tstella: S.T } : {}) }); // (Tstella: la temperatura vera di questa stella, per chi ne vuole lo spettro: il mare, l'ultravioletto; Rstella: il suo raggio vero, per chi ne vuole il vento)
     // L'URTO GIGANTE (impatti.js): l'ultimo della formazione del pianeta, con i numeri veri di disco.js. I suoi eventi
     // incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
     const casoP = sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${p.id}`, ramiCosmo(n));
@@ -226,7 +227,7 @@ export const sistema = memo((n, gid, sid) => {
     // I GAS RADIOGENICI (risalita.js): l'argon del potassio-40 e l'elio delle α usciti dall'interno nell'età del pianeta, se
     // la gravità li tiene (in Pa: entrano nell'aria insieme agli altri, dentro climaEAria)
     let inerti = null;
-    try { const gr = gasRadiogenici({ pianeta: { g: (6.674e-11 * massaKg) / p.raggioM ** 2, raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
+    try { const gr = gasRadiogenici({ pianeta: { g: gravitaDiSuperficie(massaKg, p.raggioM), raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
       inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
     const ariaDelPianeta = () => {
       const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,

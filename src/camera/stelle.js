@@ -717,6 +717,25 @@ export function fine(Msol, B0 = 1e-4, { Z = 1 } = {}) {
   return { tipo: 'buco nero', massa: He, raggio: (2 * K.G * He * MSOLE) / K.c ** 2, B: 0, supernova: true, nucleoElio: He };
 }
 
+// LA STELLA OGGI, VIVA O MORTA: UNA VIA SOLA per luce, raggio e temperatura (regola 7: una grandezza, una fonte).
+// «S» è una stella come la dà galassie.js: { massa (oggi), Z, eta, stato, e per i resti: raggioM, morta (anni dalla
+// morte) }. Viva (anche gigante): la sua struttura a quell'età, stella(massa, { Z, eta }). Nana bianca: ha il raggio
+// degli elettroni degeneri (fine()) e si raffredda irradiando il calore dei suoi ioni (Mestel 1952: L ∝ M·t^−7/5, con
+// la costante 8,8·10⁶ anni per una massa solare a una luce solare; non più calda di 150 000 K appena nata); la luce è
+// quella di una sfera con quel raggio e quella temperatura. Stella di neutroni, buco nero: non danno luce a un clima.
+// → { viva, L (W), R (m), T (K) }. La usano cosmo.js (la luce che arriva ai pianeti, il raggio della stella) e
+// grandezze.js (la fonte di stella.luminosita, stella.raggio, stella.temperatura per ogni stato).
+// (galassie.js scrive ancora la temperatura della nana bianca con la stessa formula in linea: deve chiamare questa.)
+export function nanaBiancaOggi(massa, raggioM, anniDallaMorte) {
+  const Lm = LSOLE * Math.pow((8.8e6 * Math.pow(massa, 5 / 7)) / Math.max(anniDallaMorte, 1e4), 7 / 5), T = Math.min(1.5e5, Math.pow(Lm / (PI4 * raggioM ** 2 * K.sigma), 0.25));
+  return { T, L: 4 * Math.PI * raggioM ** 2 * K.sigma * T ** 4 };
+}
+export function stellaOggi(S) {
+  if (S.stato === 'in vita' || S.stato === 'gigante rossa') { const s = stella(S.massa, { Z: S.Z ?? 1, eta: S.eta }); return { viva: true, L: s.L * LSOLE, R: s.R * RSOLE, T: s.T }; }
+  if (S.stato === 'nana bianca') { const n = nanaBiancaOggi(S.massa, S.raggioM, S.morta); return { viva: false, L: n.L, R: S.raggioM, T: n.T }; }
+  return { viva: false, L: 0, R: S.raggioM || 1e4, T: 0 };
+}
+
 // la composizione di una stella che nasce con Z metalli (in unità solari): l'elio cresce con i metalli, dal valore del
 // Big Bang a quello del Sole (le stelle che fanno i metalli fanno anche elio)
 

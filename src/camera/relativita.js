@@ -1,5 +1,5 @@
 // relativita.js — LA RELATIVITÀ NEL MODELLO: il ritmo del tempo, la sezione e il cono di chi guarda, i buchi neri,
-// le geodetiche della luce e delle particelle. Funzioni pure; unità SI; costanti da leggi.js.
+// le geodetiche della luce e delle particelle, le lenti (più immagini, più tempi). Funzioni pure; unità SI; costanti da leggi.js.
 //
 // IL PUNTO, detto esattamente (è ciò che l'utente ha chiesto):
 //   · L'EVENTO È UNO SOLO, identico per tutti gli osservatori; ogni osservatore gli assegna un tempo e un luogo diversi
@@ -47,6 +47,15 @@
 //      [D]; ritardo di Shapiro 1964 [R]; cattura della luce sotto b_c = √27·GM/c² [D]; lenti: raggio di Einstein
 //      θ_E = √(4GM·D_ls/(c²D_l D_s)) (Einstein 1936) e 4π(σ/c)²·D_ls/D_s per la sfera isoterma [R].
 //
+//   5. lenti — principio di Fermat: le immagini sono i punti stazionari del tempo d'arrivo
+//      t(θ) = (1 + z_l)/c·D_lD_s/D_ls·[½|θ − β|² − ψ(θ)], ∇²ψ = 2Σ/Σ_cr (Schneider 1985; Blandford & Narayan 1986
+//      [R]); ritardo tra le immagini (Refsdal 1964 [R]); profili proiettati: NFW (Bartelmann 1996 [R]), Hernquist
+//      1990 [R], disco esponenziale; deflessione dei profili ellittici (Schramm 1990; Keeton 2001 [R], CONTROLLATA nel
+//      test: ∇·α = 2κ); microlente (Paczyński 1986 [R]).
+//   6. casi limite — intervallo nullo lungo la luce [R]; caduta oltre l'orizzonte nelle coordinate di Painlevé (1921)
+//      e Gullstrand [R, con il bordo dell'ombra per chi cade D e controllato contro l'aberrazione]; assenza di capelli
+//      (Israel 1967; Carter 1971) ed entropia dell'orizzonte [R].
+//
 // I DATI MISURATI usati qui (non scelti guardando il risultato): T₀ = 2,72548 K del fondo a microonde (Fixsen 2009,
 // ApJ 707, 916 [V]); σ_T di Thomson viene da stelle.js (dalle costanti). Tutto il resto è c, G, ħ, k_B, m_p di leggi.js.
 //
@@ -60,6 +69,14 @@
 //     v·x/c² è la formula locale estesa, e `sezioneDi` lo dice (`curvatura`: x·H/c);
 //   · il cono cosmico usa la cosmologia di leggi.js (materia + Λ, niente radiazione): l'orizzonte delle particelle
 //     viene 14,4 Gpc contro i 14,2 veri;
+//   · DUE FONTI per la stessa grandezza: l'orizzonte e il tempo conforme sono anche in ragnatela.js, con la radiazione
+//     (14,17 Gpc: giusto). Qui non la si importa (ragnatela.js importa bolle.js, e bolle.js dovrà importare questo
+//     modulo: sarebbe un giro): `orizzonteParticelle(t, tabella)` la prende da chi chiama; `conoPassato` e le distanze
+//     delle lenti usano ancora la cosmologia di qui (differenza: 2% sull'orizzonte, < 0,1% sotto z = 10);
+//   · le lenti: l'alone è sferico e proiettato fino all'infinito, la lente è sottile e sola sulla linea di vista (niente
+//     taglio esterno delle strutture vicine, che nelle croci vere conta quanto lo schiacciamento); un ammasso fatto
+//     col solo alone del modello (10¹⁵ M☉, concentrazione 3) ha un raggio di Einstein di 6″ contro i 10–50″ veri:
+//     mancano la galassia centrale, le sottostrutture e l'allungamento lungo la linea di vista degli ammassi-lente;
 //   · la rotazione (a*) dei buchi neri non viene dal modello: `stelle.fine` non dà il momento angolare del resto e
 //     `galassie.js` non segue quello accresciuto dal buco centrale: qui a* è un ingresso (0 se non si sa);
 //   · Kerr: orizzonte, ergosfera, orbite e ombra sono esatti; le geodetiche integrate sono quelle di Schwarzschild
@@ -558,6 +575,188 @@ export function raggioEinstein(M, { zl = null, zs = null, Dl = null, Ds = null }
 export const raggioEinsteinIsoterma = (sigma, zl, zs) => 4 * PI * (sigma / C) ** 2 * (distanzaAngolare(zs, zl) / distanzaAngolare(zs));
 
 // =====================================================================================================
+// 5. LE LENTI: più immagini della stessa sorgente, a tempi diversi (principio di Fermat)
+// =====================================================================================================
+// La luce arriva lungo i cammini per cui il tempo d'arrivo è STAZIONARIO. Per una lente sottile, con θ la direzione in
+// cui si guarda e β quella in cui la sorgente starebbe senza lente (radianti, dal centro della lente):
+//   t(θ) = (1 + z_l)/c · D_l·D_s/D_ls · [ ½|θ − β|² − ψ(θ) ]        (ritardo geometrico + ritardo di Shapiro)
+//   ∇²ψ = 2κ,  κ = Σ/Σ_cr,  Σ_cr = c²D_s/(4πG·D_l·D_ls)              (Schneider 1985; Blandford & Narayan 1986 [R])
+// Le immagini sono i punti dove ∇t = 0, cioè θ − α(θ) = β con α = ∇ψ; l'ingrandimento è 1/det(∂β/∂θ); la parità
+// dice che punto stazionario è (minimo, sella, massimo). Le distanze sono quelle della cosmologia già presente.
+// Per un profilo ellittico κ(ξ), ξ² = x² + y²/q², la deflessione è un integrale a una dimensione (Schramm 1990;
+// Keeton 2001, astro-ph/0102341, eq. 9–12 [R, e CONTROLLATA nel test: ∇·α = 2κ]):
+//   α_x = q·x·J₀, α_y = q·y·J₁,  J_n = ∫₀¹ κ(ξ(u)) du/(1 − (1 − q²)u)^(n+½),  ξ(u)² = u·(x² + y²/(1 − (1 − q²)u))
+// ---------- i profili proiettati (kg/m² in funzione del raggio proiettato R in metri)
+const acosh1 = (x) => Math.log(x + Math.sqrt(x * x - 1));
+// alone di Navarro, Frenk & White proiettato fino all'infinito (Bartelmann 1996 [R]); M: la massa entro R_v, c la concentrazione
+export function sigmaNFW(M, Rv, c) {
+  const rs = Rv / c, rhoS = M / (4 * PI * rs ** 3 * (Math.log(1 + c) - c / (1 + c)));
+  // (attorno a x = 1 la formula è 0/0: lì la serie, con X(e) = atanh(√e)/√e = 1 + e/3 + e²/5 + …, e = 1 − x²: f = (X − 1)/e)
+  return (R) => { const x = Math.max(R / rs, 1e-9), d = x * x - 1; let f; if (Math.abs(d) < 0.05) { f = 0; for (let k = 12; k >= 1; k--) f = f * -d + 1 / (2 * k + 1); } else if (x < 1) f = (1 - acosh1(1 / x) / Math.sqrt(-d)) / d; else f = (1 - Math.acos(1 / x) / Math.sqrt(d)) / d; return 2 * rhoS * rs * f; };
+}
+// sferoide di Hernquist 1990 proiettato [R]; M la massa, a la scala
+export function sigmaHernquist(M, a) {
+  // (attorno a s = 1, con la stessa serie di X: [(2 + s²)X − 3]/d² = Σ_{k≥2} d^(k−2)·4(k − 1)/((2k + 1)(2k − 1)), d = 1 − s²)
+  return (R) => { const s = Math.max(R / a, 1e-9), d = 1 - s * s; if (Math.abs(d) < 0.05) { let f = 0; for (let k = 13; k >= 2; k--) f = f * d + (4 * (k - 1)) / ((2 * k + 1) * (2 * k - 1)); return (M / (2 * PI * a * a)) * f; }
+    const X = s < 1 ? acosh1(1 / s) / Math.sqrt(d) : Math.acos(1 / s) / Math.sqrt(-d); return (M / (2 * PI * a * a * d * d)) * ((2 + s * s) * X - 3); };
+}
+// disco esponenziale visto di faccia (Freeman 1970): Σ₀e^(−R/R_d), Σ₀ = M/(2πR_d²)
+export const sigmaDisco = (M, Rd) => (R) => (M / (2 * PI * Rd * Rd)) * Math.exp(-R / Rd);
+// LA MASSA DAVANTI dal modello di una galassia (galassie.js `forma.modello`: { Mh, c, Rv, Md, Rd, Ms, as } in M☉ e kpc):
+// l'alone (sferico), il disco visto inclinato di `inclinazione` (0: di faccia; il disco inclinato è ellittico con
+// rapporto d'assi cos i: è questo, con lo schiacciamento dello sferoide, a dare quattro immagini invece dell'anello) e lo
+// sferoide con il suo `schiacciata` (rapporto d'assi sul cielo). `angolo`: dove punta l'asse maggiore.
+// (Semplificazioni dichiarate: l'alone è sferico e va all'infinito; il disco è sottile, e non lo si inclina oltre q = 0,15.)
+const KPC_M = 3.0857e19;
+export function massaDaModello(m, { z = null, distanza = null, inclinazione = 0, angolo = 0, schiacciata = 1 } = {}) {
+  const componenti = [{ nome: 'alone', sigma: sigmaNFW(m.Mh * MSOLE, m.Rv * KPC_M, m.c), q: 1, angolo: 0 }];
+  if (m.Md > 0 && m.Rd > 0) componenti.push({ nome: 'disco', sigma: sigmaDisco(m.Md * MSOLE, m.Rd * KPC_M), q: Math.max(0.15, Math.cos(inclinazione)), angolo });
+  if (m.Ms > 0 && m.as > 0) componenti.push({ nome: 'sferoide', sigma: sigmaHernquist(m.Ms * MSOLE, m.as * KPC_M), q: Math.max(0.15, schiacciata), angolo });
+  return { z, distanza, componenti };
+}
+// i nodi di Gauss–Legendre su [0, 1]
+const nodiGL = (() => { const memo = new Map(); return (n) => { if (memo.has(n)) return memo.get(n); const x = new Float64Array(n), w = new Float64Array(n);
+  for (let i = 0; i < n; i++) { let z = Math.cos((PI * (i + 0.75)) / (n + 0.5)), pp = 1; for (let it = 0; it < 60; it++) { let p1 = 1, p2 = 0; for (let j = 1; j <= n; j++) { const p3 = p2; p2 = p1; p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j; } pp = (n * (z * p1 - p2)) / (z * z - 1); const dz = p1 / pp; z -= dz; if (Math.abs(dz) < 1e-15) break; } x[i] = 0.5 * (1 + z); w[i] = 1 / ((1 - z * z) * pp * pp); }
+  const r = { x, w }; memo.set(n, r); return r; }; })();
+
+// LA LENTE. massaDavanti: { z | distanza (m), componenti: [{ sigma(R) kg/m², q, angolo } | { massa (kg): un punto }] }
+//   (da `massaDaModello`, o { z, massa } per una massa puntiforme); sorgente: { z | distanza, beta: [βx, βy] rad };
+//   osservatore: { bolla (per i tempi d'emissione: vedi sotto), griglia (96), campo (2,5 raggi di Einstein), curve (false) }.
+// → { raggioEinstein (rad: dove la deflessione media vale θ), anello (true se sorgente e lente sono allineate e la
+//     lente è rotonda: l'immagine è un anello), immagini: [{ theta: [x, y], ingrandimento (con il segno: negativo =
+//     immagine rovesciata), parita: 'minimo' | 'sella' | 'massimo', ritardo (s dopo la prima che arriva),
+//     tEmissione (s da oggi: l'istante della sorgente che quella immagine mostra) }] in ordine d'arrivo,
+//     ingrandimentoTotale, scalaRitardo (s per rad²), sigmaCritica (kg/m²), deflessione(x, y), kappa(x, y),
+//     critiche, caustiche (liste di punti, solo con curve: true), segui(theta, beta) → la stessa immagine per una
+//     sorgente spostata in beta (o null se lì non c'è più: ha passato una caustica) }
+// IL LEGAME CON IL CONO: la bolla che guarda riceve, dello STESSO oggetto, tante epoche quante sono le immagini: quella
+// che arriva più tardi di Δt mostra la sorgente com'era Δt/(1 + z_s) PRIMA (tutte nel passato, mai nel futuro). La
+// prima immagine è presa al tempo del cono senza lente (`conoPassato`): la costante del ritardo di Shapiro non è
+// definita (il potenziale di una massa estesa non ha uno zero), le differenze sì.
+export function lente(massaDavanti, sorgente, osservatore = {}) {
+  const O = { griglia: 96, campo: 2.5, curve: false, nodi: 64, bolla: null, ...osservatore }, cosmico = massaDavanti.distanza == null;
+  const Dl = cosmico ? distanzaAngolare(massaDavanti.z) : massaDavanti.distanza, Ds = cosmico ? distanzaAngolare(sorgente.z) : sorgente.distanza, Dls = cosmico ? distanzaAngolare(sorgente.z, massaDavanti.z) : Ds - Dl;
+  if (!(Dls > 0)) throw new Error('relativita.lente: la sorgente deve stare dietro la massa');
+  const sigmaCr = (C2 * Ds) / (4 * PI * G * Dl * Dls), scalaT = ((cosmico ? 1 + massaDavanti.z : 1) * Dl * Ds) / (C * Dls), beta = sorgente.beta || [0, 0];
+  const lista = massaDavanti.componenti || [{ massa: massaDavanti.massa }], estese = [], punti = [];
+  for (const c of lista) { if (c.massa != null && !c.sigma) punti.push({ t2: ((4 * G * c.massa) / C2) * (Dls / (Dl * Ds)), x: (c.pos && c.pos[0]) || 0, y: (c.pos && c.pos[1]) || 0 }); else { const q = c.q ?? 1; estese.push({ k: (xi) => c.sigma(xi * Dl) / (sigmaCr * q), q, ca: Math.cos(c.angolo || 0), sa: Math.sin(c.angolo || 0) }); } }
+  const { x: gx, w: gw } = nodiGL(O.nodi);
+  const deflessione = (x, y) => { let ax = 0, ay = 0;
+    for (const c of estese) { const X = c.ca * x + c.sa * y, Y = -c.sa * x + c.ca * y, e = 1 - c.q * c.q; let j0 = 0, j1 = 0;
+      for (let i = 0; i < gx.length; i++) { const u = gx[i] * gx[i], du = 2 * gx[i] * gw[i], d = 1 - e * u, k = c.k(Math.sqrt(u * (X * X + (Y * Y) / d))) * du, r = 1 / Math.sqrt(d); j0 += k * r; j1 += k * r * r * r; } // (u = w²: l'integrando resta liscio anche dove κ ha la punta)
+      const bx = c.q * X * j0, by = c.q * Y * j1; ax += c.ca * bx - c.sa * by; ay += c.sa * bx + c.ca * by; }
+    for (const p of punti) { const dx = x - p.x, dy = y - p.y, r2 = dx * dx + dy * dy || 1e-300; ax += (p.t2 * dx) / r2; ay += (p.t2 * dy) / r2; }
+    return [ax, ay]; };
+  const kappa = (x, y) => { let k = 0; for (const c of estese) { const X = c.ca * x + c.sa * y, Y = -c.sa * x + c.ca * y; k += c.k(Math.sqrt(X * X + (Y * Y) / (c.q * c.q))); } return k; };
+  // il potenziale: ψ(θ) = ∫₀¹ α(sθ)·θ ds per le parti estese (ψ(0) = 0), θ_E²·ln|θ| per i punti
+  const potenziale = (x, y) => { let s = 0; if (estese.length) { const soloEstese = (X, Y) => { let ax = 0, ay = 0; const a = deflessione(X, Y); ax = a[0]; ay = a[1]; for (const p of punti) { const dx = X - p.x, dy = Y - p.y, r2 = dx * dx + dy * dy || 1e-300; ax -= (p.t2 * dx) / r2; ay -= (p.t2 * dy) / r2; } return [ax, ay]; };
+      for (let i = 0; i < gx.length; i++) { const a = soloEstese(gx[i] * x, gx[i] * y); s += gw[i] * (a[0] * x + a[1] * y); } }
+    for (const p of punti) s += 0.5 * p.t2 * Math.log((x - p.x) ** 2 + (y - p.y) ** 2 || 1e-300); return s; };
+  // il raggio di Einstein: dove la deflessione radiale, mediata su 16 direzioni, vale θ (il più esterno)
+  const media = (t) => { let s = 0; for (let k = 0; k < 16; k++) { const f = (2 * PI * (k + 0.5)) / 16, a = deflessione(t * Math.cos(f), t * Math.sin(f)); s += a[0] * Math.cos(f) + a[1] * Math.sin(f); } return s / 16 - t; };
+  let tE = 0; { let t = 1e-1, prima = media(t); for (let k = 0; k < 80 && t > 1e-13; k++) { const t2 = t / 1.4, f2 = media(t2); if (prima < 0 && f2 >= 0) { let lo = t2, hi = t; for (let i = 0; i < 50; i++) { const m = 0.5 * (lo + hi); if (media(m) >= 0) lo = m; else hi = m; } tE = 0.5 * (lo + hi); break; } t = t2; prima = f2; } }
+  const bN = Math.hypot(beta[0], beta[1]), rotonda = estese.every((c) => c.q === 1) && punti.every((p) => p.x === 0 && p.y === 0), anello = tE > 0 && rotonda && bN < 1e-9 * tE;
+  // le immagini: la mappa θ → β su una griglia di triangoli; dove un triangolo copre la sorgente c'è un'immagine, rifinita con Newton
+  const L = tE > 0 ? O.campo * tE + 1.5 * bN : Math.max(4 * bN, 1e-9), n = O.griglia, h = (2 * L) / n, sposta = 0.3713 * h, h1 = 1e-4 * (tE || L);
+  const jac = (x, y) => { const a = deflessione(x + h1, y), b = deflessione(x - h1, y), c = deflessione(x, y + h1), d = deflessione(x, y - h1); return [1 - (a[0] - b[0]) / (2 * h1), -(c[0] - d[0]) / (2 * h1), -(a[1] - b[1]) / (2 * h1), 1 - (c[1] - d[1]) / (2 * h1)]; };
+  const immagini = [], vicino2 = (1e-4 * (tE || L)) ** 2;
+  const rifinisci = (x, y) => { for (let it = 0; it < 40; it++) { const a = deflessione(x, y), fx = x - a[0] - beta[0], fy = y - a[1] - beta[1], J = jac(x, y), det = J[0] * J[3] - J[1] * J[2]; if (!(Math.abs(det) > 1e-14)) break; const dx = (J[3] * fx - J[1] * fy) / det, dy = (-J[2] * fx + J[0] * fy) / det, passo = Math.hypot(dx, dy), k = passo > 0.5 * h ? (0.5 * h) / passo : 1; x -= k * dx; y -= k * dy; if (passo < 1e-13 * (tE || L)) return [x, y]; } const a = deflessione(x, y); return Math.hypot(x - a[0] - beta[0], y - a[1] - beta[1]) < 1e-9 * (tE || L) ? [x, y] : null; };
+  if (!anello) {
+    const bxG = new Float64Array((n + 1) * (n + 1)), byG = new Float64Array((n + 1) * (n + 1)), px = (i) => -L + sposta + i * h;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { const a = deflessione(px(i), px(j)); bxG[j * (n + 1) + i] = px(i) - a[0]; byG[j * (n + 1) + i] = px(j) - a[1]; }
+    const prova = (i0, j0, i1, j1, i2, j2) => { const k0 = j0 * (n + 1) + i0, k1 = j1 * (n + 1) + i1, k2 = j2 * (n + 1) + i2, x0 = bxG[k0], y0 = byG[k0], x1 = bxG[k1] - x0, y1 = byG[k1] - y0, x2 = bxG[k2] - x0, y2 = byG[k2] - y0, d = x1 * y2 - x2 * y1; if (d === 0) return;
+      const u = ((beta[0] - x0) * y2 - (beta[1] - y0) * x2) / d, v = (x1 * (beta[1] - y0) - y1 * (beta[0] - x0)) / d; if (u < -1e-9 || v < -1e-9 || u + v > 1 + 1e-9) return;
+      const r = rifinisci(px(i0) + u * (px(i1) - px(i0)) + v * (px(i2) - px(i0)), px(j0) + u * (px(j1) - px(j0)) + v * (px(j2) - px(j0))); if (!r) return; if (immagini.some((m) => (m.theta[0] - r[0]) ** 2 + (m.theta[1] - r[1]) ** 2 < vicino2)) return; immagini.push({ theta: r }); };
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { prova(i, j, i + 1, j, i, j + 1); prova(i + 1, j + 1, i, j + 1, i + 1, j); }
+    if (!immagini.length) { const r = rifinisci(beta[0], beta[1]); if (r) immagini.push({ theta: r }); }
+    for (const m of immagini) { const [x, y] = m.theta, J = jac(x, y), det = J[0] * J[3] - J[1] * J[2], tr = J[0] + J[3]; m.ingrandimento = 1 / det; m.parita = det < 0 ? 'sella' : tr > 0 ? 'minimo' : 'massimo'; m.tau = 0.5 * ((x - beta[0]) ** 2 + (y - beta[1]) ** 2) - potenziale(x, y); }
+    immagini.sort((a, b) => a.tau - b.tau); const t0 = immagini.length ? immagini[0].tau : 0;
+    const cono = O.bolla && cosmico ? conoPassato(O.bolla, { comovente: cosmo.comovente(1 / (1 + sorgente.z), 1) }) : O.bolla ? conoPassato(O.bolla, { distanza: Ds }) : null;
+    for (const m of immagini) { m.ritardo = scalaT * (m.tau - t0); if (cono) m.tEmissione = cono.t - m.ritardo / (1 + (cosmico ? sorgente.z : 0)); }
+  }
+  // seguire un'immagine mentre la sorgente si sposta (per una sorgente che si muove, o per avvicinarla a una caustica)
+  const segui = (theta, b) => { const b0 = beta[0], b1 = beta[1]; beta[0] = b[0]; beta[1] = b[1]; const r = rifinisci(theta[0], theta[1]); beta[0] = b0; beta[1] = b1; if (!r) return null; const J = jac(r[0], r[1]), det = J[0] * J[3] - J[1] * J[2]; return { theta: r, ingrandimento: 1 / det, parita: det < 0 ? 'sella' : J[0] + J[3] > 0 ? 'minimo' : 'massimo' }; };
+  const out = { raggioEinstein: tE, anello, immagini, segui, ingrandimentoTotale: anello ? Infinity : immagini.reduce((q, m) => q + Math.abs(m.ingrandimento), 0), scalaRitardo: scalaT, sigmaCritica: sigmaCr, distanze: { Dl, Ds, Dls }, deflessione, kappa, potenziale, jacobiano: jac };
+  if (O.curve && tE > 0) { // le curve critiche (det = 0) e le caustiche (dove le critiche vanno a finire nel piano della sorgente)
+    const m = Math.max(n, 160), hh = (2 * L) / m, D = new Float64Array((m + 1) * (m + 1)), q = (i) => -L + 0.3713 * hh + i * hh; out.critiche = []; out.caustiche = [];
+    for (let j = 0; j <= m; j++) for (let i = 0; i <= m; i++) { const J = jac(q(i), q(j)); D[j * (m + 1) + i] = J[0] * J[3] - J[1] * J[2]; }
+    const taglio = (xa, ya, da, xb, yb, db) => { const f = da / (da - db), x = xa + f * (xb - xa), y = ya + f * (yb - ya), a = deflessione(x, y); out.critiche.push([x, y]); out.caustiche.push([x - a[0], y - a[1]]); };
+    for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) { const d0 = D[j * (m + 1) + i], dx = D[j * (m + 1) + i + 1], dy = D[(j + 1) * (m + 1) + i]; if (d0 * dx < 0) taglio(q(i), q(j), d0, q(i + 1), q(j), dx); if (d0 * dy < 0) taglio(q(i), q(j), d0, q(i), q(j + 1), dy); }
+  }
+  return out;
+}
+// LA MICROLENTE di una stella singola che passa davanti a un'altra: le due immagini non si separano (millesimi di secondo
+// d'arco) e si vede solo la luce che cresce e cala, A(u) = (u² + 2)/(u√(u² + 4)), u = distanza in raggi di Einstein
+// (Einstein 1936; Paczyński 1986, ApJ 304, 1 [R]). M (kg), Dl, Ds (m), u0 (il passaggio più vicino), v (m/s di traverso).
+// → { raggioEinstein (rad), tempoEinstein (s), ingrandimento(u), curva(t) (t dal massimo), picco }
+export function microlente({ M, Dl, Ds, u0 = 0.1, v = 2e5 }) {
+  const tE = raggioEinstein(M, { Dl, Ds }), durata = (tE * Dl) / v, A = (u) => (u * u + 2) / (u * Math.sqrt(u * u + 4));
+  return { raggioEinstein: tE, tempoEinstein: durata, ingrandimento: A, curva: (t) => A(Math.hypot(u0, t / durata)), picco: A(u0) };
+}
+
+// =====================================================================================================
+// 6. I CASI LIMITE: la luce, la caduta oltre l'orizzonte, ciò che un buco nero dimentica
+// =====================================================================================================
+// IL TEMPO PROPRIO tra due eventi lungo il moto uniforme che li unisce: τ = √(s²)/c. Se sono separati nel tempo esiste
+// un riferimento in cui accadono nello stesso luogo (quello di chi li vive entrambi), e τ è il suo tempo. Sulla luce
+// τ = 0: tra emissione e assorbimento l'intervallo è nullo. È il LIMITE v → c di τ = Δt·√(1 − v²/c²), NON il «punto di
+// vista del fotone»: a v = c la trasformazione di Lorentz non esiste (γ = ∞), quindi non c'è un riferimento in cui il
+// fotone sta fermo, né un suo «adesso» (`sezioneDi` lo rifiuta). → { tau (s; NaN se separati nello spazio), tipo:
+// 'tempo' | 'luce' | 'spazio', riferimento (true solo per 'tempo': esiste chi li vive entrambi), velocita (m/s) }
+export function tempoProprio(e1, e2) {
+  const s2 = intervallo(e1, e2), dt = Math.abs((e2.t || 0) - (e1.t || 0)), dx = lungo(meno3(e2.x || e2.posizione || [0, 0, 0], e1.x || e1.posizione || [0, 0, 0])), v = dt > 0 ? dx / dt : Infinity;
+  // (sul cono: confronto fatto sulle velocità, non su s², che è una differenza di numeri grandi)
+  const tipo = Math.abs(dx - C * dt) <= 1e-12 * Math.max(dx, C * dt) ? 'luce' : s2 > 0 ? 'tempo' : 'spazio';
+  return { tau: tipo === 'luce' ? 0 : tipo === 'tempo' ? dt * Math.sqrt(1 - (v / C) ** 2) : NaN, tipo, riferimento: tipo === 'tempo', velocita: v };
+}
+
+// LA BOLLA CHE CADE in un buco nero (Schwarzschild). Dentro l'orizzonte r non è più un luogo dove si può restare: è
+// una coordinata di TEMPO, e r = 0 è un istante nel futuro di chiunque sia entrato, non un posto. Il tempo proprio
+// che resta, da r < r_s, è AL PIÙ r_s·[asin√x − √(x(1 − x))]/c, x = r/r_s (la geodetica di energia nulla): dall'orizzonte
+// π·GM/c³, e ogni spinta dei motori lo accorcia [R: Misner, Thorne & Wheeler 1973, §31]. Chi cade da fermo da lontano
+// ne ha (4/3)·GM/c³. Che cosa vede (coordinate di Painlevé–Gullstrand [R], valide attraverso l'orizzonte): per chi
+// cade da fermo dall'infinito, v = c√(r_s/r) misurata da chi sta fermo; un fotone con parametro d'urto b ha per lui
+// energia ε = 1 + β·p_r e momento radiale p_r = [β ∓ √(1 − A·b²/r²)]/A (A = 1 − r_s/r, β = √(r_s/r)) [D]: il bordo
+// dell'ombra (b = √27 r_g) sta a cos ψ = p_r/ε dalla direzione del centro — 42° all'orizzonte, non tutto il cielo; 90°
+// alla fine — e la luce che arriva da sopra è spostata di 1/(1 + β): al rosso, di un fattore 2 all'orizzonte.
+// M (kg); corpo: { lungo (m), massa (kg), raggio (m) } facoltativo (dove la marea lo spezza).
+// → { orizzonte, tempoMassimo (s, dall'orizzonte), tempoDaLontano (s, dall'orizzonte, cadendo da fermo dall'infinito),
+//     tempoRimasto(r) (il massimo, per r ≤ r_s), marea(r) (m/s² tra i capi del corpo), siSpezza: { r, dentro (true:
+//     sotto l'orizzonte) } | null, vede(r) → { ombra (rad: raggio del disco nero), sopra (ν/ν_lontano della luce che
+//     arriva dallo zenit), velocita (in c, misurata da chi sta fermo; > 1 dentro: lì nessuno sta fermo) },
+//     singolarita: { aperta: true, perche } — a r = 0 le funzioni si fermano e lo dicono }
+export function cadutaNelBuco(M, corpo = null) {
+  const rs = raggioSchwarzschild(M), rg = rs / 2, aperta = { aperta: true, perche: 'a r = 0 la curvatura diverge e la relatività generale non dice più niente: serve una teoria che non c\'è (STATO: aperta)' };
+  const tempoRimasto = (r) => { if (!(r > 0)) return 0; const x = Math.min(1, r / rs); return (rs / C) * (Math.asin(Math.sqrt(x)) - Math.sqrt(x * (1 - x))); };
+  const vede = (r) => { if (!(r > 0)) return aperta; const A = 1 - rs / r, b = Math.sqrt(rs / r), rad = Math.sqrt(Math.max(0, 1 - (A * 27 * rg * rg) / (r * r)));
+    // (all'orizzonte A = 0: il limite, senza dividere per zero)
+    const pr = Math.abs(A) < 1e-9 ? -1 / (1 + b) + (27 * rg * rg) / (2 * r * r) : (b + (r >= 3 * rg ? rad : -rad)) / A, eps = 1 + b * pr;
+    return { ombra: Math.acos(Math.max(-1, Math.min(1, pr / eps))), sopra: 1 / (1 + b), velocita: b }; };
+  const d = corpo ? corpo.lungo ?? 2 * corpo.raggio : 0, rt = corpo && corpo.massa && corpo.raggio ? raggioDiMarea(M, corpo.massa, corpo.raggio) : null;
+  return { orizzonte: rs, tempoMassimo: (PI * G * M) / C ** 3, tempoDaLontano: (4 * G * M) / (3 * C ** 3), tempoRimasto, marea: (r) => (r > 0 ? marea(M, r, d) : Infinity), siSpezza: rt != null ? { r: rt, dentro: rt < rs } : null, vede, singolarita: aperta };
+}
+
+// CIÒ CHE RESTA RICOSTRUIBILE DA FUORI. Un buco nero fermo è descritto per intero da tre numeri: massa, momento
+// angolare, carica (teorema «dell'assenza di capelli»: Israel 1967; Carter 1971; Robinson 1975 [R]): tutto il resto di
+// ciò che è caduto non lascia traccia fuori. La sua entropia, S = k_B·A·c³/(4Għ) (Bekenstein 1973; Hawking 1975), conta
+// quanti stati hanno lo stesso aspetto: e^(S/k_B). È il caso estremo delle regole 5 e 11 dell'intreccio: dove il
+// segnale è cancellato, TUTTI i passati compatibili pesano uguale, e sono e^(S/k_B).
+// bucoNero: ciò che dà `bucoNero(...)`, o { massaKg, spin }. → { parametri, lnPassati (= S/k_B), log10Passati, entropia (J/K), area }
+export function passatiCompatibili(buco) {
+  const h = (buco.hawking && buco.hawking.area ? buco.hawking : hawking(buco.massaKg, buco.spin || 0)), ln = h.entropia / K.kB;
+  return { parametri: ['massa', 'momento angolare', 'carica'], lnPassati: ln, log10Passati: ln / Math.LN10, entropia: h.entropia, area: h.area };
+}
+
+// L'ORIZZONTE DELLE PARTICELLE al tempo cosmico t (s da oggi): quanto era grande la regione in contatto causale.
+// `tabella`: quella di ragnatela.js (`dentro.TAB`: tempo conforme in Mpc con la radiazione) se chi chiama la ha — è la
+// fonte migliore e non la si duplica qui; senza, la cosmologia di qui (materia + Λ: 2% in più oggi, molto di più
+// all'inizio, dove comanda la radiazione). → { a, comovente (m di oggi), proprio (m di allora), fonte }
+export function orizzonteParticelle(t = 0, tabella = null) {
+  const a = cosmo.scala(T_OGGI + t), chi = tabella ? tabella.eta(a) * 3.0857e22 : cosmo.orizzonte(a);
+  return { a, comovente: chi, proprio: a * chi, fonte: tabella ? 'ragnatela.js (con la radiazione)' : 'relativita.js (materia + Λ)' };
+}
+
+// =====================================================================================================
 // LO STATO SPERIMENTALE di ogni legge usata qui: 'misurata' (con la misura), 'derivata e mai osservata', 'aperta'.
 // (Le misure marcate [V] sono state lette sulla fonte durante la stesura; [R] ricordate.)
 // =====================================================================================================
@@ -582,5 +781,9 @@ export const STATO = Object.freeze([
   { legge: 'radiazione di Hawking, evaporazione, entropia dell\'orizzonte', funzioni: 'hawking, massaCheEvapora', stato: 'derivata e mai osservata', misura: 'nessuna: 6·10⁻⁸ K per una massa solare, contro i 2,7 K del fondo; solo analoghi di laboratorio (onde sonore nei condensati)', fonte: 'Bekenstein 1973; Hawking 1974' },
   { legge: 'l\'interno dell\'orizzonte e la singolarità', funzioni: 'tempoDiCaduta (sotto r_s)', stato: 'aperta', misura: 'nessuna misura possibile da fuori; la relatività generale predice la propria fine (teoremi di Penrose 1965): lì serve una teoria che non c\'è', fonte: 'Oppenheimer & Snyder 1939; Penrose 1965' },
   { legge: 'che cosa succede all\'informazione di ciò che cade (e la fine dell\'evaporazione)', funzioni: '—', stato: 'aperta', misura: 'nessuna', fonte: 'Hawking 1976' },
+  { legge: 'immagini multiple, ingrandimento e ritardi tra le immagini (principio di Fermat)', funzioni: 'lente, massaDaModello, microlente', stato: 'misurata', misura: 'croci e anelli di Einstein attorno alle galassie; ritardi di giorni–mesi tra le immagini dei quasar (da Q0957+561 in poi) usati per misurare H₀; la supernova Refsdal riapparsa dietro l\'ammasso MACS J1149 circa un anno dopo, come previsto (Kelly et al. 2016 [R]); la stella Earendel ingrandita migliaia di volte vicino a una caustica (Welch et al. 2022 [R]); migliaia di microlenti verso il centro galattico (curva di Paczyński)', fonte: 'Einstein 1936; Refsdal 1964; Paczyński 1986; Blandford & Narayan 1986' },
+  { legge: 'il tempo proprio lungo la luce è zero (intervallo nullo); non esiste un riferimento del fotone', funzioni: 'tempoProprio, intervallo', stato: 'misurata', misura: 'è la stessa legge della dilatazione dei tempi, misurata fin dove si arriva (muoni e protoni a γ ~ 10³–10¹¹); il «punto di vista del fotone» non è una misura mancante: non esiste nella teoria (γ = ∞)', fonte: 'Einstein 1905; Minkowski 1908' },
+  { legge: 'la caduta oltre l\'orizzonte: tempo proprio finito, marea, ciò che si vede', funzioni: 'cadutaNelBuco, tempoDiCaduta', stato: 'derivata e mai osservata', misura: 'fuori dall\'orizzonte la stessa relatività generale è misurata (vedi sopra); dentro nessun segnale può uscire a dirlo: è la teoria portata dove non si può controllare', fonte: 'Oppenheimer & Snyder 1939; Painlevé 1921; Misner, Thorne & Wheeler 1973' },
+  { legge: 'assenza di capelli ed entropia di Bekenstein–Hawking (il numero di passati compatibili)', funzioni: 'passatiCompatibili, hawking', stato: 'derivata e mai osservata', misura: 'l\'entropia non è mai stata misurata; l\'assenza di capelli è compatibile con le onde della fusione (le frequenze del buco finale di GW150914 [R]) ma non provata; se l\'informazione riesca con la radiazione di Hawking è APERTO', fonte: 'Israel 1967; Bekenstein 1973; Hawking 1975' },
   { legge: 'la massa del buco nero centrale dalla galassia', funzioni: 'bucoCentrale (galassie.js)', stato: 'misurata', misura: 'relazione EMPIRICA M_bn–sferoide, scarto 0,28 dex (Kormendy & Ho 2013 [R]): è una correlazione osservata, non una legge; l\'origine dei germi è aperta', fonte: 'Kormendy & Ho 2013' },
 ]);

@@ -74,6 +74,15 @@ export const caloreDellaRoccia = (etaAnni = 4.5e9) => ISOTOPI.reduce((s, [h, mez
 
 // ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.
 export const UA = 1.496e11, R_GAS = 8.314;
+// IL LIVELLO DI RIFERIMENTO DI UN GIGANTE DI GAS (Pa). Un gigante non ha un suolo: la sua «pressione al suolo» è
+// infinita (clima.pressione = ∞ vuol dire «nessun suolo»), e tutto ciò che di un'aria si calcola a una pressione (la
+// miscela dei gas, la chimica, i raggi cosmici, il vento) si calcola a questo livello, 1 bar. UNA CONVENZIONE SOLA: il
+// clima di un gigante la porta in clima.livello, l'aria che ne esce ha atmosfera.pressione = clima.livello, e chi
+// vuole «la pressione di un gigante» legge quella
+export const LIVELLO_GIGANTI = 1e5;
+// LA GRAVITÀ ALLA SUPERFICIE (m/s²): G·M/R². Una funzione sola: chi ne ha bisogno la chiama (o legge clima.g, che viene
+// da qui), invece di riscrivere la formula
+export const gravitaDiSuperficie = (massaKg, raggioM) => (COSTANTI.G * massaKg) / (raggioM * raggioM);
 // la temperatura di equilibrio: la luce che arriva, meno quella riflessa, uguale a quella irradiata
 export const temperaturaEquilibrio = (Lw, aM, albedo) => Math.pow((Lw * (1 - albedo)) / (16 * Math.PI * COSTANTI.sigma * aM * aM), 0.25);
 // un gas resta se la gravità trattiene le sue molecole più veloci (parametro di Jeans: per restare
@@ -515,10 +524,10 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
 //   suolo, dalla stessa legge), scambio, trasporto (il flusso verso i poli), Tavvio (da dove parte), mare e ghiaccio
 //   attesi, nuvole, bilancio, fasce
 export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, giorno = null, obliquita = 0, bloccato = false, placche = false, aria = null }) {
-  const g = (COSTANTI.G * massaKg) / (raggioM * raggioM), mu = COSTANTI.mp;
+  const g = gravitaDiSuperficie(massaKg, raggioM), mu = COSTANTI.mp;
   if (tipo === 'gassoso') {
     const albedo = 0.35, Teq = temperaturaEquilibrio(Lw, aM, albedo), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
-    return { Teq, T: Teq * 1.2, g, pressione: Infinity, tenuti, acqua: 'nelle nuvole', albedo };
+    return { Teq, T: Teq * 1.2, g, pressione: Infinity, livello: LIVELLO_GIGANTI, tenuti, acqua: 'nelle nuvole', albedo };
   }
   // che cosa la gravità trattiene: decide la temperatura dell'aria alta, che non sa del ghiaccio in basso (albedo 0,3)
   const Tnuda = temperaturaEquilibrio(Lw, aM, 0.3), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Tnuda, m * mu)).map(([n]) => n);

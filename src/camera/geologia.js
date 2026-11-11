@@ -10,7 +10,7 @@
 // scende lungo la pendenza più ripida e si raccoglie: i fiumi e le loro valli.
 
 import { celle } from './fluidi.js';
-import { minerali, coloreRoccia } from './chimica.js';
+import { minerali, coloreRoccia, ROCCE } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
@@ -75,7 +75,8 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     else if (int.vulcani > 0) eta = 1e9 / 0.9;
     // l'erosione (m/anno). LEGGE EMPIRICA: dove piove, i continenti terrestri si consumano di circa 30 m ogni milione di
     // anni; con la sola aria (il vento) mille volte meno; senz'aria niente
-    const erode = aria > 0.01 && (int.acquaKg || 0) > 0 ? 3e-5 : aria > 0.01 ? 3e-8 : 0;
+    // (la denudazione attesa di chimica.js, ROCCE.denudazione: una fonte sola; quella vera la calcola erosione(), che però viene dopo i crateri)
+    const erode = aria > 0.01 && (int.acquaKg || 0) > 0 ? ROCCE.denudazione : aria > 0.01 ? ROCCE.denudazione / 1000 : 0;
     const visibili = crateriVisibili(storiaUrti, { W, H, rinnovo: eta, erosione: erode, minimoM: (2 * Math.PI * P.raggioM) / W });
     for (const cr of visibili) { // (la stessa forma di prima: scodella, bordo rialzato, picco al centro nei crateri complessi)
       const raggio = cr.raggioCelle, ci = cr.i, cj = cr.j, prof = cr.profonditaM, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI)), largo = Math.min(W >> 1, Math.ceil(R2 * allarga));
@@ -408,7 +409,8 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 // versoValle (per ogni cella, la cella in cui versa; −1 il mare), copertura, sciolto e lava (m: ciò che resta; sciolto è
 // la parte della copertura posata durante questa erosione), litologia (per
 // cella: 0 basamento, 1 vulcanica, 2 sedimentaria), e i numeri veri: durataErosione (anni), denudazione (m/anno di roccia
-// tolta, in media sulle terre di partenza), fangoAlMare (kg/anno), terreCoperte e terreVulcaniche (frazioni delle terre
+// tolta, in media sulle terre di partenza), denudazioneFresca (m/anno: la parte che è basamento o lava, roccia al suo
+// primo giro; il resto è sedimento già passato una volta dal suolo: è la roccia fresca che cede i suoi sali, mare.js), fangoAlMare (kg/anno), terreCoperte e terreVulcaniche (frazioni delle terre
 // di oggi), sollevamentoMedio (m/anno, ciò che le placche hanno dato davvero alle terre), bilancio (m³) e
 // bilancioCopertura (m³: prima + posata − erosa = dopo).
 // kQs = 0,041 (Wickert e Schildgen 2019, eq. 19, riletta 2026-11) è costruita sul trasporto di Wong e Parker,
@@ -457,10 +459,13 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   const soll = crescita && sf.sollevamento ? sf.sollevamento : null, tetto = sf.tetto || null, V0 = E.suolo * dt;
   const kSed = E.K.sedimento, kMez = E.K.vulcanica, kGra = E.K.granito, cS = E.consumo.sedimento, cV = E.consumo.vulcanica, cG = E.consumo.granito;
   const resiste = (x) => (x > 1e-6 ? (1 - Math.exp(-x)) / x : 1); // quanta della ghiaia nata lungo un tratto ne esce ancora ghiaia (x = consumo × lunghezza)
-  let erosoTot = 0, depTerra = 0, depMare = 0, alMare = 0, daiVersanti = 0, areaTerre = 0, copPrima = 0, copErosa = 0, copPosata = 0, sollevato = 0;
-  for (let k = 0; k < N; k++) { const a = aDi(k); if (!(alt[k] < mare)) areaTerre += a; copPrima += (cop[k] + sci[k]) * a; }
+  let erosoTot = 0, depTerra = 0, depMare = 0, alMare = 0, daiVersanti = 0, areaTerre = 0, copPrima = 0, copErosa = 0, copPosata = 0, sollevato = 0, fresca = 0;
+  // (UNA STORIA SOLA, PROVATA E NON TENUTA: rimettere com'era ciò che le due leggi della tettonica hanno tolto e posato negli
+  // ultimi T anni, prima di erodere qui. Nelle catene quelle leggi tolgono fino a un millimetro l'anno, e questa erosione
+  // sul granito molto meno: i monti rimessi restano, 17 km. Il doppio conto resta dichiarato, vedi CHE COSA NON TORNA.)
   // L'ACQUA DEL MARE SI CONSERVA (solo sul pianeta intero): il suo volume è quello di partenza; se il fondo si alza il livello sale
   const acqua = () => { let v = 0, a = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { const ak = aDi(k); v += (mare - alt[k]) * ak; a += ak; } return [v, a]; }, volumeMare = crescita && Number.isFinite(mare) ? acqua()[0] : 0;
+  for (let k = 0; k < N; k++) { const a = aDi(k); if (!(alt[k] < mare)) areaTerre += a; copPrima += (cop[k] + sci[k]) * a; }
   for (let it = 0; it < passi; it++) {
     // inondazione: dal mare (o dal punto più basso, se non c'è mare) verso l'interno; chi resta sotto il
     // livello di chi lo precede sta in una conca: lì c'è un lago
@@ -508,14 +513,14 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
           const uB = Math.min(bB, troppo / pB); troppo -= uB * pB; bB -= uB;
           const uL = troppo > 0 ? Math.min(bL, troppo / pL) : 0; troppo -= uL * pL; bL -= uL;
           const uC = troppo > 0 ? Math.min(bC, troppo / pC) : 0; troppo -= uC * pC; bC -= uC;
-          const u = uB + uL + uC; if (u > 0) { alt[k] += u / ak; if (diLava[k]) lava[k] += uL / ak; else cop[k] += uL / ak; sci[k] += uC / ak; eMez[k] -= uL; eSci[k] -= uC; carico -= u; scavato -= u; }
+          const u = uB + uL + uC; if (u > 0) { alt[k] += u / ak; if (diLava[k]) lava[k] += uL / ak; else cop[k] += uL / ak; sci[k] += uC / ak; eBase[k] -= uB; eMez[k] -= uL; eSci[k] -= uC; carico -= u; scavato -= u; }
           // la ghiaia arrivata da monte in più di quanta il fiume ne porta si posa qui (una conoide), senza superare chi sta a monte
           const arrivata = gS + gV + gG; if (troppo > 1e-9 * arrivata && arrivata > 0) { const posa = Math.min(troppo, arrivata, Math.max(0, 0.5 * (sottoMonte[k] - alt[k])) * ak);
             if (posa > 0) { const f = 1 - posa / arrivata; gS *= f; gV *= f; gG *= f; alt[k] += posa / ak; sci[k] += posa / ak; depositato[k] += posa / ak; carico -= posa; depTerra += posa; copPosata += posa; } }
         }
         gS += pC * bC; gV += pL * bL; if (base[k]) gV += pB * bB; else gG += pB * bB;
       }
-      erosoTot += scavato; copErosa += eSci[k] + (diLava[k] ? 0 : eMez[k]); eSci[k] = 0; eMez[k] = 0; eBase[k] = 0;
+      erosoTot += scavato; copErosa += eSci[k] + (diLava[k] ? 0 : eMez[k]); fresca += eBase[k] + (diLava[k] ? eMez[k] : 0); eSci[k] = 0; eMez[k] = 0; eBase[k] = 0;
       if (alt[k] < sottoMonte[r]) sottoMonte[r] = alt[k];
       // (una conca è tale se era sotto il pelo dell'acqua PRIMA che il fiume scavasse in questo passo: il letto appena inciso non è una conca.
       // Prima si guardava la quota già scavata: ogni cella incisa passava per conca e si riprendeva metà dello scavo)
@@ -564,7 +569,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   // di che roccia è fatta oggi la superficie, e quanta delle terre ha ancora la sua copertura
   const litologia = new Uint8Array(N); let copDopo = 0, aTerre = 0, aCoperte = 0, aVulcaniche = 0;
   for (let k = 0; k < N; k++) { const a = aDi(k); cop[k] += sci[k]; const l = cop[k] > E.velo ? 2 : lava[k] > E.velo || base[k] ? 1 : 0; litologia[k] = l; copDopo += cop[k] * a; if (!(alt[k] < mare)) { aTerre += a; if (l === 2) aCoperte += a; else if (l === 1) aVulcaniche += a; } }
-  const out = { ...sf, mare, alt, flusso, lago, depositato, copertura: cop, sciolto: sci, lava, litologia, celleLago: laghi, passiErosione: passi, versoValle: Int32Array.from(ricevente), durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
+  const out = { ...sf, mare, alt, flusso, lago, depositato, copertura: cop, sciolto: sci, lava, litologia, celleLago: laghi, passiErosione: passi, versoValle: Int32Array.from(ricevente), durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, denudazioneFresca: areaTerre > 0 ? fresca / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
     terreCoperte: aTerre > 0 ? aCoperte / aTerre : 0, terreVulcaniche: aTerre > 0 ? aVulcaniche / aTerre : 0, sollevamentoMedio: areaTerre > 0 ? sollevato / areaTerre / T : 0,
     bilancio: { eroso: erosoTot, depositato: depTerra + depMare, alMare, daiVersanti }, bilancioCopertura: { prima: copPrima, erosa: copErosa, posata: copPosata, dopo: copDopo } };
   memoErosione.set(chiave, out); if (memoErosione.size > 6) memoErosione.delete(memoErosione.keys().next().value);

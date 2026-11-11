@@ -73,10 +73,11 @@ prova('la Terra, senza tarature: un mare di sodio e cloro, quasi neutro, in meno
   assert.ok(T.esiste); tra(tempoMare, 0, 1500, 'tempo di mare() (ms)');
   const i = T.ioni, cariche = Object.entries(i).filter(([f]) => f !== 'H4SiO4').sort((a, b) => b[1] - a[1]).map(([f]) => f);
   assert.deepEqual(cariche.slice(0, 2).sort(), ['Cl-', 'Na+'], `dominano ${cariche.slice(0, 2)}`);
-  tra(T.pH, 7, 9, 'pH'); tra(i['Na+'] / i['Cl-'], 0.6, 1.3, 'sodio rispetto al cloro (misurato 0,86): lo tiene lì lo scambio col plagioclasio del fondo'); tra(T.salinitaMedia, 5, 150, 'salinità (g/kg)');
+  tra(T.pH, 7, 9, 'pH'); tra(T.salinitaMedia, 5, 150, 'salinità (g/kg)');
   tra(T.frazioneMare, 0.5, 0.9, 'parte del pianeta coperta dal mare'); tra(T.massaMare, 1.2e21, 1.6e21, 'massa del mare (kg)');
   // il confronto con il mare vero
   confronta('salinità (g/kg; misurata 35)', T.salinitaMedia, 25, 45); confronta('pH (misurato 8,2 prima dell\'industria)', T.pH, 7.5, 8.5);
+  confronta('sodio rispetto al cloro (misurato 0,86: lo tiene lì lo scambio col plagioclasio del fondo)', i['Na+'] / i['Cl-'], 0.6, 1.3); // (era un'asserzione dura: è un confronto con la Terra vera, e va con gli altri)
   confronta('sodio (mol/kg; misurato 0,47)', i['Na+'], 0.3, 0.7); confronta('cloruro (0,55)', i['Cl-'], 0.35, 0.8); confronta('potassio (0,010)', i['K+'], 0.003, 0.03); confronta('solfato (0,028)', i['SO4(2-)'], 0.005, 0.1);
   confronta('magnesio + calcio (0,063)', i['Mg2+'] + i['Ca2+'], 0.03, 0.13); confronta('magnesio (0,053)', i['Mg2+'], 0.02, 0.1); confronta('calcio (0,010)', i['Ca2+'], 0.004, 0.03); confronta('bicarbonato (0,0018)', i['HCO3-'], 3e-4, 6e-3);
   tra(T.gas.O2, 1e-4, 4e-4, 'ossigeno sciolto (mol/kg; misurato 2-3·10⁻⁴)'); tra(T.gas.N2, 2e-4, 7e-4, 'azoto sciolto (5·10⁻⁴)'); tra(T.gas.CO2, 3e-6, 2e-5, 'CO2 sciolta (10⁻⁵)');
@@ -214,7 +215,7 @@ prova('alla foce: acqua meno salata e torbida, l\'argilla coagula col sale; il f
   for (let i = 1; i < d.length; i++) { attesa(tot(d[i]) < tot(d[i - 1]), `(11/12) la torbidità cala: ${d.map(tot).map(n3)}`); assert.ok(d[i].salinita >= d[i - 1].salinita - 0.2, `la salinità risale verso il largo: ${d.map((x) => n3(x.salinita))}`); }
   assert.ok(d[0].salinita < 0.7 * T.salinitaMedia && d[0].foce.parteDiFiume > 0.3, 'accanto alla foce l\'acqua è in buona parte dolce');
   assert.ok(d[0].sospeso.sabbia / tot(d[0]) > 10 * (d[2].sospeso.sabbia / tot(d[2]) + 1e-12), 'la sabbia cade subito'); assert.ok(d[4].sospeso.argilla > 20 * (d[4].sospeso.limo + d[4].sospeso.sabbia), 'lontano resta solo l\'argilla');
-  assert.ok(d[2].foce.coagula > 0.8 && d[2].sospeso.fiocchi >= 0, 'nell\'acqua salata l\'argilla coagula'); { const limpido = tot(luogo(T, aperto.lon, aperto.lat, { profondita: 1 })); assert.ok(tot(d[0]) > 100 * limpido, 'il mare aperto è limpido'); attesa(tot(d[0]) > 1000 * limpido, `alla foce più grande il fango è oltre mille volte quello del mare aperto: ${n3(tot(d[0]) / limpido)} volte`); } // (mille volte era un'asserzione dura: dipende da quale fiume è il più grande su questa Terra; resta scritto se non torna)
+  assert.ok(d[2].foce.coagula > 0.8 && d[2].sospeso.fiocchi >= 0, 'nell\'acqua salata l\'argilla coagula'); { const limpido = tot(luogo(T, aperto.lon, aperto.lat, { profondita: 1 })); attesa(tot(d[0]) > 1000 * limpido, `alla foce più grande il fango è oltre mille volte quello del mare aperto: ${n3(tot(d[0]) / limpido)} volte`); } // (mille volte: dipende da quale fiume è il più grande su questa Terra; se non torna resta scritto)
   const c = campioneAcqua(T, { ...verso(0.03), profondita: 1, latoM: 0.01, acqua: true }); assert.ok(c.particelle.length > 20 && c.quanteDavvero.fiocco + (c.quanteDavvero.limo || 0) > 20, 'nel cubetto ci sono granelli e fiocchi'); assert.match(c.descrizione, /foce/);
   const al = campioneAcqua(T, { ...aperto, profondita: 5, latoM: 0.01 }); assert.ok(al.particelle.filter((p) => p.tipo === 'granello' || p.tipo === 'fiocco').length < 5 && al.torbidita < 1e-4); assert.match(al.descrizione, /limpida|Mare aperto/);
   console.log(`      a ${d.map((x) => Math.round(x.foce.distanzaM / 1000)).join(', ')} km dalla foce: fango ${d.map((x) => n3(tot(x) * 1000)).join(', ')} g/m³; sale ${d.map((x) => n3(x.salinita)).join(', ')} g/kg`);
@@ -241,8 +242,12 @@ prova('lo stesso punto alla stessa scala dà lo stesso campione; scale diverse e
 prova('le reazioni sul posto: il fumo nero di un camino, la salamoia nel ghiaccio, i cristalli in una salamoia', () => {
   // un camino: il più profondo; più profondo è il fondo, più calda può uscire l'acqua
   const cam = T.sorgentiCalde; assert.ok(cam.length >= 5, `sorgenti calde: ${cam.length}`);
-  for (const s of cam) { tra(s.T, 365, 648, 'temperatura all\'uscita (K: da 100 °C a pelo d\'acqua ai 300-400 °C misurati sulle dorsali profonde)'); assert.equal(s.fluido['Mg2+'], 0); tra((2 * s.fluido['Ca2+'] + s.fluido['Na+'] + s.fluido['K+'] + 2 * s.fluido['Fe2+'] + Math.pow(10, -s.pH)) / s.fluido['Cl-'], 0.97, 1.03, 'le cariche del fluido si chiudono');
-    assert.ok(s.fluido['SO4(2-)'] === 0 && (s.T < 520 || s.fluido.H4SiO4 > 2 * T.totali.Si) && F.tipo[cella(s.lon, s.lat)] === 1); }
+  for (const s of cam) { tra(s.T, 365, 648, 'temperatura all\'uscita (K: da 100 °C a pelo d\'acqua ai 300-400 °C misurati sulle dorsali profonde)'); assert.equal(s.fluido['Mg2+'], 0);
+    // (le cariche: i cationi contro il cloruro E il solfato. L'anidrite toglie calcio e solfato alla pari finché uno dei due finisce: se il mare
+    // ha meno solfato che calcio e magnesio — la Terra vera — il fluido esce senza solfato; se ne ha di più, esce senza calcio e col solfato rimasto)
+    tra((2 * s.fluido['Ca2+'] + s.fluido['Na+'] + s.fluido['K+'] + 2 * s.fluido['Fe2+'] + Math.pow(10, -s.pH)) / (s.fluido['Cl-'] + 2 * s.fluido['SO4(2-)']), 0.97, 1.03, 'le cariche del fluido si chiudono');
+    assert.ok(s.fluido['SO4(2-)'] >= 0 && s.fluido['Ca2+'] >= 0 && Math.min(s.fluido['SO4(2-)'], s.fluido['Ca2+']) < 1e-12, `l'anidrite lascia calcio o solfato, non tutti e due: ${s.fluido['Ca2+']}, ${s.fluido['SO4(2-)']}`);
+    assert.ok((s.T < 520 || s.fluido.H4SiO4 > 2 * T.totali.Si) && F.tipo[cella(s.lon, s.lat)] === 1); }
   const ord = [...cam].sort((a, b) => a.profonditaM - b.profonditaM); assert.ok(ord[ord.length - 1].T >= ord[0].T, 'più profondo, più caldo');
   const s = ord[ord.length - 1]; let fumo = null, lontano = null;
   for (let q = 0; q < 60 && !(fumo && lontano); q++) { const c = campioneAcqua(T, { lon: s.lon + q * 0.004, lat: s.lat, profondita: 1e5, latoM: 2e-6 }); if (!c.luogo.camino) continue; if (c.luogo.camino.distanzaM < 5 && !fumo) fumo = c; if (c.luogo.camino.distanzaM > 80 && !lontano) lontano = c; }
@@ -386,15 +391,22 @@ prova('un\'aria densa di anidride carbonica dà un mare acido; il pH scende con 
 prova('altri pianeti sullo stesso rilievo: giovane, senza vulcani, con poca acqua, sotto un\'aria densa: mari diversi, ciascuno per la sua causa', () => {
   // giovane: il cloro c'è già (è uscito alla nascita), il sodio delle rocce non ancora: un mare di cloruro di calcio
   const giovane = mare({ ...P, interno: { ...it, eta: 3e7 } }, sf, cl, se, 'prova/giovane');
-  assert.ok(giovane.ioni['Na+'] < 0.8 * T.ioni['Na+'] && giovane.ioni['Ca2+'] > 2 * T.ioni['Ca2+'], `a trenta milioni di anni: Na ${giovane.ioni['Na+']}, Ca ${giovane.ioni['Ca2+']}`); tra(giovane.ioni['Cl-'] / T.ioni['Cl-'], 0.8, 1.5, 'il cloro è quello della nascita');
+  // (il sodio «non ancora arrivato» si misura contro il cloro che c'è dalla nascita: nel mare vecchio i sedimenti seppelliscono acqua di mare,
+  // sodio e cloro insieme, e il sodio da solo cala anche lì)
+  assert.ok(giovane.ioni['Na+'] < T.ioni['Na+'] && giovane.ioni['Na+'] / giovane.ioni['Cl-'] < 0.8 * (T.ioni['Na+'] / T.ioni['Cl-']) && giovane.ioni['Ca2+'] > 2 * T.ioni['Ca2+'], `a trenta milioni di anni: Na ${giovane.ioni['Na+']}, Cl ${giovane.ioni['Cl-']}, Ca ${giovane.ioni['Ca2+']}`); tra((giovane.totali.Cl * giovane.massaMare) / giovane.flussi.cloroAllaNascita, 0.8, 1.5, 'il cloro del mare giovane è quello uscito alla nascita'); // (prima: contro il cloro del mare di oggi; ma il mare vecchio ne ha sepolto una parte coi sedimenti: il confronto giusto è con ciò che è uscito alla nascita)
   // interno fermo: niente roccia calda sul fondo che trattenga sodio e magnesio, niente acido dei vulcani: le rocce si sciolgono molto meno
   const fermo = mare({ ...P, interno: { ...it, q: 0.004, tettonica: 'ferma', vulcani: 0 } }, sf, cl, se, 'prova/fermo');
   assert.ok(fermo.sorgentiCalde.length === 0 && fermo.flussi.caldo === 0 && fermo.flussi.freno < 0.2 && T.flussi.freno > 0.3, `freno ${fermo.flussi.freno} contro ${T.flussi.freno}`); assert.ok(!isFinite(fermo.flussi.riciclo), 'senza placche i sedimenti non tornano');
-  assert.ok(fermo.ioni['Mg2+'] > 3 * T.ioni['Mg2+'], 'senza la roccia calda il magnesio resta nel mare');
+  // (il magnesio contro il sodio, che i fiumi portano insieme e i sedimenti seppelliscono insieme: ciò che li separa è solo la roccia calda del
+  // fondo, che toglie il magnesio. Da solo il magnesio non dice niente: senza placche i sedimenti non tornano, e il mare si addolcisce tutto)
+  assert.ok(fermo.bilancio.esce.Mg.fondo === 0 && T.bilancio.esce.Mg.fondo > 0 && fermo.ioni['Mg2+'] / fermo.ioni['Na+'] > 3 * (T.ioni['Mg2+'] / T.ioni['Na+']), 'senza la roccia calda il magnesio resta nel mare');
   confronta('anidride carbonica dei vulcani terrestri (mol/anno; misurata 6-10·10¹²)', T.flussi.CO2vulcani, 4e12, 1.5e13);
   // poca acqua: lo stesso cloro in meno acqua
   const poca = mare({ ...P, interno: { ...it, acquaKg: 5e19 } }, { ...sf, mare: sf.mare - 4200 }, cl, { ...se, mare: se.mare - 4200 }, 'prova/poca');
-  assert.ok(poca.esiste && poca.massaMare < 0.1 * T.massaMare, `massa del mare ${poca.massaMare}`); assert.ok(poca.salinitaMedia > 2 * T.salinitaMedia || poca.fondoDiSale?.salgemma > 0 || poca.flussi.sedimenti.Cl > 2 * T.flussi.sedimenti.Cl, `salinità ${poca.salinitaMedia}, cloro nei sedimenti ${poca.flussi.sedimenti.Cl}`); // (il sale che un mare piccolo non tiene è sul fondo, o sepolto nei sedimenti e nei bacini che evaporano)
+  assert.ok(poca.esiste && poca.massaMare < 0.1 * T.massaMare, `massa del mare ${poca.massaMare}`); // (…o sepolto: del cloro uscito alla nascita, la parte ancora sciolta nel mare piccolo è meno di metà di quella che il mare grande tiene.
+  // Prima: «il doppio del cloro nei sedimenti»; ma il mare grande ne ha già sepolto metà, e il doppio di metà non c'è)
+  const sciolto = (x) => (x.totali.Cl * x.massaMare) / x.flussi.cloroAllaNascita;
+  assert.ok(poca.salinitaMedia > 2 * T.salinitaMedia || poca.fondoDiSale?.salgemma > 0 || sciolto(poca) < 0.5 * sciolto(T), `salinità ${poca.salinitaMedia}, cloro ancora sciolto ${sciolto(poca)} contro ${sciolto(T)}`); // (il sale che un mare piccolo non tiene è sul fondo, o sepolto nei sedimenti e nei bacini che evaporano)
   // un'aria di cento bar: il magma non riesce a sfiatare il suo zolfo
   const densa = mare({ ...P, clima: { ...P.clima, pressione: 1.5e7 } }, sf, cl, se, 'prova/densa'); assert.equal(densa.flussi.parteBassa, 0); assert.ok(densa.flussi.sfiato.S === 0 && T.flussi.sfiato.S > 0 && T.flussi.parteBassa > 0.1 && T.flussi.parteBassa < 0.6);
   console.log(`      giovane (30 Ma): ${n3(giovane.salinitaMedia)} g/kg, pH ${n3(giovane.pH)}, Na ${n3(giovane.ioni['Na+'])}, Ca ${n3(giovane.ioni['Ca2+'])}; interno fermo: ${n3(fermo.salinitaMedia)} g/kg, pH ${n3(fermo.pH)}, Mg ${n3(fermo.ioni['Mg2+'])}; poca acqua (${n3(poca.massaMare / T.massaMare * 100)}% del mare): ${n3(poca.salinitaMedia)} g/kg, cloro nei depositi ${n3(poca.flussi.sedimenti.Cl / (poca.flussi.sedimenti.Cl + poca.totali.Cl * poca.massaMare) * 100)}% (bacini che evaporano fino al sale: ${poca.bacini.filter((b) => b.saturo).length} di ${poca.bacini.length})${poca.fondoDiSale ? ', sul fondo ' + Object.keys(poca.fondoDiSale).join(' e ') : ''}; Terra: parte del pianeta dove il magma sfiata ${n3(T.flussi.parteBassa)}`);

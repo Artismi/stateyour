@@ -346,6 +346,114 @@ prova('il fattore Doppler-gravitazionale del disco: di faccia è √(1 − 3/r);
     vicino(R.raggioEinstein(MSOLE, { Dl: 4 * KPC, Ds: 8 * KPC }) * MAS, 1.0, 2e-2, 'una stella a metà strada verso il centro galattico: 1 mas (microlente)');
     const V = GA.curvaRotazione(VIA.Gx.forma, 10) * 1e3; console.log(`        la galassia 0 del modello (V = ${n(V / 1e3)} km/s a 10 kpc → σ = V/√2), messa a z = 0,3 davanti a una sorgente a z = 1: θ_E = ${n(R.raggioEinsteinIsoterma(V / Math.SQRT2, 0.3, 1) * SEC)}″`); }); }
 
+console.log('\n— 5. LE LENTI: più immagini, più tempi —');
+const MODELLO0 = VIA.Gx.forma.modello, Z_L = 0.5, Z_S = 2;
+prova('la deflessione dei profili ellittici (integrali di Keeton) obbedisce a ∇·α = 2κ e ∇×α = 0, sul profilo vero della galassia 0', () => {
+  const L = R.lente(R.massaDaModello(MODELLO0, { z: Z_L, inclinazione: 1.1, angolo: 0.3, schiacciata: 0.7 }), { z: Z_S, beta: [1e-7, 2e-7] }), tE = L.raggioEinstein, h = 1e-3 * tE;
+  for (const [x, y] of [[0.4, -0.7], [1.3, 0.2], [-0.15, 0.1], [2.2, 1.9]]) { const X = x * tE, Y = y * tE, a = L.deflessione(X + h, Y), b = L.deflessione(X - h, Y), c = L.deflessione(X, Y + h), d = L.deflessione(X, Y - h), div = (a[0] - b[0] + c[1] - d[1]) / (2 * h), rot = (a[1] - b[1] - c[0] + d[0]) / (2 * h);
+    vicino(div, 2 * L.kappa(X, Y), 2e-4, `∇·α = 2κ in (${x}, ${y}) θ_E`); assert.ok(Math.abs(rot) < 2e-4 * Math.abs(div), '∇×α = 0'); }
+  // il potenziale è quello di cui α è il gradiente
+  const X = 0.8 * tE, Y = 0.5 * tE; vicino((L.potenziale(X + h, Y) - L.potenziale(X - h, Y)) / (2 * h), L.deflessione(X, Y)[0], 1e-5, '∂ψ/∂x = α_x');
+});
+prova('una massa puntiforme: due immagini con gli ingrandimenti esatti, la loro somma è la curva di Paczyński, il ritardo quello noto; allineata: un anello', () => {
+  const Dl = 4 * KPC, Ds = 8 * KPC, tE = R.raggioEinstein(MSOLE, { Dl, Ds });
+  for (const u of [0.1, 0.5, 1.7]) { const L = R.lente({ distanza: Dl, massa: MSOLE }, { distanza: Ds, beta: [u * tE, 0] }); assert.equal(L.immagini.length, 2); vicino(L.raggioEinstein, tE, 1e-6, 'θ_E');
+    const q = Math.sqrt(u * u + 4), piu = L.immagini.find((m) => m.parita === 'minimo'), meno = L.immagini.find((m) => m.parita === 'sella'); vicino(piu.theta[0] / tE, (u + q) / 2, 1e-8, 'θ₊'); vicino(meno.theta[0] / tE, (u - q) / 2, 1e-8, 'θ₋');
+    vicino(piu.ingrandimento, 0.5 + (u * u + 2) / (2 * u * q), 1e-5, 'μ₊'); vicino(meno.ingrandimento, 0.5 - (u * u + 2) / (2 * u * q), 1e-5, 'μ₋'); vicino(L.ingrandimentoTotale, R.microlente({ M: MSOLE, Dl, Ds }).ingrandimento(u), 1e-5, 'A(u)');
+    assert.equal(piu.ritardo, 0); vicino(meno.ritardo, ((4 * G * MSOLE) / C ** 3) * (0.5 * u * q + Math.log((q + u) / (q - u))), 1e-6, 'il ritardo tra le due immagini (Refsdal 1964)'); }
+  const A = R.lente({ distanza: Dl, massa: MSOLE }, { distanza: Ds, beta: [0, 0] }); assert.equal(A.anello, true); vicino(A.raggioEinstein, tE, 1e-6, 'anello di Einstein'); assert.equal(A.ingrandimentoTotale, Infinity);
+  const m = R.microlente({ M: 0.3 * MSOLE, Dl: 6 * KPC, Ds: 8 * KPC, u0: 0.1, v: 2e5 }); vicino(m.curva(0), m.picco, 1e-12, 'il massimo'); vicino(m.picco, 10.04, 1e-3, 'A(0,1) = 10,04'); assert.ok(m.curva(3 * m.tempoEinstein) < 1.02);
+  console.log(`        microlente tipica verso il centro galattico (0,3 M☉ a 6 kpc, sorgente a 8 kpc, 200 km/s): θ_E = ${n(m.raggioEinstein * MAS)} mas, dura ${n(m.tempoEinstein / GIORNO)} giorni (osservate: per lo più 10–40 giorni [R])`);
+});
+confronta('raggio di Einstein di 10¹² M☉ a metà strada (z 0,5 → 2)', R.raggioEinstein(1e12 * MSOLE, { zl: Z_L, zs: Z_S }) * SEC, 0.5, 2.5, '~1″ [R] (tutta la massa dentro l\'anello)', '″');
+{ // LA CROCE: la galassia 0 del modello (profilo vero: alone + disco inclinato di 63° + sferoide schiacciato 0,7) a z = 0,5, sorgente a z = 2
+  const massa = R.massaDaModello(MODELLO0, { z: Z_L, inclinazione: 1.1, angolo: 0.3, schiacciata: 0.7 }), curve = R.lente(massa, { z: Z_S, beta: [1e-9, 0] }, { curve: true, griglia: 64 }), tE = curve.raggioEinstein;
+  // la caustica interna (l'astroide: viene dalla curva critica di fuori); la sorgente a un terzo del suo raggio minimo, a 30° dall'asse
+  const astro = curve.caustiche.filter((_, i) => Math.hypot(...curve.critiche[i]) > 0.6 * tE).map((q) => Math.hypot(q[0], q[1])), rMin = Math.min(...astro), rMax = Math.max(...astro), fi = 0.3 + PI / 6;
+  const Q = R.lente(massa, { z: Z_S, beta: [0.33 * rMin * Math.cos(fi), 0.33 * rMin * Math.sin(fi)] }, { bolla: { t: 0 }, griglia: 128 }), vive = Q.immagini.filter((m) => Math.abs(m.ingrandimento) > 0.05);
+  prova('dentro la caustica interna la sorgente dà una croce: quattro immagini (due minimi e due selle) più quella centrale spenta; fuori, due più una', () => {
+    assert.equal(Q.immagini.length, 5, 'cinque immagini'); assert.equal(vive.length, 4, 'quattro vive'); assert.equal(vive.filter((m) => m.parita === 'minimo').length, 2); assert.equal(vive.filter((m) => m.parita === 'sella').length, 2);
+    const centrale = Q.immagini.find((m) => m.parita === 'massimo'); assert.ok(centrale && Math.abs(centrale.ingrandimento) < 0.05 && Math.hypot(...centrale.theta) < 0.1 * tE, 'la quinta è al centro, spenta');
+    const F = R.lente(massa, { z: Z_S, beta: [3 * rMax * Math.cos(fi), 3 * rMax * Math.sin(fi)] }); assert.equal(F.immagini.length % 2, 1, 'numero dispari'); assert.equal(F.immagini.filter((m) => Math.abs(m.ingrandimento) > 0.05).length, 2);
+    // ogni immagine è un punto stazionario del tempo d'arrivo: θ − α(θ) = β
+    for (const m of Q.immagini) { const a = Q.deflessione(m.theta[0], m.theta[1]); assert.ok(Math.hypot(m.theta[0] - a[0] - 0.33 * rMin * Math.cos(fi), m.theta[1] - a[1] - 0.33 * rMin * Math.sin(fi)) < 1e-8 * tE); }
+    // IL CONO: la stessa sorgente, più epoche; tutte nel passato, e chi arriva più tardi mostra un istante precedente
+    const cono = R.conoPassato({ t: 0 }, { comovente: R.cosmo.comovente(1 / (1 + Z_S), 1) }); vicino(Q.immagini[0].tEmissione, cono.t, 1e-12, 'la prima immagine sta sul cono');
+    for (let i = 1; i < Q.immagini.length; i++) { assert.ok(Q.immagini[i].tEmissione < 0); assert.ok(Q.immagini[i].ritardo > Q.immagini[i - 1].ritardo); vicino(Q.immagini[0].tEmissione - Q.immagini[i].tEmissione, Q.immagini[i].ritardo / (1 + Z_S), 0.02, 'Δt/(1 + z_s) prima'); }
+  });
+  console.log(`        galassia 0 (alone ${n(MODELLO0.Mh)} M☉) a z = 0,5, sorgente a z = 2: θ_E = ${n(tE * SEC)}″; caustica interna larga ${n(2 * rMax * SEC)}″`);
+  for (const m of Q.immagini) console.log(`        immagine a (${n(m.theta[0] * SEC, 3)}″, ${n(m.theta[1] * SEC, 3)}″)  ingrandimento ${n(m.ingrandimento, 3).padStart(7)}  ${m.parita.padEnd(7)}  arriva ${n(m.ritardo / GIORNO, 3)} giorni dopo la prima: mostra la sorgente ${n(m.ritardo / (1 + Z_S) / GIORNO, 3)} giorni più giovane`);
+  confronta('croce di una galassia: il ritardo più lungo tra le quattro immagini vive', Math.max(...vive.map((m) => m.ritardo)) / GIORNO, 1, 100, 'da ~1 a ~100 giorni nelle croci osservate (HE 0435: 2–14; PG 1115: 10–25; RX J1131: fino a 91 [R])', 'giorni');
+  // VICINO A UNA CAUSTICA: le due immagini che stanno per fondersi, seguite mentre la sorgente si avvicina alla piega
+  prova('vicino a una caustica l\'ingrandimento cresce come 1/√distanza, fino alle migliaia (la stella Earendel)', () => {
+    // il punto della caustica interna più vicino al centro (il mezzo di una piega, lontano dalle cuspidi) e il punto della curva
+    // critica da cui viene, rifinito lungo la sua semiretta: det(∂β/∂θ) = 0
+    const fuoriC = curve.critiche.map((q, i) => i).filter((i) => Math.hypot(...curve.critiche[i]) > 0.6 * tE), iMin = fuoriC.reduce((m, i) => (Math.hypot(...curve.caustiche[i]) < Math.hypot(...curve.caustiche[m]) ? i : m), fuoriC[0]);
+    const fc = Math.atan2(curve.critiche[iMin][1], curve.critiche[iMin][0]), dir = [Math.cos(fc), Math.sin(fc)], det = (r) => { const J = Q.jacobiano(r * dir[0], r * dir[1]); return J[0] * J[3] - J[1] * J[2]; }; let lo = 0.6 * tE, hi = 1.6 * tE; assert.ok(det(lo) * det(hi) < 0);
+    for (let k = 0; k < 60; k++) { const m = 0.5 * (lo + hi); if (det(m) * det(lo) > 0) lo = m; else hi = m; } const rc = 0.5 * (lo + hi), tc = [rc * dir[0], rc * dir[1]], a = Q.deflessione(tc[0], tc[1]), bc = [tc[0] - a[0], tc[1] - a[1]], nb = Math.hypot(bc[0], bc[1]);
+    // la sorgente dentro la caustica, sulla retta che va da quel punto al centro: a un quarto della strada le immagini sono cinque,
+    // e la coppia che si fonderà sulla piega è il minimo e la sella più vicini a quel punto della curva critica
+    const verso = [-bc[0] / nb, -bc[1] / nb], D0 = (0.25 * nb) / tE, dista = (m) => Math.hypot(m.theta[0] - tc[0], m.theta[1] - tc[1]);
+    const L5 = R.lente(massa, { z: Z_S, beta: [bc[0] + D0 * tE * verso[0], bc[1] + D0 * tE * verso[1]] }, { griglia: 160 }); assert.equal(L5.immagini.length, 5, 'dentro la caustica: cinque immagini');
+    const coppia = [L5.immagini.filter((m) => m.parita === 'minimo').sort((x, y) => dista(x) - dista(y))[0], L5.immagini.filter((m) => m.parita === 'sella').sort((x, y) => dista(x) - dista(y))[0]];
+    let p = coppia.map((m) => m.theta), mu = [], dist = []; for (let d = D0; d > 1e-10; d /= 2) { const b = [bc[0] + d * tE * verso[0], bc[1] + d * tE * verso[1]], q = p.map((t) => Q.segui(t, b)); if (!q[0] || !q[1] || q[0].ingrandimento * q[1].ingrandimento > 0) break; p = q.map((x) => x.theta); mu.push(Math.abs(q[0].ingrandimento) + Math.abs(q[1].ingrandimento)); dist.push(d); }
+    assert.ok(mu.length > 12, 'la coppia si lascia seguire per molti dimezzamenti'); const i1 = 4, i2 = mu.length - 1, esp = Math.log(mu[i2] / mu[i1]) / Math.log(dist[i2] / dist[i1]); tra(esp, -0.56, -0.44, 'esponente della legge (−½)'); assert.ok(mu[i2] > 1000, 'migliaia');
+    const k1000 = dist[mu.findIndex((x) => x > 1000)], Dsor = R.distanzaAngolare(Z_S);
+    console.log(`        a ${n(dist[i1])} θ_E dalla piega: ×${n(mu[i1])}; a ${n(dist[i2])} θ_E: ×${n(mu[i2])} (esponente ${n(esp)}); oltre ×1000 quando la sorgente sta entro ${n(k1000 * tE * SEC * 1e6)} µas = ${n((k1000 * tE * Dsor) / 3.0857e16)} pc dalla caustica: solo una stella singola ci sta (Earendel: ×1000–40000 [R])`);
+  }); }
+{ // L'AMMASSO: un alone di 10¹⁵ M☉ con la concentrazione e il raggio che danno le leggi di galassie.js, a z = 0,54 (come MACS J1149), sorgente a z = 1,49
+  const zA = 0.54, zS = 1.49, a = 1 / (1 + zA), Mh = 1e15, Rv = GA.dentro.raggioViriale(Mh, a), c = GA.dentro.concentrazione(Mh, a), massa = { z: zA, componenti: [{ sigma: R.sigmaNFW(Mh * MSOLE, Rv * KPC, c), q: 0.75, angolo: 0 }] };
+  const L0 = R.lente(massa, { z: zS, beta: [1e-9, 0] }), tE = L0.raggioEinstein;
+  confronta('raggio di Einstein di un ammasso di 10¹⁵ M☉ (alone del modello, z 0,54 → 1,49)', tE * SEC, 10, 50, '10–50″ negli ammassi ricchi [R]', '″');
+  // più immagini solo se la sorgente sta dentro la caustica di fuori (quella «radiale», che viene dalla curva critica interna):
+  // la si mette a metà del suo raggio minimo, a 0,4 rad dall'asse
+  const curve = R.lente(massa, { z: zS, beta: [1e-9, 0] }, { curve: true, griglia: 64 }), radiale = curve.caustiche.filter((_, i) => Math.hypot(...curve.critiche[i]) < 0.6 * tE).map((q) => Math.hypot(q[0], q[1]));
+  if (tE > 0 && radiale.length) { const rr = 0.5 * Math.min(...radiale), L = R.lente(massa, { z: zS, beta: [rr * Math.cos(0.4), rr * Math.sin(0.4)] }, { griglia: 128 }), vive = L.immagini.filter((m) => Math.abs(m.ingrandimento) > 0.05), ritardo = vive.length > 1 ? Math.max(...vive.map((m) => m.ritardo)) : 0;
+    prova('ammasso: numero dispari di immagini anche qui', () => { assert.equal(L.immagini.length % 2, 1); assert.ok(L.immagini.length >= 3); });
+    confronta('ammasso: il ritardo più lungo tra le immagini vive', ritardo / ANNO, 0.3, 30, '~1 anno per la supernova Refsdal (MACS J1149 [R]); 2,3 anni in SDSS J1004+4112 [R]', 'anni');
+    console.log(`        (R_v = ${n(Rv / 1e3)} Mpc, c = ${n(c)}; ${L.immagini.length} immagini, ${vive.length} vive: ${vive.map((m) => `×${n(m.ingrandimento, 3)} dopo ${n(m.ritardo / ANNO, 3)} anni`).join(', ')}; separazione massima ${n(Math.max(...vive.map((m) => Math.hypot(m.theta[0] - vive[0].theta[0], m.theta[1] - vive[0].theta[1]))) * SEC)}″)`); } }
+
+console.log('\n— 6. I CASI LIMITE —');
+prova('il tempo proprio lungo la luce è zero: il limite v → c di Δt·√(1 − v²/c²); ma il fotone non ha un riferimento', () => {
+  const d = 10 * AL, tau = []; for (const k of [1, 2, 4, 8, 12]) { const v = C * (1 - 10 ** -k), p = R.tempoProprio({ t: 0, x: [0, 0, 0] }, { t: d / v, x: [d, 0, 0] }); assert.equal(p.tipo, 'tempo'); assert.equal(p.riferimento, true); vicino(p.tau, (d / v) * Math.sqrt(1 - (v / C) ** 2), 1e-6, 'τ'); tau.push(p.tau); }
+  for (let i = 1; i < tau.length; i++) assert.ok(tau[i] < tau[i - 1]); assert.ok(tau[tau.length - 1] < 1e-5 * tau[0]);
+  const luce = R.tempoProprio({ t: 0, x: [0, 0, 0] }, { t: d / C, x: [d, 0, 0] }); assert.equal(luce.tipo, 'luce'); assert.equal(luce.tau, 0); assert.equal(luce.riferimento, false); assert.equal(R.relazione({ t: 0, x: [0, 0, 0] }, { t: d / C, x: [d, 0, 0] }), 'prima');
+  assert.throws(() => R.sezioneDi({ t: 0, moto: { velocita: [C, 0, 0] } }), /velocità della luce/); assert.ok(Number.isNaN(R.tempoProprio({ t: 0, x: [0, 0, 0] }, { t: 1, x: [2 * C, 0, 0] }).tau));
+  console.log(`        dieci anni luce: a 0,9 c il viaggiatore vive ${n(tau[0] / ANNO)} anni, a 0,99 c ${n(tau[1] / ANNO)}, a (1 − 10⁻¹²) c ${n(tau[4] / GIORNO * 24 * 60)} minuti; la luce: 0 — un limite, non un punto di vista`);
+});
+prova('la bolla che cade: dall\'orizzonte alla fine al più π·GM/c³; r dentro è un tempo; la marea spezza fuori o dentro secondo la massa; che cosa vede', () => {
+  const sole = R.cadutaNelBuco(MSOLE, { massa: MSOLE, raggio: RSOLE }), sgr = R.cadutaNelBuco(4e6 * MSOLE, { massa: MSOLE, raggio: RSOLE }), m87 = R.cadutaNelBuco(6e9 * MSOLE, { massa: MSOLE, raggio: RSOLE });
+  tra(sole.tempoMassimo * 1e6, 15, 16, '~15 µs per una massa solare'); tra(sgr.tempoMassimo, 55, 70, '~1 minuto per 4·10⁶ M☉'); tra(m87.tempoMassimo / GIORNO, 0.9, 1.2, '~1 giorno per 6·10⁹ M☉');
+  // le due vie: la cicloide di chi cade da fermo da r0, tra l'orizzonte e il centro; da fermo appena sopra l'orizzonte è il massimo, da lontano (4/3)GM/c³
+  const M = 4e6 * MSOLE, rs = R.raggioSchwarzschild(M), tra2 = (r0) => R.tempoDiCaduta(M, r0, 0) - R.tempoDiCaduta(M, r0, rs);
+  vicino(tra2(rs * (1 + 1e-9)), sgr.tempoMassimo, 1e-4, 'da fermo sull\'orizzonte: π·GM/c³'); vicino(tra2(1e5 * rs), sgr.tempoDaLontano, 1e-4, 'da lontano (10⁵ r_s): (4/3)·GM/c³'); vicino(sgr.tempoRimasto(rs), sgr.tempoMassimo, 1e-12, 'tempo rimasto all\'orizzonte');
+  // r è un tempo: più piccolo è r, meno ne resta, per chiunque; e qualunque caduta ne usa meno del massimo
+  let prima = Infinity; for (const x of [1, 0.8, 0.5, 0.2, 0.01]) { const t = sgr.tempoRimasto(x * rs); assert.ok(t < prima); prima = t; assert.ok(R.tempoDiCaduta(M, 30 * rs, 0) - R.tempoDiCaduta(M, 30 * rs, x * rs) <= t * (1 + 1e-12), 'nessuno dura più del massimo'); }
+  assert.equal(sgr.tempoRimasto(0), 0); assert.equal(sgr.vede(0).aperta, true); assert.equal(sgr.singolarita.aperta, true);
+  // la marea: una stella come il Sole si spezza FUORI da un buco di 4·10⁶ M☉ e DENTRO (cioè entra intera) uno di 6·10⁹
+  assert.equal(sgr.siSpezza.dentro, false); assert.equal(m87.siSpezza.dentro, true); assert.equal(sole.siSpezza.dentro, false);
+  // che cosa vede: fuori, è l'ombra di chi sta fermo vista con l'aberrazione di chi cade a β = √(r_s/r) (via indipendente)
+  for (const x of [50, 5, 1.6]) { const r = x * rs, b = Math.sqrt(1 / x), ps = R.ombraDaVicino(M, r), atteso = Math.acos((Math.cos(ps) + b) / (1 + b * Math.cos(ps))); vicino(sgr.vede(r).ombra, atteso, 1e-9, `l'ombra per chi cade, a ${x} r_s`); }
+  vicino((sgr.vede(rs).ombra * 180) / PI, (Math.acos(23 / 31) * 180) / PI, 1e-9, 'all\'orizzonte: acos(23/31) = 42°'); vicino(sgr.vede(rs).sopra, 0.5, 1e-12, 'la luce dallo zenit: al rosso di un fattore 2'); tra((sgr.vede(1e-6 * rs).ombra * 180) / PI, 89.9, 90, 'alla fine: mezzo cielo');
+  let pr = 0; for (const x of [100, 10, 3, 1.5, 1, 0.5, 0.1, 0.001]) { const o = sgr.vede(x * rs).ombra; assert.ok(o > pr, 'l\'ombra cresce cadendo'); pr = o; }
+  console.log(`        dall'orizzonte alla fine, al più: ${n(sole.tempoMassimo * 1e6)} µs (1 M☉), ${n(sgr.tempoMassimo)} s (4·10⁶ M☉), ${n(m87.tempoMassimo / 3600)} ore (6·10⁹ M☉); cadendo da lontano: ${n(sgr.tempoDaLontano)} s`);
+  console.log(`        il Sole si spezza a ${n(sgr.siSpezza.r / sgr.orizzonte)} r_s da 4·10⁶ M☉ (fuori: lo si vede) e a ${n(m87.siSpezza.r / m87.orizzonte)} r_s da 6·10⁹ M☉ (dentro: entra intero)`);
+  console.log(`        chi cade vede il disco nero largo ${n((sgr.vede(10 * rs).ombra * 180) / PI)}° a 10 r_s, ${n((sgr.vede(rs).ombra * 180) / PI)}° all'orizzonte (non tutto il cielo), 90° alla fine; il cielo sopra non diventa blu: ν/ν₀ = ${n(sgr.vede(rs).sopra)}    [dentro: derivata; a r = 0: aperta]`);
+});
+prova('ciò che resta ricostruibile: tre numeri; i passati compatibili sono e^(S/k), S/k = 4πGM²/ħc (a* = 0)', () => {
+  const p = R.passatiCompatibili(R.bucoNero({ massaKg: MSOLE })); assert.deepEqual(p.parametri, ['massa', 'momento angolare', 'carica']); vicino(p.lnPassati, (4 * PI * G * MSOLE ** 2) / (COSTANTI.hbar * C), 1e-9, 'S/k_B'); tra(p.lnPassati, 1.0e77, 1.1e77, '10⁷⁷ per una massa solare');
+  vicino(R.passatiCompatibili({ massaKg: 3 * MSOLE }).lnPassati, 9 * p.lnPassati, 1e-9, 'va come M²'); assert.ok(R.passatiCompatibili({ massaKg: MSOLE, spin: 0.9 }).lnPassati < p.lnPassati, 'a parità di massa, ruotando l\'area è minore');
+  // due buchi che si fondono: l'area (e i passati compatibili) non diminuisce mai — GW150914: 36 + 29 → 62 M☉, a* ≈ 0,67 [R]
+  const prima = R.passatiCompatibili({ massaKg: 36 * MSOLE }).lnPassati + R.passatiCompatibili({ massaKg: 29 * MSOLE }).lnPassati, dopo = R.passatiCompatibili({ massaKg: 62 * MSOLE, spin: 0.67 }).lnPassati; assert.ok(dopo > prima, 'teorema dell\'area (Hawking 1971)');
+  console.log(`        un buco di 1 M☉: 10^(${n(p.log10Passati)}) passati compatibili (il Sole, da stella, ha un'entropia di ~10⁵⁸ k_B: cadendo, l'informazione persa è quasi tutta) — GW150914: da 10^(${n(prima / Math.LN10)}) a 10^(${n(dopo / Math.LN10)})    [derivata, mai misurata]`);
+});
+{ // l'orizzonte delle particelle nel tempo: la fonte buona è ragnatela.js (con la radiazione); la si importa, se c'è
+  let TAB = null; try { TAB = (await import('../src/camera/ragnatela.js')).dentro.TAB; } catch (e) { console.log('        (ragnatela.js non si è aperta: ' + e.message + ')'); }
+  const oggi = R.orizzonteParticelle(0, TAB), aRic = 1 / 1090, tRic = R.cosmo.tempo(aRic) - R.T_OGGI, ric = R.orizzonteParticelle(tRic, TAB), senza = R.orizzonteParticelle(tRic);
+  if (TAB) confronta('orizzonte delle particelle oggi (da ragnatela.js, con la radiazione)', oggi.comovente / MPC / 1e3, 14.0, 14.4, '14,2 Gpc [R]', 'Gpc');
+  prova('l\'orizzonte delle particelle cresce col tempo; alla ricombinazione la regione in contatto causale era piccola', () => { assert.ok(ric.comovente < 0.05 * oggi.comovente); assert.ok(R.orizzonteParticelle(-5e9 * ANNO, TAB).comovente < oggi.comovente); vicino(ric.proprio, ric.a * ric.comovente, 1e-12, 'proprio = a·comovente'); });
+  console.log(`        alla ricombinazione (a = 1/1090): ${n(ric.comovente / MPC)} Mpc comoventi = ${n(ric.proprio / MPC)} Mpc di allora (${ric.fonte}); senza la radiazione verrebbe ${n(senza.comovente / MPC)} Mpc`); }
+
 console.log('\n— LO STATO SPERIMENTALE (relativita.js STATO) —');
 prova('ogni legge dichiara il suo stato: misurata (con la misura), derivata e mai osservata, aperta', () => {
   for (const s of R.STATO) { assert.ok(['misurata', 'derivata e mai osservata', 'aperta'].includes(s.stato), s.legge); assert.ok(s.legge && s.misura && s.fonte && s.funzioni); }
