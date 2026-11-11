@@ -55,11 +55,12 @@ export function interno(P, stella) {
 
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
 const memo = new Map();
+import { comeSorgente } from './eventi.js'; // il caso della superficie: dalla fonte unica («seme» è un numero o la sorgente del luogo)
 export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {}) {
   if (memo.has(chiave)) return memo.get(chiave);
-  let s = seme % 2147483647 || 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const caso = comeSorgente(seme, 'superficie'); // gli eventi della superficie, ognuno con il suo nome («onda 3/fase», «vulcano 2/dove»): l'ordine non conta
   const sfera = (i, j) => { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI; return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)]; };
-  const casuale = () => { const z = 2 * caso() - 1, a = caso() * 2 * Math.PI, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
+  const casuale = (nome) => { const t = caso.serie(nome), z = 2 * t(0) - 1, a = t(1) * 2 * Math.PI, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   // LA TETTONICA EVOLVE NEL TEMPO (tettonica.js). Il mantello scaldato dal basso si organizza in celle che
   // cambiano lentamente; la crosta dei continenti, leggera, è trascinata: si spacca dove il mantello sale, deriva,
@@ -77,7 +78,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
-  const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(), f: 2 + k * 0.7, fi: caso() * 6.28, a: 1 / (1 + k * 0.35) }));
+  const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(`onda ${k}/direzione`), f: 2 + k * 0.7, fi: caso(`onda ${k}/fase`) * 6.28, a: 1 / (1 + k * 0.35) }));
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const p = sfera(i, j), k = j * W + i;
     let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi);
@@ -110,8 +111,8 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     crateriVisti = visibili.length; conservati = storiaUrti.grandi.length ? visibili.length / storiaUrti.grandi.length : 1;
   }
   for (let n = 0; n < nCrateri; n++) { // (ripiego, per un pianeta senza storia degli impatti: i crateri tirati dal seme)
-    const raggio = Math.min(22, 1.2 * Math.pow(1 - caso() * 0.985, -1 / 1.8)); if (raggio < 2.2 && aria > 0.5) { caso(); caso(); continue; } // (in celle; i piccoli bruciano nell'aria)
-    const ci = Math.floor(caso() * W), cj = Math.floor(caso() * H), prof = 180 * raggio, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI));
+    const cr = caso.serie(`cratere ${n}`), raggio = Math.min(22, 1.2 * Math.pow(1 - cr(0) * 0.985, -1 / 1.8)); if (raggio < 2.2 && aria > 0.5) continue; // (in celle; i piccoli bruciano nell'aria)
+    const ci = Math.floor(cr(1) * W), cj = Math.floor(cr(2) * H), prof = 180 * raggio, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI));
     for (let dj = -R2; dj <= R2; dj++) { const y = cj + dj; if (y < 0 || y >= H) continue; for (let di = -Math.ceil(R2 * allarga); di <= R2 * allarga; di++) { const d = Math.hypot(di / allarga, dj) / raggio; if (d > 1.6) continue; const k = y * W + ((ci + di + W * 4) % W); alt[k] += d < 1 ? -prof * (1 - d * d) + (raggio > 9 && d < 0.18 ? prof * 0.5 : 0) : prof * 0.28 * Math.exp(-(d - 1) * 5); } }
   }
   // i vulcani: sopra i pennacchi caldi del mantello e lungo i confini che si aprono. Dove la tettonica ha il campo del
@@ -122,7 +123,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const v = u[j * W + i]; if (!(v > 0)) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) if ((a || b) && u[(j + b) * W + ((i + a + W) % W)] > v) { cima = false; break; } if (cima) tutte.push([v, i, j]); }
     tutte.sort((a, b) => b[0] - a[0] || a[2] - b[2] || a[1] - b[1]);
     for (const [, i, j] of tutte) { const pi = sfera(i, j); if (cime.every(([a, b]) => dot(pi, sfera(a, b)) < Math.cos(0.25))) cime.push([i, j]); } } // (almeno un quarto di radiante tra due vulcani)
-  for (let k = 0; k < int.vulcani; k++) { const p = casuale(), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
+  for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = acquaKg / 1000;

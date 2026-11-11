@@ -13,6 +13,8 @@
 // fluidi (Swift-Hohenberg): ∂u/∂t = εu − (1+∇²)²u + g·u² − u³, con ε = quanto si è
 // oltre la soglia e g = quanto conta la superficie (g > 0 fa esagoni).
 
+import { comeSorgente } from './eventi.js';
+
 const ACQUA = { nome: 'acqua', alfa: 2.1e-4, nu: 1.0e-6, kappa: 1.4e-7, k: 0.6, rho: 1000, sigmaT: 1.5e-4 };
 
 // il calore che esce dall'interno: il decadimento radioattivo nelle rocce, in proporzione alla massa
@@ -43,9 +45,9 @@ function fft2(re, im, N, inv) {
 }
 // il disegno delle celle: N×N, «onde» lunghezze d'onda di lato; il caso iniziale è un rumore minuscolo
 export function celle({ epsilon, esagoni }, { N = 128, onde = 14, passi = 600, seme = 1 } = {}) {
-  let s = seme % 2147483647 || 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const caso = comeSorgente(seme, 'pozza').serie('rumore iniziale'); // (un evento solo: l'estrazione k è quella della cella k; seme: un numero o la sorgente del luogo)
   const eps = Math.min(1.2, Math.max(0.05, epsilon)), gq = esagoni ? 1.2 : 0, L = onde * 2 * Math.PI, dk = (2 * Math.PI) / L, dt = 0.5;
-  const u = new Float64Array(N * N).map(() => 0.05 * (caso() - 0.5)), lin = new Float64Array(N * N);
+  const u = new Float64Array(N * N).map((_, k) => 0.05 * (caso(k) - 0.5)), lin = new Float64Array(N * N);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const kx = (x < N / 2 ? x : x - N) * dk, ky = (y < N / 2 ? y : y - N) * dk, k2 = kx * kx + ky * ky; lin[y * N + x] = 1 / (1 - dt * (eps - (1 - k2) ** 2)); }
   const re = new Float64Array(N * N), im = new Float64Array(N * N);
   for (let t = 0; t < passi; t++) {

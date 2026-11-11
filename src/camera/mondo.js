@@ -35,6 +35,8 @@
 // corda dell'arco. Vicino alle masse la gravità entra con mezzi calci (Verlet);
 // nei campi continui il passo resta piccolo rispetto alla loro lunghezza d'onda.
 
+import { contatore, chiaveDi } from './eventi.js';
+
 const DUE_PI = 2 * Math.PI;
 
 // ---------- geometria dei domini
@@ -101,11 +103,13 @@ export function generatore(seme) {
 // Un universo parallelo è lo stesso universo con alcuni eventi andati
 // diversamente: mondo.rami = { indirizzo: n } sceglie l'esito n-esimo di
 // quell'evento. Tutto il resto resta identico; cambia solo ciò che ne discende.
+// Il caso viene dalla fonte unica (eventi.js): l'evento ha l'indirizzo «mondo seme/indirizzo», e i numeri che gli
+// servono (quando decade, dove vanno le figlie, ogni deviazione nella materia) sono le sue estrazioni, chieste in
+// fila; il ramo le cambia tutte, e non tocca nessun altro evento.
+let semeVisto = null, chiaveSeme = null; // (la chiave di «mondo seme» si calcola una volta, non a ogni particella)
 export function casoEvento(seme, indirizzo, ramo = 0) {
-  let h = (seme >>> 0) ^ 0x811c9dc5;
-  const s = `${indirizzo}|${ramo}`;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return generatore((h ^ (h >>> 16)) >>> 0);
+  if (seme !== semeVisto) { chiaveSeme = chiaveDi(`mondo ${seme}`); semeVisto = seme; }
+  return contatore(indirizzo, ramo, chiaveSeme);
 }
 // una mappa si può scrivere compatta: «sparsa» = [scarto d'indice, valore, ...]
 const mappeDense = new WeakMap();

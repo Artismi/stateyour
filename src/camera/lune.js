@@ -24,7 +24,7 @@
 
 import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
-import { generatore } from './mondo.js';
+import { comeSorgente } from './eventi.js';
 
 const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
 const sfera = (R) => (4 / 3) * Math.PI * R ** 3;
@@ -176,24 +176,24 @@ function eccentricitaResidua(P, L, eta) {
 // 1 + 35q/12, 1 − 10q/12, 1 − 25q/12; per Io dà 15 km tra il più lungo e il più corto, come misurato)
 function forma(P, L, bloccata, c) {
   const rotonda = L.raggioM > raggioRotondo(L.densita, dentro(L).mat.resistenza);
-  if (!rotonda) { const ba = 0.6 + 0.35 * c(), cb = 0.6 + 0.35 * c(), k = Math.cbrt(ba * ba * cb); return { rotonda, assi: [1 / k, ba / k, (ba * cb) / k] }; }
+  if (!rotonda) { const f = c.serie(`${L.evento}/forma`), ba = 0.6 + 0.35 * f(0), cb = 0.6 + 0.35 * f(1), k = Math.cbrt(ba * ba * cb); return { rotonda, assi: [1 / k, ba / k, (ba * cb) / k] }; }
   const q = Math.min(0.1, bloccata ? (P.massaKg / L.massaKg) * (L.raggioM / L.aM) ** 3 : ((2 * Math.PI) / GIORNO_GIOVANE) ** 2 * L.raggioM ** 3 / (COSTANTI.G * L.massaKg));
   return { rotonda, assi: bloccata ? [1 + (35 * q) / 12, 1 - (10 * q) / 12, 1 - (25 * q) / 12] : [1 + (5 * q) / 12, 1 + (5 * q) / 12, 1 - (5 * q) / 6] };
 }
 
 // ---------- 1. le lune regolari, dal disco attorno a un gigante
-function regolari(P, amb, caso) {
-  const { G } = COSTANTI, { tra, gauss } = caso, M = P.massaKg;
+function regolari(P, amb, c) {
+  const { G } = COSTANTI, M = P.massaKg;
   // LEGGE DI SCALA (Canup e Ward 2006): il disco riceve gas e polvere mentre le lune già fatte cadono
   // sul pianeta; ciò che resta alla fine è sempre circa 2·10⁻⁴ della massa del pianeta (Giove 2,1; Saturno
   // 2,5; Urano 1,0), con un po' di dispersione
-  const mu = 2e-4 * Math.exp(0.35 * gauss());
+  const mu = 2e-4 * Math.exp(0.35 * campana(c.serie('disco/massa')));
   // il bordo interno: il campo magnetico del pianeta giovane svuota il disco fino a dove il gas gira
   // insieme al pianeta (orbita sincrona, dal suo giorno) o poco oltre; mai dentro il limite di Roche.
   // Il bordo esterno: il gas che cade porta momento angolare e si ferma a circa R_Hill/48 (Quillen e
   // Trilling 1998), un po' più dentro o più fuori. Un gigante troppo vicino alla stella non ha spazio: niente lune
   const sincrona = Math.cbrt((G * M * (P.giorno || GIORNO_GIOVANE) ** 2) / (4 * Math.PI ** 2));
-  const aIn = Math.max(1.3 * limiteRoche(P), sincrona * tra(1, 2.5)), aOut = (amb.RH * tra(0.6, 2)) / 48, W = aOut - aIn;
+  const aIn = Math.max(1.3 * limiteRoche(P), sincrona * c.tra('disco/bordo interno', 1, 2.5)), aOut = (amb.RH * c.tra('disco/bordo esterno', 0.6, 2)) / 48, W = aOut - aIn;
   if (W <= 0) return [];
   // la temperatura del disco: scaldato dall'attrito del gas che cade (T ∝ (M·Ṁ)^¼·r^(-¾), e Ṁ ∝ M),
   // TARATA su Giove (1300 K a un raggio di Giove: la linea del ghiaccio cade tra Europa e Ganimede),
@@ -204,9 +204,9 @@ function regolari(P, amb, caso) {
   // fitte non reggono miliardi di anni). Con un disco di densità ∝ 1/r, la massa di una fascia è
   // proporzionale alla sua larghezza Δ, e Δ = K·a·(m/3M)^⅓: risolvendo, Δ = K^(3/2)·a^(3/2)·√(μ/(3W)).
   // Le fasce si mettono una dopo l'altra finché il disco finisce: il numero di lune ne discende
-  const K = tra(12, 22), lam = (mu * M) / W, corpi = [];
+  const K = c.tra('disco/larghezza delle fasce', 12, 22), lam = (mu * M) / W, corpi = [];
   for (let r = aIn; r < aOut;) {
-    const cc = (K * tra(0.85, 1.15)) ** 1.5 * Math.sqrt(mu / (3 * W));
+    const cc = (K * c.tra(`disco/luna ${corpi.length}/fascia`, 0.85, 1.15)) ** 1.5 * Math.sqrt(mu / (3 * W));
     let a = r, D = 0; for (let i = 0; i < 12; i++) { D = Math.min(cc * a ** 1.5, 0.8 * a); a = r + D / 2; }
     if (r + D > aOut || corpi.length > 14) { // l'ultima fascia è tagliata dal bordo: se è piccola, la sua materia va alla luna prima
       const resto = aOut - r;
@@ -239,12 +239,12 @@ function regolari(P, amb, caso) {
   // superarla a lungo: l'eccentricità forzata si ferma lì (per Io: 1,2·10¹⁴ W; ne emette 0,9·10¹⁴)
   const fornita = (b) => ((1.5 * k2QPianeta(P) * G * b.m ** 2 * P.raggioM ** 5) / b.a ** 6) * Math.sqrt((G * M) / b.a ** 3);
   return corpi.map((b, i) => {
-    const L = corpoLuna('disco', b.m, b.a, b.ghiaccio);
+    const L = corpoLuna('disco', b.m, b.a, b.ghiaccio, undefined, `disco/luna ${i}`);
     // l'eccentricità: le maree la cancellano, ma una vicina in risonanza la rigenera a ogni giro
     // (eccentricità FORZATA ≈ 0,75·(m_vicina/M)/δ per la luna interna, 0,43 per l'esterna; δ ≈ 0,004 è lo
     // scarto dalla risonanza esatta, MISURATO su Io ed Europa: dà i millesimi osservati); oltre 0,02 la formula non vale
     const forzata = legami.reduce((e, [x, y]) => e + (x === i ? 0.75 * corpi[y].m : y === i ? 0.43 * corpi[x].m : 0) / M / 0.004, 0);
-    L.eccentricita = tra(0.005, 0.03); // quella lasciata dal disco, piccola perché il gas la smorza
+    L.eccentricita = c.tra(`disco/luna ${i}/eccentricità`, 0.005, 0.03); // quella lasciata dal disco, piccola perché il gas la smorza
     L.legami = legami.filter(([x, y]) => x === i || y === i).map(([x, y, nome]) => [x === i ? y : x, nome]);
     if (forzata) {
       const tetto = Math.max(...legami.filter(([x, y]) => x === i || y === i).map(([x]) => fornita(corpi[x])));
@@ -259,12 +259,12 @@ function regolari(P, amb, caso) {
 // di storiaImpatti o giganteDi; null se il pianeta non ne ha avuti). Allora niente è sorteggiato: la luna c'è se e solo
 // se l'urto ha lasciato in orbita un disco che la fa (urto.luna), con quella massa; le maree lavorano da allora
 // (età − urto.t); e il giorno del pianeta parte da quello che l'urto gli ha dato (urto.giornoDopo).
-function daUrto(P, amb, caso, urto) {
-  const { G } = COSTANTI, { c, tra } = caso, M = P.massaKg;
+function daUrto(P, amb, c, urto) {
+  const { G } = COSTANTI, M = P.massaKg;
   // SENZA L'URTO VERO (ripiego): gli ultimi urti della formazione sono tra corpi grandi come pianeti; serve però l'angolo
   // giusto perché i detriti restino in orbita: DALLE SIMULAZIONI, succede a meno di un pianeta roccioso su due, e la luna
   // che ne nasce ha tra un millesimo e un quarantesimo della massa del pianeta (la nostra: 1/81)
-  const sorte = c() < 0.45, muSorte = Math.pow(10, tra(-3, -1.6)), e0 = tra(0.01, 0.08);
+  const sorte = c('urto/sorte') < 0.45, muSorte = Math.pow(10, c.tra('urto/massa', -3, -1.6)), e0 = c.tra('urto/eccentricità', 0.01, 0.08);
   const capita = urto !== undefined ? !!urto?.luna : sorte, anni = urto?.luna ? Math.max(0, amb.eta - urto.t) : amb.eta;
   if (P.tipo !== 'roccioso' || !capita) return [];
   // nasce dai detriti (roccia del mantello, quasi senza ferro) appena fuori dal limite di Roche...
@@ -294,7 +294,7 @@ function daUrto(P, amb, caso, urto) {
   // e ricade: Mercurio e Venere non hanno lune), se orbita più in fretta di quanto il pianeta gira, o se
   // arriva oltre 0,4 raggi di Hill, dove la stella la porta via (pianeti vicini alla stella)
   if (P.bloccato || periodoOrbita(P, a, m) < giorno * (urto?.luna ? 1 - 1e-6 : 1) || a > 0.4 * amb.RH) return [];
-  const L = corpoLuna('urto', m, a, 0, comp);
+  const L = corpoLuna('urto', m, a, 0, comp, 'urto/luna');
   L.giornoInizialePianeta = (2 * Math.PI) / wPrima;
   if (urto?.luna) L.giornoPianeta = giorno; // il giorno del pianeta oggi, dopo che la luna l'ha frenato
   L.eccentricita = e0; L.eccentricita = eccentricitaResidua(P, L, anni); // e0: lasciata dagli ultimi detriti raccolti
@@ -302,38 +302,47 @@ function daUrto(P, amb, caso, urto) {
 }
 
 // ---------- 3. i corpi catturati
-function catturati(P, amb, caso, grandi) {
-  const { c, tra } = caso, fuori = [];
+function catturati(P, amb, c, grandi) {
+  const fuori = [], quante = c.serie('catture/quante');
   // un corpo di passaggio resta solo se qualcosa lo frena: il gas attorno a un gigante che si forma, o
   // uno scambio a tre corpi; per questo i giganti ne hanno e i rocciosi quasi mai. CONTATI nel Sistema
   // Solare: in media 2,5 più grandi di 20 km per ogni gigante, più o meno uguali per tutti (Jewitt e
   // Haghighipour 2007); il loro numero cala come l'inverso del raggio
   const media = P.tipo === 'roccioso' ? 0.15 : 2.5, roche = limiteRoche(P);
-  let n = 0; for (let p = c(), s = Math.exp(-media); p > s && n < 8; p *= c()) n++; // sorteggio di Poisson
+  let n = 0; for (let p = quante(0), s = Math.exp(-media); p > s && n < 8; p *= quante(n)) n++; // sorteggio di Poisson (le estrazioni dello stesso evento, una dopo l'altra)
   for (let k = 0; k < n; k++) {
-    const R = 2e4 * Math.min(10, 1 / (1 - c())), fa = tra(0.12, 0.5), fg = 0.5 / (1 + (amb.Tstella / NEVE) ** 8), rho = densitaCorpo(1, fg), pro = c() < 0.5;
+    const R = 2e4 * Math.min(10, 1 / (1 - c(`cattura ${k}/raggio`))), fa = c.tra(`cattura ${k}/distanza`, 0.12, 0.5), fg = 0.5 / (1 + (amb.Tstella / NEVE) ** 8), rho = densitaCorpo(1, fg), pro = c(`cattura ${k}/verso`) < 0.5;
     // restano lontane, tra 0,12 e 0,5 raggi di Hill. Un'orbita nel verso del pianeta regge solo fino a un
     // terzo del raggio di Hill, una contromano fino a metà: per questo la maggior parte gira contromano
     // (non è sorteggiato: emerge), e l'orbita è molto schiacciata ma senza uscire dalla zona stabile
-    const retrograda = fa > 0.33 || !pro, a = fa * amb.RH, e = Math.min(tra(0.1, 0.45), 0.65 / fa - 1);
+    const retrograda = fa > 0.33 || !pro, a = fa * amb.RH, e = Math.min(c.tra(`cattura ${k}/eccentricità`, 0.1, 0.45), 0.65 / fa - 1);
     // una luna grande spazza via i piccoli corpi che le passano vicino; e troppo vicino al pianeta non si resta
     if (a * (1 - e) < 2 * roche || grandi.some((g) => a * (1 - e) < 1.3 * g.aM * (1 + g.eccentricita))) continue;
-    const L = corpoLuna('cattura', sfera(R) * rho, a, fg);
+    const L = corpoLuna('cattura', sfera(R) * rho, a, fg, undefined, `cattura ${k}`);
     L.retrograda = retrograda; L.eccentricita = e; L.eccentricita = eccentricitaResidua(P, L, amb.eta);
     fuori.push(L);
   }
   return fuori;
 }
 
-// una luna appena fatta: massa, orbita e composizione; il resto si calcola dopo
-function corpoLuna(origine, massaKg, aM, ghiaccio, composizione = { ghiaccio, roccia: 1 - ghiaccio }) {
+// una luna appena fatta: massa, orbita e composizione; il resto si calcola dopo. «evento» è il nome sotto cui stanno
+// i suoi eventi («disco/luna 2», «urto/luna», «cattura 3»): non è enumerabile (chi elenca o confronta le lune vede i campi di sempre)
+function corpoLuna(origine, massaKg, aM, ghiaccio, composizione = { ghiaccio, roccia: 1 - ghiaccio }, evento = origine) {
   const densita = densitaCorpo(massaKg, ghiaccio);
-  return { id: 0, origine, massaKg, raggioM: Math.cbrt(massaKg / sfera(1) / densita), densita, aM, periodo: 0, eccentricita: 0, composizione };
+  return Object.defineProperty({ id: 0, origine, massaKg, raggioM: Math.cbrt(massaKg / sfera(1) / densita), densita, aM, periodo: 0, eccentricita: 0, composizione }, 'evento', { value: evento, enumerable: false });
 }
+// una campana (media 0, scarto 1) dalle prime sei estrazioni di un evento
+const campana = (serie) => { let u = 0; for (let i = 0; i < 6; i++) u += serie(i); return (u - 3) * Math.SQRT2; };
 
 // ---------- tutte le lune di un pianeta
 // P: un pianeta di sistema() (tipo, massaKg, raggioM, aM, Mstella; se ci sono: giorno, bloccato, clima,
-// Lw, id). stella: { massa, massaNascita, eta (anni), morta, urto }. seme: il caso, ripetibile.
+// Lw, id). stella: { massa, massaNascita, eta (anni), morta, urto }. seme: il caso, ripetibile: la sorgente degli
+// eventi delle lune di questo pianeta (in cosmo.js: «…/pianeta 2/lune», con i rami del cosmo), o un numero («lune numero/pianeta id»).
+// GLI EVENTI, ognuno con il suo indirizzo sotto quello: «disco/massa», «disco/bordo interno», «disco/bordo esterno»,
+// «disco/larghezza delle fasce», «disco/luna 2/fascia», «disco/luna 2/eccentricità»; «urto/sorte», «urto/massa»,
+// «urto/eccentricità»; «catture/quante», «cattura 3/raggio», «cattura 3/distanza», «cattura 3/verso», «cattura 3/eccentricità»;
+// e la forma di un corpo piccolo, «cattura 3/forma». Un ramo ne cambia uno, e ciò che ne discende; l'ordine non conta.
+// Ogni luna porta in «evento» (non enumerabile) il nome sotto cui stanno i suoi: «disco/luna 2», «urto/luna», «cattura 3».
 // urto (facoltativo): l'urto gigante vero del pianeta, dalla sua storia degli impatti (o null se non ne ha avuti):
 // decide lui se c'è la luna da urto, quanto pesa e da quando le maree lavorano; la luna dice allora anche
 // giornoPianeta, il giorno del pianeta oggi (secondi). Se «urto» non è dato, tutto è come prima (un sorteggio).
@@ -342,14 +351,13 @@ function corpoLuna(origine, massaKg, aM, ghiaccio, composizione = { ghiaccio, ro
 // assi }, bloccata, caloreMareale, stato, retrograda, risonanza } (assi: in raggi medi della luna;
 // risonanza: con quale vicina, o null; la luna da urto dice anche il giornoInizialePianeta, in secondi).
 export function lune(P, stella = {}, seme = 1) {
-  const c = generatore(((seme >>> 0) ^ Math.imul((P.id ?? 0) + 1, 0x9e3779b1)) >>> 0);
-  const caso = { c, tra: (a, b) => a + c() * (b - a), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) * Math.SQRT2; } };
+  const c = typeof seme === 'function' ? seme : comeSorgente(seme, 'lune').sotto(`pianeta ${P.id ?? 0}`);
   // l'ambiente: fin dove comanda il pianeta, quanto è vecchio il sistema, e quanto scalda la stella lì
   // (170 K sulla «linea della neve», 2,7 UA·√L come in cosmo.js; la temperatura cala come 1/√distanza)
   const Lgiovane = stellaVera(stella.massaNascita || stella.massa || P.Mstella / MSOLE, { Z: stella.Z ?? 1 }).L;
   const amb = { RH: raggioHill(P), eta: (stella.eta ?? ETA) + (stella.morta ?? 0), Tstella: NEVE * Math.sqrt((2.7 * UA * Math.sqrt(Lgiovane)) / P.aM) };
-  const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, caso, stella.urto) : regolari(P, amb, caso);
-  const tutte = [...grandi, ...catturati(P, amb, caso, grandi)].sort((x, y) => x.aM - y.aM);
+  const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, c, stella.urto) : regolari(P, amb, c);
+  const tutte = [...grandi, ...catturati(P, amb, c, grandi)].sort((x, y) => x.aM - y.aM);
   tutte.forEach((L, i) => { L.id = i; });
   for (const L of tutte) {
     L.periodo = periodoOrbita(P, L.aM, L.massaKg);

@@ -13,17 +13,22 @@
 //   · FRATTURE. Una roccia che si raffredda o un fango che secca si stringono, ma
 //     sono incollati a ciò che sta sotto: la trazione li spacca in poligoni.
 // Ogni funzione è pura: stessi parametri e stesso seme, stesso risultato.
+// IL CASO viene dalla fonte unica (eventi.js). «seme» è la sorgente degli eventi di quel pezzo di roccia, o un numero
+// («cristalli numero», «fiocco numero»…). Ogni cosa incerta è un evento con il suo nome: il germe k nato al passo p
+// («passo p/germe k»: dove, come è girato, di che minerale), il granello n («granello n»), la crepa nata nel punto c
+// («crepa da c/direzione») e le deviazioni di ogni sua punta («punta t/deviazioni»), la resistenza punto per punto
+// («resistenza», estrazione = la cella). Un ramo ne cambia uno; l'ordine in cui si calcola non conta.
 // Le LEGGI EMPIRICHE (misurate, non derivate qui) sono dichiarate dove si usano.
 
-import { generatore } from './mondo.js';
+import { comeSorgente } from './eventi.js';
 
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
-// una campana a caso (Box-Muller) e un conteggio a caso (Poisson) dallo stesso generatore
-const campana = (caso) => Math.sqrt(-2 * Math.log(1 - caso())) * Math.cos(2 * Math.PI * caso());
-function poisson(media, caso) {
+// una campana a caso (Box-Muller: le estrazioni k e k+1 di un evento) e un conteggio a caso (Poisson: le sue estrazioni, una dopo l'altra)
+const campana = (serie, k = 0) => Math.sqrt(-2 * Math.log(1 - serie(k))) * Math.cos(2 * Math.PI * serie(k + 1));
+function poisson(media, serie) {
   if (media <= 0) return 0;
-  if (media > 30) return Math.max(0, Math.round(media + Math.sqrt(media) * campana(caso)));
-  const L = Math.exp(-media); let k = 0, p = caso(); while (p > L) { k++; p *= caso(); } return k;
+  if (media > 30) return Math.max(0, Math.round(media + Math.sqrt(media) * campana(serie)));
+  const L = Math.exp(-media); let k = 0, p = serie(0); while (p > L) { k++; p *= serie(k); } return k;
 }
 // una tinta fissa per ogni numero (per distinguere a colpo d'occhio grani e poligoni vicini)
 const tinta = (k) => { let h = Math.imul(k + 1, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; return ((h >>> 0) % 1024) / 1023; };
@@ -86,7 +91,7 @@ export const VETRO = 255; // il valore di «minerale» dove il fuso è rimasto v
 // Ordini di grandezza: 0,001 = un plutone in profondità (granito), 0,1 = una colata (basalto),
 // 0,5 = microliti nel vetro, da 1 in su = lava nell'acqua (ossidiana).
 export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANITO, seme = 1 } = {}) {
-  const caso = generatore(seme), n2 = N * N, M = minerali.length, meta = N / 2;
+  const caso = comeSorgente(seme, 'cristalli'), n2 = N * N, M = minerali.length, meta = N / 2;
   const tot = minerali.reduce((a, m) => a + m.frazione, 0) || 1, f = minerali.map((m) => m.frazione / tot);
   const r = Math.max(1e-9, raffreddamento) * CRITICO, u = decollo(r), { nascita: I, crescita: G } = tammann(u);
   const grano = new Int32Array(n2).fill(-1), minerale = new Uint8Array(n2).fill(VETRO), frazioneNelTempo = [];
@@ -113,7 +118,7 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
   // l'attesa fino al primo germe. E se il resto della roccia fa in tempo a solidificare prima (1,7 tempi di Avrami),
   // il quadro viene invaso da un cristallo nato fuori: lo si fa nascere in un punto a caso.
   const perPasso = I * dt * n2, pieno = (1.7 * Math.cbrt(3 / (Math.PI * I * G * G))) / dt;
-  let attesa = perPasso < 0.05 ? Math.floor(-Math.log(1 - caso()) / perPasso) : 0;
+  let attesa = perPasso < 0.05 ? Math.floor(-Math.log(1 - caso('attesa del primo germe')) / perPasso) : 0;
   if (attesa >= pieno && pieno < passi) { attesa = Math.floor(pieno); invaso = true; }
   if (attesa >= passi) return fine(dt); // il vetro arriva prima del primo germe
   const area = new Float64Array(M), R = new Float64Array(M), vel = new Float64Array(M), conc = new Float64Array(M), marca = new Int32Array(n2).fill(-1);
@@ -135,8 +140,8 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
     let sc = 0;
     for (let k = 0; k < M; k++) { conc[k] = Math.max(0, f[k] * n2 - area[k]) / liquido; sc += conc[k]; vel[k] = limita(conc[k] / f[k], 0.1, 2); R[k] += vel[k] / vmax; }
     // NASCITA: germi a caso nello spazio; quelli che cadono nel già solido non nascono (i «fantasmi» di Avrami)
-    for (let k = passo === attesa && attesa ? 1 : poisson(perPasso, caso); k > 0; k--) {
-      const c = (caso() * n2) | 0, giro = caso() * Math.PI, dado = caso() * sc;
+    for (let k = passo === attesa && attesa ? 1 : poisson(perPasso, caso.serie(`passo ${passo}/germi`)); k > 0; k--) {
+      const germe = caso.serie(`passo ${passo}/germe ${k}`), c = (germe(0) * n2) | 0, giro = germe(1) * Math.PI, dado = germe(2) * sc;
       if (grano[c] >= 0) continue;
       let m = 0, acc = conc[0]; while (m < M - 1 && dado > acc) acc += conc[++m];
       const al = Math.sqrt(aspetto[m]), g = gx.length;
@@ -196,7 +201,7 @@ export function nakaya(T, umidita) {
 // T in kelvin; umidita relativa all'acqua liquida (1 = dentro una nube). parametri = { alfa, beta, gamma } per forzare l'automa.
 // celle = raggio del fiocco in celle esagonali: il fiocco è sempre lo stesso oggetto, N è solo la finezza dell'immagine.
 export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametri = null, celle = 59 } = {}) {
-  const caso = generatore(seme), nk = nakaya(T, umidita), { alfa, beta, gamma } = { ...nk, ...(parametri || {}) };
+  const caso = comeSorgente(seme, 'fiocco'), nk = nakaya(T, umidita), { alfa, beta, gamma } = { ...nk, ...(parametri || {}) };
   // il fiocco cresce fino a Rf celle; l'aria «lontana» sta a Rc. Regole e germe sono simmetrici, quindi il
   // risultato lo è per forza: si calcola un solo spicchio (un dodicesimo: q ≥ r ≥ 0) e i vicini fuori dallo
   // spicchio si leggono nelle celle specchiate. È un risparmio di calcolo, non una simmetria imposta alla fisica.
@@ -214,7 +219,7 @@ export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametr
   s[0] = 1; gela(0, 0); // il germe: un granello di polvere al centro
   // mentre cresce il fiocco cade attraverso strati d'aria un po' diversi: il vapore oscilla nel tempo, uguale
   // per tutti e sei i rami. Per questo ogni fiocco è unico e resta simmetrico. (Il seme sceglie la storia.)
-  const onde = [0, 1, 2].map((k) => [0.05 / (k + 1), (2 + 3 * k + 2 * caso()) * Math.PI, 2 * Math.PI * caso()]);
+  const onde = [0, 1, 2].map((k) => { const onda = caso.serie(`aria/onda ${k}`); return [0.05 / (k + 1), (2 + 3 * k + 2 * onda(0)) * Math.PI, 2 * Math.PI * onda(1)]; });
   let estensione2 = 0, passo = 0;
   // se l'aria non è nemmeno satura rispetto al ghiaccio (eccesso ≤ 0) il germe non cresce affatto
   const maxPassi = !parametri && nk.eccesso <= 0 ? 0 : 20000, Rf2 = Rf * Rf;
@@ -276,23 +281,23 @@ export function fioccoDiNeve({ N = 192, T = 258, umidita = 1, seme = 1, parametr
 // Sezione verticale: il tempo va dal basso (riga N−1) verso l'alto. energia fra 0 (acqua quasi ferma)
 // e 1 (piena); grano = −1 dove fra i granelli restano pori e fango.
 export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
-  const caso = generatore(seme), E = limita(energia, 0.02, 1.5), n2 = N * N;
+  const caso = comeSorgente(seme, 'sedimento'), corrente = caso.serie('corrente'), E = limita(energia, 0.02, 1.5), n2 = N * N;
   const grano = new Int32Array(n2).fill(-1), quota = new Float32Array(N), diam = [], specie = [], energiaNelTempo = [];
   const COMPETENZA = 24, SOSPENSIONE = 2.6, incostanza = 0.09 + 0.3 * E;
   // la memoria della corrente: una lamina è spessa una quindicina di celle (o un solo evento, se i granelli sono più grossi di così)
   const ricordo = Math.exp(-Math.max(1, 0.6 * COMPETENZA * E * E) / 14);
-  let x = 0, sommaArea = 0, sommaD = 0, sommaL = 0, sommaL2 = 0, minimo = 0, tentativi = 0;
+  let x = 0, sommaArea = 0, sommaD = 0, sommaL = 0, sommaL2 = 0, minimo = 0, tentativi = 0, momento = 0;
   const altezzaDi = (cx, a, b) => { let top = 0; for (let i = Math.floor(cx - a); i <= Math.floor(cx + a); i++) { const o = (i + 0.5 - cx) / a; if (o * o >= 1) continue; const q = quota[((i % N) + N) % N] + b * Math.sqrt(1 - o * o); if (q > top) top = q; } return top; };
   while (minimo < N && tentativi < 60 * n2) {
     // l'energia di questo momento: oscilla attorno alla media con una memoria (processo di Ornstein-Uhlenbeck sul logaritmo)
-    x = ricordo * x + incostanza * Math.sqrt(1 - ricordo * ricordo) * campana(caso);
+    x = ricordo * x + incostanza * Math.sqrt(1 - ricordo * ricordo) * campana(corrente, 2 * momento++); // (la corrente, momento per momento: le estrazioni dell'evento «corrente»)
     const e = E * Math.exp(x), dMax = Math.min(N / 3, COMPETENZA * e * e), dMin = Math.min(SOSPENSIONE * Math.sqrt(e), 0.7 * dMax), lMin = Math.log(dMin), lMax = Math.log(dMax);
     energiaNelTempo.push(e);
     // in questo intervallo si posa uno straterello spesso circa un granello
     for (let posato = 0, daPosare = N * Math.max(1, 0.6 * dMax); posato < daPosare && tentativi < 60 * n2; tentativi++) {
-      const d = Math.exp(lMin + (lMax - lMin) * caso()), cx0 = caso() * N, id = diam.length;
+      const granello = caso.serie(`granello ${tentativi}`), d = Math.exp(lMin + (lMax - lMin) * granello(0)), cx0 = granello(1) * N, id = diam.length;
       // di che cosa è fatto: più lungo e calmo è il viaggio, più resta solo il quarzo, che resiste (maturità: OSSERVATA)
-      const dado = caso(), sp = dado < 0.08 + 0.3 * Math.min(1, E) ? 2 : dado < 0.3 + 0.4 * Math.min(1, E) ? 1 : 0;
+      const dado = granello(2), sp = dado < 0.08 + 0.3 * Math.min(1, E) ? 2 : dado < 0.3 + 0.4 * Math.min(1, E) ? 1 : 0;
       const peso = Math.max(1, d) ** 2; posato += peso; // quanto posto occupa nella sezione
       if (d < 1.5) {
         // sotto la cella i granelli non si distinguono: ognuno occupa una cella, nel punto più basso lì vicino
@@ -301,7 +306,7 @@ export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
         grano[(N - 1 - j) * N + i] = id;
       } else {
         // un granello arrotondato dal trasporto, un po' schiacciato, che si corica sul lato lungo e rotola nell'incavo più vicino
-        const schiaccia = 1 + 0.5 * caso(), a = (d / 2) * Math.sqrt(schiaccia), b = d / 2 / Math.sqrt(schiaccia);
+        const schiaccia = 1 + 0.5 * granello(3), a = (d / 2) * Math.sqrt(schiaccia), b = d / 2 / Math.sqrt(schiaccia);
         let cx = cx0, top = altezzaDi(cx0, a, b);
         for (let k = 0, salto = Math.max(0.5, a / 3); k < 16; k++) { const s = altezzaDi(cx - salto, a, b), d2 = altezzaDi(cx + salto, a, b); if (Math.min(s, d2) >= top - 1e-6) break; if (s < d2) { top = s; cx -= salto; } else { top = d2; cx += salto; } }
         if (top - b >= N) { for (let i = Math.floor(cx - a); i <= Math.floor(cx + a); i++) { const k = ((i % N) + N) % N; quota[k] = Math.max(quota[k], N); } continue; }
@@ -352,7 +357,7 @@ export function sedimento({ N = 192, energia = 0.5, seme = 1 } = {}) {
 // sforzo: velocità di contrazione, fra 0,05 (lenta) e 2 (brusca).
 const H_CREPE = 11; // la distanza di scarico, in celle, quando sforzo = 1 (sceglie solo l'inquadratura)
 export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, colore = [78, 76, 80] } = {}) {
-  const caso = generatore(seme), S = limita(sforzo, 0.05, 2), n2 = N * N, meta = N / 2;
+  const caso = comeSorgente(seme, 'fratture'), S = limita(sforzo, 0.05, 2), n2 = N * N, meta = N / 2;
   const h = limita(H_CREPE / Math.sqrt(S), 3, N / 6), Rmax = Math.min(N / 2 - 1, 1.6 * h), sonda = limita(0.6 * h, 3, 14), ogni = Math.max(1, Math.floor(sonda / 2));
   const crepe = new Uint8Array(n2), chi = new Int32Array(n2).fill(-1), quando = new Int32Array(n2), dist = new Float64Array(n2).fill(1e9), vic = new Int32Array(n2).fill(-1);
   const avvolgi = (d) => (d > meta ? d - N : d < -meta ? d + N : d), mod = (i) => ((i % N) + N) % N;
@@ -375,10 +380,10 @@ export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, 
   };
   // la resistenza di ogni punto (Weibull, modulo 6) e l'ordine in cui i punti cederebbero
   const resistenza = new Float32Array(n2), ordine = new Int32Array(n2), scarico = new Float32Array(Math.ceil(Rmax) + 2).map((_, d) => (1 - Math.exp(-d / h)) / (1 - Math.exp(-Rmax / h)));
-  for (let i = 0; i < n2; i++) { resistenza[i] = Math.pow(-Math.log(1 - caso()), 1 / 6); ordine[i] = i; }
+  const debole = caso.serie('resistenza'); for (let i = 0; i < n2; i++) { resistenza[i] = Math.pow(-Math.log(1 - debole(i)), 1 / 6); ordine[i] = i; }
   ordine.sort((a, b) => resistenza[a] - resistenza[b]);
   const sigma0 = resistenza[ordine[0]], sigmaFine = 1, durata = Math.ceil(24 / S);
-  const px = [], py = [], pf = [], pid = []; let vive = [], nCrepe = 0, pronti = 0;
+  const px = [], py = [], pf = [], pid = [], devia = []; let vive = [], nCrepe = 0, pronti = 0;
   const fatto = new Uint8Array(n2);
   for (let passo = 0; passo < durata + 8 * N && (passo <= durata || vive.length); passo++) {
     // NASCITA: la trazione sale; cede ogni punto dove quella rimasta (dopo lo scarico delle crepe vicine) supera la sua resistenza
@@ -389,9 +394,9 @@ export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, 
         const c = ordine[k]; if (fatto[c]) continue; if (crepe[c]) { fatto[c] = 1; continue; }
         const d = dist[c]; if (sigma * (d >= Rmax ? 1 : scarico[d | 0]) < resistenza[c]) continue;
         // la direzione: perpendicolare alla trazione più forte. Vicino a una crepa quella è parallela alla crepa, quindi si parte verso di lei; lontano, a caso
-        let fi = caso() * Math.PI; if (d < Rmax) { const v = vic[c]; fi = Math.atan2(avvolgi(((v / N) | 0) - ((c / N) | 0)), avvolgi((v % N) - (c % N))); }
+        let fi; if (d >= Rmax) fi = caso(`crepa da ${c}/direzione`) * Math.PI; else { const v = vic[c]; fi = Math.atan2(avvolgi(((v / N) | 0) - ((c / N) | 0)), avvolgi((v % N) - (c % N))); }
         fatto[c] = 1; const id = nCrepe++; segna(c, id, passo); aggiorna();
-        for (const verso of [0, Math.PI]) { vive.push(px.length); px.push((c % N) + 0.5); py.push(((c / N) | 0) + 0.5); pf.push(fi + verso); pid.push(id); }
+        for (const verso of [0, Math.PI]) { vive.push(px.length); px.push((c % N) + 0.5); py.push(((c / N) | 0) + 0.5); pf.push(fi + verso); pid.push(id); devia.push(caso.serie(`punta ${px.length - 1}/deviazioni`)); }
       }
     }
     // PROPAGAZIONE: ogni punta avanza di una cella. Da sola va dritta (deviando appena per i difetti); se davanti a sé sente
@@ -403,7 +408,7 @@ export function fratture({ N = 192, sforzo = 0.5, seme = 1, maturazione = null, 
         let svolta = Math.atan2(avvolgi(((v / N) | 0) - sy), avvolgi((v % N) - sx)) - pf[t]; svolta = Math.atan2(Math.sin(2 * svolta), Math.cos(2 * svolta)) / 2;
         pf[t] += limita((svolta * Math.exp(-dist[s] / h) * 2.5) / sonda, -0.3, 0.3);
       }
-      pf[t] += 0.025 * campana(caso);
+      pf[t] += 0.025 * campana(devia[t], 2 * passo);
       const ox = Math.floor(px[t]), oy = Math.floor(py[t]); px[t] = (px[t] + Math.cos(pf[t]) + N) % N; py[t] = (py[t] + Math.sin(pf[t]) + N) % N;
       const nx = Math.floor(px[t]), ny = Math.floor(py[t]);
       if (nx === ox && ny === oy) { ancora.push(t); continue; }

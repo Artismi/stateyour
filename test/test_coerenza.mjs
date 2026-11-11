@@ -97,7 +97,7 @@ prova('l\'età è una sola: pianeti, interno e lune hanno gli anni della loro st
   for (const x of SOLIDI) { n++; assert.equal(x.p.interno.eta, x.S0.eta); }
   // le lune: rifatte con l'età della stella devono essere le stesse (il disco è controllato più sotto, con la massa)
   for (const x of PIANETI.filter((y) => y.S0.stato === 'nana bianca').filter((_, i) => i % 5 === 0)) {
-    nane++; const rifatte = LU.lune(x.p, { eta: x.S0.eta, Z: x.S0.Z, massa: x.S0.massa, massaNascita: x.S0.massaNascita, ...(x.p.tipo === 'roccioso' ? { urto: x.p.urto } : {}) }, semeDi('lune', x.n, x.gid, x.sid, x.p.id));
+    nane++; const rifatte = LU.lune(x.p, { eta: x.S0.eta, Z: x.S0.Z, massa: x.S0.massa, massaNascita: x.S0.massaNascita, ...(x.p.tipo === 'roccioso' ? { urto: x.p.urto } : {}) }, CO.casoLune(x.n, x.gid, x.sid, x.p.id)); // (la sorgente degli eventi delle lune di quel pianeta: la stessa che usa cosmo.js)
     assert.equal(foto(rifatte.map((l) => [l.massaKg, l.aM])), foto(x.p.lune.map((l) => [l.massaKg, l.aM])));
   }
   assert.ok(n > 1500 && nane >= 10);
@@ -136,7 +136,7 @@ prova('il disco è qualche centesimo della stella; i pianeti pesano meno del dis
   let n = 0;
   for (const s of SISTEMI) {
     if (s.S0.stato === 'stella di neutroni' || s.S0.stato === 'buco nero') { assert.equal(s.S.pianeti.length, 0); continue; }
-    const st = { massa: s.S0.massaNascita || s.S0.massa, Z: s.S0.Z ?? 1, eta: s.eta }, seme = semeDi('disco', s.n, s.gid, s.sid), D = DI.disco(st, seme), nati = DI.formaPianeti(st, seme);
+    const st = { massa: s.S0.massaNascita || s.S0.massa, Z: s.S0.Z ?? 1, eta: s.eta }, seme = CO.casoDisco(s.n, s.gid, s.sid), D = DI.disco(st, seme), nati = DI.formaPianeti(st, seme);
     tra(D.massaKg / (st.massa * MSOLE), 0.0099, 0.1201, 'massa del disco / massa della stella');
     if (!nati.length) continue; n++;
     // sono proprio i pianeti del sistema (nati con l'età della stella; poi il taglio a 16, e i vicini inghiottiti dalla gigante)

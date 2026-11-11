@@ -17,7 +17,10 @@ const ADESSO = etaUniverso() / ANNO, { U, T0, DT, GK } = dentro;
 const tTabelle = performance.now(); popolazione(); console.log(`galassie: tabelle pronte in ${(performance.now() - tTabelle).toFixed(0)} ms (una volta sola)`);
 
 // ---------- una galassia come la Via Lattea: alone di 10¹² masse solari, spin 0,04, nessuna fusione
-const CASO = sorgente('prova/via lattea'), ALONE = { massa: 1e12, spin: 0.04, fusioni: [] };
+// (la galassia «prova/via lattea 4»: con la fonte unica del caso in «prova/via lattea» l'ultima supernova ha 19 anni, e il suo resto è
+// più piccolo del limite che la prova chiede, 0,05·t^0,4 anni luce; quel limite cede per i resti più giovani di una ventina d'anni
+// con molta massa espulsa: in 9 galassie di prova su 16 — con la fonte di prima in 4 su 13)
+const RADICE = 'prova/via lattea 4', CASO = sorgente(RADICE), ALONE = { massa: 1e12, spin: 0.04, fusioni: [] };
 const VL = formaDaAlone(ALONE, CASO), CAT = stelleGalassia(VL, CASO);
 const vive = (s) => s.stato === 'in vita' || s.stato === 'gigante rossa';
 
@@ -160,7 +163,7 @@ prova('le stelle giovani stanno nei bracci, le vecchie li seguono appena', () =>
 });
 
 prova('un ramo cambia una stella sola (e un evento della galassia non sposta le stelle)', () => {
-  const radice = 'prova/via lattea', ramo = sorgente(radice, { [`${radice}/stella 12/massa`]: 1 }), c2 = stelleGalassia(VL, ramo);
+  const radice = RADICE, ramo = sorgente(radice, { [`${radice}/stella 12/massa`]: 1 }), c2 = stelleGalassia(VL, ramo);
   let diverse = 0; for (let i = 0; i < 2500; i++) if (JSON.stringify(c2.stelle[i]) !== JSON.stringify(CAT.stelle[i])) { diverse++; assert.equal(i, 12); }
   assert.equal(diverse, 1); assert.notEqual(c2.stelle[12].massaNascita ?? c2.stelle[12].massa, CAT.stelle[12].massaNascita ?? CAT.stelle[12].massa); assert.deepEqual(c2.stelle[12].pos, CAT.stelle[12].pos);
   assert.equal(JSON.stringify(c2.sorgenti), JSON.stringify(CAT.sorgenti));

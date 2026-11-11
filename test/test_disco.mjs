@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { formaPianeti, disco, raggioPianeta, DISCO, MTERRA, RTERRA, MGIOVE, RGIOVE } from '../src/camera/disco.js';
 import { MSOLE, UA } from '../src/camera/leggi.js';
+import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -150,6 +151,69 @@ prova('è leggero: una chiamata dura meno di 20 ms in media', () => {
     assert.ok(ms < 20, `${ms} ms per ${JSON.stringify(st)}`);
     if (st === SOLE) console.log(`      ${ms.toFixed(2)} ms a chiamata per una stella come il Sole`);
   }
+});
+
+// ---------- IL CASO PER INDIRIZZO (eventi.js): ogni esito incerto del disco è un evento con il suo nome
+const foto = (P) => JSON.stringify(P.map((p) => ({ ...p, formazione: p.formazione })));
+const letto = (st, radice, rami = null) => { const R = new Map(), P = formaPianeti(st, conRegistro(sorgente(radice, rami), R)); return { R, P }; };
+// tra due mondi: quali eventi, letti in tutti e due, hanno dato un esito diverso
+const diversi = (A, B) => [...A.keys()].filter((k) => B.has(k) && B.get(k) !== A.get(k));
+
+prova('un ramo cambia una cosa sola: l\'eccentricità di un pianeta in un mondo parallelo, e tutti gli altri restano com\'erano', () => {
+  let casi = 0, vicini = 0;
+  for (let n = 1; n <= 40; n++) {
+    const radice = `prova/stella ${n}/disco`, { R: R0, P: P0 } = letto(SOLE, radice); if (P0.length < 3) continue;
+    const k = 1 + (n % (P0.length - 2)), ev = `${radice}/embrione ${P0[k].formazione.embrione}/eccentricità`, { R: R1, P: P1 } = letto(SOLE, radice, { [ev]: 1 });
+    // gli eventi letti sono gli stessi, e l'unico andato diversamente è quello (le sue estrazioni: «…/eccentricità», «…/eccentricità#1»)
+    assert.deepEqual([...R1.keys()], [...R0.keys()]); const cambiati = diversi(R0, R1);
+    assert.ok(cambiati.length >= 1 && cambiati.every((x) => x === ev || x === `${ev}#1`), `seme ${n}: cambiati ${cambiati}`);
+    // i pianeti: stessi, con le stesse orbite, masse, storie; cambia l'eccentricità di quello (e, se le due orbite si
+    // toccavano, la parte che i detriti tolgono a lui e al vicino: ciò che ne discende)
+    assert.equal(P1.length, P0.length); assert.notEqual(P1[k].eccentricita, P0[k].eccentricita, `seme ${n}`);
+    assert.equal(foto(P1.map((p) => ({ ...p, eccentricita: 0 }))), foto(P0.map((p) => ({ ...p, eccentricita: 0 }))), `seme ${n}`);
+    P0.forEach((p, i) => { if (Math.abs(i - k) > 1) assert.equal(P1[i].eccentricita, p.eccentricita, `seme ${n}, pianeta ${i}`); else if (i !== k && P1[i].eccentricita !== p.eccentricita) vicini++; });
+    casi++;
+  }
+  assert.ok(casi >= 30, `solo ${casi} sistemi con almeno tre pianeti`);
+  console.log(`      (${casi} sistemi: cambia quel pianeta; in ${vicini} casi anche il vicino, perché le due orbite si toccavano)`);
+});
+
+prova('un incontro tra embrioni andato diversamente: tutti gli altri eventi hanno lo stesso esito; cambia solo ciò che ne discende', () => {
+  let casi = 0, altraStoria = 0, uguali = 0;
+  for (let n = 1; n <= 60 && casi < 25; n++) {
+    const radice = `prova/stella ${n}/disco`, { R: R0, P: P0 } = letto(SOLE, radice), incontri = [...R0.keys()].filter((x) => /\/incontro con \d+$/.test(x)); if (!incontri.length) continue;
+    const ev = incontri[n % incontri.length]; let girato = null;
+    // si cerca il ramo in cui quell'incontro finisce nell'altro modo (fusione invece di fionda, o il contrario)
+    for (let r = 1; r <= 12 && !girato; r++) { const m = letto(SOLE, radice, { [ev]: r }); if (foto(m.P) !== foto(P0)) girato = m; else uguali++; }
+    if (!girato) continue; casi++;
+    // nessun altro evento è stato ritirato: quelli letti in tutti e due i mondi hanno lo stesso esito, salvo quello
+    assert.deepEqual(diversi(R0, girato.R), [ev], `seme ${n}`);
+    // il disco è lo stesso (sta prima dell'incontro)
+    assert.equal(JSON.stringify(disco(SOLE, sorgente(radice, { [ev]: 1 }))), JSON.stringify(disco(SOLE, sorgente(radice))));
+    if (girato.P.length !== P0.length) altraStoria++;
+  }
+  assert.ok(casi >= 10, `solo ${casi} incontri decisi dal caso`);
+  console.log(`      (${casi} incontri girati: in ${altraStoria} il numero dei pianeti cambia; ${uguali} rami in cui l'esito era lo stesso non cambiano niente)`);
+  // un evento che sta PRIMA di tutto (la massa del disco) cambia il disco; gli altri eventi con lo stesso nome restano quelli
+  const radice = 'prova/stella 7/disco', a = letto(SOLE, radice), b = letto(SOLE, radice, { [`${radice}/massa`]: 1 });
+  assert.notEqual(disco(SOLE, sorgente(radice, { [`${radice}/massa`]: 1 })).massaKg, disco(SOLE, sorgente(radice)).massaKg);
+  assert.ok(diversi(a.R, b.R).every((x) => x === `${radice}/massa` || x.startsWith(`${radice}/massa#`)));
+  // e il disco di un'altra stella non se ne accorge
+  assert.equal(foto(formaPianeti(SOLE, sorgente('prova/stella 8/disco', { [`${radice}/massa`]: 1 }))), foto(formaPianeti(SOLE, sorgente('prova/stella 8/disco'))));
+});
+
+prova('l\'ordine non conta: sistemi calcolati all\'indietro, eventi riletti all\'indietro, il disco chiesto prima o dopo', () => {
+  const stelle = Array.from({ length: 30 }, (_, n) => ({ st: STELLE[(n * 7) % STELLE.length], radice: `prova/stella ${n}/disco` }));
+  const avanti = stelle.map(({ st, radice }) => foto(formaPianeti(st, sorgente(radice))));
+  const indietro = stelle.slice().reverse().map(({ st, radice }) => { disco(st, sorgente(radice)); return foto(formaPianeti(st, sorgente(radice))); }).reverse();
+  assert.deepEqual(indietro, avanti);
+  // ogni evento letto da un sistema, richiesto da capo e in ordine inverso, dà lo stesso esito: è una funzione dell'indirizzo
+  const { R } = letto(SOLE, 'prova/stella 3/disco'), voci = [...R.keys()]; assert.ok(voci.length > 20, `${voci.length} eventi`);
+  for (const v of voci.slice().reverse()) assert.equal(rileggi(v), R.get(v), v);
+  // un numero al posto della sorgente è «disco numero»; e i nomi degli eventi sono quelli dichiarati
+  assert.equal(foto(formaPianeti(SOLE, 7)), foto(formaPianeti(SOLE, sorgente('disco 7'))));
+  const nomi = new Set(voci.map((v) => v.slice('prova/stella 3/disco/'.length).replace(/\d+/g, 'N').replace(/#N$/, '')));
+  for (const n of nomi) assert.ok(['massa', 'vita del gas', 'bordo interno', 'acqua portata da fuori', 'embrione N/incontro con N', 'embrione N/fusione con N', 'embrione N/eccentricità'].includes(n), `evento «${n}»`);
 });
 
 console.log(`disco: ${ok} prove, tutto ok`);

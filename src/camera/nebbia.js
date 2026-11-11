@@ -14,7 +14,7 @@
 // (Ω = √(G·M / (rR)³)), con la massa vera del pianeta (quella che gli ha dato
 // il disco: la stessa di tutti gli altri calcoli).
 
-import { sistema, pianeta, fascia, FASCIA_MAX, semeEvento } from './cosmo.js';
+import { sistema, pianeta, fascia, FASCIA_MAX, sorgenteEvento } from './cosmo.js';
 
 const Q = 1.602e-19, MEV = 1.602e-13, G = 6.674e-11;
 export const ACCELERA = 40; // il tempo della mappa scorre 40 volte più in fretta
@@ -23,18 +23,20 @@ const memo = new Map();
 export function nebbiaPianeta(n, gid, sid, pid) {
   const k = `${n}|${gid}|${sid}|${pid}`; if (memo.has(k)) return memo.get(k);
   const P = sistema(n, gid, sid).pianeti[pid], Pl = pianeta(n, gid, sid, pid);
-  let s = semeEvento('nebbia', n, gid, sid, pid) % 2147483646 + 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // il campione è scelto per indirizzo (eventi.js): la candidata numero i ha le sue estrazioni (8·i, 8·i+1, …) dell'evento
+  // «nebbia/…/fascia» (o «…/anello»), qualunque cosa sia successa alle altre: gli stessi individui, in qualunque ordine
+  const ev = sorgenteEvento('nebbia', n, gid, sid, pid), cf = ev.serie('fascia'), ca = ev.serie('anello');
   const fascia_ = [], anello = [], fmax = FASCIA_MAX;
   for (let i = 0; i < 40000 && fascia_.length < 2600; i++) {
-    const r = 1.15 + caso() * 4.85; if (caso() > fascia(P, Pl, r) / fmax) continue;
-    const elettrone = caso() < 0.5, E = elettrone ? 0.05 + 0.73 * caso() : 10 * Math.pow(30, caso()), m = elettrone ? 0.511 : 938.27;
+    const q = 8 * i, r = 1.15 + cf(q) * 4.85; if (cf(q + 1) > fascia(P, Pl, r) / fmax) continue;
+    const elettrone = cf(q + 2) < 0.5, E = elettrone ? 0.05 + 0.73 * cf(q + 3) : 10 * Math.pow(30, cf(q + 3)), m = elettrone ? 0.511 : 938.27;
     const p = Math.sqrt(E * E + 2 * E * m), B = P.B0 / r ** 3;
-    fascia_.push({ r, fi: caso() * 2 * Math.PI, rg: (p * 3.336e-3) / B / P.raggioM, elettrone, omega: ((elettrone ? -1 : 1) * 3 * r * E * MEV) / (Q * P.B0 * P.raggioM ** 2) });
+    fascia_.push({ r, fi: cf(q + 4) * 2 * Math.PI, rg: (p * 3.336e-3) / B / P.raggioM, elettrone, omega: ((elettrone ? -1 : 1) * 3 * r * E * MEV) / (Q * P.B0 * P.raggioM ** 2) });
   }
   const M = P.massaKg;
   if (Pl.anello) for (let i = 0; i < 60000 && anello.length < 3000; i++) {
-    const r = Pl.anello[0] + caso() * (Pl.anello[1] - Pl.anello[0]); if (caso() * 2 > Pl.densitaAnello(r)) continue;
-    anello.push({ r, fi: caso() * 2 * Math.PI, omega: Math.sqrt((G * M) / (r * P.raggioM) ** 3) });
+    const q = 8 * i, r = Pl.anello[0] + ca(q) * (Pl.anello[1] - Pl.anello[0]); if (ca(q + 1) * 2 > Pl.densitaAnello(r)) continue;
+    anello.push({ r, fi: ca(q + 2) * 2 * Math.PI, omega: Math.sqrt((G * M) / (r * P.raggioM) ** 3) });
   }
   const out = { fascia: fascia_, anello, M };
   memo.set(k, out); if (memo.size > 6) memo.delete(memo.keys().next().value);

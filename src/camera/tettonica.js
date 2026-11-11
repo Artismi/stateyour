@@ -38,6 +38,8 @@
 // q è quello di oggi per tutta la storia. Il mantello è un'equazione delle celle, non le equazioni dei fluidi.
 // I sedimenti dei fiumi non seguono i fiumi uno per uno: si spargono sulle coste di tutto il pianeta.
 
+import { comeSorgente } from './eventi.js';
+
 export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
   hZero: 35e3, // la crosta spessa così galleggia a quota 0 (il livello di riferimento: all'incirca il mare terrestre)
@@ -96,8 +98,8 @@ function fft2(re, im, W, H, inversa) {
 // del mantello appena solidificato che qui non si calcolano (in cosmo.js è un numero legato all'indirizzo del pianeta).
 function mantello({ onde, epsilon, seme, impronta = null }) {
   const Wm = onde <= 8 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, Nq = Wm * Wm, dk = 1 / onde, g = -1.2; // g < 0: il mantello è scaldato soprattutto da DENTRO (il decadimento radioattivo) e raffreddato da sopra, perciò le discese fredde sono concentrate e le salite sono larghe e formano una rete (le dorsali)
-  let s = seme % 2147483647 || 1; if (s < 0) s += 2147483647; const caso = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  const u = new Float64Array(Nm).map(() => 0.05 * (caso() - 0.5)), re = new Float64Array(Nq), im = new Float64Array(Nq), k4 = new Float64Array(Nq);
+  const caso = comeSorgente(seme, 'mantello').serie('irregolarità'); // (un evento solo, «mantello seme/irregolarità»: l'estrazione k è quella della cella k, in qualunque ordine la si chieda)
+  const u = new Float64Array(Nm).map((_, k) => 0.05 * (caso(k) - 0.5)), re = new Float64Array(Nq), im = new Float64Array(Nq), k4 = new Float64Array(Nq);
   let daUrti = false;
   if (impronta) {
     const src = typeof impronta === 'function' ? impronta(Wm, Hm) : impronta, Ws = Math.round(Math.sqrt(2 * src.length)), Hs = Ws / 2, v = new Float64Array(Nm);

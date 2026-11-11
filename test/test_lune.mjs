@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { limiteRoche, raggioHill, raggioRotondo, lune, caloreMareale, stato, maree, tempoBlocco, orbitaDopoLeMaree, k2QFreddo, MATERIALI } from '../src/camera/lune.js';
 import { MSOLE, UA, ANNO } from '../src/camera/leggi.js';
-import { indirizzoDi, sistema } from '../src/camera/cosmo.js';
+import { indirizzoDi, sistema, cosmoCon, cosmoRamo } from '../src/camera/cosmo.js';
+import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -177,6 +178,108 @@ prova('con l\'urto gigante vero del pianeta (dalla storia degli impatti) niente 
   // lo stesso ingresso dà lo stesso risultato
   assert.equal(JSON.stringify(lune(TERRA, { ...SOLE, urto: URTO }, 5)), JSON.stringify(lune(TERRA, { ...SOLE, urto: URTO }, 5)));
   console.log(`      (la Luna dall'urto vero: oggi a ${(vecchia.aM / 1e6).toFixed(0)} mila km, giorno della Terra ${(vecchia.giornoPianeta / 3600).toFixed(1)} ore; con una luna di un decimo del pianeta: mese e giorno di ${(doppio.periodo / 86400).toFixed(1)} giorni terrestri)`);
+});
+
+// ---------- IL CASO PER INDIRIZZO (eventi.js): ogni esito incerto delle lune è un evento con il suo nome
+const lette = (P, stella, radice, rami = null) => { const R = new Map(), L = lune(P, stella, conRegistro(sorgente(radice, rami), R)); return { R, L }; };
+const diversi = (A, B) => [...A.keys()].filter((k) => B.has(k) && B.get(k) !== A.get(k));
+// le lune per nome (il nome sotto cui stanno i loro eventi), senza ciò che dipende dal posto in fila (il numero d'ordine)
+const perNome = (L) => new Map(L.map((l) => [l.evento, JSON.stringify({ ...l, id: 0, risonanza: l.risonanza && l.risonanza.replace(/\d+/g, 'N') })]));
+
+prova('un ramo cambia una cosa sola: una luna catturata con un\'altra orbita, e tutte le altre lune restano com\'erano', () => {
+  let casi = 0, sparite = 0;
+  for (let n = 1; n <= 60; n++) {
+    const radice = `prova/pianeta ${n}/lune`, { R: R0, L: L0 } = lette(GIOVE, SOLE, radice), prese = L0.filter((l) => l.origine === 'cattura'); if (!prese.length) continue;
+    const quella = prese[n % prese.length], ev = `${radice}/${quella.evento}/eccentricità`, { R: R1, L: L1 } = lette(GIOVE, SOLE, radice, { [ev]: 1 });
+    // un solo evento è andato diversamente; nessun altro è stato ritirato
+    assert.deepEqual(diversi(R0, R1), [ev], `seme ${n}`);
+    // tutte le altre lune sono identiche (massa, orbita, forma, calore, stato); quella ha un'altra eccentricità e ciò che ne
+    // discende (il calore delle maree, lo stato), oppure non c'è più: con quell'orbita passava troppo vicino a una luna grande
+    const A = perNome(L0), B = perNome(L1);
+    for (const [nome, f] of A) if (nome !== quella.evento) assert.equal(B.get(nome), f, `seme ${n}: ${nome}`);
+    const dopo = L1.find((l) => l.evento === quella.evento);
+    if (!dopo) { sparite++; assert.equal(L1.length, L0.length - 1); continue; }
+    assert.equal(L1.length, L0.length); assert.notEqual(dopo.eccentricita, quella.eccentricita);
+    for (const k of ['origine', 'massaKg', 'raggioM', 'densita', 'aM', 'periodo', 'retrograda']) assert.equal(dopo[k], quella[k], `seme ${n}: ${k}`);
+    assert.deepEqual(dopo.forma, quella.forma); assert.deepEqual(dopo.composizione, quella.composizione);
+    casi++;
+  }
+  assert.ok(casi >= 30, `solo ${casi} casi`);
+  console.log(`      (${casi} lune catturate con un'altra eccentricità: le altre lune identiche; ${sparite} in quel mondo non ci sono)`);
+});
+
+prova('eventi che stanno prima: un\'altra fascia sposta le lune del disco da lì in fuori; un\'altra sorte toglie o dà la luna a una Terra; il resto non è ritirato', () => {
+  let casi = 0, interneUguali = 0;
+  for (let n = 1; n <= 30; n++) {
+    const radice = `prova/pianeta ${n}/lune`, { R: R0, L: L0 } = lette(GIOVE, SOLE, radice), reg = L0.filter((l) => l.origine === 'disco'); if (reg.length < 3) continue;
+    const ev = `${radice}/disco/luna 1/fascia`, { R: R1, L: L1 } = lette(GIOVE, SOLE, radice, { [ev]: 1 });
+    assert.deepEqual(diversi(R0, R1), [ev], `seme ${n}`); casi++;
+    // la fascia della seconda luna è più larga o più stretta: la sua massa cambia; la prima, nata prima, ha la stessa massa
+    const una = (L, nome) => L.find((l) => l.evento === nome);
+    assert.notEqual(una(L1, 'disco/luna 1').massaKg, una(L0, 'disco/luna 1').massaKg); assert.equal(una(L1, 'disco/luna 0').massaKg, una(L0, 'disco/luna 0').massaKg);
+    if (una(L1, 'disco/luna 0').aM === una(L0, 'disco/luna 0').aM) interneUguali++;
+    // le catturate che ci sono in tutti e due i mondi sono le stesse (stanno lontano, per conto loro)
+    const A = perNome(L0), B = perNome(L1); for (const [nome, f] of A) if (nome.startsWith('cattura') && B.has(nome)) assert.equal(B.get(nome), f);
+  }
+  assert.ok(casi >= 15, `solo ${casi} casi`);
+  // una Terra senza urto vero: «urto/sorte» decide se la luna c'è
+  let con = 0, senza = 0;
+  for (let n = 1; n <= 40; n++) {
+    const radice = `prova/terra ${n}/lune`, ev = `${radice}/urto/sorte`, a = lette(TERRA, SOLE, radice); let b = null;
+    for (let r = 1; r <= 8 && !b; r++) { const m = lette(TERRA, SOLE, radice, { [ev]: r }); if (m.L.some((l) => l.origine === 'urto') !== a.L.some((l) => l.origine === 'urto')) b = m; }
+    assert.ok(b, `seme ${n}: in otto rami la sorte non cambia mai`); assert.deepEqual(diversi(a.R, b.R), [ev]);
+    if (a.L.some((l) => l.origine === 'urto')) con++; else senza++;
+    // (le catturate che ci sono in tutti e due i mondi sono le stesse; la luna grande, dove c'è, può aver spazzato via quelle che le passavano vicino)
+    const A = perNome(a.L), B = perNome(b.L); for (const [nome, f] of A) if (nome.startsWith('cattura') && B.has(nome)) assert.equal(B.get(nome), f, `seme ${n}: ${nome}`);
+  }
+  assert.ok(con >= 8 && senza >= 8, `${con} con la luna, ${senza} senza`);
+  console.log(`      (${casi} giganti: in ${interneUguali} la luna più interna resta anche alla stessa distanza; ${con} Terre con la luna e ${senza} senza: la sorte le scambia)`);
+});
+
+prova('l\'ordine non conta: pianeti calcolati all\'indietro, eventi riletti all\'indietro; i nomi degli eventi sono quelli dichiarati', () => {
+  const pianeti = Array.from({ length: 24 }, (_, n) => ({ P: n % 3 ? { ...GIOVE, massaKg: GIOVE.massaKg * (0.3 + 0.1 * n), id: n } : { ...TERRA, id: n }, radice: `prova/stella ${n >> 2}/pianeta ${n}/lune` }));
+  const avanti = pianeti.map(({ P, radice }) => JSON.stringify(lune(P, SOLE, sorgente(radice))));
+  const indietro = pianeti.slice().reverse().map(({ P, radice }) => JSON.stringify(lune(P, SOLE, sorgente(radice)))).reverse();
+  assert.deepEqual(indietro, avanti);
+  const nomi = new Set();
+  for (const [P, radice] of [[GIOVE, 'prova/pianeta 3/lune'], [GIOVE, 'prova/pianeta 4/lune'], [TERRA, 'prova/terra 5/lune'], [TERRA, 'prova/terra 6/lune']]) {
+    const { R } = lette(P, SOLE, radice), voci = [...R.keys()]; assert.ok(voci.length >= 4, `${voci.length} eventi`);
+    for (const v of voci.slice().reverse()) assert.equal(rileggi(v), R.get(v), v);
+    for (const v of voci) nomi.add(v.slice(radice.length + 1).replace(/\d+/g, 'N').replace(/#N$/, ''));
+  }
+  const dichiarati = ['disco/massa', 'disco/bordo interno', 'disco/bordo esterno', 'disco/larghezza delle fasce', 'disco/luna N/fascia', 'disco/luna N/eccentricità', 'urto/sorte', 'urto/massa', 'urto/eccentricità',
+    'catture/quante', 'cattura N/raggio', 'cattura N/distanza', 'cattura N/verso', 'cattura N/eccentricità', 'disco/luna N/forma', 'urto/luna/forma', 'cattura N/forma'];
+  for (const n of nomi) assert.ok(dichiarati.includes(n), `evento «${n}»`);
+  // un numero al posto della sorgente è «lune numero/pianeta id»
+  assert.equal(JSON.stringify(lune({ ...GIOVE, id: 2 }, SOLE, 7)), JSON.stringify(lune({ ...GIOVE, id: 2 }, SOLE, sorgente('lune 7/pianeta 2'))));
+});
+
+prova('nel cosmo: il ramo di un evento del disco o di una luna, scritto tra i rami del cosmo, cambia quella cosa sola e ciò che ne discende', () => {
+  const pianetiDi = (S) => S.pianeti.map((p) => JSON.stringify([p.aM, p.massaKg, p.raggioM, p.tipo, p.composizione])), luneDi = (p) => JSON.stringify(p.lune.map((l) => ({ ...l, id: 0 })));
+  let dischi = 0, catture = 0;
+  for (let n = 1; n < 60000 && (dischi < 6 || catture < 6); n += 191) {
+    const a = indirizzoDi(n), S0 = sistema(a.cosmo, a.galassia, a.stella), stella = `cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}`; if (S0.pianeti.length < 3) continue;
+    const accanto = (c) => JSON.stringify(sistema(c, a.galassia, (a.stella + 1) % 2500).pianeti.map((p) => [p.aM, p.massaKg, p.eccentricita, luneDi(p)]));
+    if (dischi < 6) { // l'eccentricità di oggi di un pianeta (un evento del disco): stessi pianeti, stesse orbite, stesse masse; un'altra eccentricità per lui
+      const k = 1, ev = `${stella}/disco/embrione ${S0.pianeti[k].formazione.embrione}/eccentricità`, c1 = cosmoCon(a.cosmo, { [ev]: 1 }), S1 = sistema(c1, a.galassia, a.stella);
+      assert.deepEqual(pianetiDi(S1), pianetiDi(S0), ev); assert.notEqual(S1.pianeti[k].eccentricita, S0.pianeti[k].eccentricita, ev);
+      S0.pianeti.forEach((p, i) => { if (Math.abs(i - k) > 1) { assert.equal(S1.pianeti[i].eccentricita, p.eccentricita); assert.equal(luneDi(S1.pianeti[i]), luneDi(p)); } });
+      assert.equal(accanto(c1), accanto(a.cosmo)); dischi++;
+    }
+    const q = S0.pianeti.find((p) => p.lune.some((l) => l.origine === 'cattura'));
+    if (q && catture < 6) { // l'orbita di una luna catturata: gli stessi pianeti, le stesse altre lune
+      const quella = q.lune.find((l) => l.origine === 'cattura'), ev = `${stella}/pianeta ${q.id}/lune/${quella.evento}/eccentricità`, c1 = cosmoCon(a.cosmo, { [ev]: 1 }), S1 = sistema(c1, a.galassia, a.stella);
+      assert.deepEqual(S1.pianeti.map((p) => JSON.stringify([p.aM, p.massaKg, p.eccentricita, p.giorno])), S0.pianeti.map((p) => JSON.stringify([p.aM, p.massaKg, p.eccentricita, p.giorno])), ev);
+      S0.pianeti.forEach((p, i) => { if (p !== q) assert.equal(luneDi(S1.pianeti[i]), luneDi(p), `${ev}: le lune del pianeta ${i}`); });
+      const dopo = S1.pianeti[q.id].lune.find((l) => l.evento === quella.evento); assert.ok(!dopo || dopo.eccentricita !== quella.eccentricita, ev);
+      for (const l of q.lune) if (l !== quella) { const m = S1.pianeti[q.id].lune.find((x) => x.evento === l.evento); assert.equal(JSON.stringify({ ...m, id: 0 }), JSON.stringify({ ...l, id: 0 }), `${ev}: la luna ${l.evento}`); }
+      assert.equal(accanto(c1), accanto(a.cosmo)); catture++;
+    }
+    // il ramo del corso intero («lune/galassia/stella/pianeta», come sempre) le cambia tutte, e solo quelle di quel pianeta
+    if (q && catture === 1) { const c2 = cosmoRamo(a.cosmo, `lune/${a.galassia}/${a.stella}/${q.id}`, 1), S2 = sistema(c2, a.galassia, a.stella); assert.notEqual(luneDi(S2.pianeti[q.id]), luneDi(q)); S0.pianeti.forEach((p, i) => { if (p !== q) assert.equal(luneDi(S2.pianeti[i]), luneDi(p)); }); }
+  }
+  assert.ok(dischi >= 6 && catture >= 6, `${dischi} sistemi, ${catture} lune catturate`);
+  console.log(`      (${dischi} sistemi con l'eccentricità di un pianeta andata diversamente, ${catture} con l'orbita di una luna catturata: il resto del sistema e la stella accanto identici)`);
 });
 
 console.log(`\n${ok} prove superate`);
