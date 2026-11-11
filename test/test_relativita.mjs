@@ -279,6 +279,10 @@ prova('dove sono: i resti delle stelle (stelle.fine) e il buco centrale delle ga
   console.log(`        nel cosmo 1: ${tutti.length} buchi centrali da ${n(Math.min(...tutti.map((x) => x.M)))} a ${n(Math.max(...tutti.map((x) => x.M)))} M☉; ${accesi} accrescono sopra l'1% di Eddington (lì vale il disco sottile)`);
 });
 
+{ // la relazione misurata M–σ: M = 0,309·10⁹·(σ/200 km/s)^4,38 M☉, scarto 0,29 dex (Kormendy & Ho 2013 [R]); la legge proposta (King 2003) senza parametri
+  confronta('buco centrale dalla retroazione (King 2003) a σ = 200 km/s', R.massaAutoregolata(200e3) / MSOLE, 0.309e9 / 10 ** 0.29, 0.309e9 * 10 ** 0.29, '3,1·10⁸ M☉ entro 0,29 dex (Kormendy & Ho 2013 [R])', 'M☉');
+  const V = GA.curvaRotazione(VIA.Gx.forma, 10) * 1e3; console.log(`        galassia 0 del modello (σ = V/√2 = ${n(V / Math.SQRT2 / 1e3)} km/s): dalla retroazione ${n(R.massaAutoregolata(V / Math.SQRT2) / MSOLE)} M☉; galassie.js (Kormendy & Ho sullo sferoide) le dà ${n(VIA.Gx.forma.buco.M)} M☉`); }
+
 console.log('\n— 4. LE GEODETICHE —');
 confronta('deflessione della luce al bordo del Sole (esatta)', R.deflessione(MSOLE, RSOLE) * SEC, 1.7512 * (1 - 4e-4), 1.7512 * (1 + 4e-4), '1,7512″; misurata entro 2·10⁻⁴ (VLBI [V]); ±2σ', '″');
 prova('la deflessione: tre vie (integrale esatto, Binet, la forma dello shader) danno lo stesso angolo, dal campo debole al bordo della cattura', () => {

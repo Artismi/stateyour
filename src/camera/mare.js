@@ -748,20 +748,28 @@ function sorgentiCalde(P, s, st, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livel
 // T_b = 2L/√(g·h); se quel tempo è vicino al periodo della marea il bacino risuona: ampiezza × 1/|1 − (T_b/T)²|, fino a
 // 5 volte (l'attrito: il fattore di merito del mare terrestre). Sui fondali bassi l'onda cresce (legge di Green,
 // h^−¼). La corrente di marea è quella di un'onda lunga, u = (a/2)·√(g/h): debole al largo, forte sul basso fondale.
-// L'ATTRITO sul fondo (ρ·C·|u|³, C = 0,0025 misurato) consuma l'energia della marea e frena la rotazione del
-// pianeta: dω/dt = −potenza/(0,33·M·R²·(ω − n)). LA ZONA TRA LE MAREE: lungo le coste l'acqua si ritira di
+// L'ATTRITO sul fondo (ρ·C·|u|³, C = 0,0025 misurato) consuma l'energia della marea, mai più di quanta l'onda ne porta
+// (½·ρ·g·a²·√(g·h) per metro di fronte), e frena la rotazione del pianeta: dω/dt = −potenza/(0,33·M·R²·(ω − n)). LA ZONA TRA LE MAREE: lungo le coste l'acqua si ritira di
 // dislivello/pendenza; dove evapora più di quanto piove restano pozze che si concentrano a ogni ciclo.
 function mareeDelMare(P, st, { W, H, co, fondo, righe, tipo, FW, FH, areaF, s, evap, piove }) {
   const N = W * H, g = st.gravita, omega = (2 * Math.PI) / (P.giorno || 86400), corpi = [];
   for (const L of P.lune || []) { if (!(L.massaKg > 0 && L.aM > 0)) continue; const mr = mareaDi(P, L); if (mr.altezza > 1e-4 && isFinite(mr.periodo)) corpi.push({ corpo: `luna ${L.nome ?? L.id ?? corpi.length + 1}`, altezza: mr.altezza, periodo: mr.periodo, relativa: Math.PI / mr.periodo }); }
   if (P.Mstella > 0 && P.aM > 0) { const n = (2 * Math.PI) / (P.anno || ANNO), rel = Math.abs(omega - n), alt = 1.5 * (P.Mstella / P.massaKg) * (P.raggioM / P.aM) ** 3 * P.raggioM; if (rel > 1e-12 && !P.bloccato) corpi.push({ corpo: 'stella', altezza: alt, periodo: Math.PI / rel, relativa: rel }); else if (alt > 0) corpi.push({ corpo: 'stella (marea ferma: il pianeta le mostra sempre la stessa faccia)', altezza: alt, periodo: Infinity, relativa: 0 }); }
-  const amp = new Float32Array(N), vel = new Float32Array(N), mobili = corpi.filter((c) => isFinite(c.periodo)); let potenza = 0, aMax = 0, aSomma = 0, aArea = 0;
+  const amp = new Float32Array(N), vel = new Float32Array(N), mobili = corpi.filter((c) => isFinite(c.periodo)); let potenza = 0, aMax = 0, aSomma = 0, aArea = 0, smorzate = 0;
   for (let j = 0; j < H; j++) { let i0 = -1; for (let i = 0; i < W; i++) if (!co.mare[j * W + i]) { i0 = i; break; }
     // i tratti di mare lungo il parallelo: la loro larghezza e la loro profondità media
     const tratti = []; if (i0 < 0) tratti.push([0, W, true]); else { let da = null; for (let n = 1; n <= W; n++) { const i = (i0 + n) % W, mm = co.mare[j * W + i]; if (mm && da === null) da = n; if (!mm && da !== null) { tratti.push([da, n, false]); da = null; } } }
     for (const [da, a, anello] of tratti) { let hm = 0; for (let q = da; q < a; q++) hm += fondo[j * W + (((i0 < 0 ? 0 : i0) + q) % W)] || 1; hm /= a - da; const Lb = (a - da) * righe.dx[j], Tb = (anello ? 1 : 2) * Lb / Math.sqrt(g * Math.max(hm, 1));
       for (let q = da; q < a; q++) { const k = j * W + (((i0 < 0 ? 0 : i0) + q) % W), h = Math.max(fondo[k], 2); let x = 0; for (const c of mobili) x += c.altezza * Math.cos((90 - ((j + 0.5) * 180) / H) * RAD) ** 2 * Math.min(5, 1 / Math.max(0.2, Math.abs(1 - (Tb / c.periodo) ** 2)));
-        x *= Math.min(3, Math.pow(Math.max(hm, 50) / Math.max(h, 5), 0.25)); x = Math.min(x, 0.8 * h); amp[k] = x; vel[k] = 0.5 * x * Math.sqrt(g / h); const A = righe.A[j]; potenza += 1025 * 0.0025 * vel[k] ** 3 * (4 / (3 * Math.PI)) * A; aMax = Math.max(aMax, x); aSomma += x * A; aArea += A; } } }
+        const largo = x; x *= Math.min(3, Math.pow(Math.max(hm, 50) / Math.max(h, 5), 0.25)); x = Math.min(x, 0.8 * h); let u = 0.5 * x * Math.sqrt(g / h); const A = righe.A[j]; let attrito = 1025 * 0.0025 * u ** 3 * (4 / (3 * Math.PI)) * A;
+        // L'ENERGIA SI CONSERVA: l'attrito sul fondo di una cella non può consumare più di quanta l'onda di marea ne porta
+        // dentro dal largo, ½·ρ·g·a²·√(g·h) per metro di fronte (a = metà dell'escursione al largo, h il fondo medio del
+        // bacino), sul lato della cella. Dove l'attrito ne vorrebbe di più è lui che smorza l'onda: corrente ed escursione
+        // calano finché i due conti tornano. (Prima, su un fondale di pochi metri, la legge di Green e la risonanza davano
+        // correnti di metri al secondo su celle larghe 300 km: da sole consumavano dieci volte la marea di tutto il mare.)
+        const porta = 0.5 * 1025 * g * (0.5 * largo) ** 2 * Math.sqrt(g * Math.max(hm, 1)) * Math.sqrt(A);
+        if (attrito > porta) { const f = Math.cbrt(porta / attrito); u *= f; x *= f; attrito = porta; smorzate++; }
+        amp[k] = x; vel[k] = u; potenza += attrito; aMax = Math.max(aMax, x); aSomma += x * A; aArea += A; } } }
   riempiTerra(amp, co.mare, W, H); riempiTerra(vel, co.mare, W, H);
   // la zona tra le maree, sulla carta fine: per ogni cella di costa, dislivello / pendenza della riva
   let areaZona = 0, lungoCosta = 0, pozze = 0, areaPozze = 0; const R = st.raggioM, lato = (2 * Math.PI * R) / FW;
@@ -771,7 +779,7 @@ function mareeDelMare(P, st, { W, H, co, fondo, righe, tipo, FW, FH, areaF, s, e
   const perMobile = mobili.length ? mobili.reduce((a, c) => (c.altezza > a.altezza ? c : a)) : null, I = 0.33 * P.massaKg * R * R;
   const frena = perMobile ? potenza / (I * perMobile.relativa) : 0; // (rad/s²: la potenza dissipata, divisa per il momento d'inerzia e per la velocità con cui il pianeta gira sotto il rigonfiamento)
   return { corpi, ampiezza: amp, corrente: vel, periodo: perMobile ? perMobile.periodo : Infinity, equilibrio: mobili.reduce((a, c) => a + c.altezza, 0), ampiezzaMedia: aArea ? aSomma / aArea : 0, ampiezzaMassima: aMax,
-    attrito: { potenzaW: potenza, frenaRadS2: frena, giornoPiuLungoMsAlSecolo: omega > 0 ? ((2 * Math.PI) / (omega * omega)) * frena * 100 * ANNO * 1000 : 0 },
+    attrito: { potenzaW: potenza, celleSmorzate: smorzate, frenaRadS2: frena, giornoPiuLungoMsAlSecolo: omega > 0 ? ((2 * Math.PI) / (omega * omega)) * frena * 100 * ANNO * 1000 : 0 },
     zonaTraLeMaree: { areaM2: areaZona, larghezzaMediaM: lungoCosta ? areaZona / lungoCosta : 0, costaM: lungoCosta, doveEvapora: { areaM2: areaPozze, tratti: pozze } } };
 }
 // LE STAGIONI. Il clima dà la temperatura della superficie in quattro parti dell'anno (cl.stagioni) e il tempo i venti

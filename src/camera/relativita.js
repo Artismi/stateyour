@@ -415,6 +415,12 @@ export function bucoNero({ massaKg, spin = 0, accrescimento = 0, origine = '' } 
 // centro di ogni galassia: `galassie.js` lo ha già (`forma.buco`: M in M☉, accrescimento in M☉/anno, frazione di
 // Eddington), dalla relazione EMPIRICA di Kormendy & Ho 2013 con la massa dello sferoide (scarto 0,28 dex) e un germe
 // LIBERO di 10⁵ M☉: non una legge. (Come farlo nascere da una legge: vedi il rapporto.)
+// UNA LEGGE DA CUI FARLO NASCERE (proposta, non ancora usata da galassie.js): il buco cresce finché la spinta della sua
+// luce, al limite di Eddington, non spazza via il gas dello sferoide; l'equilibrio tra quella spinta (L_Edd/c) e il peso
+// del guscio di gas in una sfera isoterma di dispersione σ dà M = f_g·κ·σ⁴/(πG²), con κ = σ_T/m_p e f_g la frazione
+// di gas (qui quella cosmica dei barioni, Ω_b/Ω_m di leggi.js) (King 2003, ApJ 596, L27 [R]). Niente germe e niente
+// coefficiente misurato: restano il germe iniziale (che non conta, se il gas basta) e il tempo per arrivarci (Salpeter).
+export const massaAutoregolata = (sigma, fg = COSMO.Ob / COSMO.Om) => (fg * (SIGMA_T / K.mp) * sigma ** 4) / (PI * G * G);
 export const bucoDaResto = (resto, opz = {}) => (resto && resto.tipo === 'buco nero' ? bucoNero({ massaKg: resto.massa * MSOLE, origine: 'resto di una stella (stelle.fine)', ...opz }) : null);
 export const bucoCentrale = (forma, opz = {}) => (forma && forma.buco ? bucoNero({ massaKg: forma.buco.M * MSOLE, accrescimento: ((forma.buco.accrescimento || 0) * MSOLE) / ANNO, origine: 'centro della galassia (galassie.js: Kormendy & Ho, empirica)', ...opz }) : null);
 
@@ -785,5 +791,5 @@ export const STATO = Object.freeze([
   { legge: 'il tempo proprio lungo la luce è zero (intervallo nullo); non esiste un riferimento del fotone', funzioni: 'tempoProprio, intervallo', stato: 'misurata', misura: 'è la stessa legge della dilatazione dei tempi, misurata fin dove si arriva (muoni e protoni a γ ~ 10³–10¹¹); il «punto di vista del fotone» non è una misura mancante: non esiste nella teoria (γ = ∞)', fonte: 'Einstein 1905; Minkowski 1908' },
   { legge: 'la caduta oltre l\'orizzonte: tempo proprio finito, marea, ciò che si vede', funzioni: 'cadutaNelBuco, tempoDiCaduta', stato: 'derivata e mai osservata', misura: 'fuori dall\'orizzonte la stessa relatività generale è misurata (vedi sopra); dentro nessun segnale può uscire a dirlo: è la teoria portata dove non si può controllare', fonte: 'Oppenheimer & Snyder 1939; Painlevé 1921; Misner, Thorne & Wheeler 1973' },
   { legge: 'assenza di capelli ed entropia di Bekenstein–Hawking (il numero di passati compatibili)', funzioni: 'passatiCompatibili, hawking', stato: 'derivata e mai osservata', misura: 'l\'entropia non è mai stata misurata; l\'assenza di capelli è compatibile con le onde della fusione (le frequenze del buco finale di GW150914 [R]) ma non provata; se l\'informazione riesca con la radiazione di Hawking è APERTO', fonte: 'Israel 1967; Bekenstein 1973; Hawking 1975' },
-  { legge: 'la massa del buco nero centrale dalla galassia', funzioni: 'bucoCentrale (galassie.js)', stato: 'misurata', misura: 'relazione EMPIRICA M_bn–sferoide, scarto 0,28 dex (Kormendy & Ho 2013 [R]): è una correlazione osservata, non una legge; l\'origine dei germi è aperta', fonte: 'Kormendy & Ho 2013' },
+  { legge: 'la massa del buco nero centrale dalla galassia', funzioni: 'bucoCentrale (galassie.js), massaAutoregolata', stato: 'misurata', misura: 'relazione EMPIRICA M_bn–sferoide, scarto 0,28 dex (Kormendy & Ho 2013 [R]): è una correlazione osservata, non una legge; `massaAutoregolata` (King 2003) è una spiegazione proposta, in accordo con la M–σ misurata ma non provata; l\'origine dei germi è aperta', fonte: 'Kormendy & Ho 2013; King 2003' },
 ]);

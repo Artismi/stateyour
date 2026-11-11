@@ -62,8 +62,25 @@ const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 
 // ---------- 1. il disco
 // Restituisce il disco di una stella { massa, Z, eta }: distanze in UA, densità in kg/m², tempi in anni.
+// la luce del Sole al tempo del suo disco (in unità di quella di oggi): dalla stessa fonte, a metà della vita mediana del gas
+let soleGiovane = 0;
+const luceDelSoleGiovane = () => (soleGiovane ||= stellaVera(1, { Z: 1, eta: 0.5 * DISCO.vitaMedia }).L);
 export function disco(st, seme = 1) {
-  const c = comeSorgente(seme, 'disco'), M = Math.max(0.01, st.massa ?? 1), Z = Math.max(0, st.Z ?? 1), L = stellaVera(M, { Z }).L; // (la luce della stella a metà della vita: la linea della neve a 2,7 UA·√L è tarata così sul Sole)
+  const c = comeSorgente(seme, 'disco'), M = Math.max(0.01, st.massa ?? 1), Z = Math.max(0, st.Z ?? 1);
+  // LEGGE EMPIRICA: il gas dura pochi milioni di anni (poi la luce della stella lo soffia via), meno attorno alle stelle grandi
+  const vita = Math.min(1.2e7, DISCO.vitaMinima - (DISCO.vitaMedia - DISCO.vitaMinima) * Math.log(1 - 0.98 * c('vita del gas'))) / Math.sqrt(M);
+  // LA LUCE DELLA STELLA AL TEMPO DEL DISCO. È la stessa grandezza che scalda i pianeti oggi, letta dalla stessa fonte
+  // (stelle.js stella(M, { Z, eta })) a un altro tempo: a metà della vita del gas (o dell'età della stella, se è più
+  // giovane del suo disco). «L» è in unità della luce che il SOLE aveva al tempo del suo disco (luceDelSoleGiovane): la
+  // taratura del disco è una sola, la linea della neve del Sistema Solare a 2,7 UA (da lì 280 K a 1 UA e la polvere che
+  // evapora a 0,034 UA: la stessa legge T ∝ L^¼/√r), e le altre stelle la scalano con la loro luce di ALLORA rispetto a
+  // quella del Sole di allora. «Lstella» è la stessa luce in unità del Sole di oggi. (Prima era la luce a metà della vita
+  // della stella: per il Sole quasi quella di oggi; ma il Sole giovane dava il 71% di oggi mentre una nana rossa dà
+  // sempre la stessa, e una nana bruna giovane molto di più: rispetto al Sole le loro linee della neve erano troppo vicine,
+  // del 20% per le nane rosse.)
+  // CHE COSA MANCA: stelle.js non ha la contrazione prima della sequenza principale, quando ogni stella è più luminosa
+  // (le piccole molto di più): la luce «al tempo del disco» è quella dell'età zero della sequenza principale.
+  const tDisco = 0.5 * Math.min(vita, st.eta > 0 ? st.eta : vita), Lstella = stellaVera(M, { Z, eta: tDisco }).L, L = Lstella / luceDelSoleGiovane();
   // la linea della neve: dove il disco scende sotto i 170 K e il ghiaccio non evapora più
   const neve = 2.7 * Math.sqrt(L);
   // LEGGE EMPIRICA: i dischi osservati arrivano a qualche decina di UA, più larghi attorno alle stelle più grandi
@@ -73,8 +90,6 @@ export function disco(st, seme = 1) {
   const frazione = limita(DISCO.frazione * Math.exp(DISCO.sparpaglio * gauss), 0.01, 0.12), massaKg = frazione * M * MSOLE;
   // Σ(r) = Σ₀·r^(-3/2): Σ₀ (a 1 UA) è quella che, sommata fino al bordo esterno, dà la massa del disco
   const sigma0 = massaKg / (4 * Math.PI * UA * UA * Math.sqrt(rOut));
-  // LEGGE EMPIRICA: il gas dura pochi milioni di anni (poi la luce della stella lo soffia via), meno attorno alle stelle grandi
-  const vita = Math.min(1.2e7, DISCO.vitaMinima - (DISCO.vitaMedia - DISCO.vitaMinima) * Math.log(1 - 0.98 * c('vita del gas'))) / Math.sqrt(M);
   // il bordo interno dei solidi: dove il disco giovane supera i 1500 K la polvere evapora, e non c'è di che fare pianeti.
   // Vicino alla stella il disco è scaldato soprattutto dal suo stesso gas che cade (in una vita il disco si svuota
   // sulla stella: Ṁ = massa / vita) e il calore esce a fatica attraverso la polvere (opacità κ ≈ 0,1 m²/kg × Z):
@@ -86,7 +101,7 @@ export function disco(st, seme = 1) {
   // i solidi: i metalli del gas (Z × 0,0134); al caldo solo un quarto è solido (ferro e roccia), oltre la neve
   // lo è anche il ghiaccio: quattro volte di più
   const sigmaSolidi = (r) => Z * DISCO.metalliSole * (r < neve ? DISCO.roccia : DISCO.solidiFreddi) * sigmaGas(r);
-  return { massaStella: M, Z, L, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi };
+  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi };
 }
 
 // ---------- 5. il raggio, dalla massa e da ciò di cui è fatto
@@ -250,10 +265,13 @@ export function formaPianeti(st, seme = 1) {
 
   // i pianeti: quelli abbastanza grandi; il resto sono detriti (fasce di asteroidi e di comete)
   const terre = (m) => { const x = m / MTERRA; return (x < 10 ? x.toFixed(x < 1 ? 2 : 1) : String(Math.round(x))).replace('.', ','); };
+  // la luce della stella OGGI (Sole di oggi = 1): il velo di gas di un pianeta si gonfia con il flusso che riceve adesso
+  // (Lopez e Fortney 2014: la legge del raggio è data con il flusso di oggi e l'età); è la stessa luce che cosmo.js dà al clima
+  const Loggi = stellaVera(D.massaStella, { Z: D.Z, eta }).L;
   const pianeti = vivi.filter((b) => b.m >= P.minimo * MTERRA && b.a >= 0.02).map((b) => {
     const solidi = b.m - b.gas, gas = b.gas / b.m, ghiaccio = b.h2o / solidi, ferro = b.fe / solidi;
     const tipo = gas > 0.5 ? 'gassoso' : ghiaccio > 0.2 ? 'ghiacciato' : 'roccioso', involucro = tipo === 'gassoso' || gas < 0.005 ? 0 : gas;
-    const raggioM = raggioPianeta({ massaKg: b.m, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: D.L / (b.a * b.a), eta });
+    const raggioM = raggioPianeta({ massaKg: b.m, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: Loggi / (b.a * b.a), eta });
     // di che cosa è fatto. Il gas di un gigante è quello della stella: idrogeno ed elio (71 a 27, la miscela misurata
     // del Sole) con i suoi metalli; i «pesanti» sono quelli più il nucleo
     const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * P.metalliSole * D.Z) : 0;

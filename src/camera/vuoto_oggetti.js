@@ -79,7 +79,7 @@ export function censimento(forma) {
     for (let i = 0; i < NC; i++) { let s = 0; for (let q = 0; q < NZ; q++) { const u = -1 + (2 * (q + 0.5)) / NZ, z = h * Math.atanh(u), c = contenuto(forma, { r: A.r[k], z, fase: (i + 0.5) / NC - 0.5 }), ch = Math.cosh(z / h); s += c.gas.densita * c.gas.molecolare * (2 / NZ) * h * ch * ch * KPC; } mol += (s * a.area) / NC; cdfMol[i + 1] = mol; }
     if (mol > 0) for (let i = 0; i <= NC; i++) cdfMol[i] /= mol; else for (let i = 0; i <= NC; i++) cdfMol[i] = i / NC;
     const g = LARSON.pendenza, Mmin = a.nubeMin, Mmax = Math.max(a.jeansKg, 2 * Mmin), Kn = mol > 0 ? (mol * (2 - g)) / (Math.pow(Mmax, 2 - g) - Math.pow(Mmin, 2 - g)) : 0;
-    const nubi = { molKg: mol, Mmin, Mmax, K: Kn, cdf: cdfMol, sopra: (M) => (Kn * (Math.pow(Math.max(M, Mmin), 1 - g) - Math.pow(Mmax, 1 - g))) / (g - 1), massa: (Nn) => Math.pow((Nn * (g - 1)) / Kn + Math.pow(Mmax, 1 - g), 1 / (1 - g)) };
+    const nubi = { molKg: mol, Mmin, Mmax, K: Kn, cdf: cdfMol, sopra: (M) => (M >= Mmax ? 0 : (Kn * (Math.pow(Math.max(M, Mmin), 1 - g) - Math.pow(Mmax, 1 - g))) / (g - 1)), massa: (Nn) => Math.pow((Nn * (g - 1)) / Kn + Math.pow(Mmax, 1 - g), 1 / (1 - g)) };
     nubi.totale = nubi.sopra(Mmin);
     // --- LE STELLE CALDE (regioni H II): quelle che finiranno in supernova; numero = nascite × vita, dalla più grande in giù
     const N = P.N, hii = new Float64Array(N + 1), rifl = new Float64Array(N + 1);
@@ -242,8 +242,8 @@ export function oggettiIn(forma, regione, t = 0, { caso = sorgente('galassia'), 
     for (const c of celle) {
       const R = Cn.anello(c.k), tot = attesiTot(R) * c.w, fin = tot * taglio; if (!(fin > 0)) continue;
       const nomeCella = `${nome}/${c.k}.${c.i}.${c.s}`, s = c0.serie(nomeCella); let G = 0;
-      for (let j = 0; j < 100000; j++) { G += intervallo(s, j); if (G >= fin) break; const o = c0.sotto(`${nomeCella}/${j}`), ogg = fai(R, valoreDi(R, G / c.w), o); if (!ogg) continue;
-        const p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k }); mostrati++; }
+      for (let j = 0; j < 100000; j++) { G += intervallo(s, j); if (G >= fin) break; const o = c0.sotto(`${nomeCella}/${j}`), p = postoIn(forma, R, c.i, c.s, cdf(c.k), Cn.numero, hz(R), o, tG); if (!dentro(p.pos)) continue; // (prima il posto: chi sta fuori dalla regione non si costruisce nemmeno)
+        const ogg = fai(R, valoreDi(R, G / c.w), o); if (!ogg) continue; oggetti.push({ ...ogg, indirizzo: `${c0.radice}/${nomeCella}/${j}`, pos: p.pos, faseBraccio: p.faseBraccio, anello: c.k }); mostrati++; }
     }
     nebbia[tipo] = { veri, mostrati, soglia: taglio, cosa: taglio < 1 ? `i ${Math.round(massimo)} più grandi di ${Math.round(veri)}` : 'tutti' };
   };

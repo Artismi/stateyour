@@ -271,11 +271,19 @@ prova('l\'aria di ogni pianeta: le frazioni fanno 1, e non c\'è nessuna molecol
   assert.ok(n > 500);
 });
 
-prova('la linea della neve è la stessa in disco.js e in lune.js: 170 K a 2,7·√L unità astronomiche', () => {
-  for (const M of [0.3, 1, 2.5]) {
+prova('la linea della neve del disco: 170 K a 2,7 UA·√(luce della stella al tempo del disco, su quella del Sole di allora), dalla stessa stelle.stella', () => {
+  // (disco.js legge la luce da stelle.stella(M, { Z, eta }) al tempo del disco, D.tDisco; la taratura è la neve del Sole a 2,7 UA)
+  const soleAllora = ST.stella(1, { Z: 1, eta: 0.5 * DI.DISCO.vitaMedia }).L; let lune = 0; const scarti = [];
+  for (const M of [0.1, 0.3, 1, 2.5]) {
     const D = DI.disco({ massa: M, Z: 1, eta: 4.5e9 }, 1), Tdisco = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(D.neve); // la temperatura che formaPianeti usa per il ferro
-    tra(Tdisco, 168, 172, 'temperatura del disco sulla linea della neve'); tra(D.neve / (2.7 * Math.sqrt(ST.stella(M, { Z: 1 }).L)), 0.999, 1.001, 'linea della neve');
+    tra(Tdisco, 168, 172, 'temperatura del disco sulla linea della neve'); tra(D.neve / (2.7 * Math.sqrt(ST.stella(M, { Z: 1, eta: D.tDisco }).L / soleAllora)), 0.999, 1.001, 'linea della neve');
+    tra(D.Lstella / ST.stella(M, { Z: 1, eta: D.tDisco }).L, 1 - 1e-12, 1 + 1e-12, 'la luce del disco è quella di stelle.stella a quel tempo');
+    // lune.js mette ancora la sua linea della neve a 2,7 UA·√(luce a metà della vita della stella)
+    const diLune = 2.7 * Math.sqrt(ST.stella(M, { Z: 1 }).L), s = Math.abs(diLune / D.neve - 1); scarti.push(s); if (s > 0.01) lune++;
   }
+  tra(DI.disco({ massa: 1, Z: 1, eta: 4.5e9 }, 1).neve, 2.699, 2.701, 'la neve del Sole (UA)');
+  nota(2, 'lune.js mette la linea della neve con la luce della stella a metà della vita (Lgiovane = stella(M, { Z }).L, e 2,7 UA·√L), disco.js con la luce al tempo del disco rispetto al Sole di allora: per le lune di una nana rossa la neve è il 18% più vicina che per i pianeti dello stesso sistema. lune.js deve leggere la luce (o la neve) dal disco del sistema',
+    { casi: lune, su: scarti.length, massimo: `${(100 * Math.max(...scarti)).toFixed(0)}%`, dove: 'lune.js lune() (Lgiovane); disco.js disco()' });
 });
 
 prova('la miscela del Sole ha una fonte sola (chimica.js SOLE): roccia, ghiacci, ferro, idrogeno ed elio del disco vengono da lì', () => {

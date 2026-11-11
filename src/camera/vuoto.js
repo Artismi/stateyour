@@ -81,14 +81,14 @@
 //   · gli oggetti interstellari: tre ordini di grandezza meno della stima da 1I/'Oumuamua (lo sono anche nei modelli veri);
 //   · le fasce: quelle interne sono quasi tutte esaurite a 4,5 miliardi di anni (impatti.js lo dichiara: manca Yarkovsky),
 //     quelle esterne pesano decine di Terre (manca la migrazione): la polvere zodiacale viene 10⁵ volte la vera.
-import { COSTANTI, MSOLE, LSOLE, ANNO, UA } from './leggi.js';
+import { COSTANTI, MSOLE, UA } from './leggi.js';
 import * as ST from './stelle.js';
-import { LEGGI, ANELLI, popolazione, cinematica, COSMOLOGIA, dentro as GAL } from './galassie.js';
+import { LEGGI, ANELLI, popolazione, COSMOLOGIA, dentro as GAL } from './galassie.js';
 import { LEGGI_ANELLI } from './anelli.js';
 import { sorgente } from './eventi.js';
-import { MEZZO, KPC, PC, GA_S, contenuto, quadro, coloreVero } from './vuoto_mezzo.js';
+import { MEZZO, KPC, GA_S, contenuto, quadro, coloreVero } from './vuoto_mezzo.js';
 import { oggettiIn, densitaOggetti } from './vuoto_oggetti.js';
-import { corpiMinori, vaganti, ventoA, SISTEMA } from './vuoto_sistema.js';
+import { corpiMinori, vaganti, ventoA } from './vuoto_sistema.js';
 
 export * from './vuoto_mezzo.js';
 export * from './vuoto_oggetti.js';
@@ -199,4 +199,4 @@ export function scenaVuoto(dove = {}, t = 0) {
     mezzo: (x, y, z) => contenuto(forma, { r: Math.hypot(x, y) / k, z: z / k, fi: Math.atan2(y, x) }, t), nebbia: O.nebbia, celle: O.celle };
 }
 
-export const dentroVuoto = { cosmoMedio, GAMMA43, cinematica, LSOLE, ANNO, PC, SISTEMA };
+export const dentroVuoto = { cosmoMedio, GAMMA43 };

@@ -123,16 +123,21 @@ export function risonanzeIn(a1, a2, pianeti, eTipica = 0.1) {
 // scaglia (scheda s): dove comincia la nube e che parte dei corpi scagliati ci resta.
 function nubeDa(s, Mst, rho, eta = 4.5e9) {
   const Dx = (SS.calcio * s.mu) / s.aM; // il calcio in 1/a (per metro) a ogni passaggio
-  // la cometa diffonde in energia in t_d = P(a)·(1/(a·Dx))²; la marea della galassia le cambia il momento angolare di
-  // quanto serve a staccare il perielio dal pianeta in t_q = √(2GM·a_p)/(4πGρ·a²). Uguali a: a = [GM·√(2a_p)·Dx²/(8π²Gρ)]^(2/3)
-  // e la marea deve averne avuto il tempo nell'età del sistema: t_q(a) ≤ età → a ≥ √(√(2GM·a_p)/(4πGρ·età)) (un pianeta
-  // piccolo dà calci piccoli: la sua cometa sale piano e arriva nella nube tutta, ma solo da dove la marea ha già lavorato)
-  const aPari = Math.pow((G * Mst * Math.sqrt(2 * s.aM) * Dx * Dx) / (8 * PI * PI * G * rho), 2 / 3), aEta = Math.sqrt(Math.sqrt(2 * G * Mst * s.aM) / (PI4 * G * rho * eta * ANNO)), aIn = Math.max(aPari, aEta);
-  return { aIn, aPari, aEta, calcio: Dx, resta: Math.min(1, 1 / (aIn * Dx)) };
+  // A un semiasse a la cometa resta, prima che i calci la portino altrove, t_r = P(a)·max(1, 1/(a·Dx)²): molti giri se i
+  // calci sono piccoli rispetto alla sua energia (cammina a caso), uno solo se sono grandi. La marea della galassia le
+  // cambia il momento angolare di quanto serve a staccare il perielio dal pianeta in t_q = √(2GM·a_p)/(4πGρ·a²).
+  // La nube comincia dove t_q = t_r:  calci piccoli → a = [GM·√(2a_p)·Dx²/(8π²Gρ)]^(2/3);
+  //                                   calci grandi  → a^3,5 = GM·√(2a_p)/(8π²Gρ) (il perielio si stacca in un giro solo).
+  // E la marea deve averne avuto il tempo nell'età del sistema: t_q(a) ≤ età → a ≥ √(√(2GM·a_p)/(4πGρ·età)).
+  const c = (G * Mst * Math.sqrt(2 * s.aM)) / (8 * PI * PI * G * rho), piccoli = Math.pow(c * Dx * Dx, 2 / 3), aPari = piccoli * Dx <= 1 ? piccoli : Math.pow(c, 1 / 3.5);
+  const aEta = Math.sqrt(Math.sqrt(2 * G * Mst * s.aM) / (PI4 * G * rho * eta * ANNO)), aIn = Math.max(aPari, aEta), aOut = bordoNube(Mst, rho);
+  // quanta parte ci resta: la cometa cammina in 1/a a passi Dx verso lo zero (oltre, è persa); la nube è la finestra tra
+  // 1/a_esterno e 1/a_interno: se è più larga di un passo ci cade dentro di sicuro, se no con probabilità finestra/passo
+  return { aIn, aPari, aEta, calcio: Dx, unGiro: piccoli * Dx > 1, resta: Math.min(1, Math.max(0, 1 / aIn - 1 / aOut) / Dx) };
 }
 // il bordo esterno: dove la marea vince la stella, (M/4πρ)^(1/3); e da dove il «cono di perdita» è sempre pieno (la
 // marea sposta il perielio di più di q in un giro): a^3,5 = GM·√(2q)/(8π²Gρ)
-const bordoNube = (Mst, rho) => Math.cbrt(Mst / (PI4 * rho));
+function bordoNube(Mst, rho) { return Math.cbrt(Mst / (PI4 * rho)); }
 const conoPieno = (Mst, rho, q) => Math.pow((G * Mst * Math.sqrt(2 * q)) / (8 * PI * PI * G * rho), 1 / 3.5);
 
 // ---------- UNA COMETA ALLA LUCE DELLA STELLA

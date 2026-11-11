@@ -12,7 +12,10 @@ export const COSTANTI = {
   c: 2.998e8, G: 6.674e-11, hbar: 1.0546e-34, kB: 1.381e-23, sigma: 5.670e-8,
   me: 9.109e-31, mp: 1.6726e-27, mn: 1.6749e-27, e: 1.602e-19,
 };
-export const COSMO = { H0: 67.7, Om: 0.31, OL: 0.69, Ob: 0.049, sigma8: 0.81, ns: 0.965 };
+// (Tcmb: la temperatura del fondo cosmico oggi, 2,7255 K — Fixsen 2009, ApJ 707, 916 —; Neff: il numero efficace di specie di
+// neutrini, 3,046 — Mangano et al. 2005. Da questi due e dalle costanti viene la densità di radiazione Ω_r (fotoni più
+// neutrini): stanno qui perché Ω_r abbia una fonte sola. etaUniverso() qui sotto non la conta: oggi pesa 10⁻⁴)
+export const COSMO = { H0: 67.7, Om: 0.31, OL: 0.69, Ob: 0.049, sigma8: 0.81, ns: 0.965, Tcmb: 2.7255, Neff: 3.046 };
 export const ANNO = 3.156e7, MSOLE = 1.989e30, RSOLE = 6.957e8, LSOLE = 3.828e26;
 
 // l'età dell'universo, esatta per un cosmo piatto con materia e energia oscura

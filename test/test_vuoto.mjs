@@ -13,6 +13,7 @@ import * as MAT from '../src/camera/materia.js';
 import { DATI as RISALITA } from '../src/camera/risalita.js';
 import { storiaImpatti, IMPATTI } from '../src/camera/impatti.js';
 import { MTERRA } from '../src/camera/disco.js';
+import { cosmo, galassia, sistema, cosmoBase, ramiCosmo } from '../src/camera/cosmo.js';
 import * as V from '../src/camera/vuoto.js';
 
 let ok = 0; const tabella = [], costi = [];
@@ -103,7 +104,7 @@ prova('vicino al Sole della galassia di prova: pressioni, luce, fasi; sui bracci
   assert.ok(cresta.gas.nH > tra2.gas.nH && cresta.gas.molecolare > tra2.gas.molecolare, 'sulla cresta del braccio c\'è più gas, e più molecolare'); assert.ok(cresta.dove.sulBraccio && !tra2.dove.sulBraccio);
   assert.ok(alto.gas.nH < 0.01 * cresta.gas.nH && alto.gas.fasi[0].massa < 0.01, 'a mezzo kpc dal piano non ci sono nubi');
   // la media nel piano attorno al cerchio solare (tutte le posizioni rispetto ai bracci)
-  let n = 0, vol = {}, caldo = null; const NF = 48; for (let i = 0; i < NF; i++) { const c = V.contenuto(VL, { r: SOLE, z: 0, fase: (i + 0.5) / NF - 0.5 }); n += c.gas.nH / NF; for (const f of c.gas.fasi) { vol[f.nome] = (vol[f.nome] || 0) + f.volume / NF; if (f.nome === 'caldo') caldo = f; } }
+  let n = 0; const vol = {}, caldo = { n: 0, T: 0 }, NF = 48; for (let i = 0; i < NF; i++) { const c = V.contenuto(VL, { r: SOLE, z: 0, fase: (i + 0.5) / NF - 0.5 }); n += c.gas.nH / NF; for (const f of c.gas.fasi) { vol[f.nome] = (vol[f.nome] || 0) + f.volume / NF; if (f.nome === 'caldo') { caldo.n += f.n / NF; caldo.T = f.T; } } }
   riscontro('vicino al Sole', 'atomi di H per cm³, media nel piano', n / 1e6, [0.6, 1.2], { fonte: 'Ferrière 2001 (tutte le fasi, a z = 0)' });
   riscontro('vicino al Sole', 'pressione termica delle due fasi (K/cm³)', a.curva.P2, 3800, { fonte: 'Jenkins & Tripp 2011, dal C I' });
   riscontro('vicino al Sole', 'peso dello strato di gas (K/cm³)', a.peso(1) / KCM, [1e4, 2.8e4], { fonte: 'Boulares & Cox 1990: 2,8·10⁴ in tutto, ~10⁴ dal gas' });
@@ -116,7 +117,7 @@ prova('vicino al Sole della galassia di prova: pressioni, luce, fasi; sui bracci
   riscontro('vicino al Sole', 'fotoni ionizzanti per M☉/anno di stelle (10⁵³/s)', a.resa.Q0 / 1e53, 1.4, { entro: 1.5, fonte: 'Kennicutt 1998, con le masse di Kroupa' });
   riscontro('vicino al Sole', 'luce 6–13,6 eV per M☉/anno (10³⁶ W)', a.resa.fuv / 1e36, [1.3, 2], { fonte: 'Kennicutt 1998 (L_ν a 150 nm × banda)' });
   riscontro('vicino al Sole', 'massa più grande di una nube: Jeans del disco (10⁶ M☉)', a.jeansKg / MSOLE / 1e6, 6, { fonte: 'Williams & McKee 1997: taglio a 6·10⁶ M☉' });
-  riscontro('vicino al Sole', 'A_V attraverso il disco (mag)', (a.sigmaGas / V.dentroMezzo.MASSA_PER_H) * a.polvere.AV, [0.3, 0.6], { fonte: 'verso i poli galattici: ~0,1–0,2 per lato... × 2 lati' });
+  riscontro('vicino al Sole', 'A_V attraverso il disco (mag)', (a.sigmaGas / V.dentroMezzo.MASSA_PER_H) * a.polvere.AV, [0.3, 0.6], { fonte: 'verso i poli galattici: 0,15–0,3 per lato' });
   // l'alone caldo di galassie.js lì: più pressione del disco? (incoerenza a monte: si stampa)
   const x = V.contenuto(VL, { r: SOLE, z: 0, fase: 0.25 }); riscontro('a monte', 'pressione dell\'alone caldo di galassie.js a 8 kpc / peso del disco', (2.3 * x.alone.nH * x.alone.T * K.kB) / a.peso(1), [0, 0.3], { entro: 1, fonte: 'dovrebbe essere ben sotto 1: l\'alone isotermo r⁻² è troppo denso al centro' });
   riscontro('a monte', 'spessore del gas: peso / (ρ·σ_g²) (1 se idrostatico)', a.peso(1) / ((a.sigmaGas / (2 * Q.hGas)) * (LEGGI.sigmaGas * 1e3) ** 2), 1, { entro: 1.3, fonte: 'equilibrio idrostatico con LEGGI.sigmaGas e LEGGI.spessoreGas' });
@@ -136,7 +137,7 @@ prova('nel tempo: stessa funzione; i bracci girano; il fondo era più caldo; un 
 });
 
 console.log('\nB. GLI OGGETTI CHE SI TROVANO ZOOMANDO');
-const tCens = performance.now(), TOT = V.quantiInTutto(VL); costo('censimento di una galassia (14 anelli, una volta)', performance.now() - tCens);
+const TOT = V.quantiInTutto(VL);
 const chiave = (o) => `${o.indirizzo}|${o.pos.map((v) => v.toPrecision(12)).join(',')}|${o.raggio.toPrecision(12)}`;
 prova('oggettiIn: stesso indirizzo, stesso oggetto; chi sta in una regione piccola c\'è, identico, in una più grande', () => {
   const piccola = { centro: [SOLE, 0.3, 0], raggio: 0.12 }, media = { centro: [SOLE, 0.2, 0.02], raggio: 0.45 }, opz = { caso: CASO, catalogo: CAT, massimo: 1e9 };
@@ -380,10 +381,29 @@ prova('scenaVuoto: i dati per il motore — metri, watt, righe con la loro lungh
   assert.deepEqual(JSON.stringify(V.scenaVuoto({ sistema: s.Sis, caso: s.caso }, 0).corpi), JSON.stringify(V.scenaVuoto({ sistema: s.Sis, caso: s.caso }, 0).corpi));
 });
 
+prova('galassie estreme (una nana, un ammasso, una appena fusa): niente si rompe, il gas torna, nessun conteggio negativo', () => {
+  for (const a of [{ massa: 1e10, spin: 0.035 }, { massa: 1e14, spin: 0.035 }, { massa: 3e12, spin: 0.04, fusioni: [{ quando: 12, rapporto: 1 }] }]) { const c = sorgente('prova/estrema'), f = formaDaAlone({ fusioni: [], ...a }, c), q = V.quantiInTutto(f), m = V.massaDelGas(f);
+    for (const k in q) assert.ok(q[k] >= 0 && isFinite(q[k]), `alone ${a.massa}: ${k} = ${q[k]}`); if (f.massaGas > 0) tra(m.totale / f.massaGas, 0.995, 1.005, `alone ${a.massa}: gas`);
+    const o = V.oggettiIn(f, { centro: [0, 0, 0], raggio: 300 }, 0, { caso: c, massimo: 30 }); for (const x of o.oggetti) assert.ok(x.raggio > 0 && isFinite(x.raggio) && x.pos.every(isFinite)); const sc = V.scenaVuoto({ forma: f, caso: c, massimo: 20 }); assert.ok(sc.volumi.length === V.oggettiIn(f, { centro: [0, 0, 0], raggio: f.anelli.bordo[ANELLI] }, 0, { caso: c, massimo: 20 }).oggetti.length);
+    const fuori = V.contenuto(f, { r: 3 * f.anelli.bordo[ANELLI], z: 5 }); assert.equal(fuori.gas.nH, 0); assert.ok(fuori.alone.nH >= 0 && fuori.fondo.fotoni > 0, 'fuori dal disco restano l\'alone caldo e il fondo'); }
+});
+
+prova('con il mondo vero di cosmo.js (cosmo 1): una galassia con il suo catalogo, sistemi con la loro storia degli impatti', () => {
+  let t = performance.now(); const C1 = cosmo(1), gid = Math.max(0, C1.galassie.findIndex((g) => g.forma.classe.startsWith('spirale'))), Gx = galassia(1, gid), casoG = sorgente(`cosmo ${cosmoBase(1)}/galassia ${gid}`, ramiCosmo(1)); costo('cosmo(1) e galassia(1, id) di cosmo.js (non è di questo modulo: per confronto)', performance.now() - t);
+  const R = Gx.forma.anelli.bordo[ANELLI], sc = V.scenaVuoto({ forma: Gx.forma, caso: casoG, catalogo: Gx, regione: { centro: [0, 0, 0], raggio: 2 * R }, massimo: 100 }), suoi = Gx.sorgenti.filter((x) => x.tipo === 'supernova'), miei = sc.volumi.filter((v) => v.id.includes('/supernova ') && !v.id.includes('/vuoto/'));
+  assert.equal(miei.length, suoi.length, 'i resti delle ultime supernove del catalogo ci sono tutti'); for (const x of suoi) assert.ok(miei.some((v) => Math.abs(v.raggio / x.raggioM - 1) < 1e-9 && Math.abs(v.pos[0] - x.pos[0] * Gx.forma.unitaM) < 1e-6 * Gx.forma.unitaM), `resto di ${x.eta.toFixed(0)} anni`);
+  let fatti = 0; for (let sid = 0; sid < Gx.stelle.length && fatti < 4; sid += 211) { const S = Gx.stelle[sid]; if (S.stato === 'stella di neutroni' || S.stato === 'buco nero') continue; const Sis = sistema(1, gid, sid); if (!Sis.pianeti.length) continue; fatti++;
+    const cs = sorgente(`cosmo ${cosmoBase(1)}/galassia ${gid}/stella ${sid}`, ramiCosmo(1)), m = V.corpiMinori(Sis, 0, { caso: cs });
+    for (const p of Sis.pianeti) { assert.strictEqual(V.dentroSistema.storiaDi(Sis, p, cs), p.impatti, 'la storia degli impatti è quella di cosmo.js (p.impatti), non un\'altra'); const A = p.impatti.attesi, nE = A.epoche.length - 1; let n = 0; for (let k = 0; k < A.diametroM.length; k++) if (A.diametroM[k] >= 1e3) n += A.perEpoca[k * nE + nE - 1] / (A.epoche[nE] - A.epoche[nE - 1]); assert.equal(m.flusso.find((x) => x.pianeta === p.id).perAnno(1e3), n); }
+    const scS = V.scenaVuoto({ sistema: Sis, caso: cs }, 1e8); for (const b of scS.corpi) assert.ok(b.pos.every(isFinite) && b.id.startsWith(`cosmo ${cosmoBase(1)}/galassia ${gid}/stella ${sid}/vuoto/`)); assert.ok(m.rAttiva >= 0 && m.vento(UA).protoni >= 0); }
+  assert.ok(fatti >= 2, `sistemi provati: ${fatti}`);
+});
+
 // ---------- i costi (misurati qui, a memorie già calde dove è scritto)
 { const N = 20000, c = sorgente('prova/costi'); let t = performance.now(); for (let i = 0; i < N; i++) V.contenuto(VL, { r: 1 + 15 * c(`r${i % 500}`), z: 0.05, fase: (i % 97) / 97 - 0.5 }); costo('contenuto(), un punto', (performance.now() - t) / N);
   t = performance.now(); const f2 = formaDaAlone({ massa: 1e12, spin: 0.045, fusioni: [] }, sorgente('prova/costi/galassia')); V.contenuto(f2, { r: 8, fase: 0 }); costo('contenuto(), il primo punto di una galassia nuova (la curva termica di un anello)', performance.now() - t);
-  t = performance.now(); V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 0.05 }, 0, { caso: CASO }); costo('oggettiIn, sfera di 50 pc, a censimento fatto', performance.now() - t);
+  t = performance.now(); V.quantiInTutto(f2); costo('censimento di una galassia nuova (14 anelli: curve termiche, gas molecolare, stelle; una volta)', performance.now() - t);
+  t = performance.now(); const piccola = V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 0.05 }, 0, { caso: CASO }); costo(`oggettiIn, sfera di 50 pc, a censimento fatto (${piccola.oggetti.length} oggetti, ${piccola.celle} celle)`, performance.now() - t);
   t = performance.now(); const tutto = V.oggettiIn(VL, { centro: [0, 0, 0], raggio: 100 }, 0, { caso: CASO, catalogo: CAT }); costo(`oggettiIn, tutta la galassia con la nebbia (${tutto.oggetti.length} oggetti di ${num(Object.values(tutto.nebbia).reduce((s, x) => s + x.veri, 0))}; ${tutto.celle} celle)`, performance.now() - t); }
 
 // ---------- I RISCONTRI, in chiaro

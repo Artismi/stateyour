@@ -14,7 +14,7 @@ import { minerali, coloreRoccia, ROCCE } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { internoDaStoria } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
+import { internoDaStoria, storia, STORIA } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
 import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, bilancioPerFasce, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
 // L'INTERNO DI OGGI: lo stato della storia del pianeta (storia.js) all'età della sua stella, nella forma di sempre:
 // { eta, nucleo (raggio del nucleo / raggio), crosta (spessore della crosta di basalto / raggio), q (W/m²), dinamo, B0 (T
@@ -48,7 +48,10 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // la storia degli impatti del pianeta (impatti.js, P.impatti); se il pianeta non la porta restano i ripieghi da seme.
   // Lo stato da cui parte il mantello è l'impronta termica dei suoi urti
   const storiaUrti = P.impatti ?? null;
-  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
+  // lo stato del mantello dalla storia termica del pianeta (storia.js: quella che il pianeta ha già): il salto di temperatura
+  // tra il mantello alto e la superficie, la sua conducibilità e la sua diffusività: da lì la velocità delle placche
+  let mantello = null; if (aPlacche) { try { const sto = storia(P, int.eta ?? 4.5e9); if (sto && sto.Tum > sto.Ts) mantello = { dT: sto.Tum - sto.Ts, k: STORIA.kSu, kappa: STORIA.kSu / (STORIA.rhoSu * STORIA.cp) }; } catch { mantello = null; } }
+  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, mantello, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(`onda ${k}/direzione`), f: 2 + k * 0.7, fi: caso(`onda ${k}/fase`) * 6.28, a: 1 / (1 + k * 0.35) }));
