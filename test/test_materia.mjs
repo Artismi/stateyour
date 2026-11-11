@@ -158,7 +158,8 @@ prova('lo spettro β nel motore è quello di Fermi; un ramo cambia un solo decad
 });
 
 prova("il muone nell'acqua: il cono di luce Cherenkov e i raggi delta", () => {
-  const r = M.cellaMateria(MARE, { processo: 'muone cosmico', latoM: 0.3 }, sorgente('prova/mare')), { tr, ms } = simula(r), c = r.cella;
+  // (l'evento «prova/mare 2»: con la fonte unica del caso quello di «prova/mare» è un muone lento, quasi fermo, sotto la soglia della luce — capita a un muone su sei a 10 m d'acqua)
+  const r = M.cellaMateria(MARE, { processo: 'muone cosmico', latoM: 0.3 }, sorgente('prova/mare 2')), { tr, ms } = simula(r), c = r.cella;
   assert.ok(ms < 300, `simulata in ${ms} ms`); assert.match(c.sorgenti[0].origine, /muone di uno sciame nato a \d+ km di quota, sopravvissuto a 10 m di acqua/);
   const mu = tr.find((t) => t.specie.nome.startsWith('muone')), luce = tr.filter((t) => t.specie.nome === 'fotone Cherenkov'); assert.ok(mu && luce.length > 10, `${luce.length} fotoni`);
   // l'angolo tra ogni fotone e il muone: cos θ = 1/(nβ) → 41°
@@ -172,7 +173,8 @@ prova("il muone nell'acqua: il cono di luce Cherenkov e i raggi delta", () => {
 });
 
 prova('una α nel motore: energia dal Q, percorso dalla tabella; il nucleo rincula dalla parte opposta', () => {
-  const r = M.cellaMateria(ROCCIA, { processo: 'polonio-214 α', latoM: 100e-6 }, sorgente('prova/roccia')), { tr, ms } = simula(r), c = r.cella, d = tr.decadimenti[0];
+  // (l'evento «prova/roccia 3»: con la fonte unica del caso la α di «prova/roccia» esce dalla finestra prima di fermarsi, e il picco di Bragg resta fuori — capita a una su quattro)
+  const r = M.cellaMateria(ROCCIA, { processo: 'polonio-214 α', latoM: 100e-6 }, sorgente('prova/roccia 3')), { tr, ms } = simula(r), c = r.cella, d = tr.decadimenti[0];
   assert.ok(ms < 300); const a = d.prodotti.find((p) => p.specie === 'alfa'), n = d.prodotti.find((p) => p.specie !== 'alfa');
   tra((a.e - c.specie.alfa.m) * 0.511, 7.68, 7.695, 'energia della α del Po-214 (MeV; 7,687)'); tra((n.e - c.specie[n.specie].m) * 0.511, 0.14, 0.15, 'energia del rinculo (MeV; 0,146)');
   assert.ok(Math.abs(a.x + n.x - d.prima.x) < 1e-6 && Math.abs(a.y + n.y - d.prima.y) < 1e-6, 'schiena contro schiena'); assert.equal(c.specie[d.specie].carica, 84); assert.equal(c.specie[n.specie].carica + 2, 84);

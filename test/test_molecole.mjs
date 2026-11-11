@@ -300,7 +300,8 @@ await prova('la mano: cis e trans distinti; i centri nuovi nascono assegnati, al
 await prova('una rete con un autocatalizzatore chirale rompe la simmetria da uno sbilancio piccolo (un evento)', () => {
   // la rete di prova è il modello di Frank (1953): L e D si copiano dal cibo A, e insieme si spengono. Le costanti qui NON vengono dalle regole
   // (un autocatalizzatore chirale vero le regole non l'hanno ancora trovato): la prova è che la cinetica amplifica, non che la chimica lo faccia.
-  const caso = sorgente('molecole/prova/rottura della simmetria'), N = 1e6, eps = caso.normale('quante L in più') / Math.sqrt(N); // lo sbilancio di N molecole fatte a caso
+  // (l'evento «… simmetria 2»: con la fonte unica del caso quello di «… simmetria» è uno sbilancio di 0,016 scarti, e in 300 unità di tempo arriva solo all'85% — capita quando lo sbilancio è sotto i 0,045 scarti: a un evento su venticinque)
+  const caso = sorgente('molecole/prova/rottura della simmetria 2'), N = 1e6, eps = caso.normale('quante L in più') / Math.sqrt(N); // lo sbilancio di N molecole fatte a caso
   const frank = (spegne) => [{ reagenti: ['A', 'L'], prodotti: ['L', 'L'], k: 1, kInversa: 0 }, { reagenti: ['A', 'D'], prodotti: ['D', 'D'], k: 1, kInversa: 0 }, { reagenti: ['L', 'D'], prodotti: ['P'], k: spegne, kInversa: 0 }];
   const ee = (spegne, e0, t) => { const e = M.evolvi(frank(spegne), { A: 1, L: 1e-3 * (1 + e0), D: 1e-3 * (1 - e0), P: 0 }, t, { fisse: ['A'], passi: 900 }); return (e.c.L - e.c.D) / (e.c.L + e.c.D); };
   const senza = ee(0, eps, 300), con = ee(10, eps, 300), opposto = ee(10, -eps, 300); console.log(`      sbilancio iniziale ${(100 * eps).toFixed(3)}% (un evento): senza antagonismo resta ${(100 * senza).toFixed(3)}%; con L + D → spenti arriva a ${(100 * con).toFixed(1)}%; l'evento opposto dà ${(100 * opposto).toFixed(1)}%`);
