@@ -18,7 +18,7 @@
 //      interno piove sul pianeta, ciò che esce da quello esterno si riaggrega in lunette. Con la viscosità delle
 //      scie (ν ∝ Σ²) l'equazione di diffusione ha una soluzione che conserva la forma e cala come 1/√t: dopo
 //      abbastanza tempo la massa NON dipende più da quella di partenza, solo dall'età e dalla larghezza
-//      (per Saturno, anello intero: 1,4·10¹⁹ kg in 4,5 miliardi di anni; quella vera è 1,5·10¹⁹);
+//      (per Saturno, se non piovesse: 1,2·10¹⁹ kg dopo 4,5 miliardi di anni; quella vera è 1,5·10¹⁹);
 //    · la PIOGGIA: la polvere finissima e carica che la luce e i micrometeoriti staccano dai grani resta
 //      agganciata al campo magnetico del pianeta e gira con lui. Lungo una linea di campo la gravità la tira
 //      verso il pianeta e la forza centrifuga la riporta all'equatore: sviluppando il potenziale lungo la linea
@@ -147,7 +147,9 @@ const fmtAnni = (a) => (a >= 1e9 ? `${(a / 1e9).toLocaleString('it-IT', { maximu
 // dove serve un esito, con la sorgente degli eventi; la storia ricostruita è sempre coerente con le lune che ci sono.
 export function storia(P, lune = [], stella = {}, caso = sorgente(`anelli/pianeta ${P.id ?? 0}`)) {
   const eta = etaDi(stella), RH = raggioHill(P), M = P.massaKg, eventi = [];
-  const regolare = (l) => (l.origine ? l.origine === 'disco' : !l.retrograda && l.aM < 0.1 * RH);
+  // le lune nate dal disco (se l'origine non è detta: nel verso giusto, vicine, e fuori dal proprio limite di Roche:
+  // una lunetta più dentro è un pezzo dell'anello, non una luna del disco)
+  const regolare = (l) => (l.origine ? l.origine === 'disco' : !l.retrograda && l.aM < 0.1 * RH && l.aM > limiteRoche(P, l.densita ?? l.massaKg / ((4 / 3) * Math.PI * l.raggioM ** 3)));
   if (P.tipo !== 'roccioso') {
     // l'ultima luna perduta: come la più interna delle regolari, con la stessa dispersione che lune.js dà alle fasce
     const interna = lune.filter(regolare).sort((x, y) => x.aM - y.aM)[0];
@@ -326,14 +328,15 @@ function anelloDi(P, lune, stella, materiale, massa0, anni, cosa) {
   const eVive = (d) => d.r > interno && d.r < esterno, fuoriSincrona = esterno * R > sincrona;
   return {
     interno, esterno, massaKg: massa, etaAnni: anni, materiale, composizione: { [materiale]: 1 }, colore: L.colore[materiale].slice(), albedo: alb, temperatura: Tgrano,
-    origine: `${materiale === 'ghiaccio' ? 'ghiaccio' : 'roccia'} da: ${cosa} (${fmtAnni(anni)} fa)`,
+    origine: `${materiale} da: ${cosa} (${fmtAnni(anni)} fa)`,
     spessoreMassimo: densa.tau, densita: (r) => Math.min(2, spessoreOttico(r)), spessoreOttico,
     grani: { taglia: densa.grani.taglia, minima: densa.grani.minimo, massima: densa.grani.massimo },
     divisioni: divisioni.filter(eVive), onde: onde.map((o) => ({ r: o.a / R, larghezza: (o.a * o.xd) / R, ampiezza: Math.min(0.9, o.ampiezza), causa: o.causa })).filter(eVive),
     bordi: { interno: conVelo ? "l'alta atmosfera del pianeta" : perche, esterno: fine },
     fasce: vive.map((z) => ({ da: z.a1 / R, a: z.a2 / R, massaKg: z.massa, spessore: z.tau })),
-    // dove piove e quanto; quanta materia è uscita dal bordo esterno a fare lunette, e che cosa ne è
     denso: [vive[0].a1 / R, esterno], // la parte che si vede bene (senza il velo interno)
+    // dove piove e quanto (kg/s, oggi); quanta materia è uscita dal bordo esterno a fare lunette, dove sarebbe oggi
+    // una lunetta nata all'inizio, e che cosa ne è
     pioggia: { finoA: tutto ? esterno : conVelo ? a0 / R : 0, velo, kgAlSecondo: fasce.reduce((s, z) => s + (z.C2 === Infinity ? 0 : (z.massa ** 3 / (2 * z.C2)) * z.versoDentro) + (z.piove ? amb.pioggia * z.A * (1 - Math.exp(-MEDIA * z.tau)) : 0), 0) },
     lunette: { massaKg: lunette, aM: fuoriSincrona && lunette > 0 ? orbitaDopoLeMaree(P, lunette, aOut, anni) : aOut, destino: fuoriSincrona ? 'oltre il limite di Roche si riaggregano in lune che le maree allontanano' : "si riaggregano, ma girano più in fretta del pianeta: le maree le riportano dentro (l'anello si rifà)" },
     sincrona: sincrona / R, roche: roche / R, piovuta,
@@ -347,7 +350,8 @@ function anelloDi(P, lune, stella, materiale, massa0, anni, cosa) {
 // { interno, esterno (raggi del pianeta), massaKg, origine, etaAnni, materiale, composizione, colore, albedo,
 //   densita(r) (spessore ottico, da 0 a 2: 0 = vuoto), spessoreOttico(r) (senza tetto), spessoreMassimo,
 //   divisioni: [{ r, larghezza, causa }], onde: [{ r, larghezza, ampiezza, causa }], bordi, fasce,
-//   grani: { taglia, minima, massima } (m), pioggia, lunette, sincrona, roche, futuro: [eventi che verranno] }.
+//   denso: [da, a], grani: { taglia, minima, massima } (m), pioggia: { finoA, velo, kgAlSecondo }, lunette: { massaKg, aM,
+//   destino }, sincrona, roche (raggi del pianeta), temperatura (K), futuro: [eventi di storia() che devono ancora venire] }.
 export function anelli(P, lune = [], stella = {}, caso = sorgente(`anelli/pianeta ${P.id ?? 0}`)) {
   const eventi = storia(P, lune, stella, caso);
   let meglio = null;

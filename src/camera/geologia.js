@@ -161,38 +161,72 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
   // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo
   const T = new Float32Array(W * H).fill(Math.max(P.clima.Teq, 310)), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
-  const C = (k) => (terra[k] ? 1e7 : 1e8), anno = P.anno, dt = anno / passiAnno, eps = (P.obliquita * Math.PI) / 180;
+  const C = (k) => (terra[k] ? 1e7 : 1e8), anno = P.anno, eps = (P.obliquita * Math.PI) / 180;
   // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
   // dove c'è acqua che evapora e un'atmosfera che la tiene si formano le nuvole, che riflettono la luce
   let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
   // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta
   const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
-  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.55 * (1 - suolo); };
+  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.38 * (1 - suolo); };
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
     const del = eps * Math.sin(2 * Math.PI * f), x = -Math.tan(ph) * Math.tan(del), h0 = x >= 1 ? 0 : x <= -1 ? Math.PI : Math.acos(x);
     return (S0 / Math.PI) * (h0 * Math.sin(ph) * Math.sin(del) + Math.cos(ph) * Math.cos(del) * Math.sin(h0));
   };
-  const totale = anni * passiAnno;
+  // IL TEMPO. Il passo è un 240-esimo d'anno (le stagioni si vedono). Perché l'energia si conservi con qualunque
+  // passo, anche lungo rispetto al tempo in cui la terraferma si scalda:
+  //  · la luce irradiata è linearizzata attorno alla temperatura di adesso (σT⁴ + 4σT³·ΔT): la cella va verso il
+  //    suo equilibrio senza scavalcarlo;
+  //  · il calore portato dai vicini è calcolato in modo implicito (con le temperature nuove), prima lungo i
+  //    paralleli e poi lungo i meridiani: ciò che esce da una cella entra nella vicina, niente si crea.
+  // Quanto dura: abbastanza perché il mare dimentichi la temperatura di partenza (alcune volte il suo tempo di
+  // risposta C/(4σT³)); un pianeta bloccato non ha stagioni, e lì il passo si allunga quanto serve.
+  const serra = 1 + 0.75 * tau, Tfine = Math.max(30, P.clima.Teq * Math.pow(serra, 0.25)), memoria = ((mareFraz > 0 ? 1e8 : 1e7) * serra) / (4 * sigma * Tfine ** 3);
+  const anniVeri = P.bloccato ? anni : Math.min(4 * anni, Math.max(anni, Math.ceil((4 * memoria) / anno)));
+  const totale = anniVeri * passiAnno, dt = P.bloccato ? Math.max(anni * anno, 12 * memoria) / totale : anno / passiAnno;
+  const cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H), sole = new Float64Array(W * H), soleJ = new Float64Array(H);
+  for (let j = 0; j < H; j++) { cosLat[j] = Math.cos(lat(j)); cosN[j] = Math.max(0, Math.cos(lat(j) + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat(j) - dphi / 2)); }
+  if (P.bloccato) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) sole[j * W + i] = luce(j, i, 0);
+  // un sistema a tre diagonali (sotto·x[i−1] + diag·x[i] + sopra·x[i+1] = noto), anche chiuso ad anello
+  const M = Math.max(W, H), sotto = new Float64Array(M), diag = new Float64Array(M), sopra = new Float64Array(M), noto = new Float64Array(M), x = new Float64Array(M), z = new Float64Array(M), u = new Float64Array(M), cp = new Float64Array(M);
+  const risolvi = (d, r, m, out) => { cp[0] = sopra[0] / d[0]; out[0] = r[0] / d[0]; for (let i = 1; i < m; i++) { const q = d[i] - sotto[i] * cp[i - 1]; cp[i] = sopra[i] / q; out[i] = (r[i] - sotto[i] * out[i - 1]) / q; } for (let i = m - 2; i >= 0; i--) out[i] -= cp[i] * out[i + 1]; };
+  const anello = (m) => { // (formula di Sherman-Morrison: l'anello è una catena più una correzione)
+    const g = -diag[0], al = sopra[m - 1], be = sotto[0]; diag[0] -= g; diag[m - 1] -= (al * be) / g;
+    risolvi(diag, noto, m, x); u.fill(0, 0, m); u[0] = g; u[m - 1] = al; risolvi(diag, u, m, z);
+    const fatt = (x[0] + (be * x[m - 1]) / g) / (1 + z[0] + (be * z[m - 1]) / g); for (let i = 0; i < m; i++) x[i] -= fatt * z[i];
+  };
+  let assorbita = 0, irradiata = 0, pesi = 0;
   for (let n = 0; n < totale; n++) {
     const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno;
-    for (let j = 0; j < H; j++) {
-      const ph = lat(j), cj = Math.max(0.25, Math.cos(ph)), jn = Math.max(0, j - 1), js = Math.min(H - 1, j + 1), cn = Math.max(0.25, Math.cos(lat(j) + dphi / 2)), cs = Math.max(0.25, Math.cos(lat(j) - dphi / 2));
-      for (let i = 0; i < W; i++) {
-        const k = j * W + i, t = T[k], ie = (i + 1) % W, iw = (i + W - 1) % W;
-        const lap = (cn * (T[jn * W + i] - t) + cs * (T[js * W + i] - t)) / (cj * dphi * dphi) + (T[j * W + ie] + T[j * W + iw] - 2 * t) / (cj * cj * dlam * dlam);
-        const dT = (luce(j, i, f) * (1 - albedo(k, t)) - (sigma * t ** 4) / (1 + 0.75 * tau) + D * lap) / C(k);
-        nuovo[k] = Math.max(3, t + dt * Math.max(-50 / dt, Math.min(50 / dt, dT)));
-        if (ultimo) { media[k] += nuovo[k] / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; }
-      }
+    if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
+    // 1. in ogni cella: la luce assorbita meno quella irradiata
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i, t = T[k], entra = (P.bloccato ? sole[k] : soleJ[j]) * (1 - albedo(k, t)), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
+      const dT = Math.max(-50, Math.min(50, (dt * (entra - esce)) / (C(k) + dt * molla)));
+      nuovo[k] = Math.max(3, t + dT);
+      if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
+    // 2. il calore portato dai vicini: lungo i paralleli (un anello)…
+    for (let j = 0; j < H; j++) {
+      const q = (dt * D) / (cosLat[j] * cosLat[j] * dlam * dlam);
+      for (let i = 0; i < W; i++) { const a = q / C(j * W + i); sotto[i] = -a; sopra[i] = -a; diag[i] = 1 + 2 * a; noto[i] = nuovo[j * W + i]; }
+      anello(W); for (let i = 0; i < W; i++) nuovo[j * W + i] = x[i];
+    }
+    // …e lungo i meridiani (da un polo all'altro: attraverso i poli non passa niente)
+    for (let i = 0; i < W; i++) {
+      for (let j = 0; j < H; j++) { const q = (dt * D) / (C(j * W + i) * cosLat[j] * dphi * dphi), a = j > 0 ? q * cosN[j] : 0, b = j < H - 1 ? q * cosS[j] : 0; sotto[j] = -a; sopra[j] = -b; diag[j] = 1 + a + b; noto[j] = nuovo[j * W + i]; }
+      risolvi(diag, noto, H, x); for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
+    }
+    if (ultimo) for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; }
     T.set(nuovo);
   }
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
   const quotaMedia = quota; // la quota media della cella del clima: la neve in quota si calcola punto per punto
   let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
   const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio,
+    // il bilancio dell'ultimo anno, in media sul pianeta (W/m²): la luce assorbita e quella irradiata; a regime sono uguali
+    bilancio: { assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4 },
     // quanto in fretta i pendii si consumano: con la pioggia molto, con il solo vento poco, senz'aria quasi niente
     sgretola: piove ? 0.05 : isFinite(P.clima.pressione) && P.clima.pressione > 1000 ? 0.015 : 0.002 };
   memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);

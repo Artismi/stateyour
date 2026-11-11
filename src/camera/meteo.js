@@ -1,22 +1,95 @@
-// meteo.js — LA CIRCOLAZIONE DELL'ARIA E IL CICLO DELL'ACQUA di un pianeta (bozza di lavoro: intestazione in fondo al lavoro)
+// meteo.js — LA CIRCOLAZIONE DELL'ARIA E IL CICLO DELL'ACQUA di un pianeta: i venti, la pioggia, la neve, le nuvole.
+//
+// Non è una carta disegnata: si prende l'aria del pianeta (pressione, gas, gravità), la si appoggia sulla superficie
+// che il clima ha scaldato in modo diseguale, la si fa girare con il pianeta e la si lascia andare per qualche decina
+// di giorni. Le fasce di vento, le celle, i deserti e le zone piovose sono ciò che ne esce.
+//   1. L'ARIA è divisa in DUE STRATI di uguale massa (sopra e sotto metà pressione). Di ogni strato si seguono il vento
+//      e la temperatura (le equazioni primitive dei fluidi su una sfera che ruota, nel modello a due livelli di Lorenz
+//      1960 e Held-Suarez 1978): il vento è spinto dalle differenze di temperatura (l'aria calda è più spessa: in quota
+//      la pressione è più alta sopra il caldo) e deviato dalla rotazione (Coriolis); l'aria che sale si raffredda,
+//      quella che scende si scalda, tanto più quanto più lo strato alto è «caldo» rispetto al basso (la stratificazione,
+//      che qui non è fissata: la fanno la convezione, le onde e l'irraggiamento). L'aria che passa da uno strato
+//      all'altro porta con sé il vento dello strato da cui viene. Lo strato basso striscia sul suolo (attrito).
+//   2. LA SUPERFICIE tiene l'aria: lo strato basso scambia calore con il suolo o il mare (tanto più quanto più c'è
+//      vento), e tutti e due gli strati irraggiano verso l'equilibrio locale, che è la colonna d'aria rimescolata dalla
+//      convezione sopra quella superficie: l'adiabatica (satura, se c'è acqua) che parte dalla sua temperatura. Se lo
+//      strato basso diventa troppo caldo per quello alto, la convezione li rimescola.
+//      Su un pianeta che gira in fretta l'aria calda dell'equatore non arriva ai poli: sale, va verso i poli in quota,
+//      ma la rotazione la piega in un vento da ovest (il getto) e la fa scendere ai tropici (la cella di Hadley); più
+//      in là il calore lo portano i vortici (cicloni e anticicloni), che nascono da soli dove la temperatura cambia in
+//      fretta con la latitudine, e spingono al suolo i venti da ovest. Su un pianeta lento la cella arriva al polo. Su
+//      uno bloccato l'aria sale sotto il sole, va verso la notte in quota e torna al suolo. Niente di questo è scritto.
+//   3. L'ACQUA: il vapore sta nell'aria bassa e viaggia con il suo vento. Evapora dal mare, dai laghi e dal suolo
+//      bagnato in proporzione al vento e a quanto l'aria è lontana dalla saturazione (Clausius-Clapeyron, dalle tabelle
+//      di chimica.js). Dove il vento converge o sale lungo un rilievo, o va verso il freddo, la colonna supera ciò che
+//      può tenere e piove: sul versante sopravvento sì, dietro no (l'aria è già asciutta e scendendo si scalda). Dove
+//      l'aria scende e diverge porta via il vapore: i deserti. Il calore latente di ciò che piove (meno ciò che evapora)
+//      scalda l'aria e rinforza la salita. Il suolo è un secchio: si riempie con la pioggia, evapora, trabocca.
+//      In ogni istante l'acqua evaporata, meno quella piovuta, è quella rimasta in più nell'aria (bilancio, esatto).
+//   4. LE NUVOLE coprono il cielo in proporzione a quanto la colonna è vicina alla soglia della pioggia. LA NEVE è la
+//      precipitazione che cade dove fa freddo, contando la quota (più in alto più freddo: il gradiente dell'adiabatica).
+//   5. IL CALORE: ciò che l'aria dà alla superficie (o le toglie) è il calore che la circolazione ha portato lì, vapore
+//      compreso: è il «trasportoCalore» (W/m²) da dare al modello del clima al posto di un coefficiente di diffusione.
+//      Un'aria densa ne porta molto (in proporzione alla pressione), una sottile quasi niente.
+// DERIVATO dal pianeta (non scelto): la costante dei gas e il calore specifico (dai gas), lo spessore dell'aria, il
+// gradiente termico e la stratificazione (dall'adiabatica satura), il tempo di irraggiamento (capacità termica della
+// colonna / 4σT³), la velocità delle onde, la pressione di saturazione e l'altezza a cui il vapore si dirada, la
+// pressione sotto cui l'aria non è più un fluido (il cammino libero delle molecole supera lo spessore dell'atmosfera).
+//
+// LEGGI EMPIRICHE (misurate sulla Terra e usate così; i numeri sono in PARAMETRI):
+//   · l'attrito e l'evaporazione: le «formule di massa» (flusso = coefficiente × vento × differenza), con i
+//     coefficienti misurati sul mare (1,3·10⁻³) e sulla terra (3·10⁻³), e 1 m/s di raffiche quando l'aria è ferma;
+//   · il suolo tiene 150 kg/m² d'acqua, ed evapora in proporzione a quanto è pieno (il «secchio» di Manabe 1969);
+//   · comincia a piovere quando il vapore della colonna supera l'80% di quello a saturazione (Bretherton e altri 2004),
+//     e l'eccesso cade in qualche ora (4: il tempo della convezione, Betts-Miller);
+//   · le nuvole: copertura = 1 − √((1 − U)/(1 − U₀)), con U l'umidità rispetto alla soglia della pioggia e U₀ = 0,6
+//     (Sundqvist 1978);
+//   · la neve: tutta sotto 0 °C, niente sopra +2 °C;
+//   · un'aria senza vapore resta stabile: il suo gradiente termico è 0,8 volte l'adiabatico secco (Marte 0,55, Venere
+//     0,8-0,9: è la radiazione a stabilizzarla, e qui non c'è un modello della radiazione in verticale).
+// PARAMETRI LIBERI (non misurati): la viscosità numerica (quanto si smorzano i vortici grandi come una cella della
+// griglia), i numeri di sicurezza del passo di tempo (courant, coriolis), la latitudine oltre la quale si filtrano i
+// poli, l'increspatura iniziale di un pianeta perfettamente liscio (1 K, fissa: senza, resterebbe simmetrico per
+// sempre), e il tetto del vapore (10% della pressione: oltre, l'acqua diventa essa stessa l'atmosfera e il modello non vale).
+// SEMPLIFICAZIONI:
+//   · due soli strati: il vapore è tutto nell'aria bassa, e il suo vento è quello medio della metà bassa
+//     dell'atmosfera, usato anche come vento al suolo; non c'è stratosfera; il coperchio è rigido (niente onde sonore
+//     né onde di superficie: il moto medio dei due strati non ha divergenza);
+//   · NIENTE STAGIONI né giorno e notte: la temperatura è la media annua che dà il clima (obliquità e blocco mareale
+//     sono già lì dentro: i parametri «obliquita» e «bloccato» non cambiano il calcolo; «bloccato» fa misurare il flusso
+//     giorno-notte). La fascia delle piogge equatoriali non migra con le stagioni: è più stretta e più intensa del vero;
+//   · la superficie ha la temperatura DATA: l'aria non la cambia qui dentro (lo fa il clima, con trasportoCalore);
+//   · i rilievi tolgono vapore (aria più fredda e più sottile in quota), frenano (la terra è più ruvida del mare), ma
+//     NON deviano il vento: nessuna onda di montagna, nessun blocco;
+//   · la griglia è grossa (64×32: 5,6°, 600 km): i vortici delle medie latitudini sono appena risolti, e su un pianeta
+//     che gira molto in fretta (giorno di poche ore) le celle diventano larghe quanto la griglia;
+//   · si simula un tempo breve (decine di giorni: «passi»), partendo dal pianeta «medio lungo i paralleli» portato a
+//     regime (una colonna per latitudine, che costa poco); le medie sono sull'ultimo 60%. Un'atmosfera molto densa
+//     (Venere), che ha tempi di anni, non arriva a regime in quota;
+//   · le quote («alt») possono stare sulla griglia del clima o su una più fine, purché multipla intera (256×128 per
+//     64×32): se ne usano la media della cella e la parte sotto il livello del mare (o coperta da laghi).
+// UNITÀ: venti m/s (u verso est, v verso nord; righe da nord a sud, come geologia.js); pioggia, neve, evaporazione,
+// deflusso in mm (kg/m²) per ANNO TERRESTRE (ANNO di leggi.js), «pioggia» è tutta la precipitazione e «neve» la sua
+// parte nevosa; vapore e suolo kg/m²; nuvole e umidità 0…1; trasportoCalore W/m² (positivo: calore che arriva).
+// Deterministico: nessun numero a caso.
 
 import { COSTANTI, R_GAS, ANNO } from './leggi.js';
 import { pressioneVapore, atmosfera, MOLECOLE } from './chimica.js';
 
 export const PARAMETRI = {
-  cdMare: 1.3e-3, cdTerra: 3e-3, // attrito dell'aria sul suolo (coefficiente della formula di massa: misurato)
-  ce: 1.3e-3, // lo stesso per l'evaporazione
+  cdMare: 1.3e-3, cdTerra: 3e-3, // l'attrito dell'aria sul mare e sulla terra (coefficiente della formula di massa)
+  ce: 1.3e-3, // lo stesso per l'evaporazione e per il calore scambiato con la superficie
   raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
-  secchio: 150, // (kg/m²) quanta acqua tiene il suolo (Manabe 1969)
+  secchio: 150, // (kg/m²) quanta acqua tiene il suolo
   stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
-  frazioneCalda: 0.25, // la parte più calda del pianeta, dove la convezione profonda fissa la stratificazione
-  tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore piove
-  umiditaPioggia: 0.8, // piove quando il vapore della colonna supera questa frazione della saturazione (Bretherton e altri 2004)
-  umiditaNuvole: 0.6,
-  vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria: oltre, l'acqua stessa diventa l'atmosfera // sotto questa umidità relativa niente nuvole (Sundqvist)
-  viscosita: 0.003, courant: 0.85, coriolis: 0.5, // numerici
-  increspatura: 1, // (K) la perturbazione iniziale di un pianeta perfettamente liscio (fissa, non a caso)
-  latCritica: 45, // numerico: oltre questa latitudine le onde più corte del passo all'equatore si filtrano
+  umiditaPioggia: 0.8, // piove quando il vapore della colonna supera questa frazione della saturazione
+  tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore cade
+  umiditaNuvole: 0.6, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
+  vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
+  viscosita: 0.003, // numerico: la viscosità, in unità di (velocità delle onde × passo della griglia)
+  courant: 0.85, coriolis: 0.5, // numerici: quanta strada (e quanta rotazione) in un passo di tempo
+  latCritica: 45, // numerico: oltre questa latitudine si lisciano le onde più corte del passo della griglia a 45°
+  increspatura: 1, // (K) la perturbazione iniziale, fissa, che rompe la simmetria di un pianeta perfettamente liscio
 };
 const MOLARE_ACQUA = 0.018015, SIGMA = COSTANTI.sigma, DIAMETRO_MOLECOLA = 3.7e-10; // (m) il diametro d'urto di una molecola d'aria
 
@@ -266,7 +339,9 @@ export function circolazione({ W = 64, H = 32, T, alt = null, mare = -Infinity, 
     let bene = true; for (let n = 0; n < 2 * passi && bene; n++) { m1.passo(false); if (n % 64 === 63) bene = m1.sano(); }
     if (bene) break; if (++tentativi > 6) throw new Error('meteo: il calcolo non si stabilizza'); dt1 *= 0.7; }
   let cOnde = 0, uMax = 0; for (let j = 0; j < H; j++) { const o = (j + 1) * 3 + 1, stretto = peso(j) < cCrit ? 2 : 1; cOnde = Math.max(cOnde, Math.sqrt(0.25 * ar.b * Math.max(0, m1.th1[o] - m1.th2[o]))); uMax = Math.max(uMax, stretto * Math.abs(m1.u1[o]), stretto * Math.abs(m1.u2[o]), Math.abs(m1.v1[o]) * (dxCrit / dy)); }
-  let dt = Math.min((PARAMETRI.courant * dxCrit) / (cOnde + 1.3 * uMax + 10), PARAMETRI.coriolis / (2 * omega));
+  // (dove la superficie cambia molto anche lungo i paralleli, i venti locali crescono con quella differenza)
+  let scarto = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) scarto = Math.max(scarto, Math.abs(t1Eq[j * W + i] + t2Eq[j * W + i] - f1.t1Eq[j] - f1.t2Eq[j]));
+  let dt = Math.min((PARAMETRI.courant * dxCrit) / (Math.max(cOnde, cStima) + Math.max(1.3 * uMax, Math.sqrt(0.25 * ar.b * scarto)) + 10), PARAMETRI.coriolis / (2 * omega));
   // (b) IL PIANETA INTERO, a partire da lì: le differenze lungo i paralleli vengono dai mari, dalle terre, dai rilievi
   // (e, se il pianeta è perfettamente liscio, da un'increspatura fissa). Le medie si prendono sull'ultimo 60% dei passi
   let m2, vaporePrima = 0; const inizio = Math.floor(passi * 0.4);
