@@ -43,7 +43,9 @@ export function interno(P, stella) {
   // solo se la rotazione ordina i moti del nucleo: il numero di Rossby locale deve stare sotto 0,12; sopra, il campo è a
   // molti poli e alla superficie è almeno dieci volte più debole (Olson e Christensen 2006, EPSL 250, 561). Lì
   // Ro_l ∝ Ra_Q^(1/2)·E^(−1/3): con il flusso di galleggiamento ∝ q·Rc², la gravità ∝ Rc e lo spessore del guscio ∝ Rc
-  // viene Ro_l ∝ q^(1/2)·Ω^(−7/6)·Rc^(1/6). DATO: la Terra ha Ro_l ≈ 0,09 (ivi; ricordato). Nessuna taratura.
+  // viene Ro_l ∝ q^(1/2)·Ω^(−7/6)·Rc^(1/6). DATI: la soglia 0,12 (verificata: Christensen, Aubert e Olson); la Terra a
+  // Ro_l ≈ 0,09 (ricordato; verificato solo che «la geodinamo sta vicino alla transizione»). Nessuna taratura. Che cosa
+  // manca: il flusso di calore dal nucleo (qui va come quello in superficie) e di quanto cala il campo senza dipolo.
   const rossby = P.giorno > 0 && nucleoLiquido ? TERRA.rossby * Math.sqrt(q / TERRA.q) * Math.pow(P.giorno / TERRA.giorno, 7 / 6) * Math.pow(Rc / TERRA.Rc, 1 / 6) : null, dipolo = !(rossby > 0.12);
   const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) * (dipolo ? 1 : 0.1) : 1e-9;
   const acqua = acquaInSuperficie(P).frazione > 0.005;

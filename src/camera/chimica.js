@@ -370,7 +370,9 @@ export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
 // IL CLIMA E L'ARIA INSIEME. La temperatura dipende dall'aria (quanta ce n'è, quanto trattiene il calore) e l'aria
 // dalla temperatura (che cosa gela, che cosa piove, se c'è un mare che si mangia l'anidride carbonica): si cercano
 // insieme, a giri alterni, finché non cambiano più. «dati» è ciò che serve a clima() di leggi.js (luce, distanza,
-// massa, raggio, tipo, acqua, anno, asse, placche…) più composizione e involucro del pianeta.
+// massa, raggio, tipo, acqua, anno, asse, placche…) più composizione e involucro del pianeta; e, se ci sono: «calore»
+// (W/m²: il calore dell'interno che alimenta i vulcani; accende il ciclo del carbonio), «inerti» (Pa: argon ed elio
+// radiogenici saliti dall'interno, da risalita.js), «gas» (Pa: l'aria vera di un mondo vero, al posto dell'inventario).
 // IL TERMOSTATO DEL CARBONIO. Dove c'è un mare la pioggia porta l'anidride carbonica nel calcare (Urey) e l'aria ne
 // resta senza; ma se così il mare gela, la pioggia smette, i vulcani continuano, e la CO2 torna ad accumularsi
 // finché il ghiaccio non si scioglie (Walker, Hays e Kasting 1981). Nessuno dei due stati sta fermo: il pianeta si
