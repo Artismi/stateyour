@@ -27,7 +27,8 @@ import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
 import { sorgente } from './eventi.js';
-import { formaGalassia, stelleGalassia, curvaRotazione, velocitaPeculiare } from './galassie.js'; // le galassie come conseguenza: alone → gas → stelle → metalli
+import { formaGalassia, stelleGalassia } from './galassie.js';
+import { motiRegione } from './spazio3d.js'; // (i due moduli si chiamano a vicenda, ma solo dentro le funzioni) // le galassie come conseguenza: alone → gas → stelle → metalli
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
 import { climaEAria, prebiotica, minerali } from './chimica.js';
@@ -464,24 +465,21 @@ export function cellaDi(a, rami = null) {
 export function motiDi(a) {
   const P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], R = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta).regioni[a.regione], c = COSTANTI.c, gr = 180 / Math.PI;
   const giro = (2 * Math.PI * R.r * P.raggioM) / P.giorno, orbita = (2 * Math.PI * P.aM) / P.anno;
-  // I MOTI PIÙ GRANDI, come vettori nel piano della mappa (m/s): il pianeta lungo l'orbita; la stella attorno al centro
-  // della galassia (galassie.js: la curva di rotazione alla sua distanza; nel disco gira nel verso in cui i bracci
-  // restano indietro; nello sferoide le stelle non girano insieme: ognuna ha la sua velocità, estratta dalla dispersione
-  // σ = V/√2 di un sistema isotermo); la galassia rispetto al fondo cosmico (la teoria lineare sul campo di cosmo(n))
-  const C = cosmo(a.cosmo), Gx = galassia(a.cosmo, a.galassia), F = Gx.forma, S = Gx.stelle[a.stella], KPC = 3.0857e19;
-  const vP = [-orbita * Math.sin(P.fase), orbita * Math.cos(P.fase)];
-  const rS = Math.hypot(S.pos[0], S.pos[1]) * F.unitaM / KPC, vC = curvaRotazione(F, Math.max(rS, 1e-3)) * 1e3, fiS = Math.atan2(S.pos[1], S.pos[0]), verso = -(F.bracci.verso || 1);
-  const casoS = sorgente(`cosmo ${cosmoBase(a.cosmo)}/galassia ${a.galassia}/stella ${a.stella}`, ramiCosmo(a.cosmo));
-  const vS = S.componente === 'sferoide' ? [(vC / Math.SQRT2) * casoS.normale('moto/x'), (vC / Math.SQRT2) * casoS.normale('moto/y')] : [-verso * vC * Math.sin(fiS), verso * vC * Math.cos(fiS)];
-  const vG = velocitaPeculiare(C, C.galassie[a.galassia].pos, { toroM: TORO_M }).map((x) => x * 1e3);
+  // I MOTI PIÙ GRANDI vengono dal mondo in tre dimensioni (spazio3d.js: motiRegione): la stella nella galassia (il suo
+  // cerchio guida alla velocità della curva di rotazione, più l'epiciclo e il su e giù attraverso il disco; nello
+  // sferoide la sua orbita), la galassia nel cosmo (la teoria lineare sul campo in tre dimensioni con lo spettro vero:
+  // cosmo3d.js), ognuna girata nel riferimento del sistema (il piano di un sistema non è quello della galassia). La
+  // regione, che è piatta, ne vede la parte che sta nel piano del sistema; `kmS3d` è la velocità intera.
+  const Gx = galassia(a.cosmo, a.galassia), S = Gx.stelle[a.stella], M3 = motiRegione(a), n3 = (v) => Math.hypot(v[0], v[1], v[2]);
+  const vP = [-orbita * Math.sin(P.fase), orbita * Math.cos(P.fase), 0], vS = M3.stella.map((x) => x * 1e3), vG = M3.galassia.map((x) => x * 1e3);
   // chi guarda è fermo rispetto a qualcosa di più grande: rispetto alla regione va al contrario della somma dei moti di sotto
-  const voce = (nome, v, cosa) => { const m = Math.hypot(v[0], v[1]); return { nome, kmS: m / 1000, velocita: m / c, direzione: ((Math.atan2(-v[1], -v[0]) * gr) % 360 + 360) % 360, cosa }; };
-  const somma = (...vs) => vs.reduce((t, v) => [t[0] + v[0], t[1] + v[1]], [0, 0]);
+  const voce = (nome, v, cosa) => { const m = Math.hypot(v[0], v[1]); return { nome, kmS: m / 1000, velocita: m / c, direzione: ((Math.atan2(-v[1], -v[0]) * gr) % 360 + 360) % 360, kmS3d: n3(v) / 1000, fuoriDalPiano: -v[2] / 1000, cosa }; };
+  const somma = (...vs) => vs.reduce((t, v) => [t[0] + v[0], t[1] + v[1], t[2] + v[2]], [0, 0, 0]);
   return [
     { nome: 'ferma nella regione', kmS: 0, velocita: 0, direzione: 0, cosa: 'chi guarda sta fermo rispetto al pianeta, senza girare con lui' },
     { nome: 'sul pianeta che gira', kmS: giro / 1000, velocita: giro / c, direzione: ((R.angolo * gr + (P.retrogrado ? -90 : 90)) % 360 + 360) % 360, cosa: 'chi guarda gira con il pianeta (e con il suo campo magnetico)' },
     { nome: 'ferma rispetto alla stella', kmS: orbita / 1000, velocita: orbita / c, direzione: ((P.fase * gr - 90) % 360 + 360) % 360, cosa: 'chi guarda sta fermo rispetto alla stella: il pianeta, con la regione, gli corre davanti lungo l\'orbita' },
-    voce('ferma rispetto alla galassia', somma(vP, vS), `chi guarda sta fermo rispetto al centro della galassia: la stella gli passa davanti a ${Math.round(Math.hypot(vS[0], vS[1]) / 1000)} km/s (${S.componente === 'sferoide' ? 'la sua orbita nello sferoide' : `il giro del disco a ${rS.toPrecision(2)} kpc dal centro`}), con il pianeta che le gira attorno`),
-    voce('ferma rispetto al fondo cosmico', somma(vP, vS, vG), `chi guarda sta fermo rispetto all'universo: la galassia cade verso dove c'è più materia a ${Math.round(Math.hypot(vG[0], vG[1]) / 1000)} km/s (teoria lineare sul campo del cosmo), e dentro girano la stella e il pianeta`),
+    voce('ferma rispetto alla galassia', somma(vP, vS), `chi guarda sta fermo rispetto al centro della galassia: la stella gli passa davanti a ${Math.round(n3(vS) / 1000)} km/s (${S.componente === 'sferoide' ? 'la sua orbita nello sferoide' : `il giro del disco a ${(Math.hypot(S.pos[0], S.pos[1]) * Gx.forma.unitaKpc).toPrecision(2)} kpc dal centro`}), con il pianeta che le gira attorno`),
+    voce('ferma rispetto al fondo cosmico', somma(vP, vS, vG), `chi guarda sta fermo rispetto all'universo: la galassia cade verso dove c'è più materia a ${Math.round(n3(vG) / 1000)} km/s (teoria lineare sul campo del cosmo in tre dimensioni), e dentro girano la stella e il pianeta`),
   ];
 }

@@ -41,9 +41,10 @@
 // giovani di 10⁵ anni): quelle da collasso sono stelle vere, una per una (peso 1), messe negli ultimi posti del
 // catalogo come stella di neutroni o buco nero, e il loro resto sta su di loro.
 //
-// I MOTI (per cosmo.js motiDi): la stella gira attorno al centro alla velocità di curvaRotazione() (nello sferoide ha la
-// sua, estratta dalla dispersione); la galassia cade verso dove c'è più materia alla velocità di velocitaPeculiare(), la
-// teoria lineare sul campo di cosmo(n).
+// IN TRE DIMENSIONI E NEL TEMPO (per spazio3d.js): cinematica() dà, anello per anello, le dispersioni delle stelle, lo
+// spessore del disco, la velocità con cui girano i bracci; motoStella() il moto di ogni stella del campione (cerchio
+// guida, epiciclo, su e giù; nello sferoide la sua orbita); densitaGalassia() la forma continua (stelle, gas, polvere);
+// galassiaAlTempo() com'era a un altro tempo. Le leggi sono dichiarate accanto a quelle funzioni.
 //
 // CHE COSA EMERGE (non è scritto: esce dalla catena): il tipo (spirale / lenticolare / ellittica), la massa in
 // stelle e in gas, la scala del disco e la sua crescita dall'interno, la curva di rotazione, la storia della
@@ -170,6 +171,9 @@ export const LEGGI = {
   pulsar: [0.3, 0.15, 265], // periodo alla nascita (s), suo scarto, spinta (km/s)
   spessoreGas: 0.1, // (kpc) la mezza altezza dello strato di gas, per la densità attorno a un resto
   assi: [0.7, 0.15], // lo schiacciamento apparente di uno sferoide (Lambas et al. 1992)
+  rapportoVerticale: 0.5, // σ_z/σ_R delle stelle del disco (misurato vicino al Sole: Dehnen & Binney 1998)
+  corotazione: 1.2, // la corotazione di una barra, in lunghezze della barra (misurato: Aguerri et al. 2003)
+  polvere: 0.5, // la parte dei metalli del gas che sta nei grani di polvere (misurato nella Via Lattea: Draine 2011)
 };
 export const ANELLI = 14, PASSI = 46, RESTI = 8;
 
@@ -209,7 +213,11 @@ const U = (() => {
   const massaDi = (s) => { let lo = LM0, hi = LM1; for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (sigma(Math.exp(m)) > s) lo = m; else hi = m; } return Math.exp(0.5 * (lo + hi)); };
   // lo scarto del campo filtrato a un numero d'onda (in 1/Mpc): solo le onde più lunghe
   const sigmaOnde = (kMpc) => { let s = 0; const kc = kMpc / h; for (let i = 0; i < NK && kk[i] < kc; i++) s += d2[i]; return Math.sqrt(norma * s * dlk); };
-  return { Om, OL, h, H0, E, tempo, scala, D, Dinv, rhoC, fb, delta, sigma, massaDi, sigmaOnde };
+  // la potenza per unità di ln k, Δ²(k) = k³P(k)/2π² (k in 1/Mpc): lo spettro vero della materia, oggi
+  const potenza = (kMpc) => { const k = kMpc / h; return norma * k ** (3 + ns) * Tk(k) ** 2; };
+  // quanti aloni più pesanti di M per Mpc³ (Press & Schechter 1974: dn/dlnM = √(2/π)·(ρ̄/M)·(δc/σ)·|dlnσ/dlnM|·e^(−δc²/2σ²))
+  const aloni = (M) => { let n = 0; const l0 = Math.log(M), l1 = LM1, N = 80, dl = (l1 - l0) / N, rho = Om * rhoC * 1e9; for (let i = 0; i < N; i++) { const l = l0 + (i + 0.5) * dl, m = Math.exp(l), sg = sigma(m), p = -(Math.log(sigma(m * 1.05)) - Math.log(sigma(m / 1.05))) / (2 * Math.log(1.05)), nu = 1.686 / sg; n += Math.sqrt(2 / Math.PI) * (rho / m) * nu * p * Math.exp(-nu * nu / 2) * dl; } return n; };
+  return { Om, OL, h, H0, E, tempo, scala, D, Dinv, rhoC, fb, delta, sigma, massaDi, sigmaOnde, potenza, aloni };
 })();
 const raggioViriale = (M, a) => Math.cbrt((3 * M) / (PI4 * U.delta(a) * U.rhoC * U.E(a) ** 2));
 const concentrazione = (M, a) => Math.max(3, (LEGGI.concentrazione[0] * a) / U.Dinv(LEGGI.deltaC / U.sigma(LEGGI.concentrazione[1] * M)));
@@ -246,7 +254,7 @@ const K_COOL = (1.5 * COSTANTI.kB * COSTANTI.mp) / (MU_CALDO * (1 + YPRIMO / (2 
 // metalli nuovi, quante supernove, in funzione del tempo passato (in passi di DT). Le vite e i resti: stelle.js.
 const Z_TAB = [0.02, 0.2, 1, 2.5];
 const tabellaZ = (Z) => (Z < 0.063 ? 0 : Z < 0.45 ? 1 : Z < 1.6 ? 2 : 3);
-const colorePerTemperatura = (T) => { // come in cosmo.js: da rossa (3000 K) a azzurra (20000 K)
+export const colorePerTemperatura = (T) => { // da rossa (3000 K) a azzurra (20000 K)
   const t = stringi(Math.log(T / 3000) / Math.log(20000 / 3000), 0, 1);
   return [Math.round(255 - 40 * t), Math.round(150 + 90 * t - 20 * t * t), Math.round(90 + 165 * t)];
 };
@@ -296,6 +304,8 @@ export function massaAlone(peso, { toroM = 3.7e25, onde = 9 } = {}) {
   const sb = sigmaCampo(toroM, onde), d = Math.min(peso * sb, 0.9 * LEGGI.deltaC);
   return U.massaDi(Math.hypot(sb, (LEGGI.deltaC - d) / LEGGI.raro));
 }
+// (Sulla carta piatta di cosmo.js; la velocità vera, con lo spettro vero e in tre dimensioni, è in cosmo3d.js: è quella
+// che motiDi usa. Questa resta per confronto.)
 // LA VELOCITÀ PECULIARE di un punto del cosmo (km/s, nel piano della mappa): la teoria lineare. La materia cade verso
 // dove ce n'è di più: ∇·v = −H₀·f·δ, con f = dlnD/dlna (≈ Ωm^0,55) il ritmo di crescita. Il campo di cosmo.js è una
 // somma di onde, δ = (σ_onde/σ)·Σ a·cos(2π k·x + φ) (letto come per le masse: lo scarto del campo è σ_onde), e per ogni
@@ -657,6 +667,100 @@ export function curvaRotazione(forma, r, parti = false) {
   return { totale: velocita(m, r), alone: velocita({ ...m, Md: 0, Ms: 0 }, r), disco: Math.sqrt(Math.max(0, velocita({ ...m, Ms: 0 }, r) ** 2 - velocita({ ...m, Md: 0, Ms: 0 }, r) ** 2)), sferoide: Math.sqrt((GK * m.Ms * r) / (r + m.as) ** 2) };
 }
 
+// ---------- LA GALASSIA IN TRE DIMENSIONI E NEL TEMPO: come si muove ogni stella, quanto è spesso il disco, come girano i bracci.
+// Unità: kpc, km/s, e il tempo in Ga (miliardi di anni) da oggi. Il riferimento è quello della galassia: x, y il piano
+// della mappa, z la normale; il disco gira nel verso in cui i bracci restano indietro.
+// LE LEGGI (dichiarate):
+//   · le stelle del disco si regolano da sole a Q = Qstelle (lo stesso numero che decide i bracci): la dispersione
+//     radiale è σ_R = Q·3,36·G·Σ★/κ, anello per anello; quella verticale ne è la metà (σ_z/σ_R ≈ 0,5: misurato vicino
+//     al Sole, Dehnen & Binney 1998);
+//   · IL RISCALDAMENTO DEL DISCO: una stella nasce con la dispersione del gas freddo (6 km/s: quella della soglia di
+//     Toomre) e gli incontri con nubi e bracci la scaldano con l'età, σ ∝ √età (Wielen 1977; Nordström et al. 2004
+//     trovano esponenti 0,3–0,5): qui σ(età) = σ_anello·√(età/età media dell'anello), così la media torna quella sopra;
+//   · lo spessore: uno strato isotermo che si regge da solo, ρ ∝ sech²(z/z₀) con z₀ = σ_z²/(πGΣ) (Spitzer 1942);
+//     una stella sale e scende con la frequenza ν² = 2πGΣ/z₀ (oscillazione armonica: vale per le ampiezze piccole);
+//   · nel piano: l'orbita è un cerchio più un epiciclo (Lindblad): la stella oscilla attorno al suo cerchio guida con
+//     la frequenza κ della curva di rotazione, in un'ellisse allungata lungo il moto (2Ω/κ);
+//   · lo sferoide: velocità in ogni direzione con dispersione σ = V/√2 (sfera isoterma), tre eventi per stella; il moto
+//     nel tempo è un cerchio nel piano di posizione e velocità (SEMPLIFICAZIONE: le orbite vere sono rosette);
+//   · I BRACCI girano tutti insieme, come un'onda, con una velocità angolare loro: quella del disco alla corotazione.
+//     Con una barra la corotazione sta a 1,2 volte la sua lunghezza (misurato: 1,2 ± 0,2, Aguerri et al. 2003, e i
+//     bracci che ne partono girano con lei); senza, dove l'amplificazione di taglio è massima, a 2,2 scale (scelta
+//     dichiarata: lì si contano i bracci). Dentro la corotazione le stelle superano i bracci, fuori restano indietro.
+const cinematiche = new WeakMap();
+export function cinematica(forma) {
+  let c = cinematiche.get(forma); if (c) return c;
+  const NR = ANELLI, { r, sigmaStelle, sigmaGas } = forma.anelli, e = forma.interno, m = forma.modello;
+  const omega = new Float64Array(NR), kappa = new Float64Array(NR), sigR = new Float64Array(NR), sigZ = new Float64Array(NR), z0 = new Float64Array(NR), nu = new Float64Array(NR), eta = new Float64Array(NR);
+  for (let k = 0; k < NR; k++) {
+    const v = velocita(m, r[k]), g = stringi(1 - Math.log(velocita(m, 1.1 * r[k]) / velocita(m, 0.9 * r[k])) / Math.log(1.1 / 0.9), 0.2, 1.8);
+    omega[k] = v / r[k]; kappa[k] = omega[k] * Math.sqrt(2 * (2 - g));
+    // l'età media delle stelle del disco in quell'anello (pesata con la massa nata)
+    let mm = 0, me = 0; for (let i = Math.max(1, e.sferoideFino); i <= e.nt; i++) { const x = e.nati[i * NR + k]; mm += x; me += x * (e.nt - i + 0.5) * DT; } eta[k] = mm > 0 ? me / mm : 0.5 * T0;
+    const tot = sigmaStelle[k] + sigmaGas[k];
+    sigR[k] = Math.max(LEGGI.soglia[1], (LEGGI.Qstelle * 3.36 * GK * sigmaStelle[k]) / kappa[k]); sigZ[k] = Math.max(LEGGI.soglia[1], LEGGI.rapportoVerticale * sigR[k]);
+    z0[k] = tot > 0 ? sigZ[k] ** 2 / (Math.PI * GK * tot) : LEGGI.spessoreGas; nu[k] = tot > 0 ? Math.sqrt((2 * Math.PI * GK * tot) / z0[k]) : kappa[k];
+  }
+  const corotazione = forma.barra ? LEGGI.corotazione * forma.barra.raggio : 2.2 * forma.raggioDisco;
+  c = { omega, kappa, sigR, sigZ, z0, nu, eta, corotazione, velocitaBracci: velocita(m, corotazione) / corotazione, verso: -(forma.bracci.verso || 1) };
+  cinematiche.set(forma, c); return c;
+}
+// l'angolo della cresta di un braccio al raggio r (kpc) a t Ga da oggi: l'onda gira tutta insieme
+export const faseBraccioAlTempo = (forma, r, t = 0) => { const c = cinematica(forma); return faseBraccio(forma, r) + c.verso * c.velocitaBracci * KMS * t; };
+// IL MOTO DI UNA STELLA del catalogo. S: la stella ({ pos, eta, componente }); caso: la sorgente della stella («…/stella 12»).
+// → { componente, stato(t): { pos: [x, y, z] (kpc), vel: [vx, vy, vz] (km/s) } a t Ga da oggi; a t = 0 la posizione, vista
+//     dall'alto, è quella del catalogo }
+export function motoStella(forma, S, caso) {
+  const U1 = forma.unitaKpc, x0 = S.pos[0] * U1, y0 = S.pos[1] * U1, m = forma.modello;
+  if (S.componente === 'sferoide') {
+    const q = forma.schiacciata || 1, R = Math.hypot(x0, y0 / q), u = 2 * caso('inclinazione') - 1, z = (R * u) / Math.sqrt(Math.max(1e-9, 1 - u * u)), p = [x0, y0, z], r3 = Math.hypot(x0, y0, z) || 1e-6;
+    const sig = velocita(m, Math.max(r3, 1e-3)) / Math.SQRT2, v = [sig * caso.normale('moto/x'), sig * caso.normale('moto/y'), sig * caso.normale('moto/z')];
+    // il moto: un cerchio nel piano di posizione e velocità, con la parte della velocità che non punta al centro
+    const vr = (v[0] * p[0] + v[1] * p[1] + v[2] * p[2]) / r3, vt = [v[0] - (vr * p[0]) / r3, v[1] - (vr * p[1]) / r3, v[2] - (vr * p[2]) / r3], vtn = Math.hypot(...vt) || 1e-9, w = (vtn / r3) * KMS;
+    return { componente: 'sferoide', stato: (t = 0) => { const c = Math.cos(w * t), s = Math.sin(w * t); return { pos: [0, 1, 2].map((d) => p[d] * c + ((vt[d] * r3) / vtn) * s), vel: [0, 1, 2].map((d) => vt[d] * c - ((p[d] * vtn) / r3) * s) }; } };
+  }
+  const C = cinematica(forma), rc = forma.anelli.r, NR = rc.length, r0 = Math.max(Math.hypot(x0, y0), 1e-6), fi0 = Math.atan2(y0, x0); let k = 0; while (k < NR - 1 && forma.anelli.bordo[k + 1] < r0) k++;
+  // quanto è calda: nata con la dispersione del gas, scaldata con l'età
+  const eta = Math.max(0, S.eta / 1e9), caldo = Math.sqrt(eta / Math.max(C.eta[k], 1e-3)), sR = Math.max(LEGGI.soglia[1], C.sigR[k] * caldo), sZ = Math.max(LEGGI.soglia[1], C.sigZ[k] * caldo);
+  const psi = 2 * Math.PI * caso('moto/fase'), zeta = 2 * Math.PI * caso('moto/altezza'), kap = C.kappa[k];
+  const a = Math.min(0.15 * r0 /* (l'epiciclo vale per le oscillazioni piccole: chi è più caldo, al centro, è tagliato qui) */, (sR * Math.abs(caso.normale('moto/raggio'))) / kap), rg = r0 - a * Math.cos(psi), Om = velocita(m, rg) / rg, s = C.verso;
+  // in altezza: con la velocità v₀ con cui attraversa il piano sale fin dove il potenziale dello strato, 2σ²·ln cosh(z/z₀), la
+  // ferma: z_max = z₀·acosh(exp(v₀²/4σ²)); poi va su e giù (come un'onda semplice: la forma vera è un po' più squadrata)
+  const fg = fi0 + s * ((2 * Om) / kap) * (a / rg) * Math.sin(psi), v0 = sZ * caso.normale('moto/z'), Zm = C.z0[k] * Math.acosh(Math.exp(Math.min(20, (v0 * v0) / (4 * C.sigZ[k] ** 2)))), Z = Math.sign(v0) * Zm, nuZ = Zm > 0 ? Math.abs(v0) / Zm : C.nu[k];
+  return { componente: 'disco', guida: rg, epiciclo: a, altezza: Zm, stato: (t = 0) => {
+    const e = kap * KMS * t + psi, v = nuZ * KMS * t + zeta, r = rg + a * Math.cos(e), fi = fg + s * (Om * KMS * t - ((2 * Om) / kap) * (a / rg) * Math.sin(e));
+    const vr = -a * kap * Math.sin(e), vf = r * s * Om * (1 - 2 * (a / rg) * Math.cos(e)), c = Math.cos(fi), sn = Math.sin(fi);
+    return { pos: [r * c, r * sn, Z * Math.sin(v)], vel: [vr * c - vf * sn, vr * sn + vf * c, Z * nuZ * Math.cos(v)] };
+  } };
+}
+// LA FORMA CONTINUA, per la luce diffusa: quanta materia c'è in un punto (R, z in kpc, fi in radianti; t in Ga da oggi).
+// → { stelle, gas, polvere } in M☉/kpc³. Il disco: la densità di superficie dell'anello, spessa sech²(z/z₀), con l'onda dei
+// bracci; il gas e la polvere in uno strato più sottile (LEGGI.spessoreGas), con l'onda più marcata; la polvere è il gas
+// per i suoi metalli per la parte che sta nei grani (LEGGI.polvere: metà, misurato nella Via Lattea: Draine 2011); lo
+// sferoide: Hernquist. `colonne` dà gli stessi numeri anello per anello, per chi li vuole disegnare a strati.
+export function densitaGalassia(forma) {
+  const C = cinematica(forma), A = forma.anelli, NR = ANELLI, B = forma.bracci, as = forma.scalaSferoide, Ms = forma.massaSferoide, q = forma.schiacciata || 1;
+  const anello = (R) => { let k = 0; while (k < NR - 1 && A.bordo[k + 1] < R) k++; return k; }, sech2 = (x) => { const c = Math.cosh(Math.min(Math.abs(x), 30)); return 1 / (c * c); };
+  const onda = (R, fi, t, ampiezza) => (ampiezza > 0 ? 1 + ampiezza * Math.cos(B.numero * (fi - faseBraccioAlTempo(forma, R, t))) : 1);
+  const in3d = (R, z, fi, t = 0) => {
+    const k = anello(R), fuori = R > A.bordo[NR] ? 0 : 1, hg = LEGGI.spessoreGas, r3 = Math.hypot(R, z) || 1e-6;
+    const disco = (fuori * A.sigmaStelle[k] * sech2(z / C.z0[k])) / (2 * C.z0[k]) * onda(R, fi, t, B.contrasto), gas = (fuori * A.sigmaGas[k] * sech2(z / hg)) / (2 * hg) * onda(R, fi, t, B.contrastoGas);
+    return { stelle: disco + (Ms > 0 ? (Ms * as) / (2 * Math.PI * q * r3 * (r3 + as) ** 3) : 0), gas, polvere: gas * A.Z[k] * ZSOLE * LEGGI.polvere };
+  };
+  return { in3d, colonne: { r: A.r, bordo: A.bordo, stelle: A.sigmaStelle, gas: A.sigmaGas, Z: A.Z, spessore: C.z0, spessoreGas: LEGGI.spessoreGas }, sferoide: { massa: Ms, scala: as, schiacciata: q },
+    bracci: { numero: B.numero, contrasto: B.contrasto, contrastoGas: B.contrastoGas, fase: (R, t = 0) => faseBraccioAlTempo(forma, R, t), velocita: C.velocitaBracci, corotazione: C.corotazione, verso: C.verso }, barra: forma.barra };
+}
+
+// COM'ERA LA GALASSIA a t Ga dall'inizio (regola 6: la stessa storia, guardata prima): le stelle e il gas che aveva, quante
+// ne nascevano, la sua luce e il suo colore (le generazioni nate fino ad allora, ognuna con l'età di allora)
+export function galassiaAlTempo(forma, tGa) {
+  const P = popolazione(), e = forma.interno, NR = ANELLI, S = forma.storia, x = stringi(tGa / DT, 0, e.nt), j = Math.min(e.nt, Math.floor(x)), u = x - j, tra = (A) => (j >= e.nt ? A[e.nt] : A[j] * (1 - u) + A[j + 1] * u);
+  let luce = 0; const tinta = [0, 0, 0];
+  for (let i = 1; i <= j; i++) { let m = e.est[i]; for (let k = 0; k < NR; k++) m += e.nati[i * NR + k]; const L = j - i; luce += m * P.luce[L]; for (let c = 0; c < 3; c++) tinta[c] += m * P.tinta[3 * L + c]; }
+  const tm = Math.max(...tinta, 1e-30);
+  return { esiste: tGa >= e.inizio, massaStelle: tra(S.stelle), massaGas: tra(S.gas), sfr: tra(S.sfr), massaAlone: tra(S.alone), luce /* L☉ */, tinta: luce > 0 ? tinta.map((v) => Math.round((255 * v) / tm)) : [0, 0, 0] };
+}
+
 // ---------- IL CATALOGO: `quante` stelle come campione della galassia, più le ultime supernove (vedi l'intestazione)
 // caso: la stessa sorgente della galassia; gli eventi di ogni stella stanno a «stella N/…», quelli delle ultime
 // supernove a «supernova K/…»: cambiarne uno con un ramo non sposta le altre.
@@ -751,4 +855,5 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
 }
 
 // (per le prove e per chi vuole guardare dentro)
+export const COSMOLOGIA = U, SIGMA_CAMPO = (toroM = 3.7e25, onde = 9) => sigmaCampo(toroM, onde);
 export const dentro = { U, T0, DT, KPC, GA, GK, KMS, ZSOLE, raggioViriale, concentrazione, velocita, FREEMAN, lambda, storiaAlone, evolvi, tempoIncontro, maree, campana, resaCollasso };

@@ -269,25 +269,21 @@ prova('collegate al cosmo: le scale vere, i moti della stella nella galassia e d
   const vel = C.galassie.map((G) => Math.hypot(...velocitaPeculiare(C, G.pos))); tra(mediana(vel), 100, 4000, 'velocità peculiare mediana delle galassie (km/s; nell\'universo vero ~400–600: il campo di cosmo.js ha onde lunghe troppo forti)');
   // le scale: una galassia nel cosmo e un sistema nella galassia hanno la taglia vera
   for (const G of C.galassie) { assert.equal(G.r, G.forma.unitaM / TORO_M); assert.equal(metriPerUnita(1, { cosmo: 1, galassia: G.id }), G.forma.unitaM); tra(raggioSistema(1, G.id) * G.forma.unitaM / 1.496e11, 30 - 1e-9, 30 + 1e-9, 'un sistema: 30 UA'); assert.equal(G.tipo, G.forma.tipo); }
-  // i moti di una regione vera: ogni voce è la somma, come vettori, dei moti di sotto
+  // i moti di una regione vera (ora vengono dal mondo in tre dimensioni: spazio3d.js, provati in test_spazio3d): le voci ci sono
+  // tutte, e la stella di un disco va circa alla velocità della curva di rotazione alla sua distanza
   let visti = 0, sferoide = 0;
   for (let n = 5; n < 60000 && visti < 12; n += 4801) {
     const a = indirizzoDi(n), M = motiDi(a), Gx = galassia(a.cosmo, a.galassia), S = Gx.stelle[a.stella], P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta]; visti++;
     assert.deepEqual(M.map((m) => m.nome), ['ferma nella regione', 'sul pianeta che gira', 'ferma rispetto alla stella', 'ferma rispetto alla galassia', 'ferma rispetto al fondo cosmico']);
     for (const m of M) assert.ok(Number.isFinite(m.kmS) && m.kmS >= 0 && Math.abs(m.velocita - (m.kmS * 1e3) / 2.998e8) < 1e-9 && m.direzione >= 0 && m.direzione < 360 && m.cosa.length > 10, JSON.stringify(m));
-    const vet = (m) => [m.kmS * Math.cos((m.direzione * Math.PI) / 180), m.kmS * Math.sin((m.direzione * Math.PI) / 180)], meno = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
     const orbita = (2 * Math.PI * P.aM) / P.anno / 1e3; tra(M[2].kmS / orbita, 1 - 1e-9, 1 + 1e-9, 'la velocità lungo l\'orbita');
-    // la stella attorno alla galassia: la differenza tra «ferma rispetto alla galassia» e «ferma rispetto alla stella»
-    const vStella = meno(vet(M[3]), vet(M[2])), r = Math.hypot(...S.pos) * Gx.forma.unitaKpc, vc = curvaRotazione(Gx.forma, r);
-    if (S.componente === 'disco') { tra(vStella / vc, 1 - 1e-6, 1 + 1e-6, 'nel disco: la velocità della curva di rotazione alla sua distanza'); const d = [vet(M[3])[0] - vet(M[2])[0], vet(M[3])[1] - vet(M[2])[1]]; assert.ok(Math.abs(d[0] * S.pos[0] + d[1] * S.pos[1]) < 1e-6 * vc * Math.hypot(...S.pos), 'tangente: perpendicolare al raggio'); }
-    else { sferoide++; assert.ok(vStella < 5 * vc, `nello sferoide: ${vStella} km/s con una curva di ${vc}`); }
-    // la galassia nel cosmo: la differenza tra le ultime due voci è la sua velocità peculiare
-    tra(meno(vet(M[4]), vet(M[3])) / Math.hypot(...velocitaPeculiare(C, C.galassie[a.galassia].pos)), 1 - 1e-6, 1 + 1e-6, 'la velocità peculiare della galassia');
+    const vc = curvaRotazione(Gx.forma, Math.max(1e-3, Math.hypot(...S.pos) * Gx.forma.unitaKpc)); if (S.componente === 'sferoide') sferoide++;
+    assert.ok(M[3].kmS3d < 6 * vc + orbita + 50 && M[4].kmS3d < 6 * vc + orbita + 3000, `moti di ${M[3].kmS3d} e ${M[4].kmS3d} km/s con una curva di ${vc}`);
     assert.equal(JSON.stringify(motiDi(a)), JSON.stringify(M));
   }
   const a = indirizzoDi(1616476), M = motiDi(a);
-  console.log(`      (velocità peculiari delle ${C.galassie.length} galassie: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}; ${visti} regioni provate, ${sferoide} attorno a stelle dello sferoide)`);
-  console.log(`      (universo n. 1616476: ${M.slice(1).map((m) => `${m.nome} ${num(m.kmS)} km/s verso ${Math.round(m.direzione)}°`).join(' · ')})`);
+  console.log(`      (velocità peculiari sulla carta piatta di prima (onde lunghe troppo forti; quelle vere, in 3D, sono in test_spazio3d): mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}; ${visti} regioni provate, ${sferoide} attorno a stelle dello sferoide)`);
+  console.log(`      (universo n. 1616476: ${M.slice(1).map((m) => `${m.nome} ${num(m.kmS3d ?? m.kmS)} km/s`).join(' · ')})`);
 });
 
 // ---------- il confronto con la Via Lattea, in chiaro
