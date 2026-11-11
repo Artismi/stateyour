@@ -8,7 +8,7 @@ Verifica delle voci marcate [Va], [S], [R] e dei conflitti dichiarati in `dal_nu
 
 **Conti di riscontro** (script in `/tmp/claude-0/-home-user/e4f7d681-8c14-51b2-bfef-3d2a580b715c/scratchpad/verifica_4/calc/`): `ell_check.py` (Ellingham da JANAF riscaricato e da Robie e Hemingway), `redox.py` (torre redox da ΔG°f), `calcite.py` (calcinazione, arrostimento della pirite).
 
-**Limite dichiarato.** Le tre note contengono circa 290 voci non verificate. Ne ho esaminate 96, scelte per priorità: tutti i conflitti segnalati, poi coefficienti e soglie che entrano in una regola, poi le licenze, poi una parte del resto. Le voci [R] e [S] non elencate qui **non sono state toccate** e restano da verificare (soprattutto: temperature di ceramica e vetro §2, punti di fusione e durezze §3.2, elenco dei processi minerari §4.2, tempi di carbone e petrolio §4.3, datazioni §8 nella nota sulla tecnica; gran parte delle equazioni classiche nella nota sul comportamento). `fisiologia_piante_ecosistemi.md` non è stato verificato (vedi in fondo).
+**Limite dichiarato.** Le tre note contengono circa 290 voci non verificate. Ne ho esaminate 80 (più 31 guardate senza esito, elencate per trasparenza), scelte per priorità: tutti i conflitti segnalati, poi coefficienti e soglie che entrano in una regola, poi le licenze, poi una parte del resto. Le voci [R] e [S] non elencate qui **non sono state toccate** e restano da verificare (soprattutto: temperature di ceramica e vetro §2, punti di fusione e durezze §3.2, elenco dei processi minerari §4.2, tempi di carbone e petrolio §4.3, datazioni §8 nella nota sulla tecnica; gran parte delle equazioni classiche nella nota sul comportamento). `fisiologia_piante_ecosistemi.md` non è stato verificato (vedi in fondo).
 
 ---
 
@@ -59,7 +59,7 @@ Verifica delle voci marcate [Va], [S], [R] e dei conflitti dichiarati in `dal_nu
 | B6 | Date di LECA e dei mitocondri | «divergono di centinaia di milioni di anni» | **Aperta nella letteratura** | [Strassert 2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC7994803/); [Mahendrarajah 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC10656485/); Betts 2018; [Kay e altri 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12872463/) | LECA 2,39–1,96 / 1,93–1,84 / < 1,84 / 1,80–1,67 Ga; mitocondrio ~2,2 Ga (Kay) o 2,05–1,21 (Betts). Li distinguono calibrazioni e radice. Usare LECA = 1,9 ± 0,3 Ga come intervallo, non una data |
 | B7 | Energia per gene: «200 000 volte» (Lane e Martin) | [Va]; nel riepilogo «200 000 volte più energia per gene» | **Corretta** (precisata); Lane e Martin 2010 **non raggiunta** | [Lane 2011, Biology Direct](https://pmc.ncbi.nlm.nih.gov/articles/PMC3152533/) | Per cellule medie: 0,1 contro ~115 fW per gene, cioè ~1200 volte. 200 000 è l'espansione del genoma possibile «in linea di principio» |
 | B8 | Lane e Martin contro Lynch e Marinov | contestato | **Aperta nella letteratura** | [Lynch e Marinov 2015](https://pmc.ncbi.nlm.nih.gov/articles/PMC4697398/), Lane 2011 | Resta la proposta della nota: esporre entrambe le letture. Le lettere di replica non sono state lette |
-| B9 | Bistabilità dell'ossigeno (Goldblatt 2006): < 10⁻⁵ e > 5·10⁻³ del livello attuale | [Va] | **Non raggiunta** (Nature chiuso); bistabilità **confermata** su fonti indipendenti; soglie **aperte** | [Horne e Goldblatt 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12329441/); [Wogan e altri 2022](https://pmc.ncbi.nlm.nih.gov/articles/PMC9477391/) | Gregory e altri 2021: stati solo sotto 6·10⁻⁷ e sopra 2·10⁻³ di rapporto di mescolamento (≈ 3·10⁻⁶ e 10⁻² del livello attuale). Interruttore sì; soglie incerte di mezzo ordine di grandezza; attenzione alle unità |
+| B9 | Bistabilità dell'ossigeno (Goldblatt 2006): < 10⁻⁵ e > 5·10⁻³ del livello attuale | [Va] | **Non raggiunta** (Nature chiuso); bistabilità **confermata** su fonti indipendenti; soglie **aperte** | [Horne e altri 2025, Phil. Trans. R. Soc. B](https://pmc.ncbi.nlm.nih.gov/articles/PMC12329441/); [Wogan e altri 2022](https://pmc.ncbi.nlm.nih.gov/articles/PMC9477391/) | Gregory e altri 2021: stati solo sotto 6·10⁻⁷ e sopra 2·10⁻³ di rapporto di mescolamento (≈ 3·10⁻⁶ e 10⁻² del livello attuale). Interruttore sì; soglie incerte di mezzo ordine di grandezza; attenzione alle unità |
 | B10 | Torre redox di Thauer 1977 | [R] | **Non raggiunta** (scansione senza testo); valori **confermati per ricalcolo** | `redox.py` | Tutti i potenziali riprodotti entro 8 mV da ΔG°f. **Corretta** la voce del ferro: Fe(OH)₃/Fe²⁺ ≈ 0 V vale a Fe²⁺ ≈ 10⁻⁵ mol/L; a 1 mol/L ≈ −0,3 V. Per ferro e manganese calcolare con la concentrazione del luogo |
 | B11 | Genoma minimo: ripartizione dei 473 geni di syn3.0 (195 / 34 / 84 / 81 / 79) | [R] | **Non raggiunta** | Hutchison 2016 chiuso; in Europe PMC nessun articolo aperto la riporta | Restano [V] solo 531 kb e 473 geni (da Breuer 2019) |
 | B12 | Rese passo per passo di Powner 2009 e Becker 2019 | [R], non riportate | **Non raggiunta** | Powner chiuso; deposito di Monaco per Becker dietro verifica anti-robot | Nessuna resa utilizzabile |
@@ -107,12 +107,12 @@ Verifica delle voci marcate [Va], [S], [R] e dei conflitti dichiarati in `dal_nu
 
 ## Riepilogo
 
-- **Voci esaminate: 96** (contando le voci raggruppate nelle righe B26–B30 e C13–C14 una per una).
-- **Confermate: 38.**
-- **Corrette: 17** — elenco sotto.
-- **Aperte nella letteratura: 4** (date di LECA e dei mitocondri; energia per gene; soglie numeriche della bistabilità dell'ossigeno; Henrich contro Vaesen).
-- **Non raggiunte: 22.**
-- **Non esaminate pur essendo in elenco: 15** (le righe A22, A23, A30, B13 erano già [V]; B29 e B30 restano [Va]).
+- **Voci esaminate con un esito: 80** (le righe che raggruppano più fonti — A23, B26–B30, C13–C14 — sono contate fonte per fonte).
+- **Confermate: 37** (tecnica 10, cellula 20, comportamento 7).
+- **Corrette: 15** (tecnica 10, cellula 5), più 2 correzioni minori dentro voci non «corrette» (rapporto rame:stagno di Uluburun in A19; coppia Fe(OH)₃/Fe²⁺ in B10): 17 punti nell'elenco sotto.
+- **Aperte nella letteratura: 3** (date di LECA e dei mitocondri, B6; energia per gene come vincolo, B8; Henrich contro Vaesen, C8). Aperte in parte anche le soglie numeriche della bistabilità dell'ossigeno (B9) e la soglia di O₂ per biomassa fuori da 1 bar (A2).
+- **Non raggiunte: 25** (tecnica 7, cellula 6, comportamento 12).
+- **In elenco ma senza esito: 31** — 7 erano già [V] e non sono state rilette (A22, A23, A30, B13); 24 restano [Va] (B29, B30).
 
 ### Correzioni (vecchio → nuovo)
 

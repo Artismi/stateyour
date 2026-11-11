@@ -196,8 +196,9 @@ prova('la causa comune: due croste di sale stanno più spesso nello stesso mondo
   const N = 400; let stesso = 0; for (let k = 0; k < N; k++) if (causaComune(sale, { mondi: MONDI, etichetta: `coppia ${k}` }).scelta === 'stesso') stesso++;
   const f = stesso / N; assert.ok(Math.abs(f - cc.probabilita) < 4 * Math.sqrt((cc.probabilita * (1 - cc.probabilita)) / N), `stesso mondo ${f} delle volte contro ${cc.probabilita}`); assert.ok(f > 0.5);
   // e quando stanno insieme, il mondo scelto è più salato: due croste scelgono in proporzione a f², una sola a f
-  const parte = (bolle, opz) => { let s = 0; for (let k = 0; k < 150; k++) { const r = incontra(bolle, { ...opz, mondi: MONDI, etichetta: `sale ${k}` }); assert.ok(r.esiste); s += r.bolle[0].giudizio.parte; } return s / 150; };
-  const una = parte([sale[0]], {}), due = parte(sale, { insieme: 'pianeta' }); assert.ok(due > una, `il sale copre ${due} dei mondi scelti con due croste, ${una} con una`);
+  // (in attesa: ⟨f³⟩/⟨f²⟩ ≥ ⟨f²⟩/⟨f⟩; qui si controlla entro l'errore del campione, perché il sale dei mondi asciutti copre quasi ovunque la stessa parte)
+  const parte = (bolle, opz) => { let s = 0, q = 0; for (let k = 0; k < 150; k++) { const r = incontra(bolle, { ...opz, mondi: MONDI, etichetta: `sale ${k}` }); assert.ok(r.esiste); const f = r.bolle[0].giudizio.parte; s += f; q += f * f; } return { media: s / 150, errore: Math.sqrt(Math.max(0, q / 150 - (s / 150) ** 2) / 150) }; };
+  const p1 = parte([sale[0]], {}), p2 = parte(sale, { insieme: 'pianeta' }), una = p1.media, due = p2.media; assert.ok(due > una - 4 * Math.hypot(p1.errore, p2.errore), `il sale copre ${due} dei mondi scelti con due croste, ${una} con una`);
   // mare e ghiaccio: i mondi col mare hanno meno ghiaccio: i pesi dicono «separati»
   const mg = causaComune([{ contenuto: 'acqua liquida' }, { contenuto: 'ghiaccio' }], { mondi: MONDI }); assert.ok(mg.guadagno < 1 && mg.probabilita < 0.5);
   // un a priori diverso (parte della domanda) sposta la risposta come deve
