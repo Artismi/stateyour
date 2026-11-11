@@ -411,7 +411,7 @@ prova('il clima e l\'aria si tengono: il mare c\'è dove può, il termostato del
     const c = p.clima, k = `${p.tipo} ${c.acqua.slice(0, 7)}${c.termostato ? ' (termostato)' : ''}`; conta[k] = (conta[k] || 0) + 1;
     if (c.acqua === 'liquida') { assert.ok(c.T >= 273.15 && c.T < LG.ebollizione(c.pressione) && c.T < 647 && c.bilancio.assorbita <= LG.LIMITE_VAPORE, `mare a ${c.T} K e ${c.pressione} Pa`); assert.ok(!(p.atmosfera.gas.SO2 > 1e-9), 'anidride solforosa sopra un mare'); }
     if (c.termostato) { assert.equal(c.acqua, 'liquida'); tra(c.T, 273.15, 300, 'temperatura al termostato'); assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= c.termostato * 1.01, 'più CO2 di quella che il termostato lascia'); }
-    else if (c.acqua === 'liquida') assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= CH.pressioneCO2Urey(c.T) * 3 + 1e-9 || p.clima.tenuti.includes('idrogeno'), 'CO2 sopra un mare senza termostato');
+    else if (c.acqua === 'liquida') assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= Math.max(CH.pressioneCO2Urey(c.T) * 3, (c.co2Ciclo || 0) * 1.01) + 1e-9 || p.clima.tenuti.includes('idrogeno'), 'CO2 sopra un mare senza termostato'); // (la CO2 è quella a cui le rocce consumano quanto i vulcani emettono: il ciclo del carbonio di chimica.js, quando c'è)
     if (c.acqua.startsWith('vapore') && p.tipo === 'roccioso' && (p.atmosfera.gas.CO2 || 0) > 0.9 && c.pressione > 1e6) venere++;
     if (c.acqua === 'ghiaccio') assert.ok(c.T < 273.15);
   }
