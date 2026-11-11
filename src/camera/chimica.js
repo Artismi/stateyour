@@ -476,9 +476,17 @@ export function climaEAria(dati, { Z } = {}) {
     // continuo (leggi.js lo conta con la stessa curva dell'albedo); se però salta proprio lì — l'instabilità del ghiaccio
     // e dell'albedo: tra un po' di ghiaccio e molto non c'è uno stato fermo, il pianeta oscilla (Menou 2015) — si resta a
     // cavallo del salto e lo si DICE: r.bilico (clima.cicloInBilico).
-    const g = (T) => { let r = con(T, 0); if (!(dati.calore > 0) || !(terre0 > 0.005) || !(r.c.ghiaccio > CICLO.ghiaccio)) return r;
-      let lo = 0, hi = 1; for (let k = 0; k < 14 && Math.abs(r.c.ghiaccio - r.m) > CICLO.ghiaccio; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; }
-      if (Math.abs(r.c.ghiaccio - r.m) > 10 * CICLO.ghiaccio) r.bilico = true; return r; };
+    // (Poiché il ghiaccio del clima cala al crescere di quello messo nel ciclo, il punto fisso sta sempre TRA i due: ogni
+    // prova stringe l'intervallo da tutte e due le parti, e la temperatura dopo parte dal ghiaccio trovato a quella prima:
+    // bastano una o due prove per temperatura invece di dieci.)
+    let mPrima = 0;
+    const g = (T) => { if (!(dati.calore > 0) || !(terre0 > 0.005)) return con(T, 0);
+      let r = con(T, mPrima), lo = 0, hi = 1;
+      for (let k = 0; k < 14 && Math.abs(r.c.ghiaccio - r.m) > CICLO.ghiaccio; k++) { const su = r.c.ghiaccio > r.m, altro = Math.min(1, Math.max(0, r.c.ghiaccio));
+        if (su) { lo = Math.max(lo, r.m); hi = Math.min(hi, altro); } else { hi = Math.min(hi, r.m); lo = Math.max(lo, altro); }
+        if (!(hi > lo)) { const m = Math.max(lo, hi); lo = Math.min(lo, hi); hi = m; } // (i due capi si sono scavalcati: il ghiaccio salta lì)
+        r = con(T, 0.5 * (lo + hi)); }
+      if (Math.abs(r.c.ghiaccio - r.m) > 10 * CICLO.ghiaccio) r.bilico = true; mPrima = r.m; return r; };
     // ciò che resta scritto nel clima quando c'è il ciclo: la sua CO2, il ghiaccio con cui è stata calcolata (uguale a
     // clima.ghiaccio entro CICLO.ghiaccio se il punto fisso c'è) e se il ciclo è in bilico
     const segna = (r) => { if (dati.calore > 0) { r.c.co2Ciclo = r.co2; r.c.ghiaccioDelCiclo = r.m; if (r.bilico) r.c.cicloInBilico = true; } return r; };
@@ -490,8 +498,8 @@ export function climaEAria(dati, { Z } = {}) {
     // 640 K i mari più caldi uscivano con l'aria fatta a 640 K e il clima qualche grado sopra: una coppia non cercata)
     if (!sopra) for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640, ACQUA.critica - 0.5]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
     if (!sopra) return segna(sotto); // (più caldo a ogni temperatura: il mare bolle)
-    // (con il ciclo del carbonio la CO2 cambia del 10% in pochi decimi di grado: lì la temperatura si stringe cento volte di più)
-    const fino = dati.calore > 0 ? 0.003 : 0.3;
+    // (con il ciclo del carbonio la CO2 cambia del 10% in pochi decimi di grado: lì la temperatura si stringe dieci volte di più)
+    const fino = dati.calore > 0 ? 0.03 : 0.3;
     for (let k = 0; k < 16 && sopra.T - sotto.T > fino; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
     // (se i due capi non si incontrano — sotto, il clima è ancora più caldo dell'aria di oltre un grado; un filo sopra, il
     // mare non c'è più — lì non c'è una coppia ferma: il mare si scalda finché bolle, o passa il punto critico. Si dà il
