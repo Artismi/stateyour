@@ -473,7 +473,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     }
     const vicino = Math.max(dist - raggio, S.quota * 0.5, 1), pxPerMetro = S.fuoco / vicino, maglia = (lato / MY) * pxPerMetro;
     // il livello di tessera che questa distanza chiede: i suoi punti grandi circa `puntiPerPixel` sullo schermo
-    const Lv = Math.max(0, Math.min(LMAX, Math.ceil(Math.log((R * Math.PI * pxPerMetro) / (TH * O.puntiPerPixel)) / Math.log(4))));
+    const Lv = Math.max(0, Math.min(LMAX, Math.round(Math.log((R * Math.PI * pxPerMetro) / (TH * O.puntiPerPixel)) / Math.log(4))));
     // si spezza: se la pezza è più grande della tessera che le serve; se il suo terreno è troppo mosso per le sue maglie;
     // (sull'acqua) se è abbastanza vicina perché le onde lunghe muovano i vertici
     let spezza = d < 2 || d < 2 * Lv;
