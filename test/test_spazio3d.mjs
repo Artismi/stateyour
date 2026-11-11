@@ -227,6 +227,21 @@ prova('le scene per il motore: metri in doppia precisione, luce e magnitudine ve
   // nel tempo: le scene si muovono; e la rete cresce
   const sc2 = S3.scenaCosmo(a.cosmo, -5e9 * ANNO); assert.ok(sc2.riferimento.fattoreDiScala < 0.75 && sc2.campi.densita.crescita < 0.8 && sc2.riferimento.periodico[0] < sc.riferimento.periodico[0]);
   const ss2 = S3.scenaSistema(a.cosmo, a.galassia, a.stella, 3e6); assert.ok(V.norma(V.meno(ss2.corpi[1].pos, ss.corpi[1].pos)) > 1e6, 'un mese dopo il pianeta si è mosso');
+  // l'assetto: una rotazione (ortonormale, destrorsa) che porta il polo del corpo (y) sull'asse; dopo un quarto di giorno
+  // il meridiano 0 è girato di 90° verso est; una luna agganciata guarda il pianeta col meridiano 0
+  const col = (m, j) => [m[j], m[3 + j], m[6 + j]], sc3 = (x, y) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2]; let agganciate = 0, girano = 0;
+  for (const c of ss.corpi) {
+    if (!c.assetto) continue; const [x, y, z] = [0, 1, 2].map((j) => col(c.assetto, j));
+    for (const [u, v, w] of [[x, x, 1], [y, y, 1], [z, z, 1], [x, y, 0], [y, z, 0], [x, z, 0]]) assert.ok(Math.abs(sc3(u, v) - w) < 1e-9, 'assetto ortonormale'); assert.ok(V.norma(V.meno(V.croce(x, y), z)) < 1e-9, 'destrorso');
+    if (c.cosa === 'luna') { const P = ss.corpi.find((q) => q.cosa === 'pianeta' && q.id === c.pianeta), verso = V.versore(V.meno(P.pos, c.pos)); assert.ok(sc3(x, verso) > 1 - 1e-9, 'la luna agganciata guarda il pianeta'); agganciate++; continue; }
+    assert.ok(V.norma(V.meno(y, c.asse)) < 1e-9, 'il polo è l\'asse');
+    if (c.cosa === 'pianeta' && c.giorno > 0) { const dopo = S3.scenaSistema(a.cosmo, a.galassia, a.stella, c.giorno / 4).corpi.find((q) => q.cosa === 'pianeta' && q.id === c.id), x2 = col(dopo.assetto, 0); assert.ok(Math.abs(sc3(x2, x)) < 1e-6 && sc3(V.croce(x, x2), c.asse) > 1 - 1e-6, 'un quarto di giorno: 90° verso est'); girano++; }
+  }
+  assert.ok(girano >= 2);
+  // gli stessi corpi come li vuole il motore: ognuno rispetto al suo genitore, in metri; sommati ridanno la scena
+  const corpi = S3.corpiSistema(a.cosmo, a.galassia, a.stella); assert.equal(corpi.length, ss.corpi.length);
+  for (const t of [0, 3e6]) { const sT = S3.scenaSistema(a.cosmo, a.galassia, a.stella, t); corpi.forEach((c, i) => { let p = c.posizione(t), g = c.genitore; while (g >= 0) { p = V.somma(p, corpi[g].posizione(t)); g = corpi[g].genitore; } assert.ok(V.norma(V.meno(p, sT.corpi[i].pos)) <= 1e-9 * (V.norma(p) + 1), `il corpo ${c.nome} al tempo ${t}`); if (c.assetto) assert.deepEqual(c.assetto(t, new Array(9)), sT.corpi[i].assetto); assert.equal(c.raggio, sT.corpi[i].raggio); }); }
+  console.log(`      (assetti: ${girano} pianeti che girano, ${agganciate} lune agganciate; ${corpi.length} corpi per il motore, ognuno rispetto al suo genitore)`);
   console.log(`      (tre scene in ${ms.toFixed(0)} ms; cosmo: ${sc.punti.n} galassie, griglia ${sc.campi.densita.n}³; galassia: ${sg.punti.n} stelle; sistema: ${ss.corpi.length} corpi)`);
 });
 

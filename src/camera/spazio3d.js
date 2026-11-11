@@ -60,7 +60,8 @@ export const assiSistema = (n, gid, sid) => elementiSistema(n, gid, sid).assi;
 // → { t, eta (anni della stella a quel tempo), fase: 'non nata' | 'disco' | 'pianeti',
 //     stella: { pos, vel (m, m/s nel riferimento del sistema), massaKg, raggioM, L (W), T (K), magnitudine, stato, asse, angolo (rad), giro (s) },
 //     disco: (solo nella fase 'disco') il disco di disco.js con ciò che resta del gas,
-//     pianeti: [{ id, pos, vel, raggioM, massaKg, formato, asse, angolo, giorno, elementi, lune: [{ id, pos, vel, raggioM, massaKg, elementi }] }] }
+//     pianeti: [{ id, pos, vel, raggioM, massaKg, formato, asse, terna, angolo, giorno, elementi, lune: [{ id, pos, vel, raggioM, massaKg, elementi, bloccata, dalPianeta }] }] }
+// (`terna`: [e1, e2, asse]; il meridiano 0 sta, sull'equatore, all'angolo `angolo` da e1 verso e2: vedi assettoDa)
 // CHE COSA È VERO NEL TEMPO: le posizioni lungo le orbite (Keplero, esatte), il giro di ogni corpo, il baricentro; la
 // stella alla sua età di allora (luce, raggio, temperatura: stelle.js; prima di morire era ancora viva, con la massa
 // di nascita e le orbite più strette in proporzione: m·a si conserva quando la massa si perde piano); il giorno dei
@@ -77,7 +78,7 @@ export function statoSistema(n, gid, sid, t = 0) {
   let stella;
   if (viva) { const s = stellaVera(m0, { Z, eta }); stella = { massaKg: m0 * MSOLE, raggioM: s.R * RSOLE, L: s.L * LSOLE, T: eta > 0.9 * vita ? Math.min(s.T, 4200) : s.T, stato: eta > 0.9 * vita ? 'gigante rossa' : 'in vita' }; }
   else { const f = vivaOggi ? fine(m0, S.B ?? 1e-4, { Z }) : { tipo: S.stato, massa: S.massa, raggio: S.raggioM }, R = f.raggio || 1e4, T = S.stato === 'nana bianca' ? S.T : 0; stella = { massaKg: f.massa * MSOLE, raggioM: R, L: 4 * Math.PI * R * R * COSTANTI.sigma * T ** 4, T, stato: f.tipo }; }
-  stella.magnitudine = magnitudine(stella.L); stella.asse = E.stella.asse; stella.angolo = E.stella.angolo(t); stella.giro = E.stella.giro;
+  stella.magnitudine = magnitudine(stella.L); stella.asse = E.stella.asse; stella.terna = E.stella.terna; stella.angolo = E.stella.angolo(t); stella.giro = E.stella.giro;
   const fase = Sis.disco && eta < Sis.disco.vita ? 'disco' : 'pianeti', stretta = stella.massaKg / (S.massa * MSOLE); // quanto pesava la stella rispetto a oggi
   // i pianeti: ognuno sulla sua orbita attorno alla stella; poi tutto rispetto al baricentro
   const lontano = Math.abs(t) > 1e5 * ANNO, corpi = [];
@@ -88,7 +89,7 @@ export function statoSistema(n, gid, sid, t = 0) {
     let giorno = asse.giorno, angolo = asse.angolo(t);
     if (lontano && !asse.agganciato) { try { const luna = (P.lune || []).find((l) => l.origine === 'urto' && l.giornoPianeta) || null, g = rotazione(P, { ...Sis, stella: { ...S, eta } }, caso, { urto: P.urto, luna }); if (g.giorno > 0 && !g.bloccato && !g.risonanza) { giorno = g.giorno; angolo = asse.meridiano0 + (PI2 * t) / giorno; } } catch { /* resta quello di oggi */ } }
     const lu = lune.map(({ L, el: eL }) => ({ L, k: statoKeplero(eL, t), el: eL }));
-    corpi.push({ P, k, formato, giorno, angolo, asse: asse.asse, el: elT, lu });
+    corpi.push({ P, k, formato, giorno, angolo, asse: asse.asse, terna: asse.terna, el: elT, lu });
   }
   let mTot = stella.massaKg; const bar = [0, 0, 0], vbar = [0, 0, 0];
   for (const c of corpi) { let m = c.P.massaKg; for (const l of c.lu) m += l.L.massaKg; c.m = m; mTot += m; for (let d = 0; d < 3; d++) { bar[d] += m * c.k.pos[d]; vbar[d] += m * c.k.vel[d]; } }
@@ -98,8 +99,8 @@ export function statoSistema(n, gid, sid, t = 0) {
     const cp = V.somma(stella.pos, c.k.pos), cv = V.somma(stella.vel, c.k.vel), sp = [0, 0, 0], sv = [0, 0, 0];
     for (const l of c.lu) { const f = l.L.massaKg / c.m; for (let d = 0; d < 3; d++) { sp[d] -= f * l.k.pos[d]; sv[d] -= f * l.k.vel[d]; } }
     const pos = V.somma(cp, sp), vel = V.somma(cv, sv);
-    return { id: c.P.id, pos, vel, raggioM: c.P.raggioM, massaKg: c.P.massaKg, formato: c.formato, asse: c.asse, angolo: c.angolo, giorno: c.giorno, elementi: c.el,
-      lune: c.lu.map((l) => ({ id: l.L.id, pos: V.somma(pos, l.k.pos), vel: V.somma(vel, l.k.vel), raggioM: l.L.raggioM, massaKg: l.L.massaKg, elementi: l.el })) };
+    return { id: c.P.id, pos, vel, raggioM: c.P.raggioM, massaKg: c.P.massaKg, formato: c.formato, asse: c.asse, terna: c.terna, angolo: c.angolo, giorno: c.giorno, elementi: c.el,
+      lune: c.lu.map((l) => ({ id: l.L.id, pos: V.somma(pos, l.k.pos), vel: V.somma(vel, l.k.vel), raggioM: l.L.raggioM, massaKg: l.L.massaKg, elementi: l.el, bloccata: !!l.L.bloccata, dalPianeta: l.k.pos })) };
   });
   return { t, eta, fase, stella, disco: fase === 'disco' ? { ...Sis.disco, gasRimasto: 1 - eta / Sis.disco.vita } : null, pianeti };
 }
@@ -245,14 +246,31 @@ export function scenaGalassia(n, gid, t = 0) {
     figlio: (i) => ({ livello: 'sistema', via: { cosmo: n, galassia: gid, stella: i } }),
   };
 }
+// L'ASSETTO di un corpo che gira: la matrice 3×3 (per righe, 9 numeri) che porta dagli assi DEL CORPO a quelli del
+// riferimento. Gli assi del corpo, come li vuole il motore (src/tre/nucleo.js): x esce dall'equatore al meridiano 0,
+// y è il polo nord (l'asse di rotazione), z = x × y (esce dall'equatore a 90° OVEST): un punto a longitudine λ (verso
+// est) e latitudine φ sta in (cos φ cos λ, sin φ, −cos φ sin λ).
+export function assettoDa(terna, angolo, o = new Array(9)) {
+  const [e1, e2, polo] = terna, c = Math.cos(angolo), s = Math.sin(angolo);
+  for (let d = 0; d < 3; d++) { o[3 * d] = c * e1[d] + s * e2[d]; o[3 * d + 1] = polo[d]; o[3 * d + 2] = s * e1[d] - c * e2[d]; }
+  return o;
+}
+// una luna agganciata guarda il pianeta sempre con la stessa faccia (il meridiano 0), e il suo polo è la normale
+// all'orbita; di una non agganciata il giro non lo dà nessuna legge qui: null (dichiarato)
+function assettoLuna(l) {
+  if (!l.bloccata) return null;
+  const W = l.elementi.assi[2], m = V.versore(V.per(l.dalPianeta, -1)), z = V.croce(m, W), o = new Array(9);
+  for (let d = 0; d < 3; d++) { o[3 * d] = m[d]; o[3 * d + 1] = W[d]; o[3 * d + 2] = z[d]; }
+  return o;
+}
 export function scenaSistema(n, gid, sid, t = 0) {
   const S = statoSistema(n, gid, sid, t), E = elementiSistema(n, gid, sid), Sis = E.Sis, G = statoGalassia(n, gid, t, { stati: false });
   const corpi = [];
-  if (S.stella) corpi.push({ cosa: 'stella', id: sid, pos: S.stella.pos, vel: S.stella.vel, raggio: S.stella.raggioM, massaKg: S.stella.massaKg, luminosita: S.stella.L, magnitudine: S.stella.magnitudine, colore: coloreDi(S.stella.T, STATI.indexOf(S.stella.stato)), temperatura: S.stella.T, stato: S.stella.stato, asse: S.stella.asse, angolo: S.stella.angolo });
+  if (S.stella) corpi.push({ cosa: 'stella', id: sid, pos: S.stella.pos, vel: S.stella.vel, raggio: S.stella.raggioM, massaKg: S.stella.massaKg, luminosita: S.stella.L, magnitudine: S.stella.magnitudine, colore: coloreDi(S.stella.T, STATI.indexOf(S.stella.stato)), temperatura: S.stella.T, stato: S.stella.stato, asse: S.stella.asse, angolo: S.stella.angolo, assetto: assettoDa(S.stella.terna, S.stella.angolo) });
   for (const p of S.pianeti) {
     const P = Sis.pianeti[p.id];
-    corpi.push({ cosa: 'pianeta', id: p.id, pos: p.pos, vel: p.vel, raggio: p.raggioM, massaKg: p.massaKg, luminosita: 0, colore: P.colore, tipo: P.tipo, formato: p.formato, asse: p.asse, angolo: p.angolo, giorno: p.giorno, schiacciamento: P.schiacciamento || 0, anello: P.anello ? { interno: P.anello.interno * P.raggioM, esterno: P.anello.esterno * P.raggioM } : null, orbita: orbitaDi(p.elementi, 'stella') });
-    for (const l of p.lune) corpi.push({ cosa: 'luna', id: l.id, pianeta: p.id, pos: l.pos, vel: l.vel, raggio: l.raggioM, massaKg: l.massaKg, luminosita: 0, colore: [170, 170, 165], orbita: orbitaDi(l.elementi, `pianeta ${p.id}`) });
+    corpi.push({ cosa: 'pianeta', id: p.id, pos: p.pos, vel: p.vel, raggio: p.raggioM, massaKg: p.massaKg, luminosita: 0, colore: P.colore, tipo: P.tipo, formato: p.formato, asse: p.asse, angolo: p.angolo, assetto: assettoDa(p.terna, p.angolo), giorno: p.giorno, schiacciamento: P.schiacciamento || 0, anello: P.anello ? { interno: P.anello.interno * P.raggioM, esterno: P.anello.esterno * P.raggioM } : null, orbita: orbitaDi(p.elementi, 'stella') });
+    for (const l of p.lune) corpi.push({ cosa: 'luna', id: l.id, pianeta: p.id, pos: l.pos, vel: l.vel, raggio: l.raggioM, massaKg: l.massaKg, luminosita: 0, colore: [170, 170, 165], bloccata: l.bloccata, assetto: assettoLuna(l), orbita: orbitaDi(l.elementi, `pianeta ${p.id}`) });
   }
   return {
     livello: 'sistema', via: { cosmo: n, galassia: gid, stella: sid }, t, eta: S.eta, fase: S.fase,
@@ -265,3 +283,26 @@ export function scenaSistema(n, gid, sid, t = 0) {
 // un'orbita per disegnarla: i suoi assi (verso il pericentro, a 90° nel verso del moto, la normale), semiasse, eccentricità,
 // periodo; un punto dell'orbita: centro + a·(cos E − e)·P + a·√(1−e²)·sin E·Q, con E da 0 a 2π
 const orbitaDi = (el, attorno) => ({ attorno, a: el.a, e: el.e, inclinazione: el.i, assi: el.assi, periodo: periodo(el) });
+
+// I CORPI DI UN SISTEMA COME LI VUOLE IL MOTORE (src/tre/nucleo.js: N.corpo({ nome, genitore, raggio, posizione(t, out),
+// assetto(t, out) })): la stella (rispetto al baricentro), i pianeti (rispetto alla stella), le lune (rispetto al loro
+// pianeta), in metri, negli assi del sistema (inerziali: non girano). `genitore` è l'indice nella lista (−1: nessuno).
+// Il tempo è lo stesso di tutto questo modulo: secondi da oggi (N.tempo.t = 0 è il mondo di cosmo.js).
+// Lo stato a un tempo si calcola una volta sola per tutti i corpi (~0,1 ms).
+export function corpiSistema(n, gid, sid) {
+  let tUlt = NaN, S = null; const a = (t) => { if (t !== tUlt) { S = statoSistema(n, gid, sid, t); tUlt = t; } return S; };
+  const metti = (o, v) => { o[0] = v[0]; o[1] = v[1]; o[2] = v[2]; return o; }, meno = (o, x, y) => { o[0] = x[0] - y[0]; o[1] = x[1] - y[1]; o[2] = x[2] - y[2]; return o; };
+  const S0 = a(0), E = elementiSistema(n, gid, sid), corpi = [];
+  if (!S0.stella) return corpi;
+  corpi.push({ nome: 'stella', cosa: 'stella', id: sid, genitore: -1, raggio: S0.stella.raggioM, luminosita: S0.stella.L, colore: coloreDi(S0.stella.T, STATI.indexOf(S0.stella.stato)),
+    posizione: (t, o = [0, 0, 0]) => metti(o, a(t).stella.pos), assetto: (t, o) => assettoDa(a(t).stella.terna, a(t).stella.angolo, o) });
+  S0.pianeti.forEach((p, i) => {
+    const io = corpi.length;
+    corpi.push({ nome: `pianeta ${p.id}`, cosa: 'pianeta', id: p.id, genitore: 0, raggio: p.raggioM, colore: E.Sis.pianeti[p.id].colore,
+      posizione: (t, o = [0, 0, 0]) => { const s = a(t); return meno(o, s.pianeti[i].pos, s.stella.pos); }, assetto: (t, o) => { const q = a(t).pianeti[i]; return assettoDa(q.terna, q.angolo, o); } });
+    p.lune.forEach((l, j) => corpi.push({ nome: `pianeta ${p.id}/luna ${l.id}`, cosa: 'luna', id: l.id, pianeta: p.id, genitore: io, raggio: l.raggioM, colore: [170, 170, 165],
+      posizione: (t, o = [0, 0, 0]) => { const q = a(t).pianeti[i]; return meno(o, q.lune[j].pos, q.pos); }, assetto: l.bloccata ? (t, o = new Array(9)) => metti9(o, assettoLuna(a(t).pianeti[i].lune[j])) : null }));
+  });
+  return corpi;
+}
+const metti9 = (o, m) => { for (let k = 0; k < 9; k++) o[k] = m[k]; return o; };

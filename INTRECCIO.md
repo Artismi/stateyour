@@ -47,8 +47,8 @@ Un evento può cambiare solo ciò che sta **dentro il suo contenitore e dopo di 
 resta identico. Così i mondi paralleli sono vicini quanto sono pochi e piccoli gli eventi che li separano.
 - Fatto: particelle (`mondo.js`), impatti, anelli, galassie, stelle una per una (`sorgente`); prove «un ramo cambia
   una cosa sola».
-- Manca: disco e lune cambiano ancora per corsi interi; meteo e clima non hanno eventi; un evento piccolo non risale
-  mai (un decadimento non cambia nulla sopra di sé); il «dopo» non è ancora controllato da una prova.
+- Manca: disco e lune cambiano ancora per corsi interi; meteo e clima non hanno eventi; un evento piccolo risale per due vie sole
+  (`risalita.js`, non ancora collegato): come flusso, sommato, o attraverso un amplificatore con il suo tempo; il «dopo» non è ancora controllato da una prova.
 
 ## 4. Dal grande al piccolo: il dettaglio è condizionato
 Avvicinandosi, il livello più fine nasce da quello sopra: ne riceve le condizioni in quel punto (i campi: temperatura,

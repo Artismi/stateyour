@@ -318,8 +318,8 @@ function riduci(alt, mare, W, H, lago = null) {
   return { quota, bagnato, zero };
 }
 
-export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = null, mare = -Infinity, lago = null, raggioM, gravita, giorno, bloccato = false, obliquita = 0, pressione, massaMolare = 0.029, cp = null, acqua = true, freddo = null, passi = 1800 } = {}) {
-  const NP = W * H, fasi = stagioni && stagioni.length > 1 ? Array.from(stagioni) : null, nS = fasi ? fasi.length : 1;
+export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = null, mare = -Infinity, lago = null, raggioM, gravita, giorno, bloccato = false, obliquita = 0, pressione, massaMolare = 0.029, cp = null, acqua = true, freddo = null, passi = 1800, seme = null } = {}) {
+  const NP = W * H, fasi = stagioni && stagioni.length > 1 ? Array.from(stagioni) : null, nS = fasi ? fasi.length : 1, fasiSeme = seme?.fasi || [0, 1, 2]; // (la differenza minima da cui parte il tempo che fa: un evento del pianeta, risalita.js)
   if (fasi) { for (const x of fasi) if (!x || x.length !== NP) throw new Error('meteo: ogni stagione è una temperatura su una griglia W×H'); if (!T) { T = new Float32Array(NP); for (const x of fasi) for (let k = 0; k < NP; k++) T[k] += x[k] / nS; } }
   if (!T || T.length !== NP) throw new Error('meteo: serve la temperatura T su una griglia W×H');
   if (W & (W - 1) || W < 8 || H < 8 || H % 2) throw new Error('meteo: W deve essere una potenza di 2 (almeno 8) e H pari');
@@ -382,7 +382,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
     for (let s = 0; s < nS && bene; s++) { const st = stati1[s], pr = s > 0 ? stati1[s - 1] : null;
       for (let j = 0; j < H; j++) { const rh = F1[s].wSat[j] > 0 ? st.wv[j] / F1[s].wSat[j] : 0; for (let i = 0; i < W; i++) { const k = (j + 1) * S2 + 1 + i, p = j * W + i;
         if (!pr) { m2.u1[k] = st.u1[j]; m2.v1[k] = st.v1[j]; m2.u2[k] = st.u2[j]; m2.v2[k] = st.v2[j]; m2.th1[k] = st.th1[j] + (F[0].t1Eq[p] - F1[0].t1Eq[j]); m2.wv[k] = rh * F[0].wSat[p];
-          m2.th2[k] = st.th2[j] + (F[0].t2Eq[p] - F1[0].t2Eq[j]) + PARAMETRI.increspatura * peso(j) * (Math.sin(3 * i * dl) + Math.sin(5 * i * dl + 1) + Math.sin(8 * i * dl + 2)); }
+          m2.th2[k] = st.th2[j] + (F[0].t2Eq[p] - F1[0].t2Eq[j]) + PARAMETRI.increspatura * peso(j) * (Math.sin(3 * i * dl + fasiSeme[0]) + Math.sin(5 * i * dl + fasiSeme[1]) + Math.sin(8 * i * dl + fasiSeme[2])); }
         else { m2.u1[k] += st.u1[j] - pr.u1[j]; m2.u2[k] += st.u2[j] - pr.u2[j]; if (j < H - 1) { m2.v1[k] += st.v1[j] - pr.v1[j]; m2.v2[k] += st.v2[j] - pr.v2[j]; }
           m2.th1[k] += F[s].t1Eq[p] - F[s - 1].t1Eq[p] + (st.th1[j] - F1[s].t1Eq[j]) - (pr.th1[j] - F1[s - 1].t1Eq[j]); m2.th2[k] += F[s].t2Eq[p] - F[s - 1].t2Eq[p] + (st.th2[j] - F1[s].t2Eq[j]) - (pr.th2[j] - F1[s - 1].t2Eq[j]);
           if (F[s - 1].wSat[p] > 0) m2.wv[k] *= F[s].wSat[p] / F[s - 1].wSat[p]; } } }
@@ -459,13 +459,13 @@ export function gasDellAria(gas = {}) {
   return n > 0 ? { massaMolare: massa / n, cp: cpMol / massa } : { massaMolare: 0.029, cp: null };
 }
 const memoMeteo = new Map();
-export function meteoPianeta(P, sf, cl, { passi = 1800, chiave = null } = {}) {
+export function meteoPianeta(P, sf, cl, { passi = 1800, chiave = null, seme = P.semeMeteo || null } = {}) {
   if (chiave && memoMeteo.has(chiave)) return memoMeteo.get(chiave);
   if (!(P.giorno > 0)) throw new Error('meteo: al pianeta manca la durata del giorno (P.giorno, in secondi)');
   let gas = P.atmosfera?.gas; if (!gas) { try { gas = atmosfera(P).gas; } catch { gas = {}; } }
   const { massaMolare, cp } = gasDellAria(gas), neve = cl.neve ?? 1;
   const out = circolazione({ W: cl.W, H: cl.H, T: cl.media, alt: sf.alt, mare: sf.mare, lago: sf.lago ?? null, raggioM: P.raggioM, gravita: (COSTANTI.G * P.massaKg) / (P.raggioM * P.raggioM), giorno: P.giorno, bloccato: !!P.bloccato, obliquita: P.obliquita ?? 0,
-    stagioni: Array.isArray(cl.stagioni) && cl.stagioni.length > 1 ? cl.stagioni : null, pressione: P.tipo === 'gassoso' ? Infinity : P.clima?.pressione ?? 0, massaMolare, cp, acqua: isFinite(sf.mare), freddo: cl.freddo && neve > 0 ? cl.freddo.map((x) => x / neve) : null, passi });
+    stagioni: Array.isArray(cl.stagioni) && cl.stagioni.length > 1 ? cl.stagioni : null, pressione: P.tipo === 'gassoso' ? Infinity : P.clima?.pressione ?? 0, massaMolare, cp, acqua: isFinite(sf.mare), freddo: cl.freddo && neve > 0 ? cl.freddo.map((x) => x / neve) : null, passi, seme });
   if (chiave) { memoMeteo.set(chiave, out); if (memoMeteo.size > 6) memoMeteo.delete(memoMeteo.keys().next().value); }
   return out;
 }

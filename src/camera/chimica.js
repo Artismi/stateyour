@@ -360,6 +360,17 @@ export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
   return tau;
 }
 
+// I GAS RADIOGENICI (risalita.js, gasRadiogenici): l'argon-40 del potassio decaduto e l'elio-4 delle α, saliti dall'interno
+// nell'età del pianeta, si aggiungono all'aria che c'è già (frazioni in volume). Sono gas nobili: non reagiscono, non
+// toccano l'equilibrio né la serra. (La pressione del clima resta quella di prima: sulla Terra l'argon ne è l'1,4%.)
+export function conRadiogenici(atm, g) {
+  if (!atm || !g || !(atm.pressione > 0) || !isFinite(atm.pressione)) return atm;
+  const fAr = g.argon40?.frazione > 1e-9 ? g.argon40.frazione : 0, fHe = g.elio4?.frazione > 1e-9 ? g.elio4.frazione : 0, piu = fAr + fHe; if (!(piu > 0) || piu >= 1) return atm;
+  const gas = {}; for (const f in atm.gas) gas[f] = atm.gas[f] * (1 - piu);
+  if (fAr > 0) gas.Ar = (gas.Ar || 0) + fAr; if (fHe > 0) gas.He = (gas.He || 0) + fHe;
+  return { ...atm, gas, pressione: atm.pressione + (g.perLAria?.Ar || 0) + (g.perLAria?.He || 0), radiogenici: { Ar: g.perLAria?.Ar || 0, He: g.perLAria?.He || 0 } };
+}
+
 // IL CLIMA E L'ARIA INSIEME. La temperatura dipende dall'aria (quanta ce n'è, quanto trattiene il calore) e l'aria
 // dalla temperatura (che cosa gela, che cosa piove, se c'è un mare che si mangia l'anidride carbonica): si cercano
 // insieme, a giri alterni, finché non cambiano più. «dati» è ciò che serve a clima() di leggi.js (luce, distanza,

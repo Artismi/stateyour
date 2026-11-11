@@ -54,10 +54,23 @@ scenaSistema(cosmo, galassia, stella, t)  // la stella, i pianeti, le lune
 | `riferimento` | origine nel baricentro; xy il piano medio del sistema |
 | `fase` | `'non nata'`, `'disco'` (c'è ancora il gas: vedi `disco`), `'pianeti'` |
 | `corpi` | stella, pianeti, lune, di fila: `{ cosa, id, pos, vel, raggio, massaKg, luminosita, colore, … }` |
-| corpo che gira | `asse` (versore), `angolo` (rad: di quanto è girato il meridiano 0 attorno all'asse, a quel tempo), `giorno` (s), `schiacciamento` |
+| corpo che gira | `asse` (versore del polo nord), `angolo` (rad), `giorno` (s), `schiacciamento`, e soprattutto **`assetto`**: la matrice 3×3 per righe (9 numeri) che porta dagli assi del corpo a quelli della scena, con gli assi del corpo di `nucleo.js` (x: equatore al meridiano 0; y: il polo; z = x × y). Un punto a longitudine λ est e latitudine φ: `assetto · (cos φ cos λ, sin φ, −cos φ sin λ)` |
+| lune | agganciate (`bloccata`): il meridiano 0 guarda il pianeta, il polo è la normale all'orbita; non agganciate: `assetto: null` (nessuna legge qui ne dà il giro) |
 | `orbita` (pianeti e lune) | `{ attorno, a, e, inclinazione, assi: [P̂, Q̂, Ŵ], periodo }`: un punto dell'orbita è `centro + a(cos E − e)·P̂ + a√(1−e²)·sin E·Q̂`, E da 0 a 2π |
 | `anello` | `{ interno, esterno }` in metri, nel piano dell'equatore del pianeta |
 | `disco` | (fase `'disco'`) `{ interno, esterno, neve (m), massaKg }` |
+
+### I corpi già pronti per `nucleo.js`
+```js
+import { corpiSistema } from '../camera/spazio3d.js';
+const corpi = corpiSistema(cosmo, galassia, stella);   // la stella, i pianeti, le lune, di fila
+// ognuno: { nome, cosa, id, genitore (indice nella lista, −1: nessuno), raggio (m), colore, luminosita (la stella),
+//           posizione(t, out) → metri dal centro del genitore (la stella: dal baricentro), assi del sistema (inerziali),
+//           assetto(t, out)   → la matrice di sopra (null per una luna non agganciata) }
+const fatti = []; for (const c of corpi) fatti.push(N.corpo({ ...c, genitore: c.genitore < 0 ? null : fatti[c.genitore] }));
+```
+Il tempo del motore è lo stesso: `N.tempo.t` in secondi, **0 = oggi** (non serve `t0`). Lo stato del sistema a un
+tempo si calcola una volta per tutti i corpi (~0,1 ms).
 
 ## Il livello di dettaglio
 Da lontano una galassia è un punto di `scenaCosmo` (o `scenaGalassia(...).daLontano`): luce totale e tinta. Quando il

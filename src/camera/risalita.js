@@ -73,6 +73,7 @@
 //     (radiolisi più idratazione) [V: Sherwood Lollar e altri 2014, Nature 516, 379]; solo radiolisi 0,16–0,47·10¹¹ [R].
 //   · Argon-40 nell'aria della Terra: 6,6·10¹⁶ kg, lo 0,934% in volume; ne è uscito circa metà di quello prodotto [R:
 //     Allègre e altri 1996]. Venere ne ha un quarto per chilo di pianeta [R], Marte ~2% del prodotto [R, conto mio].
+//     L'argon gela a 83,81 K (punto triplo: 68,9 kPa; sublimazione 7,7 kJ/mol) [R].
 //   · Elio: 5,2 milionesimi dell'aria; ne escono ~2·10⁶ atomi/cm²/s e resta ~un milione di anni [R].
 //   · Zircone: non diffrange più i raggi X a 4,5·10¹⁸ α per grammo [V: Murakami e altri 1991, Am. Mineral. 76, 1510];
 //     dose caratteristica 3,5·10¹⁸ [V: Salje e altri 1999], e non c'è una soglia netta.
@@ -101,6 +102,9 @@
 //
 // PARAMETRI LIBERI
 //   · RESA_FULMINI = 1,08·10⁻⁶: la parte del calore latente che diventa fulmine (fissata sulla Terra: 44 al secondo).
+//   · QUOTA_IONIZZAZIONE = 0,6: la parte dell'energia dei primari che resta nell'aria come ionizzazione (il resto ai
+//     neutrini, ai muoni che arrivano al suolo, ai nuclei spezzati). Sta tra 0,5 e 0,8 secondo quanta energia va ai
+//     pioni carichi; 0,6 è scelto perché il massimo in quota alle medie latitudini della Terra venga 25.
 //   · La parte di gas radiogenici uscita dall'interno: 0,5 con le placche, 0,25 con i soli vulcani, 0,02 se è fermo.
 //   · POROSITA = 1%: l'acqua nelle fratture della crosta. · ECCESSO_ESOSFERA = 4: quanto è più calda l'aria altissima
 //     (dove i gas fuggono) rispetto alla temperatura d'equilibrio (Terra: ~1000 K contro 255).
@@ -111,15 +115,17 @@
 // SEMPLIFICAZIONI
 //   · I flussi dei cosmici sono quelli di materia.js (attraverso una superficie orizzontale); per sapere quanti ne
 //     passano da tutte le direzioni si moltiplica per un fattore tra 2 (in cima) e 1,3 (in fondo all'aria).
-//   · Elettroni dello sciame a 30 MeV, protoni secondari a 1 GeV; i neutroni non ionizzano l'aria (solo dose).
+//   · Elettroni dello sciame a 30 MeV, protoni secondari a 1 GeV; i neutroni non ionizzano l'aria (solo dose). Il numero
+//     degli elettroni dello sciame è riscalato, uguale a ogni quota, perché l'energia torni (vedi colonnaDi).
 //   · L'aria ha una temperatura che cala con la quota fino a quella «di pelle» e poi resta costante; W uguale per ogni gas.
 //   · La ricombinazione ignora la polvere: gli ioni che si attaccano agli aerosol mancano (la conducibilità vera al
 //     suolo è 2–5 volte più bassa sopra la terraferma).
 //   · I fulmini ci sono solo dove piove acqua; niente fulmini di polvere o di cenere.
 //   · Il vento della stella è quello del Sole, scalato con la superficie della stella e con l'età.
 //   · La stessa parte degassata per l'argon e per l'elio; la stessa crosta (i minerali del luogo) per tutto il pianeta.
-//   · Una supernova: disco uniforme, niente bracci; durata dell'aumento = il più lungo tra il tempo di diffusione e
-//     la vita del resto.
+//   · Una supernova: disco uniforme, niente bracci; i suoi raggi diffondono liberi come nel resto della galassia (vicino
+//     alla sorgente in realtà restano intrappolati più a lungo): si danno i due estremi, picco breve o rilascio lento in
+//     30 mila anni (la vita del resto, come in galassie.js), e l'integrale, che è lo stesso.
 //   · `finDoveRisale` conta solo ciò che passa per la materia (suono, calore, fluidi) dentro il pianeta, e la gravità
 //     solo per le orbite dei corpi piccoli. In linea di principio la gravità porta ogni disturbo ovunque alla
 //     velocità della luce, e il moto caotico delle molecole lo amplifica in una frazione di secondo (Borel 1914): il
@@ -128,9 +134,15 @@
 //     questo legame, e qui lo si dichiara.
 //
 // CHE COSA NON TORNA (i numeri li stampa test/test_risalita.mjs)
-//   · Il massimo di ionizzazione in quota viene alla quota giusta ma basso: ~15 coppie/cm³/s a 45° contro 20–30
-//     misurate (mancano i protoni lenti e i frammenti delle «stelle» nucleari).
-//   · Marte: la dose viene ~0,5 volte quella misurata dal rover (mancano i secondari nati nell'aria sottile e nel suolo).
+//   · Il massimo di ionizzazione in quota: 25 coppie/cm³/s a 45° (misurate 20–30), ma solo perché QUOTA_IONIZZAZIONE è
+//     scelta per questo: con i «2 secondari per primario» di materia.js verrebbe 16. Poi la latitudine esce da sola:
+//     11 all'equatore e 32 ai poli (misurate a 15 km: 14 e 41). Il massimo sta a 13 km: quello del FLUSSO di particelle
+//     è a 15–20, quello delle coppie per cm³ più in basso, ma forse non così tanto.
+//   · L'azoto fissato dai cosmici viene 0,14 Tg all'anno contro 0,06–0,09 pubblicati.
+//   · Marte: 150 mSv all'anno contro 234 misurati dal rover (54 mGy contro 77); la Luna: 180 contro ~500. Mancano i
+//     secondari nati nell'aria sottile e nel suolo, e ciò che il suolo rimanda indietro.
+//   · Un campo magnetico forte NON azzera i cosmici al suolo: a 45° li dimezza soltanto (passano i muoni dei primari
+//     più energici); li spegne in quota e ai tropici.
 //   · L'aria portata via dal vento: per Marte ~0,06 bar in tutta la sua storia, contro i ~0,8 dedotti da MAVEN: qui c'è
 //     solo ciò che il vento carica; la fuga fotochimica e lo sputtering dei primi tempi mancano. E il campo magnetico
 //     in questa legge NON protegge (la Terra perde quanto intercetta, ~0,6 kg/s: misurato ~1): è onesto, ma non è
@@ -164,6 +176,7 @@ export const DATI = Object.freeze({
   G_H2: { alfa: 1.57, beta: 0.53, gamma: 0.45 }, // molecole per 100 eV
   POROSITA: 0.01, // PARAMETRO LIBERO
   DEGASSATA: { 'a placche': 0.5, 'coperchio unico, con vulcani': 0.25, ferma: 0.02 }, // PARAMETRI LIBERI (Terra, Venere, Marte)
+  ARGON_VAPORE: [83.81, 68.9e3, 7700], // punto triplo (K, Pa) e calore di sublimazione (J/mol)
   ECCESSO_ESOSFERA: 4, PERMANENZA_ELIO: 1e6, // PARAMETRO LIBERO; anni (Terra)
   ZIRCONE_AMORFO: 4.5e18, // α per grammo
   VENTO_SOLE: 1.3e9, VELOCITA_VENTO: 4e5, ETA_SOLE: 4.6e9, ESPONENTE_VENTO: -2.33, VENTO_MASSIMO: 100,
@@ -173,7 +186,7 @@ export const DATI = Object.freeze({
   PESO_ALFA: 20, RADON_SV: 9e-9 * 0.6 * 8766, // Sv all'anno per Bq/m³ di radon all'aperto (per chi ha polmoni)
   ROTTURE_PER_GY: 1000 / 6.4e9, IDROLISI: 3e-11, IDROLISI_T: 310, IDROLISI_EA: 1.3e5, // per base per gray; 1/s a 310 K; J/mol
   COSMICI_GALASSIA: 1.602e-13, DIFFUSIONE: 3e24, ENERGIA_SN_COSMICI: 1e43, ENERGIA_SN_GAMMA: 1.8e40, OZONO: 2e4, // J/m³, m²/s, J, J, J/m²
-  SPESSORE_DISCO: 100, SN_VIA_LATTEA: 0.02, RAGGIO_VIA_LATTEA: 15e3, // parsec; all'anno; parsec
+  VITA_RESTO: 3e4, SPESSORE_DISCO: 100, SN_VIA_LATTEA: 0.02, RAGGIO_VIA_LATTEA: 15e3, // parsec; all'anno; parsec
   LYAPUNOV_PICCOLI: 1e5, LYAPUNOV_PIANETI: 5e6, // anni
   ARIA_SPOSTATA: 1e-3, GIRI_MANTELLO: 5, GIRI_DINAMO: 10, GIRI_MARE: 10, // PARAMETRI LIBERI
 });
@@ -431,7 +444,7 @@ export function radiolisiDelPianeta(luogo, opz = {}) {
   const acquaKg = m.P?.interno?.acquaKg ?? 0, mare = luogo.tipo === 'acqua' && acquaKg > 0 ? radiolisi({ ...luogo, sopra: { acquaM: 2000 } }, opz).H2 * acquaKg : null;
   return { crosta: (r.perKgRoccia || 0) * massa, perKgAcqua: r.H2, mare, massaCrosta: massa };
 }
-// I GAS RADIOGENICI saliti nell'aria nell'età del pianeta. → { argon40: { prodotto, nellAria (kg), degassata, trattenuto,
+// I GAS RADIOGENICI saliti nell'aria nell'età del pianeta. → { argon40: { prodotto, nellAria (kg), degassata, trattenuto, gelato (kg),
 //   colonna (kg/m²), pressione (Pa), frazione (in volume, dell'aria con lui) }, elio4: { flusso (atomi/m²/s), trattenuto,
 //   colonna, pressione, frazione, permanenza (anni) }, perLAria: { Ar, He } (Pa da aggiungere all'aria) }
 export function gasRadiogenici(luogo, opz = {}) {
@@ -440,7 +453,9 @@ export function gasRadiogenici(luogo, opz = {}) {
   // argon-40: il potassio-40 decaduto dalla nascita, per il ramo di cattura
   const n40 = (el.K / (ELEMENTI.K.A * 1e-3)) * N_A * k40.abbondanza * resta(k40.mezza, eta), decaduti = n40 * (Math.pow(2, eta / k40.mezza) - 1);
   const ramo = k40.rami.find((r) => r.tipo === 'cattura').ramo, prodotto = (decaduti * ramo * 39.962e-3 * m.silicati) / N_A, tieneAr = !m.gassoso && trattiene(m.M, m.R, m.Teq, 39.96 * UMA);
-  const moliAria = m.colonna / m.mu, colAr = tieneAr ? (prodotto * degassata) / m.area : 0, molAr = colAr / 39.962e-3;
+  // sui mondi freddi l'argon gela al suolo: nell'aria ne resta al più la pressione di vapore a quella temperatura
+  const tetto = D.ARGON_VAPORE[1] * Math.exp(-(D.ARGON_VAPORE[2] / R_GAS) * (1 / m.Ts - 1 / D.ARGON_VAPORE[0])), uscito = tieneAr ? (prodotto * degassata) / m.area : 0;
+  const moliAria = m.colonna / m.mu, colAr = Math.min(uscito, tetto / m.g), molAr = colAr / 39.962e-3;
   // elio-4: le α delle tre catene; quante ne nascono adesso (per secondo e per kg) e quante dalla nascita
   let ora = 0, sempre = 0;
   for (const c of Object.values(CATENE)) { const nAlfa = c.passi.reduce((s, p) => s + (p[3] === 'α' ? p[6] ?? 1 : 0), 0), n = ((el[c.elemento] || 0) / (ELEMENTI[c.elemento].A * 1e-3)) * N_A * c.abbondanza * resta(c.mezza, eta);
@@ -448,7 +463,7 @@ export function gasRadiogenici(luogo, opz = {}) {
   const flusso = (ora * m.silicati * degassata) / m.area, tieneHe = !m.gassoso && trattiene(m.M, m.R, D.ECCESSO_ESOSFERA * m.Teq, 4.0026 * UMA);
   const atomiHe = m.gassoso ? 0 : tieneHe ? (sempre * m.silicati * degassata) / m.area : flusso * D.PERMANENZA_ELIO * ANNO, molHe = atomiHe / N_A, colHe = molHe * 4.0026e-3;
   const tot = moliAria + molAr + molHe || 1, conAria = moliAria + molAr > 1; // (meno di una mole per m²: non è un'aria, gli atomi non si urtano)
-  return { degassata, potassio: el.K, argon40: { prodotto, nellAria: colAr * m.area, trattenuto: tieneAr, colonna: colAr, pressione: colAr * m.g, frazione: conAria ? molAr / tot : 0 },
+  return { degassata, potassio: el.K, argon40: { prodotto, nellAria: colAr * m.area, trattenuto: tieneAr, gelato: uscito > colAr ? (uscito - colAr) * m.area : 0, colonna: colAr, pressione: colAr * m.g, frazione: conAria ? molAr / tot : 0 },
     elio4: { flusso, trattenuto: tieneHe, colonna: colHe, pressione: colHe * m.g, frazione: conAria ? molHe / tot : 0, permanenza: tieneHe ? Infinity : D.PERMANENZA_ELIO },
     perLAria: { Ar: colAr * m.g, He: colHe * m.g } };
 }
@@ -542,8 +557,9 @@ function energiaTerra() { if (!eTerra) eTerra = energiaPerLaChimica({ ...luogoDa
 // =====================================================================================
 // opz.galassia: ciò che dà cosmo.js (galassia(n, id): ritmoSN, forma.unitaM, sorgenti); opz.posizione: la posizione
 // della stella nelle unità della galassia (stelle[i].pos). Senza galassia: la Via Lattea.
-// → { ritmo (per anno e per pc³), ogniQuanto(dPc) (anni), effetto(dPc) → { cosmici (volte il fondo, al massimo),
-//     durata (anni), dose (Sv all'anno in più in questo luogo), gamma (J/m²), ozono (vero se lo strato soffre) },
+// → { ritmo (per anno e per pc³), ogniQuanto(dPc) (anni), effetto(dPc) → { cosmici (volte il fondo, al picco), durata
+//     (anni), dose (Sv all'anno in più in questo luogo, al picco), cosmiciLento, durataLento (se il resto li rilascia piano),
+//     anniDiFondo, doseTotale (Sv: in tutto, comunque vada), gamma (J/m²), ozono (vero se lo strato soffre) },
 //     distanzaPericolosa (pc: la dose dei cosmici raddoppia), vicine: i resti veri di quella galassia, dal più vicino,
 //     prossima (se si passa opz.caso, la sorgente degli eventi della stella): { tra (anni), distanza (pc) } entro 100 pc }
 export function supernovaVicina(luogo, opz = {}) {
@@ -551,8 +567,10 @@ export function supernovaVicina(luogo, opz = {}) {
   const ritmo = ritmoSN / (Math.PI * Rd * Rd * 2 * D.SPESSORE_DISCO), h = D.SPESSORE_DISCO; // per anno e per parsec cubo
   const volume = (d) => (d <= h ? (4 / 3) * Math.PI * d ** 3 : Math.PI * (2 * d * d * h - (2 / 3) * h ** 3)); // la sfera tagliata dal disco
   const ogniQuanto = (dPc) => 1 / (ritmo * volume(dPc)), base = dose(luogo, opz).cosmici.Sv;
-  const effetto = (dPc) => { const d = dPc * PARSEC, cosmici = (0.0736 * D.ENERGIA_SN_COSMICI) / d ** 3 / D.COSMICI_GALASSIA, gamma = D.ENERGIA_SN_GAMMA / (4 * Math.PI * d * d);
-    return { cosmici, durata: Math.max((d * d) / (6 * D.DIFFUSIONE) / ANNO, 3e4), dose: base * cosmici, gamma, ozono: gamma > D.OZONO }; };
+  // due casi estremi: tutti i raggi liberati insieme (un picco alto e breve: al tempo d²/6D) o liberati piano nella vita
+  // del resto (una sorgente che dura: E/(4πDd·τ)). L'integrale nel tempo è lo stesso, E/(4πDd): è il numero solido
+  const effetto = (dPc) => { const d = dPc * PARSEC, cosmici = (0.0736 * D.ENERGIA_SN_COSMICI) / d ** 3 / D.COSMICI_GALASSIA, gamma = D.ENERGIA_SN_GAMMA / (4 * Math.PI * d * d), anniDiFondo = D.ENERGIA_SN_COSMICI / (4 * Math.PI * D.DIFFUSIONE * d * D.COSMICI_GALASSIA) / ANNO;
+    return { cosmici, durata: (d * d) / (6 * D.DIFFUSIONE) / ANNO, dose: base * cosmici, cosmiciLento: anniDiFondo / D.VITA_RESTO, durataLento: D.VITA_RESTO, anniDiFondo, doseTotale: base * anniDiFondo, gamma, ozono: gamma > D.OZONO }; };
   const vicine = []; const qui = opz.posizione;
   if (Gx?.sorgenti && qui && Gx.forma?.unitaM > 0) for (const s of Gx.sorgenti) { if (s.tipo !== 'supernova') continue; const d = Math.hypot(s.pos[0] - qui[0], s.pos[1] - qui[1]) * Gx.forma.unitaM, t = Math.max(s.eta, 1) * ANNO, l2 = 4 * D.DIFFUSIONE * t;
     vicine.push({ nome: s.nome, distanzaPc: d / PARSEC, eta: s.eta, cosmici: (D.ENERGIA_SN_COSMICI / Math.pow(Math.PI * l2, 1.5)) * Math.exp(-(d * d) / l2) / D.COSMICI_GALASSIA }); }
@@ -687,7 +705,8 @@ export function increspatura(caso = null) {
 // =====================================================================================
 // risalita(luogo, { P, stella, galassia, posizione, caso, pioggia, porosita }) → { luogo, flussi: [{ nome, valore, unita,
 //   verso (a quale livello arriva), legge }], dose, ionizzazione(quotaM), profilo, circuito, fulmini, prodotti, radiolisi,
-//   gasRadiogenici, orologi, vento, energiaPerLaChimica, supernova, amplificatori, tempi, famiglie, racconto: [frasi] }
+//   gasRadiogenici, orologi, vento, energiaPerLaChimica, supernova, amplificatori, tempi, famiglie, racconto: [frasi],
+//   breve: [quattro frasi per il pannello del pianeta] }
 export function risalita(luogo, opz = {}) {
   const m = mondoDi(luogo, opz), pr = profiloIonizzazione(luogo, opz), ci = circuitoElettrico(luogo, opz), fu = fulmini(luogo, opz), po = prodotti(luogo, opz), ra = radiolisi(luogo, opz), rp = m.gassoso ? null : radiolisiDelPianeta(luogo, opz);
   const ga = gasRadiogenici(luogo, opz), or = orologi(luogo), ve = ventoStellare(luogo, opz), ds = dose(luogo, opz), en = energiaPerLaChimica(luogo, opz), sn = supernovaVicina(luogo, opz), am = amplificatori(luogo, opz), tm = tempoMeteo(luogo, opz);
@@ -716,14 +735,19 @@ export function risalita(luogo, opz = {}) {
   // il racconto: poche frasi con i numeri di questo luogo
   const r = [], E = en.superficie, mSv = (x) => `${cifre(x * 1000)} mSv`, tc = tempiCaotici(luogo, opz);
   if (m.gassoso) r.push("È un gigante di gas: non c'è un suolo. I numeri dell'aria valgono sopra il livello di 1 bar; i suoi fulmini e il suo tempo qui non sono calcolati.");
-  if (m.p0 > 0) r.push(`I raggi cosmici fanno ${cifre(pr.alSuolo.cosmici)} coppie di ioni per cm³ al secondo ${m.gassoso ? 'al livello di 1 bar' : 'al suolo'}${pr.alSuolo.radon + pr.alSuolo.suolo > 0.05 * pr.alSuolo.cosmici ? ` (più ${cifre(pr.alSuolo.radon + pr.alSuolo.suolo)} dalla roccia: radon e raggi γ)` : ''} e ${cifre(pr.massimo.valore)} a ${cifre(pr.massimo.quotaM / 1000)} km di quota${m.B0 > 0 ? '' : ': non c’è campo magnetico a fermarli'}. È questo che rende l'aria un poco conduttrice${fu.alSecondo > 0 ? ` (${cifre(ci.conducibilita)} S/m): i ${cifre(fu.alSecondo)} fulmini al secondo tengono l'alta atmosfera a ${cifre(ci.potenziale / 1000)} kV` : ''}.`);
+  if (m.p0 > 0) r.push(`I raggi cosmici fanno ${cifre(pr.alSuolo.cosmici)} coppie di ioni per cm³ al secondo ${m.gassoso ? 'al livello di 1 bar' : 'al suolo'}${pr.alSuolo.radon + pr.alSuolo.suolo > 0.05 * pr.alSuolo.cosmici ? ` (più ${cifre(pr.alSuolo.radon + pr.alSuolo.suolo)} dalla roccia: radon e raggi γ)` : ''}${pr.massimo.quotaM > 1000 ? ` e ${cifre(pr.massimo.valore)} a ${cifre(pr.massimo.quotaM / 1000)} km di quota` : ' (in quota di meno: l’aria è troppo poca perché lo sciame cresca)'}${m.dinamo ? '' : ': non c’è campo magnetico a fermarli'}. È questo che rende l'aria un poco conduttrice${fu.alSecondo > 0 ? ` (${cifre(ci.conducibilita)} S/m): i ${cifre(fu.alSecondo)} fulmini al secondo tengono l'alta atmosfera a ${cifre(ci.potenziale / 1000)} kV` : ''}.`);
   else r.push(`Non c'è aria: i raggi cosmici${ve?.scoperto ? ' e il vento della stella' : ''} arrivano fino alla superficie${ve?.sputtering ? `, che il vento consuma di ${cifre(ve.sputtering.metriPerAnno * 1e10)} ångström all'anno e annerisce in ${anni(ve.sputtering.annerimento)}` : ''}.`);
   r.push(`Energia per la chimica (W/m²): ultravioletto della stella ${cifre(E.ultravioletto)}, fulmini ${cifre(E.fulmini)}, aurore ${cifre(E.aurore)}, raggi cosmici ${cifre(E.cosmici)}; nel primo chilometro di roccia la radioattività ne dà ${cifre(E.radioattivita)}. ${en.qui ? `Qui sotto domina ${en.qui.domina === 'cosmici' ? 'ciò che resta dei raggi cosmici' : en.qui.domina === 'radioattivita' ? 'la radioattività' : "l'ultravioletto che ancora filtra"}.` : `In superficie domina ${E.domina === 'ultravioletto' ? "l'ultravioletto" : E.domina === 'radioattivita' ? 'la radioattività della roccia' : `${E.domina === 'fulmini' ? 'i fulmini' : E.domina === 'aurore' ? 'le aurore' : 'i raggi cosmici'}`}.`}`);
   if (m.p0 > 0 && (po.azoto.fulmini.kgAnno > 0 || po.azoto.cosmici.kgAnno > 0)) r.push(`Azoto fissato: ${cifre(po.azoto.fulmini.kgAnno / 1e9)} milioni di tonnellate all'anno dai fulmini, ${cifre(po.azoto.cosmici.kgAnno / 1e9)} dai raggi cosmici. Carbonio-14: ${cifre(po.carbonio14.atomiM2s / 1e4)} atomi per cm² al secondo.`);
-  if (!m.gassoso) r.push(`Dalla roccia: il potassio-40 decaduto in ${anni(m.eta)} ha messo nell'aria ${ga.argon40.trattenuto ? `argon per ${cifre(ga.argon40.pressione)} Pa${m.p0 > 0 ? ` (il ${cifre(ga.argon40.frazione * 100)}% dell'aria)` : ''}` : 'argon che la gravità non ha tenuto'}; l'elio delle α ${ga.elio4.trattenuto ? `si accumula (${cifre(ga.elio4.frazione * 100)}%)` : `esce (${cifre(ga.elio4.flusso / 1e4)} atomi per cm² al secondo) e fugge nello spazio`}.${ra.H2 > 0 && luogo.tipo !== 'aria' ? ` L'acqua ${luogo.tipo === 'roccia' ? 'nei pori della roccia' : 'di qui'} è spezzata dalla radioattività: ${cifre(ra.H2 * 1e9)} nanomoli di idrogeno per chilo all'anno.` : ''}`);
+  if (!m.gassoso) r.push(`Dalla roccia: il potassio-40 decaduto in ${anni(m.eta)} ha messo nell'aria ${!ga.argon40.trattenuto ? 'argon che la gravità non ha tenuto' : ga.argon40.gelato > ga.argon40.nellAria ? 'argon che a questo freddo è quasi tutto gelato al suolo' : `argon per ${cifre(ga.argon40.pressione)} Pa${m.p0 > 0 ? ` (${cifre(ga.argon40.frazione * 100)}% dell'aria)` : ''}`}; l'elio delle α ${ga.elio4.trattenuto ? `si accumula (${cifre(ga.elio4.frazione * 100)}%)` : `esce (${cifre(ga.elio4.flusso / 1e4)} atomi per cm² al secondo) e fugge nello spazio`}.${ra.H2 > 0 && luogo.tipo !== 'aria' ? ` L'acqua ${luogo.tipo === 'roccia' ? 'nei pori della roccia' : 'di qui'} è spezzata dalla radioattività: ${cifre(ra.H2 * 1e9)} nanomoli di idrogeno per chilo all'anno.` : ''}`);
   r.push(`Dose in questo punto: ${mSv(ds.totale.Sv)} all'anno (${mSv(ds.cosmici.Sv)} dai raggi cosmici${ds.suolo.Gy > 0 ? `, ${mSv(ds.suolo.Gy)} dai γ del suolo` : ''}${ds.interna.Sv > 0 ? `, ${mSv(ds.interna.Sv)} dalla radioattività attorno${ds.interna.alfa > 0.2 * ds.interna.Gy ? `: quasi tutto dalle α, che arrivano solo a 30 µm da un grano; β e γ danno ${cifre((ds.interna.beta + ds.interna.gamma) * 1000)} mGy` : ''}` : ''}). Rompe ${cifre(ds.mutazioni.daRadiazione)} legami per base all'anno in una molecola che si copia: il calore, a ${Math.round(ds.mutazioni.T - 273.15)} °C, ne rompe ${cifre(ds.mutazioni.daCalore)}.`);
   if (ve && m.p0 > 0) r.push(`Il vento della stella preme ${cifre(ve.pressione * 1e9)} nPa: ${ve.scoperto ? "senza un campo che lo tenga lontano tocca l'aria alta" : `il campo lo ferma a ${cifre(ve.magnetopausa)} raggi e le aurore ricevono ${cifre(ve.aurora.potenza / 1e9)} GW`}; porta via ${cifre(ve.perditaAria)} kg d'aria al secondo (${cifre(ve.ariaPersa.pressione / 1e5)} bar in tutta la storia del pianeta).`);
-  r.push(`Un solo evento risale così: ${tm ? `il tempo atmosferico è un altro dopo ${fmtTempo(tm.secondi)} (non il clima)` : "qui non c'è un'aria che lo amplifichi"}; ${isFinite(tc.corpiPiccoli) ? `gli impatti del sistema dopo ${anni(tc.corpiPiccoli)}` : 'niente porta il disturbo fino alle orbite'}. Una supernova entro 10 parsec capita ogni ${anni(sn.ogniQuanto(10))} e moltiplica i raggi cosmici per ${cifre(sn.effetto(10).cosmici)}.`);
-  return { luogo: luogo.nome || luogo.tipo, flussi, dose: ds, ionizzazione: (quotaM) => ionizzazione(luogo, quotaM, opz), profilo: pr, circuito: ci, fulmini: fu, prodotti: po, radiolisi: ra, radiolisiPianeta: rp, gasRadiogenici: ga, orologi: or, vento: ve,
+  r.push(`Un solo evento risale così: ${tm ? `il tempo atmosferico è un altro dopo ${fmtTempo(tm.secondi)} (non il clima)` : "qui non c'è un'aria che lo amplifichi"}; ${isFinite(tc.corpiPiccoli) ? `gli impatti del sistema dopo ${anni(tc.corpiPiccoli)}` : 'niente porta il disturbo fino alle orbite'}. Una supernova entro 10 parsec capita ogni ${anni(sn.ogniQuanto(10))}: moltiplica i raggi cosmici per ${cifre(sn.effetto(10).cosmici)} per ${anni(sn.effetto(10).durata)} (o per ${cifre(sn.effetto(10).cosmiciLento)} per ${anni(sn.effetto(10).durataLento)}): in tutto, la dose di ${anni(sn.effetto(10).anniDiFondo)} normali.`);
+  const breve = [
+    m.p0 > 0 ? `Raggi cosmici: ${cifre(pr.alSuolo.cosmici)} coppie di ioni per cm³ al secondo ${m.gassoso ? 'a 1 bar' : 'al suolo'}${pr.massimo.quotaM > 1000 ? `, ${cifre(pr.massimo.valore)} a ${cifre(pr.massimo.quotaM / 1000)} km` : ''}${m.dinamo ? '' : ' (nessun campo li ferma)'}; dose ${mSv(ds.totale.Sv)} all'anno, di cui ${mSv(ds.cosmici.Sv)} dal cielo.` : `Senz'aria i raggi cosmici arrivano al suolo: ${mSv(ds.cosmici.Sv)} all'anno${ve?.sputtering ? `; il vento della stella annerisce la superficie in ${anni(ve.sputtering.annerimento)}` : ''}.`,
+    `Energia per la chimica dell'aria (W/m²): ultravioletto ${cifre(E.ultravioletto)}, fulmini ${cifre(E.fulmini)}, aurore ${cifre(E.aurore)}, raggi cosmici ${cifre(E.cosmici)}: ${cifre(en.relativa)} volte la Terra.${po.azoto.fulmini.kgAnno + po.azoto.cosmici.kgAnno > 0 ? ` Azoto fissato: ${cifre((po.azoto.fulmini.kgAnno + po.azoto.cosmici.kgAnno) / 1e9)} milioni di tonnellate all'anno.` : ''}`,
+    m.gassoso ? "È un gigante di gas: niente roccia sotto i piedi." : `Dalla roccia: ${!ga.argon40.trattenuto ? "l'argon del potassio-40 è fuggito" : ga.argon40.gelato > ga.argon40.nellAria ? "l'argon del potassio-40 è gelato al suolo" : `argon-40 per ${cifre(ga.argon40.pressione)} Pa${m.p0 > 0 ? ` (${cifre(ga.argon40.frazione * 100)}% dell'aria)` : ''}`}; l'elio ${ga.elio4.trattenuto ? `resta (${cifre(ga.elio4.frazione * 100)}%)` : 'fugge'}${rp && rp.crosta > 0 ? `; la radioattività spezza l'acqua della crosta: ${cifre(rp.crosta)} moli di idrogeno all'anno` : ''}.`,
+    `Un solo evento andato diversamente: ${tm ? `il tempo atmosferico è un altro dopo ${fmtTempo(tm.secondi)} (il clima no)` : 'niente lo amplifica nell\'aria'}${isFinite(tc.corpiPiccoli) ? `, gli impatti del sistema dopo ${anni(tc.corpiPiccoli)}` : ''}.`];
+  return { luogo: luogo.nome || luogo.tipo, flussi, breve, dose: ds, ionizzazione: (quotaM) => ionizzazione(luogo, quotaM, opz), profilo: pr, circuito: ci, fulmini: fu, prodotti: po, radiolisi: ra, radiolisiPianeta: rp, gasRadiogenici: ga, orologi: or, vento: ve,
     energiaPerLaChimica: en, supernova: sn, amplificatori: am, tempi: tc, famiglie: FAMIGLIE, racconto: r };
 }

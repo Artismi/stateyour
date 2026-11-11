@@ -81,7 +81,9 @@ prova("i gas radiogenici: argon-40 nell'aria dopo 4,5 miliardi di anni, l'elio c
   const gm = R.gasRadiogenici(M.luogoDaAria({ P: MARTE }), { P: MARTE }); assert.equal(gm.degassata, 0.02); tra(gm.argon40.frazione * 100, 0.8, 4, "argon nell'aria di Marte (%; vero 1,9)");
   // un mondo grande tiene anche l'elio: lì si accumula
   const SUPER = { ...TERRA, massaKg: 5 * TERRA.massaKg, raggioM: 1.5 * TERRA.raggioM, clima: { ...TERRA.clima, g: (9.81 * 5) / 2.25 } }, gs = R.gasRadiogenici(M.luogoDaAria({ P: SUPER }), { P: SUPER });
-  assert.ok(gs.elio4.trattenuto && gs.elio4.frazione > 1e3 * g.elio4.frazione); assert.equal(R.gasRadiogenici(M.luogoDaRoccia({ P: LUNA, continente: false, bagnato: false }), { P: LUNA }).argon40.trattenuto, false);
+  assert.ok(gs.elio4.trattenuto && gs.elio4.frazione > 1e3 * g.elio4.frazione); assert.equal(g.argon40.gelato, 0);
+  // un mondo gelido: l'argon esce lo stesso, ma gela al suolo
+  const FREDDO = { ...TERRA, clima: { ...TERRA.clima, T: 25, Teq: 25, pressione: 10, acqua: 'ghiaccio', mare: 0 } }, gf = R.gasRadiogenici(M.luogoDaAria({ P: FREDDO }), { P: FREDDO }); assert.ok(gf.argon40.gelato > 1e3 * gf.argon40.nellAria && gf.argon40.pressione < 1e-3, `a 25 K l'argon è ghiaccio: ${gf.argon40.pressione} Pa`); assert.equal(R.gasRadiogenici(M.luogoDaRoccia({ P: LUNA, continente: false, bagnato: false }), { P: LUNA }).argon40.trattenuto, false);
   nota(`argon ${n(g.argon40.frazione * 100)}% (${n(g.argon40.nellAria)} kg), elio ${n(g.elio4.frazione * 1e6)} ppm, ${n(g.elio4.flusso / 1e4)} atomi/cm²/s; Marte ${n(gm.argon40.frazione * 100)}%; una super-Terra tiene l'elio: ${n(gs.elio4.frazione * 100)}%`);
 });
 
@@ -189,16 +191,18 @@ prova('una supernova vicina: ogni quanto, e di quanto alza i raggi cosmici e la 
   const s = R.supernovaVicina(sulMare(), { P: TERRA });
   tra(s.ogniQuanto(10), 3e8, 5e9, 'entro 10 parsec (anni; stime: una ogni ~0,5–2 miliardi)'); tra(s.ogniQuanto(100), 3e5, 5e6, 'entro 100 parsec (anni; ~una ogni 2–4 milioni)');
   tra(s.effetto(10).cosmici, 30, 500, 'a 10 parsec: volte il fondo'); tra(s.effetto(100).cosmici, 0.03, 0.5, 'a 100 parsec'); tra(s.distanzaPericolosa, 30, 100, 'distanza a cui i cosmici raddoppiano (parsec)');
-  tra(s.effetto(10).dose / R.dose(sulMare(), { P: TERRA }).cosmici.Sv, 30, 500, 'la dose dei cosmici sale con loro'); assert.ok(s.effetto(5).ozono && !s.effetto(50).ozono); assert.ok(s.effetto(10).durata >= 3e4);
+  tra(s.effetto(10).dose / R.dose(sulMare(), { P: TERRA }).cosmici.Sv, 30, 500, 'la dose dei cosmici sale con loro'); assert.ok(s.effetto(5).ozono && !s.effetto(50).ozono);
+  // picco breve o rilascio lento: l'integrale è lo stesso, e va come 1/d
+  const e10 = s.effetto(10); tra(e10.durata, 50, 1e3, 'durata del picco a 10 parsec (anni)'); tra(e10.cosmiciLento, 2, 20, 'se il resto li rilascia in 30 mila anni: volte il fondo'); tra(e10.anniDiFondo, 5e4, 5e5, 'in tutto: anni di fondo normale'); tra(e10.cosmici * e10.durata / e10.anniDiFondo, 0.05, 1, 'il picco porta una parte del totale'); tra(s.effetto(100).anniDiFondo / e10.anniDiFondo, 0.099, 0.101, '∝ 1/d');
   // dalle sorgenti vere di una galassia (come le dà cosmo.js): le più vicine, e la prossima come evento della sorgente
-  const Gx = { ritmoSN: 0.05, forma: { unitaM: 6.7e20 }, sorgenti: [{ tipo: 'getto', pos: [0, 0] }, { tipo: 'supernova', nome: 'lontana', pos: [0.4, 0.1], eta: 4000 }, { tipo: 'supernova', nome: 'vicina', pos: [0.1001, 0.1], eta: 2e4 }, { tipo: 'pulsar', pos: [0.4, 0.1] }] };
+  const Gx = { ritmoSN: 0.05, forma: { unitaM: 6.7e20 }, sorgenti: [{ tipo: 'getto', pos: [0, 0] }, { tipo: 'supernova', nome: 'lontana', pos: [0.4, 0.1], eta: 4000 }, { tipo: 'supernova', nome: 'vicina', pos: [0.1001, 0.1], eta: 1000 }, { tipo: 'pulsar', pos: [0.4, 0.1] }] };
   const caso = sorgente('cosmo 1/galassia 3/stella 53'), g = R.supernovaVicina(sulMare(), { P: TERRA, galassia: Gx, posizione: [0.1, 0.1], caso });
   assert.equal(g.vicine.length, 2); assert.equal(g.vicine[0].nome, 'vicina'); tra(g.vicine[0].distanzaPc, 1.5, 3); assert.ok(g.vicine[0].cosmici > 10 && g.vicine[1].cosmici < 1e-6);
   assert.ok(g.ogniQuanto(10) < s.ogniQuanto(10) * 1.2 && g.prossima.tra > 0 && g.prossima.distanza <= 100);
   assert.deepEqual(R.supernovaVicina(sulMare(), { P: TERRA, galassia: Gx, posizione: [0.1, 0.1], caso: sorgente('cosmo 1/galassia 3/stella 53') }).prossima.tra, g.prossima.tra);
   const altro = R.supernovaVicina(sulMare(), { P: TERRA, galassia: Gx, posizione: [0.1, 0.1], caso: sorgente('cosmo 1/galassia 3/stella 53', { 'cosmo 1/galassia 3/stella 53/supernova vicina/quando': 1 }) });
   assert.notEqual(altro.prossima.tra, g.prossima.tra); assert.equal(altro.prossima.distanza, g.prossima.distanza);
-  nota(`entro 10 pc ogni ${n(s.ogniQuanto(10) / 1e9)} miliardi di anni (cosmici ×${n(s.effetto(10).cosmici)}, +${n(s.effetto(10).dose * 1e3)} mSv/anno per ${n(s.effetto(10).durata / 1e3)} mila anni); entro 100 pc ogni ${n(s.ogniQuanto(100) / 1e6)} milioni (×${n(1 + s.effetto(100).cosmici)})`);
+  nota(`entro 10 pc ogni ${n(s.ogniQuanto(10) / 1e9)} miliardi di anni (cosmici ×${n(s.effetto(10).cosmici)} per ${n(s.effetto(10).durata)} anni, o ×${n(s.effetto(10).cosmiciLento)} per 30 mila; in tutto ${n(s.effetto(10).doseTotale)} Sv al suolo); entro 100 pc ogni ${n(s.ogniQuanto(100) / 1e6)} milioni (×${n(1 + s.effetto(100).cosmici)})`);
 });
 
 prova('gli amplificatori e i loro tempi: giorni per il tempo atmosferico, milioni di anni per le orbite, subito per la nucleazione', () => {
@@ -272,13 +276,14 @@ prova('tutto insieme, per ogni specie di luogo: numeri finiti, lo stesso risulta
     ['Marte', M.luogoDaAria({ P: MARTE }), MARTE], ['Luna', M.luogoDaRoccia({ P: LUNA, continente: false, bagnato: false }), LUNA], ['un gigante', M.luogoDaAria({ P: GIOVE }), GIOVE], ['un luogo senza pianeta', { tipo: 'roccia', minerali: [{ nome: 'quarzo', frazione: 1 }] }, null]];
   for (const [nome, L, P] of luoghi) {
     const t0 = Date.now(), r = R.risalita(L, P ? { P } : {}), dt = Date.now() - t0, r2 = R.risalita(L, P ? { P } : {});
-    assert.ok(r.flussi.length >= 8 && r.racconto.length >= 4, nome); for (const f of r.flussi) assert.ok(isFinite(f.valore) && f.nome && f.unita && f.verso && f.legge, `${nome}: ${f.nome}`);
+    assert.ok(r.flussi.length >= 8 && r.racconto.length >= 4 && r.breve.length === 4, nome); assert.ok(!r.breve.join(' ').match(/NaN|undefined|Infinity/), `${nome}: ${r.breve.join(' ')}`); for (const f of r.flussi) assert.ok(isFinite(f.valore) && f.nome && f.unita && f.verso && f.legge, `${nome}: ${f.nome}`);
     assert.ok(isFinite(r.dose.totale.Sv) && r.dose.totale.Sv >= 0 && r.amplificatori.length >= 8 && r.famiglie === R.FAMIGLIE, nome); assert.equal(typeof r.ionizzazione(5000).totale, 'number');
     assert.equal(JSON.stringify([r.flussi, r.racconto, r.dose]), JSON.stringify([r2.flussi, r2.racconto, r2.dose]), `${nome}: deterministico`); assert.ok(dt < 1500, `${nome}: ${dt} ms`);
     assert.ok(!r.racconto.join(' ').match(/NaN|undefined|Infinity/), `${nome}: ${r.racconto.join(' ')}`);
   }
   const t0 = Date.now(); for (let i = 0; i < 5; i++) R.risalita(sulMare(), { P: TERRA }); assert.ok(Date.now() - t0 < 400, `la seconda volta costa poco: ${Date.now() - t0} ms per 5`);
   console.log('\n   il racconto per la Terra, su un granito:\n' + R.risalita(SUOLO, { P: TERRA }).racconto.map((x) => `     ${x}`).join('\n'));
+  console.log('\n   in breve (per il pannello del pianeta):\n' + R.risalita(M.luogoDaAria({ P: TERRA }), { P: TERRA }).breve.map((x) => `     ${x}`).join('\n') + '\n   e per Marte:\n' + R.risalita(M.luogoDaAria({ P: MARTE }), { P: MARTE }).breve.map((x) => `     ${x}`).join('\n'));
 });
 
 console.log(`\ntest_risalita: ${ok} prove passate`);
