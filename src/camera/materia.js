@@ -32,7 +32,9 @@
 //     valore dell'elemento. Così l'acqua dà 75,3 eV (misurato: 75,0) e il quarzo 141 (139); l'aria 86,1 (85,7);
 //   · K = 4π·N_A·r_e²·m_e·c² = 0,307075 MeV·cm²/mol; l'effetto densità con la parametrizzazione generale di Sternheimer e
 //     Peierls (1971), che chiede solo I e la frequenza di plasma; la carica efficace degli ioni lenti (Barkas 1963:
-//     z·[1 − exp(−125·β·z^(−2/3))]); la frenata nucleare universale di Ziegler, Biersack e Littmark (1985);
+//     z·[1 − exp(−125·β·z^(−2/3))]; per l'elio il rapporto misurato tra le frenate di α e protoni, NIST/ICRU 49); la
+//     frenata nucleare universale di Ziegler, Biersack e Littmark (1985). Controllo: frenate e percorsi di protoni e α
+//     in acqua, aria e quarzo entro il 2–3% dalle tabelle NIST PSTAR/ASTAR sopra 1 MeV per nucleone;
 //   · la lunghezza di radiazione degli elementi: X0 = 716,4·A / [Z(Z+1)·ln(287/√Z)] g/cm² (Tsai 1974; PDG);
 //   · la deviazione multipla: θ0 = (13,6 MeV / βcp)·z·√(x/X0)·[1 + 0,038·ln(x·z²/(X0·β²))] (Highland 1975; Lynch e Dahl 1991);
 //   · l'irraggiamento dei muoni: b = 4,0·10⁻⁶ cm²/g nella «roccia standard» (Z = 11, A = 22; Groom, Mokhov e Striganov
@@ -75,9 +77,9 @@
 //     solo i nuclidi solubili (uranio, potassio, rubidio, carbonio), nell'aria il radon e i suoi figli;
 //   · di ogni decadimento α si segue la riga principale; lo spettro β è quello di Fermi (forma permessa, e la forma
 //     «unica» per il K-40); i γ si seguono solo se la finestra è larga abbastanza perché urtino;
-//   · sotto ~10 keV per nucleone la frenata elettronica è quella di Lindhard-Scharff (±30%); niente correzioni di
-//     guscio (la frenata dei protoni tra 0,3 e 3 MeV viene alta del 3%); l'irraggiamento degli elettroni è la formula
-//     di Heitler senza schermo fino a saturazione (±20%);
+//   · sotto ~100 keV per nucleone la frenata elettronica è il raccordo tra Bethe e Lindhard-Scharff (±20%, e conta poco
+//     sui percorsi); la correzione di guscio è una forma empirica tarata sui protoni; l'irraggiamento degli elettroni è
+//     la formula di Heitler senza schermo fino a saturazione (±20%);
 //   · lo sciame nell'aria è il suo scheletro: l'urto del primario, i pioni, i muoni, le coppie e i fotoni di frenamento
 //     (modello di Heitler), in un'aria a strati; il campo del pianeta è perpendicolare alla finestra;
 //   · per il plagioclasio la cella dell'albite con le coordinate del sanidino (stessa impalcatura); per la biotite quelle
@@ -221,6 +223,9 @@ export function particella(p) {
   if (p.Z && p.A) return { nome: p.nome || `ione ${p.Z}/${p.A}`, q: p.Z, Z: p.Z, A: p.A, mMeV: p.A * U_MEV };
   throw new Error('particella: serve un nome, o { q, mMeV }, o { Z, A }');
 }
+// la carica efficace dell'elio, misurata: (frenata di una α) / (4 × frenata di un protone alla stessa velocità), in funzione
+// dei keV per nucleone (qui il logaritmo): NIST ASTAR e PSTAR (ICRU 49), acqua e aria, che coincidono entro l'1%
+const ELIO = [[2.5, 0.4], [10, 0.416], [25, 0.458], [50, 0.515], [80, 0.585], [125, 0.697], [175, 0.807], [250, 0.911], [350, 0.964], [500, 0.986], [1000, 0.993], [2000, 0.995]].map(([e, g]) => [Math.log(e), g]);
 // la frenata (MeV·cm²/g) di una particella di energia cinetica E (MeV) in un mezzo: { elettronica, nucleare, radiativa, totale }
 // «taglio» (MeV): solo le perdite in urti che cedono meno di così a un elettrone (la frenata ristretta: il resto sono raggi delta)
 function frenata(p, E, m, taglio = Infinity) {
@@ -234,13 +239,15 @@ function frenata(p, E, m, taglio = Infinity) {
   } else {
     const r = me / p.mMeV, Wmax = (2 * me * bg2) / (1 + 2 * g * r + r * r), W = Math.min(Wmax, taglio), b = Math.sqrt(b2);
     // la carica efficace: uno ione lento si riveste di elettroni. Il protone conta per uno (la sua parte bassa è Lindhard-Scharff);
-    // l'elio segue la curva misurata di Ziegler (1977), in ln(keV per nucleone); i più pesanti la legge di Barkas
+    // l'elio segue la curva misurata (ELIO); i più pesanti la legge di Barkas
     let zeff = Math.abs(p.q);
-    if (p.Z === 2) { const B = Math.log(Math.max(1, (E * 1000) / p.A)); zeff = 2 * Math.sqrt(1 - Math.exp(-Math.min(30, 0.7446 + 0.1429 * B + 0.01562 * B * B - 0.00267 * B ** 3 + 1.325e-6 * B ** 8))); }
+    if (p.Z === 2) { const x = Math.log(Math.max(2.5, Math.min(2000, (E * 1000) / p.A))); let i = 0; while (i < ELIO.length - 2 && ELIO[i + 1][0] < x) i++; zeff = 2 * Math.sqrt(ELIO[i][1] + ((ELIO[i + 1][1] - ELIO[i][1]) * (x - ELIO[i][0])) / (ELIO[i + 1][0] - ELIO[i][0])); }
     else if (p.Z > 2) zeff = p.Z * (1 - Math.exp(-125 * b * Math.pow(p.Z, -2 / 3)));
     // Bethe: ½·ln(2mc²β²γ²·W/I²) − β² − δ/2 (nel logaritmo «1 + x + x²» al posto di x², perché resti positiva in basso, dove comanda Lindhard-Scharff)
-    const xx = (2 * me * bg2 * W) / (IMeV * IMeV);
-    const alta = ((K_BETHE * m.ZsuA) / b2) * Math.max(0, 0.5 * Math.log(1 + Math.sqrt(xx) + xx) - (b2 / 2) * (1 + W / Wmax) - d / 2);
+    // La CORREZIONE DI GUSCIO (gli elettroni interni, più veloci della particella, frenano meno): forma empirica
+    // 19·x/(x + 40)², x = 2mc²β²γ²/I, tarata sui protoni in acqua e in quarzo (NIST PSTAR, ICRU 49): toglie il 3% tra 0,5 e 3 MeV
+    const xx = (2 * me * bg2 * W) / (IMeV * IMeV), xg = (2 * me * bg2) / IMeV;
+    const alta = ((K_BETHE * m.ZsuA) / b2) * Math.max(0, 0.5 * Math.log(1 + Math.sqrt(xx) + xx) - (b2 / 2) * (1 + W / Wmax) - d / 2 - (19 * xg) / ((xg + 40) * (xg + 40)));
     if (p.Z) {
       // in basso: la frenata proporzionale alla velocità (Lindhard e Scharff 1961, per un protone), elemento per elemento; le
       // due si raccordano come inversi dei quadrati. Uno ione va come un protone alla stessa velocità, per il quadrato
@@ -303,4 +310,219 @@ export function energiaDopo(part, E, luogo, xM) {
   const p = particella(part), m = mezzo(luogo), t = tabella(p, m), resta = interpola(t, t.R, E) - xM * m.densita * 100; if (resta <= t.R[0]) return 0;
   let lo = 0, hi = t.n - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (t.R[mid] < resta) lo = mid; else hi = mid; }
   return Math.exp(t.lnE0 + (lo + (resta - t.R[lo]) / (t.R[hi] - t.R[lo])) * PASSO_LN);
+}
+
+// =====================================================================================
+// 3. LE SORGENTI VERE DI UN LUOGO: la radioattività naturale
+// =====================================================================================
+// I NUCLIDI (dati: ENSDF/NuDat 3; energie in MeV, tempi di dimezzamento in anni). Un passo α: [nome, Z, A, 'α', Q, mezza
+// vita, ramo, Eα della riga principale se non va al livello fondamentale]; l'energia della α è Q·(A − 4)/A: il resto lo
+// prende il nucleo che rincula. Un passo β: [nome, Z, A, 'β', Q, mezza vita, ramo, energia media degli elettroni, dei γ]:
+// il resto di Q lo porta via il neutrino.
+const G = 1 / 365.25, MIN = G / 1440, S_ = MIN / 60;
+export const CATENE = {
+  'uranio-238': { elemento: 'U', abbondanza: 0.992742, mezza: 4.468e9, fissione: 8.45e-17, passi: [
+    ['uranio-238', 92, 238, 'α', 4.270, 4.468e9], ['torio-234', 90, 234, 'β', 0.273, 24.1 * G, 1, 0.06, 0.009], ['protoattinio-234', 91, 234, 'β', 2.269, 1.159 * MIN, 1, 0.822, 0.012],
+    ['uranio-234', 92, 234, 'α', 4.858, 2.455e5], ['torio-230', 90, 230, 'α', 4.770, 7.54e4], ['radio-226', 88, 226, 'α', 4.871, 1600], ['radon-222', 86, 222, 'α', 5.590, 3.8235 * G],
+    ['polonio-218', 84, 218, 'α', 6.115, 3.098 * MIN], ['piombo-214', 82, 214, 'β', 1.019, 27.06 * MIN, 1, 0.293, 0.25], ['bismuto-214', 83, 214, 'β', 3.270, 19.9 * MIN, 1, 0.659, 1.508],
+    ['polonio-214', 84, 214, 'α', 7.833, 164.3e-6 * S_], ['piombo-210', 82, 210, 'β', 0.0635, 22.2, 1, 0.038, 0.005], ['bismuto-210', 83, 210, 'β', 1.162, 5.012 * G, 1, 0.389, 0], ['polonio-210', 84, 210, 'α', 5.407, 138.376 * G]] },
+  'uranio-235': { elemento: 'U', abbondanza: 0.007204, mezza: 7.04e8, passi: [
+    ['uranio-235', 92, 235, 'α', 4.678, 7.04e8, 1, 4.398], ['torio-231', 90, 231, 'β', 0.391, 25.52 / 24 * G, 1, 0.165, 0.026], ['protoattinio-231', 91, 231, 'α', 5.150, 3.276e4, 1, 5.01],
+    ['attinio-227', 89, 227, 'β', 0.0448, 21.772, 1, 0.016, 0], ['torio-227', 90, 227, 'α', 6.146, 18.68 * G, 1, 5.9], ['radio-223', 88, 223, 'α', 5.979, 11.43 * G, 1, 5.716],
+    ['radon-219', 86, 219, 'α', 6.946, 3.96 * S_], ['polonio-215', 84, 215, 'α', 7.526, 1.781e-3 * S_], ['piombo-211', 82, 211, 'β', 1.367, 36.1 * MIN, 1, 0.456, 0.064],
+    ['bismuto-211', 83, 211, 'α', 6.751, 2.14 * MIN], ['tallio-207', 81, 207, 'β', 1.418, 4.77 * MIN, 1, 0.495, 0.002]] },
+  'torio-232': { elemento: 'Th', abbondanza: 1, mezza: 1.405e10, passi: [
+    ['torio-232', 90, 232, 'α', 4.082, 1.405e10], ['radio-228', 88, 228, 'β', 0.0459, 5.75, 1, 0.017, 0], ['attinio-228', 89, 228, 'β', 2.124, 6.15 / 24 * G, 1, 0.475, 0.971],
+    ['torio-228', 90, 228, 'α', 5.520, 1.9116], ['radio-224', 88, 224, 'α', 5.789, 3.6319 * G], ['radon-220', 86, 220, 'α', 6.405, 55.6 * S_], ['polonio-216', 84, 216, 'α', 6.906, 0.145 * S_],
+    ['piombo-212', 82, 212, 'β', 0.570, 10.64 / 24 * G, 1, 0.176, 0.148], ['bismuto-212', 83, 212, 'β', 2.252, 60.55 * MIN, 0.6406, 0.72, 0.16], ['polonio-212', 84, 212, 'α', 8.954, 0.299e-6 * S_, 0.6406],
+    ['bismuto-212', 83, 212, 'α', 6.207, 60.55 * MIN, 0.3594], ['tallio-208', 81, 208, 'β', 4.999, 3.053 * MIN, 0.3594, 0.598, 3.375]] },
+};
+// i nuclidi soli. K-40: 89,28% β⁻ verso il calcio-40 (spettro di forma «unica», terza proibita), 10,72% cattura di un
+// elettrone verso l'argo-40, che emette un γ da 1,4608 MeV. Il C-14 c'è solo nel carbonio che scambia con l'aria.
+export const SOLI = {
+  'potassio-40': { elemento: 'K', Z: 19, A: 40, abbondanza: 1.17e-4, mezza: 1.248e9, rami: [{ tipo: 'β', ramo: 0.8928, Q: 1.3111, media: 0.5606, proibita: 3, figlia: 'calcio-40' }, { tipo: 'cattura', ramo: 0.1072, Q: 1.5044, gamma: 1.4608, figlia: 'argo-40' }] },
+  'rubidio-87': { elemento: 'Rb', Z: 37, A: 87, abbondanza: 0.2783, mezza: 4.97e10, rami: [{ tipo: 'β', ramo: 1, Q: 0.2823, media: 0.082, figlia: 'stronzio-87' }] },
+  'carbonio-14': { elemento: 'C', Z: 6, A: 14, abbondanza: 0, mezza: 5730, rami: [{ tipo: 'β', ramo: 1, Q: 0.15648, media: 0.0495, figlia: 'azoto-14' }] },
+};
+// le condriti (frazioni in massa, oggi: 4,5 miliardi di anni dopo la nascita del Sole) e quanto dei volatili è rimasto (chimica.js)
+export const CONDRITI = { U: 8.0e-9, Th: 29e-9, K: 550e-6, Rb: 2.3e-6 }, VOLATILI_RIMASTI = 0.25, ETA_RIFERIMENTO = 4.5e9;
+const NOMI_EL = { 81: 'tallio', 82: 'piombo', 83: 'bismuto', 84: 'polonio', 86: 'radon', 88: 'radio', 89: 'attinio', 90: 'torio', 91: 'protoattinio', 92: 'uranio' };
+const lambdaDi = (mezzaAnni) => Math.LN2 / (mezzaAnni * ANNO); // (1/s)
+
+// LO SPETTRO β (teoria di Fermi): N(p) ∝ F(Z, E)·p²·(Q − T)²·forma, con F la funzione di Fermi (qui nella forma non
+// relativistica 2πη/(1 − e^(−2πη)), η = ±Z·α·E/p) e, per le transizioni «uniche», il fattore di forma (terza proibita:
+// p⁶ + 7p⁴q² + 7p²q⁴ + q⁶). → { media (MeV), campiona(u): l'energia cinetica al quantile u }
+const spettri = new Map();
+export function spettroBeta(Q, Zfiglia, proibita = 0, segno = 1) {
+  const k = `${Q}|${Zfiglia}|${proibita}|${segno}`; if (spettri.has(k)) return spettri.get(k);
+  const n = 400, me = ME_MEV, w = new Float64Array(n + 1), cum = new Float64Array(n + 1); let tot = 0, media = 0;
+  for (let i = 1; i < n; i++) { const T = (Q * i) / n, E = T + me, p = Math.sqrt(T * (T + 2 * me)), q = Q - T, eta = (segno * Zfiglia * ALFA_FINE * E) / p, F = (2 * Math.PI * eta) / (1 - Math.exp(-2 * Math.PI * eta));
+    const p2 = p * p, q2 = q * q, forma = proibita === 3 ? p2 ** 3 + 7 * p2 * p2 * q2 + 7 * p2 * q2 * q2 + q2 ** 3 : proibita === 1 ? p2 + q2 : 1; w[i] = F * p * E * q2 * forma; }
+  for (let i = 1; i <= n; i++) { const a = 0.5 * (w[i - 1] + w[i]); tot += a; media += a * (Q * (i - 0.5)) / n; cum[i] = tot; }
+  const out = { media: media / tot, massima: Q, campiona: (u) => { const x = u * tot; let lo = 0, hi = n; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] < x) lo = m; else hi = m; } return (Q * (lo + (x - cum[lo]) / Math.max(1e-300, cum[hi] - cum[lo]))) / n; } };
+  spettri.set(k, out); return out;
+}
+
+// I RADIOELEMENTI DELLA ROCCIA DI UN PIANETA. Il potassio è quello dei suoi minerali (feldspato potassico, biotite);
+// uranio, torio e rubidio lo seguono: tutti e quattro restano nel fuso finché possono (per questo la crosta ne è ricca
+// e il mantello povero), con i rapporti delle condrite — salvo che del potassio, volatile, è rimasto un quarto.
+// → frazioni in massa «di riferimento» (come sarebbero in una roccia di un mondo vecchio 4,5 miliardi di anni: l'età
+//   vera del pianeta entra dopo, nuclide per nuclide, con la legge del decadimento)
+export function radioelementi(minerali = [], { K = null } = {}) {
+  let k = K;
+  if (k == null) { k = 0; const tot = minerali.reduce((a, m) => a + (m.frazione || 0), 0) || 1; for (const m of minerali) { const M = MATERIALI[m.nome]; if (M) k += ((m.frazione / tot) * (inMassa(atomiDi(M.formula)).K || 0)); } }
+  return { K: k, U: (k * CONDRITI.U) / (CONDRITI.K * VOLATILI_RIMASTI), Th: (k * CONDRITI.Th) / (CONDRITI.K * VOLATILI_RIMASTI), Rb: (k * CONDRITI.Rb) / CONDRITI.K };
+}
+// quanto U, Th e K ha un minerale di quella roccia: gli accessori concentrano uranio e torio (MATERIALI[…].concentra, rispetto
+// ai minerali comuni); il potassio sta dove la formula lo vuole. Il conto torna: la somma sui minerali è la roccia.
+export function concentrazioni(luogo, minerale) {
+  const el = elementiDi(luogo), lista = [...(luogo.minerali || []), ...(luogo.accessori || [])], tot = lista.reduce((a, m) => a + m.frazione, 0) || 1; let peso = 0, kRoccia = 0;
+  for (const m of lista) { const M = MATERIALI[m.nome] || {}; peso += (m.frazione / tot); kRoccia += (m.frazione / tot) * (M.formula ? inMassa(atomiDi(M.formula)).K || 0 : 0); }
+  const base = (e) => { let s = 0; for (const m of lista) s += (m.frazione / tot) * (MATERIALI[m.nome]?.concentra?.[e] ?? 1); return el[e] / (s || 1); };
+  const M = MATERIALI[minerale] || {}, kQui = M.formula ? inMassa(atomiDi(M.formula)).K || 0 : 0;
+  return { U: base('U') * (M.concentra?.U ?? 1), Th: base('Th') * (M.concentra?.Th ?? 1), K: kRoccia > 0 ? (el.K * kQui) / kRoccia : 0, Rb: kRoccia > 0 ? (el.Rb * kQui) / kRoccia : 0 };
+}
+// gli elementi radioattivi del mezzo (frazioni in massa di riferimento): quelli dati da chi chiama, o quelli che seguono dai minerali
+function elementiDi(luogo) {
+  if (luogo.elementi) return { K: 0, U: 0, Th: 0, Rb: 0, ...luogo.elementi };
+  if (luogo.tipo === 'acqua' || luogo.tipo === 'ghiaccio') {
+    // nell'acqua: il potassio sciolto (mol/kg, come stato.totali di mare.js); il rubidio viene dalle stesse rocce ma le
+    // argille lo trattengono di più (nel mare terrestre Rb/K è 1/14 di quello delle rocce: misurato); l'uranio è solubile solo se l'acqua è ossidata e ha carbonati (mare terrestre: 3,3 µg/kg, cioè 1,2·10⁻³
+    // di quello della crosta dei continenti): senza ossigeno resta nella roccia (un centesimo); il torio non si scioglie
+    const t = luogo.totali || {}, K = (t.K ?? 0) * 39.098e-3, crosta = luogo.crosta || { U: 2.7e-6 };
+    return { K, Rb: (K * CONDRITI.Rb) / CONDRITI.K / 14, U: 1.2e-3 * crosta.U * (luogo.ossidata === false ? 0.01 : 1) * (K > 0 ? 1 : 0), Th: 0 };
+  }
+  if (luogo.tipo === 'aria') return { K: 0, U: 0, Th: 0, Rb: 0 };
+  return radioelementi([...(luogo.minerali || []), ...(luogo.accessori || [])]);
+}
+// quanto resta (o quanto c'era) di un nuclide in un pianeta di una certa età, rispetto al riferimento (4,5 miliardi di anni)
+const quantoResta = (mezza, etaPianeta) => Math.pow(2, (ETA_RIFERIMENTO - (etaPianeta ?? ETA_RIFERIMENTO)) / mezza);
+
+// L'ATTIVITÀ di ogni nuclide in un chilo di mezzo → [{ nuclide, catena, tipo, perKg (Bq/kg), Q, energia (della particella,
+// MeV), depositata (MeV che restano nella materia), neutrino (MeV portati via), Z, A, … }]
+export function attivita(luogo) {
+  const el = elementiDi(luogo), eta = luogo.etaPianeta ?? luogo.pianeta?.eta ?? ETA_RIFERIMENTO, out = [], solido = luogo.tipo !== 'acqua' && luogo.tipo !== 'aria' && luogo.tipo !== 'ghiaccio';
+  for (const [capo, c] of Object.entries(CATENE)) {
+    const w = el[c.elemento] || 0; if (!(w > 0)) continue;
+    const A0 = (w / (ELEMENTI[c.elemento].A * 1e-3)) * N_A * c.abbondanza * quantoResta(c.mezza, eta) * lambdaDi(c.mezza);
+    for (const [nome, Z, A, tipo, Q, mezza, ramo = 1, x, y] of c.passi) {
+      // nell'acqua la catena è rotta: restano i nuclidi dell'uranio (solubile); i figli (torio, radio…) vanno nei sedimenti
+      if (!solido && NOMI_EL[Z] !== 'uranio') continue;
+      const base = { nuclide: nome, catena: capo, Z, A, tipo, mezza, perKg: A0 * ramo, Q };
+      if (tipo === 'α') { const E = x ?? (Q * (A - 4)) / A; out.push({ ...base, energia: E, rinculo: (E * 4) / (A - 4), depositata: Q, neutrino: 0, figlia: `${NOMI_EL[Z - 2]}-${A - 4}`, Zf: Z - 2 }); }
+      else out.push({ ...base, energia: x, gamma: y, depositata: x + y, neutrino: Math.max(0, Q - x - y), figlia: `${NOMI_EL[Z + 1]}-${A}`, Zf: Z + 1 });
+    }
+    if (c.fissione && solido) { // la fissione spontanea: due frammenti schiena contro schiena, con l'energia della loro repulsione (Viola)
+      const tke = (0.1189 * 92 * 92) / Math.cbrt(238) + 7.3;
+      out.push({ nuclide: capo, catena: capo, Z: 92, A: 238, tipo: 'fissione', mezza: Math.LN2 / c.fissione, perKg: (A0 / lambdaDi(c.mezza)) * (c.fissione / ANNO), Q: tke + 30, energia: tke, depositata: tke + 10, neutrino: 12 });
+    }
+  }
+  for (const [nome, s] of Object.entries(SOLI)) {
+    let perKg;
+    if (nome === 'carbonio-14') { const c = luogo.carbonio ?? 0, r = luogo.carbonio14 ?? 0; perKg = (c / 14.0e-3) * N_A * r * lambdaDi(s.mezza); } // carbonio (kg/kg) × C-14/C
+    else perKg = ((el[s.elemento] || 0) / (ELEMENTI[s.elemento].A * 1e-3)) * N_A * s.abbondanza * quantoResta(s.mezza, eta) * lambdaDi(s.mezza);
+    if (!(perKg > 0)) continue;
+    for (const r of s.rami) {
+      const base = { nuclide: nome, catena: null, Z: s.Z, A: s.A, mezza: s.mezza, perKg: perKg * r.ramo, Q: r.Q, figlia: r.figlia };
+      if (r.tipo === 'β') out.push({ ...base, tipo: 'β', energia: r.media, gamma: 0, depositata: r.media, neutrino: r.Q - r.media, Zf: s.Z + 1, proibita: r.proibita || 0 });
+      else out.push({ ...base, tipo: 'cattura', energia: 0, gamma: r.gamma, depositata: r.gamma * 0.984 + 0.003, neutrino: r.Q - r.gamma * 0.984, Zf: s.Z - 1 });
+    }
+  }
+  return out;
+}
+// il calore della radioattività (W/kg): la somma di ciò che resta nella materia. È la stessa legge di leggi.js
+// (caloreDellaRoccia): coerenza(eta) confronta i due conti per una roccia con la composizione delle condriti.
+export const calore = (luogo) => attivita(luogo).reduce((s, a) => s + a.perKg * a.depositata * MEV_J, 0);
+export function coerenza(etaAnni = ETA_RIFERIMENTO) {
+  const qui = { tipo: 'roccia', elementi: { ...CONDRITI }, etaPianeta: etaAnni }, att = attivita(qui), di = (f) => att.filter(f).reduce((s, a) => s + a.perKg * a.depositata * MEV_J, 0);
+  const mio = [di((a) => a.catena === 'uranio-238'), di((a) => a.catena === 'uranio-235'), di((a) => a.catena === 'torio-232'), di((a) => a.nuclide === 'potassio-40')];
+  const suo = ISOTOPI.map(([h, mezza]) => h * Math.pow(2, (4.5 - etaAnni / 1e9) / mezza));
+  const tot = (v) => v.reduce((a, b) => a + b, 0);
+  return { nuclidi: ['uranio-238', 'uranio-235', 'torio-232', 'potassio-40'], materia: mio, leggi: suo, scarti: mio.map((x, i) => x / suo[i] - 1), totale: tot(mio), totaleLeggi: tot(suo), scarto: tot(mio) / tot(suo) - 1 };
+}
+
+// =====================================================================================
+// 4. I RAGGI COSMICI ARRIVATI FIN LÌ
+// =====================================================================================
+// Sopra il pianeta: i nucleoni primari, per (m²·s·sr·GeV), E l'energia cinetica per nucleone in GeV. Lo spettro fuori dal
+// vento della stella è quello misurato presso il Sole (Burger e altri 2000; Usoskin e altri 2005: 1,9·10⁴·P^(−2,78) /
+// (1 + 0,4866·P^(−2,51)) protoni, P la rigidità in GV; più il 30% di nucleoni legati nell'elio e nei nuclei: in alto
+// torna a 1,8·10⁴·E^(−2,7)), moltiplicato per quanto quel punto della galassia ne ha rispetto al Sole
+// (luogo.raggi.relativo: lo dà chi conosce il cielo dei raggi di quella stella, cosmo.js; se manca vale 1), e frenato
+// dal vento della stella (campo di forza, Gleeson e Axford 1968: ogni particella perde Φ = 0,55 GeV entrando).
+const M_P = 0.93827, PHI = 0.55, LAMBDA_ATT = 1.4; // (GeV, GV) · la lunghezza di attenuazione dei nucleoni è 1,4 volte quella d'urto (aria: 120 g/cm²)
+const fuori = (E) => { const P = Math.sqrt(E * (E + 2 * M_P)); return (1.3 * 1.9e4 * Math.pow(P, -2.78)) / (1 + 0.4866 * Math.pow(P, -2.51)); };
+const primari = (E) => (fuori(E + PHI) * (E * (E + 2 * M_P))) / ((E + PHI) * (E + PHI + 2 * M_P));
+const RESA_MUONI = (0.14 / 1.8) * Math.pow(10, 2.7);
+// la soglia di Størmer (GV) in un punto della superficie: sotto questa rigidità un raggio che arriva dall'alto non passa.
+// La stessa legge di cosmo.js (Terra all'equatore: 14,9 GV), con la latitudine: cala come cos⁴ verso i poli del campo
+export const sogliaStormer = (pianeta = {}, latitudine = 0) => 14.9 * ((pianeta.B0 ?? 3.1e-5) / 3.1e-5) * ((pianeta.raggioM ?? 6.371e6) / 6.371e6) * Math.cos((latitudine * Math.PI) / 180) ** 4;
+const energiaDaRigidita = (GV) => Math.sqrt(GV * GV + M_P * M_P) - M_P;
+// l'integrale di una funzione su una griglia logaritmica
+const integraLog = (f, a, b, n = 60) => { if (!(b > a)) return 0; const h = Math.log(b / a) / n; let s = 0; for (let i = 0; i <= n; i++) { const x = a * Math.exp(i * h); s += (i === 0 || i === n ? 0.5 : 1) * f(x) * x; } return s * h; };
+
+// → { soglia (GV), colonnaAria, colonnaSopra (g/cm²), quotaNascita (m), primari, nucleoni, muoni, elettroni, neutroni: flussi
+//     attraverso una superficie orizzontale in quel punto (per m² e per secondo); muoniVerticali (per m²·s·sr),
+//     energiaMuoni (GeV, la mediana), spettroMuoni(u) (GeV al quantile u), produzioneC14 (atomi per m² e per secondo) }
+const cosmiciFatti = new Map();
+export function raggiCosmici(luogo = {}) {
+  const pn = luogo.pianeta || {}, aria = luogo.aria || {}, sopra = luogo.sopra || {}, g = pn.g ?? 9.81, rel = luogo.raggi?.relativo ?? 1, lat = luogo.latitudine ?? pn.latitudine ?? 45;
+  const chiave = JSON.stringify([pn.B0, pn.raggioM, g, aria, sopra, rel, lat, luogo.tipo === 'aria' ? luogo.quotaM : 0]);
+  if (cosmiciFatti.has(chiave)) return cosmiciFatti.get(chiave);
+  const mAria = mezzo({ tipo: 'aria', aria }), X0 = Math.max(0, (aria.pressione ?? 0) / g / 10); // la colonna d'aria sopra il punto (g/cm²)
+  const Rc = sogliaStormer(pn, lat), Ec = energiaDaRigidita(Rc), LamN = LAMBDA_ATT * mAria.lambdaNucleare;
+  // la scala d'altezza dell'aria alta, dove nascono gli sciami: più fredda di quella al suolo (aria.Talta: la temperatura
+  // «di pelle» del pianeta, Teq/2^¼; se manca, 0,76 volte quella al suolo: sulla Terra 220 K contro 288)
+  let mu = 0, tot = 0; const gas = aria.gas && Object.keys(aria.gas).length ? aria.gas : { N2: 0.781, O2: 0.209, Ar: 0.0093 }; for (const f in gas) { try { mu += gas[f] * MASSA_GAS(f); tot += gas[f]; } catch { /* un gas che la tavola non conosce */ } } mu /= tot || 1;
+  const H = (8.314 * (aria.Talta ?? 0.76 * (aria.T ?? luogo.T ?? 288))) / (mu * 1e-3 * g), epsPi = 115 * (H / 6400), epsK = 850 * (H / 6400), epsMu = (0.10566 * H) / 658.6;
+  const aAria = frenata(particella('muone-'), 3000, mAria).elettronica * 1e-3; // GeV per g/cm²
+  // i primari sopra la soglia, da tutto il cielo sopra l'orizzonte (π·I per una superficie orizzontale)
+  const Ip = rel * integraLog(primari, Math.max(Ec, 0.02), 1e6, 80), attAria = Math.exp(-X0 / LamN);
+  // I MUONI (Gaisser 1990, cap. 6). I pioni nascono dove i nucleoni urtano (∝ e^(−X/Λ)/Λ), con lo spettro dei primari; se
+  // decadono prima di urtare ancora danno un muone (1/(1 + 1,1·E·cosθ/ε_π): ε_π cresce con la scala d'altezza). Il muone
+  // scende perdendo energia (la frenata di quell'aria) e può decadere in volo: sopravvive con probabilità
+  // [(X/X0)·(E/E′)]^(ε_μ/(E·cosθ + a·X0)). Quanti: un muone di energia E′ viene in media da un primario dieci volte più
+  // energico (più 1 GeV: sotto, i pioni non nascono); la resa è quella che in alto dà 0,14·E^(−2,7) muoni per (cm²·s·sr·GeV)
+  // da 1,8·E^(−2,7) primari. Chi viene da un primario sotto la soglia del campo non c'è.
+  const muoniA = (Eg, cos) => { // intensità al suolo, per (m²·s·sr·GeV)
+    if (!(X0 > 0)) return 0; const n = 24, hx = Math.log(X0 / 0.5) / n; let somma = 0;
+    for (let i = 0; i <= n; i++) { const X = 0.5 * Math.exp(i * hx), E1 = Eg + (aAria * (X0 - X)) / cos; if (E1 * 10 + 1 < Ec) continue;
+      const nasce = RESA_MUONI * rel * primari(10 * E1 + 1) * (1 / (1 + (1.1 * E1 * cos) / epsPi) + 0.054 / (1 + (1.1 * E1 * cos) / epsK)) * (Math.exp(-X / (LamN * cos)) / (LamN * cos));
+      const vive = Math.pow((X / X0) * (Eg / E1), epsMu / (Eg * cos + aAria * X0));
+      somma += (i === 0 || i === n ? 0.5 : 1) * nasce * vive * X; }
+    return somma * hx;
+  };
+  // sotto il suolo (o sotto l'acqua, o il ghiaccio): un muone arriva alla profondità D se ha almeno (a/b)(e^(bD) − 1)
+  const strati = [['acqua', sopra.acquaM], ['ghiaccio', sopra.ghiaccioM], ['roccia', sopra.rocciaM]].filter(([, m]) => m > 0); let D = 0, aS = 0, bS = 0, attSotto = 1;
+  for (const [tipo, metri] of strati) { const mz = tipo === 'roccia' ? mezzo(sopra.roccia || { tipo: 'roccia', minerali: [{ nome: 'quarzo', frazione: 0.5 }, { nome: 'plagioclasio', frazione: 0.5 }] }) : mezzo({ tipo }), col = metri * mz.densita * 100;
+    const f = frenata(particella('muone-'), 1e5, mz); D += col; aS += col * f.elettronica * 1e-3; bS += (col * f.radiativa) / (1e5 + 105.658); attSotto *= Math.exp(-col / (LAMBDA_ATT * mz.lambdaNucleare)); }
+  if (D > 0) { aS /= D; bS /= D; }
+  const Emin = (cos) => (D > 0 ? (aS / bS) * Math.expm1((bS * D) / cos) : 0);
+  const coseni = [0.97, 0.87, 0.72, 0.55, 0.38, 0.2], dc = [0.07, 0.13, 0.17, 0.17, 0.17, 0.19 + 0.1]; // (da 1 a 0; l'ultimo tratto copre fino all'orizzonte, dove non arriva quasi niente)
+  const sopraSoglia = (cos) => integraLog((E) => muoniA(E, cos), Math.max(0.01, Emin(cos)), 1e6, 48);
+  const muV = sopraSoglia(1); let muoni = 0; for (let i = 0; i < coseni.length; i++) muoni += 2 * Math.PI * sopraSoglia(coseni[i]) * coseni[i] * dc[i];
+  // lo spettro dei muoni in quel punto (verticali): l'energia con cui ARRIVANO lì (sotto terra ne hanno già persa)
+  const perSpettro = []; { const a = Math.max(0.01, Emin(1)), n = 48, h = Math.log(1e6 / a) / n; let c = 0; for (let i = 0; i <= n; i++) { const E = a * Math.exp(i * h); c += muoniA(E, 1) * E * h; perSpettro.push([E, c]); } }
+  const arriva = (E) => (D > 0 ? Math.max(0.001, (E + aS / bS) * Math.exp(-bS * D) - aS / bS) : E);
+  const spettroMuoni = (u) => { const T = perSpettro[perSpettro.length - 1][1] * limita(u, 0, 0.9999); let i = 1; while (i < perSpettro.length - 1 && perSpettro[i][1] < T) i++; const [e0, c0] = perSpettro[i - 1], [e1, c1] = perSpettro[i]; return arriva(e0 * Math.pow(e1 / e0, (T - c0) / Math.max(1e-300, c1 - c0))); };
+  // i nucleoni (protoni e neutroni veloci) si attenuano; gli elettroni: quelli della cascata (massimo di Pfotzer a ~100 g/cm²,
+  // 2 secondari per primario: misure con palloni) più quelli che accompagnano i muoni (0,3: decadimenti in volo ed elettroni strappati)
+  const nucleoni = Math.PI * Ip * attAria * attSotto, cascata = X0 > 0 ? Math.PI * Ip * 2 * (X0 / 100) * Math.exp(1 - X0 / 100) : 0;
+  const out = { soglia: Rc, energiaSoglia: Ec, relativo: rel, colonnaAria: X0, colonnaSopra: D, scalaAltezza: H, quotaNascita: X0 > mAria.lambdaNucleare ? H * Math.log(X0 / mAria.lambdaNucleare) : 0,
+    primari: Math.PI * Ip, primariVerticali: Ip, nucleoni, muoni, muoniVerticali: muV, elettroni: (D > 0 ? 0 : cascata) + 0.3 * muoni, energiaMuoni: muV > 0 ? spettroMuoni(0.5) : 0, spettroMuoni, energiaMinima: Emin(1),
+    primarioTipico: (u) => { const a = Math.max(Ec, 0.02), n = 60, h = Math.log(1e6 / a) / n; let c = 0; const cum = []; for (let i = 0; i <= n; i++) { const E = a * Math.exp(i * h); c += primari(E) * E * h; cum.push([E, c]); } const T = c * limita(u, 0, 0.9999); let i = 1; while (i < n && cum[i][1] < T) i++; return cum[i][0]; } };
+  cosmiciFatti.set(chiave, out); if (cosmiciFatti.size > 30) cosmiciFatti.delete(cosmiciFatti.keys().next().value);
+  // i neutroni lenti (evaporati dai nuclei colpiti): 0,013 per cm²·s al suolo a New York (soglia 2 GV), in proporzione ai
+  // nucleoni; dove l'aria non basta nascono nel suolo, e ne escono circa 3 per primario (misure in orbita attorno alla Luna).
+  // E il carbonio-14 che fanno con l'azoto dell'aria: 2 atomi per cm²·s in media sulla Terra, per la parte di neutroni che
+  // l'azoto cattura; l'aria lo rimescola: conta la media dei primari su tutte le latitudini
+  if (!luogo.__riferimento) {
+    const terra = { g: 9.81, B0: 3.1e-5, raggioM: 6.371e6 }, rif = raggiCosmici({ __riferimento: true, pianeta: terra, latitudine: 51, aria: { pressione: 101325, T: 288 } });
+    out.neutroni = Math.min(130 * (nucleoni / rif.nucleoni), 3 * out.primari * attSotto);
+    const at = {}; for (const f in gas) { try { const a = atomiDi(f); for (const e in a) at[e] = (at[e] || 0) + a[e] * gas[f]; } catch { /* un gas che la tavola non conosce */ } }
+    let cat = 0; for (const e in at) cat += at[e] * (SIGMA_CATTURA[e] ?? 0.1); const suAzoto = cat > 0 ? ((at.N || 0) * SIGMA_CATTURA.N) / cat : 0;
+    const medio = (pianeta, r) => { let s = 0, w = 0; for (const l of [5, 15, 25, 35, 45, 55, 65, 75, 85]) { const c = Math.cos((l * Math.PI) / 180); s += c * r * integraLog(primari, Math.max(energiaDaRigidita(sogliaStormer(pianeta, l)), 0.02), 1e6, 40); w += c; } return s / w; };
+    out.produzioneC14 = 2e4 * (medio(pn, rel) / medio(terra, 1)) * (suAzoto / 0.995) * (X0 > 0 ? -Math.expm1(-X0 / LamN) : 0);
+  }
+  return out;
 }

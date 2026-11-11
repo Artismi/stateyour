@@ -2,7 +2,7 @@
 // correnti con la corrente forte a ovest, la salinità che segue evaporazione e pioggia, il fango alle foci, il campione
 // d'acqua a ogni scala (ioni e molecole veri, moto browniano), le reazioni sul posto; mari diversi su pianeti diversi
 import assert from 'node:assert/strict';
-import { fluidoCaldo, bilancioSali, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
+import { aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
 import { interno, superficiePianeta, climaSuperficie, erosione } from '../src/camera/geologia.js';
 import { sorgente } from '../src/camera/eventi.js';
 
@@ -249,12 +249,16 @@ prova('l\'immagine del campione e il colore del mare visto da sopra', () => {
   assert.notDeepEqual(Array.from(immagineAcqua(c, { N: 96, t: 50 * c.tempoAttraversamento })), Array.from(px), 'nel tempo le particelle si spostano');
   assert.equal(immagineAcqua(campioneAcqua(T, { ...aperto, latoM: 5e-9 }), { N: 64 }).length, 64 * 64 * 4);
   // i colori: blu scuro al largo, chiaro dove è basso, bruno alla foce, niente sulla terra, bianco sul ghiaccio
-  const blu = coloreMare(T, aperto.lon, aperto.lat), basso = coloreMare(T, aperto.lon, aperto.lat, { profonditaM: 2 }), bruno = coloreMare(T, foce.lon, foce.lat);
-  assert.ok(blu[2] > blu[0] + 50 && blu[2] > blu[1] + 30 && blu[0] + blu[1] + blu[2] < 330, `mare profondo: ${blu}`); assert.ok(basso[0] + basso[1] + basso[2] > blu[0] + blu[1] + blu[2] + 100, `mare basso: ${basso}`);
+  // (il blu scuro è quello dell'acqua limpida, fredda e profonda; nei mari caldi dove il calcare precipita l'acqua è più chiara e turchese)
+  let freddo = null; for (let k = 0; k < W * H && !freddo; k++) if (T.bagnato[k] >= 1 && T.fondo[k] > 3000 && T.ghiaccio[k] < 0.02 && T.saturazione.calcite[k] < 0.8 * T.soglia && T.torbidita[k] < 1e-6) freddo = { lon: lonI(k % W), lat: latJ(Math.floor(k / W)) };
+  assert.ok(freddo, 'un mare freddo, limpido e profondo'); const caldo = coloreMare(T, aperto.lon, aperto.lat); 
+  const blu = coloreMare(T, freddo.lon, freddo.lat), basso = coloreMare(T, freddo.lon, freddo.lat, { profonditaM: 2 }), bruno = coloreMare(T, foce.lon, foce.lat);
+  if (campioneAcqua(T, { ...aperto, latoM: 0.01 }).saturazione.calcite > T.soglia) assert.ok(caldo[1] > blu[1] + 10, `dove il calcare precipita il mare è più chiaro e più verde: ${caldo} contro ${blu}`);
+  assert.ok(blu[2] > blu[0] + 50 && blu[2] > blu[1] + 30 && blu[0] + blu[1] + blu[2] < 330, `mare profondo: ${blu}`); assert.ok(basso[0] > blu[0] + 30 && basso[1] > blu[1] + 30, `in due metri d'acqua limpida si vede il fondo (qui roccia vulcanica scura): ${basso} contro ${blu}`);
   assert.ok(bruno[0] / bruno[2] > 1.5 * (blu[0] / blu[2]), `foce: ${bruno}`);
   let terra = null; for (let k = 0; k < F.W * F.H && !terra; k++) if (F.tipo[k] === 0) terra = [((k % F.W) + 0.5) / F.W * 360 - 180, 90 - ((Math.floor(k / F.W) + 0.5) * 180) / F.H]; assert.equal(coloreMare(T, terra[0], terra[1]), null); assert.ok(campioneAcqua(T, { lon: terra[0], lat: terra[1] }).asciutto);
   const im = new Uint8ClampedArray(se.W * se.H * 4); coloraMare(T, se, im); let colorati = 0; for (let k = 0; k < se.W * se.H; k++) if (im[k * 4 + 2] > 0) colorati++; tra(colorati / (se.W * se.H), 0.5, 0.95, 'punti di mare colorati sulla carta');
-  console.log(`      mare profondo ${blu}, basso ${basso}, foce ${bruno}`);
+  console.log(`      mare freddo e profondo ${blu}, caldo dove nasce il calcare ${caldo}, basso ${basso}, foce ${bruno}`);
 });
 
 prova('lo stato è fatto solo di dati: passa tra fili, e mare() lavora anche su dati passati tra fili', () => {
@@ -262,6 +266,53 @@ prova('lo stato è fatto solo di dati: passa tra fili, e mare() lavora anche su 
   const copia = structuredClone(T); assert.equal(JSON.stringify(campioneAcqua(copia, { ...aperto, latoM: 1e-8 })), JSON.stringify(campioneAcqua(T, { ...aperto, latoM: 1e-8 })));
   const T2 = mare(structuredClone(senzaFunzioni(P)), structuredClone(senzaFunzioni(sf)), structuredClone(senzaFunzioni(cl)), structuredClone(senzaFunzioni(se)), 'prova/terra/mare');
   assert.equal(T2.salinitaMedia, T.salinitaMedia); assert.equal(T2.pH, T.pH); assert.deepEqual(Array.from(T2.salinita), Array.from(T.salinita)); assert.equal(JSON.stringify(T2.laghi), JSON.stringify(T.laghi));
+});
+
+prova('le onde: altezza e periodo dal vento e dal tratto di mare libero; il mare da sopra a ogni scala, fermo più mosso, sempre lo stesso', () => {
+  // le leggi: mare pienamente sviluppato con 10 m/s → 2,5 m e 8 s; con poco tratto libero onde più basse e corte
+  let hMax = 0, uMax = 0, hMedia = 0, n = 0; for (let k = 0; k < W * H; k++) if (eMare(k)) { const U = Math.hypot(T.vento.u[k], T.vento.v[k]), h = T.onde.altezza[k]; assert.ok(h <= (0.2431 * U * U) / T.gravita + 1e-6 && h >= 0 && T.onde.periodo[k] <= (8.131 * U) / T.gravita + 1e-6, 'mai più del mare pienamente sviluppato'); hMax = Math.max(hMax, h); uMax = Math.max(uMax, U); hMedia += h; n++; }
+  confronta('altezza media delle onde (m; misurata sulla Terra ~2,5)', hMedia / n, 1.2, 4); confronta('vento massimo sul mare (m/s; medie annue terrestri fino a ~12)', uMax, 7, 16);
+  const o = ondeNelPunto(T, aperto.lon, aperto.lat); assert.ok(o.H > 0 && o.T > 0 && o.tratto > 1e5 && o.Hl >= 0, JSON.stringify(o));
+  // la stessa superficie a scale diverse: da 3000 km a 10 m di larghezza
+  const rett = (lon, lat, largM) => { const dv = largM / 2 / (Math.PI * T.raggioM), du = largM / (2 * Math.PI * T.raggioM * Math.cos((lat * Math.PI) / 180)), u = (lon + 180) / 360, v = (90 - lat) / 180; return [u - du / 2, v - dv / 2, u + du / 2, v + dv / 2]; };
+  const WI = 128, HI = 64, vista = (larg, t, dove = aperto) => { const sfv = { W: WI, H: HI, rett: rett(dove.lon, dove.lat, larg) }, px = new Uint8ClampedArray(WI * HI * 4); aspettoMare(T, sfv, px, { t }); return { px, sfv, info: { ...aspettoMare.ultimo } }; };
+  const varia = (px) => { let s = 0, s2 = 0, m = 0; for (let k = 0; k < WI * HI; k++) { const v = px[k * 4] + px[k * 4 + 1] + px[k * 4 + 2]; s += v; s2 += v * v; m++; } return Math.sqrt(Math.max(0, s2 / m - (s / m) ** 2)); };
+  const lontano = vista(3e6, 0), vicino = vista(300, 0), dopo = vista(300, 2), ancora = vista(300, 0);
+  assert.equal(lontano.info.onde, 0, 'da lontano nessuna onda è risolta'); assert.ok(vicino.info.onde >= 3 && vicino.info.lunghezze[0] >= 2.6 * vicino.info.scalaM, `onde risolte: ${JSON.stringify(vicino.info)}`);
+  assert.deepEqual(Array.from(vicino.px), Array.from(ancora.px), 'stesso punto e stesso istante, stessa immagine'); assert.notDeepEqual(Array.from(vicino.px), Array.from(dopo.px), 'dopo due secondi le onde si sono spostate');
+  assert.ok(varia(vicino.px) > 3, 'a 300 m le onde si vedono'); const blu = vicino.px; let b = 0, r = 0; for (let k = 0; k < WI * HI; k++) { b += blu[k * 4 + 2]; r += blu[k * 4]; } assert.ok(b > 1.5 * r, 'e il mare resta blu');
+  // le scale si raccordano: la metà centrale della vista larga 600 m, e la vista larga 300 m rimpicciolita, mostrano le stesse creste
+  const larga = vista(600, 0), lum = (px, i, j) => px[(j * WI + i) * 4] + px[(j * WI + i) * 4 + 1] + px[(j * WI + i) * 4 + 2]; let sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, m = 0;
+  for (let j = 0; j < HI / 2; j++) for (let i = 0; i < WI / 2; i++) { const A = lum(larga.px, WI / 4 + i, HI / 4 + j), B = (lum(vicino.px, 2 * i, 2 * j) + lum(vicino.px, 2 * i + 1, 2 * j) + lum(vicino.px, 2 * i, 2 * j + 1) + lum(vicino.px, 2 * i + 1, 2 * j + 1)) / 4; sa += A; sb += B; saa += A * A; sbb += B * B; sab += A * B; m++; }
+  const corr = (sab / m - (sa / m) * (sb / m)) / Math.sqrt((saa / m - (sa / m) ** 2) * (sbb / m - (sb / m) ** 2)); tra(corr, 0.35, 1.01, 'le creste viste a 600 m e a 300 m sono le stesse (correlazione)');
+  // la parte ferma si fa una volta; quella che si muove costa poco
+  const ferma = aspettoFermo(T, vicino.sfv); assert.equal(ferma, aspettoFermo(T, vicino.sfv)); const sfg = { W: 256, H: 128, rett: rett(aperto.lon, aperto.lat, 300) }, pxg = new Uint8ClampedArray(256 * 128 * 4); aspettoMare(T, sfg, pxg, { t: 0 });
+  let t0 = performance.now(); for (let q = 1; q <= 5; q++) aspettoMare(T, sfg, pxg, { t: q }); const ms = (performance.now() - t0) / 5; confronta('tempo di un fotogramma di aspettoMare su 256×128 con otto onde (ms; chiesti meno di 15)', ms, 0, 15); tra(ms, 0, 80, 'tempo di un fotogramma (ms)');
+  // sul pianeta intero: mari di colori diversi (blu profondo, turchese dove il calcare precipita, chiaro sul ghiaccio)
+  const tutto = new Uint8ClampedArray(se.W * se.H * 4); coloraMare(T, se, tutto); const colori = new Set(); for (let k = 0; k < se.W * se.H; k++) if (tutto[k * 4 + 3]) colori.add((tutto[k * 4] >> 4) * 256 + (tutto[k * 4 + 1] >> 4) * 16 + (tutto[k * 4 + 2] >> 4)); assert.ok(colori.size >= 12, `tinte diverse del mare: ${colori.size}`);
+  console.log(`      onde: in media ${n3(hMedia / n)} m (massimo ${n3(hMax)} m con ${n3(uMax)} m/s); nel punto al largo ${n3(o.H)} m ogni ${n3(o.T)} s col vento a ${n3(o.U)} m/s su ${n3(o.tratto / 1000)} km di mare libero, mare lungo ${n3(o.Hl)} m ogni ${n3(o.Tl)} s`);
+  console.log(`      vista larga 300 m (${n3(vicino.info.scalaM)} m per punto): ${vicino.info.onde} onde disegnate, lunghe da ${n3(vicino.info.lunghezze[0])} a ${n3(vicino.info.lunghezze[1])} m, periodo fino a ${n3(vicino.info.periodo)} s; correlazione tra le scale ${n3(corr)}; un fotogramma 256×128: ${n3(ms)} ms; tinte del mare sul pianeta: ${colori.size}`);
+});
+
+prova('le molecole in tre dimensioni: geometria vera dell\'acqua, gli stessi conteggi del campione, i solidi coi loro reticoli; e i nuclei (il potassio-40 decade)', () => {
+  const dove = { ...aperto, profondita: 2, latoM: 4e-9 }, s = scenaMolecolare(T, dove), c = campioneAcqua(T, dove), pos = s.atomi.pos, N = s.atomi.elemento.length;
+  assert.equal(pos.length, 3 * N); assert.equal(s.atomi.raggio.length, N); assert.deepEqual(s.scatola, [4, 4, 4]); assert.equal(JSON.stringify(Array.from(scenaMolecolare(T, dove).atomi.pos.slice(0, 600))), JSON.stringify(Array.from(pos.slice(0, 600))), 'deterministica');
+  const acqua = s.parti.find((p) => p.nome === 'acqua'); let n = 0, fuori = 0;
+  for (let q = acqua.da; q < acqua.a; q += 3) { assert.equal(s.atomi.elemento[q], 8); assert.equal(s.atomi.elemento[q + 1], 1); const v1 = [0, 1, 2].map((z) => pos[(q + 1) * 3 + z] - pos[q * 3 + z]), v2 = [0, 1, 2].map((z) => pos[(q + 2) * 3 + z] - pos[q * 3 + z]), l1 = Math.hypot(...v1), l2 = Math.hypot(...v2), ang = (Math.acos((v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (l1 * l2)) * 180) / Math.PI; if (Math.abs(l1 - 0.09572) > 2e-4 || Math.abs(l2 - 0.09572) > 2e-4 || Math.abs(ang - 104.5) > 0.2) fuori++; n++; }
+  assert.equal(fuori, 0, 'ogni molecola d\'acqua: O–H 0,9572 Å e 104,5°'); tra(n / c.acquaNelCampione, 0.9, 1.02, 'molecole d\'acqua rispetto al campione (gli ioni ne prendono il posto)');
+  for (const f of ['Na+', 'Cl-']) { assert.equal(s.conteggi[f], Math.round(c.contati[f]), `${f}: gli stessi del campione`); const p = s.parti.find((x) => x.nome === f); assert.equal(p.a - p.da, s.conteggi[f]); assert.equal(s.atomi.elemento[p.da], f === 'Na+' ? 11 : 17); }
+  assert.ok(s.legami.length >= 4 * n && s.legamiH.length > 2 * n, 'due legami O–H per molecola, e legami a idrogeno'); let dH = 0; for (let x = 0; x < s.legamiH.length; x += 2) { let d = [0, 1, 2].map((z) => pos[s.legamiH[x + 1] * 3 + z] - pos[s.legamiH[x] * 3 + z]); d = d.map((v) => v - 4 * Math.round(v / 4)); dH += Math.hypot(...d); } confronta('distanza media H···O nei legami a idrogeno (nm; misurata 0,18-0,20)', dH / (s.legamiH.length / 2), 0.17, 0.21); tra(dH / (s.legamiH.length / 2), 0.15, 0.3, 'H···O (nm)');
+  // l'agitazione: l'acqua diffonde di 2,3·10⁻⁹ m²/s a 25 °C (meno al freddo), il sodio meno
+  tra(s.agitazione.diffusione.acqua, 0.0008, 0.0035, 'diffusione dell\'acqua (nm²/ps; 0,0023 a 25 °C)'); assert.ok(s.agitazione.diffusione['Na+'] < s.agitazione.diffusione.acqua && s.agitazione.legameIdrogeno.vitaPs > 0.5 && s.agitazione.velocitaTermica.acqua > 500);
+  // i solidi, se li si chiede (o se lì ce n'è uno): il salgemma alterna sodio e cloro a 2,82 Å
+  const sale = scenaMolecolare(T, { ...dove, solido: 'salgemma' }), ps = sale.parti.find((p) => p.nome.startsWith('solido')); assert.ok(ps && ps.a - ps.da > 200); const q0 = ps.da; tra(Math.hypot(sale.atomi.pos[(q0 + 1) * 3] - sale.atomi.pos[q0 * 3], sale.atomi.pos[(q0 + 1) * 3 + 1] - sale.atomi.pos[q0 * 3 + 1], sale.atomi.pos[(q0 + 1) * 3 + 2] - sale.atomi.pos[q0 * 3 + 2]), 0.28, 0.284, 'passo Na–Cl (nm)'); assert.notEqual(sale.atomi.elemento[q0], sale.atomi.elemento[q0 + 1]);
+  for (const q of ['calcite', 'ghiaccio', 'argilla']) { const x = scenaMolecolare(T, { ...dove, solido: q }); assert.ok(x.parti[0].nome === `solido: ${q}` && x.parti[0].a > 100 && x.conteggi.acqua < s.conteggi.acqua); }
+  const sup = scenaMolecolare(T, { ...aperto, profondita: 1e-9, latoM: 3e-9 }); let zMax = 0; const pa = sup.parti.find((p) => p.nome === 'acqua'); for (let q = pa.da; q < pa.a; q += 3) zMax = Math.max(zMax, sup.atomi.pos[q * 3 + 2]); tra(zMax, 1.5, 2.3, 'la superficie dell\'acqua dentro il cubetto (nm dal basso)');
+  assert.ok(scenaMolecolare(T, { lon: 0, lat: 0, latoM: 4e-9, acqua: false }).asciutto);
+  // i nuclei: l'idrogeno pesante, l'ossigeno-18, e il potassio-40 che decade
+  const nu = c.nuclei; tra(nu.isotopi['H-2'].perM3 / nu.isotopi['H-1'].perM3, 1.4e-4, 1.7e-4, 'deuterio'); const perKg = nu.decadimenti['K-40'].perM3alSecondo / c.densita, attesi = c.ioni['K+'].moliPerKg * 6.022e23 * 1.17e-4 * Math.LN2 / (1.248e9 * 3.156e7); tra(perKg / attesi, 0.9, 1.1, 'decadimenti del potassio-40 dalla quantità di potassio');
+  confronta('decadimenti del potassio-40 per kg d\'acqua di mare al secondo (misurati ~12)', perKg, 8, 16);
+  console.log(`      ${s.descrizione} ${N} atomi; H···O ${n3(dH / (s.legamiH.length / 2))} nm; l'acqua diffonde ${n3(s.agitazione.diffusione.acqua * 1000)}·10⁻³ nm²/ps, un legame a idrogeno dura ${n3(s.agitazione.legameIdrogeno.vitaPs)} ps; potassio-40: ${n3(perKg)} decadimenti al secondo per kg`);
 });
 
 // ---------- altri pianeti: lo stesso rilievo, un'altra aria o un'altra acqua

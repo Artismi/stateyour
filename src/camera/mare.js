@@ -85,6 +85,7 @@
 import { COSTANTI, R_GAS, ANNO, MSOLE, stella as stellaDi } from './leggi.js';
 import { MOLECOLE, atmosfera, pressioneVapore, pressioneCO2Urey, rocceDelPianeta, rilascio, vulcani, co2DelCiclo, ROCCE, MINERALI_ROCCIA } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
+import { maree as mareaDi } from './lune.js';
 export { rocceDelPianeta, rilascio, MINERALI_ROCCIA };
 import { sorgente, numero } from './eventi.js';
 
@@ -576,6 +577,21 @@ export function mare(P, sf, cl, se = null, caso = null) {
   out.laghi = laghi;
   // --- LE SORGENTI CALDE DEL FONDO: dove la crosta è appena nata (le dorsali) e sui vulcani sommersi
   out.sorgentiCalde = sorgentiCalde(P, s, out, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livello, g, pAria });
+  // --- IL CALORE CHE IL MARE PORTA (W/m², sulla griglia del clima, come cl.meteo.trasportoCalore: positivo dove arriva).
+  // A regime, in ogni cella, ciò che la corrente e il fondo portano pareggia ciò che la superficie scambia con l'aria:
+  // dove il mare è tenuto più caldo di quanto il clima locale lo vorrebbe (una corrente che viene dai tropici) cede
+  // calore all'aria: λ·(T − T del clima), con λ lo stesso scambio usato per il campo di temperatura.
+  { const cal = new Float32Array(cl.W * cl.H), scalda = new Float32Array(N), kk = W / cl.W; let costa = 0, nCosta = 0, massimo = 0;
+    for (let k = 0; k < N; k++) if (co.mare[k]) { scalda[k] = Tm[k] - Math.max(out.congela, Tclima[k]); massimo = Math.max(massimo, Math.abs(scalda[k])); }
+    for (let j = 0; j < cl.H; j++) for (let i = 0; i < cl.W; i++) { let t = 0, n = 0; for (let b = 0; b < kk; b++) for (let a = 0; a < kk; a++) { const q = (j * kk + b) * W + i * kk + a; if (co.mare[q]) { t += scalda[q]; n++; } } cal[j * cl.W + i] = n ? (lambda * t) / (kk * kk) : 0; }
+    for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (co.mare[k] && (!co.mare[k - W] || !co.mare[k + W] || !co.mare[j * W + ((i + 1) % W)] || !co.mare[j * W + ((i + W - 1) % W)])) { costa += Math.abs(scalda[k]); nCosta++; } }
+    out.caloreDalMare = cal; out.scaldaDi = scalda; out.scambioColCielo = lambda; out.calore = { suCosteK: nCosta ? costa / nCosta : 0, massimoK: massimo, massimoWm2: lambda * massimo };
+    // l'albedo del mare: l'acqua aperta rimanda il 7% della luce, il ghiaccio marino il 60% (misurati)
+    out.albedo = Float32Array.from(ghiaccio, (gg, k) => (bagnato[k] > 0 ? 0.07 + 0.53 * Math.min(1, gg) : 0)); }
+  // --- LE MAREE, LE STAGIONI, LE PROVINCE (più sotto)
+  out.maree = mareeDelMare(P, out, { W, H, co, fondo, righe, tipo, FW, FH, areaF, s, evap, piove });
+  out.stagioni = stagioniDelMare(P, cl, m, out, { W, H, co, fondo, righe, g, Tclima, suGriglia, rhoAria, Tm, Tfondo });
+  out.province = provinceDelMare(out, { W, H, co, righe, fondo, dolce, lonDi, latDi });
   out.prebiotica = perLaChimicaPrebiotica(out, s);
   out.storia = racconta(out, bs);
   return out;
@@ -602,7 +618,7 @@ function correnti({ W, H, R, omega, bagnato, fondo, tx, ty, g, salto, areaMare }
   const aE = new Float64Array(H), aW = new Float64Array(H), aN = new Float64Array(H), aS = new Float64Array(H), aP = new Float64Array(H);
   for (let j = 1; j < H - 1; j++) { const beta = (2 * omega * c[j]) / R, dx = R * c[j] * dl, r = Math.max(beta * dx, 1e-7), cn = Math.cos(fi(j) + df / 2), cs = Math.cos(fi(j) - df / 2);
     aE[j] = r / (dx * dx) + beta / (2 * dx); aW[j] = r / (dx * dx) - beta / (2 * dx); aN[j] = (r * cn) / (c[j] * dy * dy); aS[j] = (r * cs) / (c[j] * dy * dy); aP[j] = (2 * r) / (dx * dx) + (r * (cn + cs)) / (c[j] * dy * dy); }
-  for (let giro = 0; giro < 220; giro++) for (let jj = 1; jj < H - 1; jj++) { const j = giro & 1 ? H - 1 - jj : jj; if (j < 3 || j > H - 4) continue; for (let i = W - 1; i >= 0; i--) { const k = j * W + i; if (!mare[k]) continue;
+  for (let giro = 0; giro < 220; giro++) for (let jj = 1; jj < H - 1; jj++) { const j = giro & 1 ? H - 1 - jj : jj; if (c[j] < 0.26) continue; /* (oltre i 75° le celle sono troppo strette: lì i giri non si calcolano) */ for (let i = W - 1; i >= 0; i--) { const k = j * W + i; if (!mare[k]) continue;
     const e = j * W + ((i + 1) % W), w = j * W + ((i + W - 1) % W); psi[k] = (aE[j] * psi[e] + aW[j] * psi[w] + aN[j] * psi[k - W] + aS[j] * psi[k + W] - F[k]) / aP[j]; } }
   // lo spessore mosso dal vento, dalla discesa di Ekman tipica alle medie latitudini
   let w2 = 0, n2 = 0; for (let j = 1; j < H - 1; j++) { const la = Math.abs(fi(j)); if (la < 0.26 || la > 0.87) continue; const f = 2 * omega * Math.sin(fi(j)); for (let i = 0; i < W; i++) { const k = j * W + i; if (mare[k]) { w2 += (F[k] * rho / (rho * f)) ** 2; n2++; } } }
@@ -699,6 +715,103 @@ function sorgentiCalde(P, s, st, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livel
         H4SiO4: K.sali.quarzo, 'H2S(aq)': Math.min(0.012, DATI.solfuroSaturo * 0.2 + DATI.solfatoRidotto), 'Fe2+': Fe },
       alcalina: olivina > 0.02, portataKgAnno: mant.caldo / Math.max(1, scelte.length) }; });
 }
+// LE MAREE. Ogni luna (e la stella) alza sul mare un rigonfiamento: la marea di equilibrio di lune.js, col suo periodo.
+// Il mare vero risponde di più o di meno secondo il bacino: un'onda lunga attraversa un mare largo L e profondo h in
+// T_b = 2L/√(g·h); se quel tempo è vicino al periodo della marea il bacino risuona: ampiezza × 1/|1 − (T_b/T)²|, fino a
+// 5 volte (l'attrito: il fattore di merito del mare terrestre). Sui fondali bassi l'onda cresce (legge di Green,
+// h^−¼). La corrente di marea è quella di un'onda lunga, u = (a/2)·√(g/h): debole al largo, forte sul basso fondale.
+// L'ATTRITO sul fondo (ρ·C·|u|³, C = 0,0025 misurato) consuma l'energia della marea e frena la rotazione del
+// pianeta: dω/dt = −potenza/(0,33·M·R²·(ω − n)). LA ZONA TRA LE MAREE: lungo le coste l'acqua si ritira di
+// dislivello/pendenza; dove evapora più di quanto piove restano pozze che si concentrano a ogni ciclo.
+function mareeDelMare(P, st, { W, H, co, fondo, righe, tipo, FW, FH, areaF, s, evap, piove }) {
+  const N = W * H, g = st.gravita, omega = (2 * Math.PI) / (P.giorno || 86400), corpi = [];
+  for (const L of P.lune || []) { if (!(L.massaKg > 0 && L.aM > 0)) continue; const mr = mareaDi(P, L); if (mr.altezza > 1e-4 && isFinite(mr.periodo)) corpi.push({ corpo: `luna ${L.nome ?? L.id ?? corpi.length + 1}`, altezza: mr.altezza, periodo: mr.periodo, n: ((L.retrograda ? -2 : 2) * Math.PI) / (2 * mr.periodo) }); }
+  if (P.Mstella > 0 && P.aM > 0) { const n = (2 * Math.PI) / (P.anno || ANNO), rel = Math.abs(omega - n), alt = 1.5 * (P.Mstella / P.massaKg) * (P.raggioM / P.aM) ** 3 * P.raggioM; if (rel > 1e-12 && !P.bloccato) corpi.push({ corpo: 'stella', altezza: alt, periodo: Math.PI / rel, n }); else if (alt > 0) corpi.push({ corpo: 'stella (marea ferma: il pianeta le mostra sempre la stessa faccia)', altezza: alt, periodo: Infinity, n }); }
+  const amp = new Float32Array(N), vel = new Float32Array(N), mobili = corpi.filter((c) => isFinite(c.periodo)); let potenza = 0, aMax = 0, aSomma = 0, aArea = 0;
+  for (let j = 0; j < H; j++) { let i0 = -1; for (let i = 0; i < W; i++) if (!co.mare[j * W + i]) { i0 = i; break; }
+    // i tratti di mare lungo il parallelo: la loro larghezza e la loro profondità media
+    const tratti = []; if (i0 < 0) tratti.push([0, W, true]); else { let da = null; for (let n = 1; n <= W; n++) { const i = (i0 + n) % W, mm = co.mare[j * W + i]; if (mm && da === null) da = n; if (!mm && da !== null) { tratti.push([da, n, false]); da = null; } } }
+    for (const [da, a, anello] of tratti) { let hm = 0; for (let q = da; q < a; q++) hm += fondo[j * W + (((i0 < 0 ? 0 : i0) + q) % W)] || 1; hm /= a - da; const Lb = (a - da) * righe.dx[j], Tb = (anello ? 1 : 2) * Lb / Math.sqrt(g * Math.max(hm, 1));
+      for (let q = da; q < a; q++) { const k = j * W + (((i0 < 0 ? 0 : i0) + q) % W), h = Math.max(fondo[k], 2); let x = 0; for (const c of mobili) x += c.altezza * Math.cos((90 - ((j + 0.5) * 180) / H) * RAD) ** 2 * Math.min(5, 1 / Math.max(0.2, Math.abs(1 - (Tb / c.periodo) ** 2)));
+        x *= Math.min(3, Math.pow(Math.max(hm, 50) / Math.max(h, 5), 0.25)); x = Math.min(x, 0.8 * h); amp[k] = x; vel[k] = 0.5 * x * Math.sqrt(g / h); const A = righe.A[j]; potenza += 1025 * 0.0025 * vel[k] ** 3 * (4 / (3 * Math.PI)) * A; aMax = Math.max(aMax, x); aSomma += x * A; aArea += A; } } }
+  riempiTerra(amp, co.mare, W, H); riempiTerra(vel, co.mare, W, H);
+  // la zona tra le maree, sulla carta fine: per ogni cella di costa, dislivello / pendenza della riva
+  let areaZona = 0, lungoCosta = 0, pozze = 0, areaPozze = 0; const R = st.raggioM, lato = (2 * Math.PI * R) / FW;
+  if (s.alt) for (let j = 1; j < FH - 1; j++) for (let i = 0; i < FW; i++) { const k = j * FW + i; if (tipo[k] !== 1) continue; let terra = -1; for (const q of [k - FW, k + FW, j * FW + ((i + 1) % FW), j * FW + ((i + FW - 1) % FW)]) if (tipo[q] === 0) terra = q; if (terra < 0) continue;
+    const dx = lato * Math.max(0.1, Math.sin(((j + 0.5) / FH) * Math.PI)), pend = Math.max(1e-4, (s.alt[terra] - s.alt[k]) / dx), x = ((i + 0.5) / FW) * W - 0.5, y = ((j + 0.5) / FH) * H - 0.5, a = bil(amp, W, H, x, y), larg = Math.min(a / pend, 0.5 * dx);
+    areaZona += larg * dx; lungoCosta += dx; if (bil(evap, W, H, x, y) > bil(piove, W, H, x, y)) { pozze++; areaPozze += larg * dx; } }
+  const perMobile = mobili.length ? mobili.reduce((a, c) => (c.altezza > a.altezza ? c : a)) : null, I = 0.33 * P.massaKg * R * R;
+  const frena = perMobile ? potenza / (I * Math.abs(omega - perMobile.n)) : 0; // (rad/s²)
+  return { corpi, ampiezza: amp, corrente: vel, periodo: perMobile ? perMobile.periodo : Infinity, equilibrio: mobili.reduce((a, c) => a + c.altezza, 0), ampiezzaMedia: aArea ? aSomma / aArea : 0, ampiezzaMassima: aMax,
+    attrito: { potenzaW: potenza, frenaRadS2: frena, giornoPiuLungoMsAlSecolo: omega > 0 ? ((2 * Math.PI) / (omega * omega)) * frena * 100 * ANNO * 1000 : 0 },
+    zonaTraLeMaree: { areaM2: areaZona, larghezzaMediaM: lungoCosta ? areaZona / lungoCosta : 0, costaM: lungoCosta, doveEvapora: { areaM2: areaPozze, tratti: pozze } } };
+}
+// LE STAGIONI. Il clima dà la temperatura della superficie in quattro parti dell'anno (cl.stagioni) e il tempo i venti
+// di ognuna (cl.meteo.stagioni). Per ogni stagione: la temperatura del mare (quella media che le correnti hanno fatto,
+// più lo scarto della stagione), il ghiaccio (dove quella temperatura sta sotto il punto di gelo dell'acqua salata), le
+// onde di quel vento, la corrente (i grandi giri non fanno in tempo a cambiare: cambia la deriva di Ekman, che segue il
+// vento in giorni: è lei che si rovescia coi monsoni), e lo strato rimescolato: il vento lo scava in proporzione a
+// U^1,5, e d'inverno l'acqua di superficie, raffreddandosi, affonda finché trova acqua della sua temperatura
+// (z = −h·ln((T_inverno − T_fondo)/(T_media − T_fondo)), sul profilo che il termoclino dà).
+function stagioniDelMare(P, cl, m, st, { W, H, co, fondo, righe, g, Tclima, suGriglia, rhoAria, Tm, Tfondo }) {
+  if (!Array.isArray(cl.stagioni) || cl.stagioni.length < 2) return null; const N = W * H, omega = (2 * Math.PI) / (P.giorno || 86400), rE = DATI.attritoEkman, df = Math.PI / H;
+  const ekman = (u, v, k, j) => { const U = Math.hypot(u, v), tx = rhoAria * DATI.cd * U * u, ty = rhoAria * DATI.cd * U * v, f = 2 * omega * Math.sin(Math.PI / 2 - (j + 0.5) * df), d = 1025 * (rE * rE + f * f) * DATI.strato; return [(rE * tx + f * ty) / d, (rE * ty - f * tx) / d]; };
+  return cl.stagioni.map((Ts, q) => { const Tq = suGriglia(Ts), ms = m && m.stagioni ? m.stagioni[q] : null, vu = ms ? suGriglia(ms.u) : st.vento.u, vv = ms ? suGriglia(ms.v) : st.vento.v;
+    const T = new Float32Array(N), gh = new Float32Array(N), cu = new Float32Array(N), cv = new Float32Array(N), strato = new Float32Array(N);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!co.mare[k]) continue; const scarto = Tq[k] - Tclima[k]; T[k] = Math.max(st.congela, Tm[k] + scarto); gh[k] = limita((st.congela + 1 - (Tm[k] + scarto)) / 2, 0, 1);
+      const [ea, eb] = ekman(st.vento.u[k], st.vento.v[k], k, j), [sa, sb] = ekman(vu[k], vv[k], k, j); cu[k] = st.corrente.u[k] + (gh[k] > 0.8 ? -ea : sa - ea); cv[k] = st.corrente.v[k] + (gh[k] > 0.8 ? -eb : sb - eb);
+      const U = Math.hypot(vu[k], vv[k]), fredda = Tm[k] - Tfondo > 0.5 && scarto < 0 ? -st.termoclino * Math.log(Math.max(0.02, (Tm[k] + scarto - Tfondo) / (Tm[k] - Tfondo))) : 0; strato[k] = Math.min(Math.max(fondo[k], 1), DATI.strato * Math.pow(Math.max(U, 0.5) / 5, 1.5) + Math.max(0, fredda)); }
+    const onde = campoOnde({ W, H, R: st.raggioM, vu, vv, mare: co.mare, fondo, g, righe });
+    for (const x of [T, gh, cu, cv, strato]) riempiTerra(x, co.mare, W, H);
+    return { temperatura: T, ghiaccio: gh, vento: { u: vu, v: vv }, corrente: { u: cu, v: cv }, onde, strato }; });
+}
+// IL MARE A UN MOMENTO DELL'ANNO E DELLA MAREA. «fase»: 0…1 lungo l'anno (le quattro stagioni del clima, nell'ordine
+// in cui il clima le dà, interpolate); «marea»: 0…1 lungo un ciclo di marea. → uno stato come quello di mare(), con i
+// campi di quel momento al posto delle medie dell'anno (temperatura, ghiaccio, vento, onde, corrente, strato), e in più
+// livello (m: quanto il mare è sopra o sotto il suo livello medio, punto per punto) e correnteDiMarea { u } (m/s, lungo
+// i paralleli). Tutte le funzioni (coloreMare, aspettoMare, campioneAcqua, luogo…) lavorano anche su questo stato.
+export function mareAl(stato, { fase = 0, marea = null } = {}) {
+  if (!stato || !stato.esiste) return stato; const o = { ...stato, fase, marea }, S = stato.stagioni;
+  if (S && S.length) { const x = (((fase % 1) + 1) % 1) * S.length - 0.5, a = ((Math.floor(x) % S.length) + S.length) % S.length, b = (a + 1) % S.length, w = x - Math.floor(x), mix = (p, q) => Float32Array.from(p, (v, k) => v * (1 - w) + q[k] * w);
+    o.temperatura = mix(S[a].temperatura, S[b].temperatura); o.ghiaccio = mix(S[a].ghiaccio, S[b].ghiaccio); o.strato = mix(S[a].strato, S[b].strato);
+    o.vento = { u: mix(S[a].vento.u, S[b].vento.u), v: mix(S[a].vento.v, S[b].vento.v) }; o.corrente = { u: mix(S[a].corrente.u, S[b].corrente.u), v: mix(S[a].corrente.v, S[b].corrente.v) };
+    o.onde = { altezza: mix(S[a].onde.altezza, S[b].onde.altezza), periodo: mix(S[a].onde.periodo, S[b].onde.periodo), tratto: S[a].onde.tratto, lungo: { altezza: mix(S[a].onde.lungo.altezza, S[b].onde.lungo.altezza), periodo: mix(S[a].onde.lungo.periodo, S[b].onde.lungo.periodo), u: S[w < 0.5 ? a : b].onde.lungo.u, v: S[w < 0.5 ? a : b].onde.lungo.v } }; }
+  if (marea != null && stato.maree) { const { W, H } = stato, liv = new Float32Array(W * H), cm = new Float32Array(W * H); // (il rigonfiamento segue l'astro: due creste lungo ogni parallelo)
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, ph = 2 * Math.PI * marea - (4 * Math.PI * (i + 0.5)) / W; liv[k] = 0.5 * stato.maree.ampiezza[k] * Math.cos(ph); cm[k] = stato.maree.corrente[k] * Math.sin(ph); } o.livello = liv; o.correnteDiMarea = { u: cm }; }
+  return o;
+}
+// LE PROVINCE DEL MARE: zone con un carattere proprio, trovate nei campi (non scritte). Ogni cella prende la prima
+// regola che la riguarda, in quest'ordine; di ogni provincia: quante celle, quanta area, dove sta la sua macchia più
+// grande, e i numeri che la fanno essere così.
+function provinceDelMare(st, { W, H, co, righe, fondo, dolce, lonDi, latDi }) {
+  const N = W * H, vel = Float32Array.from(st.corrente.u, (u, k) => Math.hypot(u, st.corrente.v[k])), ord = Array.from(vel).filter((_, k) => co.mare[k]).sort((a, b) => a - b), vForte = ord[Math.floor(ord.length * 0.97)] || 1, wSu = 20 / ANNO, So = st.salinitaMedia, anno = ANNO;
+  const baciniQ = new Int16Array(N).fill(-1); if (st.fine.bacino) { const F = st.fine, kx = F.W / W; for (let k = 0; k < F.W * F.H; k++) if (F.bacino[k] >= 0) baciniQ[Math.floor(Math.floor(k / F.W) / kx) * W + Math.floor((k % F.W) / kx)] = F.bacino[k]; }
+  const regole = [
+    ['mare gelato', (k) => st.ghiaccio[k] > 0.6, (k) => `coperto di ghiaccio per ${Math.round(100 * st.ghiaccio[k])}% dell'anno (spesso ${st.spessoreGhiaccio[k].toFixed(1)} m): dentro il ghiaccio sacche di salamoia, sotto acqua al punto di gelo che il sale espulso appesantisce`],
+    ['mare chiuso arrivato al sale', (k) => baciniQ[k] >= 0 && st.bacini[baciniQ[k]].saturo, (k) => `evapora più di quanto lo stretto (${(st.bacini[baciniQ[k]].larghezzaStrettoM / 1000).toFixed(0)} km × ${st.bacini[baciniQ[k]].sogliaM.toFixed(0)} m) lasci entrare: ${st.bacini[baciniQ[k]].salinita.toFixed(0)} g/kg, il sale si deposita`],
+    ['mare quasi chiuso, più salato', (k) => baciniQ[k] >= 0 && st.bacini[baciniQ[k]].salinita > 1.08 * So, (k) => `bacino dove evapora più acqua di quanta ne arrivi: ${st.bacini[baciniQ[k]].salinita.toFixed(0)} g/kg contro ${So.toFixed(0)} del mare aperto`],
+    ['mare quasi chiuso, salmastro', (k) => baciniQ[k] >= 0 && st.bacini[baciniQ[k]].salinita < 0.92 * So, (k) => `bacino dove piove e arrivano fiumi più di quanto evapori: ${st.bacini[baciniQ[k]].salinita.toFixed(0)} g/kg`],
+    ['estuario e pennacchio di fiume', (k) => st.torbidita[k] > 2e-5 || dolce[k] > 300, (k) => `acqua dolce e fango di fiume: ${(1000 * st.torbidita[k]).toFixed(2)} g/m³ di argilla sospesa, ${st.salinita[k].toFixed(0)} g/kg; l'argilla coagula incontrando il sale`],
+    ['bordo del ghiaccio', (k) => st.ghiaccio[k] > 0.08, (k) => `ghiaccio di stagione (${Math.round(100 * st.ghiaccio[k])}% dell'anno): gela e si scioglie, d'inverno lascia sale nell'acqua`],
+    ['bassofondo con forti maree', (k) => fondo[k] < 200 && st.maree && st.maree.ampiezza[k] > 2 && st.maree.ampiezza[k] > 3 * st.maree.ampiezzaMedia, (k) => `marea di ${st.maree.ampiezza[k].toFixed(1)} m su ${fondo[k].toFixed(0)} m di fondo: correnti di ${st.maree.corrente[k].toFixed(1)} m/s che rimescolano tutto`],
+    ['mare caldo e basso che deposita calcare', (k) => fondo[k] < 200 && st.saturazione.calcite[k] > st.soglia, (k) => `acqua ${(st.saturazione.calcite[k] / st.soglia).toFixed(2)} volte oltre la soglia del calcare, su ${fondo[k].toFixed(0)} m di fondo: fanghi bianchi di carbonato`],
+    ['risalita di acqua profonda', (k) => st.risalita[k] > wSu, (k) => `l'acqua di superficie diverge e ne sale da sotto ${(st.risalita[k] * anno).toFixed(0)} m l'anno: più fredda di ${Math.max(0, -st.scaldaDi[k]).toFixed(1)} K del clima di lì`],
+    ['corrente forte', (k) => vel[k] > vForte, (k) => `${(100 * vel[k]).toFixed(0)} cm/s: porta ${st.scaldaDi[k] > 0 ? 'calore' : 'freddo'} (${st.scaldaDi[k].toFixed(1)} K rispetto al clima di lì)`],
+    ['acque calde lattiginose', (k) => st.saturazione.calcite[k] > 1.05 * st.soglia, (k) => `mare aperto caldo (${(st.temperatura[k] - 273.15).toFixed(0)} °C) dove il calcare nasce in cristalli minuti: acqua turchese`],
+    ['strati che non si mescolano', (k) => st.salinita[k] < 0.93 * st.profondo.salinita && fondo[k] > 300, (k) => `acqua di superficie più dolce (${st.salinita[k].toFixed(1)} g/kg) sopra acqua salata (${st.profondo.salinita.toFixed(1)}): troppo leggera per affondare`],
+    ['mare che affonda', (k) => densita(st.temperatura[k], st.salinita[k]) > st.profondo.densita - 0.15, (k) => `l'acqua più densa del pianeta (${(st.temperatura[k] - 273.15).toFixed(1)} °C, ${st.salinita[k].toFixed(1)} g/kg): affonda e riempie il fondo`],
+    ['centro di un grande giro', (k) => st.risalita[k] < -8 / ANNO && fondo[k] > 1000, (k) => `l'acqua converge e scende (${(st.risalita[k] * anno).toFixed(0)} m l'anno): limpida, blu, povera di tutto`],
+    ['mare aperto', () => true, (k) => `${(st.temperatura[k] - 273.15).toFixed(0)} °C, ${st.salinita[k].toFixed(1)} g/kg, limpido`]];
+  const prov = new Uint8Array(N).fill(255), lista = regole.map(([nome]) => ({ nome, celle: 0, areaM2: 0, perche: '', dove: null, _k: -1, _peso: -1 }));
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!co.mare[k]) continue; for (let r = 0; r < regole.length; r++) if (regole[r][1](k)) { prov[k] = r; lista[r].celle++; lista[r].areaM2 += righe.A[j]; break; } }
+  // l'esempio di ogni provincia: la cella con più vicine della stessa provincia (il cuore della macchia più grande)
+  for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const k = j * W + i, r = prov[k]; if (r === 255) continue; let p = 0; for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const jj = j + dj; if (jj >= 0 && jj < H && prov[jj * W + ((i + di + W) % W)] === r) p++; } if (p > lista[r]._peso) { lista[r]._peso = p; lista[r]._k = k; } }
+  const out = []; lista.forEach((x, r) => { if (!x.celle) return; const k = x._k >= 0 ? x._k : prov.indexOf(r); out.push({ indice: r, nome: x.nome, celle: x.celle, areaM2: x.areaM2, parte: x.areaM2 / st.areaMare, dove: { lon: lonDi(k % W, W), lat: latDi(Math.floor(k / W), H) }, perche: regole[r][2](k) }); });
+  // (in più, fuori dalla griglia: i camini caldi e i laghi)
+  if (st.sorgentiCalde.length) out.push({ indice: -1, nome: 'campi di camini caldi', celle: st.sorgentiCalde.length, areaM2: 0, parte: 0, dove: { lon: st.sorgentiCalde[0].lon, lat: st.sorgentiCalde[0].lat }, perche: `sul fondo dove la crosta è giovane: acqua a ${Math.round(Math.max(...st.sorgentiCalde.map((v) => v.T)) - 273)} °C, acida, con ferro e solfuro che precipitano in fumo nero` });
+  const salati = st.laghi.filter((l) => l.tipo !== 'aperto'); if (salati.length) out.push({ indice: -2, nome: 'laghi chiusi e piane di sale', celle: salati.length, areaM2: salati.reduce((a, l) => a + l.areaM2, 0), parte: 0, dove: { lon: salati[0].lon, lat: salati[0].lat }, perche: `conche senza emissario: fino a ${Math.max(...salati.map((l) => l.salinita)).toFixed(0)} g/kg, pH ${Math.max(...salati.map((l) => l.pH)).toFixed(1)}` });
+  st.provincia = prov; return out;
+}
 // CIÒ CHE SERVIREBBE ALLA CHIMICA PREBIOTICA (qui niente vita: solo dove ci sono gradienti, energia, minerali che
 // catalizzano). L'energia chimica di una sorgente: l'idrogeno che la roccia cede all'acqua (dato: fino a ~10 mmol/kg dove
 // c'è olivina che si idrata, ~0,1 altrove) contro l'anidride carbonica del mare, CO2 + 4H2 → CH4 + 2H2O, dalla tabella.
@@ -708,7 +821,7 @@ function perLaChimicaPrebiotica(st, s) {
     return { id: v.id, lon: v.lon, lat: v.lat, profonditaM: v.profonditaM, saltoDiTemperatura: v.T - (st.profondo?.T ?? T), saltoDiPH: st.pH - v.pH, energiaKJmol: -(dG0 + R_GAS * T * Math.log(Q)) / 1000,
       minerali: ['solfuro di ferro', ...(v.alcalina ? ['olivina che si idrata (serpentino, magnetite)'] : []), 'argille'], alcalina: v.alcalina }; });
   const pozze = (st.laghi || []).filter((l) => l.tipo !== 'aperto').map((l) => ({ id: l.id, lon: l.lon, lat: l.lat, concentrato: l.concentrato, salinita: l.salinita, pH: l.pH, T: l.T }));
-  return { camini, pozzeCheEvaporano: pozze, foci: (st.foci || []).slice(0, 12).map((f) => ({ lon: f.lon, lat: f.lat, portata: f.portata })),
+  return { camini, pozzeCheEvaporano: pozze, pozzeDiMarea: st.maree ? { ...st.maree.zonaTraLeMaree.doveEvapora, ogniSecondi: st.maree.periodo, dislivelloM: st.maree.ampiezzaMedia } : null, foci: (st.foci || []).slice(0, 12).map((f) => ({ lon: f.lon, lat: f.lat, portata: f.portata })),
     gradienti: { pHmare: st.pH, anidrideCarbonica: st.gas.CO2 || 0, ferroSciolto: st.totali.Fe || 0, ossigeno: st.gas.O2 || 0 },
     nota: 'gradienti di pH e di temperatura ai camini (di più se il mare è acido e il camino alcalino), minerali catalitici (solfuri di ferro, argille), pozze che si concentrano evaporando; con ossigeno nell\'aria il ferro sciolto e l\'idrogeno non durano' };
 }
@@ -907,7 +1020,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
   // --- CHE COSA SI VEDE A QUESTA SCALA (principio della nebbia): di ogni classe il numero vero nel campione; se ne
   // disegnano al più «massimo»: un campione rappresentativo. Ciò che è troppo piccolo per distinguersi è un velo
   // (lo si conta lo stesso); ciò che è più grande del campo non c'entra.
-  const particelle = [], velo = [], fuoriScala = [], quanteDavvero = {}, visibili = [];
+  const particelle = [], velo = [], fuoriScala = [], quanteDavvero = {}, visibili = [], contati = {};
   for (const cl of classi) { const N = cl.n * V, chiave = cl.materiale; quanteDavvero[chiave] = (quanteDavvero[chiave] || 0) + N;
     if (cl.d > 0.8 * L) { if (N > 0.05) fuoriScala.push({ tipo: cl.tipo, materiale: cl.materiale, diametroM: cl.d, perM3: cl.n, perche: cl.perche }); continue; }
     if (cl.d < L / 500) { velo.push({ tipo: cl.tipo, materiale: cl.materiale, diametroM: cl.d, perM3: cl.n, quanteDavvero: N, perche: cl.perche }); continue; }
@@ -919,7 +1032,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
     for (let i = 0; i < nd; i++) { const a = `p/${q}/${i}`, d = cl.sigma ? cl.d * Math.exp(cl.sigma * c.normale(`${a}/taglia`)) : cl.d, k = (d / cl.d) ** 2;
       particelle.push({ tipo: cl.tipo, materiale: cl.materiale, diametroM: d, pos: [c(`${a}/x`), c(`${a}/y`), c(`${a}/z`)], vel: [0, 0, cade * k], D: D / (cl.sigma ? d / cl.d : 1), forma: cl.forma, colore: cl.colore, angolo: c(`${a}/giro`) * Math.PI,
         rappresenta: veri / nd, fermo: !!cl.fermo, indirizzo: a, ...(cl.carica != null ? { carica: cl.carica, guscio: cl.guscio, raggioGuscioM: cl.raggioGuscioM } : {}), ...(cl.vitaS ? { vitaS: cl.vitaS } : {}) }); }
-    cl.veri = veri; cl.disegnate = nd; });
+    cl.veri = veri; cl.disegnate = nd; contati[cl.materiale] = (contati[cl.materiale] || 0) + veri; });
   // i tempi propri di questa scala: in quanto la particella tipica attraversa il campo per agitazione termica
   let Dtip = 0, nT = 0; for (const p of particelle) if (!p.fermo) { Dtip += Math.log(p.D); nT++; } Dtip = nT ? Math.exp(Dtip / nT) : KB * T / (3 * Math.PI * mu * Math.max(L / 100, 1e-10));
   const corrente = salamoia ? { u: 0, v: 0, w: 0, velocita: 0 } : { u: qui.u || 0, v: qui.v || 0, w: qui.w || 0, velocita: Math.hypot(qui.u || 0, qui.v || 0) };
@@ -927,7 +1040,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
     corrente, tempoAttraversamento: (L * L) / (2 * Dtip), tempoCorrente: corrente.velocita > 0 ? L / corrente.velocita : Infinity,
     ioni, coppie, gas: Object.fromEntries(Object.entries(gas).map(([f, m]) => [f, { moliPerKg: m, perM3: perM3(m), nelCampione: perM3(m) * V }])), acquaNelCampione: acquaPerM3 * V, acquaPerM3,
     ioniPerMolecolaDAcqua: moliIoni / 55.51, saturazione: { ...om, 'solfuro di ferro': fumo ? fumo.omega : 0 }, soglie: soglia,
-    particelle, cristalli: particelle.filter((p) => p.tipo === 'cristallo'), bolle: particelle.filter((p) => p.tipo === 'bolla'), velo, fuoriScala, quanteDavvero,
+    particelle, cristalli: particelle.filter((p) => p.tipo === 'cristallo'), bolle: particelle.filter((p) => p.tipo === 'bolla'), velo, fuoriScala, quanteDavvero, contati, nuclei: nucleiDi(nomi, acquaPerM3, perM3, V),
     classi: classi.map((x) => ({ tipo: x.tipo, materiale: x.materiale, diametroM: x.d, perM3: x.n, perche: x.perche })), sospeso: { ...qui.sospeso }, torbidita: qui.sospeso.sabbia + qui.sospeso.limo + qui.sospeso.argilla + qui.sospeso.fiocchi,
     luogo: { foce: qui.foce, camino: qui.camino ? { id: qui.camino.id, distanzaM: qui.camino.distanzaM, parteDiFluido: qui.camino.parteDiFluido, T: qui.camino.T } : null, vulcano: qui.vulcano, ghiaccio: qui.ghiaccio, vento: qui.vento, lago: qui.lago ? qui.lago.id : null, salamoia },
     luce: stato.luce || [1, 1, 1], coloreFondale: stato.coloreContinente ? stato.coloreContinente.map((v, i) => 0.5 * (v + OTTICA.sabbia[i])) : OTTICA.sabbia, radice: c.radice, rami: c.rami || null };
@@ -935,6 +1048,19 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
   return out;
 }
 const somma = (t) => (t.Na || 0) + (t.K || 0) + (t.Mg || 0) + (t.Ca || 0) + (t.Cl || 0) + (t.S || 0);
+// I NUCLEI che ci sono lì (per chi scende sotto l'atomo): gli isotopi naturali di ogni elemento (abbondanze misurate) e,
+// per quelli instabili, quanti ne decadono: il potassio-40 (0,0117% del potassio, tempo di dimezzamento 1,248 miliardi
+// di anni: 89% β⁻ verso il calcio-40, 11% cattura elettronica verso l'argo-40) fa dell'acqua di mare terrestre una
+// sorgente di ~12 decadimenti al secondo per chilo. → { isotopo: { perM3, nelCampione } }, decadimenti: { … al secondo }
+const ISOTOPI = { H: [[1, 0.999844], [2, 1.56e-4]], O: [[16, 0.99757], [17, 3.8e-4], [18, 2.05e-3]], Na: [[23, 1]], Mg: [[24, 0.79], [25, 0.1], [26, 0.11]], S: [[32, 0.9499], [33, 0.0075], [34, 0.0425]], Cl: [[35, 0.7576], [37, 0.2424]],
+  K: [[39, 0.932581], [40, 1.17e-4], [41, 0.067302]], Ca: [[40, 0.96941], [42, 0.00647], [44, 0.02086]], C: [[12, 0.9893], [13, 0.0107]], Fe: [[54, 0.05845], [56, 0.91754], [57, 0.02119]], Si: [[28, 0.92223], [29, 0.04685], [30, 0.03092]] };
+function nucleiDi(nomi, acquaPerM3, perM3, V) {
+  const el = { H: 2 * acquaPerM3 + perM3((nomi['HCO3-'] || 0) + 4 * (nomi.H4SiO4 || 0)), O: acquaPerM3 + perM3(4 * (nomi['SO4(2-)'] || 0) + 3 * ((nomi['HCO3-'] || 0) + (nomi['CO3(2-)'] || 0)) + 4 * (nomi.H4SiO4 || 0)), Na: perM3(nomi['Na+'] || 0), Mg: perM3(nomi['Mg2+'] || 0), S: perM3(nomi['SO4(2-)'] || 0),
+    Cl: perM3(nomi['Cl-'] || 0), K: perM3(nomi['K+'] || 0), Ca: perM3(nomi['Ca2+'] || 0), C: perM3((nomi['HCO3-'] || 0) + (nomi['CO3(2-)'] || 0)), Fe: perM3(nomi['Fe2+'] || 0), Si: perM3(nomi.H4SiO4 || 0) }, out = { isotopi: {}, decadimenti: {} };
+  for (const e in el) for (const [A, f] of ISOTOPI[e]) if (el[e] * f > 0) out.isotopi[`${e}-${A}`] = { perM3: el[e] * f, nelCampione: el[e] * f * V };
+  const k40 = el.K * 1.17e-4, lambda = Math.LN2 / (1.248e9 * ANNO); out.decadimenti['K-40'] = { perM3alSecondo: k40 * lambda, nelCampioneAlSecondo: k40 * lambda * V, verso: { 'Ca-40 (β⁻, 1,31 MeV)': 0.8928, 'Ar-40 (cattura elettronica, γ 1,46 MeV)': 0.1072 } };
+  return out;
+}
 const c0evento = (stato, indirizzo) => sorgente(stato.radice)(indirizzo);
 const fmtN = (x) => (x < 1 ? x.toPrecision(1) : x < 1e3 ? Math.round(x).toString() : x < 1e6 ? `${Math.round(x / 1e3)} mila` : x < 1e9 ? `${(x / 1e6).toFixed(0)} milioni` : x < 1e12 ? `${(x / 1e9).toFixed(0)} miliardi` : `10^${Math.round(Math.log10(x))}`);
 const fmtL = (m) => (m >= 1 ? `${+m.toPrecision(2)} m` : m >= 1e-3 ? `${+(m * 1e3).toPrecision(2)} mm` : m >= 1e-6 ? `${+(m * 1e6).toPrecision(2)} µm` : `${+(m * 1e9).toPrecision(2)} nm`);
@@ -945,14 +1071,14 @@ const PLURALI = { sabbia: 'granelli di sabbia', limo: 'granelli di limo', argill
 function descrivi(o, qui, note, stato) {
   const dove = qui.tipo === 'mare' ? (o.luogo.salamoia ? 'dentro il ghiaccio marino, in una sacca di salamoia' : qui.camino ? `sul fondo, a ${fmtL(qui.camino.distanzaM)} da un camino caldo (${Math.round(qui.camino.T - 273)} °C all'uscita)` : qui.foce && qui.foce.parteDiFiume > 0.02 ? `alla foce di un fiume (a ${Math.round(qui.foce.distanzaM / 1000)} km: ${(100 * qui.foce.parteDiFiume).toFixed(0)}% acqua dolce)` : qui.fondoM < 60 ? 'mare basso' : 'mare aperto')
     : qui.tipo === 'piana di sale' ? 'una pozza di salamoia su una piana di sale' : qui.lago ? (qui.lago.tipo === 'aperto' ? 'lago con emissario' : 'lago chiuso') : 'acqua dolce';
-  const L = o.latoM, sale = `${o.salinita < 1 ? o.salinita.toFixed(2) : o.salinita.toFixed(0)} g di sali per kg`, cosa = [];
+  const quota = o.profondita < 1e-6 ? 'in superficie' : `${fmtL(o.profondita)} sotto la superficie`, L = o.latoM, sale = `${o.salinita < 1 ? o.salinita.toFixed(2) : o.salinita.toFixed(0)} g di sali per kg`, cosa = [];
   if (L <= 1.2e-7) { const due = Object.entries(o.ioni).filter(([f]) => NOMI_IONI[f]).sort((a, b) => b[1].moliPerKg - a[1].moliPerKg).slice(0, 2);
     cosa.push(`${fmtN(o.acquaNelCampione)} molecole d'acqua` + (due.length === 2 ? `, ${fmtN(due[0][1].nelCampione)} ioni ${NOMI_IONI[due[0][0]]} e ${fmtN(due[1][1].nelCampione)} ${NOMI_IONI[due[1][0]]} (uno ogni ${Math.round(due[0][1].ogniQuanteMolecoleDAcqua)} e ogni ${Math.round(due[1][1].ogniQuanteMolecoleDAcqua)} molecole), ciascuno nel suo guscio d'acqua` : '')); }
   else { const viste = Object.entries(o.quanteDavvero).filter(([m, n]) => n >= 0.5 && o.particelle.some((p) => p.materiale === m)).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${fmtN(n)} ${PLURALI[m] || m}`);
     const opaca = o.torbidita * 1000 * 0.5 * L; // (quanta luce si perde attraversando il cubetto: 0,5 m² per grammo di fango)
     cosa.push(viste.length ? `in questo cubetto: ${viste.join(', ')}` : opaca > 0.1 ? 'acqua velata da particelle troppo piccole per distinguerle a questa scala' : 'acqua limpida: a questa scala non c\'è nulla di sospeso che si distingua'); }
   const perche = note.length ? ` Qui: ${note.join(', ')}.` : qui.tipo === 'mare' && !qui.foce?.parteDiFiume ? ' Lontano dai fiumi il fango è già caduto.' : '';
-  return `${dove[0].toUpperCase()}${dove.slice(1)}, ${fmtL(o.profondita)} sotto la superficie, ${(o.T - 273.15).toFixed(1)} °C, ${sale}, pH ${o.pH.toFixed(1)}; cubetto di ${fmtL(L)}: ${cosa.join('; ')}.${perche}` +
+  return `${dove[0].toUpperCase()}${dove.slice(1)}, ${quota}, ${(o.T - 273.15).toFixed(1)} °C, ${sale}, pH ${o.pH.toFixed(1)}; cubetto di ${fmtL(L)}: ${cosa.join('; ')}.${perche}` +
     (o.corrente.velocita > 0.005 ? ` La corrente lo porta a ${(100 * o.corrente.velocita).toFixed(0)} cm/s.` : '');
 }
 
@@ -1165,4 +1291,123 @@ export function aspettoMare(stato, sf, px, { t = 0, onde = 8 } = {}) {
       const lume = limita(1 + 1.3 * ombra, 0.62, 1.45), sc = Math.min(1, schiuma);
       for (let c = 0; c < 3; c++) { const v = base[k * 4 + c] * lume; px[k * 4 + c] = v + (SCHIUMA[c] - v) * sc; } } }
   return px;
+}
+
+// ---------- 8. LE MOLECOLE IN TRE DIMENSIONI (per la vista atomo per atomo, atomi3d.js)
+// Un cubetto di pochi nanometri del mare in quel punto, atomo per atomo. Ciò che è vero:
+//  · QUANTE molecole e quanti ioni: gli stessi di campioneAcqua alla stessa scala (densità dell'acqua di lì, conteggi
+//    degli ioni, delle coppie e dei gas: gli stessi eventi);
+//  · LA MOLECOLA D'ACQUA: O–H 0,9572 Å, angolo 104,5° (misurati); ogni molecola dà due legami a idrogeno a due vicine
+//    e ne riceve in media due: i suoi idrogeni puntano verso gli ossigeni delle vicine scelte (distanza O···O ~2,8-3,1 Å);
+//  · GLI IONI nei loro gusci: attorno a un catione le molecole d'acqua girano l'ossigeno verso di lui, attorno a un
+//    anione un idrogeno (distanze: raggio dello ione + 1,38 Å); solfato tetraedrico (S–O 1,49 Å), carbonato e
+//    bicarbonato piani (C–O 1,29 Å), CO2 lineare (1,16 Å), O2 (1,21 Å), N2 (1,10 Å);
+//  · I SOLIDI, se nel cubetto ce n'è uno (un cristallo che sta nascendo, il ghiaccio, un granello, il fondo), con il
+//    loro reticolo: salgemma (cubico, 5,64 Å, faccia 100), ghiaccio (ossigeni a tetraedro, 2,75 Å), calcite (strati di
+//    calcio e di carbonati piani, 4,99 Å nel piano e 2,84 Å tra gli strati: la faccia è quella basale, non quella di
+//    sfaldatura), argilla (un foglio di caolinite idealizzato: silicio in esagoni, alluminio, ossidrili verso l'acqua);
+//  · LA SUPERFICIE, se il cubetto la contiene: sopra, l'aria (a quella pressione: pochissime molecole);
+//  · L'AGITAZIONE: di quanto ogni cosa vibra e si sposta alla temperatura di lì (diffusione vera, D ∝ T/viscosità).
+// Ciò che NON è vero: le posizioni non vengono da una dinamica molecolare. Gli ossigeni stanno su un reticolo cubico
+// alla densità giusta, spostati a caso (un evento per molecola) di ~0,5 Å: la distanza tra vicine è quella del liquido,
+// l'ordine a lungo raggio no (si vede, guardando di taglio); i legami a idrogeno seguono quel reticolo (sei vicine
+// invece di quattro-cinque). Chi anima (atomi3d.js) ha qui le ampiezze e i tempi veri.
+// → { atomi: { pos (nm, 3N), raggio (nm), elemento (numero atomico) }, legami (coppie di indici: i legami covalenti),
+//     legamiH (idrogeno → ossigeno che lo riceve), scatola [nm], parti: [{ nome, da, a }], etichette, agitazione, conteggi, campione }
+const ATOMO = { H: [1, 0.11], C: [6, 0.17], N: [7, 0.155], O: [8, 0.152], Na: [11, 0.102], Mg: [12, 0.072], Al: [13, 0.054], Si: [14, 0.11], S: [16, 0.18], Cl: [17, 0.181], K: [19, 0.138], Ca: [20, 0.1], Fe: [26, 0.078] };
+const SIMBOLO = { 'Na+': 'Na', 'K+': 'K', 'Mg2+': 'Mg', 'Ca2+': 'Ca', 'Fe2+': 'Fe', 'Cl-': 'Cl' };
+export function scenaMolecolare(stato, { lon = 0, lat = 0, profondita = 0, latoM = 5e-9, t = 0, solido = 'auto', massimoAtomi = 400000, acqua: forzata = null, fondoM = null } = {}, caso = null) {
+  const camp = campioneAcqua(stato, { lon, lat, profondita, latoM, t, acqua: forzata, fondoM }, caso);
+  if (camp.asciutto) return { atomi: { pos: new Float32Array(0), raggio: new Float32Array(0), elemento: new Uint8Array(0) }, legami: new Uint32Array(0), legamiH: new Uint32Array(0), scatola: [0, 0, 0], parti: [], etichette: [], campione: camp, asciutto: true };
+  const ev = sorgente(camp.radice, camp.rami).sotto('molecole'), seme = ev.seme('reticolo'), nW = camp.acquaPerM3 * 1e-27; // (molecole d'acqua per nm³)
+  let Lnm = latoM * 1e9, ridotta = false; if (3 * nW * Lnm ** 3 > massimoAtomi) { Lnm = Math.cbrt(massimoAtomi / (3 * nW)); ridotta = true; }
+  const nx = Math.max(2, Math.round(Lnm * Math.cbrt(nW))), a = Lnm / nx, NS = nx * nx * nx, vol = (Lnm * 1e-9) ** 3 / latoM ** 3;
+  const h = (n, q) => { let x = (Math.imul(n + 1, 374761393) + Math.imul(q + 7, 668265263) + seme) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; }, gauss = (n, q) => (h(n, q) + h(n, q + 1) + h(n, q + 2) + h(n, q + 3) - 2) * 1.73;
+  const sito = (i, j, k) => (((k % nx) + nx) % nx * nx + ((j % nx) + nx) % nx) * nx + ((i % nx) + nx) % nx, stato_ = new Int8Array(NS), versoIone = new Float32Array(NS * 3), segnoIone = new Int8Array(NS); // (0 acqua; 1 tolta)
+  const P = [], Rr = [], El = [], legami = [], legamiH = [], parti = [], etichette = [], centro = (n) => { const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)); return [(i + 0.5) * a, (j + 0.5) * a, (k + 0.5) * a]; };
+  const metti = (el, x, y, z) => { P.push(x, y, z); Rr.push(ATOMO[el][1]); El.push(ATOMO[el][0]); return El.length - 1; }, parte = (nome, da) => { if (El.length > da) parti.push({ nome, da, a: El.length }); };
+  // --- che cosa c'è di solido, e la superficie
+  const zSup = profondita * 1e9 < Lnm ? Lnm - Math.max(0, profondita * 1e9) : Infinity, sulFondo = (camp.fondoM - camp.profondita) * 1e9 < Lnm;
+  let quale = solido === 'auto' ? null : solido;
+  if (solido === 'auto') { // c'è un solido nel cubetto? La probabilità vera: quante superfici di granelli o cristalli lo attraversano
+    if (camp.luogo.salamoia) quale = 'ghiaccio'; else if (sulFondo) quale = 'argilla';
+    else for (const cl of camp.classi) { if (!['cristallo', 'granello', 'colloide', 'fiocco'].includes(cl.tipo)) continue; const pr = cl.perM3 * Math.PI * cl.diametroM ** 2 * latoM; if (ev(`c'è un ${cl.materiale}`) < pr) { quale = cl.materiale === 'salgemma' || cl.materiale === 'calcite' || cl.materiale === 'ghiaccio' ? cl.materiale : 'argilla'; break; } } }
+  const zSolido = quale ? Math.min(0.34 * Lnm, 2.2) : 0;
+  for (let n = 0; n < NS; n++) { const z = (Math.floor(n / (nx * nx)) + 0.5) * a; if (z < zSolido + 0.12 || z > zSup) stato_[n] = 1; }
+  if (quale) { const da = El.length; reticolo(quale, Lnm, zSolido, metti, legami, h); parte(`solido: ${quale}`, da); etichette.push({ testo: quale, pos: [Lnm / 2, Lnm / 2, zSolido / 2] }); }
+  // --- gli ioni, le coppie, i gas: quanti ce ne sono davvero (gli stessi conteggi del campione), ognuno al posto di una molecola d'acqua
+  const liberi = []; for (let n = 0; n < NS; n++) if (!stato_[n]) liberi.push(n);
+  let giro = 0; const prendi = () => { for (let p = 0; p < 50 && liberi.length; p++) { const q = Math.floor(h(giro++, 91) * liberi.length), n = liberi[q]; if (!stato_[n]) { stato_[n] = 1; return n; } } return -1; };
+  const guscio = (n, pos, segno) => { const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)); for (const [di, dj, dk] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) { const m = sito(i + di, j + dj, k + dk); if (stato_[m]) continue; versoIone[m * 3] = pos[0]; versoIone[m * 3 + 1] = pos[1]; versoIone[m * 3 + 2] = pos[2]; segnoIone[m] = segno; } };
+  const molecola = (f, c, n) => { // gli atomi di uno ione o di un gas attorno al punto c
+    const u = [gauss(n, 31), gauss(n, 35), gauss(n, 39)], lu = Math.hypot(...u) || 1, ux = u.map((x) => x / lu), w0 = [gauss(n, 43), gauss(n, 47), gauss(n, 51)], d0 = w0[0] * ux[0] + w0[1] * ux[1] + w0[2] * ux[2], w1 = w0.map((x, q) => x - d0 * ux[q]), lw = Math.hypot(...w1) || 1, wx = w1.map((x) => x / lw), vx = [ux[1] * wx[2] - ux[2] * wx[1], ux[2] * wx[0] - ux[0] * wx[2], ux[0] * wx[1] - ux[1] * wx[0]];
+    const at = (el, pu, pw, pv) => metti(el, c[0] + pu * ux[0] + pw * wx[0] + pv * vx[0], c[1] + pu * ux[1] + pw * wx[1] + pv * vx[1], c[2] + pu * ux[2] + pw * wx[2] + pv * vx[2]);
+    if (SIMBOLO[f]) return at(SIMBOLO[f], 0, 0, 0);
+    if (f === 'SO4(2-)') { const s0 = at('S', 0, 0, 0), q = 0.149 / Math.sqrt(3); for (const [x, y, z] of [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]) legami.push(s0, at('O', q * x, q * y, q * z)); return s0; }
+    if (f === 'CO3(2-)' || f === 'HCO3-') { const c0 = at('C', 0, 0, 0); let ult = 0; for (let q = 0; q < 3; q++) { ult = at('O', 0.129 * Math.cos((q * 2 * Math.PI) / 3), 0.129 * Math.sin((q * 2 * Math.PI) / 3), 0); legami.push(c0, ult); } if (f === 'HCO3-') legami.push(ult, at('H', 0.129 * Math.cos((4 * Math.PI) / 3) - 0.05, 0.129 * Math.sin((4 * Math.PI) / 3) - 0.082, 0)); return c0; }
+    if (f === 'CO2') { const c0 = at('C', 0, 0, 0); legami.push(c0, at('O', 0.116, 0, 0), c0, at('O', -0.116, 0, 0)); return c0; }
+    if (f === 'O2') { const o0 = at('O', 0.0604, 0, 0); legami.push(o0, at('O', -0.0604, 0, 0)); return o0; }
+    if (f === 'N2') { const n0 = at('N', 0.0549, 0, 0); legami.push(n0, at('N', -0.0549, 0, 0)); return n0; }
+    if (f === 'H+') { const o0 = at('O', 0, 0, 0); for (let q = 0; q < 3; q++) legami.push(o0, at('H', 0.098 * 0.94 * Math.cos((q * 2 * Math.PI) / 3), 0.098 * 0.94 * Math.sin((q * 2 * Math.PI) / 3), 0.033)); return o0; } // (l'idrogenione sta su una molecola d'acqua: H3O⁺)
+    if (f === 'OH-') { const o0 = at('O', 0, 0, 0); legami.push(o0, at('H', 0.097, 0, 0)); return o0; }
+    return -1; };
+  const conteggi = {}, quanti = (nome, atteso) => Math.round((camp.contati[nome] ?? atteso) * vol);
+  for (const f of Object.keys(camp.ioni).filter((x) => IONI[x]).concat(Object.keys(camp.gas || {}))) { const da = El.length, N = quanti(f, (camp.ioni[f] || camp.gas[f]).nelCampione); let fatti = 0;
+    for (let q = 0; q < N; q++) { const n = prendi(); if (n < 0) break; const c = centro(n); molecola(f, c, n); guscio(n, c, IONI[f] ? Math.sign(IONI[f][2]) : 0); fatti++; } conteggi[f] = fatti; parte(f, da); }
+  for (const nome in camp.coppie) { if (nome.includes('incontri')) continue; const [ca, an] = nome.split(' '), da = El.length, N = quanti(nome, camp.coppie[nome].nelCampione); let fatti = 0;
+    for (let q = 0; q < N; q++) { const n = prendi(); if (n < 0) break; const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)), m = sito(i + 1, j, k), c = centro(n), dist = (IONI[ca][6] + IONI[an][6] + (ca === 'Mg2+' ? 2.76 : 0)) / 10; if (stato_[m]) continue; stato_[m] = 1;
+      molecola(ca, [c[0] - dist / 2 + a / 2, c[1], c[2]], n); molecola(an, [c[0] + dist / 2 + a / 2, c[1], c[2]], n + NS); guscio(n, c, 1); guscio(m, centro(m), -1); fatti++; } conteggi[nome] = fatti; parte(`coppia ${nome}`, da); }
+  // --- l'aria sopra la superficie (a quella pressione e temperatura: p/kT molecole per m³)
+  if (isFinite(zSup)) { const da = El.length, nAria = ((stato.pressioneAria / (KB * camp.T)) * 1e-27) * Lnm * Lnm * (Lnm - zSup), N = Math.round(nAria + h(5, 77) - 0.5); for (let q = 0; q < N; q++) molecola(h(q, 78) < (stato.aria.O2 || 0) ? 'O2' : (stato.aria.CO2 || 0) > 0.5 ? 'CO2' : 'N2', [h(q, 79) * Lnm, h(q, 80) * Lnm, zSup + 0.3 + h(q, 81) * Math.max(0, Lnm - zSup - 0.3)], q + 2 * NS); parte('aria', da); etichette.push({ testo: 'la superficie', pos: [Lnm / 2, Lnm / 2, zSup] }); }
+  // --- l'acqua: ogni molecola al suo posto (spostata di ~0,5 Å), con gli idrogeni verso due vicine, o girata verso lo ione che ha accanto
+  const daAcqua = El.length, OH = 0.09572, mezzo = (104.5 / 2) * RAD, cs = Math.cos(mezzo), sn = Math.sin(mezzo), posO = new Float32Array(NS * 3), DIR = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (let n = 0; n < NS; n++) { const c = centro(n); posO[n * 3] = c[0] + 0.05 * gauss(n, 1); posO[n * 3 + 1] = c[1] + 0.05 * gauss(n, 5); posO[n * 3 + 2] = c[2] + 0.05 * gauss(n, 9); }
+  let nAcqua = 0;
+  for (let n = 0; n < NS; n++) { if (stato_[n]) continue; const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)), ox = posO[n * 3], oy = posO[n * 3 + 1], oz = posO[n * 3 + 2];
+    // le due direzioni dei due idrogeni
+    let d1, d2, m1 = -1, m2 = -1;
+    const verso = (q) => { const [di, dj, dk] = DIR[q], m = sito(i + di, j + dj, k + dk); let x = posO[m * 3] - ox, y = posO[m * 3 + 1] - oy, z = posO[m * 3 + 2] - oz; x -= Lnm * Math.round(x / Lnm); y -= Lnm * Math.round(y / Lnm); z -= Lnm * Math.round(z / Lnm); const l = Math.hypot(x, y, z) || 1; return [[x / l, y / l, z / l], stato_[m] ? -1 : m]; };
+    const q1 = Math.floor(h(n, 13) * 6); let q2 = Math.floor(h(n, 17) * 4); q2 = [0, 1, 2, 3, 4, 5].filter((q) => q >> 1 !== q1 >> 1)[q2];
+    [d1, m1] = verso(q1); [d2, m2] = verso(q2);
+    if (segnoIone[n]) { let x = ox - versoIone[n * 3], y = oy - versoIone[n * 3 + 1], z = oz - versoIone[n * 3 + 2]; x -= Lnm * Math.round(x / Lnm); y -= Lnm * Math.round(y / Lnm); z -= Lnm * Math.round(z / Lnm); const l = Math.hypot(x, y, z) || 1, via = [x / l, y / l, z / l];
+      if (segnoIone[n] > 0) { const pr = d1[0] * via[0] + d1[1] * via[1] + d1[2] * via[2], pe = [d1[0] - pr * via[0], d1[1] - pr * via[1], d1[2] - pr * via[2]], lp = Math.hypot(...pe) || 1; d1 = [via[0] * cs + (pe[0] / lp) * sn, via[1] * cs + (pe[1] / lp) * sn, via[2] * cs + (pe[2] / lp) * sn]; d2 = [via[0] * cs - (pe[0] / lp) * sn, via[1] * cs - (pe[1] / lp) * sn, via[2] * cs - (pe[2] / lp) * sn]; m1 = m2 = -1; } // catione: l'ossigeno verso di lui, gli idrogeni in fuori
+      else { d1 = [-via[0], -via[1], -via[2]]; m1 = -1; } } // anione: un idrogeno verso di lui
+    // i due idrogeni: nel piano delle due direzioni, aperti esattamente di 104,5°
+    let b = [d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2]], lb = Math.hypot(...b); if (lb < 1e-3) { b = [d1[1], -d1[0], 0]; lb = Math.hypot(...b) || 1; } b = b.map((x) => x / lb);
+    let pp = [d1[0] - d2[0], d1[1] - d2[1], d1[2] - d2[2]]; const pb = pp[0] * b[0] + pp[1] * b[1] + pp[2] * b[2]; pp = pp.map((x, q) => x - pb * b[q]); const lp = Math.hypot(...pp) || 1; pp = pp.map((x) => x / lp);
+    const o = metti('O', ox, oy, oz), h1 = metti('H', ox + OH * (cs * b[0] + sn * pp[0]), oy + OH * (cs * b[1] + sn * pp[1]), oz + OH * (cs * b[2] + sn * pp[2])), h2 = metti('H', ox + OH * (cs * b[0] - sn * pp[0]), oy + OH * (cs * b[1] - sn * pp[1]), oz + OH * (cs * b[2] - sn * pp[2]));
+    legami.push(o, h1, o, h2); posO[n * 3] = ox; stato_[n] = 0; if (m1 >= 0) legamiH.push(h1, m1); if (m2 >= 0) legamiH.push(h2, m2); nAcqua++; }
+  // (i legami a idrogeno puntano al sito della molecola che riceve: lo si traduce nell'indice del suo ossigeno)
+  { const indiceO = new Int32Array(NS).fill(-1); let q = daAcqua; for (let n = 0; n < NS; n++) if (!stato_[n]) { indiceO[n] = q; q += 3; } let w = 0; for (let x = 0; x < legamiH.length; x += 2) { const io = indiceO[legamiH[x + 1]]; if (io >= 0) { legamiH[w++] = legamiH[x]; legamiH[w++] = io; } } legamiH.length = w; }
+  parte('acqua', daAcqua); conteggi.acqua = nAcqua;
+  // --- l'agitazione alla temperatura di lì
+  const T = camp.T, fT = (T / 298.15) * (8.9e-4 / camp.viscosita), Dnm = (D) => D * 1e18 * 1e-12; // (m²/s → nm²/ps)
+  const agitazione = { T, kT: KB * T, // (J)
+    legameOH: { ampiezzaNm: 0.007, periodoFs: 9.3 }, piegamento: { ampiezzaGradi: 8.7, periodoFs: 20 }, // (lo stiramento O–H e il piegamento H–O–H: moti di punto zero, misurati dagli spettri infrarossi: 3600 e 1640 cm⁻¹)
+    oscillazione: { ampiezzaGradi: (15 * Math.sqrt(T / 298.15)), periodoFs: 60 }, // la molecola che dondola nella gabbia dei suoi legami a idrogeno (librazione, ~600 cm⁻¹)
+    gabbia: { ampiezzaNm: 0.03 * Math.sqrt(T / 298.15), periodoFs: 170 }, // il centro che vibra tra le vicine (~200 cm⁻¹)
+    legameIdrogeno: { vitaPs: 1.0 / fT, giratePs: 2.5 / fT }, // quanto dura un legame a idrogeno e in quanto la molecola si rigira (misurati a 25 °C: 1 ps e 2,5 ps; scalano con la viscosità)
+    diffusione: Object.fromEntries([['acqua', Dnm(2.3e-9 * fT)], ...Object.keys(IONI).filter((f) => camp.ioni[f]).map((f) => [f, Dnm(IONI[f][5] * 1e-9 * fT)])]), // (nm²/ps: in t picosecondi lo spostamento quadratico medio è 6·D·t)
+    velocitaTermica: { acqua: Math.sqrt((3 * KB * T) / (0.018015 / NA)) } }; // (m/s: ~640 a 25 °C)
+  // (a un tempo t in secondi: ogni molecola si è spostata, in media, di √(6·D·t); qui la si sposta di quel tanto in una direzione sua, finché resta nella sua gabbia: oltre, la scena andrebbe rifatta con le vicine nuove)
+  const pos = Float32Array.from(P); if (t > 0) { const s = Math.min(0.12, Math.sqrt(6 * agitazione.diffusione.acqua * t * 1e12)); for (let q = daAcqua; q < El.length; q += 3) { const n = q / 3 | 0, dx = s * (h(n, 201) - 0.5) * 2, dy = s * (h(n, 202) - 0.5) * 2, dz = s * (h(n, 203) - 0.5) * 2; for (let z = 0; z < 3; z++) { pos[(q + z) * 3] += dx; pos[(q + z) * 3 + 1] += dy; pos[(q + z) * 3 + 2] += dz; } } }
+  return { atomi: { pos, raggio: Float32Array.from(Rr), elemento: Uint8Array.from(El) }, legami: Uint32Array.from(legami), legamiH: Uint32Array.from(legamiH), scatola: [Lnm, Lnm, Lnm], parti, etichette, agitazione, conteggi,
+    attesi: { acqua: camp.acquaNelCampione * vol, ...Object.fromEntries(Object.entries(camp.ioni).map(([f, x]) => [f, x.nelCampione * vol])) }, ridotta, latoNm: Lnm, solido: quale, nuclei: camp.nuclei, campione: camp,
+    descrizione: `${camp.descrizione.split(';')[0]}: un cubetto di ${Lnm.toFixed(1)} nm, ${nAcqua} molecole d'acqua${quale ? `, un pezzo di ${quale}` : ''}${isFinite(zSup) ? ', la superficie e l\'aria sopra' : ''}.` };
+}
+// i reticoli dei solidi: riempiono il fondo della scatola fino a zMax (nm)
+function reticolo(quale, L, zMax, metti, legami, h) {
+  if (quale === 'salgemma') { const a = 0.282; for (let k = 0; (k + 0.5) * a < zMax; k++) for (let j = 0; (j + 0.5) * a < L; j++) for (let i = 0; (i + 0.5) * a < L; i++) metti((i + j + k) & 1 ? 'Cl' : 'Na', (i + 0.5) * a, (j + 0.5) * a, (k + 0.5) * a); return; }
+  if (quale === 'ghiaccio') { // ossigeni a tetraedro (il reticolo del diamante, lato 6,35 Å), un idrogeno su ogni legame, più vicino a uno dei due
+    const a = 0.635, base = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]], vic = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+    for (let k = 0; k * a < zMax; k++) for (let j = 0; j * a < L; j++) for (let i = 0; i * a < L; i++) for (const [bx, by, bz] of base) { const x = (i + bx) * a, y = (j + by) * a, z = (k + bz) * a; if (z > zMax || x > L || y > L) continue; const o1 = metti('O', x, y, z), x2 = x + 0.25 * a, y2 = y + 0.25 * a, z2 = z + 0.25 * a, o2 = z2 <= zMax ? metti('O', x2, y2, z2) : -1;
+      for (let q = 0; q < 4; q++) { const [vx, vy, vz] = vic[q], vicino = h(i * 31 + j * 17 + k * 7 + q, 300 + Math.round(bx * 2 + by * 4 + bz * 8)) < 0.5, f = vicino ? 0.0957 / (0.433 * a) : 1 - 0.0957 / (0.433 * a), hx = x + f * 0.25 * a * vx, hy = y + f * 0.25 * a * vy, hz = z + f * 0.25 * a * vz; if (hz > zMax + 0.1 || hz < 0 || hx < 0 || hy < 0 || hx > L || hy > L) continue; const hh = metti('H', hx, hy, hz); if (vicino) legami.push(o1, hh); else if (q === 0 && o2 >= 0) legami.push(o2, hh); } } return; }
+  if (quale === 'calcite') { const a = 0.499, c = 0.284; for (let k = 0; (k + 0.5) * c < zMax; k++) for (let j = 0; j * a * 0.866 < L; j++) for (let i = 0; i * a < L; i++) { const sf = ((k % 3) * a) / 3, x = i * a + (j & 1 ? a / 2 : 0) + sf, y = j * a * 0.866 + sf * 0.577, z = (k + 0.5) * c; if (x > L || y > L) continue;
+      if (k & 1) metti('Ca', x, y, z); else { const c0 = metti('C', x, y, z), gira = (k >> 1) & 1 ? Math.PI : 0; for (let q = 0; q < 3; q++) legami.push(c0, metti('O', x + 0.129 * Math.cos(gira + (q * 2 * Math.PI) / 3), y + 0.129 * Math.sin(gira + (q * 2 * Math.PI) / 3), z)); } } return; }
+  // argilla: un foglio di caolinite idealizzato, ripetuto ogni 7,2 Å: ossigeni di base, silicio in esagoni, ossigeni di punta, alluminio, ossidrili in alto
+  { const a = 0.515, b = 0.894, strato = 0.72; for (let k = 0; k * strato + 0.45 < zMax + 0.2; k++) for (let j = 0; j * b < L; j++) for (let i = 0; i * a < L; i++) { const x0 = i * a, y0 = j * b, z0 = k * strato + Math.max(0, zMax - Math.floor(zMax / strato) * strato) * 0;
+      for (const [fx, fy] of [[0, 1 / 3], [0.5, 1 / 6], [0, 2 / 3], [0.5, 5 / 6]]) { const x = x0 + fx * a, y = y0 + fy * b; if (x > L || y > L) continue; const si = metti('Si', x, y, z0 + 0.06), op = metti('O', x, y, z0 + 0.22); legami.push(si, op); }
+      for (const [fx, fy] of [[0.25, 0.25], [0.75, 0.25], [0, 0.5], [0.25, 0.75], [0.75, 0.75], [0.5, 0]]) { const x = x0 + fx * a, y = y0 + fy * b; if (x <= L && y <= L) metti('O', x, y, z0); }
+      for (const [fx, fy] of [[0, 0], [0.5, 0.5], [0.5, 1 / 6 + 0.33], [0, 2 / 3 + 0.33 - 1 + 1]]) { const x = x0 + fx * a, y = y0 + (fy % 1) * b; if (x <= L && y <= L && (fx + fy) % 1 !== 0.99) metti('Al', x, y, z0 + 0.33); }
+      for (const [fx, fy] of [[0.25, 1 / 12], [0.75, 7 / 12], [0.25, 5 / 12], [0.75, 11 / 12], [0, 0.25 + 0.5], [0.5, 0.25]]) { const x = x0 + fx * a, y = y0 + fy * b; if (x > L || y > L) continue; const o = metti('O', x, y, z0 + 0.43); legami.push(o, metti('H', x, y, z0 + 0.527)); } } }
 }

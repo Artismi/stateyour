@@ -1,0 +1,842 @@
+// atomi3d.js — LA MATERIA ALLA SCALA DEGLI ATOMI, in tre dimensioni.
+//
+// In fondo allo zoom l'universo non è più un'immagine: è materia fatta di atomi. Questa è la vista che la mostra
+// atomo per atomo: ogni atomo una sferetta col suo raggio vero, centinaia di migliaia insieme, e la forma dell'insieme
+// che si legge perché le sferette vicine si fanno ombra (come nelle rese «atomo per atomo» delle macchine molecolari).
+// WebGL scritto a mano (WebGL2; ripiega su WebGL1 con le estensioni che servono), nessuna libreria, nessuno stato
+// globale: una vista si monta su una tela e si smonta.
+//
+// ───────────────────────────── L'INGRESSO: UNA SCENA (generica, non legata a un caso) ─────────────────────────────
+//   scena = {
+//     unita: 'nm' | 'A' | 'm',            // l'unità di pos, raggio, scatola, agitazione, etichette (se manca: NANOMETRI)
+//     atomi: {
+//       pos:      Float32Array(3N),       // x, y, z di ogni atomo
+//       raggio:   Float32Array(N),        // il raggio VERO (van der Waals, ionico o covalente: lo sceglie chi fa la scena);
+//                                         //   se manca, quello di van der Waals dell'elemento (tabella ELEMENTI qui sotto)
+//       elemento: Uint8Array(N),          // (facoltativo) il numero atomico Z: serve al colore per elemento e a dire che cos'è
+//       colore:   Uint8Array(3N),         // (facoltativo) un colore per atomo; se manca: quello della parte, o dell'elemento
+//       parte:    Uint16Array(N),         // (facoltativo) l'indice in `parti` (se manca si usano parti[k].da / .a)
+//       agitazione: Float32Array(N),      // (facoltativo) ampiezza dell'agitazione termica di ogni atomo (scarto per asse)
+//       pos2:     Float32Array(3N),       // (facoltativo) le posizioni «dopo»: vista.mescola(f) le interpola (0 → pos, 1 → pos2)
+//     },
+//     legami:   Uint32Array(2M),          // (facoltativo) coppie di indici: bastoncini tra gli atomi (si vedono se i raggi
+//                                         //   sono rimpiccioliti: opzione scalaRaggi < 1)
+//     scatola:  [lx, ly, lz],             // il volume della scena (da 0 a l su ogni asse); serve a inquadrare
+//     parti:    [{ nome, da, a, colore: [r, g, b] }],   // le parti (una proteina, l'acqua, il cristallo…): atomi da `da`
+//                                         //   (compreso) ad `a` (escluso), oppure dette da atomi.parte
+//     etichette: [{ testo, pos: [x, y, z], scarto: [dx, dy] }],   // una scritta bianca con la linea che indica il punto
+//     agitazione: { 8: 0.012, 1: 0.02, … } | numero,   // (facoltativo) ampiezza per elemento (chiave Z o simbolo), alla
+//                                         //   temperatura della scena: la calcola chi fa la scena; qui si muove soltanto
+//     tempo:    (t, pos) => true | false  // (facoltativo) una funzione che a ogni fotogramma riscrive `pos` (una copia di
+//               | { fotogrammi: [Float32Array(3N), …], durata: secondi, ciclo: true },   // lavoro) — oppure posizioni
+//                                         //   successive, tra cui la vista interpola. Basta questo: un buffer per fotogramma.
+//     nome, descrizione                   // (facoltativi) per chi la mostra
+//   }
+// Dentro, tutto è in NANOMETRI (numeri a 32 bit: un atomo è 0,1, una scena 100: nessun problema di precisione).
+//
+// ───────────────────────────── COME È RESA ─────────────────────────────
+//   · ogni atomo è un «impostore»: un quadratino a istanze che guarda l'occhio; nel frammento si calcola dove il raggio
+//     dell'occhio tocca la sfera, e si scrive la profondità GIUSTA (le sfere si compenetrano come sfere vere);
+//   · luce semplice (una lampada in alto a sinistra, un po' di ambiente, un riflesso piccolo), colori pieni;
+//   · OMBRE MORBIDE TRA ATOMI VICINI: occlusione ambientale calcolata dallo schermo (dalla sola profondità: le normali
+//     si ricostruiscono), a due scale — quella dell'atomo (il contatto tra sferette) e quella della forma (le pieghe
+//     dell'insieme) — poi sfumata rispettando i bordi;
+//   · contorno scuro dove la profondità salta, attenuazione con la distanza, sfocatura leggera dei piani lontani; sfondo nero;
+//   · un PIANO DI TAGLIO: le sfere tagliate mostrano la sezione piena (un dischetto), così si guarda dentro la materia;
+//   · il principio della nebbia (nebbia.js) per le quantità: da lontano gli atomi di una celletta sono rappresentati da
+//     UNA sferetta più grande (stesso volume, il colore della parte che lì prevale, la posizione di un atomo vero), e
+//     ognuna dichiara quanti atomi rappresenta; da vicino tornano gli atomi. Gli atomi SEPOLTI (coperti da almeno un
+//     nanometro scarso di materia fitta da ogni lato) non si disegnano finché il taglio o l'occhio non li scoprono.
+//
+// uso:  const v = creaVista3D(tela, { alCambio: () => … });
+//       v.carica(scena);  v.avvia();            // oppure, dal ciclo di chi la monta: v.disegna(t) a ogni fotogramma
+//       v.suAtomo((a) => …);                    // a = { indice, simbolo, elemento, parte, rappresenta, x, y } oppure null
+//       v.taglio({ vista: true, scarto: 0 });   // taglia sul piano che passa dal centro di rotazione e guarda l'occhio
+//       v.libera();                             // toglie ascolti, buffer e contesto: la tela non si riusa
+//
+// Le scene vere (acqua col sale, cristalli e la loro faccia bagnata, la prova di carico) sono in fondo: scenaAcqua,
+// scenaCristallo, scenaDoppioStrato. Il caso viene dalla sorgente degli eventi (eventi.js): stessa radice, stessa scena.
+
+import { sorgente } from './eventi.js';
+
+// ---------- gli elementi: colori convenzionali (Corey-Pauling-Koltun, nella versione di Jmol) e raggi in ångström
+// [simbolo, nome, colore, raggio di van der Waals (Bondi 1964; Mantina e altri 2009), covalente (Cordero e altri 2008),
+//  ionico a sei vicini (Shannon 1976) con la carica a cui si riferisce]
+const TAVOLA = {
+  1: ['H', 'idrogeno', [255, 255, 255], 1.10, 0.31, 0, 1], 2: ['He', 'elio', [217, 255, 255], 1.40, 0.28, 0, 0],
+  3: ['Li', 'litio', [204, 128, 255], 1.82, 1.28, 0.76, 1], 6: ['C', 'carbonio', [144, 144, 144], 1.70, 0.76, 0, 0],
+  7: ['N', 'azoto', [48, 80, 248], 1.55, 0.71, 0, 0], 8: ['O', 'ossigeno', [255, 13, 13], 1.52, 0.66, 1.40, -2],
+  9: ['F', 'fluoro', [144, 224, 80], 1.47, 0.57, 1.33, -1], 10: ['Ne', 'neon', [179, 227, 245], 1.54, 0.58, 0, 0],
+  11: ['Na', 'sodio', [171, 92, 242], 2.27, 1.66, 1.02, 1], 12: ['Mg', 'magnesio', [138, 255, 0], 1.73, 1.41, 0.72, 2],
+  13: ['Al', 'alluminio', [191, 166, 166], 1.84, 1.21, 0.535, 3], 14: ['Si', 'silicio', [240, 200, 160], 2.10, 1.11, 0.40, 4],
+  15: ['P', 'fosforo', [255, 128, 0], 1.80, 1.07, 0, 0], 16: ['S', 'zolfo', [255, 255, 48], 1.80, 1.05, 1.84, -2],
+  17: ['Cl', 'cloro', [31, 240, 31], 1.75, 1.02, 1.81, -1], 18: ['Ar', 'argon', [128, 209, 227], 1.88, 1.06, 0, 0],
+  19: ['K', 'potassio', [143, 64, 212], 2.75, 2.03, 1.38, 1], 20: ['Ca', 'calcio', [61, 255, 0], 2.31, 1.76, 1.00, 2],
+  22: ['Ti', 'titanio', [191, 194, 199], 2.15, 1.60, 0.605, 4], 25: ['Mn', 'manganese', [156, 122, 199], 2.05, 1.39, 0.83, 2],
+  26: ['Fe', 'ferro', [224, 102, 51], 2.04, 1.32, 0.78, 2], 28: ['Ni', 'nichel', [80, 208, 80], 1.63, 1.24, 0.69, 2],
+  29: ['Cu', 'rame', [200, 128, 51], 1.40, 1.32, 0.73, 2], 30: ['Zn', 'zinco', [125, 128, 176], 1.39, 1.22, 0.74, 2],
+  35: ['Br', 'bromo', [166, 41, 41], 1.85, 1.20, 1.96, -1], 38: ['Sr', 'stronzio', [0, 255, 0], 2.49, 1.95, 1.18, 2],
+  53: ['I', 'iodio', [148, 0, 148], 1.98, 1.39, 2.20, -1], 56: ['Ba', 'bario', [0, 201, 0], 2.68, 2.15, 1.35, 2],
+};
+// ELEMENTI[Z] e ELEMENTI['Na']: { Z, simbolo, nome, colore, vdw, covalente, ionico (nm), carica }
+export const ELEMENTI = {};
+for (const [z, [simbolo, nome, colore, vdw, cov, ion, carica]] of Object.entries(TAVOLA)) {
+  const e = { Z: +z, simbolo, nome, colore, vdw: vdw / 10, covalente: cov / 10, ionico: ion ? ion / 10 : null, carica };
+  ELEMENTI[z] = e; ELEMENTI[simbolo] = e;
+}
+// i colori delle parti quando la scena non li dà (pieni e saturi: ogni parte si distingue da lontano)
+export const COLORI_PARTI = [[255, 208, 0], [236, 38, 143], [0, 196, 200], [70, 200, 60], [255, 122, 20], [60, 124, 255], [156, 92, 240], [235, 56, 50], [240, 240, 240], [150, 110, 70]];
+const UNITA = { nm: 1, A: 0.1, 'Å': 0.1, m: 1e9, pm: 1e-3 };
+
+// ---------- LA PREPARAZIONE (senza grafica: si prova da sola). Dalla scena ai buffer da disegnare:
+// gli atomi riordinati a PEZZI di spazio (per scartare ciò che è fuori dallo schermo e scegliere il dettaglio pezzo per
+// pezzo), in ogni pezzo prima gli esposti e poi i SEPOLTI, e in coda i GRUPPI: le sferette che da lontano stanno per
+// molti atomi, a quattro grossezze (cellette di lato s, 2s, 4s, 8s).
+//   → { N, M, pos (3M, nm), statico (M × 8 byte: raggio a 32 bit + r, g, b, agitazione), ordine (M: quale atomo),
+//       rappresenta (M − N: quanti atomi per gruppo), pezzi: [{ c, r, liv: [{ da, nE, nB }] × 5 }], passi: [s…], … }
+export function preparaScena(scena, opz = {}) {
+  const A = scena && scena.atomi; if (!A || !A.pos) throw new Error('atomi3d: la scena non ha atomi.pos');
+  const ku = UNITA[scena.unita || 'nm']; if (!ku) throw new Error(`atomi3d: unità sconosciuta «${scena.unita}»`);
+  const N = Math.floor(A.pos.length / 3), pos = new Float32Array(3 * N), rag = new Float32Array(N), el = A.elemento || null;
+  for (let i = 0; i < 3 * N; i++) pos[i] = A.pos[i] * ku;
+  let rMax = 0, rSomma = 0;
+  for (let i = 0; i < N; i++) { const r = A.raggio ? (A.raggio.length ? A.raggio[i] : A.raggio) * ku : ELEMENTI[el ? el[i] : 6]?.vdw || 0.17; rag[i] = r; rSomma += r; if (r > rMax) rMax = r; }
+  // la parte di ogni atomo
+  const parti = scena.parti || []; let parteDi = A.parte || null;
+  if (!parteDi && parti.length && parti[0].da != null) { parteDi = new Uint16Array(N).fill(65535); parti.forEach((p, k) => parteDi.fill(k, Math.max(0, p.da), Math.min(N, p.a))); }
+  // il colore: dato atomo per atomo, o della parte, o dell'elemento
+  const modo = opz.colora || 'auto', rgb = new Uint8Array(3 * N);
+  const perParte = parteDi && (modo === 'parte' || (modo === 'auto' && !A.colore && parti.some((p) => p.colore))), perElemento = el && !perParte && (modo === 'elemento' || !A.colore);
+  if (perParte) { const tav = parti.map((p, k) => p.colore || COLORI_PARTI[k % COLORI_PARTI.length]); for (let i = 0; i < N; i++) { const c = tav[parteDi[i]] || [150, 150, 150]; rgb[3 * i] = c[0]; rgb[3 * i + 1] = c[1]; rgb[3 * i + 2] = c[2]; } }
+  else if (perElemento) { const tav = []; for (let z = 0; z < 256; z++) tav.push(ELEMENTI[z]?.colore || [255, 20, 147]); for (let i = 0; i < N; i++) { const c = tav[el[i]]; rgb[3 * i] = c[0]; rgb[3 * i + 1] = c[1]; rgb[3 * i + 2] = c[2]; } }
+  else if (A.colore) rgb.set(A.colore.subarray ? A.colore.subarray(0, 3 * N) : A.colore);
+  else rgb.fill(170);
+  // l'agitazione termica: per atomo, o per elemento; nel buffer va in un byte (frazione della massima)
+  const agita = new Float32Array(N); let agitaMax = 0;
+  if (A.agitazione) for (let i = 0; i < N; i++) agita[i] = A.agitazione[i] * ku;
+  else if (typeof scena.agitazione === 'number') agita.fill(scena.agitazione * ku);
+  else if (scena.agitazione && el) { const tav = new Float32Array(256); for (const [k, v] of Object.entries(scena.agitazione)) { const z = ELEMENTI[k]?.Z ?? +k; if (z >= 0 && z < 256) tav[z] = v * ku; } for (let i = 0; i < N; i++) agita[i] = tav[el[i]]; }
+  for (let i = 0; i < N; i++) if (agita[i] > agitaMax) agitaMax = agita[i];
+  // la scatola che contiene tutto
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < N; i++) for (let k = 0; k < 3; k++) { const x = pos[3 * i + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; }
+  if (!N) { lo.fill(0); hi.fill(1); }
+  const dim = [0, 1, 2].map((k) => Math.max(1e-3, hi[k] - lo[k]));
+  // --- I SEPOLTI. Una griglia di cellette: è «opaca» quella in cui gli atomi, messi in fila, coprirebbero più della
+  // sua faccia; un atomo è sepolto se tutte le cellette intorno, per una profondità data, sono opache.
+  const cs = Math.max(0.45, Math.cbrt((dim[0] * dim[1] * dim[2]) / 3e6)), gx = Math.ceil(dim[0] / cs) + 1, gy = Math.ceil(dim[1] / cs) + 1, gz = Math.ceil(dim[2] / cs) + 1;
+  const cellaDi = new Int32Array(N), area = new Float32Array(gx * gy * gz); let occupate = 0;
+  for (let i = 0; i < N; i++) {
+    const c = Math.floor((pos[3 * i] - lo[0]) / cs) + gx * (Math.floor((pos[3 * i + 1] - lo[1]) / cs) + gy * Math.floor((pos[3 * i + 2] - lo[2]) / cs));
+    cellaDi[i] = c; if (area[c] === 0) occupate++; area[c] += Math.PI * rag[i] * rag[i];
+  }
+  const sepolto = new Uint8Array(N); let quantiSepolti = 0;
+  if (opz.scartaSepolti !== false && N > 2000) {
+    let g = new Uint8Array(area.length), h = new Uint8Array(area.length); const soglia = 1.5 * cs * cs;
+    for (let c = 0; c < area.length; c++) g[c] = area[c] >= soglia ? 1 : 0;
+    const giri = Math.max(2, Math.round((opz.profonditaSepolti ?? 0.9) / cs)), passi = [1, gx, gx * gy], lati = [gx, gy, gz];
+    for (let giro = 0; giro < giri; giro++) for (let asse = 0; asse < 3; asse++) {
+      const p = passi[asse], n = lati[asse];
+      for (let c = 0; c < g.length; c++) { const k = asse === 0 ? c % gx : asse === 1 ? Math.floor(c / gx) % gy : Math.floor(c / (gx * gy)); h[c] = k > 0 && k < n - 1 ? g[c] & g[c - p] & g[c + p] : 0; }
+      const s = g; g = h; h = s;
+    }
+    for (let i = 0; i < N; i++) if (g[cellaDi[i]]) { sepolto[i] = 1; quantiSepolti++; }
+  }
+  // --- I PEZZI. Il passo fine s è il doppio della distanza media tra atomi (≈ 8 atomi per celletta); un pezzo è 8 s.
+  const passoAtomi = Math.cbrt((Math.max(1, occupate) * cs * cs * cs) / Math.max(1, N)), s1 = Math.max(2 * Math.min(passoAtomi, cs), 2.2 * (rSomma / Math.max(1, N)), Math.max(...dim) / 4096);
+  const lp = 8 * s1, px = Math.ceil(dim[0] / lp) || 1, py = Math.ceil(dim[1] / lp) || 1, pz = Math.ceil(dim[2] / lp) || 1;
+  const tanti = px * py * pz, tabella = tanti <= 4e6 ? new Int32Array(tanti).fill(-1) : new Map(), pezzoDi = new Int32Array(N), origini = [], conta = [];
+  for (let i = 0; i < N; i++) {
+    const ix = Math.min(px - 1, Math.floor((pos[3 * i] - lo[0]) / lp)), iy = Math.min(py - 1, Math.floor((pos[3 * i + 1] - lo[1]) / lp)), iz = Math.min(pz - 1, Math.floor((pos[3 * i + 2] - lo[2]) / lp)), id = ix + px * (iy + py * iz);
+    let k = tabella.get ? tabella.get(id) ?? -1 : tabella[id];
+    if (k < 0) { k = origini.length; origini.push([lo[0] + ix * lp, lo[1] + iy * lp, lo[2] + iz * lp]); conta.push(0, 0); if (tabella.set) tabella.set(id, k); else tabella[id] = k; }
+    pezzoDi[i] = k; conta[2 * k + sepolto[i]]++;
+  }
+  const P = origini.length, inizio = new Int32Array(2 * P + 1); for (let k = 0; k < 2 * P; k++) inizio[k + 1] = inizio[k] + conta[k];
+  const ordAtomi = new Uint32Array(N), cursore = inizio.slice(0, 2 * P);
+  for (let i = 0; i < N; i++) ordAtomi[cursore[2 * pezzoDi[i] + sepolto[i]]++] = i;
+  // --- I GRUPPI, pezzo per pezzo. Al livello 1 le cellette hanno lato s (8 per lato del pezzo); i livelli 2, 3, 4 si
+  // fanno fondendo a otto a otto quelli del livello prima. Di ogni gruppo: quanti atomi, il volume (somma dei raggi al
+  // cubo), il baricentro, la parte che prevale (a volume), il suo colore medio, un atomo vero che lo rappresenta.
+  const gOrd = [], gRag = [], gCol = [], gConta = [], pezzi = [], LIV = 4;
+  const nc = 512, cn = new Int32Array(nc), cv = new Float32Array(nc), cx = new Float32Array(nc), cy = new Float32Array(nc), cz = new Float32Array(nc), cp = new Int32Array(nc), cw = new Float32Array(nc), cb = new Uint8Array(nc);
+  const kr = new Float32Array(nc), kg = new Float32Array(nc), kb = new Float32Array(nc), kw = new Float32Array(nc), cr = new Int32Array(nc), cd = new Float32Array(nc);
+  for (let k = 0; k < P; k++) {
+    const o = origini[k], da = inizio[2 * k], nE = conta[2 * k], nB = conta[2 * k + 1], n = nE + nB, liv = [{ da, nE, nB }];
+    // la sfera che contiene il pezzo
+    let bx = 0, by = 0, bz = 0; for (let j = da; j < da + n; j++) { const i = ordAtomi[j]; bx += pos[3 * i]; by += pos[3 * i + 1]; bz += pos[3 * i + 2]; }
+    bx /= n; by /= n; bz /= n; let r2 = 0; for (let j = da; j < da + n; j++) { const i = ordAtomi[j], d = (pos[3 * i] - bx) ** 2 + (pos[3 * i + 1] - by) ** 2 + (pos[3 * i + 2] - bz) ** 2; if (d > r2) r2 = d; }
+    cn.fill(0); cv.fill(0); cx.fill(0); cy.fill(0); cz.fill(0); cw.fill(0); cb.fill(1); kr.fill(0); kg.fill(0); kb.fill(0); kw.fill(0); cd.fill(Infinity);
+    const cellina = (i) => Math.min(7, Math.max(0, Math.floor((pos[3 * i] - o[0]) / s1))) + 8 * (Math.min(7, Math.max(0, Math.floor((pos[3 * i + 1] - o[1]) / s1))) + 8 * Math.min(7, Math.max(0, Math.floor((pos[3 * i + 2] - o[2]) / s1))));
+    for (let j = da; j < da + n; j++) {
+      const i = ordAtomi[j], c = cellina(i), r = rag[i], v = r * r * r, p = parteDi ? parteDi[i] : 0;
+      cn[c]++; cv[c] += v; cx[c] += v * pos[3 * i]; cy[c] += v * pos[3 * i + 1]; cz[c] += v * pos[3 * i + 2]; if (!sepolto[i]) cb[c] = 0;
+      if (cw[c] === 0) { cp[c] = p; cw[c] = v; } else if (cp[c] === p) cw[c] += v; else { cw[c] -= v; if (cw[c] < 0) { cp[c] = p; cw[c] = -cw[c]; } } // la parte che prevale (voto di maggioranza)
+    }
+    for (let c = 0; c < nc; c++) if (cn[c]) { cx[c] /= cv[c]; cy[c] /= cv[c]; cz[c] /= cv[c]; }
+    for (let j = da; j < da + n; j++) {
+      const i = ordAtomi[j], c = cellina(i); if (parteDi && parteDi[i] !== cp[c]) continue;
+      const w = rag[i] * rag[i], d = (pos[3 * i] - cx[c]) ** 2 + (pos[3 * i + 1] - cy[c]) ** 2 + (pos[3 * i + 2] - cz[c]) ** 2;
+      kr[c] += w * rgb[3 * i]; kg[c] += w * rgb[3 * i + 1]; kb[c] += w * rgb[3 * i + 2]; kw[c] += w; if (d < cd[c]) { cd[c] = d; cr[c] = i; }
+    }
+    let lato = 8, prima = n;
+    for (let L = 1; L <= LIV; L++) {
+      if (L > 1) { // fonde a otto a otto (sul posto: la celletta madre ha indice minore o uguale a quello delle figlie)
+        const m = lato / 2;
+        for (let z = 0; z < m; z++) for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) {
+          let tn = 0, tv = 0, sx = 0, sy = 0, sz = 0, sep = 1, pMeglio = 0, wMeglio = -1; const figlie = [];
+          for (let q = 0; q < 8; q++) { const c = 2 * x + (q & 1) + lato * (2 * y + ((q >> 1) & 1) + lato * (2 * z + (q >> 2))); if (cn[c]) figlie.push(c); }
+          for (const c of figlie) { tn += cn[c]; tv += cv[c]; sx += cv[c] * cx[c]; sy += cv[c] * cy[c]; sz += cv[c] * cz[c]; if (!cb[c]) sep = 0; }
+          if (tn) { sx /= tv; sy /= tv; sz /= tv; }
+          for (const c of figlie) { let w = 0; for (const e of figlie) if (cp[e] === cp[c]) w += cw[e] + 1e-9; if (w > wMeglio) { wMeglio = w; pMeglio = cp[c]; } }
+          let r = 0, g = 0, b = 0, w = 0, rap = 0, dm = Infinity;
+          for (const c of figlie) if (cp[c] === pMeglio) { r += kr[c]; g += kg[c]; b += kb[c]; w += kw[c]; const i = cr[c], d = (pos[3 * i] - sx) ** 2 + (pos[3 * i + 1] - sy) ** 2 + (pos[3 * i + 2] - sz) ** 2; if (d < dm) { dm = d; rap = i; } }
+          const c = x + m * (y + m * z); cn[c] = tn; cv[c] = tv; cx[c] = sx; cy[c] = sy; cz[c] = sz; cb[c] = sep; cp[c] = pMeglio; cw[c] = Math.max(0, wMeglio); kr[c] = r; kg[c] = g; kb[c] = b; kw[c] = w; cr[c] = rap;
+        }
+        lato = m;
+      }
+      const tot = lato ** 3; let quanti = 0; for (let c = 0; c < tot; c++) if (cn[c]) quanti++;
+      if (quanti > 0.6 * prima) { liv.push(liv[L - 1]); continue; } // non conviene: questo livello è quello prima
+      const qui = N + gOrd.length; let e = 0, s = 0;
+      for (let giro = 0; giro < 2; giro++) for (let c = 0; c < tot; c++) {
+        if (!cn[c] || cb[c] !== giro) continue;
+        gOrd.push(cr[c]); gRag.push(cn[c] === 1 ? rag[cr[c]] : 1.1 * Math.cbrt(cv[c])); gCol.push(kr[c] / kw[c], kg[c] / kw[c], kb[c] / kw[c]); gConta.push(cn[c]); if (giro) s++; else e++;
+      }
+      liv.push({ da: qui, nE: e, nB: s }); prima = quanti;
+    }
+    pezzi.push({ c: [bx, by, bz], r: Math.sqrt(r2) + rMax, liv });
+  }
+  // --- i buffer
+  const G = gOrd.length, M = N + G, ordine = new Uint32Array(M); ordine.set(ordAtomi); for (let j = 0; j < G; j++) ordine[N + j] = gOrd[j];
+  const posOrd = new Float32Array(3 * M), statico = new ArrayBuffer(8 * M), sf = new Float32Array(statico), sb = new Uint8Array(statico);
+  for (let j = 0; j < M; j++) {
+    const i = ordine[j]; posOrd[3 * j] = pos[3 * i]; posOrd[3 * j + 1] = pos[3 * i + 1]; posOrd[3 * j + 2] = pos[3 * i + 2];
+    if (j < N) { sf[2 * j] = rag[i]; sb[8 * j + 4] = rgb[3 * i]; sb[8 * j + 5] = rgb[3 * i + 1]; sb[8 * j + 6] = rgb[3 * i + 2]; sb[8 * j + 7] = agitaMax > 0 ? Math.round((255 * agita[i]) / agitaMax) : 0; }
+    else { const q = j - N; sf[2 * j] = gRag[q]; sb[8 * j + 4] = gCol[3 * q]; sb[8 * j + 5] = gCol[3 * q + 1]; sb[8 * j + 6] = gCol[3 * q + 2]; sb[8 * j + 7] = 0; }
+  }
+  const centro = [0, 1, 2].map((k) => (lo[k] + hi[k]) / 2), raggioScena = 0.5 * Math.hypot(dim[0], dim[1], dim[2]) + rMax;
+  return { N, M, ku, pos: posOrd, statico, ordine, rappresenta: Uint32Array.from(gConta), pezzi, passi: [0, s1, 2 * s1, 4 * s1, 8 * s1], lo, hi, centro, raggioScena, rMax, rMedio: rSomma / Math.max(1, N), agitaMax, quantiSepolti, parteDi, lato: lp };
+}
+
+// ---------- piccola algebra (matrici 4×4 per colonne, come le vuole WebGL)
+function prospettiva(tanY, aspetto, vicino, lontano) {
+  const m = new Float32Array(16); m[0] = 1 / (tanY * aspetto); m[5] = 1 / tanY; m[10] = -(lontano + vicino) / (lontano - vicino); m[11] = -1; m[14] = (-2 * lontano * vicino) / (lontano - vicino); return m;
+}
+const norma = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const vett = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const scal = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+// ---------- i programmi (scritti per WebGL2; per WebGL1 li traduce `perVecchio`)
+const V_ATOMI = `
+in vec2 a_angolo; in vec3 a_pos; in vec3 a_pos2; in float a_raggio; in vec4 a_colore;
+#ifdef VECCHIO
+in float a_id;
+#endif
+uniform mat4 u_vista, u_proj;
+uniform vec4 u_scegli;   // per leggere un solo pixel: scala e scarto dello schermo
+uniform vec4 u_moto;     // mescolanza tra pos e pos2, tempo, agitazione massima (nm), scala dei raggi
+uniform vec4 u_taglio;   // il piano di taglio nello spazio dell'occhio: resta ciò che ha n·p + w >= 0
+uniform vec4 u_sepolti;  // x: questo intervallo è di sepolti; y: si vedono entro questa distanza dall'occhio; z: ed entro questa dal taglio; w: c'è il taglio
+uniform vec4 u_evid;     // l'atomo sotto il cursore (si schiarisce)
+uniform float u_base;
+out vec3 v_q; out vec3 v_c; out vec3 v_col; out float v_r;
+#ifdef SCEGLI
+out float v_id;
+#endif
+void main() {
+  vec3 pw = mix(a_pos, a_pos2, u_moto.x);
+  float amp = a_colore.a * u_moto.z;
+  if (amp > 0.0) { // l'agitazione termica: ogni atomo trema attorno al suo posto con fasi sue
+    vec3 h = fract(sin(vec3(dot(a_pos, vec3(127.1, 311.7, 74.7)), dot(a_pos, vec3(269.5, 183.3, 246.1)), dot(a_pos, vec3(113.5, 271.9, 124.6)))) * 43758.5453);
+    vec3 f = h * 6.2832; float t = u_moto.y;
+    pw += amp * 1.16 * (sin(t * (9.0 + 5.0 * h.yzx) + f) + 0.7 * sin(t * (17.0 + 8.0 * h.zxy) + f.zxy * 1.7));
+  }
+  vec3 c = (u_vista * vec4(pw, 1.0)).xyz;
+  float r = a_raggio * u_moto.w, d2 = dot(c, c), dp = dot(u_taglio.xyz, c) + u_taglio.w;
+  bool via = dp < -r || d2 <= r * r * 1.0001 || c.z - r > 0.0;
+  if (u_sepolti.x > 0.5 && !(d2 < u_sepolti.y * u_sepolti.y || (u_sepolti.w > 0.5 && dp < u_sepolti.z))) via = true;
+  v_c = c; v_r = r; v_q = c;
+  vec3 col = a_colore.rgb;
+  if (u_evid.w > 0.5 && distance(a_pos, u_evid.xyz) < 1e-5) col = mix(col, vec3(1.0), 0.6);
+  v_col = col;
+#ifdef SCEGLI
+#ifdef VECCHIO
+  v_id = a_id + 1.0;
+#else
+  v_id = u_base + float(gl_InstanceID) + 1.0;
+#endif
+#endif
+  if (via) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  // il quadratino: perpendicolare alla retta occhio-centro, largo quanto il cono tangente alla sfera
+  float d = sqrt(d2); vec3 w = c / d, u = normalize(cross(w, vec3(0.0, 1.0, 0.0))), v = cross(u, w);
+  vec3 q = c + (a_angolo.x * u + a_angolo.y * v) * (r * d / sqrt(d2 - r * r));
+  v_q = q;
+  vec4 clip = u_proj * vec4(q, 1.0);
+#ifdef CON_PROFONDITA
+  clip.z = 0.0; // la profondità vera la scrive il frammento: il quadratino non deve essere tagliato dai piani vicino e lontano
+#else
+  clip.z = (u_proj * vec4(c, 1.0)).z / max(1e-6, -c.z) * clip.w;
+#endif
+  clip.xy = clip.xy * u_scegli.xy + u_scegli.zw * clip.w;
+  gl_Position = clip;
+}`;
+const F_ATOMI = `
+in vec3 v_q; in vec3 v_c; in vec3 v_col; in float v_r;
+#ifdef SCEGLI
+in float v_id;
+#endif
+uniform vec4 u_taglio; uniform vec4 u_piani; uniform vec3 u_sole;
+out vec4 o_col;
+void main() {
+  vec3 d = normalize(v_q);
+  float b = dot(d, v_c), disc = b * b - dot(v_c, v_c) + v_r * v_r;
+  if (disc < 0.0) discard;
+  float s = sqrt(disc), t = b - s, tappo = 0.0;
+  vec3 n;
+  if (dot(u_taglio.xyz, d * t) + u_taglio.w < 0.0) { // il davanti è tagliato: se il piano attraversa la sfera se ne vede la sezione
+    float den = dot(u_taglio.xyz, d);
+    if (den <= 0.0) discard;
+    float tp = -u_taglio.w / den;
+    if (tp > b + s) discard;
+    t = tp; n = -u_taglio.xyz; tappo = 1.0;
+  } else n = (d * t - v_c) / v_r;
+  if (t < u_piani.x) discard;
+#ifdef CON_PROFONDITA
+  gl_FragDepth = clamp((-d.z * t - u_piani.x) / u_piani.y, 0.0, 1.0);
+#endif
+#ifdef SCEGLI
+  o_col = vec4(mod(v_id, 256.0), mod(floor(v_id / 256.0), 256.0), floor(v_id / 65536.0), 255.0) / 255.0;
+#else
+  float luce = max(dot(n, u_sole), 0.0), riflesso = pow(max(dot(n, normalize(u_sole - d)), 0.0), 36.0);
+  vec3 col = v_col * (u_piani.z + (1.0 - u_piani.z) * luce) + u_piani.w * riflesso;
+  if (tappo > 0.5) col = v_col * 0.82;
+  o_col = vec4(col, 1.0);
+#endif
+}`;
+const V_PIENO = `
+in vec2 a_angolo; out vec2 v_uv;
+void main() { v_uv = a_angolo * 0.5 + 0.5; gl_Position = vec4(a_angolo, 0.0, 1.0); }`;
+// l'occlusione ambientale dalla profondità (Scalable Ambient Obscurance, McGuire e altri 2012), a due raggi
+const F_OMBRE = `
+in vec2 v_uv; out vec4 o_col;
+uniform sampler2D u_prof;
+uniform vec4 u_pr;   // 1/P00, 1/P11, piano vicino, lontano − vicino
+uniform vec4 u_px;   // 1/larghezza, 1/altezza; pixel per nanometro a distanza 1; raggio massimo in pixel
+uniform vec4 u_ao;   // raggio piccolo e grande (nm), forza piccola e grande
+float zDi(vec2 uv) { return u_pr.z + texture(u_prof, uv).r * u_pr.w; }
+vec3 pDi(vec2 uv) { float z = zDi(uv); return vec3((uv * 2.0 - 1.0) * u_pr.xy * z, -z); }
+void main() {
+  float d = texture(u_prof, v_uv).r;
+  if (d >= 1.0) { o_col = vec4(1.0); return; }
+  float z = u_pr.z + d * u_pr.w;
+  vec3 P = vec3((v_uv * 2.0 - 1.0) * u_pr.xy * z, -z);
+  vec3 a = pDi(v_uv + vec2(u_px.x, 0.0)) - P, b = P - pDi(v_uv - vec2(u_px.x, 0.0));
+  vec3 dx = abs(a.z) < abs(b.z) ? a : b;
+  a = pDi(v_uv + vec2(0.0, u_px.y)) - P; b = P - pDi(v_uv - vec2(0.0, u_px.y));
+  vec3 dy = abs(a.z) < abs(b.z) ? a : b;
+  vec3 n = normalize(cross(dx, dy));
+  float rumore = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float k = u_px.z / z, r1 = min(u_ao.x * k, u_px.w), r2 = min(u_ao.y * k, u_px.w), R1 = r1 / k, R2 = r2 / k, s1 = 0.0, s2 = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float f = (float(i) + 0.5) / 8.0, ang = 6.2832 * (rumore + f * 2.6);
+    vec2 dir = vec2(cos(ang), sin(ang));
+    vec3 v = pDi(v_uv + dir * (f * r1) * u_px.xy) - P;
+    float vv = dot(v, v), q = max(R1 * R1 - vv, 0.0);
+    s1 += q * q * q * max((dot(v, n) - 0.03 * R1) / (vv + 1e-3 * R1 * R1), 0.0);
+    v = pDi(v_uv + vec2(-dir.y, dir.x) * (sqrt(f) * r2) * u_px.xy) - P;
+    vv = dot(v, v); q = max(R2 * R2 - vv, 0.0);
+    s2 += q * q * q * max((dot(v, n) - 0.03 * R2) / (vv + 1e-3 * R2 * R2), 0.0);
+  }
+  float A1 = max(0.0, 1.0 - u_ao.z * 5.0 * s1 / (pow(R1, 6.0) * 8.0)), A2 = max(0.0, 1.0 - u_ao.w * 5.0 * s2 / (pow(R2, 6.0) * 8.0));
+  float p = d * 65535.0;
+  o_col = vec4(A1 * A2, floor(p / 256.0) / 255.0, mod(p, 256.0) / 255.0, 1.0);
+}`;
+// la sfumatura dell'ombra, che non scavalca i salti di profondità
+const F_SFUMA = `
+in vec2 v_uv; out vec4 o_col;
+uniform sampler2D u_ao; uniform vec4 u_dir;  // passo (in coordinate dell'immagine), e in w quanto conta la profondità
+void main() {
+  vec4 c = texture(u_ao, v_uv);
+  float z0 = c.g * 255.0 * 256.0 + c.b * 255.0, tot = 0.20, somma = c.r * 0.20;
+  if (z0 >= 65535.0) { o_col = c; return; }
+  for (int i = 1; i <= 4; i++) {
+    float g = i == 1 ? 0.17 : i == 2 ? 0.12 : i == 3 ? 0.07 : 0.035;
+    for (int s = -1; s <= 1; s += 2) {
+      vec4 q = texture(u_ao, v_uv + u_dir.xy * float(i * s));
+      float w = g * max(0.0, 1.0 - abs(q.g * 255.0 * 256.0 + q.b * 255.0 - z0) * u_dir.w);
+      somma += q.r * w; tot += w;
+    }
+  }
+  o_col = vec4(somma / tot, c.g, c.b, 1.0);
+}`;
+// la composizione: colore × ombra, contorno dove la profondità salta, attenuazione con la distanza
+const F_COMPONI = `
+in vec2 v_uv; out vec4 o_col;
+uniform sampler2D u_col, u_prof, u_ao;
+uniform vec4 u_pr;    // 1/P00, 1/P11, piano vicino, lontano − vicino
+uniform vec4 u_px;    // 1/larghezza, 1/altezza dell'immagine; 1/larghezza, 1/altezza dell'ombra
+uniform vec4 u_eff;   // forza dell'ombra, del contorno, della nebbia; larghezza del contorno in pixel
+uniform vec4 u_dist;  // nebbia da, a; fuoco: da qui comincia a sfocare, e qui è sfocato del tutto
+uniform vec4 u_sog;   // soglie del contorno (nm, a distanza 1: crescono con la distanza), quanto conta la profondità nell'ombra, c'è l'ombra
+uniform vec3 u_sfondo;
+float zDi(vec2 uv) { return u_pr.z + texture(u_prof, uv).r * u_pr.w; }
+void main() {
+  float d = texture(u_prof, v_uv).r;
+  if (d >= 1.0) { o_col = vec4(u_sfondo, 1.0); return; }
+  float z = u_pr.z + d * u_pr.w;
+  vec3 col = texture(u_col, v_uv).rgb;
+  if (u_sog.w > 0.5) { // l'ombra, presa dai quattro punti vicini che stanno alla stessa profondità
+    vec2 p = v_uv / u_px.zw - 0.5, f = fract(p), base = (floor(p) + 0.5) * u_px.zw; float tot = 0.0, ao = 0.0, p16 = d * 65535.0;
+    for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+      vec4 q = texture(u_ao, base + vec2(float(i), float(j)) * u_px.zw);
+      float w = (i == 0 ? 1.0 - f.x : f.x) * (j == 0 ? 1.0 - f.y : f.y) / (0.02 + abs(q.g * 255.0 * 256.0 + q.b * 255.0 - p16) * u_sog.z);
+      ao += q.r * w; tot += w;
+    }
+    col *= mix(1.0, ao / max(tot, 1e-6), u_eff.x);
+  }
+  vec2 e = u_px.xy * u_eff.w;
+  float zs = min(min(zDi(v_uv + vec2(e.x, 0.0)), zDi(v_uv - vec2(e.x, 0.0))), min(zDi(v_uv + vec2(0.0, e.y)), zDi(v_uv - vec2(0.0, e.y))));
+  col *= 1.0 - u_eff.y * smoothstep(u_sog.x * z, u_sog.y * z, z - zs);
+  col *= 1.0 - u_eff.z * smoothstep(u_dist.x, u_dist.y, z);
+  o_col = vec4(col, smoothstep(u_dist.z, u_dist.w, z));
+}`;
+// la sfocatura dei piani lontani: ogni punto raccoglie dai vicini che sono sfocati quanto basta per arrivare fin lì
+const F_SFOCA = `
+in vec2 v_uv; out vec4 o_col;
+uniform sampler2D u_col; uniform vec4 u_px;   // 1/larghezza, 1/altezza, raggio massimo in pixel
+void main() {
+  vec4 c = texture(u_col, v_uv);
+  float r = c.a * u_px.z, tot = 1.0; vec3 somma = c.rgb;
+  if (r > 0.5) for (int i = 0; i < 14; i++) {
+    float f = sqrt((float(i) + 0.5) / 14.0), ang = float(i) * 2.39996;
+    vec2 o = vec2(cos(ang), sin(ang)) * f * r;
+    vec4 q = texture(u_col, v_uv + o * u_px.xy);
+    float w = smoothstep(0.0, 1.0, q.a * u_px.z - f * r + 1.0);
+    somma += q.rgb * w; tot += w;
+  }
+  o_col = vec4(somma / tot, 1.0);
+}`;
+const F_COPIA = `
+in vec2 v_uv; out vec4 o_col; uniform sampler2D u_col;
+void main() { o_col = vec4(texture(u_col, v_uv).rgb, 1.0); }`;
+// le etichette e le loro linee: rettangoli sullo schermo presi da un'immagine di scritte
+const V_SCRITTE = `
+in vec4 a_pv; out vec2 v_uv;
+void main() { v_uv = a_pv.zw; gl_Position = vec4(a_pv.xy, 0.0, 1.0); }`;
+const F_SCRITTE = `
+in vec2 v_uv; out vec4 o_col; uniform sampler2D u_col;
+void main() { o_col = texture(u_col, v_uv); }`;
+// i legami: un rettangolo lungo il segmento tra due atomi, ombreggiato come un cilindro
+const V_LEGAMI = `
+in vec2 a_angolo; in vec3 a_pos; in vec3 a_pos2; in vec4 a_colore;
+uniform mat4 u_vista, u_proj; uniform vec4 u_moto; uniform vec4 u_taglio;
+out vec3 v_col; out vec3 v_p; out vec2 v_lato;
+void main() {
+  vec3 a = (u_vista * vec4(a_pos, 1.0)).xyz, b = (u_vista * vec4(a_pos2, 1.0)).xyz, m = mix(a, b, a_angolo.y * 0.5 + 0.5);
+  vec3 asse = normalize(b - a), lato = normalize(cross(asse, m));
+  float r = u_moto.w;
+  v_p = m + lato * a_angolo.x * r; v_lato = vec2(a_angolo.x, r); v_col = a_colore.rgb;
+  gl_Position = u_proj * vec4(v_p, 1.0);
+  if (dot(u_taglio.xyz, m) + u_taglio.w < 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`;
+const F_LEGAMI = `
+in vec3 v_col; in vec3 v_p; in vec2 v_lato;
+uniform vec4 u_piani; uniform vec3 u_sole;
+out vec4 o_col;
+void main() {
+  float h = sqrt(max(0.0, 1.0 - v_lato.x * v_lato.x));
+  vec3 d = normalize(v_p), p = v_p - d * h * v_lato.y;
+#ifdef CON_PROFONDITA
+  gl_FragDepth = clamp((-p.z - u_piani.x) / u_piani.y, 0.0, 1.0);
+#endif
+  o_col = vec4(v_col * (u_piani.z + (1.0 - u_piani.z) * (0.35 + 0.65 * h)), 1.0);
+}`;
+function perVecchio(src, frammento) {
+  let s = src.replace(/\btexture\(/g, 'texture2D(');
+  if (frammento) s = s.replace(/^\s*in /gm, 'varying ').replace(/\bin (vec\d|float) /g, 'varying $1 ').replace(/out vec4 o_col;/, '').replace(/\bo_col\b/g, 'gl_FragColor').replace(/gl_FragDepth/g, 'gl_FragDepthEXT');
+  else s = s.replace(/\bin (vec\d|float) /g, 'attribute $1 ').replace(/\bout (vec\d|float) /g, 'varying $1 ');
+  return s;
+}
+
+// ---------- LA VISTA
+export function creaVista3D(tela, opzioni = {}) {
+  const O = {
+    ombre: 1, // quanto pesano le ombre morbide (0: spente)
+    raggioOmbre: 0.32, // il raggio dell'ombra di contatto, in nanometri (≈ un atomo e mezzo)
+    ombreForma: 1, // il peso dell'ombra larga, quella che fa leggere la forma (il suo raggio segue l'inquadratura)
+    risoluzioneOmbre: 0, // 1: piena, 0.5: metà; 0: sceglie da sé (metà sopra il milione di pixel)
+    contorno: 0.45, nebbia: 0.55, sfoca: 0, // contorno e attenuazione con la profondità (0–1); sfocatura dei piani lontani: raggio massimo in pixel (0: spenta)
+    luceAmbiente: 0.42, riflesso: 0.14, sfondo: [0, 0, 0],
+    densita: 0, // pixel veri per pixel della pagina (0: quella dello schermo, al più 2)
+    dettaglio: 3, // sotto quanti pixel per celletta gli atomi si fondono in gruppi
+    massimoIstanze: 600000, // oltre, il dettaglio scende finché ci si sta
+    scartaSepolti: true, profonditaSepolti: 0.9, // gli atomi coperti da questa profondità di materia fitta non si disegnano
+    scalaRaggi: 1, raggioLegami: 0.012, colora: 'auto', // 'auto' | 'parte' | 'elemento'
+    etichette: true, interazione: true, agitazione: 1, alCambio: null, vecchio: false, ...opzioni,
+  };
+  const attributi = { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: !!O.conserva, powerPreference: 'high-performance' };
+  let gl = O.vecchio ? null : tela.getContext('webgl2', attributi); const due = !!gl;
+  if (!gl) gl = tela.getContext('webgl', attributi) || tela.getContext('experimental-webgl', attributi);
+  if (!gl) throw new Error('atomi3d: questo programma non riesce a creare un contesto WebGL');
+  const est = due ? {} : { ist: gl.getExtension('ANGLE_instanced_arrays'), prof: gl.getExtension('EXT_frag_depth'), tess: gl.getExtension('WEBGL_depth_texture') };
+  if (!due && !est.ist) throw new Error('atomi3d: WebGL1 senza disegno a istanze (ANGLE_instanced_arrays)');
+  const conProfondita = due || !!est.prof, conPost = due || !!est.tess;
+  const divisore = (i, n) => (due ? gl.vertexAttribDivisor(i, n) : est.ist.vertexAttribDivisorANGLE(i, n));
+  const aIstanze = (n) => (due ? gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n) : est.ist.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, n));
+
+  // --- programmi
+  const POSTI = { a_angolo: 0, a_pos: 1, a_pos2: 2, a_raggio: 3, a_colore: 4, a_id: 5, a_pv: 6 };
+  function programma(v, f, definizioni = '') {
+    const testa = (due ? '#version 300 es\n' : (conProfondita ? '#extension GL_EXT_frag_depth : enable\n' : '')) + 'precision highp float;\n' + (due ? '' : '#define VECCHIO\n') + (conProfondita ? '#define CON_PROFONDITA\n' : '') + definizioni;
+    const fai = (tipo, src) => { const s = gl.createShader(tipo); gl.shaderSource(s, testa + (due ? src : perVecchio(src, tipo === gl.FRAGMENT_SHADER))); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('atomi3d: ' + gl.getShaderInfoLog(s) + '\n' + src); return s; };
+    const p = gl.createProgram(), sv = fai(gl.VERTEX_SHADER, v), sf = fai(gl.FRAGMENT_SHADER, f); gl.attachShader(p, sv); gl.attachShader(p, sf);
+    for (const [nome, i] of Object.entries(POSTI)) gl.bindAttribLocation(p, i, nome);
+    gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('atomi3d: ' + gl.getProgramInfoLog(p));
+    gl.deleteShader(sv); gl.deleteShader(sf);
+    const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const nome = gl.getActiveUniform(p, i).name; u[nome] = gl.getUniformLocation(p, nome); }
+    return { p, u };
+  }
+  const prg = { atomi: programma(V_ATOMI, F_ATOMI), scegli: null, legami: null, ombre: null, sfuma: null, componi: null, sfoca: null, copia: null, scritte: null };
+  const pigro = (nome, v, f, def) => prg[nome] || (prg[nome] = programma(v, f, def));
+
+  // --- buffer e immagini
+  const bufAngoli = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufAngoli); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  let bufPos = null, bufPos2 = null, bufStatico = null, bufId = null, bufScritte = gl.createBuffer(), bufLegA = null, bufLegB = null, bufLegC = null, nLegami = 0;
+  let S = null, scena = null, lista = [], viva = null, fotogrammi = null, mesc = 0, coppia = -1, piano = null, evid = null;
+  let imm = null; // le immagini su cui si disegna prima di comporre
+  const immagine = (w, h, filtro, formato) => {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    if (formato === 'profondita') gl.texImage2D(gl.TEXTURE_2D, 0, due ? gl.DEPTH_COMPONENT24 : gl.DEPTH_COMPONENT, w, h, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filtro); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filtro);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t;
+  };
+  const telaio = (colore, profondita) => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colore, 0); if (profondita) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, profondita, 0); return f; };
+  function buttaImmagini() { if (!imm) return; for (const k of ['col', 'prof', 'ao1', 'ao2', 'comp']) gl.deleteTexture(imm[k]); for (const k of ['fG', 'fA1', 'fA2', 'fC']) gl.deleteFramebuffer(imm[k]); if (imm.rb) gl.deleteRenderbuffer(imm.rb); imm = null; }
+  function preparaImmagini() {
+    const W = tela.width, H = tela.height, sa = O.risoluzioneOmbre || (W * H > 1.1e6 ? 0.5 : 1), wa = Math.max(1, Math.round(W * sa)), ha = Math.max(1, Math.round(H * sa));
+    if (imm && imm.W === W && imm.H === H && imm.wa === wa) return;
+    buttaImmagini(); if (!conPost) { imm = { W, H, wa, ha }; return; }
+    imm = { W, H, wa, ha, col: immagine(W, H, gl.NEAREST), prof: immagine(W, H, gl.NEAREST, 'profondita'), ao1: immagine(wa, ha, gl.NEAREST), ao2: immagine(wa, ha, gl.NEAREST), comp: immagine(W, H, gl.LINEAR) };
+    imm.fG = telaio(imm.col, imm.prof); imm.fA1 = telaio(imm.ao1); imm.fA2 = telaio(imm.ao2); imm.fC = telaio(imm.comp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  // per leggere che cosa c'è sotto il cursore: un'immagine di un pixel solo
+  let scelta = null;
+  function preparaScelta() {
+    if (scelta) return; const t = immagine(1, 1, gl.NEAREST), rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1, 1);
+    const f = telaio(t); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb); gl.bindFramebuffer(gl.FRAMEBUFFER, null); scelta = { t, rb, f };
+  }
+
+  // --- la camera: gira attorno a un bersaglio (in nanometri); yaw e pitch in radianti
+  const cam = { bersaglio: [0, 0, 0], yaw: 0.6, pitch: 0.35, dist: 10, fov: 0.6, vicino: 0.02 };
+  cam.inquadra = () => { if (!S) return; cam.bersaglio = S.centro.slice(); cam.dist = (S.raggioScena / Math.sin(cam.fov / 2)) * 0.92; cambia(); };
+  const M4 = { vista: new Float32Array(16), proj: null, occhio: [0, 0, 0], dx: [1, 0, 0], su: [0, 1, 0], dietro: [0, 0, 1], tanY: 0, aspetto: 1, vicino: 0.02, lontano: 100 };
+  function matrici() {
+    const cp = Math.cos(cam.pitch), f = [cp * Math.sin(cam.yaw), Math.sin(cam.pitch), cp * Math.cos(cam.yaw)], b = cam.bersaglio, o = [b[0] + cam.dist * f[0], b[1] + cam.dist * f[1], b[2] + cam.dist * f[2]];
+    const dx = norma(vett([0, 1, 0], f)), su = vett(f, dx), m = M4.vista;
+    m[0] = dx[0]; m[4] = dx[1]; m[8] = dx[2]; m[12] = -scal(dx, o); m[1] = su[0]; m[5] = su[1]; m[9] = su[2]; m[13] = -scal(su, o); m[2] = f[0]; m[6] = f[1]; m[10] = f[2]; m[14] = -scal(f, o); m[3] = m[7] = m[11] = 0; m[15] = 1;
+    M4.occhio = o; M4.dx = dx; M4.su = su; M4.dietro = f; M4.tanY = Math.tan(cam.fov / 2); M4.aspetto = tela.width / Math.max(1, tela.height);
+    const dc = S ? Math.hypot(o[0] - S.centro[0], o[1] - S.centro[1], o[2] - S.centro[2]) : cam.dist;
+    M4.vicino = cam.vicino; M4.lontano = Math.max(dc + (S ? S.raggioScena : 1) * 1.05, cam.vicino * 10);
+    M4.proj = prospettiva(M4.tanY, M4.aspetto, M4.vicino, M4.lontano);
+  }
+  const inVista = (p) => { const m = M4.vista; return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]]; };
+  // il piano di taglio nello spazio dell'occhio (resta ciò che ha n·p + w ≥ 0)
+  function pianoOcchio() {
+    if (!piano) return null;
+    if (piano.vista) return [0, 0, -1, -(cam.dist - (piano.scarto || 0))];
+    const n = norma(piano.normale || [0, 0, 1]), q = piano.quota ?? 0, nv = [-(M4.dx[0] * n[0] + M4.dx[1] * n[1] + M4.dx[2] * n[2]), -scal(M4.su, n), -scal(M4.dietro, n)];
+    return [nv[0], nv[1], nv[2], q - scal(n, M4.occhio)]; // resta n·p ≤ quota
+  }
+
+  // --- caricare una scena
+  function carica(nuova) {
+    for (const b of [bufPos, bufPos2, bufStatico, bufId, bufLegA, bufLegB, bufLegC]) if (b) gl.deleteBuffer(b);
+    bufPos = bufPos2 = bufStatico = bufId = bufLegA = bufLegB = bufLegC = null; nLegami = 0; S = null; scena = nuova || null; lista = []; viva = null; fotogrammi = null; coppia = -1; evid = null; mesc = 0;
+    if (!scena) { cambia(); return null; }
+    const t0 = performance.now();
+    S = preparaScena(scena, O);
+    bufPos = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.bufferData(gl.ARRAY_BUFFER, S.pos, scena.tempo ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+    bufStatico = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufStatico); gl.bufferData(gl.ARRAY_BUFFER, S.statico, gl.STATIC_DRAW); S.statico = null;
+    if (!due) { const id = new Float32Array(S.M); for (let i = 0; i < S.M; i++) id[i] = i; bufId = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufId); gl.bufferData(gl.ARRAY_BUFFER, id, gl.STATIC_DRAW); }
+    const A = scena.atomi;
+    if (A.pos2) { bufPos2 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufPos2); gl.bufferData(gl.ARRAY_BUFFER, ordinate(A.pos2), gl.STATIC_DRAW); }
+    if (typeof scena.tempo === 'function') viva = Float32Array.from(A.pos);
+    else if (scena.tempo && scena.tempo.fotogrammi) { fotogrammi = scena.tempo; bufPos2 = bufPos2 || gl.createBuffer(); }
+    if (scena.legami && scena.legami.length) caricaLegami();
+    S.memoria = S.M * (12 + 8 + (bufPos2 ? 12 : 0) + (due ? 0 : 4)); S.tempoPreparazione = performance.now() - t0;
+    faiScritte(); if (!O.tieniCamera) cam.inquadra(); cambia();
+    return statistiche();
+  }
+  // le posizioni di tutti gli atomi (nell'ordine della scena, nella sua unità) messe nell'ordine dei buffer
+  const lavoro = { a: null };
+  function ordinate(pos) {
+    const M = S.M, ord = S.ordine, k = S.ku, out = lavoro.a && lavoro.a.length === 3 * M ? lavoro.a : (lavoro.a = new Float32Array(3 * M));
+    for (let j = 0; j < M; j++) { const i = 3 * ord[j]; out[3 * j] = pos[i] * k; out[3 * j + 1] = pos[i + 1] * k; out[3 * j + 2] = pos[i + 2] * k; }
+    return out;
+  }
+  function aggiornaPosizioni(pos, seconde = false) {
+    if (!S) return; const b = seconde ? bufPos2 || (bufPos2 = gl.createBuffer()) : bufPos, dati = ordinate(pos);
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    if (seconde && !b.pieno) { gl.bufferData(gl.ARRAY_BUFFER, dati, gl.DYNAMIC_DRAW); b.pieno = true; } else gl.bufferSubData(gl.ARRAY_BUFFER, 0, dati);
+    if (!seconde) S.pos.set(dati);
+  }
+  function caricaLegami() {
+    const L = scena.legami, n = L.length >> 1, A = scena.atomi, k = S.ku, a = new Float32Array(3 * n), b = new Float32Array(3 * n), c = new Uint8Array(4 * n), grigio = [200, 200, 200];
+    for (let j = 0; j < n; j++) { const p = 3 * L[2 * j], q = 3 * L[2 * j + 1]; for (let e = 0; e < 3; e++) { a[3 * j + e] = A.pos[p + e] * k; b[3 * j + e] = A.pos[q + e] * k; } c.set(grigio, 4 * j); }
+    bufLegA = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufLegA); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
+    bufLegB = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufLegB); gl.bufferData(gl.ARRAY_BUFFER, b, gl.STATIC_DRAW);
+    bufLegC = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufLegC); gl.bufferData(gl.ARRAY_BUFFER, c, gl.STATIC_DRAW); nLegami = n;
+  }
+
+  // --- che cosa disegnare in questo fotogramma: i pezzi dentro lo schermo, ognuno al suo livello di dettaglio
+  const stat = { disegnate: 0, intervalli: 0, cpuMs: 0, livelli: [0, 0, 0, 0, 0], sepolteMostrate: 0, fattore: 1 };
+  function faiLista() {
+    const tY = M4.tanY, tX = tY * M4.aspetto, lX = Math.hypot(1, tX), lY = Math.hypot(1, tY), fuocoPx = tela.height / (2 * tY), pv = pianoOcchio();
+    const De = O.profonditaSepolti * 1.6 + 0.3, Dp = O.profonditaSepolti * 1.3 + 0.2, visti = [];
+    for (const z of S.pezzi) {
+      const c = inVista(z.c), r = z.r + S.agitaMax * 3;
+      if (c[2] - r > -M4.vicino || (c[0] + c[2] * tX) / lX > r || (-c[0] + c[2] * tX) / lX > r || (c[1] + c[2] * tY) / lY > r || (-c[1] + c[2] * tY) / lY > r) continue;
+      const dp = pv ? pv[0] * c[0] + pv[1] * c[1] + pv[2] * c[2] + pv[3] : 1e9; if (dp < -r) continue;
+      const d = Math.hypot(c[0], c[1], c[2]);
+      visti.push({ z, ppn: fuocoPx / Math.max(d - r * 0.6, M4.vicino), sepolti: d - r < De || (pv && dp < Dp + r) });
+    }
+    // il dettaglio: la celletta più grossa che sta ancora sotto la soglia di pixel; se le istanze sono troppe, la soglia sale
+    let fattore = 1, totale = 0;
+    for (let giro = 0; giro < 12; giro++) {
+      totale = 0;
+      for (const v of visti) { let L = 0; for (let k = 4; k >= 1; k--) if (S.passi[k] * v.ppn <= O.dettaglio * fattore) { L = k; break; } v.L = L; const l = v.z.liv[L]; totale += l.nE + (v.sepolti ? l.nB : 0); }
+      if (totale <= O.massimoIstanze) break; fattore *= 1.5;
+    }
+    lista = []; stat.livelli.fill(0); stat.sepolteMostrate = 0; stat.fattore = fattore;
+    let ultimo = null;
+    const aggiungi = (da, n, sep) => { if (!n) return; if (ultimo && ultimo.sep === sep && ultimo.da + ultimo.n === da) ultimo.n += n; else lista.push((ultimo = { da, n, sep })); };
+    for (const v of visti) { const l = v.z.liv[v.L]; aggiungi(l.da, l.nE, false); stat.livelli[v.L] += l.nE; if (v.sepolti && l.nB) { aggiungi(l.da + l.nE, l.nB, true); stat.sepolteMostrate += l.nB; } }
+    stat.disegnate = totale; stat.intervalli = lista.length; return pv;
+  }
+  function puntaIstanze(da) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 12, da * 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesc > 0 && bufPos2 ? bufPos2 : bufPos); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 12, da * 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufStatico); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 8, da * 8); gl.vertexAttribPointer(4, 4, gl.UNSIGNED_BYTE, true, 8, da * 8 + 4);
+    if (bufId) { gl.bindBuffer(gl.ARRAY_BUFFER, bufId); gl.vertexAttribPointer(5, 1, gl.FLOAT, false, 4, da * 4); }
+  }
+  function disegnaAtomi(P, pv, t, sceglie) {
+    gl.useProgram(P.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufAngoli); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); divisore(0, 0);
+    for (const i of bufId ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]) { gl.enableVertexAttribArray(i); divisore(i, 1); }
+    gl.uniformMatrix4fv(P.u.u_vista, false, M4.vista); gl.uniformMatrix4fv(P.u.u_proj, false, M4.proj);
+    gl.uniform4f(P.u.u_scegli, ...(sceglie || [1, 1, 0, 0]));
+    gl.uniform4f(P.u.u_moto, bufPos2 ? mesc : 0, t, S.agitaMax * O.agitazione, O.scalaRaggi);
+    gl.uniform4f(P.u.u_taglio, ...(pv || [0, 0, 0, 1]));
+    gl.uniform4f(P.u.u_piani, M4.vicino, M4.lontano - M4.vicino, O.luceAmbiente, O.riflesso);
+    if (P.u.u_sole) gl.uniform3f(P.u.u_sole, ...norma([-0.45, 0.6, 0.72]));
+    if (P.u.u_evid) gl.uniform4f(P.u.u_evid, ...(evid ? [S.pos[3 * evid.istanza], S.pos[3 * evid.istanza + 1], S.pos[3 * evid.istanza + 2], 1] : [0, 0, 0, 0]));
+    let sep = null;
+    for (const x of lista) {
+      if (x.sep !== sep) { sep = x.sep; gl.uniform4f(P.u.u_sepolti, sep ? 1 : 0, O.profonditaSepolti * 1.6 + 0.3, O.profonditaSepolti * 1.3 + 0.2, pv ? 1 : 0); }
+      if (P.u.u_base) gl.uniform1f(P.u.u_base, x.da);
+      puntaIstanze(x.da); aIstanze(x.n);
+    }
+    for (const i of [1, 2, 3, 4, 5]) { divisore(i, 0); gl.disableVertexAttribArray(i); }
+  }
+  function disegnaLegami(pv) {
+    const P = pigro('legami', V_LEGAMI, F_LEGAMI); gl.useProgram(P.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufAngoli); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); divisore(0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufLegA); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0); divisore(1, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufLegB); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0); divisore(2, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufLegC); gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.UNSIGNED_BYTE, true, 0, 0); divisore(4, 1);
+    gl.uniformMatrix4fv(P.u.u_vista, false, M4.vista); gl.uniformMatrix4fv(P.u.u_proj, false, M4.proj);
+    gl.uniform4f(P.u.u_moto, 0, 0, 0, O.raggioLegami * 3); gl.uniform4f(P.u.u_taglio, ...(pv || [0, 0, 0, 1])); gl.uniform4f(P.u.u_piani, M4.vicino, M4.lontano - M4.vicino, O.luceAmbiente, 0);
+    aIstanze(nLegami);
+    for (const i of [1, 2, 4]) { divisore(i, 0); gl.disableVertexAttribArray(i); }
+  }
+  const pieno = (P) => { gl.useProgram(P.p); gl.bindBuffer(gl.ARRAY_BUFFER, bufAngoli); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
+  const lega = (unita, t, u) => { gl.activeTexture(gl.TEXTURE0 + unita); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(u, unita); };
+
+  // --- il tempo: le posizioni che cambiano
+  function avanza(t) {
+    if (viva) { if (scena.tempo(t, viva, scena) !== false) aggiornaPosizioni(viva); }
+    else if (fotogrammi) {
+      const F = fotogrammi.fotogrammi, n = F.length, dur = fotogrammi.durata || n; let x = (t / dur) * (fotogrammi.ciclo === false ? n - 1 : n);
+      x = fotogrammi.ciclo === false ? Math.max(0, Math.min(n - 1.0001, x)) : ((x % n) + n) % n;
+      const k = Math.floor(x); if (k !== coppia) { coppia = k; aggiornaPosizioni(F[k]); aggiornaPosizioni(F[(k + 1) % n], true); }
+      mesc = x - k;
+    }
+  }
+
+  // --- IL DISEGNO di un fotogramma (t in secondi)
+  let tempoOra = 0;
+  function disegna(t) {
+    if (perso) return;
+    const t0 = performance.now(); tempoOra = t = t ?? t0 / 1000;
+    if (!tela.width || !tela.height) return;
+    if (!S) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, tela.width, tela.height); gl.clearColor(O.sfondo[0], O.sfondo[1], O.sfondo[2], 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+    preparaImmagini(); avanza(t); matrici();
+    const pv = faiLista(), W = tela.width, H = tela.height, post = conPost;
+    // 1. gli atomi: colore e profondità
+    gl.bindFramebuffer(gl.FRAMEBUFFER, post ? imm.fG : null); gl.viewport(0, 0, W, H);
+    gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true);
+    gl.clearColor(post ? 0 : O.sfondo[0], post ? 0 : O.sfondo[1], post ? 0 : O.sfondo[2], post ? 0 : 1); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    disegnaAtomi(prg.atomi, pv, t, null);
+    if (nLegami && O.scalaRaggi < 0.9) disegnaLegami(pv);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+    if (post) {
+      const pr = [1 / M4.proj[0], 1 / M4.proj[5], M4.vicino, M4.lontano - M4.vicino], conOmbre = O.ombre > 0, pxNm = H / (2 * M4.tanY);
+      const campo = cam.dist * M4.tanY, Rg = Math.max(2.5 * O.raggioOmbre, 0.22 * campo); // il raggio largo segue l'inquadratura
+      if (conOmbre) {
+        // 2. l'ombra morbida, 3. sfumata in due passate
+        let P = pigro('ombre', V_PIENO, F_OMBRE); gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); gl.viewport(0, 0, imm.wa, imm.ha); gl.useProgram(P.p);
+        lega(0, imm.prof, P.u.u_prof); gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, pxNm, 0.2 * H); gl.uniform4f(P.u.u_ao, O.raggioOmbre, Rg, 1, O.ombreForma); pieno(P);
+        P = pigro('sfuma', V_PIENO, F_SFUMA); gl.useProgram(P.p); const kz = (65535 / (M4.lontano - M4.vicino)) ;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA2); lega(0, imm.ao1, P.u.u_ao); gl.uniform4f(P.u.u_dir, 1 / imm.wa, 0, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); lega(0, imm.ao2, P.u.u_ao); gl.uniform4f(P.u.u_dir, 0, 1 / imm.ha, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);
+      }
+      // 4. la composizione
+      const sfoca = O.sfoca > 0, P = pigro('componi', V_PIENO, F_COMPONI);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sfoca ? imm.fC : null); gl.viewport(0, 0, W, H); gl.useProgram(P.p);
+      lega(0, imm.col, P.u.u_col); lega(1, imm.prof, P.u.u_prof); lega(2, imm.ao1, P.u.u_ao);
+      gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, 1 / imm.wa, 1 / imm.ha);
+      const dens = W / Math.max(1, tela.clientWidth || W);
+      gl.uniform4f(P.u.u_eff, O.ombre, O.contorno, O.nebbia, Math.max(1, dens));
+      const dc = Math.hypot(M4.occhio[0] - S.centro[0], M4.occhio[1] - S.centro[1], M4.occhio[2] - S.centro[2]);
+      const nebbiaDa = Math.max(M4.vicino, Math.min(cam.dist * 0.75, dc - S.raggioScena)), nebbiaA = Math.max(nebbiaDa + 0.5, Math.min(dc + S.raggioScena, cam.dist * 3.2));
+      gl.uniform4f(P.u.u_dist, nebbiaDa, nebbiaA, cam.dist * 1.08 + 0.3, cam.dist * 2.0 + 1.5);
+      const pxMondo = 1 / pxNm; // quanti nanometri è largo un pixel a distanza 1
+      gl.uniform4f(P.u.u_sog, Math.max(0.12 / cam.dist, 2 * pxMondo), Math.max(0.4 / cam.dist, 6 * pxMondo), 1 / ((65535 / (M4.lontano - M4.vicino)) * O.raggioOmbre), conOmbre ? 1 : 0);
+      gl.uniform3f(P.u.u_sfondo, O.sfondo[0], O.sfondo[1], O.sfondo[2]); pieno(P);
+      if (sfoca) { const Q = pigro('sfoca', V_PIENO, F_SFOCA); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(Q.p); lega(0, imm.comp, Q.u.u_col); gl.uniform4f(Q.u.u_px, 1 / W, 1 / H, O.sfoca * dens, 0); pieno(Q); }
+    }
+    if (O.etichette && scritte.voci.length) disegnaScritte();
+    stat.cpuMs = performance.now() - t0;
+  }
+
+  // --- le etichette: il testo disegnato una volta in un'immagine, poi rettangoli sullo schermo e la linea fino al punto
+  const scritte = { voci: [], tex: null, w: 1, h: 1 };
+  function faiScritte() {
+    scritte.voci = []; const E = (scena && scena.etichette) || []; if (!E.length || typeof document === 'undefined') return;
+    const dens = Math.max(1, tela.width / Math.max(1, tela.clientWidth || tela.width)), corpo = Math.round(14 * dens), cv = document.createElement('canvas'), c2 = cv.getContext('2d');
+    c2.font = `600 ${corpo}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+    const righe = E.map((e) => ({ e, w: Math.ceil(c2.measureText(e.testo).width) + 8, h: Math.ceil(corpo * 1.5) }));
+    cv.width = Math.min(4096, Math.max(64, ...righe.map((r) => r.w))); cv.height = 8 + righe.reduce((s, r) => s + r.h + 2, 0);
+    c2.font = `600 ${corpo}px system-ui, -apple-system, 'Segoe UI', sans-serif`; c2.textBaseline = 'middle'; c2.fillStyle = '#fff'; c2.fillRect(0, 0, 4, 4);
+    let y = 6;
+    for (const r of righe) { c2.shadowColor = 'rgba(0,0,0,0.9)'; c2.shadowBlur = 4 * dens; c2.fillText(r.e.testo, 4, y + r.h / 2); c2.fillText(r.e.testo, 4, y + r.h / 2); scritte.voci.push({ pos: r.e.pos.map((x) => x * S.ku), scarto: r.e.scarto, u0: 0, v0: y / cv.height, u1: r.w / cv.width, v1: (y + r.h) / cv.height, w: r.w, h: r.h }); y += r.h + 2; }
+    if (!scritte.tex) scritte.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, scritte.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    scritte.w = cv.width; scritte.h = cv.height; scritte.dens = dens;
+  }
+  // un punto della scena sullo schermo (pixel della tela, origine in alto a sinistra), o null se è dietro l'occhio
+  function sulloSchermo(p) { const c = inVista(p); if (c[2] > -M4.vicino) return null; return [(0.5 + (0.5 * c[0] * M4.proj[0]) / -c[2]) * tela.width, (0.5 - (0.5 * c[1] * M4.proj[5]) / -c[2]) * tela.height, -c[2]]; }
+  function disegnaScritte() {
+    const W = tela.width, H = tela.height, dens = scritte.dens || 1, v = [], bianco = [1.5 / scritte.w, 1.5 / scritte.h], cs = sulloSchermo(S.centro) || [W / 2, H / 2];
+    const rett = (x0, y0, x1, y1, u0, v0, u1, v1) => { const a = [(x0 / W) * 2 - 1, 1 - (y0 / H) * 2], b = [(x1 / W) * 2 - 1, 1 - (y1 / H) * 2]; v.push(a[0], a[1], u0, v0, b[0], a[1], u1, v0, a[0], b[1], u0, v1, b[0], a[1], u1, v0, b[0], b[1], u1, v1, a[0], b[1], u0, v1); };
+    const linea = (x0, y0, x1, y1, sp) => { const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = (-dy / l) * sp * 0.5, ny = (dx / l) * sp * 0.5, q = [[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x0 - nx, y0 - ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]]; for (const p of q) v.push((p[0] / W) * 2 - 1, 1 - (p[1] / H) * 2, bianco[0], bianco[1]); };
+    for (const e of scritte.voci) {
+      const p = sulloSchermo(e.pos); if (!p || p[0] < 0 || p[0] > W || p[1] < 0 || p[1] > H) continue;
+      let sx, sy; if (e.scarto) { sx = e.scarto[0] * dens; sy = e.scarto[1] * dens; } else { const dx = p[0] - cs[0], dy = p[1] - cs[1], l = Math.hypot(dx, dy) || 1; sx = (dx >= 0 ? 1 : -1) * (60 + 40 * Math.abs(dx / l)) * dens; sy = (dy / l) * 60 * dens - 20 * dens; }
+      const aDestra = sx >= 0, bx = p[0] + sx, by = p[1] + sy, x0 = aDestra ? bx : bx - e.w, sp = 1.4 * dens;
+      linea(p[0], p[1], bx, by, sp); linea(bx, by, aDestra ? bx + e.w : bx - e.w, by, sp); rett(p[0] - 2.5 * dens, p[1] - 2.5 * dens, p[0] + 2.5 * dens, p[1] + 2.5 * dens, bianco[0], bianco[1], bianco[0], bianco[1]);
+      rett(x0, by - e.h - 1 * dens, x0 + e.w, by - 1 * dens, e.u0, e.v0, e.u1, e.v1);
+    }
+    if (!v.length) return;
+    const P = pigro('scritte', V_SCRITTE, F_SCRITTE); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(P.p);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufScritte); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(6); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 0, 0);
+    lega(0, scritte.tex, P.u.u_col); gl.drawArrays(gl.TRIANGLES, 0, v.length / 4); gl.disableVertexAttribArray(6); gl.disable(gl.BLEND);
+  }
+
+  // --- che cosa c'è sotto il cursore: si ridisegna la scena in un pixel solo, ogni atomo col suo numero come colore
+  function scegli(x, y) { // x, y in pixel della pagina, dentro la tela
+    if (!S || perso || !lista.length) return null;
+    const W = tela.width, H = tela.height, px = (x / Math.max(1, tela.clientWidth)) * W, py = H - (y / Math.max(1, tela.clientHeight)) * H, nx = (px / W) * 2 - 1, ny = (py / H) * 2 - 1;
+    preparaScelta(); const P = pigro('scegli', V_ATOMI, F_ATOMI, '#define SCEGLI\n');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scelta.f); gl.viewport(0, 0, 1, 1); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    disegnaAtomi(P, pianoOcchio(), tempoOra, [W, H, -nx * W, -ny * H]);
+    const b = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+    if (!b[3]) return null; const istanza = b[0] + 256 * b[1] + 65536 * b[2] - 1; if (istanza < 0 || istanza >= S.M) return null;
+    return descrivi(istanza, x, y);
+  }
+  function descrivi(istanza, x, y) {
+    const i = S.ordine[istanza], A = scena.atomi, z = A.elemento ? A.elemento[i] : 0, e = ELEMENTI[z] || null, k = S.parteDi ? S.parteDi[i] : -1, parte = (scena.parti || [])[k] || null;
+    return { istanza, indice: i, elemento: z, simbolo: e ? e.simbolo : null, nome: e ? e.nome : null, parte: parte ? parte.nome : null, indiceParte: parte ? k : -1, rappresenta: istanza >= S.N ? S.rappresenta[istanza - S.N] : 1,
+      pos: [S.pos[3 * istanza], S.pos[3 * istanza + 1], S.pos[3 * istanza + 2]], raggio: (A.raggio && A.raggio.length ? A.raggio[i] * S.ku : null), x, y };
+  }
+
+  // --- l'interazione: trascinare ruota; col tasto destro (o maiuscolo) sposta; la rotella avvicina verso il punto
+  // sotto il cursore; due clic portano lì il centro di rotazione; passando sopra un atomo si dice che cos'è
+  const ascolti = []; let ascoltatoreAtomo = null, trascina = null, ancora = null, daScegliere = null, quadro = 0, giro = 0, perso = false;
+  const ascolta = (chi, che, f, o) => { chi.addEventListener(che, f, o); ascolti.push([chi, che, f, o]); };
+  function cambia() { if (O.alCambio) O.alCambio(); else if (!giro && !quadro) quadro = requestAnimationFrame(() => { quadro = 0; disegna(); }); }
+  const dove = (e) => { const r = tela.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  function raggioDaSchermo(x, y) { const nx = (x / tela.clientWidth) * 2 - 1, ny = 1 - (y / tela.clientHeight) * 2, a = nx * M4.tanY * M4.aspetto, b = ny * M4.tanY; return norma([a * M4.dx[0] + b * M4.su[0] - M4.dietro[0], a * M4.dx[1] + b * M4.su[1] - M4.dietro[1], a * M4.dx[2] + b * M4.su[2] - M4.dietro[2]]); }
+  if (O.interazione) {
+    const dita = new Map(); let pizzico = 0;
+    ascolta(tela, 'contextmenu', (e) => e.preventDefault());
+    ascolta(tela, 'pointerdown', (e) => { const [x, y] = dove(e); dita.set(e.pointerId, [x, y]); trascina = { x, y, sposta: e.shiftKey || e.button === 2 || e.button === 1, mosso: 0 }; pizzico = 0; ancora = null; try { tela.setPointerCapture(e.pointerId); } catch { /* il puntatore non c'è più */ } });
+    ascolta(tela, 'pointermove', (e) => {
+      const [x, y] = dove(e);
+      if (!trascina) { ancora = null; daScegliere = [x, y]; if (ascoltatoreAtomo && !quadroScelta) quadroScelta = requestAnimationFrame(sceltaPigra); return; }
+      if (dita.has(e.pointerId)) dita.set(e.pointerId, [x, y]);
+      if (dita.size === 2) { // due dita: allargare avvicina, spostarle sposta
+        const [a, b] = [...dita.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pizzico) cam.dist = Math.max(0.05, cam.dist * (pizzico / Math.max(1, d))); pizzico = d; cambia(); return;
+      }
+      const dx = x - trascina.x, dy = y - trascina.y; trascina.x = x; trascina.y = y; trascina.mosso += Math.abs(dx) + Math.abs(dy);
+      if (trascina.sposta) { const k = (2 * cam.dist * M4.tanY) / Math.max(1, tela.clientHeight); for (let i = 0; i < 3; i++) cam.bersaglio[i] += (-dx * M4.dx[i] + dy * M4.su[i]) * k; }
+      else { cam.yaw -= dx * 0.006; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch + dy * 0.006)); }
+      cambia();
+    });
+    const lascia = (e) => { dita.delete(e.pointerId); if (!dita.size) trascina = null; pizzico = 0; };
+    ascolta(tela, 'pointerup', lascia); ascolta(tela, 'pointercancel', lascia);
+    ascolta(tela, 'pointerleave', () => { daScegliere = null; if (evid) { evid = null; cambia(); } if (ascoltatoreAtomo) ascoltatoreAtomo(null); });
+    ascolta(tela, 'wheel', (e) => {
+      e.preventDefault(); if (!S) return; const [x, y] = dove(e);
+      if (!ancora) { // il punto sotto il cursore: l'atomo che c'è, o il piano del bersaglio
+        matrici(); const a = scegli(x, y), d = raggioDaSchermo(x, y);
+        if (a) { const v = [a.pos[0] - M4.occhio[0], a.pos[1] - M4.occhio[1], a.pos[2] - M4.occhio[2]], s = scal(v, d); ancora = [M4.occhio[0] + d[0] * s, M4.occhio[1] + d[1] * s, M4.occhio[2] + d[2] * s]; }
+        else { const s = cam.dist / Math.max(1e-6, -scal(d, M4.dietro)); ancora = [M4.occhio[0] + d[0] * s, M4.occhio[1] + d[1] * s, M4.occhio[2] + d[2] * s]; }
+      }
+      const k = Math.exp(Math.max(-1, Math.min(1, e.deltaY * 0.0015))), nuova = Math.max(0.08, Math.min(S.raggioScena * 40, cam.dist * k)), f = nuova / cam.dist;
+      for (let i = 0; i < 3; i++) cam.bersaglio[i] = ancora[i] + (cam.bersaglio[i] - ancora[i]) * f; cam.dist = nuova; cambia();
+    }, { passive: false });
+    ascolta(tela, 'dblclick', (e) => { const [x, y] = dove(e), a = scegli(x, y); if (a) { cam.bersaglio = a.pos.slice(); cambia(); } });
+  }
+  let quadroScelta = 0;
+  function sceltaPigra() {
+    quadroScelta = 0; if (!daScegliere || !ascoltatoreAtomo || trascina) return;
+    const a = scegli(daScegliere[0], daScegliere[1]); daScegliere = null;
+    if ((a ? a.istanza : -1) !== (evid ? evid.istanza : -1)) { evid = a; cambia(); }
+    ascoltatoreAtomo(a);
+  }
+  ascolta(tela, 'webglcontextlost', (e) => { e.preventDefault(); perso = true; });
+
+  function ridimensiona() {
+    const d = O.densita || Math.min(2, (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1), w = Math.max(1, Math.round((tela.clientWidth || tela.width) * d)), h = Math.max(1, Math.round((tela.clientHeight || tela.height) * d));
+    if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; if (scena && scritte.voci.length && Math.abs((scritte.dens || 1) - d) > 0.01) faiScritte(); }
+    cambia();
+  }
+  function statistiche() { return S ? { webgl: due ? 2 : 1, atomi: S.N, istanze: S.M, gruppi: S.M - S.N, sepolti: S.quantiSepolti, pezzi: S.pezzi.length, memoria: S.memoria, preparazioneMs: S.tempoPreparazione, pixel: [tela.width, tela.height], ...stat, livelli: stat.livelli.slice() } : { webgl: due ? 2 : 1, atomi: 0 }; }
+  function passo(ms) { if (!giro) return; disegna(ms / 1000); giro = requestAnimationFrame(passo); }
+  function libera() {
+    if (giro) cancelAnimationFrame(giro); if (quadro) cancelAnimationFrame(quadro); if (quadroScelta) cancelAnimationFrame(quadroScelta); giro = quadro = quadroScelta = 0;
+    for (const [chi, che, f, o] of ascolti) chi.removeEventListener(che, f, o); ascolti.length = 0; ascoltatoreAtomo = null;
+    if (perso) return;
+    for (const b of [bufPos, bufPos2, bufStatico, bufId, bufAngoli, bufScritte, bufLegA, bufLegB, bufLegC]) if (b) gl.deleteBuffer(b);
+    buttaImmagini(); if (scelta) { gl.deleteTexture(scelta.t); gl.deleteRenderbuffer(scelta.rb); gl.deleteFramebuffer(scelta.f); } if (scritte.tex) gl.deleteTexture(scritte.tex);
+    for (const p of Object.values(prg)) if (p) gl.deleteProgram(p.p);
+    S = null; scena = null; perso = true;
+    if (O.tieniContesto !== true) gl.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+  ridimensiona();
+  return {
+    carica, disegna, ridimensiona, camera: cam, libera, opzioni: O, statistiche, scegli, gl,
+    suAtomo: (f) => { ascoltatoreAtomo = f || null; },
+    taglio: (p) => { piano = p || null; cambia(); return piano; }, // { vista: true, scarto } oppure { normale: [x, y, z], quota } (resta ciò che sta sotto la quota)
+    mescola: (f) => { mesc = Math.max(0, Math.min(1, f)); cambia(); },
+    aggiornaPosizioni, // (Float32Array(3N) nell'ordine e nell'unità della scena): un buffer per fotogramma
+    ricarica: () => { const s = scena, c = { ...cam, bersaglio: cam.bersaglio.slice() }; if (s) { carica(s); Object.assign(cam, c); cambia(); } },
+    avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; },
+    sulloSchermo: (p) => { matrici(); const q = sulloSchermo(p.map((x) => x * (S ? S.ku : 1))); return q ? [(q[0] / tela.width) * tela.clientWidth, (q[1] / tela.height) * tela.clientHeight] : null; },
+  };
+}
