@@ -518,6 +518,7 @@ export function creaVista3D(tela, opzioni = {}) {
     densita: 0, // pixel veri per pixel della pagina (0: quella dello schermo, al più 2)
     dettaglio: 3, // sotto quanti pixel per celletta gli atomi si fondono in gruppi
     massimoIstanze: 600000, // oltre, il dettaglio scende finché ci si sta
+    fotogrammiVoluti: 30, minimoIstanze: 120000, // se la scheda non tiene questo ritmo, il tetto delle istanze scende (mai sotto il minimo) mentre ci si muove; da fermi si ridisegna al dettaglio pieno. 0: non si adatta
     punti: true, // gli atomi piccoli sullo schermo come punti (un vertice ciascuno); false: tutti quadratini a istanze
     scartaSepolti: true, profonditaSepolti: 0.9, // gli atomi coperti da questa profondità di materia fitta non si disegnano
     scalaRaggi: 1, raggioLegami: 0.03, colora: 'auto', // 'auto' | 'parte' | 'elemento'
@@ -665,7 +666,7 @@ export function creaVista3D(tela, opzioni = {}) {
     for (let giro = 0; giro < 12; giro++) {
       totale = 0;
       for (const v of visti) { let L = 0; if (!v.vicino) for (let k = 4; k >= 1; k--) if (S.passi[k] * v.ppn <= O.dettaglio * fattore) { L = k; break; } v.L = L; const l = v.z.liv[L]; totale += l.nE + (v.sepolti ? l.nB : 0); }
-      if (totale <= O.massimoIstanze) break; fattore *= 1.5;
+      if (totale <= Math.min(O.massimoIstanze, rifinisce ? Infinity : ritmo.tetto)) break; fattore *= 1.5;
     }
     lista = []; grandi.n = 0; stat.livelli.fill(0); stat.sepolteMostrate = 0; stat.fattore = fattore;
     let ultimo = null;
@@ -778,6 +779,26 @@ export function creaVista3D(tela, opzioni = {}) {
     }
   }
 
+  // --- il ritmo: quanto ci mette davvero la scheda a finire un fotogramma (un segnale messo in coda ai comandi, e
+  // un orologio che guarda quando arriva). Se è troppo, il tetto delle istanze scende; se avanza tempo, risale.
+  // Quando per un terzo di secondo nessuno ridisegna, si rifà il fotogramma al dettaglio pieno.
+  const ritmo = { segnale: null, t0: 0, orologio: 0, media: 0, tetto: Infinity, fermo: 0 }; let rifinisce = false;
+  function misuraRitmo() {
+    if (!due || !(O.fotogrammiVoluti > 0)) { ritmo.tetto = Infinity; return; }
+    if (stat.fattore > 1 && !rifinisce) { clearTimeout(ritmo.fermo); ritmo.fermo = setTimeout(() => { ritmo.fermo = 0; if (perso || !S) return; rifinisce = true; if (O.alCambio) O.alCambio(); else disegna(tempoOra); }, 350); }
+    if (ritmo.segnale || rifinisce) return;
+    ritmo.segnale = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); ritmo.t0 = performance.now(); ritmo.disegnate = stat.disegnate; ritmo.orologio = setTimeout(guardaRitmo, 4);
+  }
+  function guardaRitmo() {
+    ritmo.orologio = 0; if (perso || !ritmo.segnale) return;
+    const arrivato = gl.clientWaitSync(ritmo.segnale, 0, 0) !== gl.TIMEOUT_EXPIRED, dt = performance.now() - ritmo.t0;
+    if (!arrivato && dt < 1500) { ritmo.orologio = setTimeout(guardaRitmo, 4); return; }
+    gl.deleteSync(ritmo.segnale); ritmo.segnale = null; if (!arrivato) return;
+    ritmo.media = ritmo.media ? 0.6 * ritmo.media + 0.4 * dt : dt; const voluto = 1000 / O.fotogrammiVoluti;
+    if (ritmo.media > 1.2 * voluto) ritmo.tetto = Math.max(O.minimoIstanze, Math.min(ritmo.tetto, ritmo.disegnate, O.massimoIstanze) * 0.8);
+    else if (ritmo.media < 0.6 * voluto && ritmo.tetto < O.massimoIstanze) ritmo.tetto = Math.min(O.massimoIstanze, ritmo.tetto * 1.15);
+  }
+
   // --- IL DISEGNO di un fotogramma (t in secondi)
   let tempoOra = 0;
   function disegna(t) {
@@ -822,6 +843,7 @@ export function creaVista3D(tela, opzioni = {}) {
       if (sfoca) { const Q = pigro('sfoca', V_PIENO, F_SFOCA); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(-BORDO, -BORDO, W, H); gl.useProgram(Q.p); lega(0, imm.comp, Q.u.u_col); gl.uniform4f(Q.u.u_px, 1 / W, 1 / H, O.sfoca * dens, 0); pieno(Q); }
     }
     if (O.etichette && scritte.voci.length) disegnaScritte();
+    misuraRitmo(); rifinisce = false;
     stat.cpuMs = performance.now() - t0;
   }
 
@@ -932,10 +954,10 @@ export function creaVista3D(tela, opzioni = {}) {
     if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; if (scena && scritte.voci.length && Math.abs((scritte.dens || 1) - d) > 0.01) faiScritte(); }
     cambia();
   }
-  function statistiche() { return S ? { webgl: due ? 2 : 1, punti: conPunti ? LP : 0, atomi: S.N, istanze: S.M, gruppi: S.M - S.N, sepolti: S.quantiSepolti, pezzi: S.pezzi.length, memoria: S.memoria, preparazioneMs: S.tempoPreparazione, pixel: [tela.width, tela.height], ...stat, livelli: stat.livelli.slice() } : { webgl: due ? 2 : 1, atomi: 0 }; }
+  function statistiche() { return S ? { webgl: due ? 2 : 1, punti: conPunti ? LP : 0, atomi: S.N, istanze: S.M, gruppi: S.M - S.N, sepolti: S.quantiSepolti, pezzi: S.pezzi.length, memoria: S.memoria, preparazioneMs: S.tempoPreparazione, pixel: [tela.width, tela.height], ...stat, livelli: stat.livelli.slice(), tetto: Math.min(O.massimoIstanze, ritmo.tetto), msScheda: ritmo.media } : { webgl: due ? 2 : 1, atomi: 0 }; }
   function passo(ms) { if (!giro) return; disegna(ms / 1000); giro = requestAnimationFrame(passo); }
   function libera() {
-    if (giro) cancelAnimationFrame(giro); if (quadro) cancelAnimationFrame(quadro); if (quadroScelta) cancelAnimationFrame(quadroScelta); giro = quadro = quadroScelta = 0;
+    if (giro) cancelAnimationFrame(giro); if (quadro) cancelAnimationFrame(quadro); if (quadroScelta) cancelAnimationFrame(quadroScelta); giro = quadro = quadroScelta = 0; clearTimeout(ritmo.orologio); clearTimeout(ritmo.fermo);
     for (const [chi, che, f, o] of ascolti) chi.removeEventListener(che, f, o); ascolti.length = 0; ascoltatoreAtomo = null;
     if (perso) return;
     for (const b of [bufPos, bufPos2, bufStatico, bufId, bufPerni, bufAngoli, bufScritte, bufLegA, bufLegB, bufLegC, grandi.bPos, grandi.bPos2, grandi.bSt, grandi.bId, grandi.bPerni]) if (b) gl.deleteBuffer(b);

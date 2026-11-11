@@ -54,7 +54,7 @@ const SCENE = {
 };
 let sporco = 3; // con ?fermo si ridisegna solo quando qualcosa cambia
 const opzioni = { densita: +(par.get('densita') || 0), vecchio: par.has('webgl1'), alCambio: () => { sporco = 2; } };
-for (const k of ['agitazione', 'massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
+for (const k of ['agitazione', 'fotogrammiVoluti', 'minimoIstanze', 'massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
 if (par.get('sepolti') === 'no') opzioni.scartaSepolti = false;
 if (par.get('punti') === 'no') opzioni.punti = false;
 if (par.has('colora')) opzioni.colora = par.get('colora');
