@@ -231,9 +231,9 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //      chilo d'aria porta scendendo e risalendo, v = flusso/(c_p·(p/2g)·Δθ); dove il pianeta gira, la rotazione lo piega
 //      finché l'attrito lo ferma, u = √(f·v/μ) (gli alisei; non su un pianeta bloccato, dove il vento va dal giorno alla
 //      notte; mai più del vento a momento angolare conservato, e la cella mai più veloce delle onde interne); i vortici aggiungono V = (√c₃/c₁)·U·√D* (dalla chiusura: ⟨u²⟩ ~ (𝒟/ℓ)², senza il logaritmo); più le
-//      raffiche. Serve allo scambio e alle nuvole attese (al posto dei 5 m/s di prima). Sulla Terra dà 3,7 m/s (misurati
+//      raffiche. Serve allo scambio e alle nuvole attese (al posto dei 5 m/s di prima). Sulla Terra dà 3,6 m/s (misurati
 //      6–7); contro i venti di meteo.js: ×1,6 sui pianeti asciutti, ×0,45 su quelli d'acqua, ×1,0 sui bloccati lenti;
-//      su Marte dà 34 m/s (misurati 2–10): in un'aria sottile la cella deve correre per portare quel calore, ed è troppo.
+//      su Marte dà 17 m/s (misurati 2–10): in un'aria sottile la cella deve correre per portare quel calore, ed è troppo.
 // CHE COSA NON C'È (dichiarato): il mare non porta calore (lo fa mare.js sulla mappa: sulla Terra vera un terzo del
 // trasporto ai tropici è del mare); il vapore viaggia solo con i vortici (la cella lo riporta verso l'equatore, e qui
 // non si conta); su un pianeta bloccato le fasce girano attorno all'asse che punta alla stella ma il vento sente la
@@ -248,13 +248,17 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //     lì i venti portano 10–13 PW quasi senza sentire né la rotazione né la pressione (è la cella di Hadley umida di
 //     meteo.js, una volta e mezza più forte del vero, che porta il doppio della Terra), la legge 0,2–33 PW;
 //   · CON LA TERRA VERA: sul profilo misurato (North 1975) la legge porta 3,6 PW a 45° (misurati 5–6 PW a 35–40° con il
-//     mare; la sola aria ≈ 5 PW a 43°); i venti di meteo.js 10,8 PW a 28°. Nel clima a fasce la Terra sta a 290 K con
-//     31 K tra equatore e poli e 2,0 PW (veri: 288, 40–45, 5–6): con la serra fissa la luce irradiata cresce di 3,4 W/m²
-//     per grado (veri ~2), e a tenere quel contrasto bastano 2 PW: contrasto e trasporto veri insieme non possono tornare;
+//     mare; la sola aria ≈ 5 PW a 43°); i venti di meteo.js 10,8 PW a 28°. Nel clima a fasce la Terra sta a 291 K con
+//     33 K tra equatore e poli e 2,1 PW (veri: 288, 40–45, 5–6): con la serra fissa la luce irradiata cresce di 3,4 W/m²
+//     per grado (veri ~2), e a tenere 40 K di contrasto bastano 2 PW: contrasto e trasporto veri insieme non possono
+//     tornare (test_fili lo stampa, con la riprova); la mappa con i venti sta entro mezzo grado dalle fasce;
 //   · SULLA POPOLAZIONE (test_coerenza): clima() e la mappa con i venti coincidono entro 3 K su tutti i mondi tranne
-//     dove decidono le nuvole (un mare caldo sotto un sole fisso: i venti concentrano la pioggia sotto il sole); prima,
-//     con 0,6·√p, gli scarti arrivavano a 64 K. Il ghiaccio del lato notte dei mondi bloccati non coincide (la mappa
-//     spiana ancora la superficie con il coefficiente equivalente, non con quest'aria).
+//     dove decidono le nuvole (un mare caldo sotto un sole fisso, +37 K: i venti concentrano la pioggia sotto il sole e
+//     lasciano sgombro il resto del giorno, anche a regime); prima, con 0,6·√p, gli scarti arrivavano a 64 K. Il ghiaccio
+//     del lato notte dei mondi bloccati non coincide (la mappa spiana ancora la superficie con il coefficiente
+//     equivalente, non con quest'aria). Con il vento vero delle arie dense e lente (≈ 1 m/s) le nuvole attese sono più
+//     sottili di prima: nel campione di test_coerenza 50 mari su 373 non reggono più e bollono (43 su 319 sui mondi
+//     bloccati, 7 su 54 sugli altri: erano tenuti dalle nuvole a 5 m/s), 6 mondi di vapore ritrovano il mare.
 export const ARIA = Object.freeze({
   cdMare: 1.3e-3, cdTerra: 3e-3, ce: NUVOLE.ce, // l'attrito sul mare e sulla terra, lo scambio di calore e di vapore (formule di massa: misurati sulla Terra)
   raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
