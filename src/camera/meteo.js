@@ -97,6 +97,7 @@ export const PARAMETRI = {
   stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
   umiditaPioggia: 0.8, // piove quando il vapore della colonna supera questa frazione della saturazione
   tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore cade
+  raggioGocce: 1e-5, // (m) il raggio efficace delle gocce di nube: 10 µm, MISURATO sulle nubi d'acqua terrestri (è l'incognita dichiarata delle nuvole)
   umiditaNuvole: 0.6, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
   vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
   viscosita: 0.003, // numerico: la viscosità, in unità di (velocità delle onde × passo della griglia)
@@ -104,6 +105,10 @@ export const PARAMETRI = {
   latCritica: 45, // numerico: oltre questa latitudine si lisciano le onde più corte del passo della griglia a 45°
   increspatura: 1, // (K) la perturbazione iniziale, fissa, che rompe la simmetria di un pianeta perfettamente liscio
 };
+// le nuvole: la velocità con cui l'acqua di nube diventa pioggia (Kessler, k₁ letto nel sorgente WRF), la densità dell'acqua,
+// quanto le gocce diffondono in avanti la luce (g, per gocce d'acqua nel visibile: Pierrehumbert), quanto assorbe
+// nell'infrarosso un chilo d'acqua di nube per metro quadro (Stephens 1978: MISURATO sulla Terra, non riletto)
+const K_AUTO = 1e-3, RHO_ACQUA = 1000, ASIMMETRIA = 0.85, ASSORBE_IR = 130;
 const MOLARE_ACQUA = 0.018015, SIGMA = COSTANTI.sigma, DIAMETRO_MOLECOLA = 3.7e-10; // (m) il diametro d'urto di una molecola d'aria
 
 // ---------- la trasformata di Fourier per righe (lati potenze di 2)
@@ -193,9 +198,9 @@ function motore(W, H, par, forz) {
     orlo(D); orlo(K); orlo(q);
   };
   const nuX = new Float64Array(H), nuY = par.nu * ry * ry; for (let j = 0; j < H; j++) nuX[j] = par.nu * rx[j] * rx[j] * Math.min(1, (cc[j] / cCrit) ** 2);
-  const acc = { n: 0, u1: new Float64Array(NP), v1: new Float64Array(NP), u2: new Float64Array(NP), v2: new Float64Array(NP), th1: new Float64Array(NP), th2: new Float64Array(NP), piove: new Float64Array(NP), evapora: new Float64Array(NP), nuvole: new Float64Array(NP), umidita: new Float64Array(NP), calore: new Float64Array(NP), sale: new Float64Array(NP), scorre: new Float64Array(NP), vapore: new Float64Array(NP) };
-  const { t1Eq, t2Eq, wSat, kE, bagnato, cd } = forz, attrito = 2 / par.hs, kRad = dt / tauRad, kSuolo = (dt * 2 * PARAMETRI.ce) / par.hs, kPioggia = 1 - Math.exp(-dt / PARAMETRI.tempoPioggia), u0 = PARAMETRI.umiditaNuvole, { w1, w2, capStrato } = par, latente = par.L / (capStrato * w2);
-  const raffica2 = PARAMETRI.raffica ** 2, secchio = PARAMETRI.secchio, { piove: aPiove, evapora: aEvapora, umidita: aUmidita, vapore: aVapore, calore: aCalore, th1: aTh1, th2: aTh2, sale: aSale, nuvole: aNuvole, scorre: aScorre, u1: aU1, v1: aV1, u2: aU2, v2: aV2 } = acc;
+  const acc = { n: 0, u1: new Float64Array(NP), v1: new Float64Array(NP), u2: new Float64Array(NP), v2: new Float64Array(NP), th1: new Float64Array(NP), th2: new Float64Array(NP), piove: new Float64Array(NP), evapora: new Float64Array(NP), nuvole: new Float64Array(NP), umidita: new Float64Array(NP), calore: new Float64Array(NP), sale: new Float64Array(NP), riflesso: new Float64Array(NP), acquaNube: new Float64Array(NP), serra: new Float64Array(NP), scorre: new Float64Array(NP), vapore: new Float64Array(NP) };
+  const { t1Eq, t2Eq, wSat, kE, bagnato, cd } = forz, tSuolo = forz.tSuolo ?? new Float64Array(NP).fill(1e9), attrito = 2 / par.hs, kRad = dt / tauRad, kSuolo = (dt * 2 * PARAMETRI.ce) / par.hs, kPioggia = 1 - Math.exp(-dt / PARAMETRI.tempoPioggia), u0 = PARAMETRI.umiditaNuvole, { w1, w2, capStrato } = par, latente = par.L / (capStrato * w2);
+  const raffica2 = PARAMETRI.raffica ** 2, secchio = PARAMETRI.secchio, { piove: aPiove, evapora: aEvapora, umidita: aUmidita, vapore: aVapore, calore: aCalore, th1: aTh1, th2: aTh2, sale: aSale, nuvole: aNuvole, riflesso: aRiflesso, acquaNube: aAcquaNube, serra: aSerra, scorre: aScorre, u1: aU1, v1: aV1, u2: aU2, v2: aV2 } = acc;
   const pX = nuovo(), pY = nuovo(), iCal1 = 1 / (par.cp * w1), rc = PARAMETRI.umiditaPioggia, sal1 = 1 + par.kappa, sal2 = 1 - par.kappa / 3, iCal = 1 / (par.cp * w2);
   let passi = 0;
   // una temperatura portata dal vento del suo strato (la parte che si può estrapolare nel tempo)
@@ -241,10 +246,14 @@ function motore(W, H, par, forz) {
           // (l'energia che l'attrito ha tolto al vento torna all'aria bassa come calore; e così quella persa quando l'aria che cambia strato si mescola a un vento diverso)
           const fr = freno[p], u1c = 0.5 * (u1[k] + u1[k - 1]) - uc, v1c = 0.5 * (v1[k] + v1[k - S]) - vc, mesc = 0.5 * dt * D1[k] * (u1c * u1c + v1c * v1c); // (l'attrito del passo prima: l'energia che ha tolto al vento torna all'aria bassa come calore)
           let a1 = (th1[k] + dt1[k] + (mesc > 0 ? mesc * iCal1 : 0) + kRad * e1) / (1 + kRad), a2 = (th2[k] + dt2[k] + latente * (pv - ev) * dt + ((uc * uc + vc * vc) * fr * (1 + 0.5 * fr) - (mesc < 0 ? mesc : 0)) * iCal + k2 * e2) / (1 + k2);
-          if (a1 - a2 < e1 - e2) { const en = w1 * a1 + w2 * a2; a2 = (en - w1 * (e1 - e2)) / (w1 + w2); a1 = a2 + e1 - e2; }
+          let profonda = false; if (a1 - a2 < e1 - e2) { profonda = true; const en = w1 * a1 + w2 * a2; a2 = (en - w1 * (e1 - e2)) / (w1 + w2); a1 = a2 + e1 - e2; }
           th1[k] = a1; th2[k] = a2; freno[p] = dt * attrito * cd[p] * vel;
           if (accumula) { const rh = ws > 0 ? Math.min(1, w / (rc * ws)) : 0; aPiove[p] += pv; aEvapora[p] += ev; aUmidita[p] += rh; aVapore[p] += w; aCalore[p] += (w1 * kRad * (a1 - e1) + w2 * k2 * (a2 - e2)); aTh1[p] += a1; aTh2[p] += a2; aSale[p] += D1[k];
-            if (rh > u0) aNuvole[p] += 1 - Math.sqrt((1 - rh) / (1 - u0)); }
+            // LE NUVOLE: quanta parte del cielo coprono (dall'umidità), e quanta acqua tengono: quella che la condensazione
+            // dà loro nel tempo che la pioggia impiega a formarsi (Kessler); da lì lo spessore ottico, quanta luce rimandano
+            // (due flussi) e quanta ne assorbono nell'infrarosso; la loro cima è nello strato alto dove la convezione arriva fin lì, se no in quello basso
+            if (rh > u0) { const c = 1 - Math.sqrt((1 - rh) / (1 - u0)), lwp = pv / (Math.max(c, 0.05) * K_AUTO), g1 = ((1 - ASIMMETRIA) * 1.5 * lwp) / (RHO_ACQUA * PARAMETRI.raggioGocce), q = (profonda ? a1 * w1 : a2 * w2) / tSuolo[p], q2 = q * q;
+              aNuvole[p] += c; aRiflesso[p] += (c * g1) / (2 + g1); aAcquaNube[p] += c * lwp; if (q < 1) aSerra[p] += c * (1 - Math.exp(-ASSORBE_IR * lwp)) * (1 - q2 * q2); } }
         } }
       orlo(th1); orlo(th2); }
     // (3) IL VENTO: Coriolis e vorticità, energia cinetica, scambio verticale, viscosità (Adams-Bashforth), poi la
@@ -325,7 +334,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
   if (W & (W - 1) || W < 8 || H < 8 || H % 2) throw new Error('meteo: W deve essere una potenza di 2 (almeno 8) e H pari');
   if (!(raggioM > 0 && gravita > 0 && giorno > 0)) throw new Error('meteo: servono raggioM, gravita e giorno');
   const df = Math.PI / H, dl = (2 * Math.PI) / W, a = raggioM, peso = (j) => Math.sin((j + 0.5) * df), campo = () => new Float32Array(NP), temperature = fasi ?? [T];
-  const ris = { W, H, regime: 'senza aria', u: campo(), v: campo(), uAlto: campo(), vAlto: campo(), pioggia: campo(), neve: campo(), evaporazione: campo(), nuvole: campo(), umidita: campo(), vapore: campo(), suolo: campo(), deflusso: campo(),
+  const ris = { W, H, regime: 'senza aria', u: campo(), v: campo(), uAlto: campo(), vAlto: campo(), pioggia: campo(), neve: campo(), evaporazione: campo(), nuvole: campo(), riflessoNuvole: campo(), serraNuvole: campo(), acquaNuvole: campo(), umidita: campo(), vapore: campo(), suolo: campo(), deflusso: campo(),
     trasportoCalore: campo(), salita: campo(), temperaturaAria: Float32Array.from(T), temperaturaQuota: Float32Array.from(T), temperatura: T, stagioni: null, celle: 0, celleNord: 0, celleSud: 0, fasce: 0, fasceNord: 0, fasceSud: 0, latitudineAlisei: null, giornoNotte: null,
     diffusivita: 0, scambio: 0, nuvoleMedie: 0, bilancio: { evaporata: 0, piovuta: 0, accumulata: 0 }, psi: new Float64Array(H - 1), ventoZonale: new Float64Array(H), ventoZonaleAlto: new Float64Array(H), aria: null, dt: 0, giorniSimulati: 0, tentativi: 0 };
   let Tm = 0, area = 0, tMin = Infinity, tMax = -Infinity; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { Tm += T[j * W + i] * peso(j); area += peso(j); for (const x of temperature) { const t = x[j * W + i]; tMin = Math.min(tMin, t); tMax = Math.max(tMax, t); } } Tm /= area;
@@ -375,9 +384,9 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
   // i vortici, il 60% per le medie. Con le stagioni: il 30% all'inizio; poi, per ogni stagione, un tratto perché l'aria si
   // adatti e uno, doppio, per le medie. Da una stagione all'altra i vortici restano, e lo stato medio lungo i paralleli
   // fa il salto che ha fatto la colonna
-  const nAvvio = fasi ? Math.floor(0.3 * passi) : 0, nAdatta = Math.max(1, Math.floor(fasi ? (0.7 * passi) / (3 * nS) : 0.4 * passi)), nMedia = Math.max(1, Math.floor(fasi ? (1.4 * passi) / (3 * nS) : 0.6 * passi)), CAMPI2 = ['u', 'v', 'uAlto', 'vAlto', 'pioggia', 'neve', 'evaporazione', 'deflusso', 'nuvole', 'umidita', 'vapore', 'trasportoCalore', 'salita', 'temperaturaAria', 'temperaturaQuota'];
+  const nAvvio = fasi ? Math.floor(0.3 * passi) : 0, nAdatta = Math.max(1, Math.floor(fasi ? (0.7 * passi) / (3 * nS) : 0.4 * passi)), nMedia = Math.max(1, Math.floor(fasi ? (1.4 * passi) / (3 * nS) : 0.6 * passi)), CAMPI2 = ['u', 'v', 'uAlto', 'vAlto', 'pioggia', 'neve', 'evaporazione', 'deflusso', 'nuvole', 'riflessoNuvole', 'serraNuvole', 'acquaNuvole', 'umidita', 'vapore', 'trasportoCalore', 'salita', 'temperaturaAria', 'temperaturaQuota'];
   let m2, raccolte, accumulata;
-  for (;;) { const f2 = { t1Eq: Float64Array.from(F[0].t1Eq), t2Eq: Float64Array.from(F[0].t2Eq), wSat: Float64Array.from(F[0].wSat), kE: Float64Array.from(F[0].kE), bagnato, cd }; m2 = motore(W, H, parametri(dt), f2);
+  for (;;) { const f2 = { t1Eq: Float64Array.from(F[0].t1Eq), t2Eq: Float64Array.from(F[0].t2Eq), wSat: Float64Array.from(F[0].wSat), kE: Float64Array.from(F[0].kE), tSuolo: Float64Array.from(F[0].Tloc), bagnato, cd }; m2 = motore(W, H, parametri(dt), f2);
     const S2 = m2.S; let bene = true; raccolte = []; accumulata = 0;
     for (let s = 0; s < nS && bene; s++) { const st = stati1[s], pr = s > 0 ? stati1[s - 1] : null;
       for (let j = 0; j < H; j++) { const rh = F1[s].wSat[j] > 0 ? st.wv[j] / F1[s].wSat[j] : 0; for (let i = 0; i < W; i++) { const k = (j + 1) * S2 + 1 + i, p = j * W + i;
@@ -386,7 +395,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
         else { m2.u1[k] += st.u1[j] - pr.u1[j]; m2.u2[k] += st.u2[j] - pr.u2[j]; if (j < H - 1) { m2.v1[k] += st.v1[j] - pr.v1[j]; m2.v2[k] += st.v2[j] - pr.v2[j]; }
           m2.th1[k] += F[s].t1Eq[p] - F[s - 1].t1Eq[p] + (st.th1[j] - F1[s].t1Eq[j]) - (pr.th1[j] - F1[s - 1].t1Eq[j]); m2.th2[k] += F[s].t2Eq[p] - F[s - 1].t2Eq[p] + (st.th2[j] - F1[s].t2Eq[j]) - (pr.th2[j] - F1[s - 1].t2Eq[j]);
           if (F[s - 1].wSat[p] > 0) m2.wv[k] *= F[s].wSat[p] / F[s - 1].wSat[p]; } } }
-      if (pr) for (const c of NOMI) f2[c].set(F[s][c]);
+      if (pr) { for (const c of NOMI) f2[c].set(F[s][c]); f2.tSuolo.set(F[s].Tloc); }
       for (let n = 0, fine = nAdatta + (s === 0 ? nAvvio : 0); n < fine && bene; n++) { m2.passo(false); if (n % 64 === 63) bene = m2.sano(); }
       const vaporePrima = m2.vaporeMedio(); for (let n = 0; n < nMedia && bene; n++) { m2.passo(true); if (n % 64 === 63) bene = m2.sano(); }
       if (!(bene && m2.sano())) { bene = false; break; }
@@ -395,7 +404,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
       const acc = m2.acc, n = acc.n, r = { temperatura: temperature[s], psi: new Float64Array(H - 1) }; for (const c of CAMPI2) r[c] = campo();
       for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const p = j * W + i, iw = j * W + ((i + W - 1) % W);
         r.u[p] = (0.5 * (acc.u2[p] + acc.u2[iw])) / n; r.v[p] = (0.5 * (acc.v2[p] + (j > 0 ? acc.v2[p - W] : 0))) / n; r.uAlto[p] = (0.5 * (acc.u1[p] + acc.u1[iw])) / n; r.vAlto[p] = (0.5 * (acc.v1[p] + (j > 0 ? acc.v1[p - W] : 0))) / n;
-        r.pioggia[p] = (acc.piove[p] / n) * ANNO; r.evaporazione[p] = (acc.evapora[p] / n) * ANNO; r.deflusso[p] = (acc.scorre[p] / n) * ANNO; r.nuvole[p] = acc.nuvole[p] / n; r.umidita[p] = acc.umidita[p] / n; r.vapore[p] = acc.vapore[p] / n;
+        r.pioggia[p] = (acc.piove[p] / n) * ANNO; r.evaporazione[p] = (acc.evapora[p] / n) * ANNO; r.deflusso[p] = (acc.scorre[p] / n) * ANNO; r.nuvole[p] = acc.nuvole[p] / n; r.riflessoNuvole[p] = acc.riflesso[p] / n; r.serraNuvole[p] = acc.serra[p] / n; r.acquaNuvole[p] = acc.acquaNube[p] / n; r.umidita[p] = acc.umidita[p] / n; r.vapore[p] = acc.vapore[p] / n;
         r.neve[p] = r.pioggia[p] * frazioneNeve(F[s].Tloc[p], !fasi && freddo ? freddo[p] : 0);
         r.trasportoCalore[p] = (ar.capStrato * acc.calore[p]) / n / dt; r.salita[p] = acc.sale[p] / n; r.temperaturaAria[p] = temperature[s][p] + (acc.th2[p] / n - F[s].t2Eq[p]) * ar.w2; r.temperaturaQuota[p] = (acc.th1[p] / n) * ar.w1; }
       for (let j = 0; j < H - 1; j++) { let q = 0; for (let i = 0; i < W; i++) q += acc.v1[j * W + i]; r.psi[j] = ((q / n / W) * Math.sin((j + 1) * df) * 2 * Math.PI * a * (0.5 * pressione)) / gravita; }
