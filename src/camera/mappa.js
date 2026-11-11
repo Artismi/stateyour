@@ -9,7 +9,7 @@
 // Ogni livello ha le sue coordinate; la camera della mappa è { livello, via, cx, cy, z }
 // (via = l'indirizzo dei livelli sopra), e passare di livello non muove niente sullo schermo.
 
-import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo } from './cosmo.js';
+import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
@@ -24,7 +24,7 @@ function figli(cam) {
   const v = cam.via;
   if (cam.livello === 0) return cosmo(v.cosmo).galassie.map((G) => ({ pos: G.pos, scala: G.r, raggio: 1.05, via: { ...v, galassia: G.id }, dato: G }));
   if (cam.livello === 1) return galassia(v.cosmo, v.galassia).stelle.map((S) => ({ pos: S.pos, scala: RAGGIO_SISTEMA, raggio: 1.2, via: { ...v, stella: S.id }, dato: S }));
-  if (cam.livello === 2) return sistema(v.cosmo, v.galassia, v.stella).pianeti.map((P) => ({ pos: P.pos, scala: P.r, raggio: 2.8, via: { ...v, pianeta: P.id }, dato: P }));
+  if (cam.livello === 2) return sistema(v.cosmo, v.galassia, v.stella).pianeti.map((P) => ({ pos: P.pos, scala: P.r, raggio: Math.max(2.8, 1.1 * estensioneLune(P)), via: { ...v, pianeta: P.id }, dato: P }));
   return [];
 }
 // dove sta il livello dentro il genitore (posizione e scala)
@@ -52,6 +52,20 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; return null; }
   if (cam.livello === 5) { if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; return null; } cam.z = Math.min(cam.z, 12 * m); return null; }
   return passaggi(cam, W, H);
+}
+// LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
+// (per il passaggio di livello si conta fino a 70 raggi: le lune lontanissime, catturate, restano fuori dallo schermo)
+const estensioneLune = (P) => Math.min(70, (P?.lune || []).reduce((m, L) => Math.max(m, (L.aM * (1 + (L.eccentricita || 0))) / P.raggioM), 0));
+function posLuna(v, P, L, t) {
+  const a = L.aM / P.raggioM, e = L.eccentricita || 0, f0 = (semeEvento('fase luna', v.cosmo, v.galassia, v.stella, v.pianeta, L.id) / 4294967296) * 2 * Math.PI;
+  const f = f0 + ((L.retrograda ? -1 : 1) * 2 * Math.PI * t) / L.periodo, r = (a * (1 - e * e)) / (1 + e * Math.cos(f));
+  return [r * Math.cos(f), r * Math.sin(f), a, e];
+}
+const tempoMappa = () => ((typeof performance !== 'undefined' ? performance.now() : 0) / 1000) * ACCELERA;
+function descriviLuna(P, L) {
+  const nata = { disco: 'nata dal disco attorno al pianeta', urto: 'nata da un grande urto', cattura: 'un corpo catturato' }[L.origine] || L.origine;
+  const giorni = L.periodo / 86400, lun = L.massaKg / 7.35e22;
+  return `luna ${L.id + 1}: ${nata}${L.retrograda ? ', gira al contrario' : ''} · raggio ${Math.round(L.raggioM / 1000)} km${L.forma && !L.forma.rotonda ? ' (irregolare)' : ''}, ${lun >= 0.01 ? `${lun.toPrecision(2)} Lune` : `${L.massaKg.toExponential(1)} kg`} · a ${Math.round(L.aM / 1000).toLocaleString('it')} km, un giro in ${giorni < 3 ? `${(giorni * 24).toFixed(1)} ore` : `${giorni.toFixed(1)} giorni`}${L.bloccata ? ' · mostra sempre la stessa faccia' : ''} · ${L.stato}${L.risonanza ? ` · in risonanza ${L.risonanza}` : ''}`;
 }
 function passaggi(cam, W, H) {
   const m = minimo(W, H);
@@ -102,7 +116,9 @@ function passaggi(cam, W, H) {
     }
     // fuori: il livello è diventato piccolo sullo schermo
     const g = nelGenitore(cam);
-    if (g && cam.z * (cam.livello === 3 ? 6 : cam.livello === 2 ? 1.3 : 1.1) < 0.3 * m) {
+    // il livello del pianeta arriva fin dove arrivano le sue lune
+    const largo = cam.livello === 3 ? Math.max(6, 2.2 * estensioneLune(sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella).pianeti[cam.via.pianeta])) : cam.livello === 2 ? 1.3 : 1.1;
+    if (g && cam.z * largo < 0.3 * m) {
       cam.cx = g.pos[0] + cam.cx * g.scala; cam.cy = g.pos[1] + cam.cy * g.scala; cam.z /= g.scala; cam.livello--;
       const v = { ...cam.via }; delete v[['galassia', 'stella', 'pianeta'][cam.livello]]; cam.via = v;
       continue;
@@ -127,6 +143,7 @@ export function colpisciMappa(cam, sx, sy, W, H) {
     const P = pianeta(cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta);
     for (const R of P.regioni) if (Math.abs(x - R.pos[0]) < LATO_REGIONE / 2 && Math.abs(y - R.pos[1]) < LATO_REGIONE / 2) { const a = { ...cam.via, regione: R.id }; return { tipo: 'regione', pos: R.pos, scala: LATO_REGIONE / 2, testo: `regione ${R.id + 1}${R.nellAnello ? ", nell'anello" : ''} · universo n. ${numeroDi(a)} · clic per entrare`, via: a }; }
     if (Math.hypot(x, y) < 1) return { tipo: 'pianeta', pos: [0, 0], scala: 1, testo: descriviPianeta(P.P) };
+    { const t = tempoMappa(); for (const L of P.P.lune || []) { const q = posLuna(cam.via, P.P, L, t), rr = Math.max(px, L.raggioM / P.P.raggioM); if (Math.hypot(x - q[0], y - q[1]) < rr) return { tipo: 'luna', pos: [q[0], q[1]], scala: Math.max(L.raggioM / P.P.raggioM, 0.2), testo: descriviLuna(P.P, L) }; } }
     return null;
   }
   let migliore = null, dm = Infinity;
@@ -312,9 +329,23 @@ function disegnaPianeta(ctx, v, X, Y, z, dpr, evidenzia) {
     if (cerchio < 1) { ctx.fillStyle = `rgba(${col},${0.7 * (1 - cerchio)})`; ctx.fillRect(x, y, 1.3 * dpr, 1.3 * dpr); }
     if (cerchio > 0) { ctx.strokeStyle = `rgba(${col},${0.5 * cerchio})`; ctx.lineWidth = dpr; ctx.beginPath(); ctx.arc(x + R, y, R, 0, 7); ctx.stroke(); }
   }
+  // LE LUNE (lune.js): l'orbita vera (in raggi del pianeta) e il corpo con la sua taglia vera; girano col tempo della mappa
+  { const t = tempoMappa();
+    for (const L of P.lune || []) {
+      const [lx, ly, a, e] = posLuna(v, P, L, t), rl = (L.raggioM / P.raggioM) * z;
+      if (a * z > 4 * ctx.canvas.width) continue; // orbita molto più grande dello schermo: non si vede
+      ctx.strokeStyle = 'rgba(200,210,255,0.18)'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.ellipse(X(-a * e), Y(0), a * z, a * Math.sqrt(1 - e * e) * z, 0, 0, 7); ctx.stroke();
+      const ghiaccio = L.composizione?.ghiaccio || 0, col = [150 + 70 * ghiaccio, 145 + 75 * ghiaccio, 140 + 90 * ghiaccio].map(Math.round);
+      const luce = Math.atan2(-P.pos[1], -P.pos[0]), x = X(lx), y = Y(ly), r = Math.max(2.2 * dpr, rl);
+      const g = ctx.createRadialGradient(x + Math.cos(luce) * r * 0.5, y + Math.sin(luce) * r * 0.5, r * 0.1, x, y, r);
+      g.addColorStop(0, rgb(col)); g.addColorStop(1, rgb(col.map((c) => c * 0.25))); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      if (L.stato === 'vulcanica') { ctx.fillStyle = 'rgba(255,150,60,0.9)'; ctx.fillRect(x - dpr, y - dpr, 2 * dpr, 2 * dpr); }
+    } }
   // i raggi cosmici nel campo del pianeta: le orbite di Størmer, calcolate davvero
-  ctx.strokeStyle = 'rgba(255,196,120,0.5)'; ctx.lineWidth = dpr;
-  for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
+  // (sono calcolate fino a 20 raggi dal pianeta: guardando da più lontano sfumano, invece di mostrare il bordo del calcolo)
+  const vicino = Math.max(0, Math.min(1, ((40 * z) / Math.min(ctx.canvas.width, ctx.canvas.height) - 0.9) / 0.6));
+  ctx.strokeStyle = `rgba(255,196,120,${0.5 * vicino})`; ctx.lineWidth = dpr;
+  if (vicino > 0) for (const t of magnetosfera(v.cosmo, v.galassia, v.stella, v.pianeta)) { ctx.beginPath(); t.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke(); }
   disegnaCorpo(ctx, P, X(0), Y(0), z, S.stella, v, dpr, P.pos);
   // la sua superficie, vista da sopra l'equatore: la stessa mappa del pannello, avvolta sulla sfera
   // la sua forma (schiacciata ai poli dalla rotazione) e la sua superficie vista dall'equatore
