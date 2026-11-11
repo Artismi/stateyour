@@ -45,22 +45,29 @@
 //     frittella» fino a 7 volte e si ferma (Chyba e altri 1993; Collins, Melosh e Marcus 2005);
 //   · il momento d'inerzia di un pianeta roccioso, 0,33·M·R² (la Terra: 0,3307).
 // PARAMETRI LIBERI (scelte di calcolo, non misure): le 40 classi di taglia e le 8 di velocità; il passo del tempo
-// (cresce del 40% a ogni passo: il conto di ogni passo è esatto a ritmi costanti, e passi più fitti non cambiano i risultati); quanti urti si seguono uno per uno («massimo», 2000); il momento angolare del disco
-// di detriti (quello di un'orbita a metà tra la superficie e il limite di Roche).
+// (cresce del 40% a ogni passo: il conto di ogni passo è esatto a ritmi costanti, e passi più fitti cambiano i
+// risultati di un decimo); quanti urti si seguono uno per uno («massimo», 2000); il momento angolare del disco di
+// detriti (quello di un'orbita a metà tra la superficie e il limite di Roche); la massa che il disco perde (5%).
 // SEMPLIFICAZIONI (da sapere):
 //   · contano solo i detriti dell'ULTIMO urto gigante; quelli degli urti prima si danno per già ripresi o macinati;
 //   · le nubi dei pianeti vicini sono calcolate con i valori attesi dei loro urti giganti, non con i loro eventi veri;
 //   · le classi di velocità non si scambiano corpi (nessun incontro ravvicinato sposta un corpo da lenta a veloce), e
 //     niente passa di mano da un pianeta all'altro: MANCANO le riserve lontane (una fascia di asteroidi accanto a un
 //     gigante, le comete) che nel Sistema Solare tengono vivo il bombardamento dopo il primo miliardo di anni;
-//   · dentro una nube volume e velocità degli urti sono quelli iniziali; le nubi non si urtano tra loro;
+//   · dentro una nube volume e velocità degli urti sono quelli iniziali; le nubi non si urtano tra loro; in un urto
+//     tra due corpi si conta la sorte del più grosso (il piccolo fa da martello: lo rompono i suoi urti);
+//   · la massa dei detriti e quella che ricade non sono tolte né aggiunte alla massa del pianeta (che è quella di
+//     disco.js); e un embrione lento qui cresce, dopo il gas, molto meno di quanto disco.js gli fa fare (il suo «300
+//     volte più lento»): lontano dalla stella quasi tutto il cibo finisce in polvere o scagliato via;
 //   · gli urti arrivano da ogni direzione (nessuna preferenza per l'equatore o per la faccia avanti);
 //   · la luna, se c'è, è bersagliata alla distanza di oggi; la resistenza Q* è quella misurata a 3–5 km/s.
 // DATI CHE MANCANO E SI STIMANO (da esporre in disco.js e cosmo.js; se ci sono, si usano al posto delle stime):
 //   · sistema.disco = disco(stella, seme): la densità dei solidi e la vita del gas (oggi: la vita media dei dischi, e
 //     i solidi ricavati dalla massa dell'embrione);
-//   · P.formazione = { urti: [{ bersaglioKg, massaKg, t }], cibo, tGas }: gli urti giganti veri (oggi: il loro
-//     numero si legge dal testo di P.storia, gli embrioni si prendono tutti uguali, e il tempo dell'ultimo è un evento).
+//   · P.formazione = { urti: [{ bersaglioKg, massaKg, delta | t, angolo?, v? }], cibo, tGas }: gli urti giganti veri, in
+//     ordine (delta: la distanza in raggi di Hill reciproci a cui disco.js li ha trovati instabili; cibo: i kg della
+//     striscia non mangiati). Oggi: il loro numero si legge dal testo di P.storia, gli embrioni si prendono tutti
+//     uguali e mangiati uno a uno, e quando è avvenuto l'ultimo è un evento.
 //
 // IL CASO: tutto ciò che è incerto si chiede alla sorgente degli eventi (eventi.js), con indirizzi stabili:
 //   «urto gigante k/angolo|piano|verso|dove|quando», «classe c/nube p/quanti», «impatto k/quando|corpo|angolo|dove|sorte».
@@ -453,12 +460,15 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
   }
   // I GRANDI: dalle classi più grosse in giù, finché sono al più «massimo»; della classe dopo, se avanza posto, solo
   // gli ultimi arrivati (dopo «taglio.t»: su un mondo colpito senza sosta sono loro che si vedono)
-  let cS = 0, tot = 0; for (; cS < NC && tot + N[cS] <= massimo; cS++) tot += N[cS];
+  // (ogni nube può arrotondare per eccesso il suo numero: lo si conta, così i grandi non superano mai «massimo»)
+  const alPiu = (k) => { let x = 0; for (const b of nubi) x += Math.ceil(b.N[k]); return x; };
+  let cS = 0, tot = 0; for (; cS < NC && tot + alPiu(cS) <= massimo; cS++) tot += alPiu(cS);
   // quanti ne sono arrivati da una nube prima del tempo t (dentro un passo gli arrivi sono sparsi in modo uniforme)
   const prima = (b, k, t) => { let C = 0; for (let s = 0; s < b.nu.nS; s++) { const t1 = Math.max(t0, b.nu.ts + b.nu.tb[s]), t2 = b.nu.ts + b.nu.tb[s + 1]; if (t2 <= t1) continue; if (t <= t1) break; C += b.H[s * NC + k] * Math.min(1, (t - t1) / (t2 - t1)); } return C; };
   let taglio = null;
-  if (cS < NC && massimo - tot >= 1) { // il momento dopo il quale gli arrivi di quella classe sono quanti i posti rimasti (per bisezione)
-    let ta = t0, tz = eta; for (let giro = 0; giro < 40; giro++) { const tm = 0.5 * (ta + tz); let dopo = 0; for (const b of nubi) dopo += b.N[cS] - prima(b, cS, tm); if (dopo > massimo - tot) ta = tm; else tz = tm; }
+  const posto = massimo - tot - nubi.length;
+  if (cS < NC && posto >= 1) { // il momento dopo il quale gli arrivi di quella classe sono quanti i posti rimasti (per bisezione)
+    let ta = t0, tz = eta; for (let giro = 0; giro < 40; giro++) { const tm = 0.5 * (ta + tz); let dopo = 0; for (const b of nubi) dopo += b.N[cS] - prima(b, cS, tm); if (dopo > posto) ta = tm; else tz = tm; }
     taglio = { classe: cS, t: tz };
   }
   const grandi = []; let id = 0, energia = 0, arrivataGrandi = 0;
@@ -590,8 +600,9 @@ export function crateriVisibili(storia, { eta = storia.eta, rinnovo = Infinity, 
     vivi.push({ id: g.id, t: g.t, eta: anni, lat: g.lat, lon: g.lon, i, j, diametroM: g.cratereM, raggioCelle: cella ? g.cratereM / 2 / cella : 0, profonditaM: resta, profonditaInizialeM: g.profonditaM, complesso: g.complesso, x: Math.cos(la) * Math.cos(lo), y: Math.cos(la) * Math.sin(lo), z: Math.sin(la) });
   }
   // sepolti: dentro un cratere più giovane e più grande (i grandi sono pochi: si guardano solo quelli)
+  vivi.sort((a, b) => a.t - b.t || a.id - b.id);
   const R = storia.raggioM, grossi = vivi.map((v, n) => n).sort((a, b) => vivi[b].diametroM - vivi[a].diametroM);
-  const out = vivi.filter((v, n) => { for (const m of grossi) { const w = vivi[m]; if (w.diametroM <= v.diametroM) break; if (m > n && v.x * w.x + v.y * w.y + v.z * w.z > Math.cos(w.diametroM / 2 / R)) return false; } return true; });
+  const out = vivi.filter((v) => { for (const m of grossi) { const w = vivi[m]; if (w.diametroM <= v.diametroM) break; if (w.t > v.t && v.x * w.x + v.y * w.y + v.z * w.z > Math.cos(w.diametroM / 2 / R)) return false; } return true; });
   for (const v of out) { delete v.x; delete v.y; delete v.z; }
   return out;
 }

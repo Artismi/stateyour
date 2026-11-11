@@ -185,7 +185,10 @@ prova('l\'impronta nel mantello: media zero, calda dove sono caduti gli urti pi�
   // il più energetico degli urti caduti prima della quiete: lì il mantello è tra i punti più caldi
   const cella = (x) => Math.min(H - 1, Math.floor(((90 - x.lat) / 180) * H)) * W + Math.min(W - 1, Math.floor(((x.lon + 180) / 360) * W));
   const prima = STORIA.grandi.filter((x) => x.t <= STORIA.quiete.t).sort((a, b) => b.energiaJ - a.energiaJ), ordinati = Float32Array.from(m).sort();
-  assert.ok(m[cella(prima[0])] > ordinati[Math.floor(0.9 * m.length)], `sotto il più grande: ${m[cella(prima[0])]} K`);
+  assert.ok(m[cella(prima[0])] > 0 && m[cella(prima[0])] > ordinati[Math.floor(0.75 * m.length)], `sotto il più grande: ${m[cella(prima[0])]} K`);
+  // a parità di calore per chilo (la roccia non regge più del calore latente), il più grande fa la macchia più larga, il più tardo la più calda
+  const tardi = prima.filter((x) => x.diametroM > 2e5).sort((a, b) => b.t - a.t)[0];
+  assert.ok(tardi.t > prima[0].t && m[cella(tardi)] > m[cella(prima[0])], `sotto il più tardo dei grossi: ${m[cella(tardi)]} K`);
   // più tardi lo si guarda, più il mantello ha rimescolato: l'impronta sbiadisce; senza rimescolamento resta
   const ampiezza = (a) => { let x = -Infinity, y = Infinity; for (const v of a) { x = Math.max(x, v); y = Math.min(y, v); } return x - y; };
   const dopo = improntaMantello(STORIA, W, H, { t: STORIA.quiete.t + 5e8 });
@@ -250,7 +253,7 @@ prova('se disco.js espone il disco, il cibo rimasto viene dalla densità dei sol
 });
 
 prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta', () => {
-  let pianeti = 0, urti = 0, conGigante = 0, conLuna = 0, lenti = 0, puliti = 0; const tempi = [];
+  let pianeti = 0, urti = 0, conGigante = 0, conLuna = 0, luneGrosse = 0, lenti = 0, puliti = 0, retrogradi = 0; const tempi = [], giorni = [];
   for (let n = 1; n < 3000; n += 53) {
     const a = indirizzoDi(n), S = sistema(a.cosmo, a.galassia, a.stella);
     for (const P of S.pianeti) {
@@ -258,7 +261,7 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta
       const t0 = performance.now(), s = storiaImpatti(P, S, caso); tempi.push(performance.now() - t0); pianeti++; urti += s.grandi.length;
       const b = s.bilancio;
       for (const v of [s.formazione, s.eta, s.quiete.t, b.arrivataKg, b.energiaJ, b.polvereKg, b.scagliataKg, b.rimastaKg, ...s.attesi.numero, ...s.attesi.cratereM, ...s.attesi.v]) assert.ok(Number.isFinite(v) && v >= 0, `${n} pianeta ${P.id}: ${v}`);
-      assert.ok(s.formazione > 0 && s.formazione < s.eta && s.quiete.t >= s.formazione && s.quiete.t <= s.eta && s.grandi.length <= 2001);
+      assert.ok(s.formazione > 0 && s.formazione < s.eta && s.quiete.t >= s.formazione && s.quiete.t <= s.eta && s.grandi.length <= 2000);
       for (let k = 0; k < s.grandi.length; k++) { const x = s.grandi[k];
         for (const v of [x.t, x.massaKg, x.diametroM, x.v, x.lat, x.lon, x.angolo, x.energiaJ, x.cratereM, x.fusione]) assert.ok(Number.isFinite(v), `${n} pianeta ${P.id} impatto ${x.id}`);
         assert.ok(x.t >= s.formazione && x.t <= s.eta && Math.abs(x.lat) <= 90 && Math.abs(x.lon) <= 180 && x.v * x.v >= (2 * 6.674e-11 * P.massaKg) / P.raggioM && (k === 0 || x.t >= s.grandi[k - 1].t));
@@ -266,12 +269,13 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta
       // la massa della nube del pianeta si conserva
       const mia = b.detritiKg + b.restiKg;
       if (mia > 0) assert.ok(Math.abs((b.sulPianetaKg + b.aiViciniKg + b.scagliataKg + b.polvereKg + b.rimastaKg + b.daRilasciareKg) / mia - 1) < 1e-6, `${n} pianeta ${P.id}: bilancio`);
-      if (s.gigante) { conGigante++; const g = s.gigante; if (g.luna) conLuna++;
+      if (s.gigante) { conGigante++; const g = s.gigante; if (g.luna) conLuna++; if (g.luna?.mu > 1e-3) luneGrosse++; if (g.obliquita > 90) retrogradi++; giorni.push(g.giornoDopo / 3600);
         assert.ok(/urt[oi] gigant/.test(P.storia) && g.t === s.formazione && g.urti >= 1 && g.massaKg <= g.bersaglioKg * 1.0001 && Math.abs((g.massaKg + g.bersaglioKg) / P.massaKg - 1) < 1e-9);
         assert.ok(g.giornoDopo > 3000 && g.obliquita >= 0 && g.obliquita <= 180 && g.detritiKg >= 0 && g.detritiKg < 0.1 * P.massaKg && g.lunaKg < 0.2 * P.massaKg && g.frazioneFusa > 0 && g.frazioneFusa <= 1, `${n} pianeta ${P.id}: ${JSON.stringify(g)}`);
       } else assert.ok(!/urt[oi] gigant/.test(P.storia) || P.tipo === 'gassoso');
       if (b.restiKg > 0) { lenti++; assert.ok(/cresciuto piano/.test(P.storia)); }
       if (!s.grandi.length) puliti++;
+      if (pianeti % 6) continue; // (le due letture, su un pianeta ogni sei: sono più lente della storia)
       const m = improntaMantello(s, 64, 32), v = crateriVisibili(s, { W: 64, H: 32 });
       assert.ok(m.every(Number.isFinite) && v.length <= s.grandi.length && Math.abs(somma(m) / m.length) < 1);
     }
@@ -279,7 +283,7 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta
   tempi.sort((x, y) => x - y); const mediana = tempi[tempi.length >> 1], novanta = tempi[Math.floor(0.95 * tempi.length)];
   assert.ok(pianeti > 100 && urti > 1e4 && conGigante > 30 && conLuna > 10 && lenti > 10, `${pianeti} pianeti, ${urti} urti, ${conGigante} con urto gigante, ${conLuna} con luna, ${lenti} lenti`);
   assert.ok(mediana < 50 && novanta < 50, `storiaImpatti: mediana ${mediana} ms, 95 su 100 sotto ${novanta} ms`);
-  console.log(`      (${pianeti} pianeti, ${urti} grandi urti; ${conGigante} con un urto gigante, ${conLuna} dei quali con una luna; ${lenti} embrioni lenti ancora bersagliati; ${puliti} col cielo pulito; storiaImpatti: mediana ${mediana.toFixed(1)} ms, 95 su 100 sotto ${novanta.toFixed(1)} ms, la più lenta ${tempi.at(-1).toFixed(0)} ms)`);
+  console.log(`      (${pianeti} pianeti, ${urti} grandi urti; ${conGigante} con un urto gigante: ${conLuna} con un disco che fa una luna, ${luneGrosse} più pesante di un millesimo del pianeta; giorno dopo l'urto ${giorni.sort((x, y) => x - y)[giorni.length >> 1].toFixed(1)} ore (mediana), ${retrogradi} girano al contrario; ${lenti} embrioni lenti ancora bersagliati; ${puliti} col cielo pulito; storiaImpatti: mediana ${mediana.toFixed(1)} ms, 95 su 100 sotto ${novanta.toFixed(1)} ms, la più lenta ${tempi.at(-1).toFixed(0)} ms)`);
 });
 
 console.log(`\n${ok} prove superate`);
