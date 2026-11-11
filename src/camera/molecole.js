@@ -11,6 +11,33 @@
 //   molecole_reazioni.js  le reazioni come regole generali sui siti; barriere e velocità; catalisi; fotolisi
 //   molecole_forze.js     il campo di forze; chi si scioglie e chi si aggrega; polimeri; grana grossa; scena 3D
 //   molecole_rete.js      la rete delle reazioni di un luogo; equilibrio; cicli autocatalitici; RAF; anfifiliche
+//   molecole_incontri.js  l'energia d'interazione di due molecole qualsiasi, e ciò che ne discende: catalisi da parte di
+//                         qualunque molecola, copia su stampo, ripiegamento di una catena, superfici dei minerali
+//
+// CIÒ CHE LE REGOLE ORA PERMETTONO (seconda tappa; i riscontri sono nelle prove 24-35):
+//   · reazioni: addizioni coniugate, enoli ed enammine al carbonio, sostituzioni su carbonio saturo (lente), epossidi,
+//     sostituzione aromatica, Diels-Alder e trasposizioni [3,3], spostamenti 1,2, disolfuri, scambio di due idrogeni,
+//     trasferimento di elettroni con gli ioni metallici (potenziali dai dati: Fe³⁺/Fe²⁺ 0,775 V), fotoionizzazione e
+//     reazioni dagli stati eccitati, isomeria cis-trans;
+//   · la mano: cis/trans nella chiave e nella forma; i centri nuovi nascono in tutte le forme, alla pari (stereo: true);
+//     i diastereomeri hanno energie diverse (campo di forze); la cinetica (evolvi) amplifica uno sbilancio;
+//   · la rete: reagisce chi è sopra una soglia di concentrazione (peptide + peptide); stazionarie converge; scatole con
+//     una barriera (regola di Overton); forza ionica (Davies) e pKa con la temperatura (van 't Hoff);
+//   · catalisi da parte di qualsiasi molecola (metà della differenza di legame tra prodotti e reagenti + vicinanza);
+//   · copia su stampo come conseguenza dell'energia d'interazione; ricerca conformazionale (ricottura sui diedri);
+//   · ioni metallici con le energie misurate; gruppi ferro-zolfo; siti di superficie dal reticolo vero (materia.js);
+//     fosfati, anidridi, ATP tarati su tre idrolisi misurate; cheCosaChiede come funzione della regola 5.
+// CHE COSA RESTA VIETATO O SBAGLIATO (stampato dalle prove):
+//   · la copia fedele: senza la geometria dell'elica le purine dello stampo prendono un'altra purina, e in acqua le basi
+//     libere si impilano senza scegliersi; l'energia d'interazione senza solvente è 1,2-1,9 volte troppo forte;
+//   · la catalisi covalente esce (un'ammina nell'aldolica: 10⁵ per mol/L) ma l'imidazolo sugli esteri attivati è 10⁵ volte
+//     troppo lento: una barriera per famiglia non vede il gruppo uscente; lo stato di transizione non ha una geometria sua;
+//   · il ripiegamento: la ricerca dice se c'è un minimo netto per catene fino a 20-30 residui; una proteina di 300 no
+//     (servirebbero acqua esplicita o un solvente implicito tarato, le catene laterali che ruotano, 10⁶-10⁹ passi, o un
+//     campo a grana grossa DERIVATO dagli atomi: quello di qui non li segue, correlazione −0,3);
+//   · chinoni (deidrogenazioni coniugate), le enammine terziarie (la prolina) come specie neutre, cluster metallici oltre
+//     la regola di log K, le specie adsorbite dentro la rete (ci sono come complessi, non come passi di superficie);
+//   · le famiglie rare e le mani distinte si aprono a richiesta (famiglie: 'tutte', stereo: true): di suo la rete non le usa.
 //
 // LEGGI (ricavate o applicate in generale):
 //   · struttura elettronica: riempimento dei gusci (Madelung), regole di Slater → raggio, ionizzazione, elettronegatività
@@ -121,12 +148,51 @@ export function reteDelLuogo(luogo = {}, opzioni = {}) {
   r.fotolisi = luogo.luce ? Object.keys(partenza).flatMap((k) => fotolisi(k, luogo.luce).filter((x) => x.J > 1e-12).slice(0, 2)) : [];
   return r;
 }
-// ciò che una molecola chiede a chi sta sopra perché possa esserci (INTRECCIO, regola 5): i suoi elementi, e se in acqua
-// a quel pH e a quella temperatura la sua formazione dagli ingredienti dati è in discesa.
-export function cheCosaChiede(x, { ingredienti = ['O', 'O=C=O', 'N', '[HH]', 'S', 'OP(=O)(O)O'], T = 298.15, pH = 7 } = {}) {
-  const m = molecola_(x), c = conta(m), elementi = Object.keys(c), cond = { T, pH, solvente: 'acqua' };
-  // quante molecole di ogni ingrediente servono (bilancio degli elementi: C dalla CO2, N dall'ammoniaca, S da H2S, P dal fosfato, O dall'acqua, H da H2)
+// ---------- CHE COSA CHIEDE (INTRECCIO, regola 5: dal piccolo al grande)
+// Per una molecola, o un polimero, che cosa deve offrire il luogo perché possa esserci e durare: gli elementi, l'acqua, la
+// finestra di temperatura e di pH in cui non si disfa prima di «tempo», quanto deve essere asciutto (per i legami fatti
+// per condensazione), un riducente o un'altra energia, i minerali che servono a farla, e quanta storia c'è in mezzo.
+//   cheCosaChiede(molecola | polimero, { tempo (s: quanto deve durare; di suo cent'anni), T, pH (per l'energia di formazione) }) →
+//   { che, elementi: { C: n, … }, acqua: 'liquida', T: [min, max] (K), pH: [min, max], mezzaVita: { '298': s, '373': s },
+//     attivitaAcqua: (solo per i polimeri) sopra questo valore i suoi legami si rifanno acqua; attivatore: se serve anche a secco,
+//     energia: { formazione (kJ/mol da CO2, NH3, H2S, fosfato, acqua e H2), riducente: n di H2 per molecola, tipo },
+//     minerali: [che cosa serve e perché], generazioni (stima), confronta(luogo) → { possibile, mancano: [testo] }, nota }
+// La mezza vita viene dai passi che la molecola può fare da sola o con l'acqua, con le loro velocità (molecole_reazioni.js).
+// GENERAZIONI: stima dichiarata di quanti passi di rete servono dai gas e dai sali semplici: ¾ × (legami tra atomi pesanti
+// + H2 da aggiungere), più log2 delle unità per un polimero. Il ¾ è tarato su tre vie trovate dalla rete (acido acetico in
+// 5, glicina in 6 + 3, adenina in 9 + 3); non conta la selezione che serve a fare UNA sequenza tra tante.
+// «luogo» per confronta: { T, pH, attivitaAcqua, acqua: 'liquida'…, gas: { H2: frazione, CO2, … }, ioni: { 'Mg2+': …, fosfato }, minerali: [nomi],
+//   energia: { luce, scariche, gradiente } (vero/falso o un numero), cicliAsciutti (vero/falso), anni } — ciò che mare.js, chimica.js e il clima sanno dare.
+export function cheCosaChiede(x, { tempo = 3.156e9, T = 298.15, pH = 7 } = {}) {
+  const poli = x && x.m && x.unita ? x : null, m = poli ? poli.m : molecola_(x), c = conta(m), cond = { T, pH, solvente: 'acqua' };
+  // gli ingredienti: C dalla CO2, N dall'ammoniaca, S da H2S, P dal fosfato, O dall'acqua, H da H2
   const n = { 'O=C=O': c.C || 0, N: c.N || 0, S: c.S || 0, 'OP(=O)(O)O': c.P || 0 }; n.O = (c.O || 0) - 2 * n['O=C=O'] - 4 * n['OP(=O)(O)O']; n['[HH]'] = ((c.H || 0) - 3 * n.N - 2 * n.S - 3 * n['OP(=O)(O)O'] - 2 * n.O) / 2;
-  const altri = elementi.filter((e) => !['C', 'H', 'N', 'O', 'S', 'P'].includes(e)); let dG = energia_(m, cond).G; for (const k in n) dG -= n[k] * energia_(k, cond).G;
-  return { elementi, ingredienti: Object.fromEntries(Object.entries(n).filter(([, v]) => Math.abs(v) > 1e-9)), altriElementi: altri, dG, riducente: n['[HH]'] > 0, nota: `${n['[HH]'] > 0 ? 'chiede un riducente (idrogeno: ' + n['[HH]'] + ' H2 per molecola)' : 'non chiede riducenti'}; dalla CO2, dall'ammoniaca e dall'acqua la sua formazione ${dG < 0 ? 'è in discesa' : 'è in salita: serve energia (luce, scariche, un gradiente)'} di ${Math.abs(dG).toFixed(0)} kJ/mol`, ingredientiUsati: ingredienti };
+  const metalli = Object.keys(c).filter((e) => atomo_(e).metallo), altri = Object.keys(c).filter((e) => !['C', 'H', 'N', 'O', 'S', 'P'].includes(e) && !metalli.includes(e));
+  const piccola = m.atomi.length <= 400, prova_ = poli ? molecola_(passoDiCondensazione(poli.unita[0].nome, poli.unita[Math.min(1, poli.unita.length - 1)].nome, poli.tipo, {}).dimero) : m;
+  let formazione = NaN; if (piccola && !metalli.length && !altri.length) { formazione = energia_(m, cond).G; for (const k in n) formazione -= n[k] * energia_(k, cond).G; }
+  // quanto dura: la somma delle velocità dei passi in discesa che può fare da sola o con l'acqua
+  const perdita = (cc) => { let k = 0; for (const r of reazioni_(prova_, null, { tutte: false }).concat(reazioni_(prova_, 'O', { tutte: false, lente: false, metalli: false }))) { let v; try { v = velocita_(r, cc); } catch { continue; } if (v.dG < -15 && isFinite(v.k)) k += v.k; } return k; }; // (solo i passi davvero in discesa: gli equilibri tra forme della stessa molecola non la distruggono)
+  const vita = (cc) => Math.LN2 / Math.max(perdita({ solvente: 'acqua', ...cc }), 1e-300), finestra = (lista, fa) => { const buoni = lista.filter((v) => vita(fa(v)) >= tempo); return buoni.length ? [Math.min(...buoni), Math.max(...buoni)] : null; };
+  const limiteMolecola = prova_.atomi.length <= 40, Ts = [273.15, 298.15, 323.15, 348.15, 373.15, 423.15, 473.15], pHs = [1, 3, 5, 7, 9, 11, 13];
+  const finT = limiteMolecola ? finestra(Ts, (t) => ({ T: t, pH })) : null, finPH = limiteMolecola ? finestra(pHs, (p) => ({ T, pH: p })) : null, mezzaVita = limiteMolecola ? { 298: vita({ T: 298.15, pH }), 373: vita({ T: 373.15, pH }) } : null;
+  // i polimeri: quanto asciutto perché il legame si faccia (ΔG = 0 a quell'attività dell'acqua)
+  let attivitaAcqua = null, attivatore = false; if (poli && poli.unita.length > 1) { const d = passoDiCondensazione(poli.unita[0].nome, poli.unita[1].nome, poli.tipo, { ...cond }).dG; attivitaAcqua = Math.min(1, Math.exp(-d / (R * T))); attivatore = attivitaAcqua < 1e-3; }
+  const stima = (mm, h2) => Math.max(1, Math.round(0.75 * (mm.legami.filter((l) => l.t === 'c').length + Math.max(0, h2)))), generazioni = poli ? Math.max(...[...new Set(poli.unita.map((u) => u.nome))].map((u) => cheCosaChiede(u, { tempo, T, pH }).generazioni)) + Math.ceil(Math.log2(poli.unita.length)) : stima(m, n['[HH]']);
+  const minerali = []; if (n['[HH]'] > 0 && (c.C || 0) > 0) minerali.push('un metallo a guscio d incompleto (solfuri o ossidi di ferro e nichel) per usare H2 e CO2, oppure luce o scariche su un\'aria riducente'); if (c.P) minerali.push('fosfato sciolto (apatite che si scioglie, laghi di carbonato)'); for (const e of metalli) minerali.push(`${atomo_(e).nome} sciolto`); if (poli) minerali.push('una superficie che concentri i monomeri (argille) aiuta ma non è necessaria');
+  const out = { che: poli ? `${poli.tipo} di ${poli.unita.length} unità` : chiave_(m), elementi: c, acqua: 'liquida', T: finT, pH: finPH, mezzaVita, attivitaAcqua, attivatore,
+    energia: { formazione, riducente: Math.max(0, n['[HH]']), ossidante: Math.max(0, -n['[HH]']), tipo: n['[HH]'] > 0 ? (formazione < 0 ? 'un riducente (H2 o equivalenti): poi è in discesa' : 'un riducente e in più energia (luce, scariche, un gradiente)') : formazione < 0 ? 'nessuna: in discesa' : 'energia (luce, scariche, un gradiente)' }, minerali, generazioni, ingredienti: Object.fromEntries(Object.entries(n).filter(([, v]) => Math.abs(v) > 1e-9)) };
+  out.nota = `${out.che}: ${formula(m)}; ${out.energia.tipo}${isFinite(formazione) ? ` (${formazione.toFixed(0)} kJ/mol dagli ingredienti semplici)` : ''}; ${finT ? `dura più di ${(tempo / 3.156e7).toFixed(0)} anni tra ${(finT[0] - 273.15).toFixed(0)} e ${(finT[1] - 273.15).toFixed(0)} °C` : limiteMolecola ? 'in acqua non dura quel tempo a nessuna temperatura provata' : 'durata non calcolata (troppo grande)'}${finPH ? `, tra pH ${finPH[0]} e ${finPH[1]}` : ''}${attivitaAcqua != null ? `; i suoi legami si fanno sotto un'attività dell'acqua di ${attivitaAcqua.toPrecision(2)}${attivatore ? ' (serve un attivatore)' : ''}` : ''}; circa ${generazioni} generazioni di rete dai gas e dai sali`;
+  // il confronto con un luogo: che cosa ha e che cosa gli manca
+  out.confronta = (luogo = {}) => { const mancano = [], gas = luogo.gas || {}, ioni = luogo.ioni || {}, min = (luogo.minerali || []).map((q) => (typeof q === 'string' ? q : q.nome)).join(' '), en = luogo.energia || {}, ha = (...ff) => ff.some((f) => (gas[f] || 0) > 1e-9);
+    if (luogo.acqua && luogo.acqua !== 'liquida') mancano.push('acqua liquida'); if (finT && luogo.T != null && (luogo.T < finT[0] || luogo.T > finT[1])) mancano.push(`una temperatura tra ${finT[0].toFixed(0)} e ${finT[1].toFixed(0)} K (qui ${luogo.T.toFixed(0)})`); if (limiteMolecola && !finT) mancano.push('non dura abbastanza in acqua a nessuna temperatura');
+    if (finPH && luogo.pH != null && (luogo.pH < finPH[0] - 1 || luogo.pH > finPH[1] + 1)) mancano.push(`un pH tra ${finPH[0]} e ${finPH[1]} (qui ${luogo.pH})`);
+    if (c.C && !ha('CO2', 'CO', 'CH4', 'HCN', 'H2CO', 'CH3OH', 'C2H2', 'C2H6')) mancano.push('carbonio (CO2, CO, metano…)'); if (c.N && !ha('N2', 'NH3', 'HCN', 'NO')) mancano.push('azoto'); if (c.S && !ha('H2S', 'SO2', 'S2') && !/solfuro|pirite|gesso/i.test(min)) mancano.push('zolfo'); if (c.P && !(ioni.fosfato > 0 || ioni.P > 0 || /apatite|fosfat/i.test(min))) mancano.push('fosforo (fosfato sciolto o apatite)');
+    for (const e of metalli) if (!Object.keys(ioni).some((q) => q.startsWith(e))) mancano.push(`${atomo_(e).nome} sciolto`);
+    const riducente = ha('H2', 'CH4', 'NH3', 'H2S', 'HCN') || luogo.riducente, energia2 = en.luce || en.scariche || en.gradiente || luogo.luce;
+    if (out.energia.riducente > 0 && !riducente) mancano.push('un riducente (idrogeno dai camini, o un\'aria con metano e ammoniaca)'); if (out.energia.riducente > 0 && riducente && !ha('HCN', 'H2CO') && !METALLO_D.test(min) && !energia2) mancano.push('un modo di usare il riducente: solfuri di ferro e nichel, luce o scariche'); if (!(formazione < 0) && isFinite(formazione) && !energia2) mancano.push('energia (luce, scariche, un gradiente)');
+    if (attivitaAcqua != null && attivitaAcqua < 1 && (luogo.attivitaAcqua ?? 1) > attivitaAcqua && !luogo.cicliAsciutti && !luogo.attivatore) mancano.push(`un posto che si asciughi (attività dell'acqua sotto ${attivitaAcqua.toPrecision(2)}) o un attivatore`);
+    if (luogo.anni != null && luogo.anni < generazioni * 1) mancano.push('tempo');
+    return { possibile: mancano.length === 0, mancano }; };
+  return out;
 }
+const METALLO_D = /ferro|nichel|magnetite|pirite|greigite|awaruite|troilite|solfuro/i;

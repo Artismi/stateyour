@@ -8,7 +8,8 @@
 //     atomi piani (V = 5·√(Ui·Uj)·(1 + 4,18·ln ordine), U = 2 kcal/mol nel secondo periodo: il legame peptidico ha ordine 1,41);
 //   · dispersione e ingombro (London, Pauli): Lennard-Jones 12-6 con distanza e profondità di UFF, media geometrica;
 //   · elettrostatica: cariche parziali da incrementi di legame, δ = κ·(χb − χa)/(Ja + Jb), con χ e J (elettronegatività e
-//     durezza) di Rappé e Goddard 1991 e κ = 2,6 TARATO perché l'acqua abbia le cariche del modello TIP3P (−0,83/+0,42);
+//     durezza) di Rappé e Goddard 1991, divisi per (n_a·n_b)^¼ (n: i legami polari dell'atomo: saturazione) e κ = 3,1 TARATO
+//     perché l'acqua abbia le cariche del modello TIP3P (−0,83/+0,42);
 //     più le cariche formali. Il LEGAME A IDROGENO non è un termine a parte: è l'attrazione tra un idrogeno su N od O
 //     (che non ha quasi nuvola: raggio ridotto) e una coppia solitaria;
 //   · IN ACQUA (solvente implicito, dichiarato): la costante dielettrica cresce con la distanza (ε = 8r, fino a 78);
@@ -26,7 +27,7 @@ import { forma, dominio, lunghezzaLegame } from './molecole_forma.js';
 import { energia, sitiAcidoBase, speciazione, alPH, idratazione, inOlio, R } from './molecole_energia.js';
 import { numero } from './eventi.js';
 
-const KCAL = 4.184, COULOMB = 1389.35, KAPPA = 2.6;
+const KCAL = 4.184, COULOMB = 1389.35, KAPPA = 3.1;
 // mette insieme più forme (ognuna con una rotazione/traslazione, se si vuole) in una configurazione sola
 export function insieme(forme, sposta = []) {
   const Z = [], legami = [], pos = [], parti = [], cariche = [];
@@ -40,7 +41,10 @@ export function insieme(forme, sposta = []) {
 // le cariche parziali di una forma: incrementi di legame + cariche formali
 function cariche_(f) {
   const q = new Float64Array(f.n); if (f.m) f.m.atomi.forEach((a, k) => { q[k] += a.q; });
-  for (const [a, b, o] of f.legami) { if (!o) continue; const A = atomo(f.Z[a]).uff, B = atomo(f.Z[b]).uff, d = (KAPPA * (B.chi - A.chi)) / (2 * A.durezza + 2 * B.durezza) * (o > 1 ? 1.3 : 1); q[a] += d; q[b] -= d; }
+  // (saturazione: un atomo che cede elettroni a più vicini insieme ne cede meno a ciascuno — la sua elettronegatività sale mentre si
+  // carica —: ogni incremento è diviso per la radice quarta del prodotto dei legami polari dei due atomi)
+  const polari = new Uint8Array(f.n); for (const [a, b, o] of f.legami) if (o && f.Z[a] !== f.Z[b]) { polari[a]++; polari[b]++; }
+  for (const [a, b, o] of f.legami) { if (!o || f.Z[a] === f.Z[b]) continue; const A = atomo(f.Z[a]).uff, B = atomo(f.Z[b]).uff, d = ((KAPPA * (B.chi - A.chi)) / (2 * A.durezza + 2 * B.durezza)) * (o > 1 ? 1.3 : 1) * Math.pow(polari[a] * polari[b], -0.25); q[a] += d; q[b] -= d; }
   return q;
 }
 export const cariche = (x) => cariche_(x.pos ? x : forma(x));
@@ -66,7 +70,7 @@ export function campo(x, { solvente = null } = {}) {
   // tipi per le forze tra atomi non legati
   const xv = new Float64Array(n), D = new Float64Array(n), apolare = new Uint8Array(n), polare = new Uint8Array(n);
   for (let i = 0; i < n; i++) { const u = atomo(c.Z[i]).uff; xv[i] = u.x; D[i] = KCAL * u.D; const su = vic[i][0];
-    if (c.Z[i] === 1 && su != null && (c.Z[su] === 7 || c.Z[su] === 8)) { xv[i] = 1.5; D[i] = KCAL * 0.05; }
+    if (c.Z[i] === 1 && su != null && (c.Z[su] === 7 || c.Z[su] === 8)) { xv[i] = 2.0; D[i] = KCAL * 0.05; }
     if (c.Z[i] === 6 || c.Z[i] === 16) apolare[i] = vic[i].some((j) => c.Z[j] === 7 || c.Z[j] === 8) ? 0 : 1; if (c.Z[i] === 7 || c.Z[i] === 8) polare[i] = 1; if (Math.abs(c.cariche[i]) > 0.6) polare[i] = 1; }
   const massa = Float64Array.from(c.Z, (z) => atomo(z).massa);
   return { n, Z: c.Z, pos: Float64Array.from(c.pos), parti: c.parti, legamiLista: c.legami, legami, angoli, torsioni, escl, uno4, x: xv, D, q: c.cariche, apolare, polare, massa, acqua: solvente === 'acqua', taglio: 10 };

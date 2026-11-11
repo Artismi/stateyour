@@ -32,7 +32,7 @@ const ETERO = new Set([7, 8, 16]), ALOGENI = new Set([9, 17, 35]);
 // barriere intrinseche (kJ/mol) per famiglia, e da quale misura vengono (in acqua, 25 °C, senza catalisi)
 export const INTRINSECHE = {
   addizione: 85,        // idratazione dell'acetaldeide, non catalizzata: k ≈ 9·10⁻³ 1/s (Bell 1966), ΔG ≈ 0
-  'addizione C': 85,    // come sopra: il carbanione attacca come un nucleofilo qualsiasi (la sua rarità è nel fattore del pKa)
+  'addizione C': 110,   // i carbanioni sono più lenti di quanto direbbe la loro basicità (la carica deve prima raccogliersi sul carbonio: Bernasconi 1987): cianuro + acetaldeide, k ≈ 10³-10⁴ L/mol/s [ricordato]
   sostituzione: 135,    // idrolisi neutra dell'acetato di etile, k ≈ 1,5·10⁻¹⁰ 1/s; del legame peptidico, 5·10⁻¹¹ 1/s (Radzicka e Wolfenden 1996)
   tautomeria: 100,      // enolizzazione dell'acetone in acqua neutra, k ≈ 5·10⁻¹⁰ 1/s, ΔG = +47 kJ/mol (Chiang e Kresge 1984)
   idrogenazione: 230,   // H2 + H2CO in fase gas: ~300 kJ/mol di barriera (nessuna via senza catalizzatore)
@@ -41,6 +41,7 @@ export const INTRINSECHE = {
   radicale: 50,         // strappo di H da parte di un radicale alchilico (Evans e Polanyi 1938)
   protone: 10,          // tra eteroatomi: quasi al limite della diffusione (Eigen 1964)
   complessazione: 30,   // scambio dell'acqua attorno a uno ione (Mg²⁺ 10⁵ 1/s, Fe²⁺ 10⁶ 1/s)
+  'addizione a un triplo legame': 170, // un nitrile è un elettrofilo pigro: idrolisi basica dell'acetonitrile, k_OH = 1,6·10⁻⁶ L/mol/s con ΔG ≈ −80 kJ/mol [ricordato]
   'addizione coniugata': 85, // come le addizioni: il nucleofilo sul carbonio β di un C=C tirato da un C=O o un C≡N (Michael)
   'addizione enolica': 75,   // un enolo o un'enammina che attacca con il suo carbonio: più svelti dell'enolato perché non serve togliere il protone (enammine + aldeidi: 1/s-1/min)
   'sostituzione su carbonio saturo': 150, // scambi su un carbonio tetraedrico (Albery e Kreevoy 1978: barriere intrinseche del trasferimento di metile 110-170 kJ/mol)
@@ -145,7 +146,7 @@ export function reazioni(x1, x2 = null, { radicali = false, protoni = false, met
       const g = base(); g.atomi[X].h--; g.atomi[B].h++; ordine(g, A, B, -1); ordine(g, X, A, 1); senzaStereo(g, X, A, B); metti('tautomeria', g); }
     // chiusure d'anello (5 o 6 atomi): addizione e sostituzione dentro la stessa molecola
     for (const d of s.donatori) { if (d.tipo === 'H2') continue;
-      for (const p of s.pi) { if (!p.polare || d.k === p.A || d.k === p.B) continue; const n = distanzaNelGrafo(m, d.k, p.A); if (n !== 4 && n !== 5) continue; const g = base(); g.atomi[d.k].h--; g.atomi[p.B].h++; ordine(g, p.A, p.B, -1); ordine(g, d.k, p.A, 1); senzaStereo(g, p.A, d.k); metti(d.tipo === 'carbonio' ? 'addizione C' : 'addizione', g, { p: d.p, pb: d.pb, anello: n + 1 }); }
+      for (const p of s.pi) { if (!p.polare || d.k === p.A || d.k === p.B) continue; const n = distanzaNelGrafo(m, d.k, p.A); if (n !== 4 && n !== 5) continue; const g = base(); g.atomi[d.k].h--; g.atomi[p.B].h++; ordine(g, p.A, p.B, -1); ordine(g, d.k, p.A, 1); senzaStereo(g, p.A, d.k); metti(d.tipo === 'carbonio' ? 'addizione C' : 'addizione', g, { p: d.p, pb: d.pb, anello: n + 1, triplo: p.o === 3 }); }
       if (d.tipo === 'eteroatomo') for (const u of s.uscenti) { if (d.k === u.L || d.k === u.A || (u.lenta && !lente)) continue; const n = distanzaNelGrafo(m, d.k, u.A); if (n !== 4 && n !== 5) continue; const g = base(); g.atomi[d.k].h--; ordine(g, u.A, u.L, -1); g.atomi[u.L].h++; ordine(g, d.k, u.A, 1); senzaStereo(g, u.A); metti('sostituzione', g, { p: d.p, pb: d.pb, anello: n + 1, classe: u.classe }); } }
     // trasposizione sigmatropica [3,3] (Cope, Claisen): a=b–c–d–e=f → b=c, d=e, e il legame nuovo a–f al posto di c–d
     if (tutte) for (const p1 of s.piTutti) for (const p2 of s.piTutti) { if (p1 === p2 || p1.o !== 2 || p2.o !== 2) continue; for (const [a, b] of [[p1.A, p1.B], [p1.B, p1.A]]) for (const [e, f] of [[p2.A, p2.B], [p2.B, p2.A]]) { if (new Set([a, b, e, f]).size < 4) continue;
@@ -168,7 +169,7 @@ export function reazioni(x1, x2 = null, { radicali = false, protoni = false, met
       // addizione a un legame π polare (o qualsiasi, per H2)
       for (const p of se.pi) { if (!p.polare && d.tipo !== 'H2' && !(ETERO.has(me.atomi[p.A].Z) && ETERO.has(me.atomi[p.B].Z))) continue; const A = p.A + oe, B = p.B + oe, g = nuovo();
         if (d.tipo === 'H2') { g.atomi[A].h++; g.atomi[B].h++; ordine(g, A, B, -1); senzaStereo(g, A, B); togli(g, n); metti('idrogenazione', g); continue; }
-        g.atomi[n].h--; g.atomi[B].h++; ordine(g, A, B, -1); ordine(g, n, A, 1); senzaStereo(g, A, n); metti(d.tipo === 'carbonio' ? 'addizione C' : 'addizione', g, { p: d.p, pb: d.pb }); }
+        g.atomi[n].h--; g.atomi[B].h++; ordine(g, A, B, -1); ordine(g, n, A, 1); senzaStereo(g, A, n); metti(d.tipo === 'carbonio' ? 'addizione C' : 'addizione', g, { p: d.p, pb: d.pb, triplo: p.o === 3 }); }
       // addizione al carbonio di CO o di un isonitrile: prende H e Nu tutti e due
       for (const c of se.carbeni) { const C = c.C + oe, X = c.X + oe, g = nuovo(); g.atomi[C].q = 0; g.atomi[X].q = 0; ordine(g, C, X, -1);
         if (d.tipo === 'H2') { g.atomi[C].h += 2; togli(g, n); } else { g.atomi[n].h--; g.atomi[C].h++; ordine(g, n, C, 1); } metti('addizione a CO', g, { p: d.p }); }
@@ -265,8 +266,9 @@ export function velocita(r, c = {}) {
   if (r.tipo === 'omolisi') { G0 = null; const b = Math.max(dH, 0); k = KB_H * T * Math.exp(-b / (R * T)) * 30; return { dG, dH, barriera: b, k, kInversa: k * Math.exp(dG / (R * T)), K: Math.exp(-dG / (R * T)), catalisi: cat }; }
   if (r.tipo === 'ricombinazione') return { dG, dH, barriera: 0, k: 1e10, kInversa: 1e10 * Math.exp(dG / (R * T)), K: Math.exp(-dG / (R * T)), catalisi: cat };
   const famiglia = r.tipo === 'eliminazione' ? (r.carbonio ? 'addizione C' : 'addizione') : r.tipo === 'deidrogenazione' ? 'idrogenazione' : r.tipo === 'eliminazione di CO' ? 'addizione a CO' : ['strappo di H', 'addizione radicalica'].includes(r.tipo) ? 'radicale'
-    : r.tipo === 'trasferimento di elettroni' ? 'elettrone' : (r.tipo === 'sostituzione' || r.tipo === 'addizione enolica') && (r.classe === 'saturo' || r.classe === 'anello teso') ? 'sostituzione su carbonio saturo' : r.tipo === 'isomerizzazione' ? (r.azoto ? 'tautomeria' : 'isomerizzazione') : r.tipo;
+    : r.tipo === 'trasferimento di elettroni' ? 'elettrone' : r.tipo === 'addizione coniugata' && r.soloAnione ? 'addizione C' : (r.tipo === 'sostituzione' || r.tipo === 'addizione enolica') && (r.classe === 'saturo' || r.classe === 'anello teso') ? 'sostituzione su carbonio saturo' : r.tipo === 'isomerizzazione' ? (r.azoto ? 'tautomeria' : 'isomerizzazione') : r.tipo;
   G0 = INTRINSECHE[famiglia] ?? 100;
+  if (r.triplo) G0 = INTRINSECHE['addizione a un triplo legame'];
   if ((famiglia === 'idrogenazione' || famiglia === 'inserzione di CO' || famiglia === 'addizione a CO') && cat.metalloD) G0 = famiglia === 'inserzione di CO' ? INTRINSECHE['inserzione di CO'] : INTRINSECHE['idrogenazione su metallo'];
   else if (famiglia === 'inserzione di CO') G0 = 300; // senza un metallo che leghi CO non avviene
   // Marcus: ΔG‡ = G0·(1 + ΔG/4G0)², tra 0 e |ΔG|

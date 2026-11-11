@@ -36,7 +36,6 @@ export const CONCENTRAZIONE_EFFICACE = 1 / (6.02214e23 * (4 / 3) * Math.PI * (RA
 export function interazione(a, b, { solvente = 'acqua', passi = 40, tieni = 3, T = 298.15 } = {}) {
   const ma = molecola(chiave(molecola(a))), mb = molecola(chiave(molecola(b))), id = `${chiave(ma)}|${chiave(mb)}|${solvente}|${passi}`; if (MEMO.has(id)) return MEMO.get(id);
   const fa = forma(ma), fb = forma(mb), qa = cariche(fa), qb = cariche(fb), ca = baricentro(fa), cb = baricentro(fb);
-  const soli = minimizza(campo(fa, { solvente }), { passi }).energia + minimizza(campo(fb, { solvente }), { passi }).energia;
   const donatori = (f) => { const o = []; for (const [i, j] of f.legami) for (const [h, x] of [[i, j], [j, i]]) if (f.Z[h] === 1 && (f.Z[x] === 7 || f.Z[x] === 8 || f.Z[x] === 16)) o.push([h, x]); return o; }, accettori = (f, q) => f.Z.map((z, i) => ((z === 7 || z === 8 || z === 16) && q[i] < -0.25 ? i : -1)).filter((i) => i >= 0);
   const prove = [], metti = (R_, t) => { const pos = new Float64Array(fb.pos.length); for (let i = 0; i < fb.n; i++) { const v = somma(R_(meno(p3(fb, i), cb)), t); pos[3 * i] = v[0]; pos[3 * i + 1] = v[1]; pos[3 * i + 2] = v[2]; } prove.push(pos); };
   // b accostata ad a: un suo accettore davanti a un idrogeno di a (e viceversa), il resto di b dalla parte opposta; quattro giri attorno al legame
@@ -48,7 +47,9 @@ export function interazione(a, b, { solvente = 'acqua', passi = 40, tieni = 3, T
   const fbIn = (pos) => ({ ...fb, pos }), provati = prove.map((pos) => { const c = campo(insieme([fa, fbIn(pos)]), { solvente }); return { c, e: forze(c).energia }; }).sort((x, y) => x.e - y.e).slice(0, tieni);
   let meglio = null; for (const pr of provati) { const mn = minimizza(pr.c, { passi: 2 * passi }); if (!meglio || mn.energia < meglio.energia) meglio = mn; }
   let legamiH = 0; for (let i = 0; i < fa.n; i++) for (let j = fa.n; j < meglio.n; j++) { const [h, x] = meglio.Z[i] === 1 ? [i, j] : [j, i]; if (meglio.Z[h] !== 1 || ![7, 8].includes(meglio.Z[x]) || Math.abs(meglio.q[h]) < 0.2) continue; if (Math.hypot(meglio.pos[3 * h] - meglio.pos[3 * x], meglio.pos[3 * h + 1] - meglio.pos[3 * x + 1], meglio.pos[3 * h + 2] - meglio.pos[3 * x + 2]) < 2.4) legamiH++; }
-  const dE = Math.min(0, meglio.energia - soli), dG = dE + (solvente === 'acqua' ? COSTO_LEGARSI : 0), out = { dE, dG, K: Math.exp(-dG / (R * T)), legamiH, configurazione: meglio };
+  // l'energia d'interazione: solo le coppie di atomi una di qua e una di là, nella geometria trovata (le tensioni interne non contano)
+  const tutti = (da, a_) => { const o = new Set(); for (let i = da; i < a_; i++) o.add(i); return o; }, sA = tutti(0, fa.n), sB = tutti(fa.n, meglio.n), soloTra = { ...meglio, legami: [], angoli: [], torsioni: [], escl: Array.from({ length: meglio.n }, (_, i) => (i < fa.n ? sA : sB)), uno4: Array.from({ length: meglio.n }, () => new Set()) };
+  const dE = Math.min(0, forze(soloTra, meglio.pos).energia), dG = dE + (solvente === 'acqua' ? COSTO_LEGARSI : 0), out = { dE, dG, K: Math.exp(-dG / (R * T)), legamiH, configurazione: meglio };
   if (MEMO.size > 3000) MEMO.clear(); MEMO.set(id, out); return out;
 }
 
