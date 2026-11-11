@@ -26,9 +26,9 @@ const tiri = (nome) => { let s = sorgente('mondo3d').seme(nome); return () => (s
 
 // ---------- una galassia
 export function creaGalassia(N, punti, { via, genitore = null, posizione = null, opzioni = {} } = {}) {
-  // (stelle: le stelle del campione sono rese più brillanti del vero rispetto alla luce diffusa, perché si vedano: sono
-  // una su cento milioni, e quelle che in cielo sarebbero vicine e brillanti nel campione non ci sono)
-  const O = { batuffoli: 60000, diffusa: 1, stelle: 60, ...opzioni }; let sc = scenaGalassia(via.cosmo, via.galassia, N.tempo.t), tScena = N.tempo.t;
+  // (le stelle del campione sono una su cento milioni: da lontano ogni punto porta la luce di tutte quelle che rappresenta
+  // — il suo `peso`: è il principio della nebbia —; avvicinandosi torna a essere una stella sola. La luce diffusa è l'altra metà.)
+  const O = { batuffoli: 60000, diffusa: 0.5, ...opzioni }; let sc = scenaGalassia(via.cosmo, via.galassia, N.tempo.t), tScena = N.tempo.t;
   const Rg = sc.riferimento.raggio, n = sc.punti.n, assi = sc.nelGenitore.assi, q0 = [assi[0][0], assi[1][0], assi[2][0], assi[0][1], assi[1][1], assi[2][1], assi[0][2], assi[1][2], assi[2][2]]; // (per righe: le colonne sono i tre assi)
   const nodo = N.corpo({ nome: `galassia ${via.galassia}`, genitore, posizione, assi: q0, raggio: 0, influenza: 3 * Rg });
   const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
@@ -79,12 +79,12 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       // cielo e deve restare tenue; da fuori sta tutta in un disco piccolo, che deve valere quasi uno
       { let E = 0; const D = nube.dati; for (let k = 0; k < nube.K; k += 30) { const x = D[8 * k] - eGr[0], y = D[8 * k + 1] - eGr[1], z = D[8 * k + 2] - eGr[2], t2 = D[8 * k + 3] ** 2; E += Math.max(D[8 * k + 4], D[8 * k + 5], D[8 * k + 6]) / Math.max(x * x + y * y + z * z, t2); }
         E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
-        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.2 : 0.9) * angolo)); }
+        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.25 : 2.2) * angolo)); }
     },
     disegna(S, passata) {
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
-      nube.disegna(S, rel, g, LUCE * O.diffusa); stelle.disegna(S, LUCE * O.stelle, 1);
+      const peso = sc.punti.peso; nube.disegna(S, rel, g, LUCE * O.diffusa); stelle.disegna(S, LUCE, 1, [0.5 * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
     },
     // dove sta la stella i nel riferimento della galassia (per il sistema che le si attacca), e spegnerne il punto quando il suo sistema c'è
     posStella: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; o[0] = P[3 * i]; o[1] = P[3 * i + 1]; o[2] = P[3 * i + 2]; return o; },
@@ -127,7 +127,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     },
     disegna(S, passata) {
       if (passata !== 'velato') return; const k = lato / lato0;
-      if (rete && O.rete) rete.disegna(S, [-occhio[0], -occhio[1], -occhio[2]], [k, 0, 0, 0, k, 0, 0, 0, k], 0, 0.05 * O.rete, lato);
+      if (rete && O.rete) rete.disegna(S, [-occhio[0], -occhio[1], -occhio[2]], [k, 0, 0, 0, k, 0, 0, 0, k], 0, 0.05 * O.rete * (strato.dentro ? 0.12 : 1), lato); // (da dentro una galassia la rete del cosmo quasi non si vede)
       gal.disegna(S, LUCE, 1.5);
     },
     // dove sta la galassia i (l'immagine più vicina all'occhio), nel riferimento del cosmo
@@ -157,6 +157,7 @@ export function creaUniverso(N, { via, livello = 'pianeta', superficie = () => n
   // chi governa: a ogni fotogramma si guarda che cosa c'è vicino e lo si prepara (o lo si lascia)
   const governo = { nome: 'livelli', aggiorna(S) {
     if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina]; if (cosmo.distanzaVicina < 14 * r && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
+    cosmo.dentro = !!G && G.distanza < 2.5 * G.raggio;
     if (G && assiSistema) { if (G.vicina >= 0 && G.distanzaVicina < 4e15 && (!Sis || Sis.via.stella !== G.vicina)) apriSistema(G.vicina); else if (Sis && G.distanzaVicina > 1.2e16) chiudiSistema(); }
   } };
   N.strati.unshift(governo);
@@ -177,8 +178,11 @@ export function creaUniverso(N, { via, livello = 'pianeta', superficie = () => n
   N.camera.corpo = cosmo.radice; N.strati.unshift(aspetta);
   return {
     cosmo, galassia: () => G, sistema: () => Sis, guardaDa, pronto: () => partito, apriGalassia, apriSistema,
+    // a che cosa è attaccata la camera, come «via» della mappa: { cosmo, galassia, stella, pianeta } fin dove si è dentro
+    viaOra() { const v = { cosmo: via.cosmo }; let c = N.camera.corpo, inG = false, inS = false; for (let x = c; x; x = x.genitore) { if (G && x === G.nodo) inG = true; if (Sis && x === Sis.nodo) inS = true; }
+      if (inG) v.galassia = G.via.galassia; if (inS) { v.stella = Sis.via.stella; const s = Sis.scheda(c); if (s && s.c.cosa === 'pianeta') v.pianeta = s.c.id; else if (s && s.c.cosa === 'luna') v.pianeta = s.c.pianeta; } return v; },
     // dove si è, dal livello più grande al più piccolo (per la riga in basso)
-    percorso() { const out = [`il cosmo ${via.cosmo}`], c = N.camera.corpo; if (G && (c === G.nodo || Sis)) out.push(`la galassia ${G.via.galassia + 1}`); else if (G) out.push(`vicino alla galassia ${G.via.galassia + 1}`); if (Sis) { out.push(`il sistema della stella ${Sis.via.stella + 1}`); const s = Sis.scheda(c); if (s && s.c.cosa !== 'stella') out.push(s.c.cosa === 'pianeta' ? `il pianeta ${s.c.id + 1}` : `una luna del pianeta ${s.c.pianeta + 1}`); } return out; },
+    percorso() { const v = this.viaOra(), out = [`il cosmo ${v.cosmo}`]; if (v.galassia != null) out.push(`la galassia ${v.galassia + 1}`); if (v.stella != null) out.push(`il sistema della stella ${v.stella + 1}`); if (v.pianeta != null) out.push(`il pianeta ${v.pianeta + 1}`); return out; },
     libera() { chiudiSistema(); if (G) G.libera(); cosmo.libera(); punti.libera(); for (const s of [governo, aspetta]) { const i = N.strati.indexOf(s); if (i >= 0) N.strati.splice(i, 1); } },
   };
 }

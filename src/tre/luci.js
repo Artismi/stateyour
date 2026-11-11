@@ -11,12 +11,13 @@ const V_PUNTI = `
 in vec3 a_p; in vec4 a_l;   // posizione rispetto all'occhio (assi del mondo); luminosità per colore (in unità di u_k.x watt), e in a quanto pesa
 uniform mat4 u_proj; uniform mat3 u_vista; uniform float u_fc;
 uniform vec4 u_k;           // unità delle luminosità / (4π·E0); π·fuoco²/20 (da irradianza a valore di picco); lato massimo in pixel; alone minimo
+uniform vec3 u_peso;        // quante sorgenti vere rappresenta ogni punto visto da lontano (un campione: nebbia.js), e tra quali distanze (in 10¹⁵ m) si passa da una a tutte
 out vec3 v_c; out float v_r;
 void main() {
   // (le distanze vanno da metri a 10²⁶ m: il loro quadrato non sta in un numero a 32 bit; si conta in unità di 10¹⁵ m,
   // e la costante u_k.x arriva già divisa per 10³⁰)
   vec3 e = u_vista * a_p, es = e * 1e-15; float d2 = max(dot(es, es), 1e-36);
-  vec3 picco = a_l.rgb * (u_k.x / d2) * u_k.y; float f = max(picco.r, max(picco.g, picco.b));
+  vec3 picco = a_l.rgb * (u_k.x / d2) * u_k.y * (1.0 + (u_peso.x - 1.0) * smoothstep(u_peso.y, u_peso.z, sqrt(d2))); float f = max(picco.r, max(picco.g, picco.b));
   float r = clamp(sqrt(f / 0.006), u_k.w, u_k.z);
   // (una sorgente fortissima: il suo alone non può uscire dal quadratino; resta un cuore bianco largo metà del raggio, che poi sfuma)
   v_c = picco * min(1.0, 0.5 * (1.0 + 0.25 * r * r) / max(f, 1e-20)); v_r = r;
@@ -61,10 +62,11 @@ export function creaPunti(N) {
     const o = { vao, bp, bl, n: 0, capienza,
       // pos: Float32Array(3n) rispetto all'occhio; luce: Float32Array(4n) (r, g, b in unità di `unita` watt; a > 0: c'è)
       metti(pos, luce, n) { o.n = n; gl.bindBuffer(gl.ARRAY_BUFFER, bp); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos, 0, 3 * n); if (luce) { gl.bindBuffer(gl.ARRAY_BUFFER, bl); gl.bufferSubData(gl.ARRAY_BUFFER, 0, luce, 0, 4 * n); } },
-      disegna(S, unita = 1, minimo = 1) {
+      disegna(S, unita = 1, minimo = 1, peso = null) {
         if (!o.n) return; if (!prg) prg = N.programma(V_PUNTI, F_PUNTI, { a_p: 0, a_l: 1 }); const u = prg.u; gl.useProgram(prg.p); gl.bindVertexArray(vao);
         gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc);
-        gl.uniform4f(u.u_k, (unita * 1e-30) / (4 * Math.PI * S.E0), (Math.PI * S.fuoco * S.fuoco) / 20, massimo / 2 - 1, minimo); gl.drawArrays(gl.POINTS, 0, o.n); gl.bindVertexArray(null);
+        gl.uniform4f(u.u_k, (unita * 1e-30) / (4 * Math.PI * S.E0), (Math.PI * S.fuoco * S.fuoco) / 20, massimo / 2 - 1, minimo); gl.uniform3f(u.u_peso, peso ? peso[0] : 1, peso ? peso[1] * 1e-15 : 0, peso ? peso[2] * 1e-15 : 1);
+        gl.drawArrays(gl.POINTS, 0, o.n); gl.bindVertexArray(null);
       },
       libera() { gl.deleteBuffer(bp); gl.deleteBuffer(bl); gl.deleteVertexArray(vao); } };
     libere.push(o); return o;
@@ -76,12 +78,12 @@ export function creaPunti(N) {
     const u9 = new Float32Array(9), o = { n,
       aggiorna(d) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferSubData(gl.ARRAY_BUFFER, 0, d); },
       // centro: il riferimento della nube rispetto all'occhio; quadro: i suoi assi nel mondo (3×3 per righe); unita: watt per unità (0: colori già da schermo, con `opacita`)
+      // (un batuffolo è largo al più 40 pixel: decine di migliaia più larghi riempirebbero lo schermo migliaia di volte)
       disegna(S, centro, quadro, unita, opacita = 1, toro = 0) {
         if (!prgN) prgN = N.programma(V_NUBI, F_NUBI, { a_p: 0, a_l: 1 }); const u = prgN.u; gl.useProgram(prgN.p); gl.bindVertexArray(vao);
         gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform3f(u.u_C, centro[0], centro[1], centro[2]);
         const q = quadro || V.identita(); for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = q[3 * r + c]; gl.uniformMatrix3fv(u.u_quadro, false, u9);
-        if (!o._detto) { o._detto = 1; console.log('NUBE', o.n, JSON.stringify({ centro: Array.from(centro).map((x) => x.toExponential(2)), q: Array.from(u9).map((x) => +x.toFixed(2)), unita, E0: S.E0, kx: unita > 0 ? (unita * 1e-30) / (4 * Math.PI * S.E0) : 0, fuoco: S.fuoco, toro, u: Object.keys(u) })); }
-        gl.uniform1f(u.u_toro, toro); gl.uniform4f(u.u_k, unita > 0 ? (unita * 1e-30) / (4 * Math.PI * S.E0) : 0, S.fuoco, Math.min(massimo, 40 * Math.max(1, S.H / 800)), opacita); // (un batuffolo è largo al più 40 pixel: decine di migliaia più larghi riempirebbero lo schermo migliaia di volte) gl.drawArrays(gl.POINTS, 0, o.n); gl.bindVertexArray(null);
+        gl.uniform1f(u.u_toro, toro); gl.uniform4f(u.u_k, unita > 0 ? (unita * 1e-30) / (4 * Math.PI * S.E0) : 0, S.fuoco, Math.min(massimo, 40 * Math.max(1, S.H / 800)), opacita); gl.drawArrays(gl.POINTS, 0, o.n); gl.bindVertexArray(null);
       },
       libera() { gl.deleteBuffer(b); gl.deleteVertexArray(vao); } };
     libere.push(o); return o;

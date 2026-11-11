@@ -424,6 +424,21 @@ prova('il clima e l\'aria si tengono: il mare c\'è dove può, il termostato del
   console.log(`      ${Object.entries(conta).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}; ${venere} come Venere (vapore, CO2, più di 10 bar)`);
   assert.ok(Object.keys(conta).some((k) => k.includes('termostato')) && venere >= 3 && (conta['ghiacciato ghiacci'] || 0) > 300);
 });
+prova('sopra un mare aria e clima sono una coppia sola (stessa temperatura); il ciclo del carbonio c\'è dove ci sono vulcani; prebiotica vede il mare', () => {
+  let mari = 0, cicli = 0, peggio = 0, vulcaniEMare = 0; const pre = { mare: 0, HCN: 0, formaldeide: 0, auto: 0 };
+  for (const { p } of SOLIDI) {
+    const c = p.clima, q = p.prebiotica;
+    if (c.co2Ciclo > 0) { cicli++; assert.ok(p.interno.vulcani > 0 && c.acqua === 'liquida', 'ciclo del carbonio senza vulcani o senza mare'); assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= c.co2Ciclo * 1.01, "più CO2 nell'aria di quella del ciclo"); }
+    if (c.acqua === 'liquida') { mari++; if (p.interno.vulcani > 0) vulcaniEMare++;
+      // (al termostato l'aria è fatta a 275 K per costruzione: lì la coppia non è cercata)
+      if (!c.termostato) { const d = Math.abs(c.Taria - c.T); peggio = Math.max(peggio, d); assert.ok(d < 6, `mare con l'aria fatta a ${c.Taria} K e il clima a ${c.T} K`); }
+      if (q) { assert.equal(q.acquaLiquida, true, 'prebiotica non vede il mare'); if (q.acquaLiquida) { pre.mare++; if (q.HCN > 1e-3) pre.HCN++; if (q.formaldeide > 1e-3) pre.formaldeide++; if (q.autocatalisi) pre.auto++; } } }
+    else if (q) assert.equal(q.acquaLiquida, false);
+    if (p.atmosfera && Object.keys(p.atmosfera.gas).length) assert.ok(p.energiaChimica && p.energiaChimica.relativa >= 0, "manca l'energia per la chimica dell'aria");
+  }
+  assert.ok(mari > 50);
+  console.log(`      ${mari} mari; aria e clima alla stessa temperatura entro ${num(peggio)} K (termostato a parte); ciclo del carbonio acceso su ${cicli} (pianeti con vulcani e mare: ${vulcaniEMare}); prebiotica: ${pre.mare} con acqua liquida (prima 0: riceveva un sì/no), di cui ${pre.HCN} con acido cianidrico oltre un millesimo, ${pre.formaldeide} con formaldeide oltre un millesimo, ${pre.auto} con gli zuccheri che si moltiplicano`);
+});
 { // 5. gli anelli contro il limite di Roche e la temperatura
   let conAnelli = 0, oltre = 0, caldi = 0;
   for (const x of PIANETI) {
@@ -601,9 +616,15 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
   }
   nota(3, 'il conteggio «vero» dei raggi cosmici di una regione è o tutto o niente: il flusso pieno (1,7·10⁻⁴ per m³) anche dove la magnetosfera ne lascia passare una parte (e la regione ne disegna in proporzione), zero solo dove non ne è disegnato nessuno',
     { casi: pieneLoStesso, su: schermate, tipico: `regioni in parte schermate nel campione: ${schermate} su ${REGIONI.length}`, dove: 'nebbia.js conteggioVero() «raggi = 1.7e-4 * V» contro cosmo.js regione() «voluti = … (Emin / 500) ** -1.7»' });
-  let fmax = 0, rmax = 0; for (let r = 1.15; r < 8; r += 0.005) { const f = CO.fascia({ B0: 3.1e-5, raggioM: 6.371e6 }, { densitaAnello: () => 0 }, r); if (f > fmax) { fmax = f; rmax = r; } }
-  nota(3, 'il «massimo» della fascia di radiazione (0,17, scritto in tre posti) non è il massimo di fascia(): tra 1,5 e 4 raggi la fascia è tagliata al tetto e il conteggio vero supera le «decine per metro cubo»',
-    { casi: fmax > 0.17 * 1.01 ? 1 : 0, su: 1, tipico: `massimo vero ${num(fmax)} a ${num(rmax)} raggi`, massimo: `${num(fmax / 0.17)} volte il tetto`, dove: 'cosmo.js FASCIA_MAX, nebbia.js «fmax = 0.17» e «/ 0.17», laboratorio.js disegnaNebbiaRegione «/ 0.17» contro cosmo.js fascia()' });
+  // (era una nota: il «massimo» della fascia, 0,17 scritto in tre posti, non era il massimo di fascia(). Ora è calcolato in
+  // cosmo.js (FASCIA_MAX = 1/(4·1,12), il massimo analitico) e nebbia.js lo legge da lì: è una prova)
+  let fmax = 0, rmax = 0; for (let r = 1.15; r < 8; r += 0.001) { const f = CO.fascia({ B0: 3.1e-5, raggioM: 6.371e6 }, { densitaAnello: () => 0 }, r); if (f > fmax) { fmax = f; rmax = r; } }
+  prova('il massimo della fascia di radiazione è quello di fascia(): calcolato una volta in cosmo.js, letto da nebbia.js', () => {
+    tra(fmax / CO.FASCIA_MAX, 1 - 1e-5, 1 + 1e-5, `massimo vero ${fmax} a ${rmax} raggi contro FASCIA_MAX`); tra(rmax, 2.23, 2.25, 'dove sta il massimo (raggi)');
+    assert.ok(!/0\.17\b/.test(readFileSync(new URL('../src/camera/nebbia.js', import.meta.url), 'utf8')) && !/FASCIA_MAX = 0\.17/.test(readFileSync(new URL('../src/camera/cosmo.js', import.meta.url), 'utf8')), 'un 0,17 scritto a mano in cosmo.js o nebbia.js');
+  });
+  { const lab = readFileSync(new URL('../src/camera/laboratorio.js', import.meta.url), 'utf8'), resta = (lab.match(/fasciaDi\([^)]*\) \/ 0\.17/g) || []).length;
+    nota(3, 'laboratorio.js (disegnaNebbiaRegione) divide ancora la fascia per 0,17 scritto a mano invece che per FASCIA_MAX di cosmo.js', { casi: resta, su: 1, tipico: `massimo vero ${num(fmax)} = ${num(fmax / 0.17)} volte 0,17`, dove: 'laboratorio.js «fasciaDi(P, Pl, r) / 0.17» contro cosmo.js FASCIA_MAX' }); }
 }
 
 { // le bolle dello zoom: dieci volte più vicino, le stesse particelle sulla stessa strada
@@ -722,7 +743,9 @@ prova('il caso di ogni luogo dipende da tutto l\'indirizzo: stesso pianeta e ste
   for (const [cosmo, galassia] of [[1, 0], [1, 1], [2, 0], [2, 1], [3, 0]]) for (const sid of [3, 4, 5]) {
     const S = CO.sistema(cosmo, galassia, sid); if (!S.pianeti.length) continue; n++;
     visti.regioni.add(foto(CO.pianeta(cosmo, galassia, sid, 0).regioni.map((r) => r.angolo))); visti.fasi.add(S.pianeti[0].fase); visti.lune.add(foto(S.pianeti.map((p) => p.lune.map((l) => l.massaKg))));
-    const nebbia = NE.nebbiaPianeta(cosmo, galassia, sid, 0).fascia; if (nebbia.length) { conNebbia++; visti.nebbie.add(foto(nebbia.slice(0, 5).map((q) => q.fi))); } // (senza campo non c'è fascia)
+    // (senza campo non c'è fascia; e i pianeti più interni, che girano piano e hanno il vento della stella addosso, spesso non ne hanno più:
+    // si prende il primo pianeta del sistema che ne ha una)
+    for (let pid = 0; pid < S.pianeti.length; pid++) { const nebbia = NE.nebbiaPianeta(cosmo, galassia, sid, pid).fascia; if (nebbia.length) { conNebbia++; visti.nebbie.add(foto(nebbia.slice(0, 5).map((q) => q.fi))); break; } }
   }
   assert.ok(n >= 8, `solo ${n} sistemi gemelli con pianeti`);
   assert.equal(visti.regioni.size, n, 'regioni uguali in luoghi diversi'); assert.equal(visti.fasi.size, n, 'fasi uguali in luoghi diversi'); assert.equal(visti.lune.size, n, 'lune uguali in luoghi diversi');
