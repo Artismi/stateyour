@@ -21,13 +21,27 @@ Niente è disegnato o messo lì. Ogni numero del codice è di una di tre specie,
 costanti), **misurato** (un dato di laboratorio o di natura, con la fonte, non scelto guardando il risultato),
 **libero** (scelto da noi: dichiarato, e da eliminare). Ogni modulo dichiara in testa le sue leggi, i suoi dati, i
 suoi parametri liberi e che cosa non torna con la realtà; le prove stampano ciò che non torna invece di nasconderlo.
+**Le regole devono essere complete.** Non scriviamo il gioco, scriviamo le regole: ma devono essere tutte quelle che
+servono perché il gioco vero si possa giocare. Una regola semplificata che vieta ciò che la realtà permette rende
+impossibile, in quel mondo, ciò che nella realtà accade (se la chimica conosce solo un elenco di molecole, nessuna
+storia potrà mai costruire una proteina). Quindi:
+- le regole di un livello sono **chiuse**: dicono che cosa può esistere e accadere per ogni caso che le loro leggi
+  ammettono, non un elenco di casi previsti da noi;
+- i livelli più alti sono **scorciatoie** di quelli sotto: devono potersi ricavare da quelli (e controllare su un
+  campione piccolo), e non possono vietare ciò che sotto è permesso né permettere ciò che sotto è vietato;
+- il costo vero sta nel giocare, non nello scrivere le regole: per questo si gioca solo dove si guarda (regola 8),
+  ma le regole ci sono tutte, ovunque.
 - Fatto: intestazioni dei moduli; «NON TORNA» nelle prove.
-- Manca: i parametri liberi rimasti (elencati nei moduli); un elenco unico generato dal codice.
+- Manca: i parametri liberi rimasti (elencati nei moduli); un elenco unico generato dal codice. Regole ancora ad
+  elenco invece che chiuse: le molecole (41 in `chimica.js`), i minerali, le particelle del catalogo, i tipi di
+  roccia, i tipi di pianeta. La chimica generale (qualsiasi molecola dai suoi atomi e dai suoi legami) è il primo
+  passo.
 
 ## 3. L'evento, la sovrapposizione, il collasso
-Ogni esito incerto è un **evento** con un indirizzo (dove e quando accade, e che cosa). Finché nessuno lo guarda
-l'evento non è deciso «da nessuna parte»: tutti i suoi esiti esistono, ognuno in un mondo. Guardare un luogo vuol
-dire calcolarlo in un mondo: è il collasso, e da quel momento per quel mondo l'esito è quello, sempre. Un mondo
+Ogni esito incerto è un **evento** con un indirizzo (dove e quando accade, e che cosa). Tutti i suoi esiti esistono,
+ognuno in un mondo. Non serve un osservatore: ogni punto di ogni istante di ogni mondo c'è, e «si osserva da solo».
+Quello che chiamiamo osservare, o collasso, è solo il nostro leggere: calcolare quel punto in uno dei suoi mondi; da
+quel momento, per chi legge quel mondo, l'esito è quello, sempre. Leggere non crea niente e non forza niente. Un mondo
 parallelo è lo stesso indirizzo con alcuni eventi andati in un altro modo (`rami`).
 Un evento può cambiare solo ciò che sta **dentro il suo contenitore e dopo di lui**: tutto ciò che è fuori, o prima,
 resta identico. Così i mondi paralleli sono vicini quanto sono pochi e piccoli gli eventi che li separano.
@@ -47,8 +61,10 @@ sopra e contate da sotto. Gli eventi del dettaglio hanno indirizzi sotto quello 
   tutto (i fiumi tra tessere).
 
 ## 5. Dal piccolo al grande: il mondo compatibile
-Si può partire da un punto qualsiasi, anche piccolissimo: un cristallo, una goccia, una macchina fatta di atomi.
-Quel punto è un'**osservazione**, e funziona da condizione: il mondo più grande non è libero, è uno di quelli che,
+Questa è la direzione che conta di più. Si può partire da un punto qualsiasi, anche piccolissimo: un cristallo, una
+goccia, un metro di mondo, una macchina fatta di atomi. Preso da solo, quel pezzo potrebbe avere attorno qualunque
+mondo; ma non tutti allo stesso modo: è molto più probabile che sia nato da un mondo simile a quello da cui lo si è
+ritagliato. Quel pezzo funziona da condizione: il mondo più grande non è libero, è uno di quelli che,
 scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie uno, e resta quello.
 - **Che cosa chiede.** Ogni livello deve saper dire che cosa chiede a chi sta sopra perché una cosa possa esserci
   (un fiocco di neve chiede aria sotto zero e vapore; una crosta di sale un bacino chiuso che evapora; una macchina

@@ -214,7 +214,7 @@ export const sistema = memo((n, gid, sid) => {
     // è ciò che il pianeta ha liberato o trattenuto (anche il velo di idrogeno del disco, se la gravità lo tiene),
     // meno ciò che a quella temperatura gela, piove o finisce nel calcare
     const ariaDelPianeta = () => {
-      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
+      const r = climaEAria({ calore: p.interno.q, Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro }, { Z: S.Z ?? 1 });
       p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato }; // (con quale asse e quale giorno è stato calcolato)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
       // aminoacidi e zuccheri (scariche e ultravioletto)

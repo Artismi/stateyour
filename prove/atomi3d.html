@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: la materia atomo per atomo (atomi3d.js)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #e8e4da; font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
+  #tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #barra { position: absolute; left: 10px; top: 10px; max-width: 330px; background: rgba(12, 12, 14, 0.78); border: 1px solid #333; border-radius: 6px; padding: 8px 10px; }
+  #barra h1 { font-size: 13px; margin: 0 0 6px; font-weight: 600; }
+  #barra button { background: #1d1d22; color: #e8e4da; border: 1px solid #444; border-radius: 4px; padding: 3px 7px; margin: 0 3px 4px 0; cursor: pointer; font: inherit; }
+  #barra button.attivo { background: #e8e4da; color: #111; }
+  #barra label { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  #barra input[type=range] { flex: 1; }
+  #dati { white-space: pre-wrap; color: #b8b4aa; margin-top: 6px; font: 11px/1.35 ui-monospace, monospace; }
+  #frase { color: #d8d4ca; margin: 4px 0; }
+  #cosa { position: absolute; pointer-events: none; background: rgba(0, 0, 0, 0.82); border: 1px solid #666; border-radius: 4px; padding: 3px 7px; display: none; white-space: nowrap; }
+  body.nudo #barra { display: none; }
+</style>
+</head>
+<body>
+<canvas id="tela"></canvas>
+<div id="barra">
+  <h1>la materia atomo per atomo</h1>
+  <div id="scene"></div>
+  <div id="frase"></div>
+  <label><input type="checkbox" id="ombre" checked> ombre morbide</label>
+  <label><input type="checkbox" id="contorno" checked> contorno e attenuazione</label>
+  <label><input type="checkbox" id="sfoca"> sfocatura dei piani lontani</label>
+  <label><input type="checkbox" id="moto" checked> agitazione termica</label>
+  <label><input type="checkbox" id="scritte" checked> etichette</label>
+  <label>colore <select id="colora"><option value="auto">della scena</option><option value="elemento">per elemento</option><option value="parte">per parte</option></select></label>
+  <label><input type="checkbox" id="taglia"> taglio <input type="range" id="scarto" min="-1" max="1" step="0.01" value="0"></label>
+  <label>raggi <input type="range" id="raggi" min="0.2" max="1" step="0.05" value="1"></label>
+  <div id="dati"></div>
+  <div style="color:#8a867c;margin-top:4px">trascina: ruota · tasto destro o maiuscolo: sposta · rotella: avvicina verso il cursore · due clic: centra lì</div>
+</div>
+<div id="cosa"></div>
+<script type="module">
+import { creaVista3D, scenaAcqua, scenaCristallo, scenaDoppioStrato, ELEMENTI } from '../src/camera/atomi3d.js';
+import { sorgente } from '../src/camera/eventi.js';
+
+const $ = (id) => document.getElementById(id), par = new URLSearchParams(location.search);
+// le scene di prova: ognuna prende il caso da una sorgente di eventi col suo indirizzo (stessa radice, stessa scena)
+const SCENE = {
+  acqua: { nome: 'acqua col sale', fai: () => scenaAcqua({ latoNm: +(par.get('lato') || 6), salinita: +(par.get('sale') || 35), T: +(par.get('T') || 298.15) }, sorgente('prova/atomi3d/acqua')) },
+  cristallo: { nome: 'salgemma bagnato', fai: () => scenaCristallo({ minerale: 'salgemma', dimNm: [10, 6, 10], acqua: { spessoreNm: 4 } }, sorgente('prova/atomi3d/salgemma')) },
+  salgemma: { nome: 'salgemma', fai: () => scenaCristallo({ minerale: 'salgemma', latoNm: 10 }, sorgente('prova/atomi3d/salgemma')) },
+  quarzo: { nome: 'quarzo bagnato', fai: () => scenaCristallo({ minerale: 'quarzo', dimNm: [10, 6, 10], acqua: { spessoreNm: 4, salinita: 35 } }, sorgente('prova/atomi3d/quarzo')) },
+  ghiaccio: { nome: 'ghiaccio bagnato', fai: () => scenaCristallo({ minerale: 'ghiaccio', dimNm: [10, 6, 10], T: 268, acqua: { spessoreNm: 4, salinita: 35, T: 271 } }, sorgente('prova/atomi3d/ghiaccio')) },
+  carico: { nome: 'carico 200 000', fai: () => scenaDoppioStrato({ atomi: 200000 }, sorgente('prova/atomi3d/carico')) },
+  milione: { nome: 'carico 1 000 000', fai: () => scenaDoppioStrato({ atomi: 1000000 }, sorgente('prova/atomi3d/carico')) },
+  blocco: { nome: 'salgemma 1 000 000', fai: () => scenaCristallo({ minerale: 'salgemma', latoNm: 28.2 }, sorgente('prova/atomi3d/blocco')) },
+};
+const opzioni = { densita: +(par.get('densita') || 0), vecchio: par.has('webgl1') };
+for (const k of ['massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
+if (par.get('sepolti') === 'no') opzioni.scartaSepolti = false;
+if (par.has('colora')) opzioni.colora = par.get('colora');
+if (par.has('nudo')) document.body.classList.add('nudo');
+
+let vista;
+try { vista = creaVista3D($('tela'), opzioni); } catch (e) { $('frase').textContent = String(e.message || e); throw e; }
+const O = vista.opzioni;
+let scena = null, nomeScena = '', fps = 0, ultimo = 0, contati = 0, daQuando = performance.now(), cpu = 0;
+
+function mostra(nome) {
+  const S = SCENE[nome] || SCENE.acqua; nomeScena = SCENE[nome] ? nome : 'acqua';
+  for (const b of $('scene').children) b.classList.toggle('attivo', b.dataset.scena === nomeScena);
+  const t0 = performance.now(); scena = S.fai(); const tScena = performance.now() - t0;
+  O.colora = $('colora').value === 'auto' ? scena.colora || 'auto' : $('colora').value;
+  const st = vista.carica(scena);
+  $('frase').textContent = scena.descrizione || '';
+  window.prova.tempi = { scenaMs: tScena, preparazioneMs: st.preparazioneMs };
+  // l'inquadratura di partenza di ogni scena
+  const c = vista.camera;
+  if (nomeScena === 'acqua') { c.yaw = 0.62; c.pitch = 0.42; c.dist *= 0.82; }
+  else if (nomeScena === 'carico' || nomeScena === 'milione') { c.yaw = 0.55; c.pitch = 0.36; c.dist *= 0.62; }
+  else { c.yaw = 0.55; c.pitch = 0.3; c.dist *= 0.86; }
+  for (const k of ['yaw', 'pitch', 'dist']) if (par.has(k)) c[k] = +par.get(k);
+  aggiornaTaglio();
+}
+function aggiornaTaglio() { vista.taglio($('taglia').checked && scena ? { vista: true, scarto: +$('scarto').value * 0.5 * Math.hypot(...scena.scatola) } : null); }
+
+for (const [k, s] of Object.entries(SCENE)) { const b = document.createElement('button'); b.textContent = s.nome; b.dataset.scena = k; b.onclick = () => mostra(k); $('scene').appendChild(b); }
+$('ombre').onchange = (e) => { O.ombre = e.target.checked ? 1 : 0; };
+$('contorno').onchange = (e) => { O.contorno = e.target.checked ? 0.45 : 0; O.nebbia = e.target.checked ? 0.55 : 0; };
+$('sfoca').onchange = (e) => { O.sfoca = e.target.checked ? 7 : 0; };
+$('moto').onchange = () => {};
+$('scritte').onchange = (e) => { O.etichette = e.target.checked; };
+$('colora').onchange = () => { O.colora = $('colora').value === 'auto' ? scena.colora || 'auto' : $('colora').value; vista.ricarica(); };
+$('taglia').onchange = aggiornaTaglio; $('scarto').oninput = aggiornaTaglio;
+$('raggi').oninput = (e) => { O.scalaRaggi = +e.target.value; };
+for (const [id, k] of [['ombre', 'ombre'], ['sfoca', 'sfoca']]) if (par.has(k)) $(id).checked = +par.get(k) > 0;
+if (par.has('taglio')) { $('taglia').checked = true; $('scarto').value = par.get('taglio'); }
+if (par.get('moto') === 'no') $('moto').checked = false;
+if (par.get('scritte') === 'no') { $('scritte').checked = false; O.etichette = false; }
+
+// che cosa c'è sotto il cursore
+vista.suAtomo((a) => {
+  const q = $('cosa'); if (!a) { q.style.display = 'none'; return; }
+  const che = a.rappresenta > 1 ? `≈ ${a.rappresenta} atomi${a.parte ? ` (${a.parte})` : ''}` : `${a.nome || 'atomo'}${a.simbolo ? ` (${a.simbolo})` : ''}${a.parte ? ` — ${a.parte}` : ''}`;
+  q.textContent = che; q.style.display = 'block'; q.style.left = `${a.x + 14}px`; q.style.top = `${a.y + 14}px`;
+});
+
+// il ciclo: il tempo dell'agitazione scorre solo se è accesa
+let tMoto = 0, fermo = par.has('fermo');
+function passo(ms) {
+  const dt = Math.min(0.1, (ms - ultimo) / 1000 || 0); ultimo = ms; if ($('moto').checked && !fermo) tMoto += dt;
+  vista.disegna(tMoto); cpu += vista.statistiche().cpuMs || 0; contati++;
+  if (ms - daQuando > 500) { fps = (contati * 1000) / (ms - daQuando); const s = vista.statistiche(); $('dati').textContent = `${fps.toFixed(1)} fotogrammi/s · CPU ${(cpu / contati).toFixed(2)} ms\n${s.atomi} atomi · ${s.disegnate} istanze disegnate in ${s.intervalli} chiamate\nlivelli ${s.livelli.join(' / ')} · sepolti ${s.sepolti} (mostrati ${s.sepolteMostrate})\n${s.pixel.join(' × ')} px · WebGL${s.webgl} · ${(s.memoria / 1e6).toFixed(1)} MB sulla scheda`; contati = 0; cpu = 0; daQuando = ms; }
+  requestAnimationFrame(passo);
+}
+addEventListener('resize', () => vista.ridimensiona());
+
+// per le prove automatiche: misura n fotogrammi aspettando ogni volta che la scheda abbia finito davvero
+window.prova = { vista, mostra, SCENE, ELEMENTI, tempi: {},
+  misura(n = 20) {
+    const gl = vista.gl, b = new Uint8Array(4); let cpuTot = 0; vista.disegna(tMoto); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) { tMoto += 1 / 60; vista.disegna(tMoto); cpuTot += vista.statistiche().cpuMs; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); }
+    const ms = (performance.now() - t0) / n, s = vista.statistiche();
+    return { msPerFotogramma: +ms.toFixed(2), fotogrammiAlSecondo: +(1000 / ms).toFixed(2), cpuMs: +(cpuTot / n).toFixed(3), atomi: s.atomi, istanzeNelBuffer: s.istanze, disegnate: s.disegnate, chiamate: s.intervalli, livelli: s.livelli, sepolti: s.sepolti, memoriaMB: +(s.memoria / 1e6).toFixed(1), pixel: s.pixel, webgl: s.webgl };
+  } };
+mostra(par.get('scena') || 'acqua');
+window.prova.pronta = true;
+requestAnimationFrame(passo);
+</script>
+</body>
+</html>

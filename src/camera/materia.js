@@ -40,18 +40,25 @@
 //   · l'irraggiamento dei muoni: b = 4,0·10⁻⁶ cm²/g nella «roccia standard» (Z = 11, A = 22; Groom, Mokhov e Striganov
 //     2001), scalato con Z²/A; la lunghezza d'urto nucleare: 35·A^(1/3) g/cm² (aria: 90);
 //   · densità, indice di rifrazione, temperatura di Debye, formule dei minerali (Deer, Howie e Zussman 2013; CRC Handbook);
-//   · i nuclidi: tempi di dimezzamento, energie Q, energie medie di β e γ (ENSDF/NuDat 3, ICRP 107), abbondanze
-//     isotopiche (IUPAC 2016); la fissione spontanea dell'U-238: 8,45·10⁻¹⁷ all'anno (Holden e Hoffman 2000); l'energia
+//   · i nuclidi: tempi di dimezzamento, energie Q, energie medie di β e γ (ENSDF via IAEA LiveChart, ICRP 107),
+//     abbondanze isotopiche (IUPAC 2016). Controlli: le α che ne escono (Q·(A − 4)/A) coincidono con le righe principali
+//     misurate (U-238 4198 keV … Po-218 6002,6 … Po-214 7686,8; attenzione: la tabella degli aloni di Wikipedia dà 5,18
+//     MeV per il Po-218, che è una riga dello 0,001%); il calore per chilo di nuclide torna con Dye (2012) entro lo
+//     0,1% (U-238 95,2 µW/kg contro 95,13; Th-232 26,29 contro 26,28; K-40 28,4 contro 28,47; U-235 −1,2%).
+//     La fissione spontanea dell'U-238: 8,45·10⁻¹⁷ all'anno (Holden e Hoffman 2000); l'energia
 //     dei frammenti: 0,1189·Z²/A^(1/3) + 7,3 MeV (Viola, Kwiatkowski e Walker 1985); frammento leggero A = 96 ± 6;
 //   · uranio, torio, potassio, rubidio nelle condriti CI: 8,0 ppb · 29 ppb · 550 ppm · 2,3 ppm (Lodders 2003; Palme e
 //     O'Neill 2014): gli stessi da cui vengono i numeri di leggi.js (ISOTOPI); il potassio è volatile e ne resta un
 //     quarto (come in chimica.js), uranio e torio no: perciò nella roccia di un pianeta seguono il potassio con il
-//     rapporto K/U ≈ 17 000 (Terra: 12–14 000). Quanto li concentrano i minerali accessori rispetto al fuso (Bea 1996;
-//     Mahood e Hildreth 1983): zircone U ×100, Th ×25 · apatite ×6, ×4 · monazite ×1000, ×5000; e quanti accessori ha un
-//     granito (zircone 0,03%, apatite 0,3%, monazite 0,01% in massa) e un basalto (apatite 0,2%);
+//     rapporto K/U ≈ 17 000 (Terra: 12–14 000). Quanto li concentrano i minerali rispetto al fuso (Bea 1996; Mahood e
+//     Hildreth 1983): zircone U ×100, Th ×25 · apatite ×6, ×4 · monazite ×1000, ×5000 · i minerali comuni 0,001–0,02
+//     (non li vogliono: sono ioni grandi e molto carichi); quanti accessori ha un granito (zircone 0,03%, apatite 0,3%,
+//     monazite 0,01% in massa) e un basalto (apatite 0,2%); e la parte che resta ai bordi dei grani (U 30%, Th 10%:
+//     Tieh e Ledger 1981);
 //   · le temperature di ricottura (sopra, in tempi geologici, il cristallo si ripara e la traccia sparisce): tracce di
-//     fissione nell'apatite 110 °C, nello zircone 240 °C, nella mica 300 °C (Gleadow e Duddy 1981; Hurford 1986;
-//     Bernet 2009); tracce di rinculo α nella mica 50 °C (Gögen e Wagner 2000); aloni nella biotite 250 °C;
+//     fissione nell'apatite 110 °C, nello zircone 240 °C (Gleadow e Duddy 1981; Hurford 1986; Bernet 2009), nella
+//     biotite ~150 °C (incerta: 100–200); tracce di rinculo α nella mica 50 °C (Gögen e Wagner 2000); aloni nella
+//     biotite ~300 °C (incerta: gli aloni spariscono nelle rocce che hanno subìto un metamorfismo);
 //   · la dose che colora la biotite: ~3·10¹³ α/cm² (irraggiamenti con ioni elio: Gentry 1974);
 //   · i raggi cosmici primari presso il Sole: lo spettro interstellare di Burger e Usoskin (in alto 1,8·10⁴·E^(−2,7)
 //     nucleoni/(m²·s·sr·GeV): PDG), con la modulazione del vento solare (campo di forza, 0,55 GV: per un'altra stella
@@ -59,6 +66,8 @@
 //     dell'energia (dalla formula di Gaisser 1990, che al livello del mare è
 //     0,14·E^(−2,7)·[1/(1 + 1,1·E·cosθ/115 GeV) + 0,054/(1 + 1,1·E·cosθ/850 GeV)] per cm²·s·sr·GeV); lunghezza di
 //     attenuazione dei nucleoni 120 g/cm²; neutroni al suolo sulla Terra 0,013 per cm²·s (Gordon e altri 2004);
+//     controllo in profondità: il flusso misurato sotto h km d'acqua equivalente, 67,97·10⁻⁶·e^(−h/0,285) +
+//     2,071·10⁻⁶·e^(−h/0,698) per cm²·s (Mei e Hime 2006, da 1 a 10 km): qui viene 2,3 volte meno a 1 km, uguale a 2,5;
 //     elettroni: 0,3 dei muoni al livello del mare (PDG); produzione di C-14 sulla Terra: 2 atomi per cm²·s;
 //   · il radon dal suolo: frazione che esce dai grani 0,2, diffusione nel suolo 2·10⁻⁶ m²/s, rimescolamento verticale
 //     dell'aria 5 m²/s (UNSCEAR 2000): ne esce il flusso (Terra: 0,02 Bq/m²/s) e la concentrazione (~10 Bq/m³);
@@ -124,14 +133,16 @@ export function atomiDi(formula) {
 const inMassa = (atomi) => { let m = 0; for (const e in atomi) m += atomi[e] * ELEMENTI[e].A; const o = {}; for (const e in atomi) o[e] = (atomi[e] * ELEMENTI[e].A) / m; return o; };
 
 // I MATERIALI: formula (per la composizione), densità (g/cm³), indice di rifrazione (0: opaco), temperatura di Debye (K),
-// e per chi tiene memoria la temperatura di ricottura delle tracce (K). Dati misurati.
+// per chi tiene memoria la temperatura di ricottura delle tracce (K), e «concentra»: quanto uranio e torio prende quel
+// minerale rispetto al fuso da cui cresce (i minerali comuni quasi niente: 0,001–0,02; gli accessori centinaia o migliaia
+// di volte). Dati misurati.
 export const MATERIALI = {
-  quarzo: { formula: 'SiO2', densita: 2.65, n: 1.544, debye: 470 },
-  'feldspato potassico': { formula: 'KAlSi3O8', densita: 2.56, n: 1.523, debye: 420 },
-  plagioclasio: { formula: 'Na0.6Ca0.4Al1.4Si2.6O8', densita: 2.67, n: 1.545, debye: 450 },
-  olivina: { formula: 'Mg1.8Fe0.2SiO4', densita: 3.32, n: 1.67, debye: 760 },
-  pirosseno: { formula: 'Ca0.5Mg1.2Fe0.3Si2O6', densita: 3.3, n: 1.68, debye: 660 },
-  biotite: { formula: 'K(Mg1.5Fe1.5)AlSi3O10(OH)2', densita: 3.05, n: 1.62, debye: 400, ricottura: { fissione: 573, rinculo: 323, alone: 523 } },
+  quarzo: { formula: 'SiO2', densita: 2.65, n: 1.544, debye: 470, concentra: { U: 0.005, Th: 0.005 } },
+  'feldspato potassico': { formula: 'KAlSi3O8', densita: 2.56, n: 1.523, debye: 420, concentra: { U: 0.02, Th: 0.02 } },
+  plagioclasio: { formula: 'Na0.6Ca0.4Al1.4Si2.6O8', densita: 2.67, n: 1.545, debye: 450, concentra: { U: 0.02, Th: 0.02 } },
+  olivina: { formula: 'Mg1.8Fe0.2SiO4', densita: 3.32, n: 1.67, debye: 760, concentra: { U: 0.001, Th: 0.001 } },
+  pirosseno: { formula: 'Ca0.5Mg1.2Fe0.3Si2O6', densita: 3.3, n: 1.68, debye: 660, concentra: { U: 0.01, Th: 0.01 } },
+  biotite: { formula: 'K(Mg1.5Fe1.5)AlSi3O10(OH)2', densita: 3.05, n: 1.62, debye: 400, ricottura: { fissione: 423, rinculo: 323, alone: 573 }, concentra: { U: 0.02, Th: 0.02 } },
   calcite: { formula: 'CaCO3', densita: 2.71, n: 1.658, debye: 470 },
   salgemma: { formula: 'NaCl', densita: 2.165, n: 1.544, debye: 321 },
   gesso: { formula: 'CaSO4(H2O)2', densita: 2.31, n: 1.52, debye: 300 },
@@ -146,6 +157,8 @@ export const MATERIALI = {
 MATERIALI.ghiaccio = MATERIALI['ghiaccio d\'acqua'];
 // i minerali accessori (dati): quanta parte in massa di una roccia dei continenti e di un basalto
 export const ACCESSORI = { continente: { zircone: 3e-4, apatite: 3e-3, monazite: 1e-4 }, basalto: { apatite: 2e-3 } };
+// la parte di uranio e torio che non sta dentro nessun cristallo ma ai bordi dei grani (pellicole, prodotti di alterazione)
+export const AI_BORDI = { U: 0.3, Th: 0.1 };
 const SIGMA_CATTURA = { H: 0.332, C: 0.0035, N: 1.91, O: 0.00019, Ar: 0.675, He: 0, S: 0.53, Cl: 33.5 }; // (barn) cattura dei neutroni lenti; per l'azoto è la reazione che fa il carbonio-14
 const MASSA_GAS = (f) => { const a = atomiDi(f); let m = 0; for (const e in a) m += a[e] * ELEMENTI[e].A; return m; };
 
@@ -324,18 +337,18 @@ const G = 1 / 365.25, MIN = G / 1440, S_ = MIN / 60;
 export const CATENE = {
   'uranio-238': { elemento: 'U', abbondanza: 0.992742, mezza: 4.468e9, fissione: 8.45e-17, passi: [
     ['uranio-238', 92, 238, 'α', 4.270, 4.468e9], ['torio-234', 90, 234, 'β', 0.273, 24.1 * G, 1, 0.06, 0.009], ['protoattinio-234', 91, 234, 'β', 2.269, 1.159 * MIN, 1, 0.822, 0.012],
-    ['uranio-234', 92, 234, 'α', 4.858, 2.455e5], ['torio-230', 90, 230, 'α', 4.770, 7.54e4], ['radio-226', 88, 226, 'α', 4.871, 1600], ['radon-222', 86, 222, 'α', 5.590, 3.8235 * G],
-    ['polonio-218', 84, 218, 'α', 6.115, 3.098 * MIN], ['piombo-214', 82, 214, 'β', 1.019, 27.06 * MIN, 1, 0.293, 0.25], ['bismuto-214', 83, 214, 'β', 3.270, 19.9 * MIN, 1, 0.659, 1.508],
-    ['polonio-214', 84, 214, 'α', 7.833, 164.3e-6 * S_], ['piombo-210', 82, 210, 'β', 0.0635, 22.2, 1, 0.038, 0.005], ['bismuto-210', 83, 210, 'β', 1.162, 5.012 * G, 1, 0.389, 0], ['polonio-210', 84, 210, 'α', 5.407, 138.376 * G]] },
+    ['uranio-234', 92, 234, 'α', 4.858, 2.455e5], ['torio-230', 90, 230, 'α', 4.770, 7.5584e4], ['radio-226', 88, 226, 'α', 4.871, 1600], ['radon-222', 86, 222, 'α', 5.590, 3.8222 * G],
+    ['polonio-218', 84, 218, 'α', 6.115, 3.097 * MIN], ['piombo-214', 82, 214, 'β', 1.019, 27.06 * MIN, 1, 0.293, 0.25], ['bismuto-214', 83, 214, 'β', 3.270, 19.9 * MIN, 1, 0.659, 1.508],
+    ['polonio-214', 84, 214, 'α', 7.833, 163.46e-6 * S_], ['piombo-210', 82, 210, 'β', 0.0635, 22.2, 1, 0.038, 0.005], ['bismuto-210', 83, 210, 'β', 1.162, 5.012 * G, 1, 0.389, 0], ['polonio-210', 84, 210, 'α', 5.407, 138.376 * G]] },
   'uranio-235': { elemento: 'U', abbondanza: 0.007204, mezza: 7.04e8, passi: [
-    ['uranio-235', 92, 235, 'α', 4.678, 7.04e8, 1, 4.398], ['torio-231', 90, 231, 'β', 0.391, 25.52 / 24 * G, 1, 0.165, 0.026], ['protoattinio-231', 91, 231, 'α', 5.150, 3.276e4, 1, 5.01],
+    ['uranio-235', 92, 235, 'α', 4.678, 7.04e8, 1, 4.396], ['torio-231', 90, 231, 'β', 0.391, 25.52 / 24 * G, 1, 0.165, 0.026], ['protoattinio-231', 91, 231, 'α', 5.150, 3.276e4, 1, 5.01],
     ['attinio-227', 89, 227, 'β', 0.0448, 21.772, 1, 0.016, 0], ['torio-227', 90, 227, 'α', 6.146, 18.68 * G, 1, 5.9], ['radio-223', 88, 223, 'α', 5.979, 11.43 * G, 1, 5.716],
     ['radon-219', 86, 219, 'α', 6.946, 3.96 * S_], ['polonio-215', 84, 215, 'α', 7.526, 1.781e-3 * S_], ['piombo-211', 82, 211, 'β', 1.367, 36.1 * MIN, 1, 0.456, 0.064],
     ['bismuto-211', 83, 211, 'α', 6.751, 2.14 * MIN], ['tallio-207', 81, 207, 'β', 1.418, 4.77 * MIN, 1, 0.495, 0.002]] },
   'torio-232': { elemento: 'Th', abbondanza: 1, mezza: 1.405e10, passi: [
     ['torio-232', 90, 232, 'α', 4.082, 1.405e10], ['radio-228', 88, 228, 'β', 0.0459, 5.75, 1, 0.017, 0], ['attinio-228', 89, 228, 'β', 2.124, 6.15 / 24 * G, 1, 0.475, 0.971],
-    ['torio-228', 90, 228, 'α', 5.520, 1.9116], ['radio-224', 88, 224, 'α', 5.789, 3.6319 * G], ['radon-220', 86, 220, 'α', 6.405, 55.6 * S_], ['polonio-216', 84, 216, 'α', 6.906, 0.145 * S_],
-    ['piombo-212', 82, 212, 'β', 0.570, 10.64 / 24 * G, 1, 0.176, 0.148], ['bismuto-212', 83, 212, 'β', 2.252, 60.55 * MIN, 0.6406, 0.72, 0.16], ['polonio-212', 84, 212, 'α', 8.954, 0.299e-6 * S_, 0.6406],
+    ['torio-228', 90, 228, 'α', 5.520, 1.9116], ['radio-224', 88, 224, 'α', 5.789, 3.6319 * G], ['radon-220', 86, 220, 'α', 6.405, 55.6 * S_], ['polonio-216', 84, 216, 'α', 6.906, 0.144 * S_],
+    ['piombo-212', 82, 212, 'β', 0.570, 10.64 / 24 * G, 1, 0.176, 0.148], ['bismuto-212', 83, 212, 'β', 2.252, 60.55 * MIN, 0.6406, 0.72, 0.16], ['polonio-212', 84, 212, 'α', 8.954, 0.2943e-6 * S_, 0.6406],
     ['bismuto-212', 83, 212, 'α', 6.207, 60.55 * MIN, 0.3594], ['tallio-208', 81, 208, 'β', 4.999, 3.053 * MIN, 0.3594, 0.598, 3.375]] },
 };
 // i nuclidi soli. K-40: 89,28% β⁻ verso il calcio-40 (spettro di forma «unica», terza proibita), 10,72% cattura di un
@@ -379,9 +392,9 @@ export function radioelementi(minerali = [], { K = null } = {}) {
 export function concentrazioni(luogo, minerale) {
   const el = elementiDi(luogo), lista = [...(luogo.minerali || []), ...(luogo.accessori || [])], tot = lista.reduce((a, m) => a + m.frazione, 0) || 1; let peso = 0, kRoccia = 0;
   for (const m of lista) { const M = MATERIALI[m.nome] || {}; peso += (m.frazione / tot); kRoccia += (m.frazione / tot) * (M.formula ? inMassa(atomiDi(M.formula)).K || 0 : 0); }
-  const base = (e) => { let s = 0; for (const m of lista) s += (m.frazione / tot) * (MATERIALI[m.nome]?.concentra?.[e] ?? 1); return el[e] / (s || 1); };
+  const base = (e) => { let s = 0; for (const m of lista) s += (m.frazione / tot) * (MATERIALI[m.nome]?.concentra?.[e] ?? 0.02); return ((1 - AI_BORDI[e]) * el[e]) / (s || 1); };
   const M = MATERIALI[minerale] || {}, kQui = M.formula ? inMassa(atomiDi(M.formula)).K || 0 : 0;
-  return { U: base('U') * (M.concentra?.U ?? 1), Th: base('Th') * (M.concentra?.Th ?? 1), K: kRoccia > 0 ? (el.K * kQui) / kRoccia : 0, Rb: kRoccia > 0 ? (el.Rb * kQui) / kRoccia : 0 };
+  return { U: base('U') * (M.concentra?.U ?? 0.02), Th: base('Th') * (M.concentra?.Th ?? 0.02), K: kRoccia > 0 ? (el.K * kQui) / kRoccia : 0, Rb: kRoccia > 0 ? (el.Rb * kQui) / kRoccia : 0 };
 }
 // gli elementi radioattivi del mezzo (frazioni in massa di riferimento): quelli dati da chi chiama, o quelli che seguono dai minerali
 function elementiDi(luogo) {
@@ -551,7 +564,7 @@ export function rapportoC14(luogo) {
 // esce dai grani una parte, diffonde nel suolo (cammino √(D/λ) ≈ 1 m) ed esce; l'aria lo rimescola in alto per √(K/λ)
 export function radonNellAria(luogo) {
   const suolo = luogo.suolo; if (!suolo || luogo.sopra?.acquaM > 0) return 0;
-  const U = suolo.U ?? 2.7e-6, eta = luogo.etaPianeta ?? luogo.pianeta?.eta ?? ETA_RIFERIMENTO, c = CATENE['uranio-238'], lam = lambdaDi(3.8235 * G);
+  const U = suolo.U ?? 2.7e-6, eta = luogo.etaPianeta ?? luogo.pianeta?.eta ?? ETA_RIFERIMENTO, c = CATENE['uranio-238'], lam = lambdaDi(3.8222 * G);
   const radio = (U / 238.03e-3) * N_A * c.abbondanza * quantoResta(c.mezza, eta) * lambdaDi(c.mezza), flusso = 0.2 * radio * (suolo.densita ?? 1600) * Math.sqrt(lam * 2e-6);
   return flusso / (lam * Math.sqrt(5 / lam));
 }

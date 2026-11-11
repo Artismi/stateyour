@@ -21,7 +21,7 @@ import { sorgente } from './eventi.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
-import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare } from './mare.js';
+import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare } from './mare.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -487,11 +487,12 @@ export function superficieDi(v) {
 }
 const livelloTessere = (z) => Math.max(0, Math.min(7, Math.floor(Math.log(z / 420) / Math.log(4))));
 export let tessereInAttesa = 0;
+let giroMare = 1; // a ogni giro tutte le tessere con onde in vista vengono ridisegnate una volta
 function disegnaSuperficie(ctx, W, H, cam, dpr) {
   const S = superficieDi(cam.via), z = cam.z, Lmax = livelloTessere(z);
   if (!S) { ctx.fillStyle = 'rgba(235,230,215,0.85)'; ctx.font = `${14 * dpr}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText('la superficie si sta formando: tettonica, clima, aria, erosione…', W / 2, H / 2); ctx.textAlign = 'start'; return; }
   const x0 = cam.cx - W / 2 / z, x1 = cam.cx + W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), y1 = Math.min(0.5, cam.cy + H / 2 / z);
-  ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0;
+  ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0, mosse = 0, restano = 0;
   // dal più grosso al più fine: si disegna quello che c'è, e si calcola una tessera nuova per fotogramma
   for (let L = Math.max(0, Lmax - 2); L <= Lmax; L++) {
     const n = 4 ** L;
@@ -500,15 +501,23 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
       if (!t) {
         if (nuove >= 1 && L > 0) { tessereInAttesa++; continue; }
         const sf = tessera(S.k, S.se, S.cl, L, tx, ty, S.seme), px = immagineSuperficie(sf, S.P.clima.T, S.cl);
-        if (S.mare?.esiste) coloraMare(S.mare, sf, px);
+        // il mare com'è lì: il colore dall'ottica vera e dal fondale (parte ferma), e sopra le onde di quel punto (mare.js)
+        let acqua = false; if (S.mare?.esiste) { for (let q = 0; q < sf.alt.length; q += 7) if (sf.alt[q] < sf.mare || (sf.lago && sf.lago[q] > 0)) { acqua = true; break; } }
+        const base = acqua ? px.slice() : null; // la terra e il fondo, senz'acqua sopra: da qui si ridisegna il mare che si muove
+        if (acqua) aspettoMare(S.mare, sf, px, { t: performance.now() / 1000, onde: 6 });
         const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(sf.W, sf.H) : Object.assign(document.createElement('canvas'), { width: sf.W, height: sf.H });
         cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
-        t = { cv, sf }; tessereFatte.set(k, t); if (tessereFatte.size > 60) tessereFatte.delete(tessereFatte.keys().next().value); nuove++;
+        t = { cv, sf, base, mossa: acqua && (aspettoMare.ultimo?.onde || 0) > 0 }; tessereFatte.set(k, t); if (tessereFatte.size > 60) tessereFatte.delete(tessereFatte.keys().next().value); nuove++;
       }
+      // dove le onde si vedono (tessere fini con acqua) il mare si ridisegna all'istante di adesso: poche tessere per
+      // fotogramma, a turno, perché costa
+      if (t.mossa && L === Lmax && mosse < 2 && (t.giro || 0) < giroMare) { const q = t.base.slice(); aspettoMare(S.mare, t.sf, q, { t: performance.now() / 1000, onde: 6 }); t.cv.getContext('2d').putImageData(new ImageData(q, t.sf.W, t.sf.H), 0, 0); t.giro = giroMare; mosse++; }
+      else if (t.mossa && L === Lmax && (t.giro || 0) < giroMare) restano++;
       const px0 = W / 2 + (txg / n - cam.cx) * z, py0 = H / 2 + ((ty / n) * 0.5 - cam.cy) * z;
       ctx.drawImage(t.cv, px0, py0, z / n + 0.5, (0.5 * z) / n + 0.5);
     }
   }
+  if (!restano) giroMare++;
 }
 
 // ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto

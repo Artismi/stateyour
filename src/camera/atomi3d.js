@@ -132,9 +132,14 @@ export function preparaScena(scena, opz = {}) {
   }
   const sepolto = new Uint8Array(N); let quantiSepolti = 0;
   if (opz.scartaSepolti !== false && N > 2000) {
-    let g = new Uint8Array(area.length), h = new Uint8Array(area.length); const soglia = 1.5 * cs * cs;
-    for (let c = 0; c < area.length; c++) g[c] = area[c] >= soglia ? 1 : 0;
-    const giri = Math.max(2, Math.round((opz.profonditaSepolti ?? 0.9) / cs)), passi = [1, gx, gx * gy], lati = [gx, gy, gz];
+    // (la copertura si media sulle 27 cellette intorno: conta quanta materia c'è lì attorno, non il caso di una celletta)
+    const passi = [1, gx, gx * gy], lati = [gx, gy, gz]; let m1 = area, m2 = new Float32Array(area.length);
+    for (let asse = 0; asse < 3; asse++) { const p = passi[asse], n = lati[asse];
+      for (let c = 0; c < m1.length; c++) { const k = asse === 0 ? c % gx : asse === 1 ? Math.floor(c / gx) % gy : Math.floor(c / (gx * gy)); m2[c] = m1[c] + (k > 0 ? m1[c - p] : 0) + (k < n - 1 ? m1[c + p] : 0); }
+      if (asse === 0) { m1 = m2; m2 = new Float32Array(area.length); } else { const t = m1; m1 = m2; m2 = t; } }
+    let g = new Uint8Array(area.length), h = new Uint8Array(area.length); const soglia = 27 * 1.15 * cs * cs;
+    for (let c = 0; c < area.length; c++) g[c] = m1[c] >= soglia ? 1 : 0;
+    const giri = Math.max(2, Math.round((opz.profonditaSepolti ?? 0.9) / cs));
     for (let giro = 0; giro < giri; giro++) for (let asse = 0; asse < 3; asse++) {
       const p = passi[asse], n = lati[asse];
       for (let c = 0; c < g.length; c++) { const k = asse === 0 ? c % gx : asse === 1 ? Math.floor(c / gx) % gy : Math.floor(c / (gx * gy)); h[c] = k > 0 && k < n - 1 ? g[c] & g[c - p] & g[c + p] : 0; }
@@ -144,13 +149,18 @@ export function preparaScena(scena, opz = {}) {
   }
   // --- I PEZZI. Il passo fine s è il doppio della distanza media tra atomi (≈ 8 atomi per celletta); un pezzo è 8 s.
   const passoAtomi = Math.cbrt((Math.max(1, occupate) * cs * cs * cs) / Math.max(1, N)), s1 = Math.max(2 * Math.min(passoAtomi, cs), 2.2 * (rSomma / Math.max(1, N)), Math.max(...dim) / 4096);
-  const lp = 8 * s1, px = Math.ceil(dim[0] / lp) || 1, py = Math.ceil(dim[1] / lp) || 1, pz = Math.ceil(dim[2] / lp) || 1;
-  const tanti = px * py * pz, mappa = tanti > 4e6, tabella = mappa ? new Map() : new Int32Array(tanti).fill(-1), pezzoDi = new Int32Array(N), origini = [], conta = [];
-  for (let i = 0; i < N; i++) {
-    const ix = Math.min(px - 1, Math.floor((pos[3 * i] - lo[0]) / lp)), iy = Math.min(py - 1, Math.floor((pos[3 * i + 1] - lo[1]) / lp)), iz = Math.min(pz - 1, Math.floor((pos[3 * i + 2] - lo[2]) / lp)), id = ix + px * (iy + py * iz);
-    let k = mappa ? tabella.get(id) ?? -1 : tabella[id];
-    if (k < 0) { k = origini.length; origini.push([lo[0] + ix * lp, lo[1] + iy * lp, lo[2] + iz * lp]); conta.push(0, 0); if (mappa) tabella.set(id, k); else tabella[id] = k; }
-    pezzoDi[i] = k; conta[2 * k + sepolto[i]]++;
+  // (se la materia è rada o a fogli e i pezzi verrebbero quasi vuoti, il pezzo raddoppia: 16 o 32 s)
+  const pezzoDi = new Int32Array(N); let m0 = 8, lp, origini, conta;
+  for (;;) {
+    lp = m0 * s1; const px = Math.ceil(dim[0] / lp) || 1, py = Math.ceil(dim[1] / lp) || 1, pz = Math.ceil(dim[2] / lp) || 1;
+    const tanti = px * py * pz, mappa = tanti > 4e6, tabella = mappa ? new Map() : new Int32Array(tanti).fill(-1); origini = []; conta = [];
+    for (let i = 0; i < N; i++) {
+      const ix = Math.min(px - 1, Math.floor((pos[3 * i] - lo[0]) / lp)), iy = Math.min(py - 1, Math.floor((pos[3 * i + 1] - lo[1]) / lp)), iz = Math.min(pz - 1, Math.floor((pos[3 * i + 2] - lo[2]) / lp)), id = ix + px * (iy + py * iz);
+      let k = mappa ? tabella.get(id) ?? -1 : tabella[id];
+      if (k < 0) { k = origini.length; origini.push([lo[0] + ix * lp, lo[1] + iy * lp, lo[2] + iz * lp]); conta.push(0, 0); if (mappa) tabella.set(id, k); else tabella[id] = k; }
+      pezzoDi[i] = k; conta[2 * k + sepolto[i]]++;
+    }
+    if (m0 >= 32 || N / origini.length >= 2500 || origini.length <= 8) break; m0 *= 2;
   }
   const P = origini.length, inizio = new Int32Array(2 * P + 1); for (let k = 0; k < 2 * P; k++) inizio[k + 1] = inizio[k] + conta[k];
   const ordAtomi = new Uint32Array(N), cursore = inizio.slice(0, 2 * P);
@@ -159,7 +169,7 @@ export function preparaScena(scena, opz = {}) {
   // fanno fondendo a otto a otto quelli del livello prima. Di ogni gruppo: quanti atomi, il volume (somma dei raggi al
   // cubo), il baricentro, la parte che prevale (a volume), il suo colore medio, un atomo vero che lo rappresenta.
   const gOrd = [], gRag = [], gCol = [], gConta = [], pezzi = [], LIV = 4;
-  const nc = 512, cn = new Int32Array(nc), cv = new Float32Array(nc), cx = new Float32Array(nc), cy = new Float32Array(nc), cz = new Float32Array(nc), cp = new Int32Array(nc), cw = new Float32Array(nc), cb = new Uint8Array(nc);
+  const nc = m0 ** 3, cn = new Int32Array(nc), cv = new Float32Array(nc), cx = new Float32Array(nc), cy = new Float32Array(nc), cz = new Float32Array(nc), cp = new Int32Array(nc), cw = new Float32Array(nc), cb = new Uint8Array(nc);
   const kr = new Float32Array(nc), kg = new Float32Array(nc), kb = new Float32Array(nc), kw = new Float32Array(nc), cr = new Int32Array(nc), cd = new Float32Array(nc);
   for (let k = 0; k < P; k++) {
     const o = origini[k], da = inizio[2 * k], nE = conta[2 * k], nB = conta[2 * k + 1], n = nE + nB, liv = [{ da, nE, nB }];
@@ -167,7 +177,7 @@ export function preparaScena(scena, opz = {}) {
     let bx = 0, by = 0, bz = 0; for (let j = da; j < da + n; j++) { const i = ordAtomi[j]; bx += pos[3 * i]; by += pos[3 * i + 1]; bz += pos[3 * i + 2]; }
     bx /= n; by /= n; bz /= n; let r2 = 0; for (let j = da; j < da + n; j++) { const i = ordAtomi[j], d = (pos[3 * i] - bx) ** 2 + (pos[3 * i + 1] - by) ** 2 + (pos[3 * i + 2] - bz) ** 2; if (d > r2) r2 = d; }
     cn.fill(0); cv.fill(0); cx.fill(0); cy.fill(0); cz.fill(0); cw.fill(0); cb.fill(1); kr.fill(0); kg.fill(0); kb.fill(0); kw.fill(0); cd.fill(Infinity);
-    const cellina = (i) => Math.min(7, Math.max(0, Math.floor((pos[3 * i] - o[0]) / s1))) + 8 * (Math.min(7, Math.max(0, Math.floor((pos[3 * i + 1] - o[1]) / s1))) + 8 * Math.min(7, Math.max(0, Math.floor((pos[3 * i + 2] - o[2]) / s1))));
+    const mm = m0 - 1, cellina = (i) => Math.min(mm, Math.max(0, Math.floor((pos[3 * i] - o[0]) / s1))) + m0 * (Math.min(mm, Math.max(0, Math.floor((pos[3 * i + 1] - o[1]) / s1))) + m0 * Math.min(mm, Math.max(0, Math.floor((pos[3 * i + 2] - o[2]) / s1))));
     for (let j = da; j < da + n; j++) {
       const i = ordAtomi[j], c = cellina(i), r = rag[i], v = r * r * r, p = parteDi ? parteDi[i] : 0;
       cn[c]++; cv[c] += v; cx[c] += v * pos[3 * i]; cy[c] += v * pos[3 * i + 1]; cz[c] += v * pos[3 * i + 2]; if (!sepolto[i]) cb[c] = 0;
@@ -179,7 +189,7 @@ export function preparaScena(scena, opz = {}) {
       const w = rag[i] * rag[i], d = (pos[3 * i] - cx[c]) ** 2 + (pos[3 * i + 1] - cy[c]) ** 2 + (pos[3 * i + 2] - cz[c]) ** 2;
       kr[c] += w * rgb[3 * i]; kg[c] += w * rgb[3 * i + 1]; kb[c] += w * rgb[3 * i + 2]; kw[c] += w; if (d < cd[c]) { cd[c] = d; cr[c] = i; }
     }
-    let lato = 8, prima = n;
+    let lato = m0, prima = n;
     for (let L = 1; L <= LIV; L++) {
       if (L > 1) { // fonde a otto a otto (sul posto: la celletta madre ha indice minore o uguale a quello delle figlie)
         const m = lato / 2;
@@ -342,14 +352,15 @@ void main() {
     vec2 dir = vec2(cos(ang), sin(ang));
     vec3 v = pDi(v_uv + dir * (f * r1) * u_px.xy) - P;
     float vv = dot(v, v), q = max(R1 * R1 - vv, 0.0);
-    s1 += q * q * q * max((dot(v, n) - 0.03 * R1) / (vv + 1e-3 * R1 * R1), 0.0);
+    s1 += q * q * q * max((dot(v, n) - 0.05 * R1) / (vv + 1e-3 * R1 * R1), 0.0);
     v = pDi(v_uv + vec2(-dir.y, dir.x) * (sqrt(f) * r2) * u_px.xy) - P;
     vv = dot(v, v); q = max(R2 * R2 - vv, 0.0);
-    s2 += q * q * q * max((dot(v, n) - 0.03 * R2) / (vv + 1e-3 * R2 * R2), 0.0);
+    s2 += q * q * q * max((dot(v, n) - 0.10 * R2) / (vv + 1e-3 * R2 * R2), 0.0);
   }
-  float A1 = max(0.0, 1.0 - u_ao.z * 5.0 * s1 / (pow(R1, 6.0) * 8.0)), A2 = max(0.0, 1.0 - u_ao.w * 5.0 * s2 / (pow(R2, 6.0) * 8.0));
+  // (la somma ha le dimensioni di 1/lunghezza: moltiplicata per il raggio non dipende più dalla scala)
+  float A1 = max(0.0, 1.0 - u_ao.z * 5.0 * s1 / (pow(R1, 5.0) * 8.0)), A2 = max(0.0, 1.0 - u_ao.w * 5.0 * s2 / (pow(R2, 5.0) * 8.0));
   float p = d * 65535.0;
-  o_col = vec4(A1 * A2, floor(p / 256.0) / 255.0, mod(p, 256.0) / 255.0, 1.0);
+  o_col = vec4(max(A1 * A2, 0.08), floor(p / 256.0) / 255.0, mod(p, 256.0) / 255.0, 1.0);
 }`;
 // la sfumatura dell'ombra, che non scavalca i salti di profondità
 const F_SFUMA = `
@@ -687,7 +698,7 @@ export function creaVista3D(tela, opzioni = {}) {
       if (conOmbre) {
         // 2. l'ombra morbida, 3. sfumata in due passate
         let P = pigro('ombre', V_PIENO, F_OMBRE); gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); gl.viewport(0, 0, imm.wa, imm.ha); gl.useProgram(P.p);
-        lega(0, imm.prof, P.u.u_prof); gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, pxNm, 0.2 * H); gl.uniform4f(P.u.u_ao, O.raggioOmbre, Rg, 1, O.ombreForma); pieno(P);
+        lega(0, imm.prof, P.u.u_prof); gl.uniform4f(P.u.u_pr, ...pr); gl.uniform4f(P.u.u_px, 1 / W, 1 / H, pxNm, 0.2 * H); gl.uniform4f(P.u.u_ao, O.raggioOmbre, Rg, 0.8, 0.75 * O.ombreForma); pieno(P);
         P = pigro('sfuma', V_PIENO, F_SFUMA); gl.useProgram(P.p); const kz = (65535 / (M4.lontano - M4.vicino)) ;
         gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA2); lega(0, imm.ao1, P.u.u_ao); gl.uniform4f(P.u.u_dir, 1 / imm.wa, 0, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);
         gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA1); lega(0, imm.ao2, P.u.u_ao); gl.uniform4f(P.u.u_dir, 0, 1 / imm.ha, 0, 1 / (kz * O.raggioOmbre * 1.5)); pieno(P);
@@ -873,7 +884,7 @@ const densitaAcqua = (T, S = 0) => (1 - 6.8e-6 * (T - 277.13) ** 2) * (1 + 7.7e-
 // lo ione è fatto di più atomi). Chi ha i numeri veri di un punto (mare.js) passa `ioni: [{ el, quanti | perMolecola }]`.
 export const IONI = {
   'Na+': { el: 'Na', carica: 1, guscio: 6 }, 'K+': { el: 'K', carica: 1, guscio: 6 }, 'Mg2+': { el: 'Mg', carica: 2, guscio: 6 }, 'Ca2+': { el: 'Ca', carica: 2, guscio: 7 },
-  'Cl-': { el: 'Cl', carica: -1, guscio: 7 }, 'Fe2+': { el: 'Fe', carica: 2, guscio: 6 },
+  'Cl-': { el: 'Cl', carica: -1, guscio: 6 }, 'Fe2+': { el: 'Fe', carica: 2, guscio: 6 },
   'SO4(2-)': { el: 'S', carica: -2, guscio: 10, raggio: 0.24, raggioCentro: 0.105, intorno: { el: 'O', n: 4, d: 0.149, raggio: 0.152 } }, // tetraedro, S–O 1,49 Å
   'HCO3-': { el: 'C', carica: -1, guscio: 8, raggio: 0.21, raggioCentro: 0.076 * 2, intorno: { el: 'O', n: 3, d: 0.127, raggio: 0.152, piano: true } },
 };
@@ -896,30 +907,28 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
   const L = dimNm || [latoNm, latoNm, latoNm], V = L[0] * L[1] * L[2], rho = densitaAcqua(T, salinita), nAcqua = Math.round(ACQUA.perNm3 * rho * (1 - salinita / 1000) * V);
   // --- gli ioni: quanti, e dove
   const specie = ioni ? ioni.map((x) => ({ ...(IONI[x.nome] || {}), ...x })) : (() => { const n = Math.round(salinita * rho * 0.010304 * V); return [{ nome: 'Na+', ...IONI['Na+'], quanti: n }, { nome: 'Cl-', ...IONI['Cl-'], quanti: n }]; })();
+  const fermi = grigliaFermi(ostacoli, origine); // ciò che sta fermo mentre l'acqua si sistema: gli ostacoli e gli ioni
   const centri = []; // gli ioni messi: { p, s (specie), R (raggio dello ione), G (distanza del guscio) }
   for (let k = 0; k < specie.length; k++) {
     const s = specie[k], e = ELEMENTI[s.el] || ELEMENTI.Na, R = s.raggio ?? e.ionico ?? e.vdw, G = R + 0.14, quanti = s.quanti ?? Math.round((s.perMolecola || 0) * nAcqua);
     s.R = R; s.messi = 0;
-    for (let q = 0, prove = 0; q < quanti && prove < quanti * 400; prove++) {
+    for (let q = 0, prove = 0; q < quanti && prove < quanti * 3000; prove++) {
       const p = [0, 1, 2].map((a) => (L[a] > 2 * (G + 0.2) ? G + 0.15 + r() * (L[a] - 2 * (G + 0.15)) : L[a] / 2));
-      if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + G + 0.12) ** 2)) continue;
-      if (ostacoli && vicinoAOstacoli(ostacoli, origine, p, G + 0.25)) continue;
-      centri.push({ p, s, k, R, G, carica: s.carica }); q++; s.messi++;
+      let libero = true; fermi.vicini(p, (q, R, carica, m, ione) => { if ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 < (ione ? m + G + 0.24 : R + G + 0.25) ** 2) libero = false; }); if (!libero) continue; // i gusci non si compenetrano
+      centri.push({ p, s, k, R, G, carica: s.carica }); fermi.metti(p, R, s.carica, G + 0.08, true); q++; s.messi++;
     }
   }
   // --- le molecole: prima i gusci degli ioni, poi le altre su una griglia scossa
   const O = [], guscioDi = []; // ossigeni [x, y, z]; di quale ione è il guscio (−1: libera)
-  const ost = ostacoli ? grigliaOstacoli(ostacoli, origine) : null;
-  const candidatoSuOstacolo = (p) => { let su = false; ost.vicini(p, (q, R) => { if ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 < (R + 0.09) ** 2) su = true; }); return su; };
+  const occupato = (p, meno) => { let su = false; fermi.vicini(p, (q, R, carica, m) => { if ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 < (m - meno) ** 2) su = true; }); return su; };
   const dentro = (p) => p[0] > 0.02 && p[1] > 0.02 && p[2] > 0.02 && p[0] < L[0] - 0.02 && p[1] < L[1] - 0.02 && p[2] < L[2] - 0.02;
-  centri.forEach((c, i) => { for (const d of ruotaACaso(sullaSfera(c.s.guscio || 6), r)) { const p = [c.p[0] + d[0] * c.G, c.p[1] + d[1] * c.G, c.p[2] + d[2] * c.G]; if (dentro(p)) { O.push(p); guscioDi.push(i); } } });
+  centri.forEach((c, i) => { for (const d of ruotaACaso(sullaSfera(c.s.guscio || 6), r)) { const p = [c.p[0] + d[0] * c.G, c.p[1] + d[1] * c.G, c.p[2] + d[2] * c.G]; if (dentro(p) && !O.some((q) => (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2 < 0.068)) { O.push(p); guscioDi.push(i); } } });
   const nGusci = O.length, liberi = Math.max(0, nAcqua - nGusci); let candidati = [];
   for (let piu = 1.15; piu < 3 && candidati.length < liberi; piu *= 1.12) { // la griglia si infittisce finché i posti bastano
     const passo = Math.cbrt(V / (liberi * piu + 1)), n = L.map((l) => Math.max(1, Math.round(l / passo))); candidati = [];
     for (let z = 0; z < n[2]; z++) for (let y = 0; y < n[1]; y++) for (let x = 0; x < n[0]; x++) {
       const p = [((x + 0.5 + 0.7 * (r() - 0.5)) * L[0]) / n[0], ((y + 0.5 + 0.7 * (r() - 0.5)) * L[1]) / n[1], ((z + 0.5 + 0.7 * (r() - 0.5)) * L[2]) / n[2]];
-      if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + 0.08) ** 2)) continue;
-      if (ostacoli && candidatoSuOstacolo(p)) continue;
+      if (occupato(p, 0.04)) continue;
       candidati.push(p);
     }
   }
@@ -940,8 +949,7 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
     for (let i = nGusci; i < nO; i++) {
       const p = O[i]; let sx = 0, sy = 0, sz = 0;
       vicini(p, (j) => { if (j === i) return; const q = O[j], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], d2 = dx * dx + dy * dy + dz * dz; if (d2 >= d0 * d0) return; const d = Math.sqrt(d2) || 1e-4, k = ((d0 - d) / d) * (j < nGusci ? 0.9 : 0.45); sx += dx * k; sy += dy * k; sz += dz * k; });
-      for (const c of centri) { const dx = p[0] - c.p[0], dy = p[1] - c.p[1], dz = p[2] - c.p[2], m = c.G + 0.08, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (m - d) / d; sx += dx * k; sy += dy * k; sz += dz * k; } }
-      if (ost) ost.vicini(p, (q, R) => { const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], m = R + 0.14, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (0.9 * (m - d)) / d; sx += dx * k; sy += dy * k; sz += dz * k; } });
+      fermi.vicini(p, (q, R, carica, m) => { const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (0.9 * (m - d)) / d; sx += dx * k; sy += dy * k; sz += dz * k; } });
       spinta[3 * i] = sx; spinta[3 * i + 1] = sy; spinta[3 * i + 2] = sz;
     }
     for (let i = nGusci; i < nO; i++) for (let a = 0; a < 3; a++) O[i][a] = Math.min(L[a] - 0.03, Math.max(0.03, O[i][a] + spinta[3 * i + a]));
@@ -955,8 +963,7 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
   for (const i of ordine) {
     const p = O[i], via = [0, 0, 0], cand = []; let cationi = 0; // cand: [ux, uy, uz, costo, indice dell'ossigeno o −1]
     const fermo = (q, R, carica) => { const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d = Math.hypot(dx, dy, dz); if (d > R + 0.14 + 0.07 || d < 1e-6) return; if (carica > 0) { via[0] -= dx / d; via[1] -= dy / d; via[2] -= dz / d; cationi++; } else if (carica < 0) cand.push([dx / d, dy / d, dz / d, -25, -1]); };
-    for (const c of centri) fermo(c.p, c.R, c.carica);
-    if (ost) ost.vicini(p, (q, R, carica) => fermo(q, R, carica));
+    fermi.vicini(p, fermo);
     vicini(p, (j) => { if (j === i || dona[2 * j] === i || dona[2 * j + 1] === i) return; const q = O[j], dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d = Math.hypot(dx, dy, dz); if (d < 0.36) cand.push([dx / d, dy / d, dz / d, (riceve[j] >= 2 ? 60 : riceve[j] * 6) + Math.abs(d - 0.28) * 100, j]); });
     const lontanoDa = cationi ? norma(via) : null;
     let meglio = 45, a = -1, b = -1;
@@ -1024,13 +1031,15 @@ function motoAcqua(pos0, nO, kT, caso) {
     return true;
   };
 }
-// gli ostacoli in una griglia, per trovarne i vicini in fretta (posizioni riferite all'origine dell'acqua)
-function grigliaOstacoli(ost, origine) {
-  const n = ost.raggio.length, lc = 0.5, m = new Map(), chiave = (x, y, z) => `${x},${y},${z}`;
-  for (let i = 0; i < n; i++) { const k = chiave(Math.floor((ost.pos[3 * i] - origine[0]) / lc), Math.floor((ost.pos[3 * i + 1] - origine[1]) / lc), Math.floor((ost.pos[3 * i + 2] - origine[2]) / lc)); (m.get(k) || m.set(k, []).get(k)).push(i); }
-  return { vicini(p, f) { const cx = Math.floor(p[0] / lc), cy = Math.floor(p[1] / lc), cz = Math.floor(p[2] / lc); for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) { const l = m.get(chiave(x, y, z)); if (l) for (const i of l) f([ost.pos[3 * i] - origine[0], ost.pos[3 * i + 1] - origine[1], ost.pos[3 * i + 2] - origine[2]], ost.raggio[i], ost.carica ? ost.carica[i] : 0); } } };
+// ciò che sta fermo (gli atomi di una faccia di cristallo, gli ioni) in una griglia, per trovarne i vicini in fretta.
+// Le posizioni sono riferite all'origine dell'acqua; di ognuno: raggio, carica, e il margine sotto cui un ossigeno
+// dell'acqua non deve scendere (raggio + 1,4 Å per un atomo; per uno ione il suo guscio).
+function grigliaFermi(ost, origine) {
+  const lc = 0.8, m = new Map(), chiave = (x, y, z) => (x + 512) + 1024 * ((y + 512) + 1024 * (z + 512));
+  const metti = (p, R, carica, margine, ione) => { const k = chiave(Math.floor(p[0] / lc), Math.floor(p[1] / lc), Math.floor(p[2] / lc)); (m.get(k) || m.set(k, []).get(k)).push({ p, R, carica, margine, ione }); };
+  if (ost) for (let i = 0, n = ost.raggio.length; i < n; i++) metti([ost.pos[3 * i] - origine[0], ost.pos[3 * i + 1] - origine[1], ost.pos[3 * i + 2] - origine[2]], ost.raggio[i], ost.carica ? ost.carica[i] : 0, ost.raggio[i] + 0.14, false);
+  return { metti, vicini(p, f) { const cx = Math.floor(p[0] / lc), cy = Math.floor(p[1] / lc), cz = Math.floor(p[2] / lc); for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) { const l = m.get(chiave(x, y, z)); if (l) for (const e of l) f(e.p, e.R, e.carica, e.margine, e.ione); } } };
 }
-function vicinoAOstacoli(ost, origine, p, d) { const n = ost.raggio.length; for (let i = 0; i < n; i++) if ((ost.pos[3 * i] - origine[0] - p[0]) ** 2 + (ost.pos[3 * i + 1] - origine[1] - p[1]) ** 2 + (ost.pos[3 * i + 2] - origine[2] - p[2]) ** 2 < (d + ost.raggio[i]) ** 2) return true; return false; }
 
 // ---------- I RETICOLI. Una cella elementare è { a, b, c: i tre vettori (nm), base: [{ el, uvw, carica, raggio }] }:
 // lo stesso formato che può arrivare da fuori (`reticolo` in scenaCristallo). L'asse y è quello «in alto»: la faccia che
@@ -1047,7 +1056,7 @@ export const RETICOLI = {
   // quarzo α: trigonale (P3₂21), a = 4,913 Å, c = 5,405 Å; Si in (0,4697, 0, 0), O in (0,4135, 0,2669, 0,1191) (Levien,
   // Prewitt e Weidner 1980); ossigeno col raggio ionico (1,35 Å), silicio col covalente (1,11 Å) perché si veda tra gli ossigeni
   quarzo: (() => { const a = 0.4913, c = 0.5405, u = 0.4697, [x, y, z] = [0.4135, 0.2669, 0.1191], m = (v) => v.map((q) => ((q % 1) + 1) % 1);
-    const Si = [[u, 0, 0], [0, u, 2 / 3], [-u, -u, 1 / 3]], Ox = [[x, y, z], [-y, x - y, z + 2 / 3], [-x + y, -x, z + 1 / 3], [y, x, -z], [x - y, -y, -z + 1 / 3], [-x, -x + y, -z + 2 / 3]];
+    const Si = [[u, 0, 0], [0, u, 2 / 3], [-u, -u, 1 / 3]], Ox = [[x, y, z], [-y, x - y, z + 2 / 3], [-x + y, -x, z + 1 / 3], [x - y, -y, -z], [y, x, 2 / 3 - z], [-x, -x + y, 1 / 3 - z]];
     return { nome: 'quarzo', formula: 'SiO2', a: [a, 0, 0], b: [-a / 2, 0, a * R3], c: [0, c, 0], base: [...Si.map((v) => ({ el: 'Si', uvw: m(v), carica: 2.4, raggio: 0.111 })), ...Ox.map((v) => ({ el: 'O', uvw: m(v), carica: -1.2, raggio: 0.135 }))], agitazione: { Si: 0.007, O: 0.0105 } }; })(),
 };
 // riempie il blocco [0, dim] con la cella ripetuta → { pos: [], el: [], raggio: [], carica: [] }
