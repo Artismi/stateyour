@@ -8,7 +8,7 @@ Il censimento completo, una riga per fonte, è in `reports/Fonti da recuperare.c
 
 | Grandezza | Numero |
 |---|---|
-| Voci con marca non primaria estratte dalle 15 note ([R], [S], [V2], [V‑sec], [V‑cod], [Va], [V‑ab], [V‑r], [V*]) | 1355 |
+| Voci che dopo questo giro portano ancora una marca non primaria nelle 15 note ([R], [S], [V2], [V‑sec], [V‑cod], [Va], [V‑ab], [V‑r], [V*]; escluse le annotazioni storiche «era [R]») | 1355 |
 | di cui senza alcuna fonte indicata nella riga (fatti da manuale ricordati) | 355 |
 | Fonti distinte ricavate dalle altre voci | 878 |
 | per tipo: articoli e libri con DOI 510, pagine o documenti in rete e libri senza DOI 151, pagine Wikipedia 100, PubMed Central 85, arXiv 26, schede ADS 6 | |
@@ -27,7 +27,7 @@ Il censimento completo, una riga per fonte, è in `reports/Fonti da recuperare.c
 
 Come leggere i numeri. La priorità è assegnata da una regola automatica sul testo attorno alla marca: A se c'è una formula, un coefficiente, una soglia o una licenza; B se c'è un numero; C altrimenti. La regola è larga: molte voci A sono riscontri e non costanti del codice. Dei 510 DOI, OpenAlex ne classifica 331 come chiusi; gli altri hanno una copia dichiarata aperta, ma un terzo abbondante di quelle copie sta su siti di editori che rispondono 403 a un client dichiarato.
 
-Fin dove è arrivato il lavoro. La ricerca automatica ha fatto un solo passaggio per fonte su tutte le fonti con DOI. La lettura e la ricostruzione hanno coperto 75 voci di priorità A, scelte tra quelle che portano una formula operativa. Restano non lavorate: circa 530 voci di priorità A (in gran parte nelle note sulla vita, dove i numeri sono misure e non si derivano), tutte le B e le C, e le 355 voci senza fonte indicata. Le note `quantistica_legami_cinetica`, `fisiologia_piante_ecosistemi` e `fuoco_metalli_civilta` hanno ricevuto solo la definizione delle marche nuove.
+Fin dove è arrivato il lavoro. La ricerca automatica ha fatto un solo passaggio per fonte su tutte le fonti con DOI. La lettura e la ricostruzione hanno coperto 75 voci di priorità A, scelte tra quelle che portano una formula operativa. Restano non lavorate: 559 voci di priorità A (in gran parte nelle note sulla vita, dove i numeri sono misure e non si derivano), tutte le B e le C, e le 355 voci senza fonte indicata. Le note `quantistica_legami_cinetica`, `fisiologia_piante_ecosistemi` e `fuoco_metalli_civilta` hanno ricevuto solo la definizione delle marche nuove.
 
 ## 2. Che cosa è stato ricostruito, e come
 
@@ -204,7 +204,7 @@ Per il deposito dell'Università del Maine l'archivio ha la scheda di Jumars 200
 | Servizio | Risposta | Utilità |
 |---|---|---|
 | Crossref (`/works/<DOI>`, ricerca per autore e anno) | 200; due 429 su circa 600 richieste | metadati per quasi tutti i DOI; due DOI scritti nelle note non risultano (Aitken 1985, `10.1016/0277-3791(87)90019-4`; Clapham e Miller 2011, `10.1073/pnas.1114193108`): vanno ricontrollati |
-| OpenAlex senza indirizzo di posta | 200 | la fonte migliore per le copie aperte: 236 DOI su 525 |
+| OpenAlex senza indirizzo di posta | 200 | la fonte migliore per le copie aperte: 227 DOI su 510 |
 | Semantic Scholar, interrogazione a lotti | 429 alla prima, 200 alla seconda | 500 DOI in due richieste; aggiunge gli identificativi arXiv |
 | Europe PMC, ricerca | 200 | ottima anche per cercare una costante a testo pieno negli articoli aperti: così sono state trovate le triangolazioni di Io, Dunbar, Alexander |
 | Europe PMC, `fullTextXML` | 200 per gli aperti, 500 per gli altri (68 su 82) | testo intero pulito |
@@ -215,7 +215,7 @@ Per il deposito dell'Università del Maine l'archivio ha la scheda di Jumars 200
 | CORE v3 senza chiave | 429 subito, 200 dopo qualche minuto | funziona ma con un limite stretto; un solo riscontro fatto, senza risultati |
 | Zenodo, NASA NTRS, USGS | 200 | NTRS e USGS servono i PDF (2 e 1 scaricati); Zenodo 410 su un file rimosso |
 | Wayback Machine (`/wayback/available`) | 200 | 7 istantanee su 9 indirizzi |
-| Scansioni ADS (`articles.adsabs.harvard.edu/pdf/…`) | 200 per ApJ e MNRAS vecchi (2 su 8), 403 per il resto | scansioni senza testo |
+| Scansioni ADS (`articles.adsabs.harvard.edu/pdf/…`) | 200 per ApJ e MNRAS vecchi (2 su 8 provati), 403 per il resto | scansioni senza testo |
 | `raw.githubusercontent.com`, Wikipedia in wikitesto, JPL, PDG, Osservatorio di Parigi | 200 | codici di riferimento e tabelle |
 | Ricerca nel codice di GitHub | risposta non valida attraverso il proxy | non usabile |
 | Depositi istituzionali | 200 con PDF: Konstanz, CSIC, Caltech, UTS, UNAM, Illinois, hal.science; 403: eScholarship, UNM; 429: MIT, Harvard; solo pagina a script: EPFL, Zurigo, DTU, Helsinki | a macchia di leopardo |

@@ -49,8 +49,10 @@ Un evento può cambiare solo ciò che sta **dentro il suo contenitore e dopo di 
 resta identico. Così i mondi paralleli sono vicini quanto sono pochi e piccoli gli eventi che li separano.
 - Fatto: particelle (`mondo.js`), impatti, anelli, galassie, stelle una per una (`sorgente`); disco e lune evento
   per evento («…/disco/embrione 12/incontro con 13», «…/lune/cattura 3/eccentricità»), e così rocce, superficie,
-  mantello, pozza; prove «un ramo cambia una cosa sola» (`test_eventi`, `test_disco`, `test_lune`).
-- Manca: meteo e clima non hanno eventi; restano fuori dalla fonte unica il campo del cosmo in 3D (`cosmo3d.js`),
+  mantello, pozza; il campo del cosmo in 3D (`cosmo3d.js` `ampiezzeLibere`: ogni onda è un evento col suo nome,
+  «cosmo 1/campo/onda 2,-1,3»; il ramo di un'onda cambia quell'onda sola e lascia le galassie dove sono viste
+  dall'alto); prove «un ramo cambia una cosa sola» (`test_eventi`, `test_disco`, `test_lune`, `test_bolle`).
+- Manca: meteo e clima non hanno eventi; restano fuori dalla fonte unica
   le scene di `atomi3d.js`, il rumore delle tessere (`geologia.js`), le ricerche (`cercatore.js`, `vicini.js`) e
   ciò che l'interfaccia tira da un seme (`laboratorio.js`, `mappa.js`, `src/tre`); un evento piccolo risale per due vie sole
   (`risalita.js`, non ancora collegato): come flusso, sommato, o attraverso un amplificatore con il suo tempo; il «dopo» non è ancora controllato da una prova.
@@ -194,9 +196,20 @@ per poi cucirli (al bordo non combacerebbero), si condiziona lo stesso mondo a t
   suo stato dell'acqua, più grande del pianeta), con posizione libera si trova sempre se ogni bolla è possibile.
   **La causa comune** (`causaComune`): il peso di «nello stesso mondo» contro «ognuna nel suo», sugli stessi mondi;
   due croste di sale stanno nello stesso mondo con probabilità 0,86 (pesa 6 volte di più), mare e ghiaccio no.
+  **Bolle in galassie diverse si incontrano nel campo del cosmo** (`incontra(bolle, { nelCosmo })`,
+  `chiedeAlCosmo`, `ridiscendiNelCosmo`): ogni bolla trovata chiede al cosmo la sua galassia, cioè un picco del campo
+  filtrato alto quanto serve all'alone che `galassie.js` le dà; i picchi, messi nei posti dati, sono vincoli lineari
+  e il peso della parte cosmica è esatto (χ²), accanto a quello stimato dei pianeti. Due bolle a distanza data
+  (χ² uguale alla formula dei due picchi entro 10⁻⁷), dieci bolle in dieci galassie (χ² 16 su 10), e ridiscendendo
+  ognuna torna: dal campo l'altezza, dall'altezza la massa dell'alone, dalla galassia il pianeta e il contenuto.
+  A mezzo megaparsec due galassie diverse pesano e^(−173) contro e^(0,5) da libere; nello stesso punto non esistono.
+  A decine di megaparsec invece due picchi costano MENO che lontani (ρ > 0): è l'ammassarsi delle galassie.
 - Manca: l'intersezione delle richieste è fatta nel punto (temperatura, pressione) e nel tempo, non ancora per le
   distanze («una stella a un metro da un fiocco di neve») né tra istanti diversi (una bolla nel futuro di un'altra);
   il peso dei pianeti è stimato a livello di pianeta: i contenuti che decide la superficie restano «forse» finché
-  non si scende; le bolle di pianeti diversi non condizionano ancora insieme il campo del cosmo (i due pezzi, A e B,
-  non sono collegati: una galassia non è un vincolo lineare); la prova che al bordo tutto combacia; mille bolle
-  con un batterio (serve il contenuto «vivo», che nessun modulo sa ancora giudicare).
+  non si scende; il cosmo delle bolle è (indirizzo, vincoli) e non ancora un cosmo che `cosmo.js` sa aprire: dentro
+  ogni galassia si scende con il suo indirizzo d'origine, e ciò che in `galassie.js` dipende dai vicini (metà del
+  giro dell'alone) resta quello del cosmo d'origine; il vincolo è l'altezza del picco, non «è un massimo»; i mondi
+  delle bolle sono scelti prima del peso cosmico, non insieme; manca la legge che vieta due aloni a meno del loro
+  raggio; la prova che al bordo tutto combacia; mille bolle con un batterio (serve il contenuto «vivo», che nessun
+  modulo sa ancora giudicare).
