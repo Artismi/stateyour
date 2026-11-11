@@ -265,10 +265,10 @@ function daUrto(P, amb, caso, urto) {
   // giusto perché i detriti restino in orbita: DALLE SIMULAZIONI, succede a meno di un pianeta roccioso su due, e la luna
   // che ne nasce ha tra un millesimo e un quarantesimo della massa del pianeta (la nostra: 1/81)
   const sorte = c() < 0.45, muSorte = Math.pow(10, tra(-3, -1.6)), e0 = tra(0.01, 0.08);
-  const capita = urto !== undefined ? !!urto?.luna : sorte, mu = urto?.luna ? urto.luna.massaKg / M : muSorte, anni = urto?.luna ? Math.max(0, amb.eta - urto.t) : amb.eta;
+  const capita = urto !== undefined ? !!urto?.luna : sorte, anni = urto?.luna ? Math.max(0, amb.eta - urto.t) : amb.eta;
   if (P.tipo !== 'roccioso' || !capita) return [];
   // nasce dai detriti (roccia del mantello, quasi senza ferro) appena fuori dal limite di Roche...
-  const m = mu * M, comp = { roccia: 0.98, ferro: 0.02 }, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0));
+  const m = urto?.luna ? urto.luna.massaKg : muSorte * M, comp = { roccia: 0.98, ferro: 0.02 }, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0));
   // ...e le maree la allontanano per tutto il tempo che hanno avuto (da/dt ∝ a^(-11/2))
   let a = orbitaDopoLeMaree(P, m, a0, anni);
   const I = 0.33 * M * P.raggioM ** 2, wMax = Math.sqrt((G * M) / P.raggioM ** 3), Lorb = (x) => m * Math.sqrt(G * M * x);
@@ -293,7 +293,7 @@ function daUrto(P, amb, caso, urto) {
   // la luna si PERDE se: il pianeta è bloccato dalla stella (gira piano: la marea la tira giù invece che su,
   // e ricade: Mercurio e Venere non hanno lune), se orbita più in fretta di quanto il pianeta gira, o se
   // arriva oltre 0,4 raggi di Hill, dove la stella la porta via (pianeti vicini alla stella)
-  if (P.bloccato || periodoOrbita(P, a, m) < giorno * (1 - 1e-9) || a > 0.4 * amb.RH) return [];
+  if (P.bloccato || periodoOrbita(P, a, m) < giorno * (urto?.luna ? 1 - 1e-6 : 1) || a > 0.4 * amb.RH) return [];
   const L = corpoLuna('urto', m, a, 0, comp);
   L.giornoInizialePianeta = (2 * Math.PI) / wPrima;
   if (urto?.luna) L.giornoPianeta = giorno; // il giorno del pianeta oggi, dopo che la luna l'ha frenato

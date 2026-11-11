@@ -211,7 +211,7 @@ export function formaPianeti(st, seme = 1) {
           // quella distanza regge, contati da quando i due corpi sono così (l'ultimo urto di uno dei due, o la fine del gas)
           const mu2 = (p.m + q.m) / (2 * Mst), anno = Math.pow(am, 1.5) / Math.sqrt(D.massaStella), delta = Math.max(0, s[i] * raggiNecessari((eta - D.vita) / anno, mu2));
           const tIncrocio = Math.min(eta, Math.max(p.tUrto, q.tUrto) + giriCheRegge(delta, mu2) * anno);
-          grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: grande.m - grande.gas, massaKg: piccolo.m - piccolo.gas, delta, tIncrocio, aUA: am }];
+          grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta, tIncrocio, aUA: am }];
           grande.tUrto = tIncrocio; grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.alGas += piccolo.alGas;
           grande.a = ((p.m * Math.sqrt(p.a) + q.m * Math.sqrt(q.a)) / m) ** 2;
           grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;

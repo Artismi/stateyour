@@ -977,7 +977,7 @@ function pannelloCosmo(h) {
       // PERCHÉ È FATTO COSÌ: la catena delle cause, dall'inizio al suo nucleo
       {
         const v = camMappa.via, Gx = galassiaDi(v.cosmo, v.galassia), St = Gx.stelle[v.stella], Gg = Gx.G, ANNI = 3.156e7;
-        const dopo = ((St.morta != null ? 0 : 0) + (13.8e9 - (St.eta ?? 0) - (St.morta ?? 0)) - Gg.formazione / ANNI) / 1e9, rc = Math.hypot(...St.pos);
+        const dopo = (13.8e9 - St.eta - Gg.formazione / ANNI) / 1e9, rc = Math.hypot(...St.pos);
         h.push(`<h2>perché è fatto così</h2><ol class="nota catena">
           <li><b>L'inizio.</b> Le fluttuazioni dell'universo appena nato (quelle che si vedono ancora nella radiazione cosmica di fondo) qui erano ${Gg.peso.toFixed(1)} volte più dense della media.</li>
           <li><b>La galassia.</b> Su quel picco la materia è collassata presto: la galassia ${v.galassia + 1} ha cominciato a fare stelle ${(Gg.formazione / ANNI / 1e9).toFixed(1)} miliardi di anni dopo l'inizio.</li>

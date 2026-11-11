@@ -141,7 +141,7 @@ function contesto(sistema, P) {
   if (cx && cx.pianeti.includes(P)) return cx;
   const st = sistema.stella || {}, dentro = (sistema.pianeti || []).includes(P), pianeti = dentro ? sistema.pianeti : [...(sistema.pianeti || []), P].sort((x, y) => x.aM - y.aM);
   const Mst = P.Mstella ?? (st.massaNascita || st.massa || 1) * MSOLE;
-  cx = { sistema, st, Mst, Z: st.Z ?? 1, eta: (st.eta ?? 4.5e9) + (st.morta ?? 0), pianeti, sk: pianeti.map((q) => scheda(q, Mst)), nubi: new Map() };
+  cx = { sistema, st, Mst, Z: st.Z ?? 1, eta: st.eta ?? 4.5e9, pianeti, sk: pianeti.map((q) => scheda(q, Mst)), nubi: new Map() };
   cx.nubeAttesa = (r) => { if (!cx.nubi.has(r)) cx.nubi.set(r, nube(cx, r, formazioneDi(cx, r, null))); return cx.nubi.get(r); };
   if (dentro) contesti.set(sistema, cx);
   return cx;
@@ -208,7 +208,7 @@ function formazioneDi(cx, i, caso) {
     const { k, u, r } = ult, ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${nome}`) : medio);
     // QUANDO. disco.js fonde due corpi se la loro distanza regge meno giri di quelli fatti finora: il momento in cui le
     // orbite si incrociano è quello in cui quella distanza cede (Chambers), e disco.js lo dà (tIncrocio). Poi serve il
-    // tempo per trovarsi (Öpik, con la velocità a caso degli embrioni di disco.js: la sua media).
+    // tempo per trovarsi («cerca»: Öpik, con la velocità a caso degli embrioni di disco.js).
     // Se disco.js non lo dà: due embrioni vicini stanno a C·2^⅔ raggi di Hill reciproci, e il primo giro di urti arriva
     // allora; se gli urti sono stati più d'uno, l'ultimo è tra corpi già fusi, con orbite allungate: la loro distanza
     // utile sta tra il limite di Hill (2√3: si incrociano subito) e il limite di oggi (oltre non si sarebbero fusi):
@@ -223,7 +223,10 @@ function formazioneDi(cx, i, caso) {
         incrocio = tGas + me.T * giriChambers(delta, muP);
         if (u.delta == null) out.stime.push('quando è avvenuto l\'ultimo urto gigante: dalla legge di Chambers');
       }
-      t0 = Math.min(0.9999 * eta, incrocio + cerca);
+      // l'urto è avvenuto (il pianeta c'è): l'attesa media, sapendo che è finita prima di oggi (vicino alla stella è
+      // «cerca»; lontano, dove trovarsi richiederebbe più dell'età del sistema, è a metà del tempo che c'era)
+      const resta = Math.max(0, eta - incrocio);
+      t0 = Math.min(0.9999 * eta, incrocio + (resta > 1e-6 * cerca ? cerca - resta / Math.expm1(resta / cerca) : 0));
     }
     const dove = caso ? punto(caso(`urto gigante ${k}/dove`)) : { lat: 0, lon: 0 };
     const Ln = Math.hypot(...Lv), I = IMPATTI.inerzia * q.massaKg * q.raggioM ** 2;
@@ -428,12 +431,13 @@ function schedaGigante(form, P) {
 }
 export function giganteDi(P, sistema, caso) {
   const st = sistema.stella || {}, Mst = P.Mstella ?? (st.massaNascita || st.massa || 1) * MSOLE;
-  return schedaGigante(formazioneDi({ sistema, st, Mst, Z: st.Z ?? 1, eta: (st.eta ?? 4.5e9) + (st.morta ?? 0), sk: [scheda(P, Mst)] }, 0, caso), P);
+  return schedaGigante(formazioneDi({ sistema, st, Mst, Z: st.Z ?? 1, eta: st.eta ?? 4.5e9, sk: [scheda(P, Mst)] }, 0, caso), P);
 }
 
 // ---------- LA STORIA DEGLI IMPATTI.
 // P: un pianeta di sistema() (aM, massaKg, raggioM, Mstella, tipo, composizione, clima, atmosfera, interno, storia;
-//    se c'è, P.formazione: vedi in cima). sistema: { stella: { massa, eta, Z… }, pianeti: [...], disco? }.
+//    se c'è, P.formazione: vedi in cima). sistema: { stella: { massa, eta, Z… }, pianeti: [...], disco? }; stella.eta
+//    sono gli anni dalla nascita a oggi (l'unica età del sistema, anche per una stella morta).
 // caso: la sorgente degli eventi del pianeta (eventi.js). opzioni: { massimo: quanti urti seguire uno per uno (2000);
 //    luna: una luna di lune.js (aM, massaKg, raggioM): allora il bersaglio è lei, dentro la buca del suo pianeta }.
 // I TEMPI sono anni dalla nascita del sistema (lo stesso orologio di stella.eta); la storia della superficie comincia

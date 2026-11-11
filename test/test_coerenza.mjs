@@ -53,9 +53,8 @@ for (const n of [1, 2]) {
     GALASSIE.push({ n, gid, Gx: CO.galassia(n, gid) });
     for (let k = 0; k < 25; k++) {
       const sid = (k * 61 + 7 * gid) % CO.STELLE, S0 = CO.galassia(n, gid).stelle[sid], S = CO.sistema(n, gid, sid);
-      // l'età che sistema() dà ai pianeti, e quella vera della stella (dalla nascita a oggi)
-      const eta = (S0.eta ?? 5e9) + (S0.morta ?? 0), etaVera = S0.eta ?? LG.stella(S0.massaNascita).vita + S0.morta;
-      const s = { n, gid, sid, S0, S, eta, etaVera, viva: S0.stato === 'in vita' || S0.stato === 'gigante rossa' };
+      // l'età del sistema è quella della stella (anni dalla nascita a oggi), viva o morta che sia
+      const s = { n, gid, sid, S0, S, eta: S0.eta, viva: S0.stato === 'in vita' || S0.stato === 'gigante rossa' };
       SISTEMI.push(s); for (const p of S.pianeti) PIANETI.push({ ...s, p });
     }
   }
@@ -66,7 +65,7 @@ console.log(`coerenza: ${GALASSIE.length} galassie, ${SISTEMI.length} sistemi, $
 // =====================================================================================================
 sezione('IL TEMPO');
 // =====================================================================================================
-const nascitaDi = (s) => ADESSO - (s.eta ?? LG.stella(s.massaNascita).vita + s.morta); // anni dall'inizio
+const nascitaDi = (s) => ADESSO - s.eta; // anni dall'inizio
 
 prova('ogni stella è più giovane dell\'universo ed è nata dopo la sua galassia', () => {
   for (const { Gx } of GALASSIE) {
@@ -81,6 +80,7 @@ prova('una stella viva ha età < vita; un resto viene da una stella la cui vita 
     if (s.stato === 'in vita' || s.stato === 'gigante rossa') { vive++; assert.ok(s.eta < LG.stella(s.massa).vita, `viva oltre la sua vita: ${s.eta} > ${LG.stella(s.massa).vita}`); if (s.stato === 'gigante rossa') assert.ok(s.eta > 0.9 * LG.stella(s.massa).vita); }
     else {
       resti++; assert.ok(s.morta >= 0 && s.massaNascita > s.massa, `resto più pesante della stella: ${s.massa} da ${s.massaNascita}`);
+      tra(s.eta / (LG.stella(s.massaNascita).vita + s.morta), 1 - 1e-9, 1 + 1e-9, 'età di un resto = vita della stella + anni dalla morte');
       const f = LG.fine(s.massaNascita); assert.equal(s.stato, f.tipo); assert.ok(Math.abs(s.massa - f.massa) < 1e-9);
       if (s.stato === 'nana bianca') assert.ok(s.massa < LG.massaChandrasekhar() / MSOLE); else if (s.stato === 'stella di neutroni') assert.ok(s.massa < LG.massaMassimaNeutroni() / MSOLE);
     }
@@ -88,27 +88,32 @@ prova('una stella viva ha età < vita; un resto viene da una stella la cui vita 
   assert.ok(vive > 1000 && resti > 100);
 });
 
-prova('attorno a una stella viva i pianeti, il loro interno e le lune hanno la stessa età della stella', () => {
-  let n = 0;
-  for (const x of SOLIDI) if (x.viva) { n++; assert.equal(x.p.interno.eta, x.S0.eta); assert.equal(x.eta, x.etaVera); }
-  assert.ok(n > 500);
+prova('l\'età è una sola: pianeti, interno e lune hanno gli anni della loro stella (anche attorno a una nana bianca), mai più dell\'universo', () => {
+  let n = 0, nane = 0;
+  for (const s of SISTEMI) { assert.ok(s.eta > 0 && s.eta < ADESSO, `una stella di ${s.eta} anni`); }
+  for (const x of SOLIDI) { n++; assert.equal(x.p.interno.eta, x.S0.eta); }
+  // le lune: rifatte con l'età della stella devono essere le stesse (il disco è controllato più sotto, con la massa)
+  for (const x of PIANETI.filter((y) => y.S0.stato === 'nana bianca').filter((_, i) => i % 5 === 0)) {
+    nane++; const rifatte = LU.lune(x.p, { eta: x.S0.eta, Z: x.S0.Z, massa: x.S0.massa, massaNascita: x.S0.massaNascita }, semeDi('lune', x.n, x.gid, x.sid, x.p.id));
+    assert.equal(foto(rifatte.map((l) => [l.massaKg, l.aM])), foto(x.p.lune.map((l) => [l.massaKg, l.aM])));
+  }
+  assert.ok(n > 1500 && nane >= 10);
 });
 
-{ // le nane bianche: l'età della stella non c'è (S.eta manca) e ognuno ne mette una sua
-  const wd = SISTEMI.filter((s) => s.S0.stato === 'nana bianca'), scarti = wd.map((s) => (s.eta - s.etaVera) / 1e9);
-  nota(1, 'nane bianche: i pianeti sono più vecchi della loro stella (età = 5 Ga fissi + anni dalla morte, invece di vita + anni dalla morte)',
-    { casi: wd.filter((s) => s.eta > s.etaVera * 1.0001).length, su: wd.length, tipico: `scarto mediano ${num(mediana(scarti))} Ga (da ${num(minimo(scarti))} a ${num(massimo(scarti))})`, massimo: `età fino a ${num(massimo(wd.map((s) => s.eta / 1e9)))} Ga`, dove: 'cosmo.js sistema() «(S.eta ?? 5e9) + (S.morta ?? 0)» contro galassia() (vita + morta)' });
-  nota(1, 'nane bianche: i pianeti (disco, lune, blocco mareale) sono più vecchi dell\'universo',
-    { casi: wd.filter((s) => s.eta > ADESSO).length, su: wd.length, tipico: `universo ${num(ADESSO / 1e9, 4)} Ga`, massimo: `${num(massimo(wd.map((s) => s.eta / 1e9)))} Ga`, dove: 'cosmo.js sistema() → disco.js formaPianeti, lune.js lune' });
-  const pw = SOLIDI.filter((x) => x.S0.stato === 'nana bianca');
-  nota(2, 'nane bianche: l\'interno del pianeta (calore, dinamo, crateri, tettonica) usa una terza età, 5 Ga fissi',
-    { casi: pw.filter((x) => Math.abs(x.p.interno.eta - x.etaVera) > 0.05 * x.etaVera).length, su: pw.length, tipico: `scarto mediano ${num(mediana(pw.map((x) => Math.abs(x.p.interno.eta - x.etaVera) / 1e9)))} Ga`, massimo: `${num(massimo(pw.map((x) => Math.abs(x.p.interno.eta - x.etaVera) / 1e9)))} Ga`, dove: 'geologia.js interno() «stella?.eta ?? (stella?.morta != null ? 5e9 : 4.5e9)»' });
-}
-{ // le giganti rosse: restano luminose come in sequenza principale e tengono i pianeti che la nana bianca «avrà inghiottito»
-  let gig = 0, vicini = 0;
-  for (const { n, gid, Gx } of GALASSIE) for (const s of Gx.stelle) if (s.stato === 'gigante rossa') { gig++; if (CO.sistema(n, gid, s.id).pianeti.some((p) => p.aM < 1.5 * UA)) vicini++; }
-  nota(2, 'giganti rosse: tengono pianeti entro 1,5 UA (quelli che da nana bianca risultano «inghiottiti») e li scaldano con la luce di sequenza principale',
-    { casi: vicini, su: gig, tipico: 'la luminosità usata è stella(M).L, la temperatura è scesa a 4200 K', dove: 'cosmo.js galassia() (stato gigante) contro sistema() (taglio a 0,05 solo per le nane bianche)' });
+prova('una gigante rossa ha inghiottito i pianeti entro 1,5 UA, e così la nana bianca che ne resta', () => {
+  let gig = 0, nane = 0;
+  for (const { n, gid, Gx } of GALASSIE) for (const s of Gx.stelle.filter((q, i) => q.stato === 'gigante rossa' || (q.stato === 'nana bianca' && i % 7 === 0))) {
+    const S = CO.sistema(n, gid, s.id), k = s.stato === 'nana bianca' ? s.massaNascita / s.massa : 1; if (s.stato === 'gigante rossa') gig++; else nane++;
+    for (const p of S.pianeti) assert.ok(p.aM >= 1.5 * UA * k * (1 - 1e-9), `${s.stato}: un pianeta a ${p.aM / UA} UA`);
+  }
+  assert.ok(gig > 50 && nane > 50);
+});
+
+{ // le giganti rosse: la luce è ancora quella di sequenza principale
+  let gig = 0;
+  for (const { Gx } of GALASSIE) for (const s of Gx.stelle) if (s.stato === 'gigante rossa') gig++;
+  nota(3, 'giganti rosse: la luce che scalda i pianeti rimasti è ancora quella di sequenza principale (stella(M).L), mentre la temperatura è scesa a 4200 K: raggio e luce della gigante non hanno una legge',
+    { casi: gig, su: gig, dove: 'cosmo.js galassia() «gigante ? Math.min(vita.T, 4200)» e sistema() «viva ? stellaVera(S.massa).L»' });
 }
 { // i resti di supernova sono messi sulla posizione di stelle che il catalogo dà ancora per vive
   let sn = 0, vive = 0, nane = 0;
@@ -127,8 +132,9 @@ prova('il disco è qualche centesimo della stella; i pianeti pesano meno del dis
     const st = { massa: s.S0.massaNascita || s.S0.massa, Z: s.S0.Z ?? 1, eta: s.eta }, seme = semeDi('disco', s.n, s.gid, s.sid), D = DI.disco(st, seme), nati = DI.formaPianeti(st, seme);
     tra(D.massaKg / (st.massa * MSOLE), 0.0099, 0.1201, 'massa del disco / massa della stella');
     if (!nati.length) continue; n++;
-    // sono proprio i pianeti del sistema (prima del taglio a 16 e di quello della nana bianca)
-    if (s.viva && nati.length <= CO.PIANETI_MAX) assert.equal(foto(nati.map((q) => q.massaKg)), foto(s.S.pianeti.map((p) => p.massaKg)));
+    // sono proprio i pianeti del sistema (nati con l'età della stella; poi il taglio a 16, e i vicini inghiottiti dalla gigante)
+    const rimasti = nati.slice(0, CO.PIANETI_MAX).filter((q) => s.S0.stato === 'in vita' || q.aUA / 30 >= 0.05);
+    assert.equal(foto(rimasti.map((q) => q.massaKg)), foto(s.S.pianeti.map((p) => p.massaKg)));
     const tutti = nati.reduce((a, q) => a + q.massaKg, 0); assert.ok(tutti < D.massaKg, `pianeti ${tutti} kg > disco ${D.massaKg} kg`);
     // i solidi del disco: Σs sommata sugli anelli, dal bordo interno a quello esterno
     let solidi = 0; const N = 600, l0 = Math.log(D.rIn), l1 = Math.log(D.rOut);
@@ -279,7 +285,7 @@ prova('gravità, anno, giorno, schiacciamento e temperatura di equilibrio discen
     const { p } = x;
     tra(p.clima.g / ((K.G * p.massaKg) / p.raggioM ** 2), 1 - 1e-9, 1 + 1e-9, 'gravità');
     tra(p.clima.Teq / LG.temperaturaEquilibrio(p.Lw, p.aM, p.clima.albedo), 1 - 1e-9, 1 + 1e-9, 'temperatura di equilibrio');
-    if (x.viva) tra(p.anno / (2 * Math.PI * Math.sqrt(p.aM ** 3 / (K.G * x.S0.massa * MSOLE))), 0.999, 1.001, 'anno (Keplero, con la massa della stella)');
+    tra(p.anno / (2 * Math.PI * Math.sqrt(p.aM ** 3 / (K.G * x.S0.massa * MSOLE))), 0.999, 1.001, 'anno (Keplero, con la massa che la stella ha oggi)'); assert.equal(p.Mstella, x.S0.massa * 1.989e30);
     if (p.bloccato) { assert.equal(p.giorno, p.anno); assert.equal(p.obliquita, 0); }
     tra(p.schiacciamento, 0, 0.3, 'schiacciamento'); if (p.schiacciamento < 0.3) tra(p.schiacciamento / (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3 / (K.G * p.massaKg)), 0.999, 1.001, 'schiacciamento = 5/4·ω²R³/GM');
     if (p.atmosfera && isFinite(p.clima.pressione)) assert.ok(p.atmosfera.pressione <= p.clima.pressione * (1 + 1e-9), 'l\'aria di chimica.js non supera quella del clima');
@@ -304,14 +310,11 @@ prova('gravità, anno, giorno, schiacciamento e temperatura di equilibrio discen
   nota(2, 'il blocco mareale dei pianeti è una soglia sulla distanza (0,4 UA·M^⅓·età^⅙); la legge di lune.js (tempoBlocco, con massa, raggio e rigidità del corpo) dice altro',
     { casi: discordi, su: SOLIDI.length, tipico: `bloccati secondo cosmo.js ${perCosmo}, secondo lune.js ${perLune}`, dove: 'cosmo.js sistema() «bloccato = aM < 0.4·UA·…» contro lune.js tempoBlocco()' });
 }
-{ // 3. le nane bianche: luce e anno
-  const wd = SISTEMI.filter((s) => s.S0.stato === 'nana bianca' && s.S.pianeti.length);
-  const rL = wd.map((s) => (4 * Math.PI * s.S0.raggioM ** 2 * K.sigma * s.S0.T ** 4) / (1e-3 * LSOLE)), rA = wd.map((s) => Math.sqrt(s.S0.massaNascita / s.S0.massa));
-  nota(2, 'nane bianche: la luce che scalda i pianeti è 1/1000 del Sole per tutte, ma raggio e temperatura della stella (che il catalogo ha) ne danno un\'altra',
-    { casi: rL.filter((x) => Math.abs(Math.log(x)) > Math.log(1.25)).length, su: wd.length, tipico: `4πR²σT⁴ / luce usata: mediana ${num(mediana(rL))}`, massimo: `da ${num(minimo(rL))} a ${num(massimo(rL))}`, dove: 'cosmo.js sistema() «S.stato === \'nana bianca\' ? 1e-3» contro galassia() (T, raggioM del resto)' });
-  nota(2, 'nane bianche: anno, sfera di Hill e blocco dei pianeti usano la massa che la stella aveva alla nascita, sull\'orbita già allargata dalla perdita di massa',
-    { casi: wd.length, su: wd.length, tipico: `anno usato / anno di Keplero con la massa di oggi: mediana ${num(1 / mediana(rA))}`, massimo: `fino a ${num(1 / massimo(rA))}`, dove: 'cosmo.js sistema() «Mst = (S.massaNascita || S.massa)» dopo «pianeti[i].a *= k»' });
-}
+prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e della loro temperatura (4πR²σT⁴)', () => {
+  const wd = PIANETI.filter((x) => x.S0.stato === 'nana bianca'); assert.ok(wd.length > 50);
+  for (const x of wd) tra(x.p.Lw / (4 * Math.PI * x.S0.raggioM ** 2 * K.sigma * x.S0.T ** 4), 1 - 1e-9, 1 + 1e-9, 'luce della nana bianca');
+  for (const x of PIANETI.filter((y) => y.viva)) tra(x.p.Lw / (LG.stella(x.S0.massa).L * LSOLE), 1 - 1e-9, 1 + 1e-9, 'luce della stella viva');
+});
 { // 4. la pressione e l'ebollizione
   const conAria = PIANETI.filter(({ p }) => isFinite(p.clima.pressione) && p.clima.pressione > 0 && p.atmosfera), r = conAria.map(({ p }) => p.atmosfera.pressione / p.clima.pressione);
   nota(3, 'la pressione dell\'aria: chimica.atmosfera() ne dà meno di clima() quando i gas gelano, ma effetto serra, stato dell\'acqua e vento usano quella di clima()',
@@ -356,7 +359,7 @@ const SCELTI = [
   ['un mondo ghiacciato', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && !p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un mondo ghiacciato bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un mondo ghiacciato lontano dalla sua stella', SOLIDI.find(({ p }) => p.tipo === 'ghiacciato' && p.aM > 8 * UA && p.interno.tettonica !== 'a placche')],
-  ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
+  ['un roccioso coperto da un oceano profondo', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && !p.clima.acqua.startsWith('vapore') && p.interno.acquaKg / 1000 / (4 * Math.PI * p.raggioM ** 2) > 2e4 && p.interno.tettonica !== 'a placche')],
   ['un roccioso con il mare e le placche', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
   ['un roccioso con il mare, bloccato dalle maree', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && p.interno.tettonica !== 'a placche')],
   ['un roccioso dove l\'acqua è vapore', SOLIDI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],

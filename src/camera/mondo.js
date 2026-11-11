@@ -194,6 +194,60 @@ function sagomeImpresse(mondo) {
   }));
 }
 
+// ---------- LA CINEMATICA VERA dei decadimenti e degli urti (solo con «relativita»). Energie e impulsi si
+// contano in masse, con c = 1: ε = γ·m, π = γ·β·m; la luce ha ε = π. Un quadrivettore è { e, x, y }.
+// n corpi nel riferimento in cui il loro impulso totale è zero, con massa invariante W: a ciascuno una direzione e
+// una spinta a caso, si toglie la media (così la somma è zero) e poi si riscalano tutte insieme finché l'energia
+// torna (Σ√(m² + λ²q²) = W). Per due corpi è la cinematica esatta: schiena contro schiena, con l'impulso obbligato.
+function spartisci(W, masse, caso) {
+  const n = masse.length, qx = new Array(n), qy = new Array(n); let mx = 0, my = 0, somma = 0;
+  for (let i = 0; i < n; i++) { const r = 0.2 + 0.8 * caso(), a = DUE_PI * caso(); qx[i] = r * Math.cos(a); qy[i] = r * Math.sin(a); mx += qx[i] / n; my += qy[i] / n; }
+  for (let i = 0; i < n; i++) { qx[i] -= mx; qy[i] -= my; somma += Math.hypot(qx[i], qy[i]); }
+  if (!(somma > 1e-9)) { qx.fill(0); qy.fill(0); qx[0] = 1; qx[1] = -1; somma = 2; }
+  const energia = (l) => { let e = 0; for (let i = 0; i < n; i++) e += Math.sqrt(masse[i] * masse[i] + l * l * (qx[i] * qx[i] + qy[i] * qy[i])); return e; };
+  let lo = 0, hi = W / somma; // (l'energia è almeno λ·Σ|q|: la radice sta sotto W/Σ|q|)
+  for (let k = 0; k < 90; k++) { const m = (lo + hi) / 2; if (energia(m) < W) lo = m; else hi = m; }
+  return masse.map((m, i) => ({ e: Math.sqrt(m * m + lo * lo * (qx[i] * qx[i] + qy[i] * qy[i])), x: lo * qx[i], y: lo * qy[i] }));
+}
+// la spinta di Lorentz: un quadrivettore visto da un riferimento in cui il suo va a velocità (bx, by)·c
+function spinta(v, bx, by) {
+  const b2 = bx * bx + by * by; if (!(b2 > 0)) return v;
+  const g = 1 / Math.sqrt(1 - b2), lungo = (v.x * bx + v.y * by) / b2, k = (g - 1) * lungo + g * v.e;
+  return { e: g * (v.e + v.x * bx + v.y * by), x: v.x + k * bx, y: v.y + k * by };
+}
+// Le figlie di una madre con quadrivettore «madre» e direzione (dx, dy). «specie» è quella della madre:
+//   canali      le liste di figlie possibili, dalla più ricca alla più povera (nasce la prima per cui l'energia basta);
+//               se mancano, vale la lista «figli»
+//   bersaglio   il corpo fermo contro cui avviene l'urto (un nucleone, un nucleo): entra nel conto con la sua massa
+//   spettatore  il bersaglio non si rompe e non entra tra le figlie del canale: prende solo l'impulso che avanza (il
+//               meno possibile, in avanti), e le figlie partono in avanti (un fotone che fa una coppia accanto a un nucleo)
+// Restituisce [{ specie, e, x, y }] (anche il bersaglio, dopo), o null se l'energia non basta per nessun canale.
+function figlieVere(sp, madre, dx, dy, catalogo, caso) {
+  const massa = (nome) => { const s = risolviSpecie(nome, catalogo); return s.luce ? 0 : s.m ?? 1; };
+  const canali = sp.canali || (sp.figli ? [sp.figli.map((f) => (typeof f.specie === 'string' ? f.specie : f.specie.nome))] : []);
+  const M = sp.bersaglio ? massa(sp.bersaglio) : 0, pm = Math.hypot(madre.x, madre.y);
+  if (sp.bersaglio && sp.spettatore) {
+    for (const nomi of canali) {
+      const masse = nomi.map(massa), soglia = masse.reduce((a, b) => a + b, 0), Wtot = Math.sqrt(Math.max(0, (madre.e + M) ** 2 - pm * pm));
+      if (nomi.length < 2 || !(Wtot - M > soglia * 1.000001)) continue;
+      // la massa invariante dell'insieme delle figlie: poco sopra la soglia (così partono strette, in avanti)
+      const u = caso(), w = Math.min(soglia * (1 + 3 * u * u), soglia + 0.9 * (Wtot - M - soglia));
+      let rinculo = 0, ef = madre.e, pf = 0, q = 0;
+      for (let k = 0; k < 6; k++) { ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf; rinculo = Math.sqrt(M * M + q * q) - M; }
+      const bx = (pf / ef) * dx, by = (pf / ef) * dy, fuori = spartisci(w, masse, caso).map((v, i) => ({ specie: nomi[i], ...spinta(v, bx, by) }));
+      fuori.push({ specie: sp.bersaglio, e: M + rinculo, x: q * dx, y: q * dy });
+      return fuori;
+    }
+    return null;
+  }
+  const e = madre.e + M, W = Math.sqrt(Math.max(0, e * e - pm * pm));
+  for (const nomi of canali) {
+    const masse = nomi.map(massa); if (nomi.length < 2 || !(W > masse.reduce((a, b) => a + b, 0) * 1.000001)) continue;
+    return spartisci(W, masse, caso).map((v, i) => ({ specie: nomi[i], ...spinta(v, madre.x / e, madre.y / e) }));
+  }
+  return null;
+}
+
 export function simulaMondo(mondo, opzioni = {}) {
   // più esposizioni sulla stessa lastra: ognuna con i suoi campi, le sue masse,
   // i suoi specchi e le sue sorgenti; le specie, la pellicola e c sono comuni
@@ -273,7 +327,7 @@ export function simulaMondo(mondo, opzioni = {}) {
     // stessa specie decadono ognuna a un istante diverso; la specie ne dà solo la media)
     // una particella può anche CONTINUARE da un livello più grande: con il suo indirizzo (ev), il tempo
     // proprio e la strada già fatti; così il suo caso è lo stesso, e decade dove decadeva lassù
-    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.nascita ?? s.t0 ?? 0, sorgente: i, generazione: s.generazione ?? 0, madre: null, vita: s.vita, ev: s.ev ?? `${i}`, tp0: s.tp0 ?? 0, percorso0: s.percorso0 ?? 0 };
+    return { pos: s.pos.slice(), vel: [Math.cos(s.dir ?? 0) * v, Math.sin(s.dir ?? 0) * v], t: s.t0 ?? 0, specie, nascita: s.nascita ?? s.t0 ?? 0, sorgente: i, generazione: s.generazione ?? 0, madre: null, vita: s.vita, ev: s.ev ?? `${i}`, tp0: s.tp0 ?? 0, percorso0: s.percorso0 ?? 0, gamma: s.gamma, impulso: s.impulso };
   }).filter(Boolean);
   let nate = 0;
 
@@ -286,12 +340,23 @@ export function simulaMondo(mondo, opzioni = {}) {
     // la vita: nel proprio tempo (vitaMedia, si dilata con la velocità) o come cammino libero in
     // un mezzo (camminoLibero: l'urto con la materia, contato nel tempo del laboratorio)
     const vita = p.vita ?? sp.vita ?? (sp.vitaMedia != null ? -sp.vitaMedia * Math.log(1 - caso()) : Infinity);
-    const urto = sp.camminoLibero != null ? -sp.camminoLibero * Math.log(1 - caso()) : Infinity; // in unità di lunghezza
+    let urto = sp.camminoLibero != null ? -sp.camminoLibero * Math.log(1 - caso()) : Infinity; // in unità di lunghezza
     let tp = p.tp0 ?? 0, percorso = p.percorso0 ?? 0; // il tempo proprio e la strada fatta
     statoA(p.t); let scatto = prossimoScatto(p.t);
     const visibile = sp.visibile ?? q !== 0;
     const larghezza = (v) => (!visibile ? 0 : q ? pel.w0 * Math.abs(q) * Math.min(pel.saturazione, pel.vRif / Math.max(v, 1e-9)) : pel.w0 * 0.35);
     let [x, y] = p.pos, [vx, vy] = p.vel, t = p.t;
+    // IN RELATIVITÀ lo stato di una particella con massa è il suo γ (l'energia, in masse), non la velocità: vicino a c
+    // la velocità non distingue più un'energia dall'altra. La velocità (per avanzare) discende da γ, e nessuna è
+    // tagliata: un elettrone può avere γ centomila. γ cambia solo dove la materia frena o la gravità tira.
+    let gamS = 1;
+    const veloceCome = (g) => C * Math.sqrt(Math.max(0, 1 - 1 / (g * g)));
+    if (rel && !luce) {
+      const v0 = Math.hypot(vx, vy);
+      if (p.gamma > 1 && v0 > 0) { gamS = p.gamma; const k = veloceCome(gamS) / v0; vx *= k; vy *= k; } else gamS = 1 / Math.sqrt(Math.max(1e-12, 1 - (v0 * v0) / (C * C)));
+    }
+    // il quadrivettore di adesso (in masse, c = 1), e le figlie che la cinematica permette (null: l'energia non basta)
+    const quadri = () => { const v = Math.hypot(vx, vy) || 1e-12, pi = luce ? (p.impulso ?? m * C) / C : m * Math.sqrt(Math.max(0, gamS * gamS - 1)); return { e: luce ? pi : gamS * m, x: (pi * vx) / v, y: (pi * vy) / v }; };
     let c = campoIn(x, y);
     // il nome della legge che agisce in un punto, per colorare e per spiegare
     const legge = (cc, gx, gy, v) => {
@@ -311,8 +376,12 @@ export function simulaMondo(mondo, opzioni = {}) {
       // un interruttore scatta: il mondo cambia qui, la particella prosegue nel mondo nuovo
       if (t >= scatto - 1e-12) { statoA(t); scatto = prossimoScatto(t); c = campoIn(x, y); }
       if (S.L.decadimento && (rel ? tp >= vita : t >= p.nascita + vita)) { fine = 'decade'; break; }
-      if (percorso >= urto) { fine = 'decade'; break; }
-      const gam = rel ? 1 / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : 1;
+      if (percorso >= urto) {
+        // (in relatività un urto avviene solo se l'energia basta almeno per il canale più povero; se no, prosegue)
+        if (!rel || !sp.figli || !(sp.canali || sp.bersaglio) || figlieVere(sp, quadri(), vx / v, vy / v, catalogo, () => 0.5)) { fine = 'decade'; break; }
+        urto = Infinity;
+      }
+      const gam = rel ? (luce ? 1 / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : gamS) : 1;
       const w = q ? (q * c.B) / (m * gam) : 0, kq = q ? (c.K * q * q) / m : 0;
       // l'accelerazione di gravità: per la luce solo la parte trasversale, doppia, divisa per n²
       const accel = (px, py, ux, uy) => {
@@ -342,7 +411,8 @@ export function simulaMondo(mondo, opzioni = {}) {
         wx = v1 * (ux * cf - uy * sf); wy = v1 * (ux * sf + uy * cf);
         if (masse.length) { const u = Math.hypot(wx, wy) || 1e-12, [bx, by] = accel(nx, ny, wx / u, wy / u); wx += (bx * h) / 2; wy += (by * h) / 2; }
         if (luce) { const u = Math.hypot(wx, wy) || 1e-12, s = C / u; wx *= s; wy *= s; }
-        else { const u = Math.hypot(wx, wy); if (u > 0.99 * C) { const s = (0.99 * C) / u; wx *= s; wy *= s; } } // nessuna particella con massa raggiunge c
+        else if (!rel) { const u = Math.hypot(wx, wy); if (u > 0.99 * C) { const s = (0.99 * C) / u; wx *= s; wy *= s; } } // nessuna particella con massa raggiunge c
+        else { const u = Math.hypot(wx, wy); if (u >= C) { const s = (C * (1 - 1e-12)) / u; wx *= s; wy *= s; } } // (in relatività il limite è c, e l'energia sta in γ)
         return { x: nx, y: ny, vx: wx, vy: wy, ferma: kq > 0 && v3 <= 0 };
       };
       let s = avanza(dt);
@@ -353,6 +423,11 @@ export function simulaMondo(mondo, opzioni = {}) {
         dt = hi; s = avanza(dt);
       }
       percorso += Math.hypot(s.x - x, s.y - y); x = s.x; y = s.y; vx = s.vx; vy = s.vy; t += dt; if (rel) tp += dt / gam;
+      if (rel && !luce) { // γ: nuovo dove materia o gravità hanno cambiato la velocità; altrove resta lui, e la velocità lo segue
+        const u = Math.hypot(vx, vy);
+        if (kq || masse.length) gamS = 1 / Math.sqrt(Math.max(1e-12, 1 - (u * u) / (C * C)));
+        else if (u > 0) { const k = veloceCome(gamS) / u; vx *= k; vy *= k; }
+      }
       // il corpo di una massa: chi lo tocca ci cade dentro
       if (masse.length) {
         const { d, chi } = superficie(x, y);
@@ -376,19 +451,31 @@ export function simulaMondo(mondo, opzioni = {}) {
       punti.push([x, y, visibile, t, larghezza(Math.hypot(vx, vy)), legge(c, gg[0], gg[1], Math.hypot(vx, vy))]);
       if (s.ferma) { fine = 'ferma'; vx = 0; vy = 0; break; }
     }
-    if (visibile && punti.length > 1) tracce.push({ id: tracce.length, punti, fine, specie: sp, sorgente: p.sorgente, generazione: p.generazione, madre: p.madre, evento: p.ev });
+    if (visibile && punti.length > 1) tracce.push({ id: tracce.length, punti, fine, specie: sp, sorgente: p.sorgente, generazione: p.generazione, madre: p.madre, evento: p.ev, ...(rel ? (luce ? { impulso: p.impulso ?? m * C } : { gamma: gamS }) : {}) });
     // il decadimento: le figlie partono da qui, ora
     if (fine === 'decade' && sp.figli) {
-      const v = Math.hypot(vx, vy), dir = Math.atan2(vy, vx), P = luce ? (p.impulso ?? m * C) : rel ? (m * v) / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : m * v;
-      sp.figli.forEach((f, k) => {
-        const estrai = (x, d) => (Array.isArray(x) ? x[0] + caso() * (x[1] - x[0]) : x ?? d);
-        const fs = risolviSpecie(f.specie, catalogo), a = dir + (estrai(f.angolo, 0) * Math.PI) / 180, mf = fs.m ?? 1;
-        const pf = estrai(f.quota, 0.5) * (P || m * pel.vRif);
-        // con la relatività: dall'impulso alla velocità, v = p / √(m² + (p/c)²), mai oltre c
-        const vf = fs.luce ? C : f.v != null ? f.v : rel ? Math.min(0.99 * C, pf / Math.sqrt(mf * mf + (pf / C) ** 2)) : Math.min(0.95 * C, pf / mf);
-        coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, impulso: fs.luce && rel ? pf : undefined, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
-      });
-      decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione, evento: p.ev });
+      // IN RELATIVITÀ: la cinematica vera. Le figlie nascono nel riferimento della madre (o del centro di massa, se c'è
+      // un bersaglio) con energia e impulso che tornano esatti, poi la spinta di Lorentz le porta nel laboratorio. Le
+      // figlie «perse» (neutrini, il nucleone o il nucleo colpito) prendono la loro parte ma non si seguono.
+      const prima = rel ? quadri() : null, v0 = Math.hypot(vx, vy) || 1e-12, vere = rel ? figlieVere(sp, prima, vx / v0, vy / v0, catalogo, caso) : null;
+      if (vere) {
+        vere.forEach((f, k) => {
+          const fs = risolviSpecie(f.specie, catalogo), pi = Math.hypot(f.x, f.y); if (fs.persa || !(pi > 0)) return;
+          const mf = fs.luce ? 0 : fs.m ?? 1, vf = fs.luce ? C : (C * pi) / f.e;
+          coda.push({ pos: [x, y], vel: [(vf * f.x) / pi, (vf * f.y) / pi], t, nascita: t, specie: fs, impulso: fs.luce ? pi * C : undefined, gamma: fs.luce ? undefined : f.e / mf, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
+        });
+      } else {
+        const v = Math.hypot(vx, vy), dir = Math.atan2(vy, vx), P = luce ? (p.impulso ?? m * C) : rel ? (m * v) / Math.sqrt(Math.max(1e-12, 1 - (v * v) / (C * C))) : m * v;
+        sp.figli.forEach((f, k) => {
+          const estrai = (x, d) => (Array.isArray(x) ? x[0] + caso() * (x[1] - x[0]) : x ?? d);
+          const fs = risolviSpecie(f.specie, catalogo), a = dir + (estrai(f.angolo, 0) * Math.PI) / 180, mf = fs.m ?? 1;
+          const pf = estrai(f.quota, 0.5) * (P || m * pel.vRif);
+          // con la relatività: dall'impulso alla velocità, v = p / √(m² + (p/c)²), mai oltre c
+          const vf = fs.luce ? C : f.v != null ? f.v : rel ? Math.min(0.99 * C, pf / Math.sqrt(mf * mf + (pf / C) ** 2)) : Math.min(0.95 * C, pf / mf);
+          coda.push({ pos: [x, y], vel: [Math.cos(a) * vf, Math.sin(a) * vf], t, nascita: t, specie: fs, impulso: fs.luce && rel ? pf : undefined, sorgente: p.sorgente, generazione: p.generazione + 1, madre: { specie: sp.nome, t, evento: p.ev }, ev: `${p.ev}.${k}` });
+        });
+      }
+      decadimenti.push({ pos: [x, y], t, specie: sp.nome, sorgente: p.sorgente, generazione: p.generazione, evento: p.ev, ...(vere ? { prima, bersaglio: sp.bersaglio ?? null, prodotti: vere } : {}) });
     }
   }
   for (const s of sagomeImpresse(mondo)) tracce.push({ ...s, id: tracce.length });

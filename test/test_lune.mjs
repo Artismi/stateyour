@@ -148,4 +148,35 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto legato al pianeta, e in f
   console.log(`      (${pianeti} pianeti, ${trovate} lune; la chiamata più lenta ${peggio.toFixed(2)} ms)`);
 });
 
+prova('con l\'urto gigante vero del pianeta (dalla storia degli impatti) niente è sorteggiato: la luna c\'è se e solo se l\'urto l\'ha fatta', () => {
+  // l'urto della Terra com'è andato: 60 milioni di anni dopo la nascita del Sole, una luna di 7,35·10²² kg, un giorno di 5 ore
+  const URTO = { t: 6e7, giornoDopo: 5 * 3600, luna: { massaKg: LUNA.massaKg, mu: LUNA.massaKg / TERRA.massaKg } }, RH = raggioHill(TERRA);
+  for (let s = 1; s <= 40; s++) {
+    const u = lune(TERRA, { ...SOLE, urto: URTO }, s).filter((l) => l.origine === 'urto');
+    assert.equal(u.length, 1, `seme ${s}`); const l = u[0];
+    assert.equal(l.massaKg, LUNA.massaKg); assert.equal(l.giornoInizialePianeta, 5 * 3600);
+    tra(l.aM / 1e8, 2.8, 5, 'distanza oggi (centinaia di migliaia di km: 3,84)');
+    tra(l.giornoPianeta / 3600, 12, 40, 'il giorno della Terra oggi, frenata dalla Luna (ore: 24)');
+    assert.ok(l.bloccata && l.forma.rotonda && l.stato === 'fredda e ferma' && l.aM < 0.4 * RH && l.periodo > l.giornoPianeta);
+    // il pianeta non ha avuto urti giganti, o l'urto non ha lasciato un disco: nessuna luna da urto, qualunque sia il seme
+    assert.ok(!lune(TERRA, { ...SOLE, urto: null }, s).some((x) => x.origine === 'urto'));
+    assert.ok(!lune(TERRA, { ...SOLE, urto: { ...URTO, luna: null } }, s).some((x) => x.origine === 'urto'));
+    assert.ok(!lune({ ...TERRA, bloccato: true }, { ...SOLE, urto: URTO }, s).some((x) => x.origine === 'urto'), 'un pianeta bloccato la perde lo stesso');
+    assert.ok(!lune(GIOVE, { ...SOLE, urto: URTO }, s).some((x) => x.origine === 'urto'), 'un gigante non ha lune da urto');
+  }
+  const una = (urto, P = TERRA) => lune(P, { ...SOLE, urto }, 1).find((l) => l.origine === 'urto');
+  // le maree lavorano da quando la luna è nata: un urto recente, una luna ancora vicina e un giorno ancora corto
+  const vecchia = una(URTO), giovane = una({ ...URTO, t: 4.4e9 });
+  assert.ok(giovane.aM < 0.75 * vecchia.aM && giovane.giornoPianeta < vecchia.giornoPianeta, `${giovane.aM} contro ${vecchia.aM}`);
+  assert.ok(Math.abs(vecchia.aM - orbitaDopoLeMaree(TERRA, LUNA.massaKg, 1.2 * limiteRoche(TERRA, vecchia.densita), 4.5e9 - 6e7)) < 1e-6 * vecchia.aM);
+  // una luna più pesante frena di più il pianeta; una molto pesante lo ferma: girano faccia a faccia, il mese lungo quanto il giorno
+  const pesante = una({ ...URTO, luna: { massaKg: 3 * LUNA.massaKg } }), doppio = una({ ...URTO, luna: { massaKg: 0.1 * TERRA.massaKg } });
+  assert.ok(pesante.giornoPianeta > vecchia.giornoPianeta && Math.abs(doppio.periodo / doppio.giornoPianeta - 1) < 1e-3, `mese ${doppio.periodo}, giorno ${doppio.giornoPianeta}`);
+  // se dopo l'urto il pianeta gira più piano di quanto la luna orbita appena nata, la luna ricade
+  assert.equal(una({ ...URTO, giornoDopo: 30 * 3600 }), undefined);
+  // lo stesso ingresso dà lo stesso risultato
+  assert.equal(JSON.stringify(lune(TERRA, { ...SOLE, urto: URTO }, 5)), JSON.stringify(lune(TERRA, { ...SOLE, urto: URTO }, 5)));
+  console.log(`      (la Luna dall'urto vero: oggi a ${(vecchia.aM / 1e6).toFixed(0)} mila km, giorno della Terra ${(vecchia.giornoPianeta / 3600).toFixed(1)} ore; con una luna di un decimo del pianeta: mese e giorno di ${(doppio.periodo / 86400).toFixed(1)} giorni terrestri)`);
+});
+
 console.log(`\n${ok} prove superate`);

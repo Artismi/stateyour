@@ -20,7 +20,7 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
+import { COSTANTI, etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
 import { interno } from './geologia.js';
 import { formaPianeti } from './disco.js';
 import { lune } from './lune.js';
@@ -141,7 +141,8 @@ export const galassia = memo((n, id) => {
       const a = G.angolo + (2 * Math.PI * braccio) / G.bracci + Math.log(r / 0.08) / Math.tan(G.passo) + gauss() * (c() < 0.7 ? 0.18 : 0.6);
       x = r * Math.cos(a); y = r * Math.sin(a);
     }
-    // la stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
+    // (ogni stella, viva o morta, porta la sua «eta»: gli anni dalla nascita a oggi. È l'unica età del sistema: quella
+    // dei pianeti, del loro interno e delle lune.) La stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
     // misurata, e un campo magnetico suo; poi vive secondo le sue equazioni fino a «adesso»
     const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 * ANNO : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita, vita = stellaVera(m0);
     // la METALLICITÀ (in unità del Sole): il gas da cui nasce è stato arricchito dalle supernove delle
@@ -153,7 +154,7 @@ export const galassia = memo((n, id) => {
       stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0, Z });
     } else {
       const f = fine(m0, B0), morta = (eta - vita.vita * ANNO) / ANNO;
-      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z });
+      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, eta: eta / ANNO, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z });
     }
   }
   // le sorgenti dei raggi cosmici EMERGONO dalla storia: le supernove nascono dalle stelle massicce
@@ -202,7 +203,7 @@ export const sistema = memo((n, gid, sid) => {
   // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
   // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
   const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: (S.eta ?? 5e9) + (S.morta ?? 0) }, semeEvento('disco', n, gid, sid)).slice(0, PIANETI_MAX);
+  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeEvento('disco', n, gid, sid)).slice(0, PIANETI_MAX);
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
     return {
@@ -213,11 +214,12 @@ export const sistema = memo((n, gid, sid) => {
       colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[q.tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
     };
   });
-  // una nana bianca: quand'era gigante ha inghiottito i pianeti vicini, e perdendo massa ha lasciato
+  // una gigante rossa inghiotte i pianeti vicini; la nana bianca che ne resta, avendo perso massa, ha anche lasciato
   // allontanare gli altri (l'orbita si allarga come la massa iniziale su quella finale)
-  if (S.stato === 'nana bianca') { const k = (S.massaNascita || 1) / S.massa; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
-  // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è fioca: 1/1000 del Sole)
-  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = (viva ? stellaVera(S.massa).L : S.stato === 'nana bianca' ? 1e-3 : 0) * LSOLE;
+  if (S.stato === 'nana bianca' || S.stato === 'gigante rossa') { const k = S.stato === 'nana bianca' ? (S.massaNascita || 1) / S.massa : 1; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
+  // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è piccola: la sua luce è quella di una
+  // sfera con il suo raggio e la sua temperatura, 4πR²σT⁴: da un decimo del Sole appena nata a meno di un millesimo)
+  const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
@@ -225,8 +227,9 @@ export const sistema = memo((n, gid, sid) => {
     // l'asse inclinato a caso, di solito poco); le maree della stella la frenano finché il pianeta le mostra
     // sempre la stessa faccia: succede se è vicino (il tempo cresce come la distanza alla sesta) e la stella
     // è pesante; allora il giorno dura quanto l'anno (Keplero)
-    const Mst = (S.massaNascita || S.massa) * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
-    const eta = (S.eta ?? 5e9) + (S.morta ?? 0), bloccato = aM < 0.4 * UA * Math.cbrt(Mst / 1.989e30) * Math.pow(eta / 4.5e9, 1 / 6) && p.tipo !== 'gassoso';
+    // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
+    const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
+    const eta = S.eta, bloccato = aM < 0.4 * UA * Math.cbrt(Mst / 1.989e30) * Math.pow(eta / 4.5e9, 1 / 6) && p.tipo !== 'gassoso';
     const giorno = bloccato ? anno : (p.tipo === 'gassoso' ? tra(9, 16) : tra(10, 40)) * 3600;
     const omega = (2 * Math.PI) / giorno;
     Object.assign(p, { aM, Lw, Mstella: Mst, anno, giorno, bloccato, obliquita: bloccato ? 0 : Math.min(85, Math.abs((c() + c() + c() - 1.5) * 30) + (c() < 0.08 ? tra(30, 90) : 0)) });
@@ -246,7 +249,7 @@ export const sistema = memo((n, gid, sid) => {
         minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
     } catch { p.atmosfera = null; p.prebiotica = null; }
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
-    p.lune = lune(p, { eta, Z: S.Z ?? 1 }, semeEvento('lune', n, gid, sid, p.id));
+    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita }, semeEvento('lune', n, gid, sid, p.id));
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
     // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
     p.origine = hash(semeEvento('mantello', n, gid, sid, p.id), Math.round(Math.log(p.massaKg) * 1e6));

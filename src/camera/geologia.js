@@ -30,7 +30,7 @@ export function interno(P, stella) {
     const B0 = 4.2e-4 * Math.pow(P.massaKg / 1.9e27, 0.6);
     return { nucleo: 0.1, mantello: 'idrogeno metallico', crosta: 0, q: 5, dinamo: true, B0, tettonica: 'nessuna (è un gas)', vulcani: 0 };
   }
-  const ferro = P.composizione.ferro ?? 0.1, eta = stella?.eta ?? (stella?.morta != null ? 5e9 : 4.5e9), Z = stella?.Z ?? 1;
+  const ferro = P.composizione.ferro ?? 0.1, eta = stella?.eta ?? 4.5e9, Z = stella?.Z ?? 1;
   const M = P.massaKg, R = P.raggioM, rhoMedia = M / ((4 / 3) * Math.PI * R ** 3);
   const Rc = R * Math.cbrt((ferro * rhoMedia) / TERRA.rhoC);
   // il calore: radioattività (più metalli, più calore) che cala con l'età, più il calore iniziale che resta

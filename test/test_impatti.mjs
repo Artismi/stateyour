@@ -1,9 +1,12 @@
 // test_impatti.mjs — la storia degli impatti: i numeri veri della Terra e della Luna, e storie che emergono dalla formazione
 import assert from 'node:assert/strict';
-import { storiaImpatti, urtoGigante, contaCrateri, improntaMantello, crateriVisibili, ariaDi, attraversaAria, cratere, giriChambers, deltaChambers, classeDi, diametroClasse, CLASSI } from '../src/camera/impatti.js';
+import { storiaImpatti, giganteDi, urtoGigante, contaCrateri, improntaMantello, crateriVisibili, ariaDi, attraversaAria, cratere, giriChambers, deltaChambers, classeDi, diametroClasse, CLASSI } from '../src/camera/impatti.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { MSOLE, UA } from '../src/camera/leggi.js';
-import { indirizzoDi, sistema } from '../src/camera/cosmo.js';
+import { indirizzoDi, sistema, semeEvento } from '../src/camera/cosmo.js';
+import { formaPianeti, disco, raggiNecessari, giriCheRegge } from '../src/camera/disco.js';
+import { lune } from '../src/camera/lune.js';
+import { evolviTettonica } from '../src/camera/tettonica.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -270,10 +273,10 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta
       const mia = b.detritiKg + b.restiKg;
       if (mia > 0) assert.ok(Math.abs((b.sulPianetaKg + b.aiViciniKg + b.scagliataKg + b.polvereKg + b.rimastaKg + b.daRilasciareKg) / mia - 1) < 1e-6, `${n} pianeta ${P.id}: bilancio`);
       if (s.gigante) { conGigante++; const g = s.gigante; if (g.luna) conLuna++; if (g.luna?.mu > 1e-3) luneGrosse++; if (g.obliquita > 90) retrogradi++; giorni.push(g.giornoDopo / 3600);
-        assert.ok(/urt[oi] gigant/.test(P.storia) && g.t === s.formazione && g.urti >= 1 && g.massaKg <= g.bersaglioKg * 1.0001 && Math.abs((g.massaKg + g.bersaglioKg) / P.massaKg - 1) < 1e-9);
-        assert.ok(g.giornoDopo > 3000 && g.obliquita >= 0 && g.obliquita <= 180 && g.detritiKg >= 0 && g.detritiKg < 0.1 * P.massaKg && g.lunaKg < 0.2 * P.massaKg && g.frazioneFusa > 0 && g.frazioneFusa <= 1, `${n} pianeta ${P.id}: ${JSON.stringify(g)}`);
+        assert.ok(/urt[oi] gigant/.test(P.storia) && g.t === s.formazione && g.urti >= 1 && g.massaKg <= g.bersaglioKg * 1.0001 && (g.massaKg + g.bersaglioKg) / P.massaKg < 1 + 1e-9);
+        assert.ok(g.giornoDopo > 3000 && g.obliquita >= 0 && g.obliquita <= 180 && g.detritiKg >= 0 && g.detritiKg < 0.1 * P.massaKg && g.lunaKg < 0.2 * P.massaKg && JSON.stringify(giganteDi(P, S, caso)) === JSON.stringify(g) && g.frazioneFusa > 0 && g.frazioneFusa <= 1, `${n} pianeta ${P.id}: ${JSON.stringify(g)}`);
       } else assert.ok(!/urt[oi] gigant/.test(P.storia) || P.tipo === 'gassoso');
-      if (b.restiKg > 0) { lenti++; assert.ok(/cresciuto piano/.test(P.storia)); }
+      if (b.restiKg > 0) { lenti++; assert.ok(P.formazione || /cresciuto piano/.test(P.storia)); }
       if (!s.grandi.length) puliti++;
       if (pianeti % 6) continue; // (le due letture, su un pianeta ogni sei: sono più lente della storia)
       const m = improntaMantello(s, 64, 32), v = crateriVisibili(s, { W: 64, H: 32 });
@@ -284,6 +287,54 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto al suo posto, e in fretta
   assert.ok(pianeti > 100 && urti > 1e4 && conGigante > 30 && conLuna > 10 && lenti > 10, `${pianeti} pianeti, ${urti} urti, ${conGigante} con urto gigante, ${conLuna} con luna, ${lenti} lenti`);
   assert.ok(mediana < 50 && novanta < 50, `storiaImpatti: mediana ${mediana} ms, 95 su 100 sotto ${novanta} ms`);
   console.log(`      (${pianeti} pianeti, ${urti} grandi urti; ${conGigante} con un urto gigante: ${conLuna} con un disco che fa una luna, ${luneGrosse} più pesante di un millesimo del pianeta; giorno dopo l'urto ${giorni.sort((x, y) => x - y)[giorni.length >> 1].toFixed(1)} ore (mediana), ${retrogradi} girano al contrario; ${lenti} embrioni lenti ancora bersagliati; ${puliti} col cielo pulito; storiaImpatti: mediana ${mediana.toFixed(1)} ms, 95 su 100 sotto ${novanta.toFixed(1)} ms, la più lenta ${tempi.at(-1).toFixed(0)} ms)`);
+});
+
+prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) niente è più stimato; e la catena arriva fino alle lune e al mantello', () => {
+  // la legge di Chambers è quella di disco.js, non una copia
+  assert.equal(giriChambers, giriCheRegge); assert.equal(deltaChambers, raggiNecessari);
+  // i pianeti di sistema() con la loro «formazione» (finché cosmo.js non la copia da sé, la si riprende da formaPianeti con lo stesso seme)
+  const veri = (a) => { const S = sistema(a.cosmo, a.galassia, a.stella); if (S.pianeti.every((P) => P.formazione)) return S;
+    const seme = semeEvento('disco', a.cosmo, a.galassia, a.stella);
+    for (const eta of [S.stella.eta, (S.stella.eta ?? 5e9) + (S.stella.morta ?? 0)]) { // (l'età con cui cosmo.js chiama formaPianeti)
+      const st = { massa: S.stella.massaNascita || S.stella.massa, Z: S.stella.Z ?? 1, eta }, nati = formaPianeti(st, seme), F = S.pianeti.map((P) => nati.find((q) => q.massaKg === P.massaKg && q.raggioM === P.raggioM)?.formazione);
+      if (F.every(Boolean)) return { stella: { ...S.stella, eta }, disco: disco(st, seme), pianeti: S.pianeti.map((P, k) => ({ ...P, formazione: F[k] })) }; }
+    throw new Error('i pianeti di sistema() non sono quelli di formaPianeti'); };
+  let pianeti = 0, giganti = 0, dischi = 0, lunePrese = 0, tardi = 0, lenti = 0, retro = 0, catena = 0; const giorni = [], rapporti = [], quando = [], tempi = [], visti = new Set();
+  for (let n = 1; n < 3000; n += 53) {
+    const a = indirizzoDi(n), chiave = `${a.cosmo}/${a.galassia}/${a.stella}`; if (visti.has(chiave)) continue; visti.add(chiave);
+    const S = veri(a), eta = S.stella.eta;
+    for (const P of S.pianeti) {
+      const F = P.formazione, caso = sorgente(`cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}/pianeta ${P.id}`), t0 = performance.now(), s = storiaImpatti(P, S, caso), g = s.gigante; tempi.push(performance.now() - t0); pianeti++;
+      assert.ok(Array.isArray(F.urti) && F.cibo >= 0 && F.tGas > 0 && F.mIso > 0 && F.urti.every((u, k) => u.bersaglioKg >= u.massaKg && u.delta >= 0 && u.tIncrocio >= F.tGas && u.tIncrocio <= eta && (k === 0 || u.tIncrocio >= F.urti[k - 1].tIncrocio)), `formazione di ${n}/${P.id}`);
+      assert.ok(!s.bilancio.stime.length, `niente stime: ${s.bilancio.stime}`);
+      assert.equal(JSON.stringify(giganteDi(P, S, caso)), JSON.stringify(g));
+      for (const v of [s.formazione, s.bilancio.arrivataKg, s.quiete.t, ...s.grandi.flatMap((x) => [x.t, x.cratereM, x.energiaJ])]) assert.ok(Number.isFinite(v));
+      if (s.bilancio.restiKg > 0) { lenti++; assert.equal(s.bilancio.restiKg, F.cibo); }
+      if (P.tipo === 'gassoso' || !F.urti.length) { assert.equal(g, null); assert.equal(s.formazione, Math.min(0.999 * eta, F.tGas)); continue; }
+      // l'urto gigante della storia è proprio l'ultimo di formaPianeti: stesse masse, e avviene poco dopo che le orbite si sono incrociate
+      const u = F.urti.at(-1); giganti++;
+      assert.ok(!u.laterale && g.bersaglioKg === u.bersaglioKg && g.massaKg === u.massaKg && g.urti === F.urti.length && g.t === s.formazione && g.t >= Math.min(u.tIncrocio, 0.9999 * eta) && g.t <= eta, `urto di ${n}/${P.id}`);
+      assert.ok(g.t - u.tIncrocio <= 0.5 * (eta - u.tIncrocio) + 1, `il tempo per trovarsi: ${g.t - u.tIncrocio} anni`);
+      rapporti.push(g.massaKg / g.bersaglioKg); quando.push((g.t - F.tGas) / eta); giorni.push(g.giornoDopo / 3600); if (g.t > 1e9) tardi++; if (g.obliquita > 90) retro++; if (g.luna) dischi++;
+      // le lune: con l'urto vero, la luna da urto c'è solo se l'urto l'ha fatta, e pesa quanto dice l'urto
+      if (P.tipo !== 'roccioso') continue;
+      const L = lune(P, { eta, Z: S.stella.Z ?? 1, urto: g }, 1).filter((l) => l.origine === 'urto');
+      assert.ok(L.length <= (g.luna ? 1 : 0)); if (!L.length) continue; lunePrese++;
+      assert.ok(L[0].massaKg === g.luna.massaKg && L[0].giornoInizialePianeta >= g.giornoDopo * 0.999 && L[0].giornoPianeta >= L[0].giornoInizialePianeta && L[0].periodo >= L[0].giornoPianeta * 0.999);
+      // e il mantello: l'impronta degli urti è lo stato da cui parte la tettonica (una volta ogni tanto: costa)
+      if (catena < 2 && s.grandi.length > 100) { catena++;
+        const r = evolviTettonica({ W: 64, H: 32, raggioM: P.raggioM, nucleo: P.interno.nucleo, q: Math.max(P.interno.q, 0.06), eta, placche: true, seme: 1, impronta: (W, H) => improntaMantello(s, W, H) });
+        assert.ok(r.storia.impronta === 'urti' && r.alt.every(Number.isFinite) && somma(r.cont) > 0); }
+    }
+  }
+  const q = (v, f) => [...v].sort((x, y) => x - y)[Math.floor(f * v.length)];
+  assert.ok(pianeti > 80 && giganti > 40 && lenti > 10 && catena === 2, `${pianeti} pianeti, ${giganti} con urto gigante, ${lenti} lenti, ${catena} catene`);
+  // gli ultimi urti giganti cadono presto: quasi tutti nel primo decimo della vita del sistema (con le stime, uno su quattro cadeva dopo il primo miliardo di anni)
+  tra(q(quando, 0.5), 0, 0.05, 'a che punto della vita cade l\'ultimo urto gigante (mediana)'); assert.ok(tardi < 0.2 * giganti, `dopo il primo miliardo di anni: ${tardi} su ${giganti}`);
+  tra(q(rapporti, 0.5), 0.3, 1, 'rapporto di massa tra i due corpi dell\'ultimo urto (mediana: gli embrioni di disco.js sono quasi pari)');
+  tra(q(giorni, 0.5), 1.5, 12, 'giorno dopo l\'urto (ore, mediana)'); tra(retro / giganti, 0.25, 0.75, 'pianeti che girano al contrario (gli urti arrivano da ogni parte: metà)');
+  assert.ok(q(tempi, 0.5) < 50 && q(tempi, 0.95) < 50);
+  console.log(`      (${pianeti} pianeti: ${giganti} con un urto gigante; l'ultimo cade a ${(100 * q(quando, 0.5)).toFixed(1)}% della vita (mediana), ${tardi} dopo il primo miliardo di anni; rapporto di massa ${q(rapporti, 0.5).toFixed(2)}; giorno dopo l'urto ${q(giorni, 0.5).toFixed(1)} ore, ${retro} al contrario; ${dischi} lasciano un disco che fa una luna, ${lunePrese} lune restano dopo le maree; ${lenti} con cibo ancora in giro)`);
 });
 
 console.log(`\n${ok} prove superate`);
