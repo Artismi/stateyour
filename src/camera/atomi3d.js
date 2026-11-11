@@ -145,11 +145,11 @@ export function preparaScena(scena, opz = {}) {
   // --- I PEZZI. Il passo fine s è il doppio della distanza media tra atomi (≈ 8 atomi per celletta); un pezzo è 8 s.
   const passoAtomi = Math.cbrt((Math.max(1, occupate) * cs * cs * cs) / Math.max(1, N)), s1 = Math.max(2 * Math.min(passoAtomi, cs), 2.2 * (rSomma / Math.max(1, N)), Math.max(...dim) / 4096);
   const lp = 8 * s1, px = Math.ceil(dim[0] / lp) || 1, py = Math.ceil(dim[1] / lp) || 1, pz = Math.ceil(dim[2] / lp) || 1;
-  const tanti = px * py * pz, tabella = tanti <= 4e6 ? new Int32Array(tanti).fill(-1) : new Map(), pezzoDi = new Int32Array(N), origini = [], conta = [];
+  const tanti = px * py * pz, mappa = tanti > 4e6, tabella = mappa ? new Map() : new Int32Array(tanti).fill(-1), pezzoDi = new Int32Array(N), origini = [], conta = [];
   for (let i = 0; i < N; i++) {
     const ix = Math.min(px - 1, Math.floor((pos[3 * i] - lo[0]) / lp)), iy = Math.min(py - 1, Math.floor((pos[3 * i + 1] - lo[1]) / lp)), iz = Math.min(pz - 1, Math.floor((pos[3 * i + 2] - lo[2]) / lp)), id = ix + px * (iy + py * iz);
-    let k = tabella.get ? tabella.get(id) ?? -1 : tabella[id];
-    if (k < 0) { k = origini.length; origini.push([lo[0] + ix * lp, lo[1] + iy * lp, lo[2] + iz * lp]); conta.push(0, 0); if (tabella.set) tabella.set(id, k); else tabella[id] = k; }
+    let k = mappa ? tabella.get(id) ?? -1 : tabella[id];
+    if (k < 0) { k = origini.length; origini.push([lo[0] + ix * lp, lo[1] + iy * lp, lo[2] + iz * lp]); conta.push(0, 0); if (mappa) tabella.set(id, k); else tabella[id] = k; }
     pezzoDi[i] = k; conta[2 * k + sepolto[i]]++;
   }
   const P = origini.length, inizio = new Int32Array(2 * P + 1); for (let k = 0; k < 2 * P; k++) inizio[k + 1] = inizio[k] + conta[k];
@@ -873,7 +873,7 @@ const densitaAcqua = (T, S = 0) => (1 - 6.8e-6 * (T - 277.13) ** 2) * (1 + 7.7e-
 // lo ione è fatto di più atomi). Chi ha i numeri veri di un punto (mare.js) passa `ioni: [{ el, quanti | perMolecola }]`.
 export const IONI = {
   'Na+': { el: 'Na', carica: 1, guscio: 6 }, 'K+': { el: 'K', carica: 1, guscio: 6 }, 'Mg2+': { el: 'Mg', carica: 2, guscio: 6 }, 'Ca2+': { el: 'Ca', carica: 2, guscio: 7 },
-  'Cl-': { el: 'Cl', carica: -1, guscio: 6 }, 'Fe2+': { el: 'Fe', carica: 2, guscio: 6 },
+  'Cl-': { el: 'Cl', carica: -1, guscio: 7 }, 'Fe2+': { el: 'Fe', carica: 2, guscio: 6 },
   'SO4(2-)': { el: 'S', carica: -2, guscio: 10, raggio: 0.24, raggioCentro: 0.105, intorno: { el: 'O', n: 4, d: 0.149, raggio: 0.152 } }, // tetraedro, S–O 1,49 Å
   'HCO3-': { el: 'C', carica: -1, guscio: 8, raggio: 0.21, raggioCentro: 0.076 * 2, intorno: { el: 'O', n: 3, d: 0.127, raggio: 0.152, piano: true } },
 };
@@ -909,13 +909,19 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
   }
   // --- le molecole: prima i gusci degli ioni, poi le altre su una griglia scossa
   const O = [], guscioDi = []; // ossigeni [x, y, z]; di quale ione è il guscio (−1: libera)
+  const ost = ostacoli ? grigliaOstacoli(ostacoli, origine) : null;
+  const candidatoSuOstacolo = (p) => { let su = false; ost.vicini(p, (q, R) => { if ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 < (R + 0.09) ** 2) su = true; }); return su; };
   const dentro = (p) => p[0] > 0.02 && p[1] > 0.02 && p[2] > 0.02 && p[0] < L[0] - 0.02 && p[1] < L[1] - 0.02 && p[2] < L[2] - 0.02;
   centri.forEach((c, i) => { for (const d of ruotaACaso(sullaSfera(c.s.guscio || 6), r)) { const p = [c.p[0] + d[0] * c.G, c.p[1] + d[1] * c.G, c.p[2] + d[2] * c.G]; if (dentro(p)) { O.push(p); guscioDi.push(i); } } });
-  const nGusci = O.length, liberi = Math.max(0, nAcqua - nGusci), passo = Math.cbrt(V / (liberi * 1.25 + 1)), n = L.map((l) => Math.max(1, Math.round(l / passo))), candidati = [];
-  for (let z = 0; z < n[2]; z++) for (let y = 0; y < n[1]; y++) for (let x = 0; x < n[0]; x++) {
-    const p = [((x + 0.5 + 0.7 * (r() - 0.5)) * L[0]) / n[0], ((y + 0.5 + 0.7 * (r() - 0.5)) * L[1]) / n[1], ((z + 0.5 + 0.7 * (r() - 0.5)) * L[2]) / n[2]];
-    if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + 0.2) ** 2)) continue;
-    candidati.push(p);
+  const nGusci = O.length, liberi = Math.max(0, nAcqua - nGusci); let candidati = [];
+  for (let piu = 1.15; piu < 3 && candidati.length < liberi; piu *= 1.12) { // la griglia si infittisce finché i posti bastano
+    const passo = Math.cbrt(V / (liberi * piu + 1)), n = L.map((l) => Math.max(1, Math.round(l / passo))); candidati = [];
+    for (let z = 0; z < n[2]; z++) for (let y = 0; y < n[1]; y++) for (let x = 0; x < n[0]; x++) {
+      const p = [((x + 0.5 + 0.7 * (r() - 0.5)) * L[0]) / n[0], ((y + 0.5 + 0.7 * (r() - 0.5)) * L[1]) / n[1], ((z + 0.5 + 0.7 * (r() - 0.5)) * L[2]) / n[2]];
+      if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + 0.08) ** 2)) continue;
+      if (ostacoli && candidatoSuOstacolo(p)) continue;
+      candidati.push(p);
+    }
   }
   for (let i = candidati.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = candidati[i]; candidati[i] = candidati[j]; candidati[j] = t; }
   for (let i = 0; i < Math.min(liberi, candidati.length); i++) { O.push(candidati[i]); guscioDi.push(-1); }
@@ -928,13 +934,13 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
     const cx = Math.min(g[0] - 1, Math.max(0, Math.floor(p[0] / lc))), cy = Math.min(g[1] - 1, Math.max(0, Math.floor(p[1] / lc))), cz = Math.min(g[2] - 1, Math.max(0, Math.floor(p[2] / lc)));
     for (let z = Math.max(0, cz - 1); z <= Math.min(g[2] - 1, cz + 1); z++) for (let y = Math.max(0, cy - 1); y <= Math.min(g[1] - 1, cy + 1); y++) for (let x = Math.max(0, cx - 1); x <= Math.min(g[0] - 1, cx + 1); x++) for (let j = testa[x + g[0] * (y + g[1] * z)]; j >= 0; j = dopo[j]) f(j);
   };
-  const ost = ostacoli ? grigliaOstacoli(ostacoli, origine) : null, d0 = 0.282, spinta = new Float32Array(3 * nO);
+  const d0 = 0.282, spinta = new Float32Array(3 * nO);
   for (let giro = 0; giro < 40; giro++) {
     rifaiCelle(); spinta.fill(0);
     for (let i = nGusci; i < nO; i++) {
       const p = O[i]; let sx = 0, sy = 0, sz = 0;
       vicini(p, (j) => { if (j === i) return; const q = O[j], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], d2 = dx * dx + dy * dy + dz * dz; if (d2 >= d0 * d0) return; const d = Math.sqrt(d2) || 1e-4, k = ((d0 - d) / d) * (j < nGusci ? 0.9 : 0.45); sx += dx * k; sy += dy * k; sz += dz * k; });
-      for (const c of centri) { const dx = p[0] - c.p[0], dy = p[1] - c.p[1], dz = p[2] - c.p[2], m = c.G + 0.19, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (m - d) / d; sx += dx * k; sy += dy * k; sz += dz * k; } }
+      for (const c of centri) { const dx = p[0] - c.p[0], dy = p[1] - c.p[1], dz = p[2] - c.p[2], m = c.G + 0.08, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (m - d) / d; sx += dx * k; sy += dy * k; sz += dz * k; } }
       if (ost) ost.vicini(p, (q, R) => { const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], m = R + 0.14, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (0.9 * (m - d)) / d; sx += dx * k; sy += dy * k; sz += dz * k; } });
       spinta[3 * i] = sx; spinta[3 * i + 1] = sy; spinta[3 * i + 2] = sz;
     }
