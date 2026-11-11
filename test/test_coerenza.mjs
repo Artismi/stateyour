@@ -200,7 +200,14 @@ prova('il velo di idrogeno ed elio lasciato dal disco è l\'aria primordiale del
     if (p.clima.tenuti.includes('idrogeno')) { tenuto++; assert.ok(H2 > 0.7 && (p.atmosfera.gas.He || 0) > 0.1, `velo tenuto ma aria di ${foto(p.atmosfera.gas).slice(0, 80)}`); tra(p.clima.pressione / (colonna * p.clima.g), 0.9, 1.001, 'pressione dell\'aria / peso del velo'); }
     else { fuggito++; assert.ok(H2 < 1e-6 && !(p.atmosfera?.gas?.He > 1e-6), 'velo non trattenuto ma ancora lì'); }
   }
-  assert.ok(tenuto >= 3 && fuggito >= 1, `${tenuto} veli tenuti, ${fuggito} fuggiti`);
+  assert.ok(tenuto >= 3, `${tenuto} veli tenuti, ${fuggito} fuggiti`);
+  // nel campione (dipende dalle stelle) può non esserci nessun velo fuggito: la legge si prova allora su due mondi fatti
+  // apposta, uguali in tutto tranne massa e distanza. Quello pesante e lontano tiene il velo, quello leggero e vicino lo perde
+  const mondo = (terre, raggi, ua) => CH.climaEAria({ Lw: 3.83e26, aM: ua * 1.496e11, massaKg: terre * 5.97e24, raggioM: raggi * 6.371e6, tipo: 'ghiacciato', acqua: 0.3, acquaKg: 0.3 * terre * 5.97e24,
+    anno: 3.156e7 * ua ** 1.5, obliquita: 0.3, bloccato: false, placche: false, composizione: { roccia: 0.5, ferro: 0.15, ghiaccio: 0.34, gas: 0.01 }, involucro: 0.01 }, { Z: 1 });
+  const pesante = mondo(8, 2.2, 3), leggero = mondo(0.5, 0.9, 0.3);
+  assert.ok(pesante.clima.tenuti.includes('idrogeno') && pesante.atmosfera.gas.H2 > 0.7 && pesante.atmosfera.gas.He > 0.1, 'otto Terre a 3 UA: il velo resta');
+  assert.ok(!leggero.clima.tenuti.includes('idrogeno') && !((leggero.atmosfera?.gas?.H2 || 0) > 1e-6) && pesante.clima.pressione > 5 * leggero.clima.pressione, 'mezza Terra a 0,3 UA: il velo è fuggito');
 });
 { // le galassie contro i barioni del cosmo
   for (const n of [1]) {
