@@ -23,15 +23,15 @@ const MONDI = SEMI.map((seme) => {
   // l'incasso: di quanto il letto è sceso rispetto ai quattro vicini, dove scorre molta acqua (la misura di test_biblioteca)
   const inc = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
   let d = 0, n = 0; for (let k = 0; k < W * H; k++) if (sf.alt[k] > sf.mare && se.lago[k] === 0 && se.flusso[k] > 30) { d += inc(se.alt, k) - inc(sf.alt, k); n++; }
-  // la rete dei fiumi sul rilievo finale: ogni cella di terra versa nel vicino più in basso (pendenza più ripida)
-  const giu = new Int32Array(W * H).fill(-1), dist = new Float64Array(W * H), S = new Float64Array(W * H), A = new Float64Array(W * H), L = new Float64Array(W * H);
-  for (let k = 0; k < W * H; k++) { if (!terra(k) || se.lago[k] > 0) continue; const i = k % W, j = (k - i) / W; let best = 0;
-    for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue; for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const q = jj * W + ((i + di + W) % W), dd = Math.hypot(di * 0.5 * (dx(j) + dx(jj)), dj * dy), s = (se.alt[k] - se.alt[q]) / dd; if (s > best) { best = s; giu[k] = q; dist[k] = dd; } } } S[k] = best; A[k] = se.flusso[k] * dx(j) * dy; }
-  // la lunghezza del corso più lungo a monte di ogni cella (Hack): dalle celle più alte in giù
-  const ord = Array.from({ length: W * H }, (_, k) => k).filter((k) => giu[k] >= 0).sort((a, b) => se.alt[b] - se.alt[a]);
-  for (const k of ord) { const q = giu[k]; if (L[k] + dist[k] > L[q]) L[q] = L[k] + dist[k]; }
+  // la rete dei fiumi è quella dell'erosione (versoValle: attraversa anche le conche colme); la pendenza e la distanza
+  // lungo di essa, l'area drenata dal flusso (celle × m/anno di pioggia → m² con un metro di pioggia l'anno)
+  const giu = se.versoValle, dist = new Float64Array(W * H), S = new Float64Array(W * H), A = new Float64Array(W * H), L = new Float64Array(W * H), monte = new Int32Array(W * H);
+  for (let k = 0; k < W * H; k++) { const q = giu[k], i = k % W, j = (k - i) / W; A[k] = se.flusso[k] * dx(j) * dy; if (q < 0) continue; const jq = (q - (q % W)) / W, di = i === q % W ? 0 : 1; dist[k] = Math.hypot(di * 0.5 * (dx(j) + dx(jq)), (jq - j) * dy); S[k] = (se.alt[k] - se.alt[q]) / dist[k]; monte[q]++; }
+  // la lunghezza del corso più lungo a monte di ogni cella (Hack): dalle sorgenti in giù
+  const ord = [], coda = []; for (let k = 0; k < W * H; k++) if (giu[k] >= 0 && monte[k] === 0) coda.push(k);
+  while (coda.length) { const k = coda.pop(), q = giu[k]; ord.push(k); if (q < 0) continue; if (L[k] + dist[k] > L[q]) L[q] = L[k] + dist[k]; if (--monte[q] === 0 && giu[q] >= 0) coda.push(q); }
   const lA = [], lS = [], hA = [], hL = [];
-  for (const k of ord) { if (se.flusso[k] > 8 && S[k] > 1e-6) { lA.push(Math.log(A[k])); lS.push(Math.log(S[k])); } if (se.flusso[k] > 4 && L[k] > 0) { hA.push(Math.log(A[k])); hL.push(Math.log(L[k])); } }
+  for (const k of ord) { if (terra(k) && se.lago[k] === 0 && se.flusso[k] > 8 && S[k] > 1e-6) { lA.push(Math.log(A[k])); lS.push(Math.log(S[k])); } if (terra(k) && se.flusso[k] > 4 && L[k] > 0) { hA.push(Math.log(A[k])); hL.push(Math.log(L[k])); } }
   return { seme, se, sf, incasso: d / n, fiumi: n, concavita: -pendenza(lA, lS), hack: pendenza(hA, hL) };
 });
 const tempoTutto = performance.now() - t0;

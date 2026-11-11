@@ -41,12 +41,25 @@ const TAVOLA = {
   K: ['potassio', 39.098, 1, 0.82, 5.03, 57], Ca: ['calcio', 40.078, 2, 1.00, 6.34, 17],
   Fe: ['ferro', 55.845, 3, 1.83, 7.50, 118],
 };
+// I METALLI DELLA TECNICA (e l'arsenico): gli stessi sei numeri, dalle stesse fonti (abbondanze nel Sole: Asplund e altri
+// 2009; per As e Hg, che nella fotosfera non si misurano, il valore delle meteoriti CI della stessa tabella [ricordati]).
+// Stanno in una tavola a parte perché NON entrano nella miscela del Sole di qui sotto (SOLE): il nichel aggiungerebbe lo
+// 0,5% alla massa dei metalli e sposterebbe di un soffio ogni pianeta già calcolato; gli altri nove pesano meno di 10⁻⁴.
+const TAVOLA_METALLI = {
+  Ti: ['titanio', 47.867, 4, 1.54, 4.95, 118], Ni: ['nichel', 58.693, 2, 1.91, 6.22, 204], Cu: ['rame', 63.546, 2, 1.90, 4.19, 201],
+  Zn: ['zinco', 65.38, 2, 1.65, 4.56, 22], As: ['arsenico', 74.922, 3, 2.18, 2.30, 146], Ag: ['argento', 107.868, 1, 1.93, 0.94, 163],
+  Sn: ['stagno', 118.71, 4, 1.96, 2.04, 187], Au: ['oro', 196.967, 1, 2.54, 0.92, 226], Hg: ['mercurio', 200.59, 2, 2.00, 1.17, 8], Pb: ['piombo', 207.2, 2, 2.33, 1.75, 87],
+};
+// quanto ce n'è nella crosta continentale superiore (parti per milione in massa: Rudnick e Gao 2003, Treatise on Geochemistry 3 [ricordati])
+export const CROSTA_PPM = { Si: 311000, Al: 81500, Fe: 39200, Ca: 25700, Na: 24300, K: 23200, Mg: 15000, Ti: 3840, C: 2000, S: 621, Cl: 370, Zn: 67, Ni: 47, Cu: 28, Pb: 17, As: 4.8, Sn: 2.1, Ag: 0.053, Hg: 0.05, Au: 0.0015 };
 // abbondanza: atomi per ogni atomo di idrogeno
-export const ELEMENTI = Object.fromEntries(Object.entries(TAVOLA).map(([simbolo, [nome, massa, valenza, chi, logA, legame]]) =>
+export const ELEMENTI = Object.fromEntries(Object.entries({ ...TAVOLA, ...TAVOLA_METALLI }).map(([simbolo, [nome, massa, valenza, chi, logA, legame]]) =>
   [simbolo, { simbolo, nome, massa, valenza, chi, abbondanza: 10 ** (logA - 12), legame }]));
 // la materia di una stella con metallicità Z (1 = il Sole): idrogeno ed elio sono quelli del Big Bang,
 // tutto il resto l'hanno fabbricato le stelle di prima e cresce con Z
-export const abbondanze = (Z = 1) => Object.fromEntries(Object.entries(ELEMENTI).map(([s, e]) => [s, e.abbondanza * (s === 'H' || s === 'He' ? 1 : Math.max(0, Z))]));
+// (i quindici della miscela dei pianeti; con tracce: true anche i dieci metalli della tecnica, che sono tracce: tutti
+// insieme lo 0,5% della massa dei pesanti, quasi tutto nichel)
+export const abbondanze = (Z = 1, { tracce = false } = {}) => Object.fromEntries(Object.entries(ELEMENTI).filter(([s]) => tracce || s in TAVOLA).map(([s, e]) => [s, e.abbondanza * (s === 'H' || s === 'He' ? 1 : Math.max(0, Z))]));
 
 // ---------- 2. I LEGAMI (calcolati)
 // Pauling: un legame tra atomi diversi è più forte della media (geometrica) dei due legami tra atomi
@@ -90,6 +103,23 @@ const SPECIE = [
   ['NaAlSi3O8', 'albite (feldspato)', 'solido', -3935.1, 207.4], ['KAlSi3O8', 'ortoclasio (feldspato)', 'solido', -3974.6, 214.2],
   ['CaAl2Si2O8', 'anortite (feldspato)', 'solido', -4234.0, 199.3],
 ];
+// I MINERALI DEI METALLI: ossidi, solfuri, carbonati principali. ΔH di formazione e S a 298 K da Robie e Hemingway 1995
+// (U.S. Geological Survey Bulletin 2131: opera del governo degli Stati Uniti, di dominio pubblico, letta dal PDF
+// l'11-2026; per bunsenite, covellite e smithsonite il ΔH è ricavato dal loro ΔG e dalle entropie della stessa fonte).
+// STATO DELLE FONTI della tabella SPECIE qui sopra (2026-11): le tabelle NIST-JANAF e il NIST WebBook sono «dati standard
+// di riferimento» protetti (Standard Reference Data Act): i numeri restano quelli, ma la fonte da citare è la primaria.
+// Per H2O, CO, CO2, CH4, NH3, H2S, SO2, HCl, O2, H2, N2, S2 e per tutti i minerali: Robie e Hemingway 1995 (che riporta i
+// valori CODATA di Cox, Wagman e Medvedev 1989), coincidenti con quelli di qui entro l'arrotondamento; per HCN, H2CO,
+// CH3OH, NO, C2H2, C2H6 la fonte primaria (Gurvich e altri 1989-94, o le Active Thermochemical Tables) NON è stata riletta.
+const SPECIE_METALLI = [
+  ['Cu2O', 'cuprite', -170.6, 92.4], ['CuO', 'tenorite', -156.1, 42.6], ['SnO2', 'cassiterite', -577.6, 49.0], ['PbO', 'litargirio', -219.0, 66.5],
+  ['ZnO', 'zincite', -350.5, 43.2], ['As2O3', 'arsenolite', -657.0, 107.4], ['TiO2', 'rutilo', -944.0, 50.6], ['NiO', 'bunsenite', -239.3, 38.0], ['HgO', 'montroydite', -90.8, 70.3],
+  ['Cu2S', 'calcocite', -83.9, 116.2], ['CuS', 'covellite', -54.6, 67.4], ['PbS', 'galena', -98.3, 91.7], ['ZnS', 'sfalerite', -204.1, 58.7], ['As2S3', 'orpimento', -91.6, 163.6],
+  ['Ag2S', 'acantite', -32.0, 142.9], ['HgS', 'cinabro', -54.3, 82.5], ['NiS', 'millerite', -91.0, 53.0], ['SnS', 'herzenbergite', -106.5, 77.0], ['FeS2', 'pirite', -171.5, 52.9],
+  ['Cu2CO5H2', 'malachite', -1054.0, 166.3], ['PbCO3', 'cerussite', -699.2, 131.0], ['ZnCO3', 'smithsonite', -817.0, 81.2], ['FeCO3', 'siderite', -755.9, 95.5],
+  ['Cu', 'rame nativo', 0, 33.14], ['Ag', 'argento nativo', 0, 42.55], ['Au', 'oro nativo', 0, 47.49], ['Pb', 'piombo', 0, 64.8], ['Sn', 'stagno', 0, 51.18], ['Zn', 'zinco', 0, 41.63], ['Ni', 'nichel', 0, 29.87], ['Ti', 'titanio', 0, 30.76], ['Hg', 'mercurio', 0, 75.90], ['As', 'arsenico', 0, 35.69],
+].map(([f, nome, dH, S]) => [f, nome, 'solido', dH, S]);
+for (const r of SPECIE_METALLI) if (!SPECIE.some((x) => x[0] === r[0])) SPECIE.push(r);
 // gli atomi di una formula ('Mg2SiO4' → Mg 2, Si 1, O 4) e la sua massa, dalla tavola
 const atomiDi = (f) => { const a = {}; for (const [, s, n] of f.replace(/\(.*\)/, '').matchAll(/([A-Z][a-z]?)(\d*)/g)) a[s] = (a[s] || 0) + (+n || 1); return a; };
 const massaDi = (f) => Object.entries(atomiDi(f)).reduce((m, [s, n]) => m + n * ELEMENTI[s].massa, 0);
@@ -653,4 +683,64 @@ export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, t
   const pavimento = Math.max(1e-9, pressioneCO2Urey(T) / 1e5); if (prende(pavimento) >= fonte) return pavimento;
   let lo = Math.log(pavimento), hi = Math.log(100); for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
   return Math.exp(0.5 * (lo + hi));
+}
+
+// ---------- 9. IL FUOCO E I METALLI (Ellingham)
+// ΔG° di formazione dagli elementi (kJ per mole di formula) ogni 100 K, da 300 K: Robie e Hemingway 1995, USGS Bull. 2131
+// (dominio pubblico), tabelle «Formation from the elements», lette dal PDF l'11-2026 (ogni riga controllata con il suo
+// log Kf; tre buchi della lettura — NiO a 400 K, CO a 600 K, CO2 a 800 K — riempiti per interpolazione tra le righe vicine).
+// Dentro ci sono già le fusioni e le ebollizioni dei metalli (il ginocchio dello zinco a 1180 K). Oltre l'ultima riga si
+// prosegue in linea retta con la pendenza delle ultime tre (ESTRAPOLATO: lo dice il risultato).
+export const ELLINGHAM = {
+  CO: [-137.1, -146.2, -155.2, -164.2, -173.2, -182.2, -191.0, -199.9, -208.6, -217.3, -226.0, -234.6, -243.1, -251.6, -260.1, -268.5],
+  CO2: [-394.4, -394.7, -394.9, -395.2, -395.4, -395.6, -395.7, -395.9, -396.0, -396.1, -396.1, -396.2, -396.3, -396.3, -396.3, -396.3],
+  Cu2O: [-147.8, -140.0, -132.4, -124.9, -117.4, -110.0, -102.7, -95.5, -88.3, -81.2, -74.1, -66.2, -57.4],
+  CuO: [-128.3, -118.9, -109.9, -100.9, -92.2, -83.5, -74.9, -66.5, -58.1, -49.9, -41.7, -33.1],
+  SnO2: [-515.8, -494.7, -474.1, -452.3, -430.8, -409.4, -388.2, -367.3, -346.5, -325.9, -305.4, -285.1, -265.0],
+  PbO: [-188.9, -178.7, -168.9, -159.3, -149.0, -138.9, -128.9, -119.0],
+  ZnO: [-320.4, -310.1, -300.1, -290.2, -280.2, -269.4, -258.5, -247.7, -236.9, -224.2, -203.7, -183.4, -163.1, -143.0, -123.0, -103.3],
+  TiO2: [-888.8, -869.9, -851.6, -833.4, -815.4, -797.5, -779.8, -762.1, -744.5, -726.9, -709.1, -691.4, -673.7, -656.1, -638.5, -621.0],
+  NiO: [-211.1, -201.8, -192.5, -183.6, -175.0, -166.8, -157.8, -149.3, -140.8, -132.4, -124.0, -115.7, -107.4, -99.1, -90.9, -82.0],
+  FeO: [-244.9, -237.8, -231.1, -224.6, -218.1, -211.8, -205.4, -199.0, -192.5, -185.9, -179.3, -172.8, -166.3, -159.9], // wüstite, Fe0,947O
+  Fe2O3: [-744.4, -716.6, -689.9, -663.6, -637.8, -612.4, -587.4, -562.8, -538.0, -513.2, -488.4, -463.8, -439.2, -414.7, -390.3, -366.0],
+  Fe3O4: [-1012.7, -977.9, -944.5, -912.0, -880.3, -849.4, -819.5, -790.0, -760.3, -730.4, -700.4, -670.6, -641.0, -611.5, -582.0, -552.4],
+  SiO2: [-856.3, -837.7, -819.4, -801.2, -783.2, -765.3, -747.7, -730.2, -712.8, -695.4, -678.1, -660.9, -643.7, -626.6, -609.0, -589.6],
+  Al2O3: [-1582.3, -1550.2, -1518.7, -1487.3, -1456.1, -1424.9, -1393.9, -1361.5, -1328.3, -1295.3, -1262.3, -1229.5, -1196.8, -1164.1, -1131.5, -1099.0],
+  MgO: [-569.3, -558.3, -547.4, -536.7, -526.0, -515.3, -504.7, -493.3, -481.8, -470.2, -458.6, -443.9, -423.1, -402.3, -381.7, -361.1],
+  CaO: [-603.1, -592.2, -581.6, -571.2, -560.8, -550.3, -539.9, -529.4, -518.9, -507.7, -496.4, -485.1, -473.8, -462.6, -451.3, -437.9],
+};
+// ΔG° di formazione a T (kJ/mol), per interpolazione → [valore, estrapolato?]
+export function formazione(f, T) { const g = ELLINGHAM[f]; if (!g) throw new Error(`chimica: per «${f}» non c'è la tabella di formazione (ci sono: ${Object.keys(ELLINGHAM).join(', ')})`);
+  const x = (T - 300) / 100, n = g.length - 1; if (x <= 0) return [g[0] + x * (g[1] - g[0]), T < 250]; if (x >= n) { const p = (g[n] - g[n - 3]) / 3; return [g[n] + (x - n) * p, x > n + 0.01]; } const i = Math.floor(x); return [g[i] + (x - i) * (g[i + 1] - g[i]), false]; }
+// riduzione(ossido, T, gas): il carbone toglie l'ossigeno a quell'ossido a quella temperatura? (diagramma di Ellingham)
+//   ossido: 'Cu2O', 'CuO', 'PbO', 'SnO2', 'FeO', 'Fe3O4', 'Fe2O3', 'ZnO', 'NiO', 'TiO2', 'SiO2', 'Al2O3', 'MgO', 'CaO';
+//   gas (se si vuole): { CO, CO2 } frazioni o pressioni del gas del forno.
+// LEGGI: MxOy + y C → x M + y CO va da sé dove ΔG = y·ΔG°(CO) − ΔG°(ossido) < 0, cioè sopra la temperatura in cui la retta
+// dell'ossido incrocia quella di 2C + O2 → 2CO (che scende, perché fa gas: è l'unica); con il gas, MxOy + y CO → x M +
+// y CO2 chiede pCO/pCO2 ≥ exp(ΔG/(y·R·T)). Solo termodinamica: non dice in quanto tempo, né se il metallo esce liquido
+// o in vapore (lo zinco bolle a 1180 K e si riossida salendo). → { metallo, conCarbonio (vero/falso a quella T),
+//   temperaturaMinima (K: l'incrocio con C → CO a 1 bar), rapportoCOCO2 (il minimo a quella T), riduce (con il gas dato,
+//   o null), pO2 (bar: sotto questa pressione d'ossigeno l'ossido si disfa da solo), dG (kJ per mole di O2, con il carbonio), estrapolato }
+export function riduzione(ossido, T = 1200, gas = null) {
+  const at = atomiDi(ossido), y = at.O, metallo = Object.keys(at).find((e) => e !== 'O'), RT = (R_GAS * T) / 1000;
+  const conC = (t) => y * formazione('CO', t)[0] - formazione(ossido, t)[0], [gO, fuori] = formazione(ossido, T), [gCO, f1] = formazione('CO', T), [gCO2, f2] = formazione('CO2', T);
+  let lo = 250, hi = 3200, Tmin = conC(lo) < 0 ? lo : conC(hi) > 0 ? Infinity : null; if (Tmin == null) { for (let k = 0; k < 50; k++) { const m = 0.5 * (lo + hi); if (conC(m) > 0) lo = m; else hi = m; } Tmin = 0.5 * (lo + hi); }
+  const rapporto = Math.exp((y * (gCO2 - gCO) - gO) / (y * RT)), r = gas && gas.CO != null ? (gas.CO2 > 0 ? gas.CO / gas.CO2 : Infinity) : null;
+  return { ossido, metallo, T, conCarbonio: conC(T) < 0, temperaturaMinima: Tmin, rapportoCOCO2: rapporto, riduce: r == null ? null : r >= rapporto, pO2: Math.exp((2 * gO) / (y * RT)), dG: (2 * conC(T)) / y, estrapolato: fuori || f1 || f2 || Tmin > 300 + 100 * (ELLINGHAM[ossido].length - 1) };
+}
+// combustione(aria): una fiamma di materia vegetale secca regge in quell'aria?  aria = { gas: { O2: frazione, N2, CO2, … }, pressione (Pa) }
+// SOGLIA MISURATA, NON DERIVATA: sotto il 16% di O2 (frazione molare, a 1 bar, in azoto) la combustione non si sostiene,
+// sotto il 18,5% gli incendi sono quasi spenti (Belcher e altri 2010, PNAS 107, 22448: torba di sfagno secca). Due
+// correzioni, misurate anche loro: (1) la pressione totale conta poco: x_min ∝ P^−0,1 (prove NASA di propagazione su
+// polimeri tra 48 e 101 kPa: esponenti 0,08-0,4; vale sopra ~0,4 bar: Hirsch, Williams e Beeson 2007); (2) il gas inerte
+// è zavorra termica: con CO2 al posto di N2 la soglia sale di 14,5/12 (Zabetakis 1965, Bureau of Mines Bull. 627), cioè
+// come il calore specifico molare dell'inerte alla temperatura di fiamma elevato a 0,385 (N2 33, CO2 54, H2O 41, gas nobili 21 J/mol/K).
+// La temperatura di fiamma è la stima adiabatica del carbonio che brucia a CO2 (senza dissociazione: troppo alta sopra 2300 K).
+// → { regge, piena (attività piena degli incendi), O2, soglia, sogliaPiena, temperaturaFiamma (K), fuoriIntervallo, nota }
+export function combustione(aria = {}) {
+  const gas = aria.gas || aria, P = aria.pressione ?? 101325, x = gas.O2 || 0, CP = { N2: 33, CO2: 54, H2O: 41, He: 21, Ar: 21, SO2: 55, CH4: 60, NH3: 50, H2: 31, CO: 33 }; let n = 0, cp = 0;
+  for (const f in gas) { if (f === 'O2' || !(gas[f] > 0)) continue; n += gas[f]; cp += gas[f] * (CP[f] ?? 33); } const cpInerte = n > 0 ? cp / n : 33;
+  const fattore = Math.pow(P / 101325, -0.1) * Math.pow(cpInerte / 33, 0.385), soglia = 0.16 * fattore, sogliaPiena = 0.185 * fattore;
+  return { regge: x >= soglia, piena: x >= sogliaPiena, O2: x, soglia, sogliaPiena, temperaturaFiamma: x > 0 ? 298 + 393510 / (54 + (cpInerte * (1 - x)) / x) : 0, fuoriIntervallo: P < 4e4 || P > 2e5,
+    nota: 'soglia misurata sulla Terra (torba secca; polimeri per la pressione), non derivata: un combustibile diverso o bagnato ha la sua' };
 }

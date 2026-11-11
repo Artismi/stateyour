@@ -43,8 +43,15 @@
 //   · il suolo tiene 150 kg/m² d'acqua, ed evapora in proporzione a quanto è pieno (il «secchio» di Manabe 1969);
 //   · comincia a piovere quando il vapore della colonna supera l'80% di quello a saturazione (Bretherton e altri 2004),
 //     e l'eccesso cade in qualche ora (4: il tempo della convezione, Betts-Miller);
-//   · le nuvole: copertura = 1 − √((1 − U)/(1 − U₀)), con U l'umidità rispetto alla soglia della pioggia e U₀ = 0,6
-//     (Sundqvist 1978);
+//   · le nuvole. COPERTURA = 1 − √((1 − U)/(1 − U₀)), con U l'umidità rispetto alla soglia della pioggia e U₀ = 0,6
+//     (Sundqvist 1989: empirica e terrestre; la scienza non ha una legge per la copertura). ACQUA di una nuvola: quella
+//     che la condensazione le dà nel tempo che la pioggia impiega a formarsi, 1/k₁ con k₁ = 10⁻³ s⁻¹ (Kessler, dal sorgente
+//     WRF). Da lì lo SPESSORE OTTICO τ = 3·acqua/(2·ρ·r) con gocce di raggio r = 10 µm (misurato sulle nubi terrestri: è
+//     l'incognita dichiarata), la LUCE RIMANDATA (1 − g)τ/(2 + (1 − g)τ) con g = 0,85 (due flussi), e l'INFRAROSSO
+//     trattenuto 1 − exp(−130·acqua) (Stephens 1978, non riletto) per quanto la cima è più fredda del suolo (la cima è
+//     nello strato alto dove la convezione arriva fin lì). Così una nuvola senz'acqua (un mondo gelido) non riflette.
+//     «riflessoNuvole» (luce rimandata, già per la copertura) è ciò che il clima usa; «serraNuvole» è solo misurata: la
+//     serra del clima è tarata con le nuvole dentro. Restano fuori le nubi basse che non piovono (strato limite);
 //   · la neve: tutta sotto 0 °C, niente sopra +2 °C;
 //   · un'aria senza vapore resta stabile: il suo gradiente termico è 0,8 volte l'adiabatico secco (Marte 0,55, Venere
 //     0,8-0,9: è la radiazione a stabilizzarla, e qui non c'è un modello della radiazione in verticale).

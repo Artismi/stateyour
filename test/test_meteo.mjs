@@ -213,6 +213,32 @@ prova('su dodici Terre con i continenti diversi: in quante ci sono le tre fasce 
   console.log(`      (${N} mondi: ogni frazione ± ${Math.round(100 * Math.sqrt(0.25 / N))}% al più; ${(tempoPopolazione / 1000).toFixed(0)} s)`);
 });
 
+// LE NUVOLE: quanta acqua tengono e quanta luce rimandano. Il difetto di prima: la copertura veniva dalla sola umidità,
+// e ogni colonna sopra un mare, se nulla la asciuga, sta ferma alla soglia della pioggia; su un mondo d'acqua freddo o con
+// poco contrasto tra equatore e poli il cielo risultava tutto coperto, e ogni nuvola rimandava il 30% della luce anche
+// senza acqua dentro. Ora lo spessore delle nuvole viene dall'acqua che la condensazione dà loro (Kessler)
+prova('le nuvole: un mondo d\'acqua gelido ha il cielo velato ma le sue nuvole, senz\'acqua, non rimandano luce', () => {
+  const acquaTutto = (T0, dT, passi = 900) => { const T = new Float32Array(N); for (let j = 0; j < H; j++) { const s = Math.sin((lat(j) * Math.PI) / 180); for (let i = 0; i < W; i++) T[j * W + i] = T0 - dT * (1.5 * s * s - 0.5); } return circolazione({ ...base, T, alt: oceano(), mare: 0, passi }); };
+  const temperato = acquaTutto(288.1, 28, 1800), gelido = acquaTutto(230, 5), freddo = acquaTutto(248.1, 28);
+  // la causa, misurata: la copertura (dall'umidità) cresce quando la circolazione si spegne, fino a tutto il cielo…
+  assert.ok(gelido.nuvoleMedie > 0.9 && gelido.bilancio.piovuta < 20, `mondo gelido e uniforme: copertura ${gelido.nuvoleMedie} con ${gelido.bilancio.piovuta} mm/anno di pioggia`);
+  // …ma senz'acqua da condensare quelle nuvole non rimandano luce (prima: 0,30 per la copertura, cioè quasi 0,30)
+  const rT = globale(temperato.riflessoNuvole), rF = globale(freddo.riflessoNuvole), rG = globale(gelido.riflessoNuvole);
+  assert.ok(rG < 0.01 && rF < 0.5 * rT && rT > 0.1, `luce rimandata dalle nuvole: ${rT} temperato, ${rF} 40 K più freddo, ${rG} gelido`);
+  for (const m of [temperato, gelido, freddo]) for (let k = 0; k < N; k++) assert.ok(m.riflessoNuvole[k] >= 0 && m.riflessoNuvole[k] <= m.nuvole[k] + 1e-6 && m.serraNuvole[k] >= 0 && m.serraNuvole[k] <= m.nuvole[k] + 1e-6 && m.acquaNuvole[k] >= 0);
+  // i riscontri sulla Terra (temperatura misurata): copertura, acqua di nube, luce rimandata e infrarosso trattenuto
+  const cop = terra.nuvoleMedie, rifl = globale(terra.riflessoNuvole), serra = globale(terra.serraNuvole), acqua = 1000 * globale(terra.acquaNuvole);
+  const sw = -340 * rifl * 0.88, lw = 240 * serra; // (W/m²: 340 di luce media, 0,88 la parte che la superficie non rimanda già, 240 l'infrarosso che esce)
+  atteso(cop > 0.6 && cop < 0.7, `copertura di nuvole ${cop.toFixed(2)} (misurata 0,6-0,7)`);
+  atteso(acqua > 40 && acqua < 120, `acqua di nube ${acqua.toFixed(0)} g/m² (misurata 60-90)`);
+  atteso(sw + lw < -10 && sw + lw > -30, `forzante netto delle nuvole ${(sw + lw).toFixed(0)} W/m² (luce ${sw.toFixed(0)}, infrarosso +${lw.toFixed(0)}; misurato −20: −47 e +27)`);
+  // con il clima di geologia.js (che usa queste nuvole): l'albedo del pianeta
+  const b = cl.bilancio, bond = b ? 1 - b.assorbita / b.arriva : NaN;
+  atteso(bond > 0.27 && bond < 0.33, `albedo di Bond della Terra di prova ${bond.toFixed(3)} (misurata 0,30 ± 0,03)`);
+  console.log(`      Terra: copertura ${cop.toFixed(2)}, acqua di nube ${acqua.toFixed(0)} g/m², luce rimandata dalle nuvole ${rifl.toFixed(3)}, forzante ${sw.toFixed(0)} + ${lw.toFixed(0)} = ${(sw + lw).toFixed(0)} W/m²; con il clima: ${(cl.Tglobale - 273.15).toFixed(1)} °C, albedo ${bond.toFixed(3)}`);
+  console.log(`      mondo tutto d'acqua: temperato copertura ${temperato.nuvoleMedie.toFixed(2)} luce rimandata ${rT.toFixed(3)}; 40 K più freddo ${freddo.nuvoleMedie.toFixed(2)} e ${rF.toFixed(3)}; gelido ${gelido.nuvoleMedie.toFixed(2)} e ${rG.toFixed(3)}`);
+});
+
 prova('l\'ombra di pioggia: un oceano, un muro di monti, e il vento che lo investe', () => {
   // un muro alto 3500 m lungo un meridiano, tra 60° sud e 60° nord, in mezzo a un oceano
   const alt = oceano(); for (let j = 0; j < H; j++) if (Math.abs(lat(j)) < 60) for (let i = 31; i <= 32; i++) alt[j * W + i] = 3500;

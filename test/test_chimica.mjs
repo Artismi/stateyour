@@ -1,6 +1,6 @@
 // test_chimica.mjs — la chimica: legami, equilibrio dei gas, atmosfere, minerali, chimica prebiotica
 import assert from 'node:assert/strict';
-import { ELEMENTI, abbondanze, energiaLegame, tipoLegame, carattereIonico, MOLECOLE, REAZIONI, costanteEquilibrio, pressioneVapore, pressioneCO2Urey, ferroStabile, equilibrio, potereRiducente, atmosfera, minerali, coloreRoccia, prebiotica } from '../src/camera/chimica.js';
+import { ELEMENTI, abbondanze, energiaLegame, tipoLegame, carattereIonico, MOLECOLE, REAZIONI, costanteEquilibrio, pressioneVapore, pressioneCO2Urey, ferroStabile, equilibrio, potereRiducente, atmosfera, minerali, coloreRoccia, prebiotica, SOLE as SOLE_CHIMICA, CROSTA_PPM, ELLINGHAM, formazione, riduzione, combustione } from '../src/camera/chimica.js';
 import { clima, LSOLE, UA } from '../src/camera/leggi.js';
 
 let ok = 0;
@@ -11,8 +11,12 @@ const ab = abbondanze(1), SOLE = { H: ab.H, He: ab.He, C: ab.C, N: ab.N, O: ab.O
 // quanta parte di un elemento sta in una specie
 const quota = (gas, el, f) => ((MOLECOLE[f].atomi[el] || 0) * (gas[f] || 0)) / Object.keys(gas).reduce((s, k) => s + (MOLECOLE[k].atomi[el] || 0) * gas[k], 0);
 
-prova('la tavola: quindici elementi, e i pesanti crescono con la metallicità', () => {
-  assert.deepEqual(Object.keys(ELEMENTI), ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'K', 'Ca', 'Fe']);
+prova('la tavola: i quindici elementi dei pianeti più i dieci metalli della tecnica, e i pesanti crescono con la metallicità', () => {
+  assert.deepEqual(Object.keys(ELEMENTI), ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'K', 'Ca', 'Fe', 'Ti', 'Ni', 'Cu', 'Zn', 'As', 'Ag', 'Sn', 'Au', 'Hg', 'Pb']);
+  // i dieci aggiunti NON entrano nella miscela del Sole: Z resta quello di prima (0,011947) e con lui ogni pianeta
+  assert.ok(Math.abs(SOLE_CHIMICA.Z - 0.011946985304955738) < 1e-15, `Z del Sole ${SOLE_CHIMICA.Z}`);
+  assert.equal(Object.keys(ab).length, 15); assert.equal(Object.keys(abbondanze(1, { tracce: true })).length, 25);
+  assert.ok(ELEMENTI.Cu.abbondanza < 1e-7 && ELEMENTI.Ni.abbondanza > ELEMENTI.Cu.abbondanza && ELEMENTI.Au.abbondanza < ELEMENTI.Pb.abbondanza && CROSTA_PPM.Cu > CROSTA_PPM.Sn && CROSTA_PPM.Au < 0.01);
   for (const e of Object.values(ELEMENTI)) assert.ok(e.massa > 0 && e.abbondanza > 0 && Number.isInteger(e.valenza), e.simbolo);
   const a2 = abbondanze(2);
   assert.equal(a2.H, ab.H); assert.equal(a2.He, ab.He); assert.ok(vicino(a2.Fe, 2 * ab.Fe, 1e-12) && vicino(a2.O, 2 * ab.O, 1e-12));
@@ -174,11 +178,56 @@ prova('il colore della roccia: la ruggine arrossa, il ghiaccio schiarisce, un so
   console.log(`      basalto ${grigio}, ossidato ${rosso}, granito ${chiaro}, ghiaccio ${gelo}`);
 });
 
+prova('i metalli: i minerali di Robie e Hemingway stanno in MOLECOLE, e il ΔG a 298 K torna da ΔH e S entro 3 kJ/mol', () => {
+  for (const f of ['Cu2O', 'CuO', 'SnO2', 'PbO', 'ZnO', 'TiO2', 'NiO', 'PbS', 'ZnS', 'Cu2S', 'HgS', 'Ag2S', 'FeS2', 'PbCO3', 'ZnCO3', 'Cu2CO5H2', 'Au', 'Cu']) assert.ok(MOLECOLE[f] && MOLECOLE[f].fase === 'solido' && MOLECOLE[f].massa > 0, f);
+  assert.ok(vicino(MOLECOLE.PbS.massa, 239.27, 1e-3) && MOLECOLE.Cu2CO5H2.atomi.O === 5);
+  // ΔG°f(298) = ΔH − T·(S − Σ S degli elementi): la riga a 300 K della tabella di Ellingham deve tornare con ΔH e S di SPECIE
+  const S_O2 = MOLECOLE.O2.S, righe = [['Cu2O', 'Cu', 2, 1], ['CuO', 'Cu', 1, 1], ['SnO2', 'Sn', 1, 2], ['PbO', 'Pb', 1, 1], ['ZnO', 'Zn', 1, 1], ['TiO2', 'Ti', 1, 2], ['NiO', 'Ni', 1, 1]]; let peggio = 0;
+  for (const [f, m, x, y] of righe) { const dG = MOLECOLE[f].dH - 0.3 * (MOLECOLE[f].S - x * MOLECOLE[m].S - (y / 2) * S_O2), d = dG - formazione(f, 300)[0]; peggio = Math.max(peggio, Math.abs(d)); assert.ok(Math.abs(d) < 3, `${f}: ΔH − TΔS dà ${dG.toFixed(1)}, la tabella ${formazione(f, 300)[0]}`); }
+  for (const f in ELLINGHAM) for (let i = 1; i < ELLINGHAM[f].length; i++) assert.ok(f === 'CO2' ? Math.abs(ELLINGHAM[f][i] - ELLINGHAM[f][i - 1]) < 0.5 : f === 'CO' ? ELLINGHAM[f][i] < ELLINGHAM[f][i - 1] : ELLINGHAM[f][i] > ELLINGHAM[f][i - 1], `${f} a ${300 + 100 * i} K: gli ossidi salgono, il CO scende, il CO2 sta fermo`);
+  console.log(`      ΔG°f a 300 K da ΔH e S: scarto massimo ${peggio.toFixed(1)} kJ/mol su ${righe.length} ossidi`);
+});
+
+prova('Ellingham: il carbone riduce il rame a 90 °C, il piombo a 300, lo stagno a 640, il ferro a 650-770, lo zinco a 950; silicio e alluminio no', () => {
+  const C = (K) => K - 273.15, incroci = { Cu2O: [90, 15], PbO: [300, 20], SnO2: [640, 20], ZnO: [950, 20], SiO2: [1670, 40], Al2O3: [2035, 40] }, righe = [];
+  for (const f in incroci) { const r = riduzione(f, 1200), [atteso, tol] = incroci[f]; assert.ok(Math.abs(C(r.temperaturaMinima) - atteso) <= tol, `${f}: incrocio con C → CO a ${C(r.temperaturaMinima).toFixed(0)} °C (atteso ${atteso})`); righe.push(`${f} ${C(r.temperaturaMinima).toFixed(0)} °C${r.estrapolato ? ' (estrapolato)' : ''}`); }
+  for (const f of ['FeO', 'Fe3O4', 'Fe2O3']) { const t = C(riduzione(f, 1200).temperaturaMinima); assert.ok(t >= 650 && t <= 770, `${f}: ${t.toFixed(0)} °C (atteso 650-770)`); righe.push(`${f} ${t.toFixed(0)} °C`); }
+  // l'ordine della storia: rame e piombo prima, poi stagno e ferro, poi zinco; silicio, alluminio, titanio fuori dalla portata di un forno a carbone
+  const T = (f) => riduzione(f, 1200).temperaturaMinima; assert.ok(T('Cu2O') < T('PbO') && T('PbO') < T('SnO2') && T('SnO2') < T('FeO') && T('FeO') < T('ZnO') && T('ZnO') < T('SiO2') && T('SiO2') < T('Al2O3'));
+  assert.ok(riduzione('SiO2', 1500).conCarbonio === false && riduzione('Al2O3', 1800).conCarbonio === false && riduzione('TiO2', 1500).conCarbonio === false && riduzione('Cu2O', 500).conCarbonio === true && riduzione('ZnO', 1000).conCarbonio === false && riduzione('ZnO', 1300).conCarbonio === true);
+  assert.ok(riduzione('SiO2', 1200).estrapolato && !riduzione('SnO2', 1200).estrapolato);
+  // il rapporto minimo CO/CO2 a 1200 K (misurati, dal diagramma: Cu 6·10⁻⁵, Sn 0,21, Fe 2,3, Zn ~100)
+  const rapporti = { Cu2O: 6e-5, SnO2: 0.21, FeO: 2.3, ZnO: 100 }, out = [];
+  for (const f in rapporti) { const r = riduzione(f, 1200).rapportoCOCO2; assert.ok(r > rapporti[f] / 1.3 && r < rapporti[f] * 1.3, `${f}: CO/CO2 minimo ${r} (atteso ${rapporti[f]})`); out.push(`${f} ${r.toPrecision(2)}`); }
+  // con il gas del forno: un fuoco povero di CO (1:10) riduce il rame ma non il ferro; uno ricco (4:1) anche il ferro, non lo zinco
+  assert.ok(riduzione('Cu2O', 1200, { CO: 1, CO2: 10 }).riduce && !riduzione('FeO', 1200, { CO: 1, CO2: 10 }).riduce && riduzione('FeO', 1200, { CO: 4, CO2: 1 }).riduce && !riduzione('ZnO', 1200, { CO: 4, CO2: 1 }).riduce && riduzione('SnO2', 1200).riduce === null);
+  // all'aria (pO2 0,21 bar) nessuno di questi ossidi si disfa da solo a 1200 K; l'ematite cede ossigeno prima della wüstite
+  for (const f in ELLINGHAM) if (f !== 'CO' && f !== 'CO2') assert.ok(riduzione(f, 1200).pO2 < 0.21, f);
+  assert.ok(riduzione('Fe2O3', 1200).rapportoCOCO2 < riduzione('Fe3O4', 1200).rapportoCOCO2 && riduzione('Fe3O4', 1200).rapportoCOCO2 < riduzione('FeO', 1200).rapportoCOCO2);
+  assert.throws(() => riduzione('UO2', 1200), /tabella di formazione/);
+  console.log(`      incrocio con C → CO: ${righe.join(', ')}`); console.log(`      CO/CO2 minimo a 1200 K: ${out.join(', ')}`);
+});
+
+prova('il fuoco: regge dal 16% di ossigeno in su (misurato), la pressione conta poco, l\'anidride carbonica spegne più dell\'azoto', () => {
+  const aria = (O2, inerte = 'N2', pressione = 101325) => ({ gas: { O2, [inerte]: 1 - O2 }, pressione });
+  const t = combustione(aria(0.21)); assert.ok(t.regge && t.piena && vicino(t.soglia, 0.16, 1e-9) && vicino(t.sogliaPiena, 0.185, 1e-9) && t.temperaturaFiamma > 2000 && t.temperaturaFiamma < 2700 && /misurata/.test(t.nota));
+  assert.ok(!combustione(aria(0.15)).regge && combustione(aria(0.17)).regge && !combustione(aria(0.17)).piena && !combustione(aria(0)).regge && !combustione({ gas: { CO2: 0.96, N2: 0.04 }, pressione: 9e6 }).regge);
+  // la pressione: a mezza atmosfera la soglia sale di poco (P^−0,1: 7%), non del doppio come se contasse la pressione parziale
+  const m = combustione(aria(0.21, 'N2', 5e4)); assert.ok(m.soglia > 0.16 && m.soglia < 0.18 && m.regge, `soglia a 0,5 bar ${m.soglia}`);
+  assert.ok(combustione(aria(0.21, 'N2', 2e4)).fuoriIntervallo && !t.fuoriIntervallo);
+  // il gas inerte: con CO2 la soglia sale di 14,5/12 (Zabetakis 1965), con l'argo o l'elio scende
+  const c = combustione(aria(0.18, 'CO2')), a = combustione(aria(0.18, 'Ar')); assert.ok(vicino(c.soglia / 0.16, 14.5 / 12, 0.01) && !c.regge && a.soglia < 0.16 && a.regge, `CO2 ${c.soglia}, Ar ${a.soglia}`);
+  // le arie dei pianeti di qui: quella ossidata della «Terra» calcolata (senza vita: niente O2) non regge un fuoco
+  assert.ok(!combustione({ gas: atmosfera(TERRA).gas, pressione: 101325 }).regge);
+  console.log(`      soglia: aria ${(t.soglia * 100).toFixed(1)}%, a 0,5 bar ${(m.soglia * 100).toFixed(1)}%, in CO2 ${(c.soglia * 100).toFixed(1)}%, in argo ${(a.soglia * 100).toFixed(1)}%; fiamma in aria ${t.temperaturaFiamma.toFixed(0)} K`);
+});
+
 prova('è leggero: ogni chiamata sotto 20 ms', () => {
   const tempo = (f) => { const t0 = performance.now(); f(); return performance.now() - t0; };
   let peggio = 0;
   for (const T of [150, 300, 700, 1500, 3000]) for (const P of [1, 1e5, 1e8]) peggio = Math.max(peggio, tempo(() => equilibrio({ T, P, elementi: SOLE })), tempo(() => equilibrio({ T, P, elementi: { H: 1.1, C: 0.21, N: 0.018, O: 1.21, S: 0.014 } })));
   for (const P of [TERRA, SUPERTERRA, GIOVE, LUNA]) peggio = Math.max(peggio, tempo(() => atmosfera(P)), tempo(() => prebiotica({ atmosfera: atmosfera(P), T: P.clima.T })));
+  for (const f in ELLINGHAM) if (f !== 'CO' && f !== 'CO2') peggio = Math.max(peggio, tempo(() => riduzione(f, 1200, { CO: 1, CO2: 1 })), tempo(() => combustione({ gas: { O2: 0.21, N2: 0.79 } })));
   peggio = Math.max(peggio, tempo(() => coloreRoccia(minerali({ composizione: TERRA.composizione, T: 288, ossidato: true, acqua: 'liquida' }))));
   assert.ok(peggio < 20, `la chiamata più lenta: ${peggio} ms`);
   console.log(`      la più lenta: ${peggio.toFixed(2)} ms`);

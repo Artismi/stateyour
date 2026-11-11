@@ -134,22 +134,19 @@ prova('l\'erosione: l\'acqua scende sempre, e scava', () => {
   // dove l'acqua si raccoglie molto, il terreno si è abbassato
   // una valle: dove scorre molta acqua il terreno diventa più incassato rispetto ai vicini
   const W = sf.W, incasso = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= sf.H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
-  // LE VALLI SU UNA POPOLAZIONE. «Dove scorre molta acqua il terreno si incassa» è ciò che ci si aspetta da un fiume. Nel
-  // modello NON vale: misurato su sedici Terre con i continenti diversi (semi da 11 a 26) l'incasso medio è positivo su 2,
-  // la mediana è −12 m (da −76 a +4), e delle celle dove scorre molta acqua 7 su 10 si ALZANO. La causa più probabile, letta
-  // nella legge (geologia.js erosione): lo scavo avvicina la cella a quella a valle di 0,0009·√portata per passo (mezzo
-  // per cento con portata 30), mentre «i pendii si sgretolano» avvicina OGNI cella, anche il letto del fiume, alla media
-  // dei vicini del 5% ogni quattro passi: in 60 passi spiana metà dell'incasso che c'era; e la crescita dei monti alza
-  // tutte le terre dello 0,1% per passo. È un difetto del modello, non del seme: la prova lo
-  // misura qui su sei mondi (questo e i semi da 11 a 15; ± 20%), lo stampa come «≠ NON TORNA» e non ferma la catena. Dura
-  // resta solo l'asserzione che i fiumi ci siano.
+  // LE VALLI SU UNA POPOLAZIONE. «Dove scorre molta acqua il terreno si incassa» è ciò che ci si aspetta da un fiume. Con
+  // l'erosione di prima NON valeva (su sedici Terre l'incasso medio era positivo su 2, mediana −12 m, e 7 celle di fiume
+  // su 10 si alzavano): «i pendii si sgretolano» spianava anche il letto dei fiumi (provato togliendolo: da −10 m a +2 m;
+  // il sollevamento non c'entrava). Ora l'erosione è in metri e in anni (geologia.js, EROSIONE) e il letto non è più un
+  // pendio. La misura resta su sei mondi (questo e i semi da 11 a 15; ± 20%): si stampa, e se non torna lo dice senza
+  // fermare la catena. Dura resta solo l'asserzione che i fiumi ci siano. (I riscontri in metri e anni: test_erosione.)
   const valli = (sfx, sex) => { const inc = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= sfx.H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
     let d = 0, n = 0, alzate = 0; for (let k = 0; k < sex.alt.length; k++) if (sfx.alt[k] > sfx.mare && sex.lago[k] === 0 && sex.flusso[k] > 30) { d += inc(sex.alt, k) - inc(sfx.alt, k); n++; if (sex.alt[k] > sfx.alt[k]) alzate++; } return { n, medio: d / n, alzate: alzate / n }; };
   const mondi = [valli(sf, se)]; for (const seme of [11, 12, 13, 14, 15]) { const s2 = GE.superficiePianeta(`prova-valli-${seme}`, P, it, seme), c2 = GE.climaSuperficie(`prova-valli-${seme}`, P, s2), e2 = GE.erosione(`prova-valli-${seme}`, s2, c2, { passi: 60 }); mondi.push(valli(s2, e2)); }
   for (const m of mondi) assert.ok(m.n > 0, 'nessun fiume su cui misurare le valli');
   const incassati = mondi.filter((m) => m.medio > 0).length, medi = mondi.map((m) => m.medio).sort((a, b) => a - b), alzate = mondi.reduce((a, m) => a + m.alzate, 0) / mondi.length;
   console.log(`      le valli: incasso medio dove scorre molta acqua ${mondi.map((m) => m.medio.toFixed(0)).join(', ')} m sui ${mondi.length} mondi (mediana ${medi[mondi.length >> 1].toFixed(0)} m); positivo su ${incassati}; celle di fiume che si alzano: ${Math.round(100 * alzate)}%`);
-  if (2 * incassati < mondi.length || alzate > 0.5) console.log(`      ≠ NON TORNA  le valli si incassano: solo su ${incassati} mondi su ${mondi.length}; ${Math.round(100 * alzate)}% delle celle dove scorre molta acqua si alza invece di abbassarsi (su sedici mondi: 2, mediana −12 m, 72%)`);
+  if (2 * incassati < mondi.length || alzate > 0.5) console.log(`      ≠ NON TORNA  le valli si incassano: solo su ${incassati} mondi su ${mondi.length}; ${Math.round(100 * alzate)}% delle celle dove scorre molta acqua si alza invece di abbassarsi`);
 });
 
 prova('le tessere: più vicino è lo stesso terreno con più dettaglio, e lo stesso posto dà la stessa tessera', () => {

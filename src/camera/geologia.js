@@ -383,7 +383,7 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //    il dettaglio a una scala più piccola, dura in proporzione al lato delle sue celle (un gradino risale un fiume in un
 //    tempo proporzionale alla distanza).
 // Escono, oltre al rilievo: flusso (la pioggia raccolta, in celle × metri l'anno, come prima), lago, depositato (m),
-// e i numeri veri: durataErosione (anni), denudazione (m/anno, media sulle terre), fangoAlMare (kg/anno), bilancio (m³).
+// versoValle (per ogni cella, la cella in cui versa; −1 il mare), e i numeri veri: durataErosione (anni), denudazione (m/anno, media sulle terre), fangoAlMare (kg/anno), bilancio (m³).
 export const EROSIONE = Object.freeze({ m: 0.4, n: 1, K: Object.freeze({ granito: 3.2e-7, vulcanica: 3.2e-5, sedimento: 1e-3 }), pioggiaRif: 1, pendii: 0.01, kQs: 0.041, piena: 0.01, capacitaEsponente: 7 / 6,
   isostasia: 2800 / 3300, densita: 2700, durataSenzaPlacche: 1e8 });
 const memoErosione = new Map();
@@ -449,7 +449,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
         if (troppo > 0) { alt[k] += troppo / ak; carico -= troppo; erosoTot -= troppo; } }
       eroso[k] = 0;
       const spazio = alt[r] < mare ? mare - alt[r] : pieno[r] - alt[r];
-      if (spazio > 0.5) { const dep = Math.min(carico / ar, spazio * 0.5); const eraMare = alt[r] < mare; alt[r] += dep; carico -= dep * ar; depositato[r] += dep; coperta[r] += dep; if (eraMare) depMare += dep * ar; else depTerra += dep * ar; }
+      if (spazio > 0.5) { const dep = Math.max(0, Math.min(carico / ar, spazio * 0.5)); const eraMare = alt[r] < mare; alt[r] += dep; carico = Math.max(0, carico - dep * ar); depositato[r] += dep; coperta[r] += dep; if (eraMare) depMare += dep * ar; else depTerra += dep * ar; }
       sedimento[r] += carico;
     }
     for (let k = 0; k < N; k++) if (ricevente[k] < 0 && sedimento[k] > 0) { alMare += sedimento[k]; sedimento[k] = 0; } // ciò che arriva al mare (o esce dalla tessera) e non si è posato
@@ -483,7 +483,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     if (area[k] > evapora * scala) { lago[k] = pieno[k] - alt[k]; laghi++; }
   }
   const flusso = new Float32Array(N); for (let k = 0; k < N; k++) flusso[k] = area[k];
-  const out = { ...sf, alt, flusso, lago, depositato, celleLago: laghi, passiErosione: passi, durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
+  const out = { ...sf, alt, flusso, lago, depositato, celleLago: laghi, passiErosione: passi, versoValle: Int32Array.from(ricevente), durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
     bilancio: { eroso: erosoTot, depositato: depTerra + depMare, alMare, daiVersanti } };
   memoErosione.set(chiave, out); if (memoErosione.size > 6) memoErosione.delete(memoErosione.keys().next().value);
   return out;
