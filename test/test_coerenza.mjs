@@ -94,7 +94,7 @@ prova('l\'età è una sola: pianeti, interno e lune hanno gli anni della loro st
   for (const x of SOLIDI) { n++; assert.equal(x.p.interno.eta, x.S0.eta); }
   // le lune: rifatte con l'età della stella devono essere le stesse (il disco è controllato più sotto, con la massa)
   for (const x of PIANETI.filter((y) => y.S0.stato === 'nana bianca').filter((_, i) => i % 5 === 0)) {
-    nane++; const rifatte = LU.lune(x.p, { eta: x.S0.eta, Z: x.S0.Z, massa: x.S0.massa, massaNascita: x.S0.massaNascita }, semeDi('lune', x.n, x.gid, x.sid, x.p.id));
+    nane++; const rifatte = LU.lune(x.p, { eta: x.S0.eta, Z: x.S0.Z, massa: x.S0.massa, massaNascita: x.S0.massaNascita, ...(x.p.tipo === 'roccioso' ? { urto: x.p.urto } : {}) }, semeDi('lune', x.n, x.gid, x.sid, x.p.id));
     assert.equal(foto(rifatte.map((l) => [l.massaKg, l.aM])), foto(x.p.lune.map((l) => [l.massaKg, l.aM])));
   }
   assert.ok(n > 1500 && nane >= 10);
@@ -155,7 +155,7 @@ prova('le lune pesano molto meno del pianeta e stanno tra il limite di Roche e l
   let lune = 0;
   for (const { p } of PIANETI) {
     if (!p.lune.length) continue; const RH = LU.raggioHill(p);
-    assert.ok(p.lune.reduce((a, l) => a + l.massaKg, 0) < 0.03 * p.massaKg, 'lune troppo pesanti');
+    assert.ok(p.lune.reduce((a, l) => a + l.massaKg, 0) < 0.15 * p.massaKg, 'lune troppo pesanti'); // (le lune nate da un urto gigante vero arrivano a qualche centesimo del pianeta: Caronte è il 12% di Plutone)
     for (const l of p.lune) { lune++; assert.ok(l.aM * (1 - l.eccentricita) > LU.limiteRoche(p, l.densita), 'luna dentro il limite di Roche'); assert.ok(l.aM * (1 + l.eccentricita) < 0.7 * RH, 'luna fuori dalla sfera di Hill'); if (l.origine === 'disco') assert.ok(l.aM < RH / 3); }
   }
   assert.ok(lune > 1000);

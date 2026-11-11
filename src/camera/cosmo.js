@@ -22,7 +22,9 @@ import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
 import { COSTANTI, etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
 import { interno } from './geologia.js';
-import { formaPianeti } from './disco.js';
+import { formaPianeti, disco as discoDi } from './disco.js';
+import { storiaImpatti, giganteDi } from './impatti.js';
+import { sorgente } from './eventi.js';
 import { lune, tempoBlocco } from './lune.js';
 import { atmosfera, prebiotica, minerali } from './chimica.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
@@ -203,11 +205,12 @@ export const sistema = memo((n, gid, sid) => {
   // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
   // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
   const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeEvento('disco', n, gid, sid)).slice(0, PIANETI_MAX);
+  const nascita = { massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeDisco = semeEvento('disco', n, gid, sid);
+  const nati = morta ? [] : formaPianeti(nascita, semeDisco).slice(0, PIANETI_MAX);
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
     return {
-      id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia,
+      id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia, formazione: q.formazione,
       r: Math.max(0.006, Math.min(0.04, 0.006 + 0.03 * (q.raggioM / 7e7))), B0: 0, campo: 0,
       // gli anelli: frammenti dentro il limite di Roche (per ora una probabilità, più alta per i mondi freddi: da far emergere dalle lune)
       anelli: (q.tipo !== 'roccioso' && c() < 0.6) || c() < 0.08,
@@ -220,6 +223,9 @@ export const sistema = memo((n, gid, sid) => {
   // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è piccola: la sua luce è quella di una
   // sfera con il suo raggio e la sua temperatura, 4πR²σT⁴: da un decimo del Sole appena nata a meno di un millesimo)
   const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
+  // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
+  // stella, il disco e gli altri pianeti
+  const Sis = { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
@@ -236,6 +242,12 @@ export const sistema = memo((n, gid, sid) => {
     const giorno = bloccato ? anno : (p.tipo === 'gassoso' ? tra(9, 16) : tra(10, 40)) * 3600;
     const omega = (2 * Math.PI) / giorno;
     Object.assign(p, { aM, Lw, Mstella: Mst, anno, giorno, bloccato, obliquita: bloccato ? 0 : Math.min(85, Math.abs((c() + c() + c() - 1.5) * 30) + (c() < 0.08 ? tra(30, 90) : 0)) });
+    // L'URTO GIGANTE (impatti.js): l'ultimo della formazione del pianeta, con i numeri veri di disco.js. È lui che ha dato
+    // al pianeta il giorno e l'inclinazione dell'asse (i due sorteggi qui sopra restano per chi non ne ha avuti e per i
+    // giganti). I suoi eventi incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
+    const casoP = sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${p.id}`, ramiCosmo(n));
+    p.urto = p.tipo === 'gassoso' ? null : giganteDi(p, Sis, casoP);
+    if (p.urto && !bloccato) { p.giorno = p.urto.giornoDopo; p.retrogrado = p.urto.obliquita > 90; p.obliquita = p.retrogrado ? 180 - p.urto.obliquita : p.urto.obliquita; }
     // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
@@ -252,12 +264,16 @@ export const sistema = memo((n, gid, sid) => {
         minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
     } catch { p.atmosfera = null; p.prebiotica = null; }
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
-    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita }, semeEvento('lune', n, gid, sid, p.id));
+    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
+    // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
+    if (p.urto && !bloccato) { const luna = p.lune.find((l) => l.origine === 'urto'); if (luna?.giornoPianeta) p.giorno = luna.giornoPianeta; p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); }
+    // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti
+    Object.defineProperty(p, 'impatti', { configurable: true, enumerable: false, get() { const v = storiaImpatti(p, Sis, casoP); Object.defineProperty(p, 'impatti', { value: v, enumerable: false }); return v; } });
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
     // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
     p.origine = hash(semeEvento('mantello', n, gid, sid, p.id), Math.round(Math.log(p.massaKg) * 1e6));
   }
-  return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
+  return Sis;
 });
 
 // ---------- un pianeta: l'anello, la magnetosfera, le regioni

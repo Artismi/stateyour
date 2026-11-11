@@ -21,6 +21,7 @@
 import { celle } from './fluidi.js';
 import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
+import { improntaMantello, crateriVisibili } from './impatti.js';
 import { acquaInSuperficie } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
@@ -61,7 +62,10 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // clima le assegna non è vapore. Dove bolle o sublima non c'è mare: l'acqua è nell'aria, o è già fuggita
   const acquaKg = String(P.clima?.acqua ?? '').startsWith('vapore') ? 0 : int.acquaKg || 0;
   const aPlacche = int.tettonica === 'a placche';
-  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true }) : null;
+  // la storia degli impatti del pianeta (impatti.js, P.impatti); se il pianeta non la porta restano i ripieghi da seme.
+  // Lo stato da cui parte il mantello è l'impronta termica dei suoi urti
+  const storiaUrti = P.impatti ?? null;
+  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(), f: 2 + k * 0.7, fi: caso() * 6.28, a: 1 / (1 + k * 0.35) }));
@@ -77,8 +81,26 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // con tettonica, vulcani e pioggia li cancella quasi tutti (la Terra). L'erosione, dopo, fa il resto.
   const etaG = (int.eta ?? 4.5e9) / 1e9, aria = isFinite(P.clima?.pressione) ? P.clima.pressione / 1e5 : 100;
   const rinnovo = (aPlacche ? 3 : int.vulcani > 0 ? 1 : 0) + (aria > 0.01 && acquaKg > 0 ? 1.5 : 0);
-  const conservati = Math.exp(-rinnovo * Math.min(4, etaG) * 0.9), nCrateri = Math.round(900 * (1 - Math.exp(-etaG / 1.2)) * conservati);
-  for (let n = 0; n < nCrateri; n++) {
+  let conservati = Math.exp(-rinnovo * Math.min(4, etaG) * 0.9), crateriVisti = 0; const nCrateri = storiaUrti ? 0 : Math.round(900 * (1 - Math.exp(-etaG / 1.2)) * conservati);
+  if (storiaUrti) {
+    // I CRATERI VERI: quelli dei grandi urti della sua storia che nulla ha cancellato (impatti.js). Quanto è vecchia la
+    // superficie, punto per punto: con le placche i fondali hanno l'età della loro crosta e i continenti quella del
+    // pianeta; sotto un coperchio con vulcani la lava la rifà in media ogni 1,1 miliardi di anni (il ritmo che c'era
+    // già qui: 0,9 per miliardo di anni); un mondo fermo non la rifà mai
+    let eta = Infinity;
+    if (tt) { eta = new Float32Array(W * H); const anni = int.eta ?? 4.5e9; for (let k = 0; k < W * H; k++) eta[k] = tt.cont[k] ? anni : 1e6 * tt.etaCrosta[k]; }
+    else if (int.vulcani > 0) eta = 1e9 / 0.9;
+    // l'erosione (m/anno). LEGGE EMPIRICA: dove piove, i continenti terrestri si consumano di circa 30 m ogni milione di
+    // anni; con la sola aria (il vento) mille volte meno; senz'aria niente
+    const erode = aria > 0.01 && (int.acquaKg || 0) > 0 ? 3e-5 : aria > 0.01 ? 3e-8 : 0;
+    const visibili = crateriVisibili(storiaUrti, { W, H, rinnovo: eta, erosione: erode, minimoM: (2 * Math.PI * P.raggioM) / W });
+    for (const cr of visibili) { // (la stessa forma di prima: scodella, bordo rialzato, picco al centro nei crateri complessi)
+      const raggio = cr.raggioCelle, ci = cr.i, cj = cr.j, prof = cr.profonditaM, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI)), largo = Math.min(W >> 1, Math.ceil(R2 * allarga));
+      for (let dj = -R2; dj <= R2; dj++) { const y = cj + dj; if (y < 0 || y >= H) continue; for (let di = -largo; di < Math.min(largo + 1, W - largo); di++) { const d = Math.hypot(di / allarga, dj) / raggio; if (d > 1.6) continue; const k = y * W + ((ci + di + W * 4) % W); alt[k] += d < 1 ? -prof * (1 - d * d) + (cr.complesso && d < 0.18 ? prof * 0.5 : 0) : prof * 0.28 * Math.exp(-(d - 1) * 5); } }
+    }
+    crateriVisti = visibili.length; conservati = storiaUrti.grandi.length ? visibili.length / storiaUrti.grandi.length : 1;
+  }
+  for (let n = 0; n < nCrateri; n++) { // (ripiego, per un pianeta senza storia degli impatti: i crateri tirati dal seme)
     const raggio = Math.min(22, 1.2 * Math.pow(1 - caso() * 0.985, -1 / 1.8)); if (raggio < 2.2 && aria > 0.5) { caso(); caso(); continue; } // (in celle; i piccoli bruciano nell'aria)
     const ci = Math.floor(caso() * W), cj = Math.floor(caso() * H), prof = 180 * raggio, R2 = Math.ceil(raggio * 1.6), allarga = 1 / Math.max(0.2, Math.cos(Math.PI / 2 - ((cj + 0.5) / H) * Math.PI));
     for (let dj = -R2; dj <= R2; dj++) { const y = cj + dj; if (y < 0 || y >= H) continue; for (let di = -Math.ceil(R2 * allarga); di <= R2 * allarga; di++) { const d = Math.hypot(di / allarga, dj) / raggio; if (d > 1.6) continue; const k = y * W + ((ci + di + W * 4) % W); alt[k] += d < 1 ? -prof * (1 - d * d) + (raggio > 9 && d < 0.18 ? prof * 0.5 : 0) : prof * 0.28 * Math.exp(-(d - 1) * 5); } }
@@ -117,7 +139,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     materiali.continente = minerali({ ...base, continente: true }); materiali.basalto = minerali({ ...base, continente: false });
     materiali.coloreContinente = coloreRoccia(materiali.continente); materiali.coloreBasalto = coloreRoccia(materiali.basalto);
   } catch { /* senza chimica restano i colori di riserva */ }
-  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: nCrateri, crateriConservati: conservati };
+  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
