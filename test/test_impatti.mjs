@@ -300,6 +300,8 @@ prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) nie
       const st = { massa: S.stella.massaNascita || S.stella.massa, Z: S.stella.Z ?? 1, eta }, nati = formaPianeti(st, seme), F = S.pianeti.map((P) => nati.find((q) => q.massaKg === P.massaKg && q.raggioM === P.raggioM)?.formazione);
       if (F.every(Boolean)) return { stella: { ...S.stella, eta }, disco: disco(st, seme), pianeti: S.pianeti.map((P, k) => ({ ...P, formazione: F[k] })) }; }
     throw new Error('i pianeti di sistema() non sono quelli di formaPianeti'); };
+  // la catena fino al mantello: l'impronta degli urti di un pianeta è lo stato da cui parte la sua tettonica
+  const catenaDi = (P, s, eta) => { const r = evolviTettonica({ W: 64, H: 32, raggioM: P.raggioM, nucleo: P.interno.nucleo, q: Math.max(P.interno.q, 0.06), eta, placche: true, seme: 1, impronta: (W, H) => improntaMantello(s, W, H) }); assert.ok(r.storia.impronta === 'urti' && r.alt.every(Number.isFinite) && somma(r.cont) > 0); };
   let pianeti = 0, giganti = 0, dischi = 0, lunePrese = 0, tardi = 0, lenti = 0, retro = 0, catena = 0; const giorni = [], rapporti = [], quando = [], tempi = [], visti = new Set();
   for (let n = 1; n < 3000; n += 53) {
     const a = indirizzoDi(n), chiave = `${a.cosmo}/${a.galassia}/${a.stella}`; if (visti.has(chiave)) continue; visti.add(chiave);
@@ -323,15 +325,16 @@ prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) nie
       assert.ok(L.length <= (g.luna ? 1 : 0)); if (!L.length) continue; lunePrese++;
       assert.ok(L[0].massaKg === g.luna.massaKg && L[0].giornoInizialePianeta >= g.giornoDopo * 0.999 && L[0].giornoPianeta >= L[0].giornoInizialePianeta && L[0].periodo >= L[0].giornoPianeta * 0.999);
       // e il mantello: l'impronta degli urti è lo stato da cui parte la tettonica (una volta ogni tanto: costa)
-      if (catena < 2 && s.grandi.length > 100) { catena++;
-        const r = evolviTettonica({ W: 64, H: 32, raggioM: P.raggioM, nucleo: P.interno.nucleo, q: Math.max(P.interno.q, 0.06), eta, placche: true, seme: 1, impronta: (W, H) => improntaMantello(s, W, H) });
-        assert.ok(r.storia.impronta === 'urti' && r.alt.every(Number.isFinite) && somma(r.cont) > 0); }
+      if (catena < 2 && s.grandi.length > 100) { catena++; catenaDi(P, s, eta); }
     }
   }
   const q = (v, f) => [...v].sort((x, y) => x - y)[Math.floor(f * v.length)];
-  assert.ok(pianeti > 80 && giganti > 40 && lenti > 10 && catena === 2, `${pianeti} pianeti, ${giganti} con urto gigante, ${lenti} lenti, ${catena} catene`);
-  // gli ultimi urti giganti cadono presto: quasi tutti nel primo decimo della vita del sistema (con le stime, uno su quattro cadeva dopo il primo miliardo di anni)
-  tra(q(quando, 0.5), 0, 0.05, 'a che punto della vita cade l\'ultimo urto gigante (mediana)'); assert.ok(tardi < 0.2 * giganti, `dopo il primo miliardo di anni: ${tardi} su ${giganti}`);
+  // (la catena va provata almeno una volta: se tra questi pianeti nessuno roccioso ha avuto più di cento grandi urti, se ne cerca uno più in là)
+  for (let n = 3000; catena < 1 && n < 60000; n += 53) { const a = indirizzoDi(n), S = veri(a); for (const P of S.pianeti) { if (catena || P.tipo !== 'roccioso') continue; const s = storiaImpatti(P, S, sorgente(`cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}/pianeta ${P.id}`)); if (s.grandi.length > 100 && s.gigante) { catena++; catenaDi(P, s, S.stella.eta); } } }
+  assert.ok(pianeti > 80 && giganti > 40 && lenti > 10 && catena >= 1, `${pianeti} pianeti, ${giganti} con urto gigante, ${lenti} lenti, ${catena} catene`);
+  // gli ultimi urti giganti cadono presto: metà entro il primo ventesimo della vita del sistema, tre quarti entro il primo quinto
+  // (in anni dipende da quanto sono vecchie le stelle del campione: tra stelle di dieci miliardi di anni, uno su quattro cade dopo il primo)
+  tra(q(quando, 0.5), 0, 0.05, 'a che punto della vita cade l\'ultimo urto gigante (mediana)'); tra(q(quando, 0.75), 0, 0.2, 'e i tre quarti');
   tra(q(rapporti, 0.5), 0.3, 1, 'rapporto di massa tra i due corpi dell\'ultimo urto (mediana: gli embrioni di disco.js sono quasi pari)');
   tra(q(giorni, 0.5), 1.5, 12, 'giorno dopo l\'urto (ore, mediana)'); tra(retro / giganti, 0.25, 0.75, 'pianeti che girano al contrario (gli urti arrivano da ogni parte: metà)');
   assert.ok(q(tempi, 0.5) < 50 && q(tempi, 0.95) < 50);

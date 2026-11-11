@@ -635,6 +635,12 @@ export function metallicita(forma, t, r) {
   let k = 0; while (k < NR - 2 && e.rc[k + 1] < r) k++; const w = stringi((r - e.rc[k]) / (e.rc[k + 1] - e.rc[k]), 0, 1), z = (jj) => e.Zt[jj * NR + k] * (1 - w) + e.Zt[jj * NR + k + 1] * w;
   return z(j) * (1 - u) + z(j + 1) * u;
 }
+// la Z (in unità solari) con cui è nata una stella al tempo t (ANNI dall'inizio) nell'anello che contiene il raggio r (kpc):
+// quella del gas di quell'anello quando le stelle di quel passo si sono formate (senza interpolare: è il conto del modello)
+export function metallicitaDiNascita(forma, t, r) {
+  const e = forma.interno, j = stringi(Math.floor(t / 1e9 / DT) + 1, 1, e.nt); let k = 0; while (k < ANELLI - 1 && e.bordo[k + 1] < r) k++;
+  return e.Zn[j * ANELLI + k];
+}
 // l'angolo (radianti) a cui passa la cresta di un braccio al raggio r (kpc): gli altri sono a 2π/numero l'uno dall'altro
 export function faseBraccio(forma, r) {
   const rc = forma.anelli.r, B = forma.bracci, NR = rc.length; let q = 0; while (q < NR - 2 && rc[q + 1] < r) q++;

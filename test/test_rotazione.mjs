@@ -99,7 +99,10 @@ prova('gli urti giganti: il limite dei fluidi che ruotano, il mordi e fuggi, il 
 
 prova('sui pianeti veri del cosmo: nessuno oltre il limite, i vicini alla stella frenati o bloccati; la distribuzione dei giorni', () => {
   const per = { gas: [], urti: [], embrione: [] }, visti = new Set(); let n = 0, bloccati = 0, risonanti = 0, contro = 0, collegati = 0, gassosiBloccati = 0; const assi = [], frazioni = [];
-  for (let k = 1; k < 6000; k += 53) {
+  // (si guarda finché ogni specie di pianeta è rappresentata abbastanza da contare — quanti sistemi servano dipende da che
+  // stelle ha la galassia: i giganti di gas sono rari attorno alle stelle povere di metalli —, e comunque almeno 110 numeri)
+  const bastano = () => n > 150 && per.gas.length > 10 && per.urti.length > 30 && per.embrione.length > 10 && bloccati > 10;
+  for (let k = 1; k < 60000 && (k < 6000 || !bastano()); k += 53) {
     const a = indirizzoDi(k), chiave = `${a.cosmo}/${a.galassia}/${a.stella}`; if (visti.has(chiave)) continue; visti.add(chiave);
     const Sis = sistema(a.cosmo, a.galassia, a.stella);
     for (const P of Sis.pianeti) {

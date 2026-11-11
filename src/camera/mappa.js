@@ -487,7 +487,6 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
   if (!S) { ctx.fillStyle = 'rgba(235,230,215,0.85)'; ctx.font = `${14 * dpr}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText('la superficie si sta formando: tettonica, clima, aria, erosione…', W / 2, H / 2); ctx.textAlign = 'start'; return; }
   const x0 = cam.cx - W / 2 / z, x1 = cam.cx + W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), y1 = Math.min(0.5, cam.cy + H / 2 / z);
   ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0;
-  const dopo = () => { if (cam.strato) disegnaStratoMare(ctx, W, H, cam, dpr); };
   // dal più grosso al più fine: si disegna quello che c'è, e si calcola una tessera nuova per fotogramma
   for (let L = Math.max(0, Lmax - 2); L <= Lmax; L++) {
     const n = 4 ** L;
@@ -505,7 +504,6 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
       ctx.drawImage(t.cv, px0, py0, z / n + 0.5, (0.5 * z) / n + 0.5);
     }
   }
-  dopo();
 }
 
 // ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto
@@ -578,54 +576,3 @@ export function cercaFinestra(cam, W, H, { prove = 28 } = {}) {
   return meglio;
 }
 
-// ---------- GLI STRATI DEL MARE. Il mare non è un colore solo: ogni punto ha la sua temperatura, il suo sale, il suo
-// fango, la sua corrente (mare.js). Sulla superficie del pianeta si può guardare uno di questi campi sopra la mappa;
-// le correnti si vedono come scie che scorrono, più fitte e più lunghe dove l'acqua corre.
-export const STRATI_MARE = {
-  correnti: { nome: 'le correnti', cosa: "scie portate dall'acqua: dove corre di più sono più lunghe" },
-  temperatura: { nome: 'la temperatura', campo: 'temperatura', unita: '°C', vista: (x) => x - 273.15, colori: [[20, 40, 140], [40, 150, 200], [240, 230, 120], [220, 60, 40]] },
-  salinita: { nome: 'il sale', campo: 'salinita', unita: 'g/kg', vista: (x) => x, colori: [[230, 240, 255], [120, 170, 230], [130, 80, 190], [70, 20, 90]] },
-  torbidita: { nome: 'il fango sospeso', campo: 'torbidita', unita: 'g/m³', vista: (x) => x * 1000, log: true, colori: [[20, 60, 120], [90, 110, 110], [160, 130, 80], [200, 160, 90]] },
-  risalita: { nome: "l'acqua che sale e scende", campo: 'risalita', unita: 'm/anno', vista: (x) => x * 3.156e7, simmetrico: true, colori: [[150, 60, 30], [230, 200, 170], [170, 220, 230], [20, 90, 170]] },
-};
-const stratiFatti = new Map(), scie = { k: null, punti: [] };
-const acquaQui = (M, k) => M.bagnato && M.bagnato[k] > 0.3;
-export function infoStrato(cam) { const S = cam.livello === 4 && cam.strato ? superficieDi(cam.via) : null; return S?.mare?.esiste ? stratiFatti.get(`${S.k}|${cam.strato}`) || null : null; }
-function stratoMare(S, quale) {
-  const k = `${S.k}|${quale}`; if (stratiFatti.has(k)) return stratiFatti.get(k);
-  const M = S.mare, d = STRATI_MARE[quale], F = M[d.campo], N = M.W * M.H, v = new Float32Array(N); let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < N; i++) { if (!acquaQui(M, i)) continue; let x = d.vista(F[i]); if (d.log) x = Math.log10(Math.max(1e-6, x)); v[i] = x; if (x < lo) lo = x; if (x > hi) hi = x; }
-  if (d.simmetrico) { const a = Math.max(Math.abs(lo), Math.abs(hi)) || 1; lo = -a; hi = a; }
-  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(M.W, M.H) : Object.assign(document.createElement('canvas'), { width: M.W, height: M.H }), c = cv.getContext('2d'), im = c.createImageData(M.W, M.H);
-  for (let i = 0; i < N; i++) { if (!acquaQui(M, i)) continue; const t = Math.max(0, Math.min(0.9999, (v[i] - lo) / (hi - lo || 1))) * (d.colori.length - 1), a = Math.floor(t), f = t - a, c0 = d.colori[a], c1 = d.colori[a + 1], o = i * 4;
-    im.data[o] = c0[0] + (c1[0] - c0[0]) * f; im.data[o + 1] = c0[1] + (c1[1] - c0[1]) * f; im.data[o + 2] = c0[2] + (c1[2] - c0[2]) * f; im.data[o + 3] = 215; }
-  c.putImageData(im, 0, 0);
-  const out = { cv, lo: d.log ? 10 ** lo : lo, hi: d.log ? 10 ** hi : hi, unita: d.unita, nome: d.nome };
-  stratiFatti.set(k, out); if (stratiFatti.size > 8) stratiFatti.delete(stratiFatti.keys().next().value);
-  return out;
-}
-function disegnaStratoMare(ctx, W, H, cam, dpr) {
-  const S = superficieDi(cam.via), M = S?.mare; if (!M?.esiste || !STRATI_MARE[cam.strato]) return;
-  const z = cam.z, X = (x) => W / 2 + (x - cam.cx) * z, Y = (y) => H / 2 + (y - cam.cy) * z;
-  if (cam.strato !== 'correnti') {
-    const st = stratoMare(S, cam.strato); ctx.imageSmoothingEnabled = true;
-    for (let g = Math.floor(cam.cx - W / 2 / z); g <= Math.floor(cam.cx + W / 2 / z); g++) ctx.drawImage(st.cv, X(g), Y(0), z, 0.5 * z);
-    return;
-  }
-  // le correnti: scie seminate dentro ciò che si guarda (così la densità è la stessa a ogni scala) e portate dall'acqua
-  const kS = `${S.k}`, x0 = cam.cx - W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), lx = W / z, ly = Math.min(0.5, cam.cy + H / 2 / z) - y0, u = M.corrente.u, vv = M.corrente.v;
-  if (scie.k !== kS) { scie.k = kS; scie.punti = []; }
-  const cella = (x, y) => Math.max(0, Math.min(M.H - 1, Math.floor(y * 2 * M.H))) * M.W + ((Math.floor((((x % 1) + 1) % 1) * M.W) % M.W) + M.W) % M.W;
-  const semina = () => { for (let t = 0; t < 8; t++) { const q = { x: x0 + Math.sin(scie.punti.length * 12.9898 + t * 78.233 + performance.now() * 1e-3) * 0.5 * lx + lx / 2, y: y0 + ((Math.cos(scie.punti.length * 4.1414 + t * 31.7 + performance.now() * 1.7e-3) + 1) / 2) * ly, eta: 0 }; if (acquaQui(M, cella(q.x, q.y))) return q; } return null; };
-  while (scie.punti.length < 900) { const q = semina(); if (!q) break; scie.punti.push(q); }
-  let vmax = 1e-6; for (let i = 0; i < u.length; i += 7) vmax = Math.max(vmax, Math.hypot(u[i], vv[i]));
-  const passo = (0.012 * lx) / Math.max(0.03, Math.min(vmax, 0.6)); // quanta mappa per fotogramma a 1 m/s: le più veloci attraversano lo schermo in un secondo e mezzo
-  ctx.lineWidth = 1.2 * dpr; ctx.lineCap = 'round';
-  for (let i = 0; i < scie.punti.length; i++) {
-    const q = scie.punti[i], k = cella(q.x, q.y), sp = Math.hypot(u[k], vv[k]);
-    const nx = q.x + (u[k] * passo) / Math.max(0.15, Math.cos((0.5 - q.y * 2) * Math.PI)), ny = q.y - vv[k] * passo * 0.5; // (v verso nord: la mappa ha il nord in alto)
-    ctx.strokeStyle = `rgba(235,245,255,${Math.min(0.9, 0.25 + 2.2 * (sp / vmax)) * Math.min(1, q.eta / 6)})`; ctx.beginPath(); ctx.moveTo(X(q.x - (nx - q.x) * 3), Y(q.y - (ny - q.y) * 3)); ctx.lineTo(X(nx), Y(ny)); ctx.stroke();
-    q.x = nx; q.y = ny; q.eta++;
-    if (q.eta > 90 || q.y <= 0 || q.y >= 0.5 || q.x < x0 || q.x > x0 + lx || q.y < y0 || q.y > y0 + ly || !acquaQui(M, cella(q.x, q.y)) || sp < 1e-4) { const r = semina(); if (r) scie.punti[i] = r; else { scie.punti.splice(i, 1); i--; } }
-  }
-}

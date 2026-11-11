@@ -379,7 +379,12 @@ export function climaEAria(dati, { Z } = {}) {
   // (Taria: la temperatura a cui quell'aria è stata calcolata; a giri fermi è quella del clima)
   const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } }), { Taria: T });
   // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
-  const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null; for (let k = 0; k < giri; k++) { const a = ariaDi(T, stato, co2), c = climaDi(a, T); r = { a, c }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } return r; };
+  // IL CICLO DEL CARBONIO (se chi chiama dà il calore dell'interno, «calore» in W/m²): sopra un mare l'anidride carbonica
+  // non scende fino all'equilibrio di Urey (ci arriverebbe in un tempo infinito): si ferma dove le rocce consumate dalla
+  // pioggia ne prendono quanta i vulcani ne emettono (co2DelCiclo, più sotto). È la stessa CO2 che sta sciolta nel mare:
+  // aria e mare sono un serbatoio solo (mare.js legge questa pressione, e la ricalcola con le terre e le piogge vere).
+  const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), continenti: dati.placche ? 1 : 0 }) : 0);
+  const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null, cc = co2; for (let k = 0; k < (stato === 'liquida' && dati.calore > 0 ? giri + 3 : giri); k++) { if (stato === 'liquida') cc = Math.max(co2, ciclo(T, r?.c)); const a = ariaDi(T, stato, cc), c = climaDi(a, T); r = { a, c, co2: cc }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } if (r && stato === 'liquida' && cc > 0) r.c.co2Ciclo = cc; return r; };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
   if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));
   // 0. un mondo di ghiaccio è nato al freddo, oltre la linea della neve, e non è mai stato caldo abbastanza a lungo da
@@ -521,4 +526,80 @@ export function prebiotica({ atmosfera: atm = {}, T = 288, energia = 1, pression
   const acquaLiquida = (acqua ?? statoAcqua(T, pressione ?? atm.pressione ?? 1e5)) === 'liquida' && (acqua === 'liquida' || (gas.H2O || 0) > 0);
   const basico = lista ? lista.some((m) => BASICI.includes(m.nome) && m.frazione > 0.01) : true;
   return { HCN, formaldeide, potere, acquaLiquida, basico, autocatalisi: formaldeide >= SOGLIA_FORMOSIO && acquaLiquida && basico };
+}
+
+// ---------- 8. LE ROCCE CHE LA PIOGGIA CONSUMA, E IL CICLO DEL CARBONIO
+// (È la fonte unica per l'aria e per il mare: climaEAria qui sopra e mare.js usano queste stesse funzioni.)
+// LA ROCCIA. Mantello, basalto e granito sono quelli del §6 (stessi coefficienti), in moli per chilo; ogni elemento sta
+// nel minerale che la norma gli assegna. In più ciò che il mantello ha tenuto di cloro, zolfo e carbonio rispetto alle
+// proporzioni del Sole: DATI MISURATI sul mantello primitivo della Terra (McDonough e Sun 1995: Cl 17 ppm, S 250 ppm,
+// C 120 ppm).
+// QUANTO SE NE SCIOGLIE. Ogni minerale si scioglie con la velocità misurata in laboratorio (Palandri e Kharaka 2004,
+// USGS OFR 2004-1068): un termine «neutro» e uno «acido» che cresce con l'acidità dell'acqua, v = k_n + k_a·[H⁺]^n,
+// ciascuno con la sua energia di attivazione (Arrhenius: al caldo più in fretta). L'acqua del suolo è pioggia in
+// equilibrio con l'anidride carbonica dell'aria: [H⁺] = √(K·pCO2), con CO2 + H2O ⇌ H⁺ + HCO3⁻ (log K = −7,82 a 25 °C,
+// ΔH = −10,6 kJ/mol): più CO2, più acido, rocce consumate più in fretta. In natura un granello invecchia: la sua
+// velocità cala col tempo come t^−0,61 (White e Brantley 2003, su suoli da 10 a 3 milioni di anni; in laboratorio, dopo
+// un anno, è quella del minerale fresco), per unità di superficie misurata col gas (1 m²/g nei suoli: White e altri
+// 1996). Il granello resta nel suolo finché l'erosione non lo porta via: spessore del suolo / denudazione (1 m; 30 m
+// per milione di anni dove piove: la stessa legge empirica di geologia.js).
+// IL CICLO. I vulcani emettono l'anidride carbonica del mantello che fonde (il magma porta un decimo del calore
+// dell'interno; il carbonio sta tutto nel fuso: sulla Terra ne escono così 8·10¹² mol l'anno, misurate 6-10). Ogni
+// carica di catione che la pioggia scioglie dai silicati ne porta via una molecola, che finisce nel calcare. A regime
+// le due cose si pareggiano (Walker, Hays e Kasting 1981): co2DelCiclo cerca la pressione di CO2 a cui succede.
+// Che cosa manca: l'effetto della pioggia (qui le terre bagnate sono date), il carbonio dei sedimenti che torna con i
+// vulcani delle fosse (qui il carbonio del mantello non si consuma), la vita (che sulla Terra accelera il suolo).
+export const ROCCE = Object.freeze({ denudazione: 3e-5, densita: 2700, suolo: 1, superficieGrani: 1000, invecchia: 0.61,
+  magma: 0.1, caloreMagma: 1.7e6, // il magma porta un decimo del calore; J per kg di magma (1300 K di salto + calore di fusione)
+  rimasto: { Cl: 17e-6 / 35.45e-3, S: 250e-6 / 32.06e-3, C: 120e-6 / 12.011e-3 }, // mol per kg di mantello
+  acidoCarbonico: [-7.82, -10.6] }); // log K a 25 °C e ΔH (kJ/mol) di CO2(gas) + H2O ⇌ H⁺ + HCO3⁻
+// velocità a 25 °C (log₁₀ mol/m²/s) ed energia di attivazione (kJ/mol) del termine neutro; massa molare (kg/mol); poi
+// il termine acido: velocità, esponente di [H⁺], energia di attivazione
+export const MINERALI_ROCCIA = Object.freeze({ albite: [-12.56, 69.8, 0.262, -10.16, 0.457, 65.0], ortoclasio: [-12.41, 38.0, 0.278, -10.06, 0.5, 51.7], anortite: [-9.12, 17.8, 0.278, -3.5, 1.411, 16.6],
+  pirosseno: [-11.11, 40.6, 0.217, -6.36, 0.71, 96.1], olivina: [-10.64, 79.0, 0.141, -6.85, 0.47, 67.2], quarzo: [-13.99, 87.7, 0.06, -99, 0, 0] });
+const OSSIDI = { Si: 60.08, Mg: 40.30, Fe: 71.84, Al: 50.98, Ca: 56.08, Na: 30.99, K: 47.10 };
+export function rocceDelPianeta(P = {}) {
+  const comp = P.composizione || {}, fe = comp.ferro ?? 0.32, sassi = comp.roccia ?? 1 - fe, sole = abbondanze(1), su = (e) => sole[e] / sole.Si;
+  const mantello = { Si: 1, Mg: comp.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
+  const basalto = fondi(mantello, D_MANTELLO, F_BASALTO), granito = fondi(basalto, D_BASALTO, F_GRANITO);
+  const perKg = (r) => { let m = 0; for (const e in r) m += r[e] * OSSIDI[e]; const o = {}; for (const e in r) o[e] = (1000 * r[e]) / m; return o; };
+  // chi ospita che cosa (la norma): potassio e sodio nei feldspati con l'alluminio, il calcio nell'anortite finché c'è
+  // alluminio e poi nel pirosseno, il magnesio nel pirosseno o, se la silice non basta, nell'olivina
+  const ospiti = (r) => { const or = Math.min(r.K, r.Al), ab = Math.min(r.Na, r.Al - or), an = Math.min(r.Ca, (r.Al - or - ab) / 2), M = r.Mg + r.Fe, Si = r.Si - 3 * or - 3 * ab - 2 * an - (r.Ca - an);
+    return { anortite: r.Ca > 0 ? an / r.Ca : 0, olivina: Si >= M ? 0 : Math.min(1, (2 * Math.min(M - Si, Math.max(Si, 0))) / M) }; };
+  return { mantello: { ...perKg(mantello), ...ROCCE.rimasto }, basalto: { ...perKg(basalto), ospiti: ospiti(basalto) }, granito: { ...perKg(granito), ospiti: ospiti(granito) }, fusione: F_BASALTO };
+}
+// l'acidità dell'acqua del suolo sotto una pressione di CO2 (bar): [H⁺] (mol/kg), mai meno dell'acqua pura
+export const acidoDelSuolo = (pCO2, T = 288) => Math.max(1e-7, Math.sqrt(Math.pow(10, ROCCE.acidoCarbonico[0]) * Math.exp(((-1000 * ROCCE.acidoCarbonico[1]) / R_GAS) * (1 / T - 1 / 298.15)) * Math.max(0, pCO2)));
+// quanta parte di un minerale si scioglie nel tempo che il granello resta nel suolo (anni), a T, con l'acqua acida aH
+export function sciolto(minerale, T, anni, aH = 2.2e-6) {
+  const [ln, En, M, la, n, Ea] = MINERALI_ROCCIA[minerale], ar = (E) => Math.exp(((-1000 * E) / R_GAS) * (1 / T - 1 / 298.15));
+  const v = Math.pow(10, ln) * ar(En) + (la > -90 ? Math.pow(10, la) * ar(Ea) * Math.pow(aH, n) : 0);
+  // il tempo «utile»: il primo anno a velocità piena, poi sempre più piano (l'integrale di t^−0,61)
+  const utile = anni <= 1 ? anni : 1 + (Math.pow(anni, 1 - ROCCE.invecchia) - 1) / (1 - ROCCE.invecchia);
+  return 1 - Math.exp(-v * ROCCE.superficieGrani * M * utile * 3.156e7);
+}
+// ciò che un kg di roccia consumata cede all'acqua (mol), a T e sotto pCO2 (bar); quanta della sua massa diventa argilla
+export function rilascio(roccia, T, pCO2 = 2.8e-4) {
+  const t = ROCCE.suolo / ROCCE.denudazione, o = roccia.ospiti, aH = acidoDelSuolo(pCO2, T), f = (m) => (T > 271 ? sciolto(m, T, t, aH) : 0);
+  const fAb = f('albite'), fOr = f('ortoclasio'), fAn = f('anortite'), fPx = f('pirosseno'), fOl = f('olivina');
+  const Na = roccia.Na * fAb, K = roccia.K * fOr, Ca = roccia.Ca * (o.anortite * fAn + (1 - o.anortite) * fPx), Mg = roccia.Mg * (o.olivina * fOl + (1 - o.olivina) * fPx);
+  return { Na, K, Ca, Mg, Si: 2 * Na + 2 * K + 0.5 * Mg, // la silice che i feldspati cedono diventando argilla (2 su 3), e metà di quella dei pirosseni
+    cariche: Na + K + 2 * Ca + 2 * Mg, argilla: Math.min(1, roccia.Na * fAb * 0.262 + roccia.K * fOr * 0.278 + roccia.Ca * o.anortite * fAn * 0.278 + (roccia.Mg + roccia.Fe) * fPx * 0.1) };
+}
+// i vulcani: il magma (kg/anno), il mantello che fonde per farlo, e l'anidride carbonica che ne esce (mol/anno)
+export function vulcani({ calore, raggioM, composizione }) {
+  const magma = (ROCCE.magma * Math.max(0, calore) * 4 * Math.PI * raggioM * raggioM * 3.156e7) / ROCCE.caloreMagma, fuso = magma / F_BASALTO;
+  return { magma, fuso, CO2: fuso * ROCCE.rimasto.C, rocce: rocceDelPianeta({ composizione }) };
+}
+// la pressione di CO2 (bar) a cui le rocce consumate ne prendono quanta i vulcani ne emettono. «terre»: la parte della
+// superficie emersa e bagnata dalla pioggia; «continenti»: quanta di quella è granito (il resto basalto). Si può dare
+// «consumo(pCO2)» (mol/anno) per fare il conto con una carta vera delle terre e delle temperature (lo fa mare.js).
+export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null } = {}) {
+  const v = vulcani({ calore, raggioM, composizione }), fonte = emissione ?? v.CO2; if (!(fonte > 0)) return 0;
+  const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre);
+  const prende = consumo || ((p) => massa * (continenti * rilascio(v.rocce.granito, T, p).cariche + (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche));
+  if (prende(100) < fonte) return 100; // nemmeno sotto cento bar le rocce tengono il passo: la CO2 si accumula (qui ci si ferma)
+  let lo = Math.log(1e-9), hi = Math.log(100); for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
+  return Math.exp(0.5 * (lo + hi));
 }

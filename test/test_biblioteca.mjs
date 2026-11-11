@@ -9,6 +9,17 @@ import { unita, catalogoVero, velocita } from '../src/camera/unita.js';
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 
+// UN LUOGO ADATTO, cercato: i numeri della biblioteca indicano i luoghi dell'universo com'è, e l'universo cambia quando
+// cambiano le sue leggi; una prova che ha bisogno di «una regione dove passa un raggio» la cerca, a partire dal numero 13
+const luoghi = new Map();
+function luogoCon(cerca) {
+  for (let n = 13; n < 13 + 300 * 197; n += 197) {
+    if (!luoghi.has(n)) { const a = indirizzoDi(n); luoghi.set(n, { a, tracce: simulaMondo(regione(a).cella) }); }
+    const { a, tracce } = luoghi.get(n), trovato = cerca(a, tracce); if (trovato) return { n, a, trovato };
+  }
+  throw new Error('nessun luogo adatto tra 300 provati');
+}
+
 prova('lo stesso numero dà lo stesso universo, e la stessa storia; numeri diversi, posti diversi', () => {
   const a = simulaMondo(universo(7).cella), b = simulaMondo(universo(7).cella);
   assert.equal(JSON.stringify(a.map((t) => t.punti.at(-1))), JSON.stringify(b.map((t) => t.punti.at(-1))));
@@ -64,15 +75,17 @@ prova('un universo si simula in fretta, e niente supera la luce', () => {
 prova('il cosmo: ogni numero è un indirizzo, e un ramo cambia quando un raggio arriva', () => {
   for (const n of [1, 2, 13, 5000, 4575388]) { const a = indirizzoDi(n); assert.equal(indirizzoDi(numeroDi(a)).regione, a.regione); }
   assert.ok(cosmo(1).galassie.length > 20, 'un cosmo ha molte galassie');
-  const c = regione(indirizzoDi(13)).cella;
-  const t1 = simulaMondo(c).find((t) => t.evento === '0'), t2 = simulaMondo({ ...c, rami: { 0: 7 } }).find((t) => t.evento === '0');
+  // (un luogo qualunque dove arriva almeno un raggio: si cerca, invece di fidarsi di un numero — i numeri indicano i luoghi
+  // dell'universo com'è, e l'universo cambia quando cambiano le sue leggi)
+  const qui = luogoCon((a, tracce) => tracce.find((t) => t.evento === '0')), c = regione(qui.a).cella, t1 = qui.trovato;
+  const t2 = simulaMondo({ ...c, rami: { 0: 7 } }).find((t) => t.evento === '0');
   assert.notEqual(t1.punti[0][3], t2.punti[0][3]);
 });
 
 prova('lo zoom: dieci volte più vicino, le stesse particelle nello stesso posto; in più solo il dettaglio fine', () => {
   // una particella che passa nella regione mentre la bolla dura (il primo decimo del tempo)
-  const a = indirizzoDi(13), t0 = simulaMondo(cellaDi(a)), dentro = (q) => q[3] < 12 && q[0] > 50 && q[0] < 950 && q[1] > 50 && q[1] < 950;
-  const tr = t0.find((t) => t.punti.filter(dentro).length > 3), p = tr.punti.filter(dentro)[1], ij = [Math.floor(p[0] / 100), Math.floor(p[1] / 100)];
+  const dentro = (q) => q[3] < 12 && q[0] > 50 && q[0] < 950 && q[1] > 50 && q[1] < 950;
+  const qui = luogoCon((a, tracce) => tracce.find((t) => t.evento && !t.sagoma && t.punti.filter(dentro).length > 3)), a = qui.a, tr = qui.trovato, p = tr.punti.filter(dentro)[1], ij = [Math.floor(p[0] / 100), Math.floor(p[1] / 100)];
   const t1 = simulaMondo(cellaDi({ ...a, zoom: [ij] })), tz = t1.find((t) => t.evento === tr.evento);
   assert.ok(tz, 'la particella che attraversa il quadratino c\'è anche dentro');
   for (const q of tz.punti.filter((_, i) => i % 5 === 0)) {

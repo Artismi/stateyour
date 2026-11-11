@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import * as CO from '../src/camera/cosmo.js';
 import * as LG from '../src/camera/leggi.js';
-import * as ST from '../src/camera/stelle.js'; // le stelle vengono da qui (struttura), non più dalle curve di leggi.js
+import * as ST from '../src/camera/stelle.js';
+import * as GA from '../src/camera/galassie.js'; // le galassie come conseguenza: la forma (G.forma) e il catalogo campione // le stelle vengono da qui (struttura), non più dalle curve di leggi.js
 import * as GE from '../src/camera/geologia.js';
 import * as DI from '../src/camera/disco.js';
 import * as LU from '../src/camera/lune.js';
@@ -116,12 +117,16 @@ prova('una gigante rossa ha inghiottito i pianeti entro 1,5 UA, e così la nana 
   nota(3, 'giganti rosse: «gigante» è chi ha passato nove decimi della vita, e la sua temperatura è tagliata a 4200 K anche quando stelle.js, a quell\'età, la dà più calda (la luce e il raggio invece sono quelli di stelle.js)',
     { casi: tetto, su: gig, dove: 'cosmo.js galassia() «gigante = eta > 0.9 * vita.vita», «Math.min(ora.T, 4200)»' });
 }
-{ // i resti di supernova sono messi sulla posizione di stelle che il catalogo dà ancora per vive
-  let sn = 0, vive = 0, nane = 0;
-  for (const { Gx } of GALASSIE) for (const s of Gx.sorgenti) if (s.tipo === 'supernova') { sn++; const st = Gx.stelle.find((x) => x.pos[0] === s.pos[0] && x.pos[1] === s.pos[1]); if (st && (st.stato === 'in vita' || st.stato === 'gigante rossa')) vive++; else if (st && st.stato === 'nana bianca') nane++; }
-  nota(2, 'supernove: il resto è nel posto di una stella che nel catalogo è ancora viva (o di una nana bianca che «non ha lasciato niente» ma c\'è ancora)',
-    { casi: vive + nane, su: sn, tipico: `${vive} su stelle vive, ${nane} su nane bianche ancora presenti`, dove: 'cosmo.js galassia(): sorgenti (progenitrice sorteggiata 8–38 Msol) contro stelle' });
-}
+prova('i resti di supernova: mai sul posto di una stella viva; il resto di un collasso sta sulla sua stella, morta da quanto è vecchio il resto', () => {
+  let sn = 0, collassi = 0;
+  for (const { Gx } of GALASSIE) for (const s of Gx.sorgenti) if (s.tipo === 'supernova') {
+    sn++; const qui = Gx.stelle.filter((x) => x.pos[0] === s.pos[0] && x.pos[1] === s.pos[1]);
+    if (s.resto.startsWith('niente')) { assert.equal(qui.length, 0, 'una nana bianca esplosa non lascia niente: lì non c\'è nessuna stella del catalogo'); continue; }
+    collassi++; assert.equal(qui.length, 1); const st = qui[0];
+    assert.ok(st.stato === s.resto && st.morta === s.eta && st.massaNascita > 8 && st.peso === 1, `resto «${s.resto}» di ${s.eta} anni su una stella «${st.stato}» morta da ${st.morta}`);
+  }
+  assert.ok(sn >= GALASSIE.length && collassi > 0, `${sn} resti, ${collassi} da collasso`);
+});
 
 // =====================================================================================================
 sezione('LA MASSA');
@@ -166,21 +171,24 @@ prova('le regioni e gli anelli di un pianeta stanno dentro la sua sfera di Hill'
   for (const { p } of PIANETI) assert.ok(LU.raggioHill(p) / p.raggioM > 4.2, `Hill a ${LU.raggioHill(p) / p.raggioM} raggi`);
 });
 
-prova('le stelle che nascono: massa media e frazione di massicce sono quelle che galassia() usa per le supernove', () => {
-  let m = 0, grandi = 0; const N = 100000; for (let i = 0; i < N; i++) { const x = LG.massaNascita((i + 0.5) / N); m += x; if (x >= 8) grandi++; }
-  tra(m / N, 0.57 * 0.97, 0.57 * 1.03, 'massa media alla nascita (galassia() usa 0,57)'); tra(grandi / N, 0.0062 * 0.95, 0.0062 * 1.05, 'frazione sopra 8 masse solari (galassia() usa 0,0062)');
+prova('le stelle che nascono: la massa media e le stelle che esplodono, per galassie.js, sono quelle di Kroupa (leggi.js) e di stelle.js', () => {
+  let m = 0, esplodono = 0; const N = 100000, P = GA.popolazione(); for (let i = 0; i < N; i++) { const x = LG.massaNascita((i + 0.5) / N); m += x; if (ST.fine(x, 1e-4, { Z: 1 }).supernova) esplodono++; }
+  tra(P.massaMedia / (m / N), 0.97, 1.03, 'massa media alla nascita: galassie.js / leggi.js'); tra(P.tab[2].nSN / (esplodono / m), 0.93, 1.07, 'supernove da collasso per M☉ nata: galassie.js / (leggi.js + stelle.js)');
 });
 
-prova('nelle spirali il ritmo delle supernove dichiarato è quello che si conta nel campione di stelle', () => {
-  const r = [];
+prova('il ritmo delle supernove è quello della storia della galassia: le esplose nel campione sono quelle che la storia ha fatto', () => {
+  const r = []; let esploseTutte = 0;
   for (const { Gx } of GALASSIE) {
-    if (Gx.G.tipo !== 'spirale') continue;
-    const massaStelle = 2e10 * Math.min(4, Gx.G.peso + 0.5), durata = ADESSO - Gx.G.formazione / ANNO; let nate = 0, esplose = 0;
-    for (const s of Gx.stelle) { nate += s.massaNascita || s.massa; if (s.stato === 'stella di neutroni' || s.stato === 'buco nero') esplose++; }
-    r.push(Gx.ritmoSN / ((esplose * (massaStelle / nate)) / durata));
+    const F = Gx.forma, st = F.storia; assert.equal(Gx.ritmoSN, GA.ritmoSupernove(F).totale);
+    // oggi: tante supernove da collasso quante stelle massicce sono nate nell'ultimo passo (vivono meno di un passo)
+    if (st.sfr[GA.PASSI] > 0) tra(F.ritmoSN.collasso / (st.sfr[GA.PASSI] * GA.popolazione().tab[2].nSN), 0.6, 1.5, 'supernove da collasso oggi / (nascite di oggi × massicce per M☉)');
+    // in tutta la storia: l'integrale del ritmo dei collassi è il numero di stelle di neutroni e buchi neri che il campione rappresenta
+    let storia = 0; for (let j = 1; j <= GA.PASSI; j++) storia += st.collasso[j] * st.dt * 1e9;
+    const esplose = Gx.stelle.filter((s) => (s.stato === 'stella di neutroni' || s.stato === 'buco nero') && s.peso > 1); esploseTutte += esplose.length;
+    r.push((esplose.length * Gx.pesoCampione) / storia);
   }
-  // (16 supernove per campione: lo scarto di conteggio è del 25%; in media deve tornare)
-  assert.ok(r.length >= 3); tra(r.reduce((a, b) => a + b, 0) / r.length, 0.7, 1.4, 'ritmo dichiarato / ritmo contato (media sulle spirali)');
+  // (una decina di esplose per campione: lo scarto di conteggio è del 30%; in media deve tornare)
+  assert.ok(esploseTutte > 40, `${esploseTutte} esplose nel campione`); tra(r.reduce((a, b) => a + b, 0) / r.length, 0.75, 1.3, 'esplose nel campione × peso / supernove della storia (media sulle galassie)');
 });
 
 prova('la massa del pianeta è una sola: anche i granelli dell\'anello (nebbia.js) girano attorno a quella del disco', () => {
@@ -209,12 +217,16 @@ prova('il velo di idrogeno ed elio lasciato dal disco è l\'aria primordiale del
   assert.ok(pesante.clima.tenuti.includes('idrogeno') && pesante.atmosfera.gas.H2 > 0.7 && pesante.atmosfera.gas.He > 0.1, 'otto Terre a 3 UA: il velo resta');
   assert.ok(!leggero.clima.tenuti.includes('idrogeno') && !((leggero.atmosfera?.gas?.H2 || 0) > 1e-6) && pesante.clima.pressione > 5 * leggero.clima.pressione, 'mezza Terra a 0,3 UA: il velo è fuggito');
 });
+prova('ogni galassia ha meno barioni di quanti ne porta il suo alone (Ωb/Ωm), e la massa del campione è quella delle sue stelle', () => {
+  for (const n of [1, 2]) for (const G of CO.cosmo(n).galassie) { const F = G.forma; assert.ok(F.massaStelle + F.massaGas + F.massaCalda + F.massaFuori <= (COSMO.Ob / COSMO.Om) * F.alone.massa * (1 + 1e-9), `galassia ${n}/${G.id}: più barioni dell'alone`); }
+  for (const { Gx } of GALASSIE) tra(Gx.stelle.reduce((a, s) => a + s.massa * s.peso, 0) / Gx.forma.massaStelle, 0.75, 1.3, 'massa × peso del campione / massa in stelle della galassia');
+});
 { // le galassie contro i barioni del cosmo
   for (const n of [1]) {
-    const C = CO.cosmo(n), stelle = C.galassie.reduce((a, G) => a + 2e10 * Math.min(4, G.peso + 0.5), 0);
+    const C = CO.cosmo(n), stelle = C.galassie.reduce((a, G) => a + G.forma.massaStelle, 0);
     const H = (COSMO.H0 * 1000) / 3.086e22, rhoC = (3 * H * H) / (8 * Math.PI * K.G), barioni = (COSMO.Ob * rhoC * CO.TORO_M ** 3) / MSOLE;
     nota(3, 'il cosmo ha due dimensioni e nessuno spessore: le stelle di tutte le galassie sono una parte minuscola dei barioni del cubo TORO_M³',
-      { casi: 1, su: 1, tipico: `${C.galassie.length} galassie, ${num(stelle)} Msol di stelle contro ${num(barioni)} Msol di barioni: ${num(stelle / barioni)}`, massimo: `con il 6% dei barioni in stelle il toro sarebbe una fetta spessa ${num(stelle / 0.06 / ((COSMO.Ob * rhoC * CO.TORO_M ** 2) / MSOLE) / 3.086e19)} kpc`, dove: 'cosmo.js cosmo() (densità su x, y) e galassia() (massaStelle) contro leggi.js COSMO.Ob e TORO_M' });
+      { casi: 1, su: 1, tipico: `${C.galassie.length} galassie, ${num(stelle)} Msol di stelle contro ${num(barioni)} Msol di barioni: ${num(stelle / barioni)}`, massimo: `con il 6% dei barioni in stelle il toro sarebbe una fetta spessa ${num(stelle / 0.06 / ((COSMO.Ob * rhoC * CO.TORO_M ** 2) / MSOLE) / 3.086e19)} kpc`, dove: 'cosmo.js cosmo() (densità su x, y) e galassie.js (massa in stelle) contro leggi.js COSMO.Ob e TORO_M' });
   }
 }
 
@@ -281,17 +293,20 @@ prova('il ferro di un pianeta non dipende dai metalli della stella (ferro e rocc
   nota(3, 'le lune regolari nate oltre la neve sono «metà ghiaccio e metà roccia»; la miscela del Sole (chimica.js SOLE, che ora usa il disco) dà più ghiaccio',
     { casi: 1, su: 1, tipico: `lune.js 0,5 · chimica.js ${num(CH.SOLE.ghiaccio)}`, dove: 'lune.js regolari() «b.ghiaccio = 0.5 / (1 + …)»' });
 }
-{ // la metallicità contro le supernove: quanti metalli per supernova servirebbero perché Z discendesse da loro
-  const rese = [], larghezze = [];
+prova('la metallicità discende dalle supernove avvenute prima: il bilancio dei metalli è chiuso, la resa per supernova è una sola', () => {
+  const rese = [];
   for (const { Gx } of GALASSIE) {
-    const nascite = Gx.stelle.map(nascitaDi).sort((a, b) => a - b), prima = (t) => { let lo = 0, hi = nascite.length; while (lo < hi) { const m = (lo + hi) >> 1; if (nascite[m] < t) lo = m + 1; else hi = m; } return lo / nascite.length; };
-    // le supernove esplose prima della nascita di una stella: 0,0062 delle stelle nate fin lì (le massicce vivono pochissimo)
-    const y = []; for (const s of Gx.stelle) { const f = prima(nascitaDi(s)); if (f > 0.02) y.push((s.Z * DI.DISCO.metalliSole * 0.57) / (0.0062 * f)); }
-    rese.push(...y); larghezze.push(quantile(y, 0.9) / quantile(y, 0.1));
+    const F = Gx.forma, b = F.bilancio, st = F.storia; let sn = 0; for (let j = 1; j <= GA.PASSI; j++) sn += (st.collasso[j] + st.Ia[j]) * st.dt * 1e9;
+    // i metalli che ci sono (nel gas, nelle stelle, soffiati via) sono quelli fatti dalle stelle morte più quelli entrati
+    tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, 'metalli presenti / prodotti');
+    tra((b.gas + b.stelle + b.vento + b.alCaldo) / b.entrato, 1 - 1e-9, 1 + 1e-9, 'massa presente / entrata');
+    rese.push(b.metalliProdotti / sn);
+    // ogni stella ha la Z del gas da cui è nata: quella del suo anello nel suo passo (nel disco, dove il posto di oggi è quello di nascita)
+    for (const s of Gx.stelle.filter((x, i) => x.componente === 'disco' && x.peso > 1 && i % 40 === 0)) tra(s.Z / Math.max(1e-4, GA.metallicitaDiNascita(F, nascitaDi(s), Math.hypot(...s.pos) * F.unitaKpc)), 0.999, 1.001, 'Z della stella / Z del gas del suo anello quando è nata');
   }
-  nota(2, 'la metallicità Z di una stella è una formula del tempo (satura in 2 Ga) e del raggio, non la somma delle supernove esplose prima: la resa di metalli per supernova che la renderebbe coerente non è una costante',
-    { casi: rese.filter((y) => y < 1 || y > 4).length, su: rese.length, tipico: `resa necessaria: mediana ${num(mediana(rese))} Msol per supernova (10%–90%: ${num(quantile(rese, 0.1))}–${num(quantile(rese, 0.9))})`, massimo: `da ${num(minimo(rese))} a ${num(massimo(rese))} Msol; dentro una galassia varia di ${num(mediana(larghezze))} volte`, dove: 'cosmo.js galassia(): «Z = 2.2·(1 − exp(…))·exp(−r/0.7)» contro ritmoSN e le nascite delle stelle' });
-}
+  // (prima la resa «necessaria» andava da 0,5 a 20 Msol per supernova; ora è la stessa in ogni galassia, entro il peso diverso delle Ia)
+  tra(minimo(rese), 0.6, 1.6, 'metalli nuovi per supernova (Msol), la galassia che ne fa meno'); tra(massimo(rese) / minimo(rese), 1, 1.5, 'la resa per supernova tra una galassia e l\'altra');
+});
 
 // =====================================================================================================
 sezione('LA STESSA GRANDEZZA CALCOLATA DUE VOLTE');
@@ -475,7 +490,7 @@ prova('la crosta non è più vecchia del pianeta, e la crosta continentale si co
   const s = SUPERFICI.find((q) => q.p.interno.tettonica === 'a placche') || SUPERFICI[0], int = s.p.interno;
   const tt = TE.evolviTettonica({ W: 64, H: 32, raggioM: s.p.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta, acqua: true, seme: s.p.origine, placche: int.tettonica === 'a placche' });
   let vecchia = 0; for (const v of tt.etaCrosta) vecchia = Math.max(vecchia, v);
-  assert.ok(vecchia * 1e6 <= int.eta * (1 + 1e-9), `crosta di ${vecchia} milioni di anni su un pianeta di ${int.eta / 1e6}`);
+  assert.ok(vecchia * 1e6 <= int.eta * (1 + 1e-6) /* (l'età della crosta è in un Float32: sette cifre) */, `crosta di ${vecchia} milioni di anni su un pianeta di ${int.eta / 1e6}`);
   tra(tt.storia.simulati + tt.storia.saltati, int.eta * (1 - 1e-6), int.eta * (1 + 1e-6), 'anni simulati + saltati = età');
   tra(tt.bilancio.prodotta - tt.bilancio.presente - tt.bilancio.inViaggio, -1, 1, 'crosta prodotta − presente − in viaggio (m)');
 });
@@ -541,12 +556,15 @@ prova('il metro: sul pianeta l\'unità è il suo raggio, sulla superficie il gir
   assert.equal(CO.metriPerUnita(0, { cosmo: 1 }), CO.TORO_M);
 });
 
-{ // i salti di scala tra un livello e l'altro (dichiarati in cosmo.js: «lo zoom fa un salto»), misurati
+{ // le scale tra un livello e l'altro: ora sono quelle vere
   const rG = []; for (const n of [1, 2]) for (const G of CO.cosmo(n).galassie) rG.push((G.r * CO.metriPerUnita(0, { cosmo: n })) / CO.metriPerUnita(1, { cosmo: n, galassia: G.id }));
-  const rS = GALASSIE.map(({ n, gid }) => (CO.RAGGIO_SISTEMA * CO.metriPerUnita(1, { cosmo: n, galassia: gid })) / CO.metriPerUnita(2, {}));
+  const rS = GALASSIE.map(({ n, gid }) => (CO.raggioSistema(n, gid) * CO.metriPerUnita(1, { cosmo: n, galassia: gid })) / CO.metriPerUnita(2, {}));
   const conPianeti = SISTEMI.filter((s) => s.S.pianeti.length), rSt = conPianeti.map((s) => (s.S.stella.r * 30 * UA) / (s.viva ? ST.stella(s.S0.massa, { Z: s.S0.Z, eta: s.S0.eta }).R * RSOLE : s.S0.raggioM)), rP = PIANETI.map(({ p }) => (p.r * 30 * UA) / p.raggioM);
-  nota(3, 'galassie e sistemi sono disegnati molto più grandi del vero dentro il livello di sopra (il metro in basso cambia di colpo passando di livello); stelle e pianeti invece ora hanno il raggio vero',
-    { casi: 2, su: 4, tipico: `galassia nel cosmo ×${num(mediana(rG))}; sistema nella galassia ×${num(mediana(rS))}`, massimo: `fino a ×${num(massimo(rG))}, ×${num(massimo(rS))}`, dove: 'cosmo.js cosmo() «G.r», RAGGIO_SISTEMA contro metriPerUnita()' });
+  prova('le scale sono vere a ogni livello: una galassia nel cosmo e un sistema nella galassia sono grandi quanto sono', () => {
+    tra(minimo(rG), 1 - 1e-12, 1 + 1e-12, 'galassia nel cosmo: disegnata / vera'); tra(massimo(rG), 1 - 1e-12, 1 + 1e-12, 'galassia nel cosmo'); tra(minimo(rS), 1 - 1e-12, 1 + 1e-12, 'sistema nella galassia: disegnato / vero'); tra(massimo(rS), 1 - 1e-12, 1 + 1e-12, 'sistema nella galassia');
+    // i numeri bastano: a 10⁻⁸ della galassia un sistema ha ancora otto cifre buone (le posizioni delle stelle hanno sedici cifre)
+    for (const { n, gid, Gx } of GALASSIE) { const rs = CO.raggioSistema(n, gid); tra(rs, 1e-10, 1e-6, 'un sistema nelle unità della galassia'); for (const s of Gx.stelle.filter((_, i) => i % 250 === 0)) assert.ok((s.pos[0] + rs) - s.pos[0] > 0.999 * rs && (s.pos[0] + rs) - s.pos[0] < 1.001 * rs, 'la posizione di una stella più il raggio del suo sistema: la differenza si è persa'); }
+  });
   prova('sulla mappa del sistema stella e pianeti hanno il raggio vero: nessun pianeta è disegnato dentro la stella, nessuna orbita ne tocca un\'altra', () => {
     tra(mediana(rSt), 0.999, 1.001, 'raggio disegnato della stella / vero'); tra(mediana(rP), 0.999, 1.001, 'raggio disegnato del pianeta / vero'); tra(massimo(rP), 0.999, 1.001, 'pianeta'); 
     assert.equal(PIANETI.filter((x) => x.p.a < x.S.stella.r + x.p.r).length, 0, 'pianeti dentro il disco della stella');
