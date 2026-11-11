@@ -5,7 +5,7 @@
 import { universo } from './biblioteca.js';
 import { simulaMondo, generatore } from './mondo.js';
 import { segmentiSezione } from './sezione.js';
-import { bellezzaPattern } from './pattern.js';
+import { bellezzaFinestra } from './pattern.js';
 import { perfeziona } from './vicini.js';
 
 export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = null, seme = 1, gruppo = null, cella: cellaData = null }, avanza = () => {}) {
@@ -22,11 +22,13 @@ export function cercaSezione({ da = 1, universi = 24, inquadrature = 16, solo = 
     for (let j = 0; j < (solo != null ? inquadrature * 4 : inquadrature); j++) {
       const c = centri[Math.floor(caso() * centri.length)] || [500, 500];
       const finestra = { centro: [c[0] + tra(-40, 40), c[1] + tra(-40, 40)], lato: tra(100, 440) };
-      const vista = caso() < 0.4 ? { inclinazione: 0, rotazione: 0, scalaTempo: 5 } : { inclinazione: tra(15, 75), rotazione: tra(0, 360), scalaTempo: tra(2, 12) };
+      // chi guarda: fermo nella regione, oppure in moto (un osservatore vero, secondo la relatività: sezione.js)
+      const vista = caso() < 0.35 ? { inclinazione: 0, rotazione: 0, scalaTempo: 5 } : { inclinazione: 0, rotazione: 0, scalaTempo: 5, velocita: Math.round(tra(0.1, 0.9) * 100) / 100, direzione: Math.round(tra(0, 360)) };
       const fine = tra(0.3, 1) * tMax, durata = caso() < 0.5 ? fine : tra(0.15, 0.8) * fine;
-      const g = gruppo || (caso() < 0.45 ? 'esagoni' : caso() < 0.8 ? 'quadrati' : 'specchio'), ripeti = { gruppo: g, angolo: g === 'specchio' ? 0 : Math.round(tra(0, 360)) };
+      // la finestra diretta è il modo normale; il caleidoscopio solo se lo si chiede
+      const g = !gruppo ? 'una' : gruppo === 'caleidoscopio' ? (caso() < 0.45 ? 'esagoni' : caso() < 0.8 ? 'quadrati' : 'specchio') : gruppo, ripeti = { gruppo: g, angolo: g === 'specchio' || g === 'una' ? 0 : Math.round(tra(0, 360)) };
       const prova = { ...cella, finestra, vista, sezione: { fine, durata } };
-      const b = bellezzaPattern(segmentiSezione(tracce, prova), ripeti, finestra.lato);
+      const b = bellezzaFinestra(segmentiSezione(tracce, prova), ripeti, finestra.lato);
       if (!migliore || b.totale > migliore.bellezza.totale) migliore = { numero: n, finestra, vista, sezione: { fine, durata }, ripeti, bellezza: b };
     }
     avanza((k + 1) / numeri.length, migliore);

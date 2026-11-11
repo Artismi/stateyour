@@ -6,6 +6,14 @@
 //      · i RESTI della striscia di disco che un embrione lento non ha ancora finito di mangiare («il suo cibo è
 //        ancora in giro»), che diventano raggiungibili a poco a poco, prima i vicini poi i lontani.
 //      Ogni pianeta del sistema ha la sua NUBE; una nube arriva anche ai pianeti vicini, se le sue orbite li incrociano.
+//      IL BOMBARDAMENTO TARDO viene da ciò che resta lontano, e da chi lo rifornisce:
+//      · le FASCE: quando un pianeta scaccia un vicino (la fionda di disco.js: formazione.orfani) i sassi che giravano
+//        attorno a quel vicino restano orfani. Quelli la cui orbita non incrocia nessuno stanno lì (una fascia di
+//        asteroidi), e la fascia si consuma dal bordo: la distanza dal pianeta più vicino cede sempre più lontano
+//        (Chambers), e chi cede è pompato dal pianeta su orbite sempre più allungate, che incrociano di traverso i
+//        pianeti interni (urti veloci) fino a cadere sulla stella;
+//      · le COMETE: i sassi di ghiaccio dei mondi lontani che un gigante palleggia verso l'interno; al Sole
+//        evaporano: i piccoli non arrivano. Senza un gigante non c'è chi scacci né chi palleggi: niente bombardamento tardo.
 //   2. COME SI CONSUMA. Dentro la nube i corpi si urtano tra loro e si frantumano: una CASCATA simulata in 40 classi
 //      di taglia (da 5 m a 4000 km), in cui ogni urto tra due classi rompe, scheggia o fonde secondo l'energia.
 //      Intanto i pianeti che la nube incrocia la spazzano: ogni corpo ha, a ogni giro, una probabilità di cadere su
@@ -60,9 +68,15 @@
 // SEMPLIFICAZIONI (da sapere):
 //   · contano solo i detriti dell'ULTIMO urto gigante; quelli degli urti prima si danno per già ripresi o macinati;
 //   · le nubi dei pianeti vicini sono calcolate con i valori attesi dei loro urti giganti, non con i loro eventi veri;
-//   · le classi di velocità non si scambiano corpi (nessun incontro ravvicinato sposta un corpo da lenta a veloce), e
-//     niente passa di mano da un pianeta all'altro: MANCANO le riserve lontane (una fascia di asteroidi accanto a un
-//     gigante, le comete) che nel Sistema Solare tengono vivo il bombardamento dopo il primo miliardo di anni;
+//   · le classi di velocità non si scambiano corpi (nessun incontro ravvicinato sposta un corpo da lenta a veloce);
+//   · le fasce: quanti sassi restano orfani è una stima (la parte fionda²/(1+fionda²) della massa del corpo scacciato,
+//     più il suo cibo); la legge di Chambers, misurata per pianeti che si disturbano a vicenda, qui decide quando cede
+//     un sasso accanto a UN pianeta: è troppo severa di un paio di raggi di Hill (la fascia vera regge più vicino a
+//     Giove), e fa calare il flusso più in fretta del vero negli ultimi miliardi di anni; MANCA la spinta della luce
+//     sui sassi piccoli (Yarkovsky), che nel Sistema Solare rifornisce le risonanze a ritmo quasi costante;
+//   · le comete: mentre il gigante le palleggia passano una parte a_pianeta/a_gigante del tempo su orbite che scendono
+//     fino al pianeta interno; il ghiaccio è nudo (nessuna crosta lo protegge: evapora al ritmo più alto possibile);
+//     MANCA la nube lontana (i corpi scagliati quasi fuori che tornano dopo miliardi di anni);
 //   · dentro una nube volume e velocità degli urti sono quelli iniziali; le nubi non si urtano tra loro; in un urto
 //     tra due corpi si conta la sorte del più grosso (il piccolo fa da martello: lo rompono i suoi urti);
 //   · la massa dei detriti e quella che ricade non sono tolte né aggiunte alla massa del pianeta (che è quella di

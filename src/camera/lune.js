@@ -22,7 +22,7 @@
 //   · quanti e quanto grandi sono i corpi catturati (contati nel Sistema Solare);
 //   · lo scarto dalla risonanza esatta che fissa l'eccentricità forzata (misurato su Io ed Europa).
 
-import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { generatore } from './mondo.js';
 
@@ -90,10 +90,9 @@ export const k2QPianeta = (P) => (P.tipo === 'gassoso' || P.tipo === 'ghiacciato
 // ---------- il calore
 // il calore della radioattività nella roccia (W per kg di roccia), che cala con l'età: uranio 238 e
 // 235, torio, potassio 40, nelle quantità delle condriti; ognuno si dimezza col suo tempo (in miliardi di anni)
-const ISOTOPI = [[0.75e-12, 4.47], [0.03e-12, 0.704], [0.77e-12, 14.0], [1.9e-12, 1.25]];
+// (la legge è una sola, in leggi.js: caloreDellaRoccia; la usano anche i pianeti, in geologia.js)
 export function caloreRadioattivo(L, eta = ETA) {
-  const H = ISOTOPI.reduce((s, [h, mezza]) => s + h * Math.pow(2, (4.5 - eta / 1e9) / mezza), 0);
-  return (H * L.massaKg * (1 - dentro(L).fg)) / (4 * Math.PI * L.raggioM ** 2);
+  return (caloreDellaRoccia(eta) * L.massaKg * (1 - dentro(L).fg)) / (4 * Math.PI * L.raggioM ** 2);
 }
 // la temperatura alla superficie di una luna senz'aria: la luce della stella alla distanza del pianeta
 // (il ghiaccio è chiaro e ne riflette di più; sopra i 170 K quello esposto evapora, e resta solo al

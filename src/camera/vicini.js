@@ -16,7 +16,7 @@
 
 import { simulaMondo, generatore } from './mondo.js';
 import { segmentiSezione } from './sezione.js';
-import { bellezzaPattern, RIPETI_BASE } from './pattern.js';
+import { bellezzaFinestra, RIPETI_BASE } from './pattern.js';
 
 const gauss = (caso) => { let u = 0; for (let i = 0; i < 6; i++) u += caso(); return u - 3; };
 
@@ -54,7 +54,7 @@ export function inquadraturaVicina(st, forza, caso) {
   };
 }
 
-const misura = (cella, tracce, st) => bellezzaPattern(segmentiSezione(tracce, { ...cella, ...st }), st.ripeti || RIPETI_BASE, st.finestra.lato);
+const misura = (cella, tracce, st) => bellezzaFinestra(segmentiSezione(tracce, { ...cella, ...st }), st.ripeti || RIPETI_BASE, st.finestra.lato);
 
 // la ricerca del ramo giusto: stato = { cella, finestra, vista, sezione, ripeti }
 export function perfeziona(stato, { passi = 50, seme = 1 } = {}, avanza = () => {}) {

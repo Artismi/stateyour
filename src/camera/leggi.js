@@ -77,6 +77,13 @@ export function massaNascita(u) {
   return (b ** -1.3 + ((u - f) / (1 - f)) * (c ** -1.3 - b ** -1.3)) ** (1 / -1.3);
 }
 
+// ---------- LA RADIOATTIVITÀ DELLA ROCCIA: una legge sola per i pianeti (geologia.js, interno) e per le lune (lune.js).
+// Il calore che un chilo di roccia produce (W/kg), dalle quantità misurate nelle condriti di uranio 238 e 235, torio e
+// potassio 40: ognuno si dimezza con il suo tempo (in miliardi di anni). Con l'età cala: a un miliardo di anni era
+// quasi cinque volte quello di oggi (4,5 miliardi), a dieci sarà meno di un terzo.
+export const ISOTOPI = [[0.75e-12, 4.47], [0.03e-12, 0.704], [0.77e-12, 14.0], [1.9e-12, 1.25]];
+export const caloreDellaRoccia = (etaAnni = 4.5e9) => ISOTOPI.reduce((s, [h, mezza]) => s + h * Math.pow(2, (4.5 - etaAnni / 1e9) / mezza), 0);
+
 // ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.
 export const UA = 1.496e11, R_GAS = 8.314;
 // la temperatura di equilibrio: la luce che arriva, meno quella riflessa, uguale a quella irradiata
@@ -85,13 +92,16 @@ export const temperaturaEquilibrio = (Lw, aM, albedo) => Math.pow((Lw * (1 - alb
 // miliardi di anni serve circa 25: così la Terra perde l'idrogeno e tiene l'azoto, la Luna perde tutto); l'esosfera è più calda della superficie
 export const trattiene = (M, R, T, massaMolecola) => (COSTANTI.G * M * massaMolecola) / (COSTANTI.kB * 3 * T * R) > 25;
 export const MOLECOLE = { idrogeno: 2, elio: 4, acqua: 18, azoto: 28, 'anidride carbonica': 44, metano: 16 };
-// il punto di ebollizione dell'acqua a una pressione (Clausius-Clapeyron); il ghiaccio fonde a 273 K;
+// il punto di ebollizione dell'acqua a una pressione (dove la pressione del vapore la uguaglia); il ghiaccio fonde a 273 K;
 // sotto 611 Pa (il punto triplo) l'acqua liquida non può esistere
+// (l'evaporazione dell'acqua: calore 44,00 kJ/mol ed entropia 118,89 J/mol/K, gli STESSI delle tabelle di chimica.js, da
+// cui viene la pressione del vapore che sta nell'aria: così il mare bolle esattamente dove l'aria è satura a quella pressione)
+export const ACQUA = Object.freeze({ evaporazione: 44000, entropia: 118.89, critica: 647, tripla: 611 });
+export const ebollizione = (P) => ACQUA.evaporazione / (ACQUA.entropia - R_GAS * Math.log(Math.max(P, 1e-300) / 1e5));
 export function statoAcqua(T, P) {
-  if (T >= 647) return 'vapore'; // (sopra il punto critico, 647 K, liquido e vapore non si distinguono più: non c'è un mare)
-  if (P < 611) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
-  const Teb = 1 / (1 / 373.15 - (R_GAS * Math.log(P / 101325)) / 40700);
-  return T < 273.15 ? 'ghiaccio' : T < Teb ? 'liquida' : 'vapore';
+  if (T >= ACQUA.critica) return 'vapore'; // (sopra il punto critico, 647 K, liquido e vapore non si distinguono più: non c'è un mare)
+  if (P < ACQUA.tripla) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
+  return T < 273.15 ? 'ghiaccio' : T < ebollizione(P) ? 'liquida' : 'vapore';
 }
 // L'ACQUA ALLA SUPERFICIE: una fonte sola per il clima, per il mare e per l'interno. «frazione» è la parte della
 // massa del pianeta che è acqua (i rocciosi la chiamano «acqua», i ghiacciati «ghiaccio»: è la stessa cosa), «kg»

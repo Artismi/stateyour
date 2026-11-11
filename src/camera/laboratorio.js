@@ -1453,7 +1453,7 @@ function cercaBella(come = 'ovunque') {
   };
   const da = 1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length * 0.98);
   cercatore.postMessage(come === 'vicini' ? { stato: { cella: clona(c), finestra: c.finestra, vista: c.vista, sezione: c.sezione, ripeti: ripetiDi(c), numero: c.seme }, passi: 60, seme }
-    : come === 'qui' ? { solo: c.seme, cella: (c.indirizzo?.zoom || []).length ? clona(c) : undefined, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme });
+    : come === 'qui' ? { solo: c.seme, cella: (c.indirizzo?.zoom || []).length ? clona(c) : undefined, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme, gruppo: ripetiDi(c).gruppo === 'una' ? undefined : 'caleidoscopio' });
 }
 function cambiaUniverso(n) {
   // stessa inquadratura, stessa fetta di tempo: un altro universo

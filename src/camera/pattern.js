@@ -17,6 +17,7 @@
 //   traslazione p1: la finestra copiata accanto a sé
 //   una:      la finestra da sola
 
+import { bellezza } from './sezione.js';
 export const GRUPPI = {
   esagoni: { nome: 'caleidoscopio a sei', spiega: 'un triangolo della finestra, riflesso nei suoi lati: dodici copie fanno un esagono, e intorno ai vertici nascono stelle a sei punte' },
   quadrati: { nome: 'caleidoscopio a quattro', spiega: 'un triangolo della finestra, riflesso nei suoi lati: otto copie fanno un quadrato, con stelle a quattro e a otto punte' },
@@ -25,7 +26,7 @@ export const GRUPPI = {
   traslazione: { nome: 'affiancata', spiega: 'la stessa finestra, copiata accanto a sé' },
   una: { nome: 'da sola', spiega: 'la sezione da sola, senza ripetizione' },
 };
-export const RIPETI_BASE = { gruppo: 'esagoni', angolo: 0 };
+export const RIPETI_BASE = { gruppo: 'una', angolo: 0 }; // il modo normale: la finestra da sola, com'è
 
 // ---------- trasformazioni affini [a, b, c, d, tx, ty]: (x, y) → (a·x + b·y + tx, c·x + d·y + ty)
 const applica = (T, x, y) => [T[0] * x + T[1] * y + T[4], T[2] * x + T[3] * y + T[5]];
@@ -157,3 +158,9 @@ export function bellezzaPattern(segmenti, ripeti, lato) {
   // (le tracce che entrano nel pezzo che si ripete, con la loro lunghezza: servono a cercare i rami)
   return { totale, pieno, celle: sCelle, nitido: sNitido, distese: sDistese, pulizia: sPulizia, equilibrio: sEq, pezzi: [...perTraccia] };
 }
+
+// ---------- la misura di una finestra, comunque la si guardi. LA FINESTRA DIRETTA («da sola») è il modo normale:
+// ciò che le particelle hanno disegnato lì, senza specchi né copie; il suo ordine (una simmetria, un motivo che si
+// ripete, linee che girano) dev'esserci davvero. Il caleidoscopio e le altre ripetizioni sono un'aggiunta di chi
+// guarda, e si misurano a parte.
+export const bellezzaFinestra = (segmenti, ripeti, lato) => (!ripeti || ripeti.gruppo === 'una' ? bellezza(segmenti, lato) : bellezzaPattern(segmenti, ripeti, lato));

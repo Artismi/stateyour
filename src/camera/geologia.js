@@ -23,7 +23,7 @@ import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso } from './leggi.js';
+import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -36,7 +36,7 @@ export function interno(P, stella) {
   const M = P.massaKg, R = P.raggioM, rhoMedia = M / ((4 / 3) * Math.PI * R ** 3);
   const Rc = R * Math.cbrt((ferro * rhoMedia) / TERRA.rhoC);
   // il calore: radioattività (più metalli, più calore) che cala con l'età, più il calore iniziale che resta
-  const q = TERRA.q * (M / TERRA.M) / (R / TERRA.R) ** 2 * Math.sqrt(Math.max(0.05, Z)) * Math.exp(-(eta - 4.5e9) / 3e9) * Math.pow(M / TERRA.M, 0.3);
+  const q = TERRA.q * (M / TERRA.M) / (R / TERRA.R) ** 2 * Math.sqrt(Math.max(0.05, Z)) * (caloreDellaRoccia(eta) / caloreDellaRoccia(4.5e9)) * Math.pow(M / TERRA.M, 0.3); // (cala con l'età come la radioattività della roccia: la stessa legge delle lune)
   // il nucleo resta liquido se il pianeta è abbastanza grande da non essersi raffreddato (tempo ∝ R²)
   const nucleoLiquido = q > 0.025 && R > 3.5e6;
   const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) : 1e-9;
