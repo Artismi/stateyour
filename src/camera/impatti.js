@@ -44,7 +44,12 @@
 //   · la roccia fusa da un urto: 8,9·10⁻¹² m³ per joule (Pierazzo, Vickery e Melosh 1997);
 //   · l'aria: rottura quando la pressione del vento supera la resistenza del corpo, poi il corpo si allarga «a
 //     frittella» fino a 7 volte e si ferma (Chyba e altri 1993; Collins, Melosh e Marcus 2005);
-//   · il momento d'inerzia di un pianeta roccioso, 0,33·M·R² (la Terra: 0,3307).
+//   · il momento d'inerzia di un pianeta roccioso, 0,33·M·R² (la Terra: 0,3307);
+//   · LA ROTAZIONE che gli urti lasciano: un fluido che ruota non supera 0,53 volte la velocità di rottura (le figure
+//     di equilibrio di Maclaurin e Jacobi, esatte per densità uniforme: oltre, il corpo si allunga e perde il di più);
+//     due corpi troppo veloci e di striscio non si fondono, «mordi e fuggi» (la velocità critica di Genda, Kokubo e Ida
+//     2012); un embrione cresciuto nel gas gira già, nel verso dell'orbita, a un decimo della rottura (Marte 0,07, i
+//     grandi asteroidi 0,2–0,4; simulazioni dell'accrescimento nel gas: Johansen e Lacerda 2010, Visser e altri 2020).
 // PARAMETRI LIBERI (scelte di calcolo, non misure): le 40 classi di taglia e le 8 di velocità; il passo del tempo
 // (cresce del 40% a ogni passo: il conto di ogni passo è esatto a ritmi costanti, e passi più fitti cambiano i
 // risultati di un decimo); quanti urti si seguono uno per uno («massimo», 2000); il momento angolare del disco di
@@ -66,6 +71,7 @@
 // con masse e tempi, il cibo rimasto, la fine del gas) si usa quella. In un urto di formazione.urti contano:
 // bersaglioKg, massaKg, e uno tra t (quando è avvenuto, anni), tIncrocio (quando le orbite si sono incrociate: si
 // aggiunge il tempo per trovarsi) e delta (la distanza che ha ceduto: si applica Chambers); facoltativi angolo, v,
+// inclinazione (gradi tra il piano dell'urto e quello dell'orbita: se manca è un evento),
 // laterale (un urto precedente del corpo più piccolo: non conta per la rotazione del pianeta).
 // SE MANCA, LE STIME (ripiego dichiarato, elencate in bilancio.stime): il numero degli urti giganti letto dal testo
 // di P.storia, gli embrioni presi tutti uguali e mangiati uno a uno, il momento dell'ultimo un evento tra il primo
@@ -95,6 +101,9 @@ export const IMPATTI = Object.freeze({
   urtoGrande: { cStar: 1.9, rho1: 1000, mu: 0.36, beta: 2.85, secondi: 2 },
   luna: { a: 1.9, b: 1.1, persa: 0.05 }, // Ida, Canup e Stewart 1997: M_luna = a·L/√(G·M·a_R) − b·M_d − a·M_persa
   inerzia: 0.33,
+  giroLimite: 0.53, // la velocità angolare più alta di un fluido che ruota, in unità di quella di rottura √(GM/R³) (dove la sequenza di Maclaurin si biforca in quella di Jacobi: ω² = 0,374·πGρ)
+  giroEmbrione: 0.1, // quanto gira un embrione cresciuto nel gas, in unità della rottura, nel verso dell'orbita
+  mordiEFuggi: { c1: 2.43, c2: -0.0408, c3: 1.86, c4: 1.08, c5: 2.5 }, // Genda, Kokubo e Ida 2012: v_critica/v_fuga = c1·Γ·Θ^c5 + c2·Γ + c3·Θ^c5 + c4, Γ = (1−γ)/(1+γ), Θ = 1 − b
   // Benz e Asphaug 1999 (J/kg, raggio in cm): Q* = q0·R^a + B·ρ·R^b
   rottura: { roccia: { q0: 9e3, a: -0.36, B: 5e-8, b: 1.36 }, ghiaccio: { q0: 1.6e3, a: -0.39, B: 1.2e-7, b: 1.26 } },
   resto: 1.24, frammenti: 2.5, // il resto più grosso ∝ (Q*/Q)^1,24; i frammenti: N(>D) ∝ D^-2,5
@@ -171,7 +180,13 @@ export function urtoGigante({ bersaglioKg, massaKg, raggioBersaglioM, raggioM, v
   // LA LUNA che il disco riesce a fare fuori dal limite di Roche (Ida, Canup e Stewart 1997)
   const lunaKg = Math.max(0, (IMPATTI.luna.a * discoKg * jd) / Math.sqrt(G * Mt * aR) - IMPATTI.luna.b * discoKg - IMPATTI.luna.a * IMPATTI.luna.persa * discoKg);
   const fusione = Math.min(Mt, (energiaJ * Math.sin((angolo * PI) / 180)) / IMPATTI.fusione[ghiaccio > 0.3 ? 'ghiaccio' : 'roccia']);
-  return { bersaglioKg, massaKg, raggioM: R2, raggioDopoM: Rf, v, vFuga, angolo, energiaJ, momentoAngolare, momentoPianeta: momentoAngolare - discoKg * jd, detritiKg, frammentoKg, discoKg, lunaKg, fusione, frazioneFusa: fusione / Mt };
+  // MORDI E FUGGI (LEGGE EMPIRICA: Genda, Kokubo e Ida 2012): sopra una velocità critica, tanto più bassa quanto più
+  // l'urto è di striscio, i due corpi si toccano e proseguono ognuno per la sua strada (torneranno a incontrarsi)
+  const F = IMPATTI.mordiEFuggi, gam = (1 - gamma) / (1 + gamma), th = Math.pow(1 - b, F.c5), vCritica = vFuga * (F.c1 * gam * th + F.c2 * gam + F.c3 * th + F.c4), mordiEFuggi = v > vCritica;
+  // IL MOMENTO ANGOLARE che resta al pianeta: quello dell'urto, meno ciò che si portano via il disco e i detriti che
+  // sfuggono (la calotta che manca il bersaglio passa a R₁ + 0,4·h dal centro, con la velocità d'arrivo)
+  const momentoDetriti = Math.min(momentoAngolare - discoKg * jd, IMPATTI.sfugge * fuori * massaKg * v * (R1 + 0.4 * h)), momentoPianeta = mordiEFuggi ? 0 : momentoAngolare - discoKg * jd - momentoDetriti;
+  return { bersaglioKg, massaKg, raggioM: R2, raggioDopoM: Rf, v, vFuga, vCritica, mordiEFuggi, angolo, energiaJ, momentoAngolare, momentoPianeta, momentoDetriti, detritiKg, frammentoKg, discoKg, lunaKg, fusione, frazioneFusa: fusione / Mt };
 }
 
 // ---------- LA FORMAZIONE di un pianeta, per quel che serve qui: quando il gas è sparito, i suoi urti giganti (l'ultimo
@@ -190,18 +205,29 @@ function formazioneDi(cx, i, caso) {
   const lista = Array.isArray(F.urti) ? F.urti : null, N = lista ? lista.length : typeof F.urti === 'number' ? F.urti : urtiDallaStoria(q.storia);
   if (!lista && N) out.stime.push('urti giganti: numero letto dal testo della storia, embrioni uguali');
   const raggio = (m) => raggioPianeta({ massaKg: m, ferro, ghiaccio: gh });
-  const Lv = [0, 0, 0]; let ult = null;
+  // LA ROTAZIONE. Ogni embrione gira già un poco, nel verso dell'orbita (giroEmbrione); ogni urto aggiunge il suo
+  // momento angolare (ciò che resta al pianeta: vedi urtoGigante), in una direzione qualunque; e a ogni passo il
+  // corpo, fuso, non può girare oltre il limite dei fluidi che ruotano: il di più si stacca dall'equatore
+  const critico = (m, R) => IMPATTI.inerzia * m * R * R * Math.sqrt((G * m) / R ** 3), Lv = [0, 0, 0]; let ult = null, primo = true;
   for (let k = 1; k <= N; k++) {
-    const u = lista ? lista[k - 1] : { bersaglioKg: (Ms * k) / (N + 1), massaKg: Ms / (N + 1) }, ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${nome}`) : medio);
+    const u = lista ? lista[k - 1] : { bersaglioKg: (Ms * k) / (N + 1), massaKg: Ms / (N + 1) };
     if (u.laterale) continue;
-    // l'angolo: il parametro d'urto al quadrato è uniforme (chi arriva da lontano non mira): 45° il più probabile
-    const angolo = u.angolo ?? (Math.acos(Math.sqrt(ev('angolo', 0.5))) * 180) / PI;
-    const r = urtoGigante({ bersaglioKg: u.bersaglioKg, massaKg: u.massaKg, raggioBersaglioM: raggio(u.bersaglioKg), raggioM: raggio(u.massaKg), v: u.v, angolo, ghiaccio: gh });
-    // il piano dell'urto: gli embrioni arrivano da ogni direzione (lo sciame è spesso quanto il raggio d'azione del pianeta)
-    const cosI = 2 * ev('piano', 0.75) - 1, sinI = Math.sqrt(1 - cosI * cosI), fi = 2 * PI * ev('verso', 0);
-    Lv[0] += r.momentoPianeta * sinI * Math.cos(fi); Lv[1] += r.momentoPianeta * sinI * Math.sin(fi); Lv[2] += r.momentoPianeta * cosI;
-    // un pianeta non può girare più in fretta di quanto sta insieme: il momento in più se lo portano via i detriti
-    const Mk = u.bersaglioKg + u.massaKg, Lmax = IMPATTI.inerzia * Mk * r.raggioDopoM ** 2 * Math.sqrt((G * Mk) / r.raggioDopoM ** 3), Ln = Math.hypot(...Lv);
+    if (primo) { Lv[2] += IMPATTI.giroEmbrione * critico(u.bersaglioKg, raggio(u.bersaglioKg)); primo = false; }
+    Lv[2] += IMPATTI.giroEmbrione * critico(u.massaKg, raggio(u.massaKg));
+    // (se i due corpi si mordono e fuggono tornano a incontrarsi, con un'altra geometria: al più tre volte, poi si fondono)
+    let r = null;
+    for (let giro = 0; giro < 4; giro++) {
+      const ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${giro ? `ritorno ${giro}/` : ''}${nome}`) : medio);
+      // l'angolo: il parametro d'urto al quadrato è uniforme (chi arriva da lontano non mira): 45° il più probabile
+      const angolo = (!giro && u.angolo) || (Math.acos(Math.sqrt(ev('angolo', 0.5))) * 180) / PI;
+      r = urtoGigante({ bersaglioKg: u.bersaglioKg, massaKg: u.massaKg, raggioBersaglioM: raggio(u.bersaglioKg), raggioM: raggio(u.massaKg), v: u.v, angolo, ghiaccio: gh });
+      if (r.mordiEFuggi && giro < 3) continue;
+      // il piano dell'urto: gli embrioni arrivano da ogni direzione (lo sciame è spesso quanto il raggio d'azione del pianeta)
+      const cosI = !giro && u.inclinazione != null ? Math.cos((u.inclinazione * PI) / 180) : 2 * ev('piano', 0.75) - 1, sinI = Math.sqrt(1 - cosI * cosI), fi = 2 * PI * ev('verso', 0), Lk = r.mordiEFuggi ? r.momentoAngolare : r.momentoPianeta;
+      Lv[0] += Lk * sinI * Math.cos(fi); Lv[1] += Lk * sinI * Math.sin(fi); Lv[2] += Lk * cosI;
+      break;
+    }
+    const Lmax = IMPATTI.giroLimite * critico(u.bersaglioKg + u.massaKg, r.raggioDopoM), Ln = Math.hypot(...Lv);
     if (Ln > Lmax) for (let d = 0; d < 3; d++) Lv[d] *= Lmax / Ln;
     ult = { k, u, r };
   }
@@ -230,8 +256,8 @@ function formazioneDi(cx, i, caso) {
       t0 = Math.min(0.9999 * eta, incrocio + (resta > 1e-6 * cerca ? cerca - resta / Math.expm1(resta / cerca) : 0));
     }
     const dove = caso ? punto(caso(`urto gigante ${k}/dove`)) : { lat: 0, lon: 0 };
-    const Ln = Math.hypot(...Lv), I = IMPATTI.inerzia * q.massaKg * q.raggioM ** 2;
-    out.rotazione = { momentoAngolare: Ln, giorno: Ln > 0 ? (2 * PI * I) / Ln : Infinity, obliquita: Ln > 0 ? (Math.acos(limita(Lv[2] / Ln, -1, 1)) * 180) / PI : 0 };
+    const Ln = Math.min(Math.hypot(...Lv), IMPATTI.giroLimite * critico(q.massaKg, q.raggioM)), I = IMPATTI.inerzia * q.massaKg * q.raggioM ** 2;
+    out.rotazione = { momentoAngolare: Ln, giorno: Ln > 0 ? (2 * PI * I) / Ln : Infinity, suRottura: Ln / critico(q.massaKg, q.raggioM), obliquita: Ln > 0 ? (Math.acos(limita(Lv[2] / Ln, -1, 1)) * 180) / PI : 0 };
     out.t0 = t0; out.urti = N; out.ultimo = { ...r, t: t0, ...dove };
   }
   // IL CIBO RIMASTO. Un embrione mangia la striscia larga 2C raggi di Hill della sua massa di isolamento; se non ha
@@ -428,7 +454,7 @@ export function cratere({ diametroM, densita = MATERIALI.roccia.densita, v, ango
 function schedaGigante(form, P) {
   const u = form.ultimo; if (!u) return null;
   return { t: u.t, urti: form.urti, massaKg: u.massaKg, bersaglioKg: u.bersaglioKg, diametroM: 2 * u.raggioM, v: u.v, angolo: u.angolo, lat: u.lat, lon: u.lon, energiaJ: u.energiaJ, momentoAngolare: u.momentoAngolare,
-    detritiKg: u.detritiKg, discoKg: u.discoKg, lunaKg: u.lunaKg, luna: u.lunaKg > 0 ? { massaKg: u.lunaKg, mu: u.lunaKg / P.massaKg } : null, giornoDopo: form.rotazione.giorno, obliquita: form.rotazione.obliquita, fusione: u.fusione, frazioneFusa: u.frazioneFusa };
+    detritiKg: u.detritiKg, discoKg: u.discoKg, lunaKg: u.lunaKg, luna: u.lunaKg > 0 ? { massaKg: u.lunaKg, mu: u.lunaKg / P.massaKg } : null, giornoDopo: form.rotazione.giorno, giroSuRottura: form.rotazione.suRottura, obliquita: form.rotazione.obliquita, fusione: u.fusione, frazioneFusa: u.frazioneFusa };
 }
 export function giganteDi(P, sistema, caso) {
   const st = sistema.stella || {}, Mst = P.Mstella ?? (st.massaNascita || st.massa || 1) * MSOLE;

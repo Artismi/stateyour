@@ -297,7 +297,7 @@ function passoVolo() {
   const W = tela.width, H = tela.height, r = volaVerso(camMappa, volo, W, H);
   if (r?.entra) { entraRegione(r.entra); return; }
   // arrivati: se l'oggetto è ora un livello, ci si ferma
-  if (++volo.passi > 60 || (volo.livello !== camMappa.livello)) { volo = null; sopraMappa = null; aggiornaVista(); return; }
+  if (++volo.passi > 160 || (volo.livello !== camMappa.livello)) { volo = null; sopraMappa = null; aggiornaVista(); return; }
   disegna(); dove(); requestAnimationFrame(passoVolo);
 }
 function disegnaPattern() {
@@ -1559,7 +1559,7 @@ adattaPattern(); aggiornaVista();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
 window.__camera = {
-  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, pat,
+  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat,
   entra, carica, seleziona: (s) => { sel = s; disegna(); mostraPannello(); }, sonda: (s) => { sonda = s; disegna(); },
   vai: (v) => { vista = v; aggiornaVista(); }, tempo: (t) => { tempo = t; aggiornaTempo(); disegna(); },
 };

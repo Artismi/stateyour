@@ -51,7 +51,7 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   // LA ROCCIA (livello 5): in fondo alla superficie, avvicinandosi ancora, si guarda di che cosa è fatto quel punto
   if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; return null; }
   if (cam.livello === 5) { if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; return null; } cam.z = Math.min(cam.z, 12 * m); return null; }
-  return passaggi(cam, W, H);
+  return passaggi(cam, W, H, k > 1);
 }
 // LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
 // (per il passaggio di livello si conta fino a 70 raggi: le lune lontanissime, catturate, restano fuori dallo schermo)
@@ -67,7 +67,7 @@ function descriviLuna(P, L) {
   const giorni = L.periodo / 86400, lun = L.massaKg / 7.35e22;
   return `luna ${L.id + 1}: ${nata}${L.retrograda ? ', gira al contrario' : ''} · raggio ${Math.round(L.raggioM / 1000)} km${L.forma && !L.forma.rotonda ? ' (irregolare)' : ''}, ${lun >= 0.01 ? `${lun.toPrecision(2)} Lune` : `${L.massaKg.toExponential(1)} kg`} · a ${Math.round(L.aM / 1000).toLocaleString('it')} km, un giro in ${giorni < 3 ? `${(giorni * 24).toFixed(1)} ore` : `${giorni.toFixed(1)} giorni`}${L.bloccata ? ' · mostra sempre la stessa faccia' : ''} · ${L.stato}${L.risonanza ? ` · in risonanza ${L.risonanza}` : ''}`;
 }
-function passaggi(cam, W, H) {
+function passaggi(cam, W, H, dentro = false) {
   const m = minimo(W, H);
   for (let giro = 0; giro < 4; giro++) {
     // LA SUPERFICIE (livello 4): la mappa del pianeta, x = longitudine (0..1, si richiude), y = latitudine (0..0,5)
@@ -97,9 +97,11 @@ function passaggi(cam, W, H) {
       if (scelto) { const { f, dx, dy } = scelto; cam.livello++; cam.via = f.via; cam.cx = dx / f.scala; cam.cy = dy / f.scala; cam.z *= f.scala; continue; }
       // nel vuoto tra le cose non si scende oltre; avvicinandosi, lo sguardo scivola
       // verso la cosa più vicina al centro, così zoomare porta sempre da qualche parte
-      const tetto = cam.livello === 0 ? m / 0.002 : cam.livello === 1 ? m / (RAGGIO_SISTEMA * 0.8) : m / 0.02;
+      const tetto = cam.livello === 0 ? m / 0.002 : cam.livello === 1 ? m / (RAGGIO_SISTEMA * 0.8) : m / 5e-7; // (nel sistema i pianeti hanno la taglia vera: per arrivarci serve avvicinarsi molto)
       const vicino = (() => { let b = null, d = Infinity; for (const f of figli(cam)) { let dx = f.pos[0] - cam.cx, dy = f.pos[1] - cam.cy; if (cam.livello === 0) { dx -= Math.round(dx); dy -= Math.round(dy); } const e = Math.hypot(dx, dy); if (e < d) { d = e; b = { f, dx, dy }; } } return b; })();
-      if (vicino) { const f = vicino.f, prossimita = Math.min(1, (f.scala * cam.z * f.raggio) / soglia); if (prossimita > 0.3) { const k = 0.25 * prossimita; cam.cx += vicino.dx * k; cam.cy += vicino.dy * k; } }
+      if (vicino) { const f = vicino.f, perTaglia = Math.min(1, (f.scala * cam.z * f.raggio) / soglia);
+        // nel sistema un pianeta è un puntino: avvicinandosi, lo sguardo va verso quello che è già vicino al centro dello schermo
+        const prossimita = cam.livello === 2 && dentro ? Math.max(perTaglia, 1 - (Math.hypot(vicino.dx, vicino.dy) * cam.z) / (0.3 * m)) : perTaglia; if (prossimita > 0.3) { const k = 0.25 * prossimita; cam.cx += vicino.dx * k; cam.cy += vicino.dy * k; } }
       cam.z = Math.min(cam.z, tetto);
     } else {
       // una regione grande quanto lo schermo, al centro: si entra
@@ -173,7 +175,7 @@ export function volaVerso(cam, obiettivo, W, H) {
   let dx = obiettivo.pos[0] - cam.cx, dy = obiettivo.pos[1] - cam.cy;
   if (cam.livello === 0) { dx -= Math.round(dx); dy -= Math.round(dy); }
   cam.cx += dx * 0.18; cam.cy += dy * 0.18;
-  const k = Math.exp(Math.max(-0.25, Math.min(0.25, Math.log(zFin / cam.z) * 0.18)));
+  const k = Math.exp(Math.max(-0.45, Math.min(0.45, Math.log(zFin / cam.z) * 0.18)));
   return zoomMappa(cam, W / 2, H / 2, k, W, H);
 }
 
@@ -299,8 +301,14 @@ function disegnaSistema(ctx, S, X, Y, z, dpr, v) {
   alone(ctx, X(0), Y(0), Math.max(10 * dpr, st.r * z * 4), st.colore, 0.9);
   ctx.fillStyle = rgb(st.colore); ctx.beginPath(); ctx.arc(X(0), Y(0), Math.max(2 * dpr, st.r * z), 0, 7); ctx.fill();
   for (const P of S.pianeti) {
-    ctx.strokeStyle = 'rgba(200,210,255,0.16)'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.arc(X(0), Y(0), P.a * z, 0, 7); ctx.stroke();
-    disegnaCorpo(ctx, P, X(P.pos[0]), Y(P.pos[1]), Math.max(1.5 * dpr, P.r * z), st, v, dpr, P.pos);
+    ctx.strokeStyle = 'rgba(200,210,255,0.16)'; ctx.lineWidth = dpr; ctx.beginPath();
+    if (P.a * z < 8000 * dpr) ctx.arc(X(0), Y(0), P.a * z, 0, 7);
+    else { // da molto vicino l'orbita è un cerchio enorme: se ne disegna solo il tratto che passa sullo schermo, per punti
+      const cxs = ctx.canvas.width / 2, cys = ctx.canvas.height / 2, fi0 = Math.atan2(cys - Y(0), cxs - X(0)), semi = Math.min(Math.PI, (1.5 * Math.hypot(cxs, cys)) / (P.a * z));
+      for (let q = 0; q <= 48; q++) { const fi = fi0 - semi + (2 * semi * q) / 48, x = X(P.a * Math.cos(fi)), y = Y(P.a * Math.sin(fi)); q ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    }
+    ctx.stroke();
+    disegnaCorpo(ctx, P, X(P.pos[0]), Y(P.pos[1]), Math.max(2.5 * dpr, P.r * z), st, v, dpr, P.pos); // (taglia vera; da lontano un puntino, per poterlo trovare)
   }
 }
 function disegnaCorpo(ctx, P, x, y, r, st, v, dpr, pos) {

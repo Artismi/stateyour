@@ -215,7 +215,8 @@ export const sistema = memo((n, gid, sid) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
     return {
       id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia, formazione: q.formazione, involucro: q.involucro || 0,
-      r: Math.max(0.006, Math.min(0.04, 0.006 + 0.03 * (q.raggioM / 7e7))), B0: 0, campo: 0,
+      r: q.raggioM / (30 * UA), B0: 0, campo: 0, // il raggio VERO nelle unità del sistema (30 UA): sulla mappa un pianeta è grande quanto è
+
       colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[q.tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
     };
   });
@@ -227,7 +228,7 @@ export const sistema = memo((n, gid, sid) => {
   const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = viva ? stellaVera(S.massa, { Z: S.Z ?? 1, eta: S.eta }).L * LSOLE : S.stato === 'nana bianca' ? 4 * Math.PI * S.raggioM ** 2 * COSTANTI.sigma * S.T ** 4 : 0;
   // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
   // stella, il disco e gli altri pianeti
-  const Sis = { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
+  const Sis = { stella: { ...S, r: (viva ? stellaVera(S.massa, { Z: S.Z ?? 1, eta: S.eta }).R * 6.957e8 : S.raggioM || 1e4) / (30 * UA) } /* il raggio vero, nelle unità del sistema */, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno

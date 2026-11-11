@@ -102,16 +102,116 @@ export function acquaInSuperficie({ tipo, massaKg = 0, composizione = {} } = {})
   const frazione = composizione.acqua ?? composizione.ghiaccio ?? 0;
   return { frazione, kg: massaKg * frazione * (tipo === 'ghiacciato' ? 1 : 0.04) };
 }
-// il clima di un pianeta: dalla luminosità della stella, dalla distanza, dalla massa e dalla composizione
-export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0 }) {
-  const albedo = tipo === 'ghiacciato' ? 0.6 : tipo === 'gassoso' ? 0.35 : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
+// ---------- IL CLIMA: UNA LEGGE SOLA, A DUE RISOLUZIONI. Il bilancio di energia di un pianeta (modello di
+// Budyko-Sellers): in ogni punto  C·∂T/∂t = luce assorbita − luce irradiata + calore portato dai vicini.
+// Qui sotto ci sono i pezzi della legge (quanta luce arriva, quanta ne torna indietro, quanta ne trattiene l'aria,
+// quanto calore porta) e la sua soluzione PER FASCE DI LATITUDINE (bilancioPerFasce: una colonna per parallelo, in
+// un millisecondo): è il clima che ogni pianeta ha appena esiste (clima()). geologia.js (climaSuperficie) risolve
+// LA STESSA legge, con gli stessi pezzi, sulla mappa vera del pianeta (64 × 32, terre e mari dove sono): le due
+// temperature medie coincidono entro pochi gradi, e dove non coincidono è per ciò che la mappa ha in più (dove sono
+// i continenti; e, quando il pianeta gira, i venti e le nuvole veri di meteo.js al posto dei coefficienti).
+export const CLIMA = Object.freeze({
+  capacitaTerra: 1e7, capacitaMare: 1e8, // (J/m²/K) quanto calore serve per scaldare di un grado il suolo, e lo strato di mare rimescolato
+  albedoTerra: 0.25, albedoMare: 0.08, albedoGhiaccio: 0.62, // la parte di luce rimandata indietro (misurate)
+  geloTerra: 268, geloMare: 266, // (K) sotto, la neve e il ghiaccio coprono (e sopra di 4 K non ce n'è più)
+  // le nuvole, dove c'è mare che evapora e un'aria che tiene il vapore: coprono fino a 0,63 del cielo (quanto ne esce da
+  // meteo.js per la Terra; misurato: 0,67) e rimandano indietro il 30% della luce che le colpisce. TARATO sulla Terra:
+  // così riflette in tutto 0,30. Al freddo l'aria tiene meno vapore: quattro decimi delle nuvole
+  nuvoleMassime: 0.63, riflessoNuvole: 0.3, nuvoleAlFreddo: 0.4,
+  trasporto: 0.6, // (W/m²/K, a 1 bar) il calore che l'aria e il mare portano dal caldo al freddo; cresce come la radice della pressione
+  // il rilievo che l'acqua deve coprire: la parte sommersa attesa è 1 − exp(−profondità media / rilievo). TARATO sulle
+  // superfici che escono da superficiePianeta: 2 km con le placche (continenti e oceani), mezzo senza
+  rilievoPlacche: 2000, rilievoFermo: 500,
+});
+// la luce media di un giorno (W/m²) a una latitudine, con il sole a una declinazione (radianti): la geometria esatta
+export function luceDelGiorno(S0, lat, declinazione) {
+  const x = -Math.tan(lat) * Math.tan(declinazione), h0 = x >= 1 ? 0 : x <= -1 ? Math.PI : Math.acos(x);
+  return (S0 / Math.PI) * (h0 * Math.sin(lat) * Math.sin(declinazione) + Math.cos(lat) * Math.cos(declinazione) * Math.sin(h0));
+}
+// il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina
+export const acquaPerIlGhiaccio = (mare) => (mare > 0 ? Math.min(1, 0.15 + 2.5 * mare) : 0);
+// le nuvole attese (0…1 del cielo), dove non c'è una circolazione calcolata: servono mare e un'aria di almeno 0,1 bar
+export const nuvoleAttese = (mare, pressione) => (mare > 0.02 && isFinite(pressione) && pressione > 1e4 ? CLIMA.nuvoleMassime * Math.min(1, mare * 2 + 0.3) : 0);
+// quanta luce rimanda un punto a temperatura t: il suolo (terra o mare: «mare» vale 0 o 1), il ghiaccio che lo copre
+// se fa freddo e c'è acqua, e sopra le nuvole («copertura»: quella vera di meteo.js; se manca, quella attesa)
+export function riflette(t, mare, acquaGhiaccio, nuvole, copertura = null) {
+  const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
+  const cielo = copertura ?? (t > CLIMA.geloTerra ? nuvole : nuvole * CLIMA.nuvoleAlFreddo);
+  return suolo + cielo * CLIMA.riflessoNuvole * (1 - suolo);
+}
+// il calore portato dai vicini (W/m²/K): tanto più quanto più l'aria è densa
+export const trasportoCalore = (pressione) => (isFinite(pressione) ? CLIMA.trasporto * Math.pow(Math.max(1e-4, pressione / 1e5), 0.5) : 1);
+// L'EFFETTO SERRA: lo spessore ottico dell'aria per la luce infrarossa. La superficie irradia σT⁴/(1 + ¾τ).
+// LEGGE EMPIRICA di riserva, quando dell'aria si conosce solo la pressione: τ = 0,8·(p / 1 bar)^0,6 (la Terra: 0,8)
+export const serraDaPressione = (pressione) => (isFinite(pressione) ? 0.8 * Math.pow(Math.max(0, pressione) / 1e5, 0.6) : 2);
+// la parte sommersa attesa di un pianeta con «acquaKg» d'acqua in superficie (prima che la sua mappa esista)
+export function mareAtteso({ acquaKg = 0, raggioM, placche = false }) {
+  const profondita = acquaKg / 1000 / (4 * Math.PI * raggioM * raggioM);
+  return profondita > 0 ? 1 - Math.exp(-profondita / (placche ? CLIMA.rilievoPlacche : CLIMA.rilievoFermo)) : 0;
+}
+// LA LEGGE RISOLTA PER FASCE. Una colonna per parallelo (per un pianeta bloccato le fasce girano attorno all'asse che
+// punta alla stella: il «polo» è il punto sotto il sole). In ogni fascia terra e mare stanno nella proporzione «mare»
+// e hanno la stessa temperatura. Il passo nel tempo è quello di climaSuperficie: la luce irradiata linearizzata, il
+// calore dei vicini implicito (l'energia si conserva con qualunque passo), i primi anni al rallentatore se il mare ha
+// la memoria lunga. → { T (media sul pianeta, K), ghiaccio (0…1), assorbita, irradiata, arriva (W/m²), lat, fasce }
+export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 24, anni = 12, passiAnno = 36 }) {
+  const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
+  const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
+  for (let j = 0; j < H; j++) { lat[j] = Math.PI / 2 - (j + 0.5) * dphi; cosLat[j] = Math.cos(lat[j]); cosN[j] = Math.max(0, Math.cos(lat[j] + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)); }
+  const C = mare * CLIMA.capacitaMare + (1 - mare) * CLIMA.capacitaTerra, ghiaccioAcqua = acquaPerIlGhiaccio(mare), nuvole = nuvoleAttese(mare, pressione);
+  const albedo = (t) => mare * riflette(t, 1, ghiaccioAcqua, nuvole) + (1 - mare) * riflette(t, 0, ghiaccioAcqua, nuvole);
+  const T = new Float64Array(H).fill(Tavvio), nuovo = new Float64Array(H), media = new Float64Array(H), sole = new Float64Array(H);
+  const memoria = (C * serra) / (4 * sigma * Math.max(30, Tavvio / 1.25) ** 3), veri = Math.min(4, anni - 1), totale = anni * passiAnno, lenti = bloccato ? totale : (anni - veri) * passiAnno, dtVero = anno / passiAnno;
+  const dtLento = dtVero * Math.max(1, bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
+  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H);
+  if (bloccato) for (let j = 0; j < H; j++) sole[j] = S0 * Math.max(0, Math.sin(lat[j]));
+  let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0;
+  for (let n = 0; n < totale; n++) {
+    const ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
+    if (!bloccato) { const del = eps * Math.sin((2 * Math.PI * (n % passiAnno)) / passiAnno); for (let j = 0; j < H; j++) sole[j] = luceDelGiorno(S0, lat[j], del); }
+    for (let j = 0; j < H; j++) {
+      const t = T[j], entra = sole[j] * (1 - albedo(t)), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t, dT = Math.max(-50, Math.min(50, (dt * (entra - esce)) / (C + dt * molla)));
+      nuovo[j] = Math.max(3, t + dT);
+      if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
+    }
+    // il calore portato dai vicini, da un polo all'altro (tre diagonali)
+    const q = (dt * D) / (C * dphi * dphi);
+    for (let j = 0; j < H; j++) { sotto[j] = j > 0 ? (-q * cosN[j]) / cosLat[j] : 0; sopra[j] = j < H - 1 ? (-q * cosS[j]) / cosLat[j] : 0; diag[j] = 1 - sotto[j] - sopra[j]; }
+    cp[0] = sopra[0] / diag[0]; nuovo[0] /= diag[0];
+    for (let j = 1; j < H; j++) { const d = diag[j] - sotto[j] * cp[j - 1]; cp[j] = sopra[j] / d; nuovo[j] = (nuovo[j] - sotto[j] * nuovo[j - 1]) / d; }
+    for (let j = H - 2; j >= 0; j--) nuovo[j] -= cp[j] * nuovo[j + 1];
+    for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; ghiaccio += (cosLat[j] * ghiaccioAcqua * (mare * (nuovo[j] < 271 ? 1 : 0) + (1 - mare) * (nuovo[j] < CLIMA.geloTerra ? 1 : 0))) / passiAnno; } }
+  }
+  let Tm = 0, w = 0; for (let j = 0; j < H; j++) { Tm += media[j] * cosLat[j]; w += cosLat[j]; }
+  return { T: Tm / w, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media) };
+}
+// IL CLIMA DI UN PIANETA: dalla luce della stella, dalla distanza, dalla massa, dall'acqua che ha in superficie,
+// da come gira (anno, inclinazione dell'asse, bloccato o no). È il bilancio per fasce qui sopra: la temperatura «T»
+// è la media sul pianeta e sull'anno, «albedo» la parte di luce che in tutto rimanda indietro (ghiaccio e nuvole
+// compresi), «Teq» la temperatura che avrebbe con quell'albedo e senz'aria. Lo stato dell'acqua viene da T e dalla
+// pressione; se è vapore il mare non c'è (l'acqua è nell'aria, o è fuggita) e il bilancio è quello di un mondo asciutto.
+//   acqua     la parte della massa che è acqua; acquaKg quanta ne sta in superficie (se manca: acquaInSuperficie)
+//   placche   se la crosta è a placche (il rilievo è più alto: a parità d'acqua emerge più terra)
+// → { Teq, T, g, pressione, tenuti, acqua, albedo } come sempre, e in più ciò che climaSuperficie deve condividere:
+//   tau (la serra), D (il calore portato), Tavvio (da dove parte), mare e ghiaccio attesi, nuvole, bilancio, fasce
+export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, obliquita = 0, bloccato = false, placche = false }) {
   const g = (COSTANTI.G * massaKg) / (raggioM * raggioM), mu = COSTANTI.mp;
-  const tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
-  if (tipo === 'gassoso') return { Teq, T: Teq * 1.2, g, pressione: Infinity, tenuti, acqua: 'nelle nuvole', albedo };
-  // i gas che il pianeta ha liberato dall'interno (circa un milionesimo della sua massa, come la Terra),
-  // se riesce a trattenerli; l'effetto serra cresce con la pressione
+  if (tipo === 'gassoso') {
+    const albedo = 0.35, Teq = temperaturaEquilibrio(Lw, aM, albedo), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
+    return { Teq, T: Teq * 1.2, g, pressione: Infinity, tenuti, acqua: 'nelle nuvole', albedo };
+  }
+  // che cosa la gravità trattiene: decide la temperatura dell'aria alta, che non sa del ghiaccio in basso (albedo 0,3)
+  const Tnuda = temperaturaEquilibrio(Lw, aM, 0.3), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Tnuda, m * mu)).map(([n]) => n);
+  // i gas che il pianeta ha liberato dall'interno (circa un milionesimo della sua massa, come la Terra), se riesce a trattenerli
   const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.3 + 3 * acqua) : 0;
-  const pressione = (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = 0.8 * Math.pow(pressione / 1e5, 0.6);
-  const T = Teq * Math.pow(1 + 0.75 * tau, 0.25);
-  return { Teq, T, g, pressione, tenuti, acqua: acqua > 0 ? statoAcqua(T, pressione) : 'assente', albedo };
+  const pressione = (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = serraDaPressione(pressione), D = trasportoCalore(pressione);
+  const S0 = Lw / (4 * Math.PI * aM * aM), periodo = anno ?? ANNO * Math.pow(aM / UA, 1.5), kg = acquaKg ?? acquaInSuperficie({ tipo, massaKg, composizione: { acqua } }).kg;
+  // si parte caldo (un pianeta nasce caldo e si raffredda), ma non più di un quarto sopra dove lo porterebbe la sola luce
+  const Tavvio = Lw > 0 ? Math.max(Tnuda, Math.min(310, 1.25 * Math.max(30, Tnuda * Math.pow(1 + 0.75 * tau, 0.25)))) : 30;
+  const risolvi = (mare) => (S0 > 0 ? bilancioPerFasce({ S0, anno: periodo, obliquita, bloccato, mare, pressione, tau, D, Tavvio }) : { T: 3, ghiaccio: mare > 0 ? 1 : 0, assorbita: 0, irradiata: 0, arriva: 0, lat: [], fasce: [] });
+  let mare = acqua > 0 ? mareAtteso({ acquaKg: kg, raggioM, placche }) : 0, b = risolvi(mare);
+  const stato = acqua > 0 ? statoAcqua(b.T, pressione) : 'assente';
+  if (mare > 0 && stato.startsWith('vapore')) { mare = 0; b = risolvi(0); }
+  const albedo = b.arriva > 0 ? 1 - b.assorbita / b.arriva : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
+  return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione), bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };
 }

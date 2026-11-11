@@ -14,14 +14,15 @@ const tra = (x, a, b, che) => assert.ok(x > a && x < b, `${che}: ${x} (atteso tr
 const somma = (a) => { let s = 0; for (const v of a) s += v; return s; };
 
 // ---------- i corpi veri. Di ogni pianeta solo ciò che si sa; della formazione si sa (dalle rocce) un urto solo: quello
-// che ha fatto la Luna, un corpo come Marte arrivato a 45° circa 60 milioni di anni dopo la nascita del Sole
+// che ha fatto la Luna, un corpo come Marte arrivato a 45° circa 60 milioni di anni dopo la nascita del Sole, nel
+// verso in cui la Terra gira (l'asse è inclinato di 23°)
 const MT = 5.972e24, RT = 6.371e6, ML = 7.35e22, L_TERRA_LUNA = 3.5e34;
 const anno = (aUA) => 2 * Math.PI * Math.sqrt((aUA * UA) ** 3 / (6.674e-11 * MSOLE));
 const SOLO = 'un embrione di roccia rimasto solo, che ha mangiato tutta la sua striscia di disco';
 const pianeta = (id, aUA, m, r, altro = {}) => ({ id, tipo: 'roccioso', aM: aUA * UA, massaKg: m * MT, raggioM: r * RT, Mstella: MSOLE, anno: anno(aUA), composizione: { ferro: 0.32, roccia: 0.68, acqua: 0 }, storia: SOLO, clima: { pressione: 0, T: 300 }, ...altro });
 const MERCURIO = pianeta(0, 0.387, 0.0553, 0.383);
 const VENERE = pianeta(1, 0.723, 0.815, 0.95, { clima: { pressione: 9.2e6, T: 735 }, atmosfera: { gas: { CO2: 0.965, N2: 0.035 } } });
-const TERRA = pianeta(2, 1, 1, 1, { clima: { pressione: 1.013e5, T: 288 }, atmosfera: { gas: { N2: 0.78, O2: 0.21 } }, interno: { q: 0.087, nucleo: 0.546 }, formazione: { urti: [{ bersaglioKg: 0.9 * MT, massaKg: 0.1 * MT, angolo: 45, t: 6e7 }] } });
+const TERRA = pianeta(2, 1, 1, 1, { clima: { pressione: 1.013e5, T: 288 }, atmosfera: { gas: { N2: 0.78, O2: 0.21 } }, interno: { q: 0.087, nucleo: 0.546 }, formazione: { urti: [{ bersaglioKg: 0.9 * MT, massaKg: 0.1 * MT, angolo: 45, inclinazione: 23.4, t: 6e7 }] } });
 const MARTE = pianeta(3, 1.524, 0.107, 0.532, { clima: { pressione: 610, T: 210 }, atmosfera: { gas: { CO2: 0.95, N2: 0.03 } } });
 const GIOVE = { id: 4, tipo: 'gassoso', aM: 5.2 * UA, massaKg: 317.8 * MT, raggioM: 7.149e7, Mstella: MSOLE, anno: anno(5.2), composizione: { idrogeno: 0.71, elio: 0.25, pesanti: 0.04 }, storia: 'un nucleo di 10 Terre ha catturato il gas a valanga', clima: { pressione: Infinity, T: 165 } };
 const SOLARE = { stella: { massa: 1, eta: 4.567e9, Z: 1 }, pianeti: [MERCURIO, VENERE, TERRA, MARTE, GIOVE] };
