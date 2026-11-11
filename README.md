@@ -239,16 +239,60 @@ molta scava, in proporzione alla portata e alla pendenza; i pendii si sgretolano
 Le reti di fiumi, le valli e i laghi emergono da qui; la neve sui monti si
 calcola dalla quota vera di ogni punto.
 
-**Le placche emergono dal mantello.** Il mantello scaldato dal basso si organizza
-da solo in celle (la stessa equazione della pozza): pennacchi che salgono,
-circondati da una rete di discese. La larghezza delle celle viene dallo spessore
-del mantello, il vigore dal calore dell'interno. Dove sale la crosta si apre,
-dove scende si accartoccia e raccoglie la crosta leggera dei continenti, tanta
-quanta l'età del pianeta ne ha separata. Forma e bordi non sono scelti. I colori
-della superficie sono quelli dei materiali: basalto, roccia continentale, il
-rosso del ferro ossidato dove c'è acqua o aria, sedimenti lungo i fiumi; nessun
-verde, perché la vegetazione ci sarà solo se la vita emergerà. (Resta una
-fotografia: le placche non si spostano ancora nel tempo.)
+**La tettonica evolve nel tempo** (`src/camera/tettonica.js`). Non è una
+fotografia: si parte da un pianeta senza continenti e lo si lascia vivere per la
+sua età. Il mantello, scaldato soprattutto da dentro e raffreddato da sopra, si
+organizza da solo in celle (la stessa equazione della pozza): discese fredde
+concentrate, e intorno una rete di salite larghe, le dorsali. La larghezza delle
+celle viene dallo spessore del mantello, il vigore dal calore dell'interno. La
+crosta leggera dei continenti si conserva (lo scarto è sotto lo 0,001%): nasce a
+poco a poco sopra le fosse, il mantello la raccoglie dove converge, e dove due
+masse si scontrano si ispessisce in catene; sotto un continente fermo il
+mantello si scalda, la discesa diventa salita, e il continente si spacca. La
+crosta degli oceani nasce alle dorsali, invecchia allontanandosi e sprofonda
+come la radice dell'età (la legge misurata sulla Terra). Le quote vengono dal
+galleggiamento: la crosta spessa sta alta. Forma, numero e storia dei continenti
+non sono scelti; con poco calore o senz'acqua la crosta resta un coperchio
+unico. Il «seme» è solo il rumore minuscolo da cui il mantello parte: sta per
+le irregolarità lasciate dalla formazione del pianeta, e non è ancora ricavato
+dai suoi impatti veri (è una delle cose da collegare). Limiti detti: la carta è
+trattata come piana (vicino ai poli le forme sono stirate), le coste sono
+ancora troppo lisce, quattro parametri (rigidità, coesione, e quanto e in quanto
+tempo un continente scalda il mantello sotto di sé) sono scelti guardando il
+risultato. I colori della superficie sono quelli dei materiali (`minerali` in
+`chimica.js`): nessun verde, perché la vegetazione ci sarà solo se la vita
+emergerà.
+
+**I pianeti nascono dal disco** (`src/camera/disco.js`). Intorno a ogni stella
+un disco di gas e polvere, con la massa e i metalli della stella: i grani si
+uniscono in embrioni, oltre la linea della neve c'è anche il ghiaccio e gli
+embrioni crescono abbastanza da catturare il gas (i giganti), poi migrano, si
+urtano e si fondono. Orbite, masse, composizione e raggio vengono da questa
+storia, che resta scritta nel pianeta. Limite detto: i giganti escono troppo
+spesso (un terzo delle stelle, contro il 10–20% osservato).
+
+**Le lune e le maree** (`src/camera/lune.js`). Una luna nasce da un grande
+urto, dal disco intorno a un gigante, o è catturata; deve stare tra il limite
+di Roche (dentro si sbriciola) e la sfera di Hill (fuori la stella la strappa).
+Le maree spostano la sua orbita nel tempo, bloccano la sua rotazione, e
+scaldano l'interno di una luna in orbita eccentrica (vulcani come Io, oceani
+sotto il ghiaccio come Europa). Sono calcolate per ogni pianeta e si leggono
+nel pannello; sulla mappa non sono ancora disegnate.
+
+**La chimica** (`src/camera/chimica.js`). Dagli elementi che la galassia ha
+prodotto fino a quel momento (le abbondanze seguono i metalli della stella),
+con le energie di legame vere, l'equilibrio chimico a quella temperatura e
+pressione dice quali molecole ci sono: l'aria del pianeta (riducente o
+ossidante), i minerali della crosta e il loro colore, e i mattoni della vita
+(acido cianidrico, formaldeide) dove c'è energia: fulmini, luce ultravioletta,
+sorgenti calde. Un risultato vero, non cercato: su 2478 pianeti provati nessuno
+ha insieme le tre condizioni perché gli zuccheri si copino da soli.
+
+**La roccia in fondo allo zoom** (`src/camera/rocce.js`). Sotto la tessera più
+fine c'è la roccia: cristalli che nascono in punti a caso e crescono finché si
+toccano (grana grossa se il raffreddamento è lento, fine se è veloce), fiocchi
+di neve cresciuti dal vapore, sedimenti ordinati dall'acqua, fratture che
+seguono lo sforzo.
 
 **Impatti, sedimenti, orogenesi.** Per tutta la sua vita un pianeta è colpito
 (molto da giovane, poi sempre meno; molti crateri piccoli e pochi grandi; l'aria

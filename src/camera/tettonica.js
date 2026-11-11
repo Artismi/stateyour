@@ -3,8 +3,8 @@
 //
 // Non è una fotografia: si parte da un pianeta senza continenti e lo si lascia vivere per la sua età.
 //   1. IL MANTELLO, scaldato dal basso, si organizza da solo in celle (l'equazione di Swift-Hohenberg,
-//      come in fluidi.js, in regime a celle: pennacchi caldi che salgono, circondati da una rete di
-//      discese fredde), e avanza nel tempo insieme alla crosta. La larghezza delle celle viene dallo
+//      come in fluidi.js, in regime a celle: discese fredde concentrate, circondate da una rete di
+//      salite larghe, come in un mantello scaldato da dentro), e avanza nel tempo insieme alla crosta. La larghezza delle celle viene dallo
 //      spessore del mantello, il vigore dal calore dell'interno. Trascina la crosta: via da dove sale,
 //      verso dove scende. La litosfera è rigida: ogni placca va tutta alla stessa velocità, e le dorsali
 //      e le fosse sono i bordi stretti dove quella velocità cambia verso.
@@ -54,7 +54,7 @@ export const COSTANTI = {
   rigida: 0.12, // fin dove un continente va tutto insieme: il raggio della finestra, come frazione di una cella del mantello
   coesione: 0.5, // quanto forte la crosta robusta tira a sé quella vicina (celle per passo, per unità di differenza)
   inerzia: 4, // in quanti giri di cella il mantello sotto un continente si scalda (o si raffredda quando se ne va)
-  coperta: 1.3, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
+  coperta: 2.5, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
 };
 const C = COSTANTI, C_PASSO = 0.3, CEDE = 0.03, GIRI = 2, PASSI_GROSSI = 2400;
 
@@ -88,7 +88,7 @@ function fft2(re, im, W, H, inversa) {
 // periodico, l'altra metà è la sua immagine allo specchio: così ai poli il mantello non attraversa il bordo (come la
 // crosta, che lì trova un muro). Il caso iniziale è un rumore minuscolo.
 function mantello({ onde, epsilon, seme }) {
-  const Wm = onde <= 8 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, Nq = Wm * Wm, dk = 1 / onde, g = 1.2;
+  const Wm = onde <= 8 ? 64 : 128, Hm = Wm / 2, Nm = Wm * Hm, Nq = Wm * Wm, dk = 1 / onde, g = -1.2; // g < 0: il mantello è scaldato soprattutto da DENTRO (il decadimento radioattivo) e raffreddato da sopra, perciò le discese fredde sono concentrate e le salite sono larghe e formano una rete (le dorsali)
   let s = seme % 2147483647 || 1; if (s < 0) s += 2147483647; const caso = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const u = new Float64Array(Nm).map(() => 0.05 * (caso() - 0.5)), re = new Float64Array(Nq), im = new Float64Array(Nq), k4 = new Float64Array(Nq);
   for (let y = 0; y < Wm; y++) for (let x = 0; x < Wm; x++) { const kx = (x < Wm / 2 ? x : x - Wm) * dk, ky = (y < Wm / 2 ? y : y - Wm) * dk; k4[y * Wm + x] = (1 - kx * kx - ky * ky) ** 2; }
@@ -116,9 +116,9 @@ function mantello({ onde, epsilon, seme }) {
     }
     return out;
   };
-  // quante celle: i pennacchi che salgono (i massimi del campo)
-  const celle = () => { let mx = 0, n = 0; for (const v of u) if (v > mx) mx = v;
-    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const v = u[y * Wm + x]; if (v < 0.35 * mx) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) { const yy = y + b; if ((a || b) && yy >= 0 && yy < Hm && u[yy * Wm + ((x + a + Wm) % Wm)] > v) { cima = false; break; } } if (cima) n++; }
+  // quante celle: le discese concentrate (i minimi del campo)
+  const celle = () => { let mx = 0, n = 0; for (const v of u) if (-v > mx) mx = -v;
+    for (let y = 0; y < Hm; y++) for (let x = 0; x < Wm; x++) { const v = -u[y * Wm + x]; if (v < 0.35 * mx) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) { const yy = y + b; if ((a || b) && yy >= 0 && yy < Hm && -u[yy * Wm + ((x + a + Wm) % Wm)] > v) { cima = false; break; } } if (cima) n++; }
     return n; };
   return { Wm, Hm, u, passo, su, celle };
 }

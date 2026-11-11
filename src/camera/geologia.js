@@ -20,6 +20,7 @@
 
 import { celle } from './fluidi.js';
 import { minerali, coloreRoccia } from './chimica.js';
+import { evolviTettonica } from './tettonica.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -49,45 +50,22 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const sfera = (i, j) => { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI; return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)]; };
   const casuale = () => { const z = 2 * caso() - 1, a = caso() * 2 * Math.PI, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  // LE PLACCHE EMERGONO DAL MANTELLO. Il mantello scaldato dal basso si organizza da solo in celle (la
-  // stessa equazione della pozza, fluidi.js): la loro larghezza viene dallo spessore del mantello, il loro
-  // vigore dal calore dell'interno. Dove il mantello sale la crosta si apre (dorsali); dove scende la crosta
-  // converge e si accartoccia (catene di montagne), e lì la crosta leggera dei continenti si accumula. Forma,
-  // numero e bordi delle placche non sono scelti: sono il disegno che la convezione ha preso.
-  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), cont = new Uint8Array(W * H), spinta = new Float32Array(W * H);
+  // LA TETTONICA EVOLVE NEL TEMPO (tettonica.js). Il mantello scaldato dal basso si organizza in celle che
+  // cambiano lentamente; la crosta dei continenti, leggera, è trascinata: si spacca dove il mantello sale, deriva,
+  // e dove due masse si scontrano si ispessisce in catene di montagne; la crosta degli oceani nasce alle dorsali,
+  // invecchia allontanandosi (e il fondo sprofonda come la radice dell'età) e affonda nelle fosse. Le quote
+  // vengono dal galleggiamento: la crosta spessa sta alta. Forma, numero e storia dei continenti non sono scelti.
+  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), spinta = new Float32Array(W * H);
   const aPlacche = int.tettonica === 'a placche';
-  let placche = 1, manto = null;
-  if (aPlacche) {
-    const Dm = P.raggioM * (1 - int.nucleo), ondeM = Math.max(3, Math.min(11, Math.round((2 * Math.PI * P.raggioM) / (3 * Dm))));
-    // (regime a celle: pennacchi che salgono, circondati da una rete di discese, come le fosse; i difetti vengono da soli)
-    const c = celle({ epsilon: Math.max(0.15, Math.min(0.8, 0.35 * (int.q / 0.087))), esagoni: true }, { N: 256, onde: ondeM, passi: 150, seme });
-    let mx = 1e-9; for (const v of c.u) mx = Math.max(mx, Math.abs(v));
-    manto = new Float32Array(W * H); for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) manto[jj * W + ii] = c.u[jj * 256 + ii] / mx; // metà del quadrato: stesse proporzioni della mappa
-    // la crosta dei continenti si raccoglie sopra le discese del mantello: la media, su una zona larga, di quanto scende
-    const R = 5, liscio = new Float32Array(W * H);
-    for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) { let a = 0, n = 0; for (let dj = -R; dj <= R; dj += 2) { const y = jj + dj; if (y < 0 || y >= H) continue; for (let di = -R; di <= R; di += 2) { a -= manto[y * W + ((ii + di + W) % W)]; n++; } } liscio[jj * W + ii] = a / n; }
-    // quanta crosta continentale c'è: si separa lentamente dal mantello, cresce con l'età (sulla Terra, un terzo in 4,5 miliardi di anni)
-    // (lungo la rete delle discese la crosta non si raccoglie ovunque uguale: dipende da dove il mantello ne ha portata di più)
-    const grandi = Array.from({ length: 6 }, () => ({ d: casuale(), f: 1 + caso() * 2.5, fi: caso() * 6.28 }));
-    for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) { const p = sfera(ii, jj); let g = 0; for (const o of grandi) g += Math.sin(o.f * dot(p, o.d) * 2 + o.fi); liscio[jj * W + ii] += 0.09 * g; }
-    const fraz = Math.min(0.45, 0.08 + 0.055 * ((int.eta ?? 4.5e9) / 1e9)), soglia = Float32Array.from(liscio).sort()[Math.floor((1 - fraz) * W * H)];
-    for (let k = 0; k < W * H; k++) cont[k] = liscio[k] > soglia ? 1 : 0;
-    placche = Math.round((ondeM * ondeM) / 2);
-  }
+  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true }) : null;
+  const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(), f: 2 + k * 0.7, fi: caso() * 6.28, a: 1 / (1 + k * 0.35) }));
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const p = sfera(i, j), k = j * W + i; let h = -1500;
-    if (manto) {
-      const u = manto[k];
-      h = cont[k] ? 350 : -3800;
-      h += 3600 * Math.max(0, -u - 0.3) * (cont[k] ? 1 : 0.45); // dove il mantello scende: la crosta si accartoccia
-      h += 1700 * Math.max(0, u - 0.5) * (cont[k] ? 0.4 : 1); // dove sale: le dorsali
-    }
-    let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi); h += r * (manto ? 260 : 700);
-    alt[k] = h;
-    // l'OROGENESI: la spinta che continua nel tempo, dove il mantello scende sotto la crosta
-    if (manto) spinta[k] = Math.max(0, -manto[k] - 0.3) * (cont[k] ? 1 : 0.45);
+    const p = sfera(i, j), k = j * W + i;
+    let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi);
+    alt[k] = tt ? tt.alt[k] + r * 180 : -1500 + r * 700;
+    if (tt) spinta[k] = tt.spinta[k]; // l'OROGENESI: dove oggi la crosta è compressa e i monti crescono
   }
   // GLI IMPATTI. Per tutta la sua vita il pianeta è colpito: moltissimo da giovane, poi sempre meno; molti
   // crateri piccoli e pochi grandi; un'atmosfera densa brucia i corpi piccoli. Quanti se ne vedono ancora

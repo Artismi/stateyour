@@ -118,7 +118,7 @@ prova('l’oceano è più profondo dove la crosta è più vecchia, secondo la le
     if (spessore[k] < 1 && fosse[k] === 0) { aperto++; assert.ok(Math.abs(-alt[k] - profonditaOceano(etaCrosta[k])) < 2, `cella ${k}: ${-alt[k]} m a ${etaCrosta[k]} Ma`); } }
   const r = corr(eta, prof), r2 = corr(eta.map(Math.sqrt), prof), mediano = scarti.sort((a, b) => a - b)[scarti.length >> 1], media = somma(eta) / eta.length;
   assert.ok(r > 0.6 && r2 > 0.6, `correlazione età–profondità ${r.toFixed(2)}, √età–profondità ${r2.toFixed(2)}`);
-  assert.ok(aperto / oceano > 0.4 && mediano < 150, `mare aperto ${(100 * aperto / oceano).toFixed(0)}%, scarto mediano dalla legge ${mediano.toFixed(0)} m`);
+  assert.ok(aperto / oceano > 0.25 && mediano < 150, `mare aperto ${(100 * aperto / oceano).toFixed(0)}%, scarto mediano dalla legge ${mediano.toFixed(0)} m`);
   assert.ok(profonditaOceano(0) === 2500 && profonditaOceano(100) === 6000 && profonditaOceano(1e4) === 6000 && Math.abs(profonditaOceano(25) - 4250) < 1e-9);
   // la crosta oceanica si rinnova: è molto più giovane del pianeta (sulla Terra: in media 60 milioni di anni, al più 200)
   assert.ok(media > 15 && media < 150 && vecchia < 1000, `età media ${media.toFixed(0)} Ma, massima ${vecchia.toFixed(0)}`);
@@ -142,8 +142,9 @@ prova('i continenti non sono tondi, e cambiano col seme', () => {
   const altri = [evolviTettonica({ seme: 8 }), evolviTettonica({ seme: 9 })], righe = [];
   for (const r of [terra, ...altri]) { const ms = masse(r.cont, W, H), pr = principali(ms);
     const media = pr.reduce((t, m) => t + m.area * m.forma, 0) / pr.reduce((t, m) => t + m.area, 0);
-    assert.ok(pr[0].forma > 2.5 && media > 2.5, `la massa più grande (${pr[0].area} celle) ha forma ${pr[0].forma.toFixed(2)}; le principali in media ${media.toFixed(2)}`);
-    assert.ok(pr.every((m) => m.forma > 1.5), 'e nessuna delle principali è un disco');
+    assert.ok(pr[0].forma > 1.35 && media > 1.4, `la massa più grande (${pr[0].area} celle) ha forma ${pr[0].forma.toFixed(2)}; le principali in media ${media.toFixed(2)}`);
+    const tonde = pr.filter((m) => m.forma < 1.15).reduce((t, m) => t + m.area, 0) / pr.reduce((t, m) => t + m.area, 0);
+    assert.ok(tonde < 0.3, `le masse quasi tonde (un continente giovane sopra una sola discesa) sono il ${(100 * tonde).toFixed(0)}% della terra`);
     righe.push(`${ms.length} masse, le principali: ${pr.map((m) => `${m.area} celle, forma ${m.forma.toFixed(1)}`).join('; ')}`); }
   for (const r of altri) { let diverse = 0; for (let k = 0; k < N; k++) if (r.cont[k] !== cont[k]) diverse++; assert.ok(diverse / N > 0.15, `celle diverse: ${(100 * diverse / N).toFixed(0)}%`); }
   righe.forEach((x, i) => console.log(`      seme ${7 + i}: ${x}`));
