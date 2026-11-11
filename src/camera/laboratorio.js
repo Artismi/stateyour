@@ -15,7 +15,7 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
-import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo } from './cosmo.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle, flussoInterno } from './fluidi.js';
@@ -260,7 +260,7 @@ function apriCosmo() {
 function entraRegione(a) {
   volo = null;
   const qui = indirizzoOra();
-  if (!qui || numeroDi(qui) !== numeroDi(a) || qui.cosmo !== a.cosmo) { ricorda(); comp = compBiblioteca(numeroDi(a)); corrente = 0; sel = null; scelto = null; }
+  if (!qui || numeroDi(qui) !== numeroDi(a) || qui.cosmo !== a.cosmo) { ricorda(); comp = compBiblioteca(numeroDi(a), undefined, undefined, undefined, undefined, { storia: ramiCosmo(a.cosmo) }); corrente = 0; sel = null; scelto = null; }
   entra(0); vista = 'dettaglio'; aggiornaVista();
 }
 // la rotella che, oltre un limite, porta alla vista accanto nella catena
@@ -948,7 +948,7 @@ function superficie(v) {
   const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
   const P = sistemaDi(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], q = flussoInterno(P.massaKg, P.raggioM), g = P.clima.g;
   let lo = 1e-4, hi = 1; for (let i = 0; i < 50; i++) { const m = Math.sqrt(lo * hi); if (convezione({ g, q, d: m }).epsilon < 0) lo = m; else hi = m; }
-  let sd = (v.cosmo * 131 + v.galassia * 17 + v.stella * 7 + v.pianeta) % 2147483647 || 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  let sd = (cosmoBase(v.cosmo) * 131 + v.galassia * 17 + v.stella * 7 + v.pianeta) % 2147483647 || 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const d = hi * (1.03 + 0.35 * caso()), c = convezione({ g, q, d }), r = c.epsilon > 0 ? celle(c, { seme: sd }) : null;
   let url = null;
   if (r) { const cv = document.createElement('canvas'); cv.width = cv.height = r.N; const x = cv.getContext('2d'), im = x.createImageData(r.N, r.N); let mx = 1e-9; for (const w of r.u) mx = Math.max(mx, Math.abs(w)); for (let i = 0; i < r.N * r.N; i++) { const t = 0.5 + 0.5 * (r.u[i] / mx); im.data[4 * i] = 40 + 150 * t; im.data[4 * i + 1] = 80 + 140 * t; im.data[4 * i + 2] = 120 + 120 * t; im.data[4 * i + 3] = 255; } x.putImageData(im, 0, 0); url = cv.toDataURL(); }
@@ -965,6 +965,9 @@ function pannelloCosmo(h) {
     if (camMappa.livello >= 3) {
       const P = sistemaDi(camMappa.via.cosmo, camMappa.via.galassia, camMappa.via.stella).pianeti[camMappa.via.pianeta], cl = P.clima;
       h.push(`<h2>il pianeta</h2><p class="nota">${Math.round(cl.T - 273.15)} °C in superficie (${Math.round(cl.Teq - 273.15)} °C senza atmosfera), ${isFinite(cl.pressione) ? (cl.pressione < 1 ? 'nessuna atmosfera' : `${(cl.pressione / 1e5).toPrecision(2)} bar`) : 'un gigante di gas'}, gravità ${cl.g.toFixed(1)} m/s², acqua ${cl.acqua}. Trattiene: ${cl.tenuti.join(', ') || 'niente'}. Tutto discende dalla luce della sua stella, dalla distanza, dalla massa e da che cosa è fatto.</p>`);
+      // UN PIANETA PARALLELO: lo stesso pianeta, della stessa stella, con la storia interna andata in un altro modo
+      { const v = camMappa.via, ev = `mantello/${v.galassia}/${v.stella}/${v.pianeta}`, r = ramiCosmo(v.cosmo)[ev] || 0, n = Object.keys(ramiCosmo(v.cosmo)).length;
+        if (P.tipo !== 'gassoso') h.push(`<p class="nota"><button data-ramo-p="${ev}|${r + 1}">✦ un pianeta parallelo</button>${r ? ` <button data-ramo-p="${ev}|0">↩ quello di partenza</button>` : ''}<br>${r ? `Sei in un cosmo parallelo (${n} ${n === 1 ? 'evento andato' : 'eventi andati'} diversamente): stessa galassia, stessa stella, stesso pianeta con la stessa massa; il suo mantello è partito da un altro stato, e i continenti hanno avuto un'altra storia.` : 'Lo stesso pianeta in un cosmo dove il suo mantello è partito da un altro stato: stessa massa, stessa stella, altri continenti. Tutto il resto del cosmo resta identico.'}</p>`); }
       // L'ARIA e la prima tappa verso la vita
       if (P.atmosfera) {
         const gas = Object.entries(P.atmosfera.gas).sort((x, y) => y[1] - x[1]).filter(([, f]) => f > 0.001).slice(0, 5).map(([g, f]) => `${g} ${(f * 100).toFixed(f < 0.1 ? 1 : 0)}%`).join(', ');
@@ -1197,6 +1200,7 @@ pannello.addEventListener('click', (e) => {
   if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
   if (d.vistaP != null) { vista = 'pattern'; aggiornaVista(); return; }
   if (d.modoP) { vista = d.modoP; aggiornaVista(); return; }
+  if (d.ramoP) { const [ev, r] = d.ramoP.split('|'); camMappa.via = { ...camMappa.via, cosmo: cosmoRamo(camMappa.via.cosmo, ev, +r) }; aggiornaVista(); return; }
   if (d.copiaPosto != null) { ricorda(); const e2 = comp.elementi[+d.copiaPosto], { a, b } = comp.reticolo; e2.posti.push({ pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], rot: 0 }); scelto = { e: +d.copiaPosto, p: e2.posti.length - 1 }; return aggiorna(); }
   if (d.scegliPosto != null) { scelto = { e: +d.scegliPosto, p: 0 }; mostraPannello(); return disegna(); }
   if (d.togliPosto != null) return togliPosto(scelto.e, scelto.p);
@@ -1391,7 +1395,7 @@ $('chiudiSeme').addEventListener('click', () => $('dialogoSeme').close());
 // un ramo: { rami, separato } — lo stesso universo, con alcuni eventi andati diversamente
 const nomeRamo = (c) => { const n = Object.keys(c.rami || {}).length; return n ? `un ramo parallelo (${n} ${n === 1 ? 'evento andato' : 'eventi andati'} diversamente, separato a t ${fmt(c.separato ?? 0)})` : ''; };
 function compBiblioteca(n, finestra, sezione, vistaS, ripeti, ramoS) {
-  const u = universo(n);
+  const u = universo(n, ramoS?.storia && Object.keys(ramoS.storia).length ? ramoS.storia : null); // storia: gli eventi del cosmo andati diversamente
   if (ripeti) u.cella.ripeti = clona(ripeti);
   if (ramoS?.rami && Object.keys(ramoS.rami).length) { u.cella.rami = { ...ramoS.rami }; u.cella.separato = ramoS.separato; u.nome = `${u.nome}, un ramo`; }
   if (finestra) u.cella.finestra = clona(finestra);

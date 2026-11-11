@@ -9,7 +9,7 @@
 // Ogni livello ha le sue coordinate; la camera della mappa è { livello, via, cx, cy, z }
 // (via = l'indirizzo dei livelli sopra), e passare di livello non muove niente sullo schermo.
 
-import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
+import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
@@ -161,7 +161,7 @@ export function volaVerso(cam, obiettivo, W, H) {
 
 // la riga «dove sei»
 export function percorso(cam) {
-  const v = cam.via, out = [`cosmo ${v.cosmo}`];
+  const v = cam.via, out = [`cosmo ${cosmoBase(v.cosmo)}${Object.keys(ramiCosmo(v.cosmo)).length ? ' (un ramo parallelo)' : ''}`];
   if (cam.livello >= 1) out.push(`galassia ${v.galassia + 1}`);
   if (cam.livello >= 2) out.push(`stella ${v.stella + 1}`);
   if (cam.livello >= 3) out.push(`pianeta ${v.pianeta + 1}`);

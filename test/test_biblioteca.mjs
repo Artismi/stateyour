@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { universo } from '../src/camera/biblioteca.js';
 import { simulaMondo, campiContinui } from '../src/camera/mondo.js';
 import { indirizzoDi, numeroDi, regione, cosmo, galassia, sistema, pianeta, cellaDi } from '../src/camera/cosmo.js';
+import * as CO from '../src/camera/cosmo.js';
 import { unita, catalogoVero, velocita } from '../src/camera/unita.js';
 
 let ok = 0;
@@ -131,6 +132,26 @@ prova('le tessere: più vicino è lo stesso terreno con più dettaglio, e lo ste
   let b = 0, n = 0; for (let j = Math.floor((5 / 16) * H); j < Math.floor((6 / 16) * H); j++) for (let i = Math.floor((9 / 16) * W); i < Math.floor((10 / 16) * W); i++) { b += se.alt[j * W + i]; n++; }
   assert.ok(Math.abs(a - b / n) < 250, `media della tessera ${a}, della madre ${b / n}`);
   assert.equal(GE.tessera('prova-ts', se, cl, 2, 9, 5, 21), t);
+});
+
+prova('un cosmo parallelo: un evento va diversamente, e cambia solo ciò che ne discende', () => {
+  const n = 1616476, a = CO.indirizzoDi(n), S0 = CO.sistema(a.cosmo, a.galassia, a.stella);
+  // il mantello di un pianeta parte da un altro stato: stesso pianeta, stessi vicini, stessa regione di particelle
+  const ev = `mantello/${a.galassia}/${a.stella}/${a.pianeta}`, c1 = CO.cosmoRamo(a.cosmo, ev, 1), S1 = CO.sistema(c1, a.galassia, a.stella);
+  assert.notEqual(S0.pianeti[a.pianeta].origine, S1.pianeti[a.pianeta].origine);
+  assert.equal(S0.pianeti[a.pianeta].massaKg, S1.pianeti[a.pianeta].massaKg);
+  assert.ok(S0.pianeti.every((p, i) => i === a.pianeta || p.origine === S1.pianeti[i].origine));
+  const r0 = CO.regione(a).cella, r1 = CO.regione({ ...a, cosmo: c1 }).cella;
+  assert.equal(JSON.stringify({ ...r0, indirizzo: 0 }), JSON.stringify({ ...r1, indirizzo: 0 }));
+  // il numero della biblioteca resta lo stesso, e il ramo si toglie tornando al cosmo di partenza
+  assert.equal(CO.numeroDi({ ...a, cosmo: c1 }), n); assert.equal(CO.cosmoRamo(c1, ev, 0), a.cosmo);
+  assert.deepEqual(CO.indirizzoDi(n, CO.ramiCosmo(c1)), { ...a, cosmo: c1 });
+  // un'altra formazione dei pianeti: la stella è la stessa, i pianeti no; la stella accanto non se ne accorge
+  const c2 = CO.cosmoRamo(a.cosmo, `disco/${a.galassia}/${a.stella}`, 1), S2 = CO.sistema(c2, a.galassia, a.stella);
+  assert.equal(S2.stella.massa, S0.stella.massa);
+  assert.notEqual(JSON.stringify(S2.pianeti.map((p) => p.massaKg)), JSON.stringify(S0.pianeti.map((p) => p.massaKg)));
+  const altra = (c) => JSON.stringify(CO.sistema(c, a.galassia, (a.stella + 1) % CO.STELLE).pianeti.map((p) => [p.massaKg, p.origine]));
+  assert.equal(altra(c2), altra(a.cosmo));
 });
 
 console.log(`biblioteca: ${ok} prove, tutto ok`);

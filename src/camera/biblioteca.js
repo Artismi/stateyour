@@ -31,4 +31,5 @@
 import { indirizzoDi, regione, CATALOGO } from './cosmo.js';
 
 export { CATALOGO };
-export function universo(numero) { return regione(indirizzoDi(numero)); }
+// rami: gli eventi del cosmo andati diversamente (un cosmo parallelo, vedi cosmo.js)
+export function universo(numero, rami = null) { return regione(indirizzoDi(numero, rami)); }

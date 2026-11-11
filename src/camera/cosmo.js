@@ -37,24 +37,50 @@ export function hash(...parti) {
   h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
   return h >>> 0;
 }
-const casoDi = (...parti) => { const c = generatore(hash(...parti)); const tra = (a, b) => a + c() * (b - a); return { c, tra, intero: (a, b) => Math.floor(tra(a, b + 1)), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) / Math.SQRT1_2 / 1.0; } }; };
+// ---------- UNIVERSI PARALLELI A OGNI SCALA. Ogni corso di eventi ha un indirizzo: «disco/3/53» è la formazione
+// dei pianeti della stella 53 nella galassia 3, «mantello/3/53/0» la storia interna del suo primo pianeta. Un cosmo
+// parallelo è lo stesso cosmo con alcuni di questi eventi andati diversamente: lo si scrive «n#{"evento":ramo}».
+// Tutto ciò che non discende da quegli eventi resta identico (stesse galassie, stesse stelle, stessi altri pianeti).
+const scomposti = new Map();
+function scomponi(n) {
+  if (typeof n !== 'string') return [n, null];
+  let r = scomposti.get(n);
+  if (!r) { const i = n.indexOf('#'); r = i < 0 ? [Number(n), null] : [Number(n.slice(0, i)), JSON.parse(n.slice(i + 1))]; scomposti.set(n, r); }
+  return r;
+}
+export const cosmoBase = (n) => scomponi(n)[0];
+export const ramiCosmo = (n) => scomponi(n)[1] || {};
+// lo stesso cosmo con l'evento andato nel modo «ramo» (0: come nel cosmo di partenza)
+export function cosmoRamo(n, evento, ramo) {
+  const [b, r0] = scomponi(n), r = { ...(r0 || {}) };
+  if (ramo) r[evento] = ramo; else delete r[evento];
+  const chiavi = Object.keys(r).sort();
+  return chiavi.length ? `${b}#${JSON.stringify(Object.fromEntries(chiavi.map((k) => [k, r[k]])))}` : b;
+}
+export const cosmoCon = (n, rami) => Object.entries(rami || {}).reduce((c, [e, r]) => cosmoRamo(c, e, r), cosmoBase(n));
+// il numero da cui parte un corso di eventi: nel cosmo di partenza è quello di sempre
+export function semeEvento(nome, n, ...resto) {
+  const [b, rami] = scomponi(n), r = rami ? rami[[nome, ...resto].join('/')] : 0;
+  return r ? hash(nome, b, ...resto, 'ramo', r) : hash(nome, b, ...resto);
+}
+const casoDi = (nome, n, ...resto) => { const c = generatore(semeEvento(nome, n, ...resto)); const tra = (a, b) => a + c() * (b - a); return { c, tra, intero: (a, b) => Math.floor(tra(a, b + 1)), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) / Math.SQRT1_2 / 1.0; } }; };
 const memo = (f) => { const m = new Map(); return (...a) => { const k = a.join('|'); if (!m.has(k)) { if (m.size > 64) m.delete(m.keys().next().value); m.set(k, f(...a)); } return m.get(k); }; };
 
 // ---------- il numero della biblioteca ↔ l'indirizzo
-export function indirizzoDi(numero) {
+export function indirizzoDi(numero, rami = null) {
   let n = Math.max(1, Math.floor(numero)) - 1;
   const regione = n % REGIONI; n = Math.floor(n / REGIONI);
   const slot = n % PIANETI_MAX; n = Math.floor(n / PIANETI_MAX);
   const stella = n % STELLE; n = Math.floor(n / STELLE);
   const gslot = n % GALASSIE_MAX; n = Math.floor(n / GALASSIE_MAX);
-  const cosmoN = n + 1;
+  const cosmoN = cosmoCon(n + 1, rami);
   const C = cosmo(cosmoN), galassia = gslot % C.galassie.length;
   let st = stella, S = sistema(cosmoN, galassia, st);
   while (!S.pianeti.length) { st = (st + 1) % STELLE; S = sistema(cosmoN, galassia, st); }
   return { cosmo: cosmoN, galassia, stella: st, pianeta: slot % S.pianeti.length, regione };
 }
 export function numeroDi(a) {
-  return 1 + a.regione + REGIONI * (a.pianeta + PIANETI_MAX * (a.stella + STELLE * (a.galassia + GALASSIE_MAX * (a.cosmo - 1))));
+  return 1 + a.regione + REGIONI * (a.pianeta + PIANETI_MAX * (a.stella + STELLE * (a.galassia + GALASSIE_MAX * (cosmoBase(a.cosmo) - 1))));
 }
 
 // ---------- il cosmo: le fluttuazioni dell'inizio, la rete, le galassie
@@ -176,7 +202,7 @@ export const sistema = memo((n, gid, sid) => {
   // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
   // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
   const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: (S.eta ?? 5e9) + (S.morta ?? 0) }, hash('disco', n, gid, sid)).slice(0, PIANETI_MAX);
+  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: (S.eta ?? 5e9) + (S.morta ?? 0) }, semeEvento('disco', n, gid, sid)).slice(0, PIANETI_MAX);
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
     return {
@@ -218,10 +244,10 @@ export const sistema = memo((n, gid, sid) => {
         minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
     } catch { p.atmosfera = null; p.prebiotica = null; }
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
-    p.lune = lune(p, { eta, Z: S.Z ?? 1 }, hash('lune', n, gid, sid, p.id));
+    p.lune = lune(p, { eta, Z: S.Z ?? 1 }, semeEvento('lune', n, gid, sid, p.id));
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
     // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
-    p.origine = hash('mantello', n, gid, sid, p.id, Math.round(Math.log(p.massaKg) * 1e6));
+    p.origine = hash(semeEvento('mantello', n, gid, sid, p.id), Math.round(Math.log(p.massaKg) * 1e6));
   }
   return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });

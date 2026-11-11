@@ -14,7 +14,7 @@
 // (Ω = √(G·M / (rR)³)), e la massa del pianeta discende dal suo raggio e da
 // che cosa è fatto.
 
-import { sistema, pianeta, fascia } from './cosmo.js';
+import { sistema, pianeta, fascia, semeEvento } from './cosmo.js';
 
 const Q = 1.602e-19, MEV = 1.602e-13, G = 6.674e-11;
 const DENSITA = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 };
@@ -24,7 +24,7 @@ const memo = new Map();
 export function nebbiaPianeta(n, gid, sid, pid) {
   const k = `${n}|${gid}|${sid}|${pid}`; if (memo.has(k)) return memo.get(k);
   const P = sistema(n, gid, sid).pianeti[pid], Pl = pianeta(n, gid, sid, pid);
-  let s = 7 + n * 131 + gid * 17 + sid * 7 + pid * 3; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  let s = semeEvento('nebbia', n, gid, sid, pid) % 2147483646 + 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   const fascia_ = [], anello = [], fmax = 0.17;
   for (let i = 0; i < 40000 && fascia_.length < 2600; i++) {
     const r = 1.15 + caso() * 4.85; if (caso() > fascia(P, Pl, r) / fmax) continue;
