@@ -52,7 +52,7 @@ export function leggi(testo) {
   if (aperti.size || pila.length) errore(`anelli o parentesi non chiusi in ${s}`);
   // gli idrogeni sottintesi: ciò che manca alla valenza più piccola che basta
   const somma = atomi.map(() => 0); for (const l of legami) if (l.t === 'c') { somma[l.a] += l.o; somma[l.b] += l.o; }
-  atomi.forEach((a, k) => { if (a.h < 0) { const bs = somma[k] + (a._min ? 1 : 0), v = valenzeDi(a.Z, 0).find((x) => x >= bs); a.h = v ? v - bs : 0; } });
+  atomi.forEach((a, k) => { if (a.h < 0) { const bs = somma[k] + (a._min ? 1 : 0), V = valenzeDi(a.Z, 0), v = a._min ? V[0] : V.find((x) => x >= bs); a.h = v > bs ? v - bs : 0; } });
   // gli aromatici scritti in minuscolo: si mettono i doppi legami (una delle forme di Kekulé; poi «percepisci» li riconosce)
   const serve = atomi.map((a, k) => { if (!a._min) return false; const sg = somma[k] + a.h, V = valenzeDi(a.Z, a.q); return !V.includes(sg) && V.includes(sg + 1); });
   const quali = serve.map((v, k) => (v ? k : -1)).filter((k) => k >= 0);
@@ -182,7 +182,7 @@ function ranghi(m) {
   Object.defineProperty(m, '_ranghi', { value: { cls, centri: veri }, enumerable: false });
   return m._ranghi;
 }
-const hSottintesi = (m, k) => { const a = m.atomi[k]; let bs = a.ar ? 1 : 0; for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t === 'c') bs += l.ar ? 1 : l.o; } const v = valenzeDi(a.Z, 0).find((x) => x >= bs); return v ? v - bs : 0; };
+const hSottintesi = (m, k) => { const a = m.atomi[k]; let bs = a.ar ? 1 : 0; for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t === 'c') bs += l.ar ? 1 : l.o; } const V = valenzeDi(a.Z, 0), v = a.ar ? V[0] : V.find((x) => x >= bs); return v > bs ? v - bs : 0; };
 export function chiave(x) {
   const m = molecola(x); if (m._chiave) return m._chiave;
   const { cls, centri } = ranghi(m), n = m.atomi.length, visto = new Array(n).fill(false), figli = m.atomi.map(() => []), chiusure = m.atomi.map(() => []), padre = new Array(n).fill(-1);

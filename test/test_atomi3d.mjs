@@ -2,7 +2,7 @@
 // sale e i gusci degli ioni, i reticoli dei cristalli, la faccia bagnata, la prova di carico) hanno le geometrie vere, e
 // la preparazione (pezzi, sepolti, gruppi per il dettaglio) non perde né inventa atomi.
 import assert from 'node:assert/strict';
-import { ELEMENTI, ACQUA, RETICOLI, preparaScena, scenaAcqua, scenaCristallo, scenaDoppioStrato } from '../src/camera/atomi3d.js';
+import { ELEMENTI, ACQUA, RETICOLI, preparaScena, scenaAcqua, scenaCristallo, scenaDoppioStrato, conMoto, scenaDaElenco } from '../src/camera/atomi3d.js';
 import { sorgente } from '../src/camera/eventi.js';
 
 let ok = 0;
@@ -127,6 +127,24 @@ prova('i reticoli hanno il formato dichiarato', () => {
   // un reticolo dato da fuori (cubico semplice di ferro, 2,87 Å)
   const c = scenaCristallo({ reticolo: { nome: 'ferro (prova)', a: [0.287, 0, 0], b: [0, 0.287, 0], c: [0, 0, 0.287], base: [{ el: 'Fe', uvw: [0, 0, 0] }, { el: 'Fe', uvw: [0.5, 0.5, 0.5] }] }, latoNm: 2 });
   tra(c.atomiCristallo / 8, 80, 95, 'atomi di ferro per nm³ (84,6)'); assert.equal(c.atomi.elemento[0], 26);
+});
+
+prova('le scene degli altri moduli entrano così come sono: la forma di mare.js (con le sue ampiezze), un elenco di atomi in metri, una scena vuota', () => {
+  // la forma che dà mare.js scenaMolecolare: posizioni in nm, legami covalenti, parti senza colore, agitazione come oggetto di ampiezze
+  const a = scenaAcqua({ latoNm: 2.5, moto: false }, sorgente('prova/fuori')), comeMare = { atomi: { pos: a.atomi.pos, raggio: a.atomi.raggio, elemento: a.atomi.elemento }, legami: a.legami, legamiH: new Uint32Array(0), scatola: a.scatola, parti: a.parti.map((p) => ({ nome: p.nome, da: p.da, a: p.a })), etichette: [{ testo: 'x', pos: [1, 1, 1] }],
+    agitazione: { T: 290, kT: 4e-21, oscillazione: { ampiezzaGradi: 15, periodoFs: 60 }, gabbia: { ampiezzaNm: 0.03, periodoFs: 170 }, diffusione: { acqua: 2.3e-3 } } };
+  const P = preparaScena(comeMare); assert.equal(P.N, a.atomi.raggio.length); assert.equal(P.agitaMax, 0);
+  const b = new Uint8Array(P.statico), o = P.ordine.indexOf(0); assert.deepEqual([...b.slice(8 * o + 4, 8 * o + 7)], ELEMENTI.O.colore, 'senza colori nelle parti: per elemento');
+  const m = conMoto(comeMare, { caso: sorgente('prova/moto') }), p = Float32Array.from(m.atomi.pos); assert.equal(m.molecoleMosse, a.molecole); assert.equal(m.tempo(2.2, p), true);
+  let peggio = 0, mosso = 0; for (let i = 0; i < a.molecole; i++) { peggio = Math.max(peggio, Math.abs(dist(p, 3 * i, 3 * i + 1) - ACQUA.OH), Math.abs(dist(p, 3 * i, 3 * i + 2) - ACQUA.OH)); mosso = Math.max(mosso, Math.hypot(p[9 * i] - a.atomi.pos[9 * i], p[9 * i + 1] - a.atomi.pos[9 * i + 1], p[9 * i + 2] - a.atomi.pos[9 * i + 2])); }
+  assert.ok(peggio < 1e-5, `molecole rigide (${peggio})`); tra(mosso, 0.01, 0.12, 'spostamento massimo (nm)');
+  assert.equal(m.atomi.gruppo[1], m.atomi.gruppo[0]); assert.ok(m.atomi.agitazione[3 * a.molecole] > 0 && m.atomi.agitazione[0] === 0, 'gli ioni tremano da soli, le molecole no');
+  assert.ok(preparaScena(m).perni, 'con i gruppi il taglio può togliere molecole intere');
+  // l'elenco di materia.js `atomi(…)`: oggetti in metri
+  const e = scenaDaElenco([{ x: 0, y: 0, z: 0, el: 'Si', raggio: 1.1e-10, colore: [1, 2, 3] }, { x: 1.6e-10, y: 0, z: 0, el: 'O', raggio: 1.35e-10, colore: [4, 5, 6] }]), Pe = preparaScena(e);
+  assert.equal(e.atomi.elemento[0], 14); tra(Pe.pos[3 * Pe.ordine.indexOf(1)], 0.159, 0.161, 'nanometri');
+  // vuota (un punto asciutto)
+  const v = preparaScena({ atomi: { pos: new Float32Array(0), raggio: new Float32Array(0), elemento: new Uint8Array(0) }, scatola: [0, 0, 0], parti: [], etichette: [] }); assert.equal(v.N, 0); assert.equal(v.pezzi.length, 0);
 });
 
 console.log(`\n${ok} prove superate in ${((performance.now() - inizio) / 1000).toFixed(1)} s`);

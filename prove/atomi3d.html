@@ -77,7 +77,7 @@ function mostra(nome) {
   const c = vista.camera;
   if (nomeScena === 'acqua') { c.yaw = 0.62; c.pitch = 0.42; c.dist *= 0.82; }
   else if (nomeScena === 'carico' || nomeScena === 'milione') { c.yaw = 0.55; c.pitch = 0.36; c.dist *= 0.62; }
-  else { c.yaw = 0.55; c.pitch = 0.3; c.dist *= 0.86; }
+  else { c.yaw = 0.55; c.pitch = 0.3; c.dist *= 0.97; }
   for (const k of ['yaw', 'pitch', 'dist']) if (par.has(k)) c[k] = +par.get(k);
   aggiornaTaglio();
 }

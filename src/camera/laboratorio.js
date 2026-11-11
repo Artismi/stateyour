@@ -24,6 +24,8 @@ import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassi
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
+import { cellaMateria } from './materia.js';
+import { sorgente } from './eventi.js';
 
 const $ = (id) => document.getElementById(id);
 const tela = $('tela'), ctx = tela.getContext('2d'), tela3d = $('tela3d'), pannello = $('pannello');
@@ -248,13 +250,16 @@ let sopraFinestra = false;
 // La catena dello zoom, nei due versi: pattern ↔ finestra ↔ l'universo (la regione)
 // ↔ il pianeta ↔ la stella ↔ la galassia ↔ il cosmo.
 let camMappa = null, sopraMappa = null, volo = null, rotella = 0;
+// come si chiama ciò che una cella mostra: un universo della biblioteca, o un punto di materia
+const nomeDi = (c) => (c?.indirizzo?.materia ? `di «${comp.nome}»` : `dell'universo n. ${c?.seme}`);
 const indirizzoOra = () => (vista === 'pattern' ? comp.elementi[0] : el())?.cella.indirizzo || null;
 const evidenzaMappa = () => { const a = indirizzoOra(); return a ? { ...a, sorgenti: (el()?.cella.sorgenti || []).map((s) => s.origine).filter(Boolean) } : null; };
 let animazione = 0;
 function anima() { if (vista !== 'cosmo' || !(camMappa?.livello >= 3)) { animazione = 0; return; } if (!volo) disegna(); animazione = requestAnimationFrame(anima); }
 function apriCosmo() {
   const a = indirizzoOra(); if (!a) return;
-  const dpr = devicePixelRatio || 1; camMappa = camSuRegione(a, tela.clientWidth * dpr, tela.clientHeight * dpr);
+  // (una finestra dentro la materia non ha una regione: si torna sulla mappa dove si era, in fondo allo zoom)
+  const dpr = devicePixelRatio || 1; camMappa = a.materia ? (a.camera ? clona(a.camera) : { livello: 3, via: { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }, cx: 0, cy: 0, z: Math.min(tela.clientWidth, tela.clientHeight) * dpr / 3 }) : camSuRegione(a, tela.clientWidth * dpr, tela.clientHeight * dpr);
   sopraMappa = null; vista = 'cosmo'; aggiornaVista();
 }
 function entraRegione(a) {
@@ -263,6 +268,26 @@ function entraRegione(a) {
   if (!qui || numeroDi(qui) !== numeroDi(a) || qui.cosmo !== a.cosmo) { ricorda(); comp = compBiblioteca(numeroDi(a), undefined, undefined, undefined, undefined, { storia: ramiCosmo(a.cosmo) }); corrente = 0; sel = null; scelto = null; }
   entra(0); vista = 'dettaglio'; aggiornaVista();
 }
+// LA FINESTRA DENTRO LA MATERIA (materia.js): gemella di entraRegione. Da un punto della mappa in fondo allo zoom (una
+// roccia, un'acqua, l'aria sopra un luogo) si entra nella cella dove corrono le particelle di quel punto: ciò che un
+// cristallo ha registrato in milioni di anni (modo «memoria») o un evento vero al suo istante. È una finestra come le
+// altre (sezione, osservatore in moto, ricerca, rami). La cella ricorda il luogo, e la camera della mappa per tornarci.
+function entraMateria(luogo, opzioni = {}) {
+  volo = null; let r;
+  try { r = cellaMateria(luogo, { ...opzioni, via: { ...camMappa.via } }, sorgente(luogo.indirizzo, ramiCosmo(camMappa.via.cosmo))); }
+  catch (err) { $('dove').textContent = String(err.message || err).replace(/^cellaMateria: /, ''); return; }
+  if (!r.cella.sorgenti.length) { $('dove').textContent = r.racconto.frasi.slice(1).join(' '); return; } // (una roccia che non ricorda niente: lo si dice, e si resta sulla mappa)
+  r.cella.indirizzo.camera = clona(camMappa); r.cella.materia = { luogo: clona(luogo), opzioni: clona(opzioni) };
+  ricorda();
+  comp = { nome: r.nome, nota: r.nota, reticolo: null, elementi: [{ nome: r.nome, nota: r.nota, cella: { ...r.cella, vista: { ...VISTA_SOPRA }, ripeti: { ...RIPETI_BASE } }, posti: [{ pos: [0, 0], rot: 0 }] }] };
+  corrente = 0; sel = null; scelto = null; entra(0); vista = 'dettaglio'; aggiornaVista();
+}
+// l'evento dopo (o prima) nello stesso luogo: gli eventi arrivano uno dopo l'altro, ognuno con la sua data
+function eventoMateria(passo) {
+  const c = comp.elementi[0].cella, m = c.materia; if (!m) return;
+  const cam = c.indirizzo.camera, prima = camMappa; camMappa = cam ? clona(cam) : camMappa;
+  entraMateria(m.luogo, { ...m.opzioni, evento: Math.max(0, (c.indirizzo.evento ?? 0) + passo) }); if (vista !== 'dettaglio') camMappa = prima;
+}
 // la rotella che, oltre un limite, porta alla vista accanto nella catena
 // lo zoom dentro una regione: una bolla di spaziotempo dieci volte più piccola (cosmo.js, cellaDi)
 function compZoom(a) {
@@ -270,7 +295,7 @@ function compZoom(a) {
   return { nome, nota: `${descriviIndirizzo(a)}${z.length ? `, ${z.length === 1 ? 'dieci' : `${10 ** z.length}`} volte più vicino: una bolla di spaziotempo larga ${fmtLunghezza(c.scala.latoM)}, lunga ${(c.scala.secondi * 1000).toLocaleString('it-IT', { maximumFractionDigits: 3 })} ms. Le particelle che la attraversano sono le stesse della regione, con lo stesso caso; in più si vedono gli elettroni più fini della fascia` : ''}.`, reticolo: null, elementi: [{ nome, nota: '', cella: { ...c, vista: { ...VISTA_SOPRA }, ripeti: { ...RIPETI_BASE } }, posti: [{ pos: [0, 0], rot: 0 }] }] };
 }
 function zoomQui(verso, punto) {
-  const a = indirizzoOra(); if (!a) return false;
+  const a = indirizzoOra(); if (!a || a.materia) return false; // (dentro la materia non ci sono bolle più piccole: la finestra è già alla scala dell'evento)
   const z = a.zoom || [];
   if (verso > 0) { if (z.length >= 3) return false; const [x, y] = punto; ricorda(); comp = compZoom({ ...a, zoom: [...z, [Math.max(0, Math.min(9, Math.floor(x / 100))), Math.max(0, Math.min(9, Math.floor(y / 100)))]] }); }
   else { if (!z.length) return false; ricorda(); comp = compZoom({ ...a, zoom: z.slice(0, -1) }); }
@@ -797,7 +822,8 @@ tela.addEventListener('pointerup', (e) => {
     const fermo = Math.hypot(e.clientX - presa.sx, e.clientY - presa.sy) < 5; presa = null;
     if (fermo && sopraMappa) {
       if (sopraMappa.tipo === 'regione') { entraRegione(sopraMappa.via); return; }
-      if (sopraMappa.tipo !== 'buco' && sopraMappa.tipo !== 'punto') { volo = { pos: sopraMappa.pos, scala: sopraMappa.scala, livello: camMappa.livello, passi: 0 }; requestAnimationFrame(passoVolo); }
+      if (sopraMappa.materia) { entraMateria(sopraMappa.materia.luogo, sopraMappa.materia.opzioni); return; } // in fondo allo zoom (o sull'aria, alla scala dei chilometri): la finestra di quel punto
+      if (sopraMappa.tipo !== 'buco' && sopraMappa.tipo !== 'punto' && sopraMappa.tipo !== 'materia') { volo = { pos: sopraMappa.pos, scala: sopraMappa.scala, livello: camMappa.livello, passi: 0 }; requestAnimationFrame(passoVolo); }
     }
     return;
   }
@@ -905,8 +931,12 @@ function mostraPannello() {
 }
 const controlliUniverso = (c) => {
   c.vista ??= { ...VISTA_SOPRA };
-  return `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button></div>`
-    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button><button data-cerca="vicini" title="ogni decadimento è un evento quantistico: l'universo si divide in rami, uno per esito. Cerca il ramo in cui i decadimenti da cui nascono le linee storte sono andati diversamente">✦ un ramo parallelo più pulito</button></div>`
+  // dentro la materia non c'è un numero d'universo: c'è un luogo, e (nel modo istante) gli eventi che vi accadono uno dopo l'altro
+  const testa = c.indirizzo?.materia ? (c.indirizzo.modo === 'istante' ? `<div class="universo"><span>evento n.</span><button data-univ="-1" title="l'evento prima, nello stesso luogo">◀</button><b style="padding:0 .6em">${(c.indirizzo.evento ?? 0) + 1}</b><button data-univ="1" title="l'evento dopo, nello stesso luogo">▶</button></div>` : '')
+    + `<div class="riga-bottoni"><button class="primo" data-cerca="qui" title="cerca l'inquadratura più bella di queste tracce">✨ più bella qui</button><button data-cerca="vicini" title="ogni decadimento è un evento quantistico: cerca il ramo in cui alcuni sono andati diversamente">✦ un ramo parallelo più pulito</button></div>`
+    : `<div class="universo"><span>universo n.</span><button data-univ="-1" title="l'universo prima">◀</button><input type="number" data-univ-n value="${c.seme}" min="1"><button data-univ="1" title="l'universo dopo">▶</button></div>`
+    + `<div class="riga-bottoni"><button class="primo" data-cerca="ovunque" title="sfoglia molti universi e inquadrature, e tiene la sezione più bella">🎲 una sezione bella</button><button data-cerca="qui" title="cerca solo inquadrature migliori in questo universo">✨ più bella qui</button><button data-cerca="vicini" title="ogni decadimento è un evento quantistico: l'universo si divide in rami, uno per esito. Cerca il ramo in cui i decadimenti da cui nascono le linee storte sono andati diversamente">✦ un ramo parallelo più pulito</button></div>`;
+  return testa
     + `<p class="nota" id="cercaStato"></p>`
     + `<h2>da dove la guardi</h2>`
     + cursore('inclinazione', c.vista, 'inclinazione', 0, 85, 1, 'inclinazione (gradi)')
@@ -915,7 +945,7 @@ const controlliUniverso = (c) => {
     + `<h2>chi guarda</h2><p class="nota">La traccia dipende dal moto della particella e da quello di chi la guarda. Qui la sezione è il punto di vista di un osservatore in moto, secondo la relatività: la scala del tempo è la velocità della luce, non si sceglie.</p>`
     + cursore('velocita', c.vista, 'velocita', 0, 0.99, 0.01, "velocità di chi guarda (frazione di quella della luce)")
     + cursore('direzione', c.vista, 'direzione', 0, 360, 1, 'verso dove va (gradi)')
-    + (c.indirizzo ? `<div class="riga-bottoni">${motiDi(c.indirizzo).map((m) => `<button data-moto="${m.velocita}|${m.direzione}" title="${m.cosa}">${m.nome}${m.kmS ? ` (${m.kmS < 10 ? m.kmS.toFixed(1) : Math.round(m.kmS)} km/s)` : ''}</button>`).join('')}</div><p class="nota">I moti veri di questa regione sono lentissimi rispetto alla luce (millesimi o decimillesimi): in un'esposizione di millisecondi spostano le tracce di pochi chilometri su migliaia. Contano per ciò che si muove piano (i grani dell'anello, l'acqua, l'aria) e per le esposizioni lunghe; chi viaggia insieme a un raggio cosmico, invece, vede tutto trasformato.</p>` : '');
+    + (c.indirizzo && !c.indirizzo.materia ? `<div class="riga-bottoni">${motiDi(c.indirizzo).map((m) => `<button data-moto="${m.velocita}|${m.direzione}" title="${m.cosa}">${m.nome}${m.kmS ? ` (${m.kmS < 10 ? m.kmS.toFixed(1) : Math.round(m.kmS)} km/s)` : ''}</button>`).join('')}</div><p class="nota">I moti veri di questa regione sono lentissimi rispetto alla luce (millesimi o decimillesimi): in un'esposizione di millisecondi spostano le tracce di pochi chilometri su migliaia. Contano per ciò che si muove piano (i grani dell'anello, l'acqua, l'aria) e per le esposizioni lunghe; chi viaggia insieme a un raggio cosmico, invece, vede tutto trasformato.</p>` : '');
 };
 function pannelloPattern(h) {
   if (!comp.reticolo) {
@@ -1217,6 +1247,7 @@ pannello.addEventListener('click', (e) => {
   const t = e.target.closest('button,[data-sel],[data-specie]'); if (!t) return;
   const d = t.dataset;
   if (d.entra != null) return entra(+d.entra);
+  if (d.univ && comp.elementi[0].cella.materia) return eventoMateria(+d.univ);
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
   if (d.cerca === 'vicini' && (indirizzoOra()?.zoom || []).length) { $('cercaStato').textContent = "I rami si scelgono al livello della regione (torna su con la rotella): qui dentro le particelle sono le stesse di lassù, e un ramo deve cambiarle a ogni livello insieme."; return; }
   if (d.cerca) return cercaBella(d.cerca);
@@ -1351,10 +1382,10 @@ function bloccoFinestra(c, tracce) {
 // la riga in basso: dove sei e che cosa puoi fare
 function dove() {
   const t = vista === 'pattern'
-    ? (!comp.reticolo ? `Il pattern: la finestra dell'universo n. ${comp.elementi[0].cella.seme}, ${ripetiDi(comp.elementi[0].cella).gruppo === 'una' ? 'da sola' : `ripetuta ${GRUPPI[comp.elementi[0].cella.ripeti.gruppo].nome.replace(/^caleidoscopio/, 'nel caleidoscopio')}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
+    ? (!comp.reticolo ? `Il pattern: la finestra ${nomeDi(comp.elementi[0].cella)}, ${ripetiDi(comp.elementi[0].cella).gruppo === 'una' ? 'da sola' : `ripetuta ${GRUPPI[comp.elementi[0].cella.ripeti.gruppo].nome.replace(/^caleidoscopio/, 'nel caleidoscopio')}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
-    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo; avvicinati al pianeta per scendere sulla sua superficie.' : camMappa.livello === 5 ? `${rocciaDi(camMappa).nome}: ${(rocciaDi(camMappa)?.frase || '')}. Rotella indietro per tornare al paesaggio.` : camMappa.livello === 4 ? 'La superficie: avvicinandoti il terreno si calcola sempre più fine, dai continenti alle valli (fino a celle di una decina di metri). Passa sopra un punto per quota e temperatura.' : ''}`
-    : vista === 'finestra' ? `La finestra: la sezione dell'universo n. ${el().cella.seme} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
+    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo; avvicinati al pianeta per scendere sulla sua superficie.' : camMappa.livello === 5 ? `${rocciaDi(camMappa)?.nome || ''}: ${(rocciaDi(camMappa)?.frase || '')}. Clic: entra nella finestra di questo punto (le tracce delle particelle dentro questa materia). Rotella indietro per risalire.` : camMappa.livello === 4 ? 'La superficie: avvicinandoti il terreno si calcola sempre più fine, dai continenti alle valli (fino a celle di una decina di metri). Passa sopra un punto per quota e temperatura; quando lo schermo è largo poche centinaia di chilometri, un clic su un punto apre la finestra sull\'aria che ha sopra: lo sciame di un raggio cosmico.' : ''}`
+    : vista === 'finestra' ? `La finestra: la sezione ${nomeDi(el().cella)} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
     : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra, guardato all'inizio dallo stesso angolo della sezione: è il pattern. Trascina per ruotarlo e vedere le linee d'universo nel blocco (il tempo sale); i punti arancio sono dove entrano i raggi e da dove vengono, le stelle verdi dove una particella si spezza. Tasto A: torna allineato.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
     : vista === 'spaziotempo' ? `«${el().nome}» nello spaziotempo: il tempo sale. Trascina per ruotare, rotella per avvicinarti.`
@@ -1452,7 +1483,8 @@ function cercaBella(come = 'ovunque') {
       const b = m.migliore; cercatore.terminate(); cercatore = null;
       // il ramo trovato: lo stesso universo, con alcuni decadimenti andati diversamente
       ricorda();
-      if ((b.cella.indirizzo?.zoom || []).length) { comp = compZoom(b.cella.indirizzo); Object.assign(comp.elementi[0].cella, { finestra: b.finestra, sezione: b.sezione, vista: b.vista, ripeti: b.ripeti }); }
+      if (b.cella.indirizzo?.materia) { comp = clona(comp); Object.assign(comp.elementi[0].cella, { finestra: b.finestra, sezione: b.sezione, vista: b.vista, ripeti: b.ripeti }, b.cella.rami && Object.keys(b.cella.rami).length ? { rami: b.cella.rami, separato: b.cella.separato } : {}); } // (dentro la materia: stessa cella, altra inquadratura o altro ramo)
+      else if ((b.cella.indirizzo?.zoom || []).length) { comp = compZoom(b.cella.indirizzo); Object.assign(comp.elementi[0].cella, { finestra: b.finestra, sezione: b.sezione, vista: b.vista, ripeti: b.ripeti }); }
       else comp = compBiblioteca(b.numero, b.finestra, b.sezione, b.vista, b.ripeti, { rami: b.cella.rami, separato: b.cella.separato });
       corrente = 0; sel = null; scelto = null;
       vista = 'pattern'; adattaPattern(); aggiornaVista();
@@ -1462,7 +1494,7 @@ function cercaBella(come = 'ovunque') {
   };
   const da = 1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length * 0.98);
   cercatore.postMessage(come === 'vicini' ? { stato: { cella: clona(c), finestra: c.finestra, vista: c.vista, sezione: c.sezione, ripeti: ripetiDi(c), numero: c.seme }, passi: 60, seme }
-    : come === 'qui' ? { solo: c.seme, cella: (c.indirizzo?.zoom || []).length ? clona(c) : undefined, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme, gruppo: ripetiDi(c).gruppo === 'una' ? undefined : 'caleidoscopio' });
+    : come === 'qui' ? { solo: c.seme, cella: (c.indirizzo?.zoom || []).length || c.indirizzo?.materia ? clona(c) : undefined, inquadrature: 24, seme, gruppo: ripetiDi(c).gruppo } : { da, universi: 24, inquadrature: 16, seme, gruppo: ripetiDi(c).gruppo === 'una' ? undefined : 'caleidoscopio' });
 }
 function cambiaUniverso(n) {
   // stessa inquadratura, stessa fetta di tempo: un altro universo

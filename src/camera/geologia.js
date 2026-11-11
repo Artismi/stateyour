@@ -140,7 +140,10 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     materiali.continente = minerali({ ...base, continente: true }); materiali.basalto = minerali({ ...base, continente: false });
     materiali.coloreContinente = coloreRoccia(materiali.continente); materiali.coloreBasalto = coloreRoccia(materiali.basalto);
   } catch { /* senza chimica restano i colori di riserva */ }
-  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati };
+  // (con le placche la superficie porta anche l'età della crosta degli oceani, in milioni di anni (0 sui continenti), e le
+  // fosse dove affonda (0…1): servono a chi guarda le rocce — materia.js: da quanto tempo quella roccia ricorda — e al mare
+  // — mare.js: le sorgenti calde stanno dove la crosta è giovane davvero)
+  const out = { W, H, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati, ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse } : {}) };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
@@ -410,6 +413,8 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   for (const [nome, v] of Object.entries(e)) if (ArrayBuffer.isView(v) && v.length === N) { const r = new v.constructor(W * H); for (let j = 0; j < H; j++) r.set(v.subarray((j + Ph) * Wl + Pw, (j + Ph) * Wl + Pw + W), j * W); out[nome] = r; }
   const qx = tx & 3, qy = ty & 3, cont = new Uint8Array(W * H); if (m.cont) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) cont[j * W + i] = m.cont[Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))];
   out.cont = cont; out.largo = { W: Wl, H: Hl, rett: rettL, alt: e.alt, flusso: e.flusso, lago: e.lago };
+  // l'età della crosta e le fosse della madre, ricampionate come i continenti
+  for (const nome of ['etaCrosta', 'fosse']) if (m[nome]) { const r = new Float32Array(W * H); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) r[j * W + i] = m[nome][Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))]; out[nome] = r; }
   memoTessere.set(k, out); if (memoTessere.size > 48) memoTessere.delete(memoTessere.keys().next().value);
   return out;
 }

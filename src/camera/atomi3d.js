@@ -21,7 +21,8 @@
 //       pos2:     Float32Array(3N),       // (facoltativo) le posizioni «dopo»: vista.mescola(f) le interpola (0 → pos, 1 → pos2)
 //     },
 //     legami:   Uint32Array(2M),          // (facoltativo) coppie di indici: bastoncini tra gli atomi (si vedono se i raggi
-//                                         //   sono rimpiccioliti: opzione scalaRaggi < 1)
+//                                         //   sono rimpiccioliti: opzione scalaRaggi < 0,9)
+//     colora:   'elemento' | 'parte',     // (facoltativo) come la scena preferisce essere colorata, se chi la monta non dice altro
 //     scatola:  [lx, ly, lz],             // il volume della scena (da 0 a l su ogni asse); serve a inquadrare
 //     parti:    [{ nome, da, a, colore: [r, g, b] }],   // le parti (una proteina, l'acqua, il cristallo…): atomi da `da`
 //                                         //   (compreso) ad `a` (escluso), oppure dette da atomi.parte
@@ -36,27 +37,48 @@
 // Dentro, tutto è in NANOMETRI (numeri a 32 bit: un atomo è 0,1, una scena 100: nessun problema di precisione).
 //
 // ───────────────────────────── COME È RESA ─────────────────────────────
-//   · ogni atomo è un «impostore»: un quadratino a istanze che guarda l'occhio; nel frammento si calcola dove il raggio
-//     dell'occhio tocca la sfera, e si scrive la profondità GIUSTA (le sfere si compenetrano come sfere vere);
+//   · ogni atomo è un «impostore»: nel frammento si calcola dove il raggio dell'occhio per quel pixel tocca la sfera, e
+//     si scrive la profondità GIUSTA (le sfere si compenetrano come sfere vere, a ogni ingrandimento). L'impostore è
+//     un quadratino a ISTANZE per gli atomi larghi sullo schermo e un PUNTO (un vertice solo) per quelli piccoli, che
+//     sono quasi tutti: stessi buffer, stesso frammento. (Attorno all'immagine si disegna un bordo di 32 pixel che poi
+//     non si mostra: un punto col centro appena fuori schermo sarebbe scartato tutto insieme e sparirebbe di colpo.)
+//     Con `punti: false` è tutto a istanze;
 //   · luce semplice (una lampada in alto a sinistra, un po' di ambiente, un riflesso piccolo), colori pieni;
 //   · OMBRE MORBIDE TRA ATOMI VICINI: occlusione ambientale calcolata dallo schermo (dalla sola profondità: le normali
 //     si ricostruiscono), a due scale — quella dell'atomo (il contatto tra sferette) e quella della forma (le pieghe
-//     dell'insieme) — poi sfumata rispettando i bordi;
-//   · contorno scuro dove la profondità salta, attenuazione con la distanza, sfocatura leggera dei piani lontani; sfondo nero;
-//   · un PIANO DI TAGLIO: le sfere tagliate mostrano la sezione piena (un dischetto), così si guarda dentro la materia;
+//     dell'insieme: il suo raggio segue l'inquadratura) — a metà risoluzione, poi sfumata rispettando i bordi;
+//   · contorno scuro dove la profondità salta, attenuazione con la distanza dietro il centro di rotazione, sfocatura
+//     leggera dei piani lontani (`sfoca`); sfondo nero; etichette bianche con la linea, disegnate nella stessa tela;
+//   · un PIANO DI TAGLIO: le sfere tagliate mostrano la sezione piena (un dischetto), oppure (`interi`) si tolgono gli
+//     atomi — o le molecole, se la scena dice i gruppi — che stanno oltre il piano: così si guarda dentro la materia;
 //   · il principio della nebbia (nebbia.js) per le quantità: da lontano gli atomi di una celletta sono rappresentati da
-//     UNA sferetta più grande (stesso volume, il colore della parte che lì prevale, la posizione di un atomo vero), e
-//     ognuna dichiara quanti atomi rappresenta; da vicino tornano gli atomi. Gli atomi SEPOLTI (coperti da almeno un
-//     nanometro scarso di materia fitta da ogni lato) non si disegnano finché il taglio o l'occhio non li scoprono.
+//     UNA sferetta più grande (stesso volume, il colore medio della parte che lì prevale, la posizione di un atomo
+//     vero), e ognuna dichiara quanti atomi rappresenta; da vicino tornano gli atomi. Quattro grossezze (≈ 8, 64, 512,
+//     4096 atomi), scelte pezzo per pezzo dai pixel che la celletta occupa, e dal tetto `massimoIstanze`;
+//   · gli atomi SEPOLTI (coperti da almeno un nanometro scarso di materia fitta da ogni lato) non si disegnano finché
+//     il taglio o l'occhio non li scoprono: in un blocco pieno sono i quattro quinti;
+//   · il moto: un'agitazione per atomo calcolata nel vertice (nessun costo per chi disegna), due insiemi di posizioni
+//     mescolati, o un buffer di posizioni riscritto a ogni fotogramma (`tempo`).
+// WebGL1 va con ANGLE_instanced_arrays, EXT_frag_depth e WEBGL_depth_texture (senza l'ultima: niente ombre).
 //
-// uso:  const v = creaVista3D(tela, { alCambio: () => … });
-//       v.carica(scena);  v.avvia();            // oppure, dal ciclo di chi la monta: v.disegna(t) a ogni fotogramma
-//       v.suAtomo((a) => …);                    // a = { indice, simbolo, elemento, parte, rappresenta, x, y } oppure null
-//       v.taglio({ vista: true, scarto: 0 });   // taglia sul piano che passa dal centro di rotazione e guarda l'occhio
-//       v.libera();                             // toglie ascolti, buffer e contesto: la tela non si riusa
+// ───────────────────────────── L'USO ─────────────────────────────
+//   const v = creaVista3D(tela, { alCambio: () => … });   // la tela è solo sua (un contesto WebGL per tela)
+//   v.carica(scena);                 // prepara e manda alla scheda; restituisce le statistiche; carica(null) svuota
+//   v.disegna(t);                    // un fotogramma all'istante t (secondi): lo chiama il ciclo di chi la monta.
+//                                    //   Senza `alCambio` la vista si ridisegna da sé quando la camera cambia;
+//                                    //   v.avvia() / v.ferma() fanno girare un ciclo suo (serve se la scena si muove)
+//   v.ridimensiona();                // quando la tela cambia misura
+//   v.camera                         // { bersaglio: [x, y, z] nm, yaw, pitch, dist, fov, inquadra() }: si può scrivere
+//   v.suAtomo((a) => …);             // a = { indice, elemento, simbolo, nome, parte, rappresenta, pos, x, y } oppure null
+//   v.taglio({ vista: true, scarto: 0 });   // o { normale, quota, interi }; null lo toglie
+//   v.mescola(f); v.aggiornaPosizioni(pos); v.scegli(x, y); v.statistiche(); v.opzioni (si possono cambiare al volo)
+//   v.libera();                      // toglie ascolti, orologi, buffer e contesto: la tela non si riusa, se ne fa un'altra
+// Con il mouse: trascinare ruota; tasto destro o maiuscolo sposta; la rotella avvicina verso il punto sotto il cursore;
+// due clic portano lì il centro di rotazione; passare sopra un atomo chiama suAtomo.
 //
 // Le scene vere (acqua col sale, cristalli e la loro faccia bagnata, la prova di carico) sono in fondo: scenaAcqua,
 // scenaCristallo, scenaDoppioStrato. Il caso viene dalla sorgente degli eventi (eventi.js): stessa radice, stessa scena.
+// preparaScena (dalla scena ai buffer) non ha bisogno della grafica e si prova da sola: test/test_atomi3d.mjs.
 
 import { sorgente } from './eventi.js';
 
@@ -106,7 +128,7 @@ export function preparaScena(scena, opz = {}) {
   const parti = scena.parti || []; let parteDi = A.parte || null;
   if (!parteDi && parti.length && parti[0].da != null) { parteDi = new Uint16Array(N).fill(65535); parti.forEach((p, k) => parteDi.fill(k, Math.max(0, p.da), Math.min(N, p.a))); }
   // il colore: dato atomo per atomo, o della parte, o dell'elemento
-  const modo = opz.colora || 'auto', rgb = new Uint8Array(3 * N);
+  const modo = opz.colora && opz.colora !== 'auto' ? opz.colora : scena.colora || 'auto', rgb = new Uint8Array(3 * N);
   const perParte = parteDi && (modo === 'parte' || (modo === 'auto' && !A.colore && parti.some((p) => p.colore))), perElemento = el && !perParte && (modo === 'elemento' || !A.colore);
   if (perParte) { const tav = parti.map((p, k) => p.colore || COLORI_PARTI[k % COLORI_PARTI.length]); for (let i = 0; i < N; i++) { const c = tav[parteDi[i]] || [150, 150, 150]; rgb[3 * i] = c[0]; rgb[3 * i + 1] = c[1]; rgb[3 * i + 2] = c[2]; } }
   else if (perElemento) { const tav = []; for (let z = 0; z < 256; z++) tav.push(ELEMENTI[z]?.colore || [255, 20, 147]); for (let i = 0; i < N; i++) { const c = tav[el[i]]; rgb[3 * i] = c[0]; rgb[3 * i + 1] = c[1]; rgb[3 * i + 2] = c[2]; } }
@@ -512,17 +534,20 @@ export function creaVista3D(tela, opzioni = {}) {
     ombre: 1, // quanto pesano le ombre morbide (0: spente)
     raggioOmbre: 0.32, // il raggio dell'ombra di contatto, in nanometri (≈ un atomo e mezzo)
     ombreForma: 1, // il peso dell'ombra larga, quella che fa leggere la forma (il suo raggio segue l'inquadratura)
-    risoluzioneOmbre: 0, // 1: piena, 0.5: metà; 0: sceglie da sé (metà sopra il milione di pixel)
+    risoluzioneOmbre: 0, // 1: piena, 0.5: metà; 0: sceglie da sé (metà, tranne che nelle tele piccole)
     contorno: 0.45, nebbia: 0.6, sfoca: 0, // contorno e attenuazione con la profondità (0–1); sfocatura dei piani lontani: raggio massimo in pixel (0: spenta)
     luceAmbiente: 0.48, riflesso: 0.14, sfondo: [0, 0, 0],
     densita: 0, // pixel veri per pixel della pagina (0: quella dello schermo, al più 2)
     dettaglio: 3, // sotto quanti pixel per celletta gli atomi si fondono in gruppi
     massimoIstanze: 600000, // oltre, il dettaglio scende finché ci si sta
-    fotogrammiVoluti: 30, minimoIstanze: 120000, // se la scheda non tiene questo ritmo, il tetto delle istanze scende (mai sotto il minimo) mentre ci si muove; da fermi si ridisegna al dettaglio pieno. 0: non si adatta
+    fotogrammiVoluti: 0, minimoIstanze: 120000, // (0: spento) se la scheda non tiene questo ritmo, il tetto delle istanze scende (mai sotto il minimo) mentre ci si muove, e da fermi si ridisegna al dettaglio pieno. Serve quando il costo sono gli atomi; quando sono i pixel (schede deboli, disegno a software) conviene abbassare `densita`
     punti: true, // gli atomi piccoli sullo schermo come punti (un vertice ciascuno); false: tutti quadratini a istanze
     scartaSepolti: true, profonditaSepolti: 0.9, // gli atomi coperti da questa profondità di materia fitta non si disegnano
     scalaRaggi: 1, raggioLegami: 0.03, colora: 'auto', // 'auto' | 'parte' | 'elemento'
-    etichette: true, interazione: true, agitazione: 1, alCambio: null, vecchio: false, ...opzioni,
+    etichette: true, interazione: true, agitazione: 1,
+    alCambio: null, // chiamata quando c'è da ridisegnare (se manca, la vista si ridisegna da sé)
+    alFuori: null, // chiamata quando con la rotella ci si allontana oltre la scena intera: per tornare alla scala di prima
+    vecchio: false, ...opzioni,
   };
   const attributi = { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: !!O.conserva, powerPreference: 'high-performance' };
   let gl = O.vecchio ? null : tela.getContext('webgl2', attributi); const due = !!gl;
@@ -570,7 +595,7 @@ export function creaVista3D(tela, opzioni = {}) {
   const telaio = (colore, profondita) => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colore, 0); if (profondita) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, profondita, 0); return f; };
   function buttaImmagini() { if (!imm) return; for (const k of ['col', 'prof', 'ao1', 'ao2', 'comp']) if (imm[k]) gl.deleteTexture(imm[k]); for (const k of ['fG', 'fA1', 'fA2', 'fC']) if (imm[k]) gl.deleteFramebuffer(imm[k]); imm = null; }
   function preparaImmagini() { // grandi quanto la tela più il bordo
-    const W = tela.width + 2 * BORDO, H = tela.height + 2 * BORDO, sa = O.risoluzioneOmbre || (W * H > 1.1e6 ? 0.5 : 1), wa = Math.max(1, Math.round(W * sa)), ha = Math.max(1, Math.round(H * sa));
+    const W = tela.width + 2 * BORDO, H = tela.height + 2 * BORDO, sa = O.risoluzioneOmbre || (W * H > 4e5 ? 0.5 : 1), wa = Math.max(1, Math.round(W * sa)), ha = Math.max(1, Math.round(H * sa));
     if (imm && imm.W === W && imm.H === H && imm.wa === wa) return;
     buttaImmagini(); if (!conPost) { imm = { W, H, wa, ha }; return; }
     imm = { W, H, wa, ha, col: immagine(W, H, gl.NEAREST), prof: immagine(W, H, gl.NEAREST, 'profondita'), ao1: immagine(wa, ha, gl.NEAREST), ao2: immagine(wa, ha, gl.NEAREST), comp: immagine(W, H, gl.LINEAR) };
@@ -587,7 +612,7 @@ export function creaVista3D(tela, opzioni = {}) {
 
   // --- la camera: gira attorno a un bersaglio (in nanometri); yaw e pitch in radianti
   const cam = { bersaglio: [0, 0, 0], yaw: 0.6, pitch: 0.35, dist: 10, fov: 0.6, vicino: 0.02 };
-  cam.inquadra = () => { if (!S) return; cam.bersaglio = S.centro.slice(); cam.dist = (S.raggioScena / Math.sin(cam.fov / 2)) * 0.92; cambia(); };
+  cam.inquadra = () => { if (!S) return; cam.bersaglio = S.centro.slice(); cam.dist = cam.distTutto = (S.raggioScena / Math.sin(cam.fov / 2)) * 0.92; cambia(); }; // distTutto: da dove si vede la scena intera
   // (tanX e tanY sono quelle dell'immagine col bordo: W e H le sue misure; la tela è la parte di mezzo)
   const M4 = { vista: new Float32Array(16), proj: null, occhio: [0, 0, 0], dx: [1, 0, 0], su: [0, 1, 0], dietro: [0, 0, 1], tanX: 0, tanY: 0, W: 1, H: 1, fuoco: 1, vicino: 0.02, lontano: 100 };
   function matrici() {
@@ -942,7 +967,9 @@ export function creaVista3D(tela, opzioni = {}) {
         if (a) { const oc = [a.pos[0] - M4.occhio[0], a.pos[1] - M4.occhio[1], a.pos[2] - M4.occhio[2]], b = scal(oc, d), q = b * b - scal(oc, oc) + (a.raggio * O.scalaRaggi) ** 2; s = q > 0 ? b - Math.sqrt(q) : b; } // dove il raggio tocca la sfera
         ancora = [M4.occhio[0] + d[0] * s, M4.occhio[1] + d[1] * s, M4.occhio[2] + d[2] * s];
       }
-      const k = Math.exp(Math.max(-1, Math.min(1, e.deltaY * 0.0015))), nuova = Math.max(0.08, Math.min(S.raggioScena * 40, cam.dist * k)), f = nuova / cam.dist;
+      const k = Math.exp(Math.max(-1, Math.min(1, e.deltaY * 0.0015))), lontano = O.alFuori ? 1.8 * (cam.distTutto || cam.dist) : S.raggioScena * 40;
+      if (O.alFuori && k > 1 && cam.dist >= lontano * 0.999) { O.alFuori(); return; } // ci si allontana oltre la scena intera: chi ha montato la vista torna alla scala di prima
+      const nuova = Math.max(0.08, Math.min(lontano, cam.dist * k)), f = nuova / cam.dist;
       for (let i = 0; i < 3; i++) cam.bersaglio[i] = ancora[i] + (cam.bersaglio[i] - ancora[i]) * f; cam.dist = nuova; cambia();
     }, { passive: false });
     ascolta(tela, 'dblclick', (e) => { const [x, y] = dove(e), a = scegli(x, y); if (a) { cam.bersaglio = a.pos.slice(); cambia(); } });
@@ -1176,6 +1203,50 @@ function grigliaFermi(ost, origine) {
   return { metti, vicini(p, f) { const cx = Math.floor(p[0] / lc), cy = Math.floor(p[1] / lc), cz = Math.floor(p[2] / lc); for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) { const l = m.get(chiave(x, y, z)); if (l) for (const e of l) f(e.p, e.R, e.carica, e.margine, e.ione); } } };
 }
 
+// ---------- PER LE SCENE CHE ARRIVANO DA FUORI
+// DARE IL MOTO a una scena che non ce l'ha (per esempio quella di mare.js `scenaMolecolare`, che dà posizioni, legami e
+// le ampiezze vere ma non una funzione): i legami dicono quali atomi fanno una molecola; ogni molecola piccola, rigida,
+// oscilla attorno al suo posto e al suo orientamento; gli atomi sciolti (gli ioni) e quelli dei solidi tremano ognuno
+// per sé (agitazione per atomo, mossa dalla vista). Le ampiezze: quelle di scena.agitazione se ci sono ({ gabbia:
+// { ampiezzaNm }, oscillazione: { ampiezzaGradi } }), altrimenti 0,25 Å e 12° a 25 °C, ∝ √T. Come in scenaAcqua, è il
+// tremito dentro la gabbia dei vicini, non una dinamica. Restituisce una scena nuova (gli atomi sono gli stessi).
+export function conMoto(scena, { T = scena.T || (scena.agitazione && scena.agitazione.T) || 298.15, caso = null } = {}) {
+  const A = scena.atomi, N = Math.floor(A.pos.length / 3), L = scena.legami || [], ku = UNITA[scena.unita || 'nm'], kT = Math.sqrt(T / 298.15), capo = new Uint32Array(N);
+  for (let i = 0; i < N; i++) capo[i] = i;
+  const trova = (i) => { while (capo[i] !== i) { capo[i] = capo[capo[i]]; i = capo[i]; } return i; };
+  for (let q = 0; q + 1 < L.length; q += 2) { const a = trova(L[q]), b = trova(L[q + 1]); if (a !== b) capo[Math.max(a, b)] = Math.min(a, b); }
+  const taglia = new Uint32Array(N), gruppo = new Uint32Array(N); for (let i = 0; i < N; i++) { gruppo[i] = trova(i); taglia[gruppo[i]]++; }
+  // le molecole che si muovono rigide: da 2 a 16 atomi (oltre è un reticolo legato: un solido)
+  const numero = new Int32Array(N).fill(-1), inizio = [0]; let nMol = 0;
+  for (let i = 0; i < N; i++) { const g = gruppo[i]; if (taglia[g] >= 2 && taglia[g] <= 16 && numero[g] < 0) { numero[g] = nMol++; inizio.push(inizio[inizio.length - 1] + taglia[g]); } }
+  const elenco = new Uint32Array(inizio[nMol]), cursore = inizio.slice(0, nMol), agitazione = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const m = numero[gruppo[i]]; if (m >= 0) elenco[cursore[m]++] = i; else agitazione[i] = A.agitazione ? A.agitazione[i] : ((taglia[gruppo[i]] === 1 ? 0.02 : 0.012) * kT) / ku; }
+  const r = tiri(caso || sorgente(`atomi3d/moto/${scena.nome || N}`), 'moto'), fasi = new Float32Array(9 * nMol), base = Float32Array.from(A.pos), centri = new Float32Array(3 * nMol);
+  for (let i = 0; i < fasi.length; i++) fasi[i] = r() * 6.2832;
+  for (let m = 0; m < nMol; m++) { for (let q = inizio[m]; q < inizio[m + 1]; q++) for (let k = 0; k < 3; k++) centri[3 * m + k] += base[3 * elenco[q] + k]; for (let k = 0; k < 3; k++) centri[3 * m + k] /= inizio[m + 1] - inizio[m]; }
+  const ag = scena.agitazione || {}, aT = (ag.gabbia && ag.gabbia.ampiezzaNm ? ag.gabbia.ampiezzaNm : 0.025 * kT) / ku, aR = ((ag.oscillazione && ag.oscillazione.ampiezzaGradi ? ag.oscillazione.ampiezzaGradi : 12 * kT) * Math.PI) / 180;
+  const tempo = (t, pos) => {
+    for (let m = 0; m < nMol; m++) {
+      const f = 9 * m, w1 = 5 + (m % 7) * 0.45, w2 = 8.3 + (m % 5) * 0.6, cx = centri[3 * m], cy = centri[3 * m + 1], cz = centri[3 * m + 2];
+      const tx = aT * (Math.sin(w1 * t + fasi[f]) + 0.6 * Math.sin(w2 * t + fasi[f + 3])), ty = aT * (Math.sin(w1 * 1.13 * t + fasi[f + 1]) + 0.6 * Math.sin(w2 * 0.9 * t + fasi[f + 4])), tz = aT * (Math.sin(w1 * 0.89 * t + fasi[f + 2]) + 0.6 * Math.sin(w2 * 1.1 * t + fasi[f + 5]));
+      const rx = aR * Math.sin(w2 * 1.3 * t + fasi[f + 6]), ry = aR * Math.sin(w2 * 1.55 * t + fasi[f + 7]), rz = aR * Math.sin(w2 * 1.21 * t + fasi[f + 8]), th = Math.hypot(rx, ry, rz) || 1e-9, kx = rx / th, ky = ry / th, kz = rz / th, c = Math.cos(th), s = Math.sin(th);
+      for (let q = inizio[m]; q < inizio[m + 1]; q++) { const i = 3 * elenco[q], vx = base[i] - cx, vy = base[i + 1] - cy, vz = base[i + 2] - cz, kv = (kx * vx + ky * vy + kz * vz) * (1 - c);
+        pos[i] = cx + tx + vx * c + (ky * vz - kz * vy) * s + kx * kv; pos[i + 1] = cy + ty + vy * c + (kz * vx - kx * vz) * s + ky * kv; pos[i + 2] = cz + tz + vz * c + (kx * vy - ky * vx) * s + kz * kv; }
+    }
+    return nMol > 0;
+  };
+  return { ...scena, agitazione: null, atomi: { ...A, gruppo: A.gruppo || gruppo, agitazione }, tempo, molecoleMosse: nMol };
+}
+// Un elenco di atomi come oggetti ({ x, y, z, el: simbolo o numero atomico, raggio, colore }: per esempio quello di
+// materia.js `atomi(minerale, …)`, che è in metri) messo nel formato della scena.
+export function scenaDaElenco(elenco, { unita = 'm', nome = '', scatola = null } = {}) {
+  const N = elenco.length, pos = new Float32Array(3 * N), raggio = new Float32Array(N), elemento = new Uint8Array(N), conColore = N > 0 && elenco.every((a) => a.colore), colore = conColore ? new Uint8Array(3 * N) : null, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < N; i++) { const a = elenco[i], e = ELEMENTI[a.el] || ELEMENTI[a.Z] || ELEMENTI.C, p = [a.x, a.y, a.z || 0];
+    for (let k = 0; k < 3; k++) { pos[3 * i + k] = p[k]; if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k]; }
+    raggio[i] = a.raggio ?? (e.ionico ?? e.vdw) / UNITA[unita]; elemento[i] = e.Z; if (colore) colore.set(a.colore.slice(0, 3), 3 * i); }
+  return { nome, unita, colora: 'elemento', atomi: colore ? { pos, raggio, elemento, colore } : { pos, raggio, elemento }, scatola: scatola || (N ? [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]] : [0, 0, 0]), parti: [], etichette: [] };
+}
+
 // ---------- I RETICOLI. Una cella elementare è { a, b, c: i tre vettori (nm), base: [{ el, uvw, carica, raggio }] }:
 // lo stesso formato che può arrivare da fuori (`reticolo` in scenaCristallo). L'asse y è quello «in alto»: la faccia che
 // si bagna è quella di sopra. I raggi: ionici dove il legame è ionico, e dichiarati negli altri casi.
@@ -1278,7 +1349,8 @@ export function scenaCristallo({ minerale = 'salgemma', reticolo = null, latoNm 
       for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) for (const j of m.get(ch(x, y, z)) || []) if (j > i && elemento[j] !== elemento[i] && (pos[3 * i] - pos[3 * j]) ** 2 + (pos[3 * i + 1] - pos[3 * j + 1]) ** 2 + (pos[3 * i + 2] - pos[3 * j + 2]) ** 2 < (1.15 * (ci + ELEMENTI[elemento[j]].covalente)) ** 2) legami.push(i, j); } }
   if (W) for (let q = 0; q < W.legami.length; q++) legami.push(W.legami[q] + nC);
   const scatola = [dim[0], W ? alto + 0.02 + W.scatola[1] : dim[1], dim[2]], conta = {}; for (let i = 0; i < nC; i++) { const s = ELEMENTI[B.el[i]].simbolo; conta[s] = (conta[s] || 0) + 1; }
-  const scena = { nome: ret.nome || minerale, unita: 'nm', colora: 'elemento', atomi: { pos, raggio, elemento, agitazione, gruppo }, legami: Uint32Array.from(legami), scatola, parti, etichette: [], T, reticolo: ret, atomiCristallo: nC, composizione: conta, molecoleGhiaccio,
+  // (i gruppi servono solo dove ci sono molecole: nel ghiaccio e nell'acqua)
+  const scena = { nome: ret.nome || minerale, unita: 'nm', colora: 'elemento', atomi: W || ret.ghiaccio ? { pos, raggio, elemento, agitazione, gruppo } : { pos, raggio, elemento, agitazione }, legami: Uint32Array.from(legami), scatola, parti, etichette: [], T, reticolo: ret, atomiCristallo: nC, composizione: conta, molecoleGhiaccio,
     descrizione: `${ret.nome || minerale} (${ret.formula || ''}): ${nC} atomi in ${dim.map((x) => +x.toFixed(2)).join(' × ')} nm${W ? `; sopra, ${W.descrizione}` : ''}` };
   scena.etichette.push({ testo: `${ret.nome || minerale}: ${Object.entries(conta).map(([s, n]) => `${n} ${s}`).join(', ')}`, pos: [dim[0] * 0.8, (W ? alto : dim[1]) * 0.55, dim[2]] });
   if (W) {

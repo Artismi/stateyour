@@ -786,6 +786,22 @@ export function ritenzione(luogo, minerale, tipo = 'fissione') {
   return { anni, registra: true, Tc, perche };
 }
 
+// CHE COSA RICORDA UN PUNTO DI ROCCIA, e in quale suo cristallo guardarlo (lo decide il luogo, non un elenco): se c'è la
+// biotite e ci sono granelli che concentrano l'uranio (zircone, monazite), gli ALONI attorno a uno di quei granelli;
+// altrimenti le TRACCE DI FISSIONE nel minerale che ne tiene di più (uranio × anni di memoria); se nessun minerale di lì
+// tiene memoria (ghiaccio, sale, una roccia più calda della ricottura), niente. Il granello ha la sua taglia: un evento
+// di quel punto, lo stesso che usa cellaMateria nel modo memoria.
+// → { tipo: 'alone' | 'tracce' | null, ospite, granello, minerale, raggioM, anni, perche }
+export function memoriaDelLuogo(luogo, caso = null) {
+  if (luogo.tipo !== 'roccia') return { tipo: null, ospite: null, granello: null, perche: `${luogo.tipo === 'ghiaccio' ? 'il ghiaccio' : luogo.tipo === 'acqua' ? "l'acqua" : "l'aria"} non tiene memoria delle particelle: si guarda un evento mentre accade` };
+  const c = (caso || sorgente(luogo.indirizzo || 'materia')).sotto('materia/memoria'), raggioM = 1e-6 * Math.pow(6, c('granello/raggio')), tutti = [...(luogo.minerali || []), ...(luogo.accessori || [])].map((m) => m.nome), ha = (n) => tutti.includes(n);
+  const ricco = tutti.filter((n) => (MATERIALI[n]?.concentra?.U ?? 0) >= 100).sort((a, b) => concentrazioni(luogo, b).U - concentrazioni(luogo, a).U)[0];
+  if (ha('biotite') && ricco) { const r = ritenzione(luogo, 'biotite', 'alone'); if (r.anni > 0 && concentrazioni(luogo, ricco).U > 0) return { tipo: 'alone', ospite: 'biotite', granello: ricco, minerale: 'biotite', raggioM, anni: r.anni, perche: r.perche }; }
+  let meglio = null, perche = 'nessun minerale di questo punto tiene memoria delle particelle';
+  for (const n of tutti) { if (!MATERIALI[n]?.ricottura?.fissione) continue; const r = ritenzione(luogo, n, 'fissione'), voto = concentrazioni(luogo, n).U * r.anni; if (!(voto > 0)) { perche = r.perche; continue; } if (!meglio || voto > meglio.voto) meglio = { voto, n, r }; }
+  return meglio ? { tipo: 'tracce', ospite: meglio.n, granello: null, minerale: meglio.n, raggioM, anni: meglio.r.anni, perche: meglio.r.perche } : { tipo: null, ospite: null, granello: null, perche };
+}
+
 // → { cella, racconto: { titolo, frasi, attese, veri }, nome, nota }
 //   latoM       il lato della finestra (m); se manca lo decide ciò che si guarda
 //   modo        'istante': un evento vero mentre accade · 'memoria': ciò che un minerale ha registrato nella sua età
