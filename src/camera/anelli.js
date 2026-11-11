@@ -15,60 +15,67 @@
 //    Roche del materiale (più su i grani si riaggregano in lunette): il ghiaccio arriva più lontano della roccia.
 // 3. CHE COSA LO CONSUMA:
 //    · la VISCOSITÀ: gli urti tra i grani e le scie di gravità allargano l'anello; ciò che esce dal bordo
-//      interno piove sul pianeta, ciò che esce da quello esterno si riaggrega. Con la viscosità delle scie
-//      (ν ∝ Σ²) l'equazione di diffusione ha una soluzione che si conserva nella forma e cala come 1/√t:
-//      dopo abbastanza tempo la massa NON dipende più da quella di partenza, solo dall'età e dalla larghezza;
+//      interno piove sul pianeta, ciò che esce da quello esterno si riaggrega in lunette. Con la viscosità delle
+//      scie (ν ∝ Σ²) l'equazione di diffusione ha una soluzione che conserva la forma e cala come 1/√t: dopo
+//      abbastanza tempo la massa NON dipende più da quella di partenza, solo dall'età e dalla larghezza
+//      (per Saturno, anello intero: 1,4·10¹⁹ kg in 4,5 miliardi di anni; quella vera è 1,5·10¹⁹);
 //    · la PIOGGIA: la polvere finissima e carica che la luce e i micrometeoriti staccano dai grani resta
-//      agganciata al campo magnetico del pianeta. Lungo una linea di campo la gravità la tira giù e la forza
-//      centrifuga la riporta all'equatore: vince la gravità dentro (2/3)^⅓ = 0,874 volte l'orbita sincrona
-//      (Northrop e Hill 1982: basta sviluppare il potenziale lungo la linea di un dipolo). Lì dentro l'anello
-//      piove sul pianeta, fuori no. Poiché limite di Roche e orbita sincrona dipendono allo stesso modo dalla
-//      densità del pianeta, la condizione «resta un anello oltre la zona di pioggia» dipende SOLO dal giorno:
-//      per il ghiaccio serve un giorno più corto di 16,0 ore, per la roccia di 8,5 ore (giornoMassimo). Saturno
+//      agganciata al campo magnetico del pianeta e gira con lui. Lungo una linea di campo la gravità la tira
+//      verso il pianeta e la forza centrifuga la riporta all'equatore: sviluppando il potenziale lungo la linea
+//      di un dipolo, vince la gravità dentro (2/3)^⅓ = 0,874 volte l'orbita sincrona (Northrop e Hill 1982). Lì
+//      l'anello piove sul pianeta, fuori no. Limite di Roche e orbita sincrona dipendono allo stesso modo dalla
+//      densità del pianeta, quindi «resta un pezzo di anello oltre la zona di pioggia» dipende SOLO dal giorno:
+//      per il ghiaccio serve un giorno più corto di 16,0 ore, per la roccia di 8,5 (giornoMassimo). Saturno
 //      (10,7 h) sì; Urano (17,2 h) e Nettuno (16,1 h) no; Giove (9,9 h) sì per il ghiaccio, ma le sue lune
-//      interne sono di roccia;
-//    · la luce: frena i grani (Poynting-Robertson: esatto) e, vicino alla stella, fa SUBLIMARE il ghiaccio
-//      (pressione di vapore di Clausius-Clapeyron): un anello di ghiaccio regge miliardi di anni solo sotto ~110 K.
+//      interne sono di roccia. Un pianeta senza campo magnetico non ha pioggia;
+//    · la luce: fa cadere i grani piccoli (Poynting-Robertson) e, vicino alla stella, fa SUBLIMARE il ghiaccio
+//      (pressione di vapore, Clausius-Clapeyron): un anello di ghiaccio regge miliardi di anni solo sotto ~105 K
+//      (attorno al Sole: da 5 UA in fuori; è più lontano della linea della neve);
+//    · I GRANI: i più grossi sono grandi quanto lo strato che le scie tengono agitato, e lo strato è tanto più
+//      sottile quanto più l'anello è tenue. Quando ciò che consuma i grani (luce, sublimazione, pioggia) arriva
+//      alla taglia dei più grossi, la fascia è finita: per questo un anello tenue dura poco e uno massiccio molto.
 // 4. LA STRUTTURA viene dalle lune vere di quel pianeta: ogni risonanza di Lindblad (la particella fa p giri
 //    mentre la luna ne fa q) toglie momento angolare all'anello. Se la sua coppia supera quella viscosa tiene
-//    un BORDO netto e apre una divisione appena fuori (la 2:1 con Mimas: il bordo dell'anello B e l'inizio
-//    della divisione di Cassini); se è più debole lancia un'ONDA di densità. Una luna dentro l'anello svuota la
-//    sua zona caotica. Tra un bordo e l'altro ogni fascia evolve per conto suo: le fasce strette sono più tenui.
+//    un BORDO netto e svuota una divisione appena fuori (la 2:1 con Mimas: il bordo dell'anello B, dove comincia
+//    la divisione di Cassini); se è più debole lancia un'ONDA di densità. Una luna dentro l'anello o a ridosso
+//    («pastore») svuota la sua zona caotica. Tra un bordo e l'altro ogni fascia evolve per conto suo: la sua
+//    densità va come la sua larghezza (così l'anello A viene più tenue del B).
 //
 // LEGGI EMPIRICHE (misurate o tarate altrove, non derivate qui):
 //   · la viscosità di un anello denso con scie di gravità: ν = 26·r_h*⁵·G²Σ²/Ω³ (simulazioni a N corpi: Daisaka,
-//     Tanaka e Ida 2001), r_h* = raggio di Hill di due grani / somma dei loro raggi;
+//     Tanaka e Ida 2001), con r_h* = raggio di Hill di due grani a contatto / somma dei loro raggi;
 //   · la pioggia: 10⁻¹³ kg/m²/s sulla parte di anello dentro la zona instabile, MISURATA su Saturno (circa
-//     2 t/s in tutto: O'Donoghue 2019 dà 0,4–2,8 t/s);
-//   · la coppia di una risonanza, 8,6·m²·μ²·Σ·Ω²·a⁴, e lo smorzamento di un'onda di densità (Goldreich e Tremaine
-//     1978-80); la zona caotica attorno a una luna, 1,3·μ^(2/7) (Wisdom 1980);
-//   · dei grani: n(s) ∝ s⁻³ tra il più piccolo e il più grosso (occultazioni radio di Saturno); albedo e colore
-//     di ghiaccio e roccia; il potenziale elettrico di un grano alla luce (circa 5 V);
-//   · calore di sublimazione e punto triplo del ghiaccio; le proprietà dei materiali e le leggi di marea sono
-//     quelle di lune.js; quanto spesso c'è il grande urto e quanto pesa la luna: i numeri di lune.js.
-// PARAMETRI LIBERI (scelti, non misurati): sotto quale spessore ottico non lo chiamo più anello (soglia);
-//   l'esosfera tre volte più calda della superficie (lo stesso numero di leggi.js); nel disco di detriti di un
-//   urto resta dentro Roche quanto è andato nella luna.
-// SEMPLIFICAZIONI: · la pioggia è scalata con la luce della stella (ipotesi: la carica viene dalla luce) e non
-//   dipende dalla forza del campo, purché il campo riesca a trattenere un grano di un nanometro; · le fasce
-//   sono trattate come strette (diffusione in piano) e i bordi tenuti dalle risonanze sono quelli di oggi per
-//   tutta la storia; · i grani più grossi sono grandi quanto lo strato che le scie tengono agitato (Q di Toomre
-//   = 2), i più piccoli sono quelli che la luce non ha ancora fatto cadere; · la luce è quella di oggi (per una
-//   stella morta: quella di quand'era viva, per il ghiaccio); il calore del pianeta giovane è ignorato (il
-//   vapore resta legato al pianeta e ricondensa); · solo le risonanze interne di primo e second'ordine.
+//     2 t/s in tutto: O'Donoghue e altri 2019 danno 0,4–2,8 t/s);
+//   · la coppia di una risonanza, 8,6·m²·μ²·Σ·Ω²·a⁴, e lo smorzamento viscoso di un'onda di densità (Goldreich e
+//     Tremaine 1978-80); la zona caotica attorno a una luna, 1,3·μ^(2/7) (Wisdom 1980);
+//   · i grani: n(s) ∝ s⁻³ tra il più piccolo e il più grosso (occultazioni radio di Saturno); albedo e colore di
+//     ghiaccio e roccia; il potenziale elettrico di un grano alla luce (circa 5 V);
+//   · calore di sublimazione e punto triplo del ghiaccio; i materiali e le leggi di marea sono quelli di
+//     lune.js; quanto spesso c'è il grande urto e quanto pesa la luna: i numeri di lune.js.
+// PARAMETRI LIBERI (scelti, non misurati): sotto quale spessore ottico non lo chiamo più anello (soglia); il
+//   grano più piccolo che il campo deve saper trattenere perché ci sia pioggia (un nanometro); nel disco di
+//   detriti di un urto resta dentro Roche quanto è andato nella luna (restoUrto); l'esosfera tre volte più
+//   calda della superficie (lo stesso numero di leggi.js).
+// SEMPLIFICAZIONI: · la pioggia è la stessa per ogni pianeta con un campo (non si sa come scali con la stella e
+//   con il campo: si usa la misura di Saturno); · le fasce sono trattate come strette (diffusione in piano) e i
+//   bordi tenuti dalle risonanze sono quelli di oggi per tutta la storia; · la taglia dei grani più grossi
+//   (lo spessore dello strato a Q di Toomre = 2) è un'ipotesi: dà i metri misurati nell'anello A e i centimetri
+//   dell'anello C, ma nel B dà grani troppo grossi; · la luce è quella di oggi (per il ghiaccio attorno a una
+//   stella morta: quella di quand'era viva); il calore del pianeta giovane è ignorato (il vapore resta legato al
+//   pianeta e ricondensa); · solo le risonanze interne di primo e second'ordine.
 // CHE COSA NON C'È: il ciclo anello → lunette → anello dei pianeti lenti (Urano, Nettuno, Marte: Hesselbrock e
 //   Minton 2017), le comete catturate e spezzate (oggi troppo rare per un anello massiccio), la polvere
 //   staccata dalle lune piccole (gli anelli tenui di Giove), la migrazione passata delle lune (la larghezza
-//   vera della divisione di Cassini).
+//   vera della divisione di Cassini: qui viene stretta, come la divisione di Huygens).
 
-import { COSTANTI, LSOLE, MSOLE, ANNO, UA, stella as stellaVera, temperaturaEquilibrio, clima } from './leggi.js';
+import { COSTANTI, LSOLE, MSOLE, ANNO, stella as stellaVera, clima } from './leggi.js';
 import { MATERIALI, limiteRoche, raggioHill, periodoOrbita, raggioRotondo, densitaCorpo, orbitaDopoLeMaree } from './lune.js';
 import { sorgente } from './eventi.js';
 
 const { G, c: LUCE, sigma: SIGMA, kB, mp } = COSTANTI, EPS0 = 8.854e-12;
-export const LEGGI = {
+export const LEGGI_ANELLI = {
   viscosita: 26, // Daisaka 2001
-  pioggia: 1e-13, flussoSaturno: LSOLE / (4 * Math.PI * (9.58 * UA) ** 2), // kg/m²/s, alla luce che arriva a Saturno (14,8 W/m²)
+  pioggia: 1e-13, // kg/m²/s: O'Donoghue 2019, su Saturno
   coppia: 8.6, smorza: 7 / 3, caotica: 1.3, // Goldreich e Tremaine; Wisdom
   albedo: { ghiaccio: 0.6, roccia: 0.1 }, colore: { ghiaccio: [233, 224, 204], roccia: [112, 102, 94] }, // come le lune di lune.js; gli anelli di Saturno e di Urano
   potenziale: 5, granoCarico: 1e-9, // volt; il grano più piccolo che il campo deve saper trattenere (m)
@@ -76,7 +83,7 @@ export const LEGGI = {
   esosfera: 3, soglia: 1e-8, restoUrto: 1, // PARAMETRI LIBERI
   ghiaccioMinimo: 0.005, hill: 0.4, urto: { capita: 0.45, massa: [-3, -1.6] }, // i numeri di lune.js (mantello di ghiaccio; orbita stabile; grande urto)
 };
-const L = LEGGI, PIOVE = Math.cbrt(2 / 3);
+const L = LEGGI_ANELLI, GIORNO_GIOVANE = 10 * 3600, PIOVE = Math.cbrt(2 / 3);
 
 // ---------- la forma che si conserva. Con ν = K·Σ², ∂Σ/∂t = 3·∂²(νΣ)/∂r² ha la soluzione Σ = f(x)/√(SIM·K·t)·Δ,
 // con (f³)'' ∝ −f e f = 0 ai due bordi (lì la materia se ne va). Con f² = sen θ la forma si integra da sola:
@@ -97,7 +104,7 @@ const forma = (x) => { const u = Math.min(1, Math.max(0, x)) * NF, i = Math.min(
 
 // ---------- le distanze che contano
 // l'orbita sincrona: lì una luna (o un grano) gira insieme al pianeta
-export const orbitaSincrona = (P) => (P.giorno > 0 ? Math.cbrt((G * P.massaKg * P.giorno ** 2) / (4 * Math.PI ** 2)) : Infinity);
+export const orbitaSincrona = (P) => Math.cbrt((G * P.massaKg * (P.giorno || GIORNO_GIOVANE) ** 2) / (4 * Math.PI ** 2)); // senza un giorno: 10 ore, come in lune.js
 // il giorno più lungo con cui resta un pezzo di anello fuori dalla zona di pioggia: Roche > 0,874·sincrona
 // ⇔ giorno² < (3/2)·2,44³·3π/(G·ρ_grano); la densità del pianeta si semplifica (16,0 ore per il ghiaccio, 8,5 per la roccia)
 export const giornoMassimo = (materiale = 'ghiaccio') => Math.sqrt((1.5 * 2.44 ** 3 * 3 * Math.PI) / (G * MATERIALI[materiale].densita));
@@ -166,7 +173,7 @@ export function storia(P, lune = [], stella = {}, caso = sorgente(`anelli/pianet
   }
   // le lune di oggi che scendono: da/dt ∝ m·a^(-11/2), la legge di orbitaDopoLeMaree con il segno opposto
   // (a^(13/2) cala in modo lineare: orbitaDopoLeMaree(P, m, 0, 1)^(13/2) è quanto cala in un anno)
-  const giorno = P.giorno || Infinity;
+  const giorno = P.giorno || GIORNO_GIOVANE;
   lune.forEach((l, i) => {
     if (!(l.retrograda || (l.periodo ?? periodoOrbita(P, l.aM, l.massaKg)) < giorno)) return;
     const rotta = doveSiSpezza(P, l), perAnno = orbitaDopoLeMaree(P, l.massaKg, 0, 1) ** 6.5;
@@ -326,8 +333,9 @@ function anelloDi(P, lune, stella, materiale, massa0, anni, cosa) {
     bordi: { interno: conVelo ? "l'alta atmosfera del pianeta" : perche, esterno: fine },
     fasce: vive.map((z) => ({ da: z.a1 / R, a: z.a2 / R, massaKg: z.massa, spessore: z.tau })),
     // dove piove e quanto; quanta materia è uscita dal bordo esterno a fare lunette, e che cosa ne è
+    denso: [vive[0].a1 / R, esterno], // la parte che si vede bene (senza il velo interno)
     pioggia: { finoA: tutto ? esterno : conVelo ? a0 / R : 0, velo, kgAlSecondo: fasce.reduce((s, z) => s + (z.C2 === Infinity ? 0 : (z.massa ** 3 / (2 * z.C2)) * z.versoDentro) + (z.piove ? amb.pioggia * z.A * (1 - Math.exp(-MEDIA * z.tau)) : 0), 0) },
-    lunette: { massaKg: lunette, destino: fuoriSincrona ? 'oltre il limite di Roche si riaggregano in lune che le maree allontanano' : "si riaggregano, ma girano più in fretta del pianeta: le maree le riportano dentro (l'anello si rifà)" },
+    lunette: { massaKg: lunette, aM: fuoriSincrona && lunette > 0 ? orbitaDopoLeMaree(P, lunette, aOut, anni) : aOut, destino: fuoriSincrona ? 'oltre il limite di Roche si riaggregano in lune che le maree allontanano' : "si riaggregano, ma girano più in fretta del pianeta: le maree le riportano dentro (l'anello si rifà)" },
     sincrona: sincrona / R, roche: roche / R, piovuta,
   };
 }
