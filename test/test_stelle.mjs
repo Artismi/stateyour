@@ -1,7 +1,7 @@
 // test_stelle.mjs — le stelle calcolate dalla struttura: i numeri veri (il Sole, Sirio, Proxima…), ciò che deve
 // emergere (massa minima, CNO, Sole giovane, metalli), la fine, i tempi, e il confronto con le formulette di leggi.js
 import assert from 'node:assert/strict';
-import { stella, fine, massaMinima, massaMassima, nucleoElio, composizione, preparaTabella, DATI, ALFA, interno } from '../src/camera/stelle.js';
+import { stella, fine, massaMinima, massaMassima, nucleoElio, composizione, preparaTabella, DATI, ALFA, dentro as interno } from '../src/camera/stelle.js';
 import { stella as stellaVecchia, fine as fineVecchia, massaNascita, massaChandrasekhar, massaMassimaNeutroni, COSTANTI, MSOLE, RSOLE, LSOLE, ANNO, etaUniverso } from '../src/camera/leggi.js';
 
 let ok = 0;

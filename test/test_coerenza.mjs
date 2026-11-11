@@ -21,7 +21,7 @@ import * as NE from '../src/camera/nebbia.js';
 import * as FL from '../src/camera/fluidi.js';
 import * as TE from '../src/camera/tettonica.js';
 import * as UN from '../src/camera/unita.js';
-import { simulaMondo, casoEvento } from '../src/camera/mondo.js';
+import { simulaMondo } from '../src/camera/mondo.js';
 
 const { MSOLE, RSOLE, LSOLE, UA, ANNO, COSTANTI: K, COSMO } = LG;
 const ADESSO = LG.etaUniverso() / ANNO; // l'età dell'universo, in anni
@@ -522,45 +522,38 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
 sezione('LE PARTICELLE');
 // =====================================================================================================
 {
-  // Si rifà, evento per evento, il caso di ogni decadimento e di ogni urto (lo stesso di mondo.js: la vita, il
-  // cammino libero, poi angolo e quota di ogni figlia) e si fa il bilancio. Unità del motore: m in masse
-  // dell'elettrone, c = 40. Le specie sono rese tutte visibili, per avere la traccia anche di luce e neutre.
-  const C = 40, anello = [];
+  // Le regioni del cosmo sono relativistiche: ogni decadimento e ogni urto registra il quadrivettore di prima
+  // («prima», più il bersaglio fermo se c'è) e quelli di tutte le figlie («prodotti», anche le invisibili: neutrini,
+  // nucleone e nucleo colpiti), in masse dell'elettrone con c = 1. Qui si rifà la somma.
+  const anello = [];
   for (const x of PIANETI) { if (anello.length >= 10) break; const Pl = CO.pianeta(x.n, x.gid, x.sid, x.p.id), R = Pl.regioni.find((r) => r.nellAnello); if (R && x.p.id % 2 === 0) anello.push({ cosmo: x.n, galassia: x.gid, stella: x.sid, pianeta: x.p.id, regione: R.id }); }
-  let eventi = 0, cariche = 0, figlie = 0, tagliate = 0; const perCanale = {};
+  let eventi = 0, senzaBilancio = 0, raggi = 0, veloci = 0; const scartoE = [], scartoP = [], scartoQ = [], scartoNascita = [], canali = {}, gamme = [];
   for (const cella of [...anello.map((a) => CO.regione(a).cella), ...REGIONI.slice(0, 8).map((r) => r.cella)]) {
-    const specie = Object.fromEntries(Object.entries(cella.specie).map(([k, v]) => [k, { ...v, visibile: true }])), tr = simulaMondo({ ...cella, specie }), perEvento = new Map(tr.filter((t) => t.evento).map((t) => [t.evento, t]));
-    // l'impulso di ogni particella: quello della sorgente, o quello ricevuto alla nascita (in una regione non c'è materia
-    // che frena né gravità: fino al decadimento resta quello; nel campo magnetico cambia solo la direzione)
-    const impulsi = new Map(), conMassa = (m, v) => { const w = Math.min(0.99 * C, v); return (m * w) / Math.sqrt(1 - (w / C) ** 2); };
+    const tr = simulaMondo(cella), perEvento = new Map(tr.filter((t) => t.evento).map((t) => [t.evento, t])), q = (nome) => { const sp = cella.specie[nome]; return sp.luce ? 0 : sp.q ?? 0; };
+    // un raggio cosmico ha l'energia con cui è stato sorteggiato, anche sopra 5,7 GeV (γ = 1 + E/938 MeV)
+    for (const t of tr) if (t.madre == null && t.specie.nome === 'protone' && cella.sorgenti[t.sorgente].energia) { raggi++; if (t.gamma > 7.1) veloci++; gamme.push(Math.abs(t.gamma / (1 + cella.sorgenti[t.sorgente].energia / 938.27) - 1)); }
     for (const d of tr.decadimenti) {
-      const madre = perEvento.get(d.evento); if (!madre || madre.punti.length < 2 || !madre.specie.figli) continue;
-      const sp = madre.specie, src = cella.sorgenti[madre.sorgente];
-      if (!impulsi.has(d.evento) && madre.generazione > 0) continue; // (una figlia di cui non si è visto nascere la madre: non capita, ma non si inventa)
-      const Pm = impulsi.get(d.evento) ?? (sp.luce ? sp.m * C : conMassa(sp.m, src.v));
-      const urto = sp.camminoLibero != null, Em = (sp.luce ? Pm * C : Math.hypot(Pm * C, sp.m * C * C)) + (urto && !sp.luce ? 1836.15 * C * C : 0); // nell'urto c'è anche il nucleone fermo che viene colpito
-      const caso = casoEvento(cella.seme, d.evento, 0); if (sp.vita == null && sp.vitaMedia != null) caso(); if (urto) caso();
-      let q = 0, lungo = 0, E = 0;
-      sp.figli.forEach((f, k) => {
-        const estrai = (x, d0) => (Array.isArray(x) ? x[0] + caso() * (x[1] - x[0]) : x ?? d0), angolo = (estrai(f.angolo, 0) * Math.PI) / 180, pf = estrai(f.quota, 0.5) * Pm, fs = cella.specie[f.specie]; figlie++;
-        let p = pf; if (!fs.luce) { const vf = pf / Math.hypot(fs.m, pf / C); if (vf > 0.99 * C) tagliate++; p = conMassa(fs.m, vf); }
-        impulsi.set(`${d.evento}.${k}`, p);
-        q += fs.luce ? 0 : fs.q ?? 0; lungo += p * Math.cos(angolo); E += fs.luce ? p * C : Math.hypot(p * C, fs.m * C * C);
-      });
-      eventi++; if (q !== (sp.luce ? 0 : sp.q ?? 0)) cariche++;
-      const canale = (perCanale[sp.nome] ||= { n: 0, impulso: [], energia: [] }); canale.n++; canale.impulso.push(lungo / Pm); canale.energia.push(E / Em);
+      if (!d.prodotti) { senzaBilancio++; continue; } eventi++;
+      const M = d.bersaglio ? cella.specie[d.bersaglio].m : 0, e0 = d.prima.e + M; let e = 0, px = 0, py = 0, carica = 0;
+      for (const f of d.prodotti) { e += f.e; px += f.x; py += f.y; carica += q(f.specie); assert.ok(f.e >= (cella.specie[f.specie].luce ? 0 : cella.specie[f.specie].m) * (1 - 1e-12)); }
+      scartoE.push(Math.abs(e - e0) / e0); scartoP.push(Math.hypot(px - d.prima.x, py - d.prima.y) / e0); scartoQ.push(Math.abs(carica - q(d.specie) - (d.bersaglio ? q(d.bersaglio) : 0)));
+      const nome = `${d.specie} → ${d.prodotti.map((f) => f.specie).join(' + ')}`; canali[nome] = (canali[nome] || 0) + 1;
+      // le figlie che si vedono partono davvero con quell'energia e in quella direzione
+      d.prodotti.forEach((f, k) => { const t = perEvento.get(`${d.evento}.${k}`); if (!t || !t.gamma || t.punti.length < 2) return; const A = t.punti[0], B = t.punti[1];
+        scartoNascita.push(Math.abs((t.gamma * t.specie.m) / f.e - 1)); let da = Math.atan2(B[1] - A[1], B[0] - A[0]) - Math.atan2(f.y, f.x); da = Math.abs(Math.atan2(Math.sin(da), Math.cos(da))); assert.ok(da < 0.1, `una figlia parte a ${da} rad dalla sua direzione`); });
     }
   }
-  prova('in ogni decadimento e in ogni urto la carica elettrica si conserva', () => { assert.ok(eventi >= 20, `solo ${eventi} eventi nel campione`); assert.equal(cariche, 0); });
-  const testo = (k, cosa) => (perCanale[k] ? `${k} (${perCanale[k].n}): ${num(minimo(perCanale[k][cosa]))}–${num(massimo(perCanale[k][cosa]))}` : null);
-  // dove non ci sono prodotti invisibili l'energia deve tornare (π⁰ → 2 fotoni; fotone → coppia, accanto a un nucleo);
-  // negli altri (neutrini, frammenti del nucleo) le figlie possono averne meno, mai di più
-  const chiusi = ['pione0', 'fotone'].filter((k) => perCanale[k]), aperti = Object.keys(perCanale).filter((k) => !chiusi.includes(k));
-  const fuori = chiusi.flatMap((k) => perCanale[k].energia).filter((e) => Math.abs(e - 1) > 0.05).length + aperti.flatMap((k) => perCanale[k].energia).filter((e) => e > 1.001).length, tutti = Object.values(perCanale).flatMap((c) => c.impulso);
-  nota(2, 'nei decadimenti e negli urti energia e impulso non si conservano: le «quote» delle figlie sono sorteggiate una per una, senza vincolo sulla somma',
-    { casi: fuori, su: eventi, tipico: `energia delle figlie / energia disponibile: ${[...chiusi, ...aperti].map((k) => testo(k, 'energia')).join('; ')}`, massimo: `impulso lungo la madre fino a ${num(massimo(tutti))} volte quello della madre (${tutti.filter((x) => x > 1.001).length} eventi su ${tutti.length} sopra 1)`, dove: 'unita.js catalogoVero() (quota: [da, a] per ogni figlia) e mondo.js simulaMondo() «pf = estrai(f.quota, 0.5) * (P || …)»' });
-  nota(2, 'nessuna particella con massa supera 0,99 c (γ ≤ 7,1): elettroni e positroni nati con più impulso lo perdono alla nascita, e i raggi cosmici sopra 5,7 GeV curvano come se ne avessero 5,7',
-    { casi: tagliate, su: figlie, tipico: `l'elettrone del muone tiene ${perCanale['muone-'] || perCanale['muone+'] ? num(mediana([...(perCanale['muone-']?.energia || []), ...(perCanale['muone+']?.energia || [])])) : '?'} dell'energia (vero: un terzo)`, massimo: `raggi cosmici del campione oltre il tetto: ${REGIONI.flatMap((r) => r.cella.sorgenti).filter((s) => s.specie === 'protone' && s.v > 0.99 * C).length} su ${REGIONI.flatMap((r) => r.cella.sorgenti).filter((s) => s.specie === 'protone').length}`, dove: 'mondo.js simulaMondo() «Math.min(0.99 * C, …)» e «if (u > 0.99 * C)» contro cosmo.js energiaRaggio() (fino a 10⁶ MeV)' });
+  console.log(`  · ${eventi} decadimenti e urti: ${Object.entries(canali).map(([k, n]) => `${n} ${k}`).join('; ')}`);
+  prova('in ogni decadimento e in ogni urto si conservano la carica, l\'energia e la quantità di moto (cinematica vera, con la relatività)', () => {
+    assert.ok(eventi >= 100, `solo ${eventi} eventi nel campione`); assert.equal(senzaBilancio, 0, 'eventi senza cinematica vera');
+    assert.equal(massimo(scartoQ), 0, 'carica');
+    assert.ok(massimo(scartoE) < 1e-9, `energia: scarto ${massimo(scartoE)}`); assert.ok(massimo(scartoP) < 1e-9, `impulso: scarto ${massimo(scartoP)}`);
+    assert.ok(scartoNascita.length > 100 && massimo(scartoNascita) < 1e-9, `energia alla nascita: scarto ${massimo(scartoNascita)}`);
+    for (const nome of ['pione+ → muone+ + neutrino', 'pione0 → fotone + fotone', 'fotone → elettrone + positrone + nucleo']) assert.ok(canali[nome] > 0, `non si è visto ${nome}`);
+  });
+  prova('nessun tetto alla velocità: un raggio cosmico tiene tutta l\'energia con cui arriva (γ anche oltre 7)', () => {
+    assert.ok(raggi > 100 && veloci > 0, `${raggi} raggi, ${veloci} oltre γ = 7,1`); assert.ok(massimo(gamme) < 1e-6, `γ del raggio contro la sua energia: ${massimo(gamme)}`);
+  });
 }
 
 // =====================================================================================================

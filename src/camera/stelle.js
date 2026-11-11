@@ -9,7 +9,8 @@
 // Di qui escono, per ogni massa e composizione: luminosità, raggio, temperatura della superficie e del centro, quanto
 // vive, chi porta il calore dentro, la massa sotto cui l'idrogeno non si accende, che cosa resta alla fine.
 //
-// IL METODO (leggero: una tabella calcolata al primo uso, poi si interpola). Non si integrano le quattro equazioni
+// IL METODO (leggero: una tabella calcolata al primo uso — 4 metallicità × 25 masse × 8 età, ~300 ms — poi si
+// interpola in microsecondi). Non si integrano le quattro equazioni
 // della struttura punto per punto: si sceglie una STRUTTURA DI PROVA con pochi numeri liberi e li si fissa imponendo
 // i bilanci in forma integrale.
 //   · La struttura: dove il calore lo porta la luce, il modello standard di Eddington (P ∝ T⁴, cioè il polìtropo di
@@ -67,7 +68,7 @@
 // lunghezza di mescolamento):
 //   · il coefficiente del fattore di ghigliottina: 3,29 invece dello 0,708 dei libri, TARATO perché il Sole a 4,57
 //     miliardi di anni abbia la sua luminosità. Non corregge solo l'opacità: assorbe l'errore della struttura di
-//     prova (nel Sole vero il centro è più caldo di quanto dà n = 3). Con 0,708 il Sole avrebbe 0,37 L☉;
+//     prova (nel Sole vero il centro è più caldo di quanto dà n = 3). Con 0,708 il Sole avrebbe 0,38 L☉;
 //   · la lunghezza di mescolamento, 1,8 altezze di scala (il valore tipico dei modelli solari): decide quanto è
 //     spesso l'involucro convettivo e, con lui, il raggio. Con 1,8 il Sole ha raggio 0,93 e 6000 K, ma un involucro
 //     convettivo troppo sottile (0,07% della massa: quello vero è il 2,4%); con convezione perfetta (∞) l'involucro
@@ -112,7 +113,6 @@ export const DATI = {
   CN: 0.257, // quanto ¹⁴N (in massa, per unità di Z) quando il ciclo CN è a regime: 14·(C/12 + N/14) con la miscela solare
   H2: { D0: 4.478 * K.e, rot: 85.4, vib: 6332 }, // la molecola H₂: energia di legame, temperature di rotazione e vibrazione (K)
   alfaConv: 1.8, // la lunghezza di mescolamento, in altezze di scala di pressione: PARAMETRO LIBERO
-  etaSole: 4.57e9, // l'età del Sole (dai meteoriti), per la taratura
   elioBucoNero: 7, // (masse solari) sopra, il nucleo di elio non esplode: resta un buco nero
   massaFinale: [[2.85, 0.08, 0.489], [3.6, 0.187, 0.184], [Infinity, 0.107, 0.471]], // nane bianche: M_f = a·M_i + b (Cummings et al. 2018)
 };
@@ -657,4 +657,4 @@ export function fine(Msol, B0 = 1e-4, { Z = 1 } = {}) {
 export function composizione(Z = 1) { const Zm = Z * DATI.ZSOLE, Y = DATI.YPRIMO + ((DATI.YSOLE - DATI.YPRIMO) / DATI.ZSOLE) * Zm; return { X: 1 - Y - Zm, Y, Zm }; }
 
 // i pezzi, per i test e per chi vuole guardare dentro
-export const interno = { valuta, equilibrio, traccia, raffreddamento, cercaMinima, riga, temperatura, energia, opacita, entropiaFoto, entropiaInterno, elettroni, sigmaV, membro, degenerazione, laneEmden, C_ES, C_FF, SIGMA_T, A_RAD, NG, Z_NODI, M_NODI, B, CONTA };
+export const dentro = { valuta, equilibrio, traccia, raffreddamento, cercaMinima, riga, temperatura, energia, opacita, entropiaFoto, entropiaInterno, elettroni, sigmaV, membro, degenerazione, laneEmden, C_ES, C_FF, SIGMA_T, A_RAD, NG, Z_NODI, M_NODI, B, CONTA };
