@@ -100,7 +100,7 @@ prova('un pianeta massiccio e freddo trattiene l\'idrogeno: aria riducente, con 
   for (const P of [SUPERTERRA, GIOVE]) {
     assert.ok(P.clima.tenuti.includes('idrogeno'));
     const a = atmosfera(P);
-    assert.equal(a.riducente, true); assert.ok(a.potere > 0.9 && a.gas.H2 > 0.8 && a.gas.CH4 > 1e-4 && a.gas.NH3 > 1e-5 && !(a.gas.CO2 > 1e-9), mostra(a.gas));
+    assert.equal(a.riducente, true); assert.ok(a.potere > 0.9 && a.gas.H2 > 0.8 && a.gas.CH4 > 1e-4 && a.gas.NH3 > 1e-6 && !(a.gas.CO2 > 1e-9), mostra(a.gas)); // (l'ammoniaca: a 124 K, dove ora il clima per fasce mette la super-Terra coperta di ghiaccio, quasi tutta è gelata)
     assert.ok(Math.abs(Object.values(a.gas).reduce((s, v) => s + v, 0) - 1) < 1e-9);
   }
   assert.ok(vicino(atmosfera(GIOVE).gas.He, 0.146, 0.1) && !(atmosfera(GIOVE).gas.H2O > 1e-6), 'l\'elio del Sole; l\'acqua è scesa nelle nuvole');

@@ -23,7 +23,7 @@ import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno } from './leggi.js';
+import { acquaInSuperficie, CLIMA, riflette, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso } from './leggi.js';
 const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000 };
 
 export function interno(P, stella) {
@@ -203,14 +203,16 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // (la serra, il calore portato e la temperatura di partenza sono quelli di clima(), leggi.js: è la stessa legge, risolta
   // lì per fasce e qui sulla mappa; se il pianeta non li porta con sé, valgono le stesse formule di riserva)
   const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = P.clima.tau ?? serraDaPressione(P.clima.pressione);
-  const D = meteo ? Math.max(0, meteo.diffusivita) : P.clima.D ?? trasportoCalore(P.clima.pressione), kx = sf.W / W, ky = sf.H / H;
+  // (nel secondo giro il calore portato è la media tra quello atteso del primo giro e quello che i venti hanno portato
+  // davvero: i due si rispondono, e a metà strada non rimbalzano)
+  const Dattesa = P.clima.D ?? trasportoCalore(P.clima.pressione), D = meteo ? (Dattesa + Math.max(0, meteo.diffusivita)) / 2 : Dattesa, kx = sf.W / W, ky = sf.H / H;
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
   // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo. Per un mondo
   // lontano dalla sua stella «caldo» vuol dire un quarto sopra la temperatura a cui lo porterebbe la sola luce (Tfine:
   // quanto basta per essere sopra qualunque equilibrio, anche senza ghiaccio né nuvole), non 310 K
-  const Tfine = Math.max(30, P.clima.Teq * Math.pow(1 + 0.75 * tau, 0.25));
+  const Tfine = P.clima.Tavvio ? Math.max(3, P.clima.Tavvio / 1.25) : Math.max(30, P.clima.Teq * Math.pow(1 + 0.75 * tau, 0.25));
   const T = new Float32Array(W * H).fill(P.clima.Tavvio ?? Math.max(P.clima.Teq, Math.min(310, 1.25 * Tfine))), nuovo = new Float32Array(W * H), freddo = new Float32Array(W * H), media = new Float32Array(W * H);
   const C = (k) => (terra[k] ? CLIMA.capacitaTerra : CLIMA.capacitaMare), anno = P.anno, eps = (P.obliquita * Math.PI) / 180;
   // il ghiaccio ha bisogno di acqua: su un pianeta senza mari al freddo resta solo un po' di brina;
@@ -249,14 +251,14 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     risolvi(diag, noto, m, x); u.fill(0, 0, m); u[0] = g; u[m - 1] = al; risolvi(diag, u, m, z);
     const fatt = (x[0] + (be * x[m - 1]) / g) / (1 + z[0] + (be * z[m - 1]) / g); for (let i = 0; i < m; i++) x[i] -= fatt * z[i];
   };
-  let assorbita = 0, irradiata = 0, pesi = 0;
+  let assorbita = 0, irradiata = 0, pesi = 0; const stagioni = P.bloccato ? null : [0, 1, 2, 3].map(() => new Float32Array(W * H));
   for (let n = 0; n < totale; n++) {
     const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
     // 1. in ogni cella: la luce assorbita meno quella irradiata
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const k = j * W + i, t = T[k], entra = (P.bloccato ? sole[k] : soleJ[j]) * (1 - albedo(k, t)), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
-      const dT = Math.max(-50, Math.min(50, (dt * (entra - esce)) / (C(k) + dt * molla)));
+      const dT = frenaPasso(t, (dt * (entra - esce)) / (C(k) + dt * molla));
       nuovo[k] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
@@ -271,7 +273,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
       for (let j = 0; j < H; j++) { const q = (dt * D) / (C(j * W + i) * cosLat[j] * dphi * dphi), a = j > 0 ? q * cosN[j] : 0, b = j < H - 1 ? q * cosS[j] : 0; sotto[j] = -a; sopra[j] = -b; diag[j] = 1 + a + b; noto[j] = nuovo[j * W + i]; }
       risolvi(diag, noto, H, x); for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
     }
-    if (ultimo) for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; }
+    if (ultimo) { const quarto = stagioni ? stagioni[Math.min(3, Math.floor((4 * (n % passiAnno)) / passiAnno))] : null; for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (quarto) quarto[k] += (4 * nuovo[k]) / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; } }
     T.set(nuovo);
   }
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
@@ -280,6 +282,8 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio,
     // il bilancio dell'ultimo anno, in media sul pianeta (W/m²): la luce assorbita e quella irradiata; a regime sono uguali
     bilancio: { assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4 },
+    // la temperatura media dei quattro quarti dell'ultimo anno (le stagioni: per meteo.js); un pianeta bloccato non ne ha
+    stagioni,
     // quanto in fretta i pendii si consumano: con la pioggia molto, con il solo vento poco, senz'aria quasi niente
     sgretola: piove ? 0.05 : isFinite(P.clima.pressione) && P.clima.pressione > 1000 ? 0.015 : 0.002 };
   memoClima.set(chiave, out); if (memoClima.size > 6) memoClima.delete(memoClima.keys().next().value);

@@ -58,6 +58,9 @@ const lnQ = (m, T) => 1.5 * Math.log((m * K.kB * T) / (2 * Math.PI * K.hbar * K.
 // ---------- LO STATO DELLA MATERIA a densità e temperatura date: molecole H₂, atomi, ioni ed elettroni in equilibrio
 // (Saha, con gli elettroni di Fermi; il potenziale di ionizzazione calato dalla vicinanza degli altri ioni: è la
 // ionizzazione per pressione), più la luce. Dà pressione, entropia, e chi c'è.
+// il peso statistico di uno stato legato di energia χ (in unità di kT): e^χ − 1 − χ (Planck-Larkin), che si spegne
+// con continuità quando la ionizzazione per pressione porta χ a zero
+const peso = (c) => (c > 0 ? (c < 1e-3 ? 0.5 * c * c : Math.exp(Math.min(c, 600)) - 1 - c) : 0);
 const S = { P: 0, s: 0, ne: 0, eta: 0, lnD: 0, nH0: 0, np: 0, nH2: 0, nHe0: 0, nHe1: 0, nHe2: 0, d1: 0, mu: 0, xH: 0 };
 function stato(rho, T, X, Zm) {
   const Y = Math.max(0, 1 - X - Zm), n = rho / MB, nH = X * n, nHe = (Y * n) / 4, nZ = (Zm * n) / 17, kT = K.kB * T, lam = LQE - 1.5 * Math.log(T) - Math.LN2;
@@ -65,21 +68,20 @@ function stato(rho, T, X, Zm) {
   const umax = Math.log(nH + 2 * nHe + 8.5 * nZ);
   let u = umax, np = nH, nH0 = 0, nH2 = 0, he0 = 0, he1 = 0, he2 = nHe, eta = 0;
   const cH = (RY - d1) / kT, c1 = (DATI.elio1 - d1) / kT, c2 = (4 * RY - 2 * d1) / kT;
-  if (T < 4e5 && (cH > -3 || c2 > -3)) { // non tutto ionizzato: si cerca la densità di elettroni che pareggia le cariche
-    const th = DATI.H2.vib / T, zi = ((T / DATI.H2.rot) * 2) / (1 - Math.exp(-th)), dD = Math.max(0, DATI.H2.D0 - d1) / kT;
-    const lK = 2 * lnQ(MB, T) - lnQ(2 * MB, T) + Math.log(16 / zi) - dD; // n(H)²/n(H₂)
+  if (cH > 0 || c1 > 0 || c2 > 0) { // c'è ancora qualche stato legato: si cerca la densità di elettroni che pareggia le cariche
+    const th = DATI.H2.vib / T, zi = ((T / DATI.H2.rot) * 2) / (1 - Math.exp(-th)), wD = peso((DATI.H2.D0 - d1) / kT), wH = peso(cH), w1 = peso(c1), w2 = peso(c2);
+    const lK = wD > 0 ? 2 * lnQ(MB, T) - lnQ(2 * MB, T) + Math.log(16 / zi) - Math.log(wD) : Infinity; // ln di n(H)²/n(H₂)
     const f = (u) => {
-      eta = elettroni(u + lam)[1];
-      const aH = 2 * Math.exp(Math.min(600, eta + cH)), b = 1 + 1 / aH, q = Math.exp(Math.min(600, Math.log(8 * Math.max(nH, 1e-300)) - lK));
-      nH0 = (2 * nH) / (b + Math.sqrt(b * b + q)); np = nH0 / aH; nH2 = 0.5 * (nH - nH0 - np);
-      const r1 = 0.5 * Math.exp(Math.min(600, eta + c1)), r2 = 2 * Math.exp(Math.min(600, eta + c2));
+      const ee = Math.exp(Math.min(300, (eta = elettroni(u + lam)[1]))), aH = 2 * ee * wH;
+      if (aH > 0) { const b = 1 + 1 / aH, q = Math.exp(Math.min(600, Math.log(8 * Math.max(nH, 1e-300)) - lK)); nH0 = (2 * nH) / (b + Math.sqrt(b * b + q)); np = nH0 / aH; nH2 = 0.5 * (nH - nH0 - np); } else { nH0 = 0; np = nH; nH2 = 0; }
+      const r1 = 0.5 * ee * w1, r2 = 2 * ee * w2;
       he2 = nHe / (1 + r2 + r2 * r1); he1 = r2 * he2; he0 = r1 * he1;
       return u - Math.log(Math.max(np + he1 + 2 * he2 + (8.5 * nZ * np) / Math.max(nH, 1e-300), 1e-200));
     };
     let b = umax, fb = f(b);
     if (fb > 1e-10) { // la radice sta tra ln nₑ(u massimo) e u massimo: regula falsi (Illinois)
       let a = b - fb, fa = f(a), lato = 0;
-      for (let it = 0; it < 80 && b - a > 1e-9 && fa < 0; it++) {
+      for (let it = 0; it < 100 && b - a > 1e-13 && fa < 0; it++) {
         const c = Math.min(b, Math.max(a, (a * fb - b * fa) / (fb - fa))), fc = f(c);
         if (fc > 0) { b = c; fb = fc; if (lato === 1) fa *= 0.5; lato = 1; } else { a = c; fa = fc; if (lato === -1) fb *= 0.5; lato = -1; }
       }
@@ -105,7 +107,7 @@ function densita(P, T, X, Zm, rho0 = 0) {
   let a = Math.log(rho0 > 0 ? rho0 : (Pg * 0.6 * MB) / (K.kB * T)), fa = Math.log(stato(Math.exp(a), T, X, Zm).P - (A_RAD * T ** 4) / 3) - Math.log(Pg), b = a - fa, fb;
   for (let it = 0; it < 40; it++) {
     fb = Math.log(stato(Math.exp(b), T, X, Zm).P - (A_RAD * T ** 4) / 3) - Math.log(Pg);
-    if (Math.abs(fb) < 1e-8) break;
+    if (Math.abs(fb) < 1e-12) break;
     const pend = (fb - fa) / (b - a), c = b - fb / (pend > 0.2 ? pend : 1); a = b; fa = fb; b = c;
   }
   return Math.exp(b);
@@ -154,18 +156,20 @@ function opacitaAtomica(rho, T, X, Zm) {
   soglia(2 * st.nHe0, DATI.elio1 - d1, Math.sqrt(DATI.elio1 / RY), 1);
   for (const el of METALLI) { // i metalli: l'atomo medio
     const nel = (n * Zm * el.w) / el.a, z = el.z; NA.fill(0);
-    for (let giro = 0; giro < 14; giro++) {
-      let legati = 0; for (let q = 1; q <= 4; q++) legati += NA[q];
-      const dz = d1 * Math.max(1, z - legati + 1);
-      for (let q = 1; q <= 4; q++) {
-        NB.set(NA); const N1 = Math.max(NA[q], 1); NB[q] = N1; const E1 = energiaAtomo(z, NB); NB[q] = N1 - 1; BN[q] = energiaAtomo(z, NB) - E1; // quanto costa togliere un elettrone
-        const nuovo = BN[q] > dz ? (2 * q * q) / (Math.exp(Math.min(600, -(BN[q] - dz) / kT - eta)) + 1) : 0;
-        NA[q] += 0.6 * (nuovo - NA[q]);
-      }
+    // le occupazioni dei gusci, coerenti con le energie che esse stesse determinano: guscio per guscio (bisezione:
+    // più elettroni nel guscio → si schermano → legame più debole → meno elettroni), due passate dall'interno
+    const lega = (q, N) => { NB.set(NA); const N1 = Math.max(N, 1); NB[q] = N1; const E1 = energiaAtomo(z, NB); NB[q] = N1 - 1; return energiaAtomo(z, NB) - E1; }; // quanto costa togliere un elettrone
+    const cala = (q, N) => { let leg = N; for (let k = 1; k <= 4; k++) if (k !== q) leg += NA[k]; return d1 * Math.max(1, z - leg + 1); };
+    for (let giro = 0; giro < 2; giro++) for (let q = 1; q <= 4; q++) {
+      const cap = 2 * q * q, occ = (N) => { const B = lega(q, N) - cala(q, N); return B > 0 ? cap / (Math.exp(Math.min(600, -B / kT - eta)) + 1) : 0; };
+      let a = 0, b = cap; if (occ(cap) >= cap * (1 - 1e-9)) a = cap; else if (occ(0) <= 1e-12) b = 0;
+      for (let it = 0; it < 26 && b - a > 1e-7; it++) { const m = 0.5 * (a + b); if (occ(m) > m) a = m; else b = m; }
+      NA[q] = 0.5 * (a + b);
     }
     let legati = 0; for (let q = 1; q <= 4; q++) legati += NA[q];
     const dz = d1 * Math.max(1, z - legati + 1);
-    for (let q = 1; q <= 4; q++) soglia(nel * NA[q], BN[q] - dz, Math.sqrt((Math.max(BN[q], 0) * q * q) / RY), q);
+    for (let q = 1; q <= 4; q++) { BN[q] = lega(q, NA[q]); soglia(nel * NA[q], BN[q] - dz, Math.sqrt((Math.max(BN[q], 0) * q * q) / RY), q); }
+    if (globalThis.__spia) console.log('   Z', z, 'occupazioni', [...NA].slice(1).map((v) => v.toFixed(4)).join(' '), 'legami (eV)', [...BN].slice(1).map((v) => (v / EV).toFixed(1)).join(' '), 'dz (eV)', (dz / EV).toExponential(2), 'eta', eta.toFixed(2));
     ff += nel * (z - legati) ** 2;
   }
   // la media di Rosseland (armonica, pesata con la derivata della curva di Planck)
@@ -185,7 +189,7 @@ function opacitaAtomica(rho, T, X, Zm) {
   return k;
 }
 // la tavola dell'opacità per una metallicità: ln κ su una griglia in log T, log R (R = ρ/T₆³ in g/cm³) e X; poi si interpola
-const OT = { t0: 3.3, dt: 0.05, nt: 101, r0: -8, dr: 0.5, nr: 22, xs: [0, 0.25, 0.5, 0.78] };
+const OT = { t0: 3.2, dt: 0.05, nt: 103, r0: -8, dr: 0.5, nr: 29, xs: [0, 0.25, 0.5, 0.78] };
 const TAVOLE = new Map();
 function tavolaOpacita(Zm) {
   const chiave = Zm.toPrecision(6); if (TAVOLE.has(chiave)) return TAVOLE.get(chiave);

@@ -34,6 +34,9 @@
 //   · l'energia che serve a rompere un corpo secondo la taglia, Q*_D (Benz e Asphaug 1999), e come si divide in
 //     frammenti (dagli esperimenti: il numero cresce come 1/D^2,5; il resto più grosso cala come (Q*/Q)^1,24);
 //   · i planetesimi nascono grandi, attorno a 100 km (Morbidelli e altri 2009);
+//   · quanto ghiaccio nudo la luce fa sublimare (calore di sublimazione 2,8·10⁶ J/kg: tutta la luce assorbita va in vapore);
+//   · la teoria secolare di Laplace e Lagrange (quanto in fretta un pianeta fa crescere l'eccentricità di un corpo
+//     che ha destabilizzato) e la relazione di Tisserand per le velocità d'incontro (esatte, al primo ordine);
 //   · sotto i 5 m (dove la cascata non è calcolata) la popolazione si prolunga con la pendenza di Dohnanyi (1969): è la
 //     condizione al bordo, serve solo perché i corpi più piccoli calcolati abbiano chi li rompe;
 //   · le eccentricità di uno sciame rimescolato seguono la legge di Rayleigh (Ida e Makino 1992), con una velocità a
@@ -110,7 +113,9 @@ export const IMPATTI = Object.freeze({
   planetesimo: 1e5, // (m) il diametro con cui nascono i planetesimi
   cratere: { k: 1.161, d: 0.78, v: 0.44, g: -0.22, semplice: 1.25, complesso: 1.17, esponente: 1.13, passaggio: { roccia: 3.14e4, ghiaccio: 3.6e3 } }, // passaggio: D_c·g (m²/s²)
   profondita: { semplice: 0.2, esponente: 0.3 }, // Pike 1977
-  fusione: { roccia: 3.4e7, ghiaccio: 1.5e7 }, // joule dell'urto per ogni kg fuso (Pierazzo e altri 1997; il ghiaccio in proporzione al suo calore di fusione)
+  fusione: { roccia: 3.4e7, ghiaccio: 1.5e7 },
+  // lo spessore di ghiaccio nudo che la luce del Sole a 1 UA fa sublimare in un secondo, mediato sulla sfera: S₁/(4·L_s·ρ) = 1361/(4 · 2,8·10⁶ · 930) m/s
+  ghiaccioAlSole: 1361 / (4 * 2.8e6 * 930), // joule dell'urto per ogni kg fuso (Pierazzo e altri 1997; il ghiaccio in proporzione al suo calore di fusione)
   aria: { CD: 2, frittella: 7 },
   // il mantello: calore specifico della roccia, quanto calore regge prima di fondere del tutto (il calore latente), diffusività
   mantello: { cp: 1200, latente: 4e5, kappa: 1e-6, densita: 3300 },
@@ -153,6 +158,13 @@ function contesto(sistema, P) {
   const Mst = P.Mstella ?? (st.massaNascita || st.massa || 1) * MSOLE;
   cx = { sistema, st, Mst, Z: st.Z ?? 1, eta: st.eta ?? 4.5e9, pianeti, sk: pianeti.map((q) => scheda(q, Mst)), nubi: new Map() };
   cx.nubeAttesa = (r) => { if (!cx.nubi.has(r)) cx.nubi.set(r, nube(cx, r, formazioneDi(cx, r, null))); return cx.nubi.get(r); };
+  // LA FASCIA lasciata da un corpo che il pianeta r ha scacciato: i sassi che gli giravano attorno. Quanti: il cibo
+  // che non aveva mangiato, più quelli che aveva scagliato invece di mangiare (la regola della fionda di disco.js
+  // applicata ai sassi: di quelli che un corpo incontra, la parte fionda²/(1 + fionda²)); girano attorno a dov'era
+  // lui, con la velocità a caso che lui gli dava (la sua velocità di fuga)
+  cx.nubeOrfana = (r, k) => { const chiave = `${r}.${k}`; if (!cx.nubi.has(chiave)) { const o = cx.sk[r].q.formazione.orfani[k], a = o.aUA * UA_M, vK = Math.sqrt((G * Mst) / a), R = raggioPianeta({ massaKg: o.massaKg, ghiaccio: o.ghiaccio ?? 0 }), vf = Math.sqrt((2 * G * o.massaKg) / R), fi = (vf * vf) / (2 * vK * vK);
+    cx.nubi.set(chiave, nube(cx, -1, null, { casa: { a, vK, vf, T: (2 * PI * a) / vK / ANNO_S, M: o.massaKg }, massaKg: (o.ciboKg || 0) + (o.massaKg * fi * fi) / (1 + fi * fi), ghiaccio: o.ghiaccio ?? 0, t: Math.min(0.9999 * cx.eta, o.t ?? 0) })); }
+    return cx.nubi.get(chiave); };
   if (dentro) contesti.set(sistema, cx);
   return cx;
 }
@@ -297,6 +309,9 @@ function punto(u) {
 // (Q*/Q)^1,24. I frammenti vanno nelle classi più piccole, con il numero che cresce come 1/D^2,5; sotto l'ultima
 // classe è polvere. Tutto è contato PER BERSAGLIO (la sua parte dei prodotti): il proiettile fa da martello e la
 // sua sorte la decidono i suoi urti, quando tocca a lui fare da bersaglio: così la massa si conserva esattamente.
+// la velocità con cui un corpo su un'orbita (a, e, inclinazione) incontra un pianeta su un'orbita tonda: la relazione di
+// Tisserand (esatta): U² = v_pianeta²·(3 − a_p/a − 2·√((a/a_p)·(1−e²))·cos i)
+const tisserand = (a, o, e, inc) => o.vK * Math.sqrt(Math.max(1e-3, 3 - o.a / a - 2 * Math.sqrt((a / o.a) * (1 - e * e)) * Math.cos(inc)));
 function qRottura(raggioM, rho, mat) { const r = IMPATTI.rottura[mat], cm = raggioM * 100; return r.q0 * Math.pow(cm, r.a) + r.B * rho * Math.pow(cm, r.b); }
 function tabellaUrti(mc, v, volume, rho, mat) {
   const da = new Uint16Array(NC + 1), pj = [], K = [], L = [], resto = [], mRes = [], persa = [], B = [], mf = [], lr = Math.log(mc[0] / mc[1]);
@@ -316,27 +331,65 @@ function tabellaUrti(mc, v, volume, rho, mat) {
 // ---------- LA NUBE di un pianeta: i suoi detriti e i suoi resti, seguiti dalla nascita a oggi.
 // Restituisce la popolazione a ogni passo (corpi per classe di taglia, quote per classe di velocità) e il bilancio
 // della massa; chi ne viene colpito lo si calcola dopo (colpi), per qualunque bersaglio.
-function nube(cx, i, form) {
-  const me = cx.sk[i], np = cx.sk.length, eta = cx.eta, mDet = form.ultimo ? form.ultimo.detritiKg : 0, mRes = form.resti ? form.resti.massaKg : 0;
-  if (!(mDet + mRes > 0)) return null;
-  const gh = ghiaccioDi(me.q), rho = densitaCorpo(1, gh), mat = gh > 0.3 ? 'ghiaccio' : 'roccia';
-  // LE CLASSI DI VELOCITÀ. La velocità a caso dello sciame è la velocità di fuga del pianeta che lo rimescola (Safronov);
-  // attorno a quella, la legge di Rayleigh. Per ogni classe: l'eccentricità (U/v_orbita), quali pianeti l'orbita
-  // raggiunge, e per ciascuno la probabilità per anno di caderci (Öpik: (3/π)·(b/a)²/(u·T), con b² = R²·(1 + v_fuga²/U²),
-  // la sezione allargata dalla gravità) e di esserne scagliato via (fionda² volte tanto, la stessa regola di disco.js).
-  // Chi corre più della velocità di fuga dalla stella in quella direzione è perso subito.
-  const U = new Float64Array(NV), Lam = new Float64Array(NV), fuga = new Float64Array(NV), lam = new Float64Array(np * NV), w = new Float64Array(NV);
+function nube(cx, i, form, orfano = null) {
+  const me = orfano ? orfano.casa : cx.sk[i], np = cx.sk.length, eta = cx.eta, mDet = form?.ultimo ? form.ultimo.detritiKg : 0, mRes = form?.resti ? form.resti.massaKg : 0, mOrf = orfano ? orfano.massaKg : 0;
+  if (!(mDet + mRes + mOrf > 0)) return null;
+  const gh = orfano ? orfano.ghiaccio : ghiaccioDi(me.q), rho = densitaCorpo(1, gh), mat = gh > 0.3 ? 'ghiaccio' : 'roccia';
+  // LE CLASSI DI VELOCITÀ. La velocità a caso dello sciame è la velocità di fuga del corpo che lo rimescola (Safronov);
+  // attorno a quella, la legge di Rayleigh. Per ogni classe: l'eccentricità (U/v_orbita) e l'inclinazione (la metà),
+  // quali pianeti l'orbita raggiunge, e per ciascuno: la velocità d'incontro VERA (la relazione di Tisserand tra
+  // l'orbita del corpo e quella del pianeta), la probabilità per anno di caderci (Öpik: (3/π)·(b/a)²/(u·T), con
+  // b² = R²·(1 + v_fuga²/U²), la sezione allargata dalla gravità) e di esserne scagliato via (fionda² volte tanto, la
+  // stessa regola di disco.js). Chi corre più della velocità di fuga dalla stella in quella direzione è perso subito.
+  const Lam = new Float64Array(NV), fuga = new Float64Array(NV), lam = new Float64Array(np * NV), Ur = new Float64Array(np * NV), w = new Float64Array(NV);
+  const ferma = new Uint8Array(NV), cede = [], pEsc = new Float64Array(np * NV), Ue = new Float64Array(np * NV), svapora = new Float64Array(NV), ritmo = new Float64Array(NV), mano = new Uint8Array(np * NV), svMano = new Float64Array(np * NV), ritMano = new Float64Array(np * NV);
+  const lumi = stellaVera(cx.Mst / MSOLE, { Z: cx.Z }).L, neve = (cx.sistema.disco?.neve ?? 2.7 * Math.sqrt(lumi)) * UA_M;
+  const legato = (u) => limita(0.5 * (1 + (1 - u * u) / (2 * u)), 0, 1), opik = (o, U, T) => ((3 / PI) * (o.R / o.a) ** 2 * (1 + (o.vf / U) ** 2)) / ((U / o.vK) * T);
   let legati = 0, e2 = 0, u2 = 0;
   for (let j = 0; j < NV; j++) {
-    const Uj = me.vf * XV[j], u = Uj / me.vK, e = Math.min(0.98, u);
-    U[j] = Uj; w[j] = PV[j] * limita(0.5 * (1 + (1 - u * u) / (2 * u)), 0, 1); legati += w[j]; e2 += w[j] * e * e; u2 += w[j] * Uj * Uj;
+    const Uj = me.vf * XV[j], u = Uj / me.vK, e = Math.min(0.98, u), inc = e / 2;
+    w[j] = PV[j] * legato(u); legati += w[j]; e2 += w[j] * e * e; u2 += w[j] * Uj * Uj;
+    // IL GHIACCIO AL SOLE. Un corpo di ghiaccio la cui orbita scende dentro la linea della neve evapora: a ogni giro
+    // perde lo spessore che la luce assorbita riesce a far sublimare, ∫(luce/calore di sublimazione)·dt lungo l'orbita
+    // = (S₁/(4·L_s·ρ))·T/(a²·√(1−e²)) (esatto: ∫dt/r² = T/(a²√(1−e²))). In metri di diametro all'anno:
+    if (mat === 'ghiaccio' && me.a * (1 - e) < neve) svapora[j] = (2 * IMPATTI.ghiaccioAlSole * lumi * ANNO_S) / ((me.a / UA_M) ** 2 * Math.sqrt(1 - e * e));
     for (let r = 0; r < np; r++) { const o = cx.sk[r]; if (r !== i && (o.a < me.a * (1 - e) || o.a > me.a * (1 + e))) continue;
-      const l = ((3 / PI) * (o.R / o.a) ** 2 * (1 + (o.vf / Uj) ** 2)) / (u * me.T); lam[r * NV + j] = l; Lam[j] += l * (1 + o.fionda ** 2); fuga[j] += l * o.fionda ** 2; }
+      const U = tisserand(me.a, o, e, inc), l = opik(o, U, me.T); Ur[r * NV + j] = U; lam[r * NV + j] = l; Lam[j] += l * (1 + o.fionda ** 2); fuga[j] += l * o.fionda ** 2; }
+    // LE COMETE. Un gigante che scaglia un corpo (fionda > 1) non lo butta subito fuori: lo palleggia, cambiandogli orbita a
+    // ogni incontro, finché una volta gli dà la velocità di fuga dalla stella (succede a una parte «slegata» degli
+    // incontri). Intanto l'eccentricità del corpo passa da tutti i valori: per una parte a_t/a_G del tempo la sua orbita
+    // scende fino a un pianeta interno t, che può esserne colpito: è così che i corpi lontani arrivano dentro
+    for (let r = 0; r < np; r++) { const gig = cx.sk[r]; if (!(lam[r * NV + j] > 0 && gig.fionda > 1)) continue;
+      const slegato = Math.max(0.01, 1 - legato(Ur[r * NV + j] / gig.vK));
+      for (let t = 0; t < np; t++) { const o = cx.sk[t]; if (o.a >= gig.a || lam[t * NV + j] > 0) continue;
+        const eM = 1 - o.a / (2 * gig.a), U = tisserand(gig.a, o, eM, inc), l = (opik(o, U, gig.T) * (o.a / gig.a)) / slegato; Ur[t * NV + j] = U; lam[t * NV + j] = l; Lam[j] += l;
+        // (su quell'orbita il ghiaccio evapora: fa in tempo a colpire solo se il gigante lo tiene in gioco meno di quanto dura)
+        mano[t * NV + j] = 1; ritMano[t * NV + j] = lam[r * NV + j] * gig.fionda ** 2 * slegato; if (mat === 'ghiaccio' && gig.a * (1 - eM) < neve) svMano[t * NV + j] = (2 * IMPATTI.ghiaccioAlSole * lumi * ANNO_S) / ((gig.a / UA_M) ** 2 * Math.sqrt(1 - eM * eM)); } }
+    // UNA FASCIA. Se l'orbita non raggiunge nessuno (succede solo ai sassi rimasti orfani di un corpo scacciato) la classe
+    // sta ferma lì, finché la sua distanza dal pianeta più vicino (in raggi di Hill di lui) non cede: la legge di Chambers,
+    // la stessa del cibo di un embrione. I più larghi di orbita cedono prima: la fascia si consuma dal bordo, e ciò che
+    // cede in un passo è sempre meno (la distanza che cede cresce come il logaritmo del tempo).
+    if (!(Lam[j] > 0) && np) {
+      const eA = Math.min(0.98, (me.vf * BORDI[j]) / me.vK), eB = Math.min(0.98, (me.vf * BORDI[j + 1]) / me.vK), dist = (o, ecc) => (Math.abs(o.a - me.a) - ecc * me.a - (o.q.eccentricita ?? 0) * o.a) / o.hill;
+      let chi = 0; for (let r = 1; r < np; r++) if (dist(cx.sk[r], e) < dist(cx.sk[chi], e)) chi = r;
+      const o = cx.sk[chi], dA = dist(o, eA), dB = Math.min(dA - 1e-9, dist(o, eB)), muO = o.M / (2 * cx.Mst);
+      ferma[j] = 1; cede[j] = (tau) => (tau > 0 ? limita((deltaChambers(tau / me.T, muO) - dB) / (dA - dB), 0, 1) : 0);
+      // CHI CEDE È POMPATO: il pianeta che lo ha destabilizzato gli fa crescere l'eccentricità, di e_forzata a ogni giro
+      // del suo perielio (teoria secolare di Laplace e Lagrange: il perielio gira con g = ¾·n·μ·α³, e l'eccentricità
+      // forzata è (5/4)·α·e del pianeta; α il rapporto tra le due orbite), fino a cadere sulla stella. Mentre sale,
+      // l'orbita incrocia i pianeti uno dopo l'altro, e ognuno può prenderlo (Öpik) o scagliarlo via: una gara.
+      const alfa = Math.min(me.a / o.a, o.a / me.a), g = 0.75 * ((2 * PI) / me.T) * (o.M / cx.Mst) * alfa ** (me.a < o.a ? 3 : 2), pompa = g * Math.max(1e-4, 1.25 * alfa * (o.q.eccentricita ?? 0)) / (2 * PI);
+      let esce = pompa; const prende = new Float64Array(np);
+      for (let r = 0; r < np; r++) { const t = cx.sk[r], eC = Math.abs(1 - t.a / me.a); if (eC >= 0.98) continue;
+        const e1 = Math.max(eC, e), U = tisserand(me.a, t, (e1 + 1) / 2, inc); Ue[r * NV + j] = U; prende[r] = opik(t, U, me.T) * ((1 - e1) / (1 - e)); esce += prende[r] * (1 + t.fionda ** 2); }
+      for (let r = 0; r < np; r++) pEsc[r * NV + j] = prende[r] / esce; ritmo[j] = esce;
+    }
   }
+  for (let j = 0; j < NV; j++) if (!ferma[j]) ritmo[j] = Lam[j];
   const tuttiPV = PV.reduce((x, y) => x + y, 0), fb = legati / tuttiPV;
   if (!(legati > 0)) return null;
   for (let j = 0; j < NV; j++) w[j] /= legati;
-  const ts = mRes > 0 ? form.tGas : form.t0, dur = eta - ts; if (!(dur > 0)) return null;
+  const ts = orfano ? orfano.t : mRes > 0 ? form.tGas : form.t0, dur = eta - ts; if (!(dur > 0)) return null;
   const tb = [0]; for (let x = PASSO0; x < dur; x *= CRESCE) tb.push(x); tb.push(dur);
   const nS = tb.length - 1, mc = new Float64Array(NC + SOTTO); for (let c = 0; c < NC + SOTTO; c++) mc[c] = (rho * PI * dMed(c) ** 3) / 6;
   // i detriti dell'urto gigante: dal frammento più grosso in giù, N(>D) ∝ D^-β (Leinhardt e Stewart)
@@ -344,13 +397,13 @@ function nube(cx, i, form) {
   if (mDet > 0) { const c1 = classeDi(Math.cbrt((6 * form.ultimo.frammentoKg) / (PI * rho))); let S = 0; for (let c = c1; c < NC; c++) { det[c] = Math.pow(dMed(c), 3 - IMPATTI.urtoGrande.beta); S += det[c]; } for (let c = c1; c < NC; c++) det[c] *= (mDet * fb) / S / mc[c]; }
   // i resti della striscia: planetesimi di 100 km, sparsi fino a «larghezza» raggi di Hill dal pianeta. Quelli entro
   // 2√3 lo incrociano da subito; gli altri quando la loro distanza cede (Chambers): Δ cresce come il logaritmo del tempo
-  const cP = classeDi(IMPATTI.planetesimo), dW = form.resti ? form.resti.larghezza : 0, muP = me.M / (2 * cx.Mst);
+  const cP = classeDi(IMPATTI.planetesimo), dW = form?.resti ? form.resti.larghezza : 0, muP = me.M / (2 * cx.Mst);
   const rilasciato = (tau) => (dW > 0 ? Math.min(dW, Math.max(2 * Math.sqrt(3), tau > 0 ? deltaChambers(tau / me.T, muP) : 0)) / dW : 0);
   // la cascata: velocità tra due corpi dello sciame √2 volte quella a caso; il volume è quello dell'anello che le
   // orbite riempiono (largo 2e·a, spesso 2i·a con i = e/2); g: di quanto cala la massa dei frammenti da una classe alla successiva
   const tab = tabellaUrti(mc, Math.SQRT2 * Math.sqrt(u2 / legati), 4 * PI * (e2 / legati) * me.a ** 3, rho, mat), g = Math.pow(mc[1] / mc[0], (3 - IMPATTI.frammenti) / 3);
-  const n = new Float64Array(NC + SOTTO), f = new Float64Array(NV), tolti = new Float64Array(nS * NC), fS = new Float64Array(nS * NV), guad = new Float64Array(NC), sparsi = new Float64Array(NC + 1), via = new Float64Array(NV);
-  const colpiti = new Float64Array(np), primi = new Float64Array(NC); let polvere = 0, scagliata = (mDet + mRes) * (1 - fb), entrata = 0, massa = 0, fatto = false;
+  const n = new Float64Array(NC + SOTTO), f = new Float64Array(NV), tolti = new Float64Array(nS * NC), fS = new Float64Array(nS * NV), parte = new Float64Array(nS * NV), guad = new Float64Array(NC), sparsi = new Float64Array(NC + 1), via = new Float64Array(NV);
+  const colpiti = new Float64Array(np), primi = new Float64Array(NC); let polvere = 0, scagliata = (mDet + mRes + mOrf) * (1 - fb), entrata = 0, massa = 0, fatto = false;
   const aggiungi = (kg, classe, corpi) => { // nuova materia: le quote di velocità si mescolano in proporzione alla massa
     if (corpi) for (let c = 0; c < NC; c++) n[c] += corpi[c]; else n[classe] += kg / mc[classe];
     for (let j = 0; j < NV; j++) f[j] = (f[j] * massa + w[j] * kg) / (massa + kg); massa += kg; entrata += kg;
@@ -359,11 +412,12 @@ function nube(cx, i, form) {
     const dtA = tb[s + 1] - tb[s], dt = dtA * ANNO_S;
     if (mDet > 0 && !fatto && ts + tb[s + 1] > form.t0) { aggiungi(mDet * fb, 0, det); fatto = true; }
     if (mRes > 0) { const kg = mRes * fb * (rilasciato(tb[s + 1]) - (s ? rilasciato(tb[s]) : 0)); if (kg > 0) aggiungi(kg, cP); }
+    if (mOrf > 0 && !s) aggiungi(mOrf * fb, cP);
     if (!s) primi.set(n.subarray(0, NC));
     for (let c = NC; c < NC + SOTTO; c++) n[c] = n[c - 1] * DOHNANYI; // sotto l'ultima classe: i martelli che non si calcolano
     // i pianeti spazzano la nube: ogni classe di velocità col suo ritmo; «lento» è il ritmo medio del passo
-    let resta = 0, tolta = 0; for (let j = 0; j < NV; j++) { fS[s * NV + j] = f[j]; const e = Math.exp(-Lam[j] * dtA); via[j] = f[j] * (1 - e); f[j] *= e; resta += f[j]; }
-    const lento = resta > 0 ? -Math.log(resta) / dt : 1e300;
+    let resta = 0, tolta = 0; for (let j = 0; j < NV; j++) { fS[s * NV + j] = f[j]; let e = Math.exp(-Lam[j] * dtA); if (ferma[j]) { const c1 = cede[j](tb[s]); e = c1 < 1 ? (1 - cede[j](tb[s + 1])) / (1 - c1) : 0; } parte[s * NV + j] = 1 - e; via[j] = f[j] * (1 - e); f[j] *= e; resta += f[j]; }
+    const lento = resta > 0 ? -Math.log(Math.min(1, resta)) / dt : 1e300;
     // gli urti tra i corpi della nube, dalla classe più grossa in giù (i frammenti scendono soltanto). Per ogni classe,
     // nel passo: dn/dt = guadagno − (rottura + lento)·n, risolta esattamente (ritmi costanti nel passo): così una
     // classe che si consuma in fretta sta al suo equilibrio, senza passi corti, e la massa si conserva
@@ -381,25 +435,29 @@ function nube(cx, i, form) {
       n[a] = fine;
     }
     // dove è finito ciò che i pianeti hanno tolto: su ciascuno, o scagliato via
-    if (tolta > 0) for (let j = 0; j < NV; j++) { const q = (tolta * via[j]) / (1 - resta) / Lam[j]; for (let r = 0; r < np; r++) colpiti[r] += q * lam[r * NV + j]; scagliata += q * fuga[j]; }
+    if (tolta > 0 && resta < 1) for (let j = 0; j < NV; j++) { if (!(via[j] > 0)) continue; const q = (tolta * via[j]) / (1 - resta);
+      if (ferma[j]) { let presi = 0; for (let r = 0; r < np; r++) { colpiti[r] += q * pEsc[r * NV + j]; presi += pEsc[r * NV + j]; } scagliata += q * (1 - presi); } // (il resto: sulla stella, o scagliato)
+      else { for (let r = 0; r < np; r++) colpiti[r] += (q * lam[r * NV + j]) / Lam[j]; scagliata += (q * fuga[j]) / Lam[j]; } }
     if (resta > 0) for (let j = 0; j < NV; j++) f[j] /= resta;
     massa = 0; for (let c = 0; c < NC; c++) massa += n[c] * mc[c];
   }
-  return { i, ts, nS, tb, tolti, fS, U, Lam, lam, mc, rho, w, primi, ultimi: n.subarray(0, NC), bilancio: { detritiKg: mDet, restiKg: mRes, entrataKg: entrata, colpiti, polvereKg: polvere, scagliataKg: scagliata, rimastaKg: massa, daRilasciareKg: mRes * fb * (1 - rilasciato(dur)) } };
+  return { i, ts, nS, tb, tolti, fS, parte, ferma, Ur, Ue, pEsc, svapora, ritmo, mano, svMano, ritMano, Lam, lam, mc, rho, w, primi, ultimi: n.subarray(0, NC), bilancio: { detritiKg: mDet, restiKg: mRes, orfaniKg: mOrf, entrataKg: entrata, colpiti, polvereKg: polvere, scagliataKg: scagliata, rimastaKg: massa, daRilasciareKg: mRes * fb * (1 - rilasciato(dur)) } };
 }
 
 // i corpi di una nube che cadono su un bersaglio, passo per passo e classe per classe, dopo il tempo t0: di quelli
-// che i pianeti tolgono in un passo, la parte che spetta al bersaglio. lamT: la sua probabilità per anno, per ogni
-// classe di velocità. gS: da quali classi di velocità arrivano.
-function colpi(nu, lamT, t0) {
-  const { nS, tb, ts, tolti, fS, Lam } = nu, H = new Float64Array(nS * NC), gS = new Float64Array(nS * NV);
+// che i pianeti tolgono in un passo, la parte che spetta al bersaglio. quota: per ogni classe di velocità, la parte
+// di ciò che se ne va che cade sul bersaglio. gS: da quali classi di velocità arrivano.
+function colpi(nu, quota, t0, svapora = nu.svapora, ritmo = nu.ritmo) {
+  const { nS, tb, ts, tolti, fS, parte } = nu, H = new Float64Array(nS * NC), gS = new Float64Array(nS * NV), evapora = svapora.some((x) => x > 0);
   for (let s = 0; s < nS; s++) {
     const t1 = ts + tb[s], t2 = ts + tb[s + 1]; if (t2 <= t0) continue;
     let q = 0, tutti = 0;
-    for (let j = 0; j < NV; j++) { const v = fS[s * NV + j] * -Math.expm1(-Lam[j] * (t2 - t1)), x = (v * lamT[j]) / Lam[j]; gS[s * NV + j] = x; q += x; tutti += v; }
+    for (let j = 0; j < NV; j++) { const v = fS[s * NV + j] * parte[s * NV + j], x = v * quota[j]; gS[s * NV + j] = x; q += x; tutti += v; }
     if (!(q > 0)) continue;
-    q *= (t1 >= t0 ? 1 : (t2 - t0) / (t2 - t1)) / tutti;
-    for (let c = 0; c < NC; c++) H[s * NC + c] = tolti[s * NC + c] * q;
+    const dopo = (t1 >= t0 ? 1 : (t2 - t0) / (t2 - t1)) / tutti;
+    if (!evapora) { for (let c = 0; c < NC; c++) H[s * NC + c] = tolti[s * NC + c] * q * dopo; continue; }
+    // (il ghiaccio che evapora al Sole: di un corpo di diametro D arriva la parte che fa in tempo, ritmo / (ritmo + 3·svapora/D))
+    for (let c = 0; c < NC; c++) { let qc = 0; for (let j = 0; j < NV; j++) if (gS[s * NV + j] > 0) qc += (gS[s * NV + j] * ritmo[j]) / (ritmo[j] + (3 * svapora[j]) / dMed(c)); H[s * NC + c] = tolti[s * NC + c] * qc * dopo; }
   }
   return { H, gS };
 }
@@ -483,7 +541,8 @@ export function giganteDi(P, sistema, caso) {
 //                lunaKg, luna: null | { massaKg, mu }, giornoDopo (s), obliquita (gradi), fusione, frazioneFusa, urti }
 //   quiete     { t, potenzaW }: quando il calore degli urti scende sotto quello che esce dall'interno del pianeta
 //   popolazione { diametroM, iniziale, oggi }: i corpi della nube del pianeta, per classe (la cascata li ha cambiati)
-//   bilancio   masse in kg: arrivataKg (e arrivataSuM), dei grandi e dei piccoli; della nube del pianeta: detritiKg,
+//   bilancio   masse in kg: arrivataKg (e arrivataSuM), dei grandi e dei piccoli; fasce: le fasce di sassi orfani che
+//                arrivano fin qui ({ da, inizioKg, oggiKg, polvereKg, t }); della nube del pianeta: detritiKg,
 //                restiKg, sulPianetaKg, aiViciniKg, scagliataKg, polvereKg, rimastaKg, daRilasciareKg; energiaJ; stime
 export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } = {}) {
   const cx = contesto(sistema, P), i = cx.pianeti.indexOf(P), me = cx.sk[i], eta = cx.eta;
@@ -493,18 +552,25 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
   const ghB = luna ? luna.composizione?.ghiaccio ?? 0 : ghiaccioDi(P), ghiacciato = ghB > 0.3, aria = luna ? null : ariaDi(P);
   // LE NUBI che lo raggiungono: la sua (con i suoi eventi veri) e quelle dei vicini le cui orbite arrivano fin qui
   const nubi = []; let mia = null;
+  const metti = (nu, da) => { // la parte di ciò che lascia la nube che cade sul bersaglio, e con che velocità, classe per classe
+    const quota = new Float64Array(NV), vel = new Float64Array(NV), sv = Float64Array.from(nu.svapora), rit = Float64Array.from(nu.ritmo); let tocca = false;
+    for (let j = 0; j < NV; j++) { const U = nu.ferma[j] ? nu.Ue[i * NV + j] : nu.Ur[i * NV + j], q = nu.ferma[j] ? nu.pEsc[i * NV + j] : nu.Lam[j] > 0 ? nu.lam[i * NV + j] / nu.Lam[j] : 0; if (!(q > 0)) continue; tocca = true; vel[j] = U; if (nu.mano[i * NV + j]) { sv[j] = nu.svMano[i * NV + j]; rit[j] = nu.ritMano[i * NV + j]; }
+      // (una luna: bersaglio più piccolo, e in fondo alla buca del pianeta)
+      quota[j] = luna ? q * (B.raggioM / P.raggioM) ** 2 * ((1 + vf2 / (U * U)) / (1 + (me.vf / U) ** 2)) : q; }
+    if (tocca) nubi.push({ nu, da, vel, ...colpi(nu, quota, t0, sv, rit) });
+  };
   for (let r = 0; r < cx.sk.length; r++) {
-    const o = cx.sk[r], eMax = Math.min(0.98, (o.vf * XV[NV - 1]) / o.vK); if (r !== i && (me.a < o.a * (1 - eMax) || me.a > o.a * (1 + eMax))) continue;
-    const nu = r === i ? (mia = nube(cx, i, form)) : cx.nubeAttesa(r); if (!nu) continue;
-    const lamT = new Float64Array(NV); let tocca = false;
-    for (let j = 0; j < NV; j++) { const l = nu.lam[i * NV + j]; if (!(l > 0)) continue; tocca = true;
-      lamT[j] = luna ? ((3 / PI) * (B.raggioM / me.a) ** 2 * (1 + vf2 / nu.U[j] ** 2)) / ((nu.U[j] / cx.sk[r].vK) * cx.sk[r].T) : l; }
-    if (tocca) nubi.push({ nu, r, da: cx.sk[r].q.id ?? r, lamT, ...colpi(nu, lamT, t0) });
+    const o = cx.sk[r], eMax = Math.min(0.98, (o.vf * XV[NV - 1]) / o.vK), lontano = me.a < o.a * (1 - eMax) || me.a > o.a * (1 + eMax);
+    // (una nube che non arriva fin qui non serve calcolarla; a meno che incroci un gigante, che può mandarla dentro)
+    if (r !== i && lontano && !cx.sk.some((g) => g.fionda > 1 && g.a > me.a && g.a > o.a * (1 - eMax) && g.a < o.a * (1 + eMax))) continue;
+    const nu = r === i ? (mia = nube(cx, i, form)) : cx.nubeAttesa(r); if (nu) metti(nu, o.q.id ?? r);
+    // LE FASCE: i sassi rimasti orfani dei corpi che questo pianeta ha scacciato (formazione.orfani)
+    (o.q.formazione?.orfani || []).forEach((orf, k) => { const nf = cx.nubeOrfana(r, k); if (nf) metti(nf, `fascia ${o.q.id ?? r}.${k}`); });
   }
   // quanti per classe, e con che velocità (la media dei quadrati, pesata sugli arrivi)
   const N = new Float64Array(NC), U2 = new Float64Array(NC), mMed = new Float64Array(NC);
   for (const b of nubi) { b.N = new Float64Array(NC);
-    for (let s = 0; s < b.nu.nS; s++) { let q = 0, q2 = 0; for (let j = 0; j < NV; j++) { const x = b.gS[s * NV + j]; q += x; q2 += x * b.nu.U[j] ** 2; } if (!(q > 0)) continue;
+    for (let s = 0; s < b.nu.nS; s++) { let q = 0, q2 = 0; for (let j = 0; j < NV; j++) { const x = b.gS[s * NV + j]; q += x; q2 += x * b.vel[j] ** 2; } if (!(q > 0)) continue;
       for (let k = 0; k < NC; k++) { const h = b.H[s * NC + k]; b.N[k] += h; U2[k] += (h * q2) / q; mMed[k] += h * b.nu.mc[k]; } }
     for (let k = 0; k < NC; k++) N[k] += b.N[k]; }
   // i numeri attesi per epoca (bordi: dalla formazione a oggi, quattro per ogni fattore dieci)
@@ -542,7 +608,7 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
       const xc = Math.round(c(`impatto ${id}/corpo`) * 4294967296), D = dSup(k + 1) * Math.pow(2, (0.5 * ((Math.floor(xc / 65536) % 65536) + 0.5)) / 65536), m = (nu.rho * PI * D ** 3) / 6;
       let uv = ((xc % 65536) + 0.5) / 65536, q = 0, j = 0; for (let z = 0; z < NV; z++) q += b.gS[s * NV + z];
       uv *= q; while (j < NV - 1 && uv >= b.gS[s * NV + j]) uv -= b.gS[s * NV + j++];
-      const vInf = (nu.U[j] / XV[j]) * (BORDI[j] + (BORDI[j + 1] - BORDI[j]) * (b.gS[s * NV + j] > 0 ? limita(uv / b.gS[s * NV + j], 0, 1) : 0.5)), v = Math.sqrt(vInf * vInf + vf2);
+      const vInf = (b.vel[j] / XV[j]) * (BORDI[j] + (BORDI[j + 1] - BORDI[j]) * (b.gS[s * NV + j] > 0 ? limita(uv / b.gS[s * NV + j], 0, 1) : 0.5)), v = Math.sqrt(vInf * vInf + vf2);
       // L'ANGOLO: sen² uniforme (45° il più probabile: vale per qualunque sciame che arrivi da lontano); DOVE: un punto della sfera
       const seno = Math.sqrt(c(`impatto ${id}/angolo`)), angolo = (Math.asin(seno) * 180) / PI, dove = punto(c(`impatto ${id}/dove`));
       const giu = attraversaAria(aria, D, nu.rho, v, Math.max(seno, 0.02)), E = 0.5 * m * v * v, Es = 0.5 * m * giu.v ** 2;
@@ -581,6 +647,7 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
     quiete: { t: zQ < 0 ? t0 : epoche[zQ + 1], potenzaW: soglia },
     popolazione: mia ? { diametroM: Array.from({ length: NC }, (_, k) => dMed(k)), iniziale: Array.from(mia.primi), oggi: Array.from(mia.ultimi) } : null,
     bilancio: { arrivataKg: arrivata, arrivataSuM: arrivata / B.massaKg, grandiKg: arrivataGrandi, numeroGrandi: grandi.length, numeroPiccoli: piccoli.numero.reduce((x, y) => x + y, 0), energiaJ: energia, nubi: nubi.map((b) => b.da),
+      fasce: nubi.filter((b) => b.nu.bilancio.orfaniKg > 0).map((b) => ({ da: b.da, inizioKg: b.nu.bilancio.entrataKg, oggiKg: b.nu.bilancio.rimastaKg, polvereKg: b.nu.bilancio.polvereKg, t: b.nu.ts })),
       detritiKg: mb?.detritiKg ?? 0, restiKg: mb?.restiKg ?? 0, sulPianetaKg: mb ? mb.colpiti[i] : 0, aiViciniKg: altri, scagliataKg: mb?.scagliataKg ?? 0, polvereKg: mb?.polvereKg ?? 0, rimastaKg: mb?.rimastaKg ?? 0, daRilasciareKg: mb?.daRilasciareKg ?? 0, stime: form.stime },
   };
 }

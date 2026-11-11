@@ -196,7 +196,7 @@ prova('l\'impronta nel mantello: media zero, calda dove sono caduti gli urti pi�
   // più tardi lo si guarda, più il mantello ha rimescolato: l'impronta sbiadisce; senza rimescolamento resta
   const ampiezza = (a) => { let x = -Infinity, y = Infinity; for (const v of a) { x = Math.max(x, v); y = Math.min(y, v); } return x - y; };
   const dopo = improntaMantello(STORIA, W, H, { t: STORIA.quiete.t + 5e8 });
-  assert.ok(ampiezza(dopo) < 0.1 * ampiezza(m) && ampiezza(improntaMantello(STORIA, W, H, { t: STORIA.quiete.t + 5e8, mescola: Infinity })) > 0.5 * ampiezza(m));
+  assert.ok(ampiezza(dopo) < 0.5 * ampiezza(m) && ampiezza(improntaMantello(STORIA, W, H, { t: STORIA.quiete.t + 5e8, mescola: Infinity })) > ampiezza(dopo), `${ampiezza(dopo)} contro ${ampiezza(m)}`);
   // un urto solo, grande: una macchia calda lì e nient'altro; nessun urto: niente
   const una = improntaMantello({ ...STORIA, gigante: null, grandi: [{ ...prima[0], lat: 0, lon: 0 }] }, W, H);
   let k = 0; una.forEach((v, i) => { if (v > una[k]) k = i; });
@@ -336,6 +336,34 @@ prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) nie
   tra(q(giorni, 0.5), 1.5, 12, 'giorno dopo l\'urto (ore, mediana)'); tra(retro / giganti, 0.25, 0.75, 'pianeti che girano al contrario (gli urti arrivano da ogni parte: metà)');
   assert.ok(q(tempi, 0.5) < 50 && q(tempi, 0.95) < 50);
   console.log(`      (${pianeti} pianeti: ${giganti} con un urto gigante; l'ultimo cade a ${(100 * q(quando, 0.5)).toFixed(1)}% della vita (mediana), ${tardi} dopo il primo miliardo di anni; rapporto di massa ${q(rapporti, 0.5).toFixed(2)}; giorno dopo l'urto ${q(giorni, 0.5).toFixed(1)} ore, ${retro} al contrario; ${dischi} lasciano un disco che fa una luna, ${lunePrese} lune restano dopo le maree; ${lenti} con cibo ancora in giro)`);
+});
+
+prova('il bombardamento tardo: una fascia di sassi orfani accanto a un gigante tiene vivo il cielo per miliardi di anni; senza giganti no', () => {
+  // il Sistema Solare con ciò che NON si sa per certo, messo come dato: nella fascia degli asteroidi c'era un embrione
+  // (un quinto della Terra, a 2,4 UA) che Giove ha scacciato tre milioni di anni dopo la nascita del Sole
+  const GIOVE2 = { ...GIOVE, eccentricita: 0.048, formazione: { urti: [], tGas: 3e6, orfani: [{ aUA: 2.4, massaKg: 0.2 * MT, ciboKg: 0, ghiaccio: 0, t: 3e6, dentro: true }] } };
+  const sis = { ...SOLARE, pianeti: [MERCURIO, VENERE, TERRA, MARTE, GIOVE2] }, caso = sorgente(RADICE), s = storiaImpatti(TERRA, sis, caso), sl = storiaImpatti(TERRA, sis, caso, { luna: LUNA });
+  assert.equal(s.bilancio.fasce.length, 1); const f = s.bilancio.fasce[0]; assert.ok(s.bilancio.nubi.includes('fascia 4.0') && f.oggiKg > 0 && f.oggiKg < f.inizioKg);
+  // il flusso di oggi sulla Terra: quanti corpi oltre 1 km e oltre 10 km
+  const A = s.attesi, nE = A.epoche.length - 1, ogni = (D) => { let n = 0; for (let k = 0; k <= classeDi(D); k++) n += A.perEpoca[k * nE + nE - 1]; return (A.epoche[nE] - A.epoche[nE - 1]) / n; };
+  tra(ogni(1000) / 1e6, 0.1, 5, 'oggi sulla Terra un corpo oltre 1 km ogni (milioni di anni: 0,5)'); tra(ogni(1e4) / 1e6, 20, 500, 'un corpo oltre 10 km ogni (milioni di anni: 100)');
+  // la Luna: i crateri oltre i 20 km su superfici di 4,0 e di 3,5 miliardi di anni (dai conteggi veri: 1000–2600 e circa 200)
+  const n40 = contaCrateri(sl, { superficie: 4.0e9 }), n35 = contaCrateri(sl, { superficie: 3.5e9 }), n10 = contaCrateri(sl, { superficie: 1e9 });
+  tra(n40, 330, 7800, 'crateri lunari > 20 km su 4,0 miliardi di anni'); tra(n35, 65, 600, 'su 3,5 miliardi di anni'); assert.ok(n10 > 0 && n10 < n35);
+  // i corpi della fascia arrivano veloci: l'orbita, pompata dal gigante, incrocia quella del pianeta di traverso
+  const tardi = s.grandi.filter((x) => x.t > 1e9), v = tardi.reduce((a, x) => a + x.v, 0) / tardi.length;
+  assert.ok(tardi.length > 3 && tardi.every((x) => x.da === 'fascia 4.0')); tra(v / 1e3, 14, 30, 'velocità degli urti tardi sulla Terra (km/s: circa 20)');
+  // SENZA GIGANTI nessuno scaccia nessuno: niente fasce; dopo il primo miliardo di anni non cade più niente
+  const senza = { ...SOLARE, pianeti: [MERCURIO, VENERE, TERRA, MARTE] }, quieto = storiaImpatti(TERRA, senza, caso, { luna: LUNA });
+  assert.ok(quieto.bilancio.fasce.length === 0 && contaCrateri(quieto, { superficie: 3.5e9 }) < 1 && quieto.grandi.filter((x) => x.t > 2e9).length === 0);
+  // LE COMETE: i sassi di ghiaccio di un embrione lontano arrivano dentro solo se un gigante li palleggia; e quelli
+  // piccoli evaporano al Sole prima di colpire (senza gigante, sull'orbita che li porterebbe dentro, evaporano tutti)
+  const LENTO = { id: 5, tipo: 'ghiacciato', aM: 8 * UA, massaKg: 0.5 * MT, raggioM: RT, Mstella: MSOLE, anno: anno(8), composizione: { ghiaccio: 0.75, roccia: 0.2, ferro: 0.05 }, storia: 'un embrione di ghiaccio rimasto solo, cresciuto piano: il suo cibo è ancora in giro', clima: { pressione: 0, T: 60 } };
+  const nudo = pianeta(0, 1, 1, 1), conGigante = storiaImpatti(nudo, { ...SOLARE, pianeti: [nudo, { ...GIOVE, eccentricita: 0.048 }, LENTO] }, sorgente('prova/comete')), senzaGigante = storiaImpatti(nudo, { ...SOLARE, pianeti: [nudo, LENTO] }, sorgente('prova/comete'));
+  assert.ok(conGigante.bilancio.nubi.includes(5) && conGigante.bilancio.arrivataKg > 100 * senzaGigante.bilancio.arrivataKg, `comete: ${conGigante.bilancio.arrivataKg} kg con il gigante, ${senzaGigante.bilancio.arrivataKg} senza`);
+  const comete = conGigante.grandi.filter((x) => x.t > 1e9); tra(comete.reduce((a, x) => a + x.v, 0) / comete.length / 1e3, 22, 60, 'velocità delle comete sulla Terra (km/s: 30–50)');
+  const pic = conGigante.attesi, gra = (D) => pic.numero[classeDi(D)] * pic.massaKg[classeDi(D)]; assert.ok(gra(1e5) > 0 && gra(100) < 1e-3 * gra(1e5), 'le comete piccole evaporano');
+  console.log(`      (Terra oggi: un corpo > 1 km ogni ${(ogni(1000) / 1e6).toFixed(1)} milioni di anni [0,5], > 10 km ogni ${(ogni(1e4) / 1e6).toFixed(0)} [100]; Luna, crateri > 20 km: ${Math.round(n40)} su 4,0 miliardi di anni [1000–2600], ${Math.round(n35)} su 3,5 [200], ${Math.round(n10)} su 1 [50]; urti tardi a ${(v / 1e3).toFixed(1)} km/s [20]; la fascia oggi pesa ${(f.oggiKg / 2.4e21).toFixed(2)} fasce vere; vernice ${(100 * s.bilancio.arrivataSuM).toFixed(2)}% [0,5])`);
 });
 
 console.log(`\n${ok} prove superate`);

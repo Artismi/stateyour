@@ -325,13 +325,14 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null } 
 //     k dell'acqua sulla Terra (in tutto τ = 0,83, 288 K), k del metano su Titano (94 K). Marte (un'aria di CO2
 //     di 6 millibar) è il riscontro non usato per tarare: 214 K;
 //   · i gas che non assorbono (N2, O2, H2, elio): solo durante gli urti tra molecole, quindi in proporzione a
-//     colonna × pressione (sulla Terra quasi niente; su Titano metà della serra);
+//     colonna × pressione / temperatura, cioè a quanto l'aria è fitta (sulla Terra quasi niente; su Titano, fredda e
+//     densa, metà della serra: il coefficiente è TARATO lì, a 94 K);
 //   · il vapore d'acqua sta nei primi chilometri (più su fa freddo e condensa): la sua colonna è un quarto di quella
 //     di un'aria satura fino in cima (sulla Terra: 25 kg/m²).
 // Che cosa manca: le nuvole e le foschie che assorbono o riflettono (su Titano raffreddano), le finestre tra le righe.
-export const SERRA = Object.freeze({ esponente: 0.39, H2O: 0.174, CO2: 0.098, CH4: 0.018, altri: 0.1, urti: 3.1e-6, vaporeInBasso: 0.25 });
+export const SERRA = Object.freeze({ esponente: 0.39, H2O: 0.174, CO2: 0.103, CH4: 0.018, altri: 0.1, urti: 3.1e-6, Turti: 94, vaporeInBasso: 0.25 });
 const TRASPARENTI = new Set(['H2', 'He', 'N2', 'O2', 'Cl2', 'S2']);
-export function serra(gas = {}, pressione, g) {
+export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
   if (!isFinite(pressione)) return 2;
   if (!(pressione > 0) || !(g > 0)) return 0;
   let media = 0; for (const f in gas) media += gas[f] * (MOLECOLE[f]?.massa ?? 0);
@@ -340,7 +341,7 @@ export function serra(gas = {}, pressione, g) {
   for (const f in gas) {
     if (!MOLECOLE[f]) continue;
     const colonna = ((gas[f] * MOLECOLE[f].massa) / media) * (pressione / g) * (f === 'H2O' ? SERRA.vaporeInBasso : 1), x = (colonna * pressione) / 1e5;
-    tau += TRASPARENTI.has(f) ? SERRA.urti * x : (SERRA[f] ?? (Object.values(MOLECOLE[f].atomi).reduce((a, b) => a + b, 0) >= 3 ? SERRA.altri : SERRA.altri / 5)) * Math.pow(x, SERRA.esponente);
+    tau += TRASPARENTI.has(f) ? (SERRA.urti * x * SERRA.Turti) / Math.max(T, 10) : (SERRA[f] ?? (Object.values(MOLECOLE[f].atomi).reduce((a, b) => a + b, 0) >= 3 ? SERRA.altri : SERRA.altri / 5)) * Math.pow(x, SERRA.esponente);
   }
   return tau;
 }
@@ -361,9 +362,9 @@ export function climaEAria(dati, { Z } = {}) {
   const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
   if (dati.tipo === 'gassoso') return { clima: primo, atmosfera: atmosfera({ ...P, clima: primo }, { Z }) };
   const memoria = new Map(), ariaDi = (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria });
-  const climaDi = (atm) => clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g) } });
+  const climaDi = (atm, T) => clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } });
   // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
-  const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null; for (let k = 0; k < giri; k++) { const a = ariaDi(T, stato, co2), c = climaDi(a); r = { a, c }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } return r; };
+  const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null; for (let k = 0; k < giri; k++) { const a = ariaDi(T, stato, co2), c = climaDi(a, T); r = { a, c }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } return r; };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
   if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));
   // 0. un mondo di ghiaccio è nato al freddo, oltre la linea della neve, e non è mai stato caldo abbastanza a lungo da
@@ -376,7 +377,7 @@ export function climaEAria(dati, { Z } = {}) {
   // 2. troppo caldo: il mare non c'è, l'acqua è persa, tutta la CO2 è nell'aria
   if (mare.c.acqua.startsWith('vapore')) return esce(cerca('vapore', mare.c.T));
   // 3. il mare gela: il termostato. Con tutta la CO2 che ha, si scioglie? Se sì, si cerca la minima che basta
-  const prova = (co2) => { const a = ariaDi(275, 'liquida', co2), c = climaDi(a); return { a, c, co2 }; };
+  const prova = (co2) => { const a = ariaDi(275, 'liquida', co2), c = climaDi(a, 275); return { a, c, co2 }; };
   const tutta = prova(1e12);
   if (tutta.c.acqua !== 'ghiaccio') {
     let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null;

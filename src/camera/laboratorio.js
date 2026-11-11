@@ -21,7 +21,7 @@ import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -964,6 +964,7 @@ function pannelloCosmo(h) {
   const a = indirizzoOra(), c = el()?.cella;
   h.push(`<div class="briciole"><button data-modo-p="dettaglio">← la regione</button> <b>dove si trova</b></div>`);
   h.push(`<p class="nota">${percorso(camMappa).join(' › ')}</p>`);
+  h.push(`<div class="riga-bottoni"><button class="primo" data-finestra-bella title="prova molte inquadrature qui attorno, a questa scala, e va dove il mondo disegna di più">🎲 una finestra bella a questa scala</button></div><p class="nota" id="finestraStato">La finestra è un punto di osservazione qualsiasi, a qualsiasi scala: le galassie, le orbite, i continenti, i fiumi, i cristalli, le particelle. Il disegno c'è già: lo si cerca.</p>`);
   h.push(`<p class="aiuto">L'universo intero, da esplorare. Nessun bordo: lo spazio si richiude su sé stesso. Ogni cosa ha una causa più in là: le galassie nascono dove le fluttuazioni dell'inizio hanno lasciato più materia; le stelle nei bracci; i pianeti attorno alle stelle; le regioni nell'anello o nel campo dei pianeti. <b>Avvicinati con la rotella</b> fino alle particelle, <b>allontanati</b> fino alla rete delle galassie.</p>`);
   if (a && c) {
     const raggi = c.sorgenti.filter((s) => s.origine);
@@ -1206,6 +1207,7 @@ pannello.addEventListener('click', (e) => {
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
   if (d.cerca === 'vicini' && (indirizzoOra()?.zoom || []).length) { $('cercaStato').textContent = "I rami si scelgono al livello della regione (torna su con la rotella): qui dentro le particelle sono le stesse di lassù, e un ramo deve cambiarle a ogni livello insieme."; return; }
   if (d.cerca) return cercaBella(d.cerca);
+  if ('finestraBella' in d) { const r = cercaFinestra(camMappa, tela.width, tela.height); if (r) { camMappa.cx = r.cx; camMappa.cy = r.cy; camMappa.z = r.z; disegna(); dove(); const s = $('finestraStato'); if (s) s.textContent = `Trovata tra 28 inquadrature (${r.bellezza.totale.toFixed(2)}): ${r.bellezza.simmetria > 0.35 ? 'ha una simmetria' : r.bellezza.ripetizione > 0.35 ? 'ripete un motivo' : 'il disegno più ricco qui attorno'}. Ancora 🎲 per cercare da qui.`; } return; }
   if (d.moto) { const [vv, dd] = d.moto.split('|').map(Number); ricorda(); cel().vista.velocita = vv; cel().vista.direzione = dd; simula(); aggiornaTempo(); disegna(); mostraPannello(); return; }
   if (d.ripeti) { ricorda(); const c = comp.elementi[0].cella; c.ripeti = { ...ripetiDi(c), gruppo: d.ripeti }; adattaPattern(); aggiornaVista(); return; }
   if (d.togliScatti) {

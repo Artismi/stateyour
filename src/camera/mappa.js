@@ -12,6 +12,8 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
+import { sorgente } from './eventi.js';
+import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
 import { simulaMondo } from './mondo.js';
@@ -210,11 +212,11 @@ function anteprimaRegione(a) {
   return tr;
 }
 
-export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, dpr = 1 } = {}) {
+export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, dpr = 1, nudo = false } = {}) {
   const z = cam.z, X = (x) => W / 2 + (x - cam.cx) * z, Y = (y) => H / 2 + (y - cam.cy) * z;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#05060b'; ctx.fillRect(0, 0, W, H);
   // le stelle lontane (sfondo, fisso)
-  for (const [u, v, b] of fondoStelle) { ctx.fillStyle = `rgba(220,225,255,${0.12 + 0.35 * b})`; ctx.fillRect(u * W, v * H, dpr * (b > 0.9 ? 1.5 : 1), dpr * (b > 0.9 ? 1.5 : 1)); }
+  if (!nudo) for (const [u, v, b] of fondoStelle) { ctx.fillStyle = `rgba(220,225,255,${0.12 + 0.35 * b})`; ctx.fillRect(u * W, v * H, dpr * (b > 0.9 ? 1.5 : 1), dpr * (b > 0.9 ? 1.5 : 1)); }
   const v = cam.via;
   if (cam.livello === 0) {
     const C = cosmo(v.cosmo), img = immagineRete(v.cosmo);
@@ -479,4 +481,27 @@ export function rocciaDi(cam) {
   cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
   const out = { cv, nome, larghezzaM, frase }; rocceFatte.set(k, out); if (rocceFatte.size > 12) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
+}
+
+// ---------- LA FINESTRA OVUNQUE. La finestra non è una cosa a parte: è un punto di osservazione qualsiasi del mondo,
+// a qualsiasi scala. Qui si cerca, attorno a dove si sta guardando e alla stessa scala (un po' più vicino, un po' più
+// lontano), il punto di vista dove il mondo disegna di più: si prova un certo numero di inquadrature, si guarda ciò che
+// c'è davvero in ognuna e si misura il disegno (sezione.js, bellezzaImmagine). I posti provati dipendono solo da dove
+// si è (stesso luogo, stessa ricerca, stesso risultato): niente è aggiunto, il disegno c'era già.
+export function cercaFinestra(cam, W, H, { prove = 28 } = {}) {
+  if (typeof OffscreenCanvas === 'undefined') return null;
+  const m = minimo(W, H), n = 176, hN = Math.max(64, Math.round((n * H) / W)), cv = new OffscreenCanvas(n, hN), ctx = cv.getContext('2d', { willReadFrequently: true });
+  const caso = sorgente(`finestra/${JSON.stringify(cam.via)}/livello ${cam.livello}/${cam.cx.toPrecision(5)}/${cam.cy.toPrecision(5)}/${cam.z.toPrecision(3)}`);
+  const zMin = cam.livello === 4 ? 0.95 * m : cam.livello === 5 ? 0.5 * m : cam.z / 3, zMax = cam.livello === 4 ? 5.5e6 : cam.livello === 5 ? 11 * m : cam.z * 3;
+  let meglio = null;
+  for (let q = 0; q < prove; q++) {
+    const kz = q ? Math.exp(caso.tra(`prova ${q}/scala`, -0.9, 0.9)) : 1, z = Math.max(zMin, Math.min(zMax, cam.z * kz));
+    const c = { ...cam, z, cx: cam.cx + (q ? (caso.tra(`prova ${q}/x`, -1.2, 1.2) * W) / cam.z : 0), cy: cam.cy + (q ? (caso.tra(`prova ${q}/y`, -1.2, 1.2) * H) / cam.z : 0) };
+    if (cam.livello === 4) { c.cx = ((c.cx % 1) + 1) % 1; c.cy = Math.max(0.02, Math.min(0.48, c.cy)); }
+    if (cam.livello === 5) { c.cx = Math.max(0.1, Math.min(0.9, c.cx)); c.cy = Math.max(0.1, Math.min(0.9, c.cy)); }
+    disegnaMappa(ctx, n, hN, { ...c, z: (c.z * n) / W }, { nudo: true, dpr: 1 });
+    const b = bellezzaImmagine(ctx.getImageData(0, 0, n, hN).data, n, hN);
+    if (!meglio || b.totale > meglio.bellezza.totale) meglio = { cx: c.cx, cy: c.cy, z: c.z, bellezza: b, prova: q };
+  }
+  return meglio;
 }

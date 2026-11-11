@@ -133,3 +133,36 @@ export function bellezza(segmenti, lato) {
   const totale = sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip) * (0.4 + 0.6 * sCurve) * (0.3 + 0.7 * sOrdine) * (0.4 + 0.6 * sPulizia);
   return { totale, pieno, equilibrio: sEq, simmetria: sSim, ripetizione: sRip, curve: sCurve, ordine: sOrdine, pulizia: sPulizia };
 }
+
+// ---------- la bellezza di una finestra QUALSIASI (non solo di tracce di particelle): un'immagine a colori.
+// La finestra è un punto di osservazione del mondo, a qualunque scala: una rete di fiumi, una costa, i cristalli di
+// una roccia, le orbite, la rete delle galassie. Si misura il suo disegno (i contorni: dove l'immagine cambia) con
+// le stesse domande della sezione: né vuoto né saturo, sparso nella finestra, con una simmetria o una ripetizione.
+export function bellezzaImmagine(px, W, H) {
+  const N = 96, g = new Float32Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const x0 = Math.floor((x * W) / N), x1 = Math.max(x0 + 1, Math.floor(((x + 1) * W) / N)), y0 = Math.floor((y * H) / N), y1 = Math.max(y0 + 1, Math.floor(((y + 1) * H) / N)); let a = 0, n = 0;
+    for (let j = y0; j < y1 && j < H; j++) for (let i = x0; i < x1 && i < W; i++) { const o = (j * W + i) * 4; a += 0.3 * px[o] + 0.59 * px[o + 1] + 0.11 * px[o + 2]; n++; }
+    g[y * N + x] = n ? a / n : 0;
+  }
+  let lo = Infinity, hi = -Infinity; for (const v of g) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const zero = { totale: 0, pieno: 0, equilibrio: 0, simmetria: 0, ripetizione: 0 };
+  if (hi - lo < 8) return zero; // un'immagine piatta: niente da vedere
+  const m = new Uint8Array(N * N), soglia = 0.09 * (hi - lo);
+  for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) { const k = y * N + x; if (Math.hypot(g[k + 1] - g[k - 1], g[k + N] - g[k - N]) > soglia) m[k] = 1; }
+  let pieno = 0; for (const v of m) pieno += v; pieno /= N * N;
+  if (pieno < 0.01) return zero;
+  const sPieno = Math.exp(-(((pieno - 0.2) / 0.13) ** 2));
+  const celle = new Float64Array(16); for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) celle[Math.floor(y / 24) * 4 + Math.floor(x / 24)] += m[y * N + x];
+  const tot = celle.reduce((a, b) => a + b, 0); let Hh = 0; for (const c of celle) if (c) { const p = c / tot; Hh -= p * Math.log(p); }
+  const sEq = Hh / Math.log(16);
+  const iou = (f) => { let i = 0, u = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const a = m[y * N + x], b = m[f(x, y)]; if (a && b) i++; if (a || b) u++; } return u ? i / u : 0; };
+  const sSim = Math.max(iou((x, y) => y * N + (N - 1 - x)), iou((x, y) => (N - 1 - y) * N + x), iou((x, y) => x * N + y), iou((x, y) => (N - 1 - x) * N + (N - 1 - y)));
+  let sRip = 0;
+  for (let dy = -40; dy <= 40; dy += 4) for (let dx = 0; dx <= 40; dx += 4) {
+    if (Math.hypot(dx, dy) < 12) continue; let i = 0, a = 0, b = 0;
+    for (let y = Math.max(0, -dy); y < Math.min(N, N - dy); y += 2) for (let x = 0; x < N - dx; x += 2) { const p = m[y * N + x], q = m[(y + dy) * N + x + dx]; i += p * q; a += p; b += q; }
+    if (a && b) sRip = Math.max(sRip, i / Math.sqrt(a * b));
+  }
+  return { totale: sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip), pieno, equilibrio: sEq, simmetria: sSim, ripetizione: sRip };
+}
