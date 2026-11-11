@@ -11,8 +11,10 @@ Ogni cosa è individuata da un indirizzo: **dove** (il percorso dei luoghi, dal 
 galassia, stella, pianeta, punto, scala), **quando** (il tempo), **in quale mondo** (gli eventi andati diversamente).
 Lo stesso indirizzo dà sempre la stessa cosa. Il mondo non è conservato da nessuna parte: è una funzione
 dell'indirizzo e delle leggi; ciò che si tiene in memoria si può buttare e ricalcolare identico.
-- Fatto: `src/camera/intreccio.js` (l'indirizzo e le sue operazioni), `eventi.js`; prove di determinismo in
-  `test_coerenza`, `test_intreccio`.
+- Fatto: `src/camera/intreccio.js` (l'indirizzo e le sue operazioni), `eventi.js` (la fonte unica del caso:
+  Threefry‑2x32 a 20 giri, con la chiave a 64 bit ricavata dall'indirizzo nome per nome; le particelle di
+  `mondo.js` e il cosmo di `cosmo.js` leggono da lì); prove di determinismo in `test_eventi` (vettori noti,
+  nessuna collisione su un milione di indirizzi, ordine inverso), `test_coerenza`, `test_intreccio`.
 - Manca: il tempo è nell'indirizzo ma i livelli sopra la particella si calcolano solo «adesso»; superficie, mare e
   roccia usano ancora coordinate loro invece dell'indirizzo comune.
 
@@ -45,9 +47,12 @@ quel momento, per chi legge quel mondo, l'esito è quello, sempre. Leggere non c
 parallelo è lo stesso indirizzo con alcuni eventi andati in un altro modo (`rami`).
 Un evento può cambiare solo ciò che sta **dentro il suo contenitore e dopo di lui**: tutto ciò che è fuori, o prima,
 resta identico. Così i mondi paralleli sono vicini quanto sono pochi e piccoli gli eventi che li separano.
-- Fatto: particelle (`mondo.js`), impatti, anelli, galassie, stelle una per una (`sorgente`); prove «un ramo cambia
-  una cosa sola».
-- Manca: disco e lune cambiano ancora per corsi interi; meteo e clima non hanno eventi; un evento piccolo risale per due vie sole
+- Fatto: particelle (`mondo.js`), impatti, anelli, galassie, stelle una per una (`sorgente`); disco e lune evento
+  per evento («…/disco/embrione 12/incontro con 13», «…/lune/cattura 3/eccentricità»), e così rocce, superficie,
+  mantello, pozza; prove «un ramo cambia una cosa sola» (`test_eventi`, `test_disco`, `test_lune`).
+- Manca: meteo e clima non hanno eventi; restano fuori dalla fonte unica il campo del cosmo in 3D (`cosmo3d.js`),
+  le scene di `atomi3d.js`, il rumore delle tessere (`geologia.js`), le ricerche (`cercatore.js`, `vicini.js`) e
+  ciò che l'interfaccia tira da un seme (`laboratorio.js`, `mappa.js`, `src/tre`); un evento piccolo risale per due vie sole
   (`risalita.js`, non ancora collegato): come flusso, sommato, o attraverso un amplificatore con il suo tempo; il «dopo» non è ancora controllato da una prova.
 
 ## 4. Dal grande al piccolo: il dettaglio è condizionato

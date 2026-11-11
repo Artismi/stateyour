@@ -18,7 +18,7 @@
 // le galassie sono altre). Il numero della biblioteca è l'indirizzo scritto in
 // cifre: numeri vicini sono posti vicini dello stesso universo.
 
-import { generatore, simulaMondo } from './mondo.js';
+import { simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
 import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
 import { stella as stellaVera } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
@@ -26,7 +26,7 @@ import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
-import { sorgente } from './eventi.js';
+import { sorgente, numero, contatore } from './eventi.js';
 import { formaGalassia, stelleGalassia } from './galassie.js';
 import { motiRegione } from './spazio3d.js'; // (i due moduli si chiamano a vicenda, ma solo dentro le funzioni) // le galassie come conseguenza: alone → gas → stelle → metalli
 import { anelli } from './anelli.js';
@@ -36,13 +36,9 @@ const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in quest
 
 export const REGIONI = 12, PIANETI_MAX = 16, STELLE = 2500, GALASSIE_MAX = 200;
 
-// il caso di un indirizzo
+// il caso di un indirizzo: dalla fonte unica (eventi.js), i primi 32 bit dell'esito dell'evento «parti/unite/così»
 export function hash(...parti) {
-  let h = 0x811c9dc5;
-  const s = parti.join('/');
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-  return h >>> 0;
+  return numero(parti.join('/'));
 }
 // ---------- UNIVERSI PARALLELI A OGNI SCALA. Ogni corso di eventi ha un indirizzo: «disco/3/53» è la formazione
 // dei pianeti della stella 53 nella galassia 3, «mantello/3/53/0» la storia interna del suo primo pianeta. Un cosmo
@@ -66,11 +62,20 @@ export function cosmoRamo(n, evento, ramo) {
 }
 export const cosmoCon = (n, rami) => Object.entries(rami || {}).reduce((c, [e, r]) => cosmoRamo(c, e, r), cosmoBase(n));
 // il numero da cui parte un corso di eventi: nel cosmo di partenza è quello di sempre
+// (l'indirizzo del corso: «disco/1/3/53»; nel ramo r del corso intero, «disco/1/3/53/ramo/r»: tutto ciò che sta sotto cambia)
+const indirizzoEvento = (nome, n, ...resto) => { const [b, rami] = scomponi(n), r = rami ? rami[[nome, ...resto].join('/')] : 0; return r ? [nome, b, ...resto, 'ramo', r].join('/') : [nome, b, ...resto].join('/'); };
 export function semeEvento(nome, n, ...resto) {
-  const [b, rami] = scomponi(n), r = rami ? rami[[nome, ...resto].join('/')] : 0;
-  return r ? hash(nome, b, ...resto, 'ramo', r) : hash(nome, b, ...resto);
+  return numero(indirizzoEvento(nome, n, ...resto));
 }
-const casoDi = (nome, n, ...resto) => { const c = generatore(semeEvento(nome, n, ...resto)); const tra = (a, b) => a + c() * (b - a); return { c, tra, intero: (a, b) => Math.floor(tra(a, b + 1)), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) / Math.SQRT1_2 / 1.0; } }; };
+// la sorgente degli eventi di un corso: ogni suo evento ha un indirizzo sotto quello del corso e un ramo suo, nella
+// mappa dei rami del cosmo. Con un posto («cosmo 1/galassia 3/stella 53/disco») gli eventi stanno sotto il posto
+// («…/disco/embrione 12/incontro con 13»); il ramo del corso intero («disco/3/53», come sempre) lo sposta tutto
+export const sorgenteEvento = (nome, n, ...resto) => sorgente(indirizzoEvento(nome, n, ...resto), ramiCosmo(n));
+const sorgenteCorso = (posto, n, corso) => { const r = ramiCosmo(n)[corso]; return sorgente(r ? `${posto}/ramo ${r}` : posto, ramiCosmo(n)); };
+export const casoDisco = (n, gid, sid) => sorgenteCorso(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/disco`, n, `disco/${gid}/${sid}`);
+export const casoLune = (n, gid, sid, pid) => sorgenteCorso(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${pid}/lune`, n, `lune/${gid}/${sid}/${pid}`);
+// (le estrazioni di un corso chieste in fila: la k-esima è sempre la stessa)
+const casoDi = (nome, n, ...resto) => { const c = contatore(indirizzoEvento(nome, n, ...resto)); const tra = (a, b) => a + c() * (b - a); return { c, tra, intero: (a, b) => Math.floor(tra(a, b + 1)), gauss: () => { let u = 0; for (let i = 0; i < 6; i++) u += c(); return (u - 3) / Math.SQRT1_2 / 1.0; } }; };
 const memo = (f) => { const m = new Map(); return (...a) => { const k = a.join('|'); if (!m.has(k)) { if (m.size > 64) m.delete(m.keys().next().value); m.set(k, f(...a)); } return m.get(k); }; };
 
 // ---------- il numero della biblioteca ↔ l'indirizzo
@@ -165,7 +170,7 @@ export const sistema = memo((n, gid, sid) => {
   // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
   // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
   const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const nascita = { massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeDisco = semeEvento('disco', n, gid, sid);
+  const nascita = { massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeDisco = casoDisco(n, gid, sid);
   const nati = morta ? [] : formaPianeti(nascita, semeDisco).slice(0, PIANETI_MAX);
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
@@ -227,7 +232,7 @@ export const sistema = memo((n, gid, sid) => {
     };
     ariaDelPianeta();
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
-    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
+    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, casoLune(n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
     { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); } }
     // (il clima è stato calcolato prima delle lune, che lo leggono: se la luna dell'urto ha poi cambiato l'asse o il blocco, si rifà)

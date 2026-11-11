@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { storiaImpatti, giganteDi, urtoGigante, contaCrateri, improntaMantello, crateriVisibili, ariaDi, attraversaAria, cratere, giriChambers, deltaChambers, classeDi, diametroClasse, CLASSI } from '../src/camera/impatti.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { MSOLE, UA } from '../src/camera/leggi.js';
-import { indirizzoDi, sistema, semeEvento } from '../src/camera/cosmo.js';
+import { indirizzoDi, sistema, casoDisco } from '../src/camera/cosmo.js';
 import { formaPianeti, disco, raggiNecessari, giriCheRegge } from '../src/camera/disco.js';
 import { lune } from '../src/camera/lune.js';
 import { evolviTettonica } from '../src/camera/tettonica.js';
@@ -295,7 +295,7 @@ prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) nie
   assert.equal(giriChambers, giriCheRegge); assert.equal(deltaChambers, raggiNecessari);
   // i pianeti di sistema() con la loro «formazione» (finché cosmo.js non la copia da sé, la si riprende da formaPianeti con lo stesso seme)
   const veri = (a) => { const S = sistema(a.cosmo, a.galassia, a.stella); if (S.pianeti.every((P) => P.formazione)) return S;
-    const seme = semeEvento('disco', a.cosmo, a.galassia, a.stella);
+    const seme = casoDisco(a.cosmo, a.galassia, a.stella); // (la sorgente degli eventi del disco: la stessa che usa cosmo.js)
     for (const eta of [S.stella.eta, (S.stella.eta ?? 5e9) + (S.stella.morta ?? 0)]) { // (l'età con cui cosmo.js chiama formaPianeti)
       const st = { massa: S.stella.massaNascita || S.stella.massa, Z: S.stella.Z ?? 1, eta }, nati = formaPianeti(st, seme), F = S.pianeti.map((P) => nati.find((q) => q.massaKg === P.massaKg && q.raggioM === P.raggioM)?.formazione);
       if (F.every(Boolean)) return { stella: { ...S.stella, eta }, disco: disco(st, seme), pianeti: S.pianeti.map((P, k) => ({ ...P, formazione: F[k] })) }; }
