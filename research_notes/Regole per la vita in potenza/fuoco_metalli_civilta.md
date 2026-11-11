@@ -43,7 +43,7 @@ Il fuoco all'aperto è una soglia del pianeta prima che della specie: serve un o
 
 #### 1.5 Incendi naturali come dato del pianeta
 - Fulmini: 44 al secondo sulla Terra (già in `risalita.js`, parametro `RESA_FULMINI`, da Christian e altri 2003).
-- [S] Efficienza d'innesco: in Tasmania in media lo 0,24% dei fulmini a terra accende un incendio (0,39% nelle brughiere di buttongrass), con massimo in estate; contano soprattutto i fulmini con corrente continua lunga (>10 ms) — [rassegna canadese, PMC12104117](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12104117/); [Nature Communications 2023](https://www.nature.com/articles/s41467-023-36500-5).
+- [S] Efficienza d'innesco: in Tasmania in media lo 0,24% dei fulmini a terra accende un incendio (0,39% nelle brughiere di buttongrass), con massimo in estate; — [studio sulla Tasmania, rivista Fire 2021 (scheda)](https://doaj.org/article/33880dad626140459955655d12380396). L'efficienza cambia con stagione e regione, e contano soprattutto i fulmini con corrente continua lunga (>10 ms) — [efficienza nelle foreste canadesi, PMC12104117](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12104117/); [Nature Communications 2023](https://www.nature.com/articles/s41467-023-36500-5).
 - [R] Superficie bruciata oggi ≈3,5–4,5 milioni di km² l'anno (GFED4), emissioni ≈2 Pg di carbonio l'anno; il fuoco è anche un freno all'ossigeno (più O₂ → più incendi → meno sepoltura di carbonio organico a terra; Lenton e Watson 2000).
 
 #### 1.6 Prove del controllo del fuoco (date)
