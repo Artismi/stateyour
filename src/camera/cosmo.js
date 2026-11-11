@@ -25,6 +25,7 @@ import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { sorgente } from './eventi.js';
+import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
 import { atmosfera, prebiotica, minerali } from './chimica.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
@@ -210,10 +211,8 @@ export const sistema = memo((n, gid, sid) => {
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
     return {
-      id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia, formazione: q.formazione,
+      id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia, formazione: q.formazione, involucro: q.involucro || 0,
       r: Math.max(0.006, Math.min(0.04, 0.006 + 0.03 * (q.raggioM / 7e7))), B0: 0, campo: 0,
-      // gli anelli: frammenti dentro il limite di Roche (per ora una probabilità, più alta per i mondi freddi: da far emergere dalle lune)
-      anelli: (q.tipo !== 'roccioso' && c() < 0.6) || c() < 0.08,
       colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[q.tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
     };
   });
@@ -247,7 +246,10 @@ export const sistema = memo((n, gid, sid) => {
     // giganti). I suoi eventi incerti stanno all'indirizzo del pianeta, e i loro rami nella stessa mappa dei rami del cosmo
     const casoP = sorgente(`cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}/pianeta ${p.id}`, ramiCosmo(n));
     p.urto = p.tipo === 'gassoso' ? null : giganteDi(p, Sis, casoP);
-    if (p.urto && !bloccato) { p.giorno = p.urto.giornoDopo; p.retrogrado = p.urto.obliquita > 90; p.obliquita = p.retrogrado ? 180 - p.urto.obliquita : p.urto.obliquita; }
+    // (un mondo con un involucro di gas non gira come l'ha lasciato l'urto dei nuclei: il gas che cade dopo porta la sua
+    // rotazione, come nei giganti; per quelli resta il sorteggio, finché la cattura del gas non darà anche il giro)
+    const giroDaUrto = p.urto && !bloccato && p.involucro < 0.01;
+    if (giroDaUrto) { p.giorno = p.urto.giornoDopo; p.retrogrado = p.urto.obliquita > 90; p.obliquita = p.retrogrado ? 180 - p.urto.obliquita : p.urto.obliquita; }
     // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
@@ -266,7 +268,12 @@ export const sistema = memo((n, gid, sid) => {
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, semeEvento('lune', n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
-    if (p.urto && !bloccato) { const luna = p.lune.find((l) => l.origine === 'urto'); if (luna?.giornoPianeta) p.giorno = luna.giornoPianeta; p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); }
+    if (giroDaUrto) { const luna = p.lune.find((l) => l.origine === 'urto'); if (luna?.giornoPianeta) p.giorno = luna.giornoPianeta; p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg)); }
+    // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
+    // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
+    // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere
+    p.anello = anelli(p, p.lune, { massa: S.massa, massaNascita: S.massaNascita, eta: eta - (S.morta ?? 0), morta: S.morta, Z: S.Z ?? 1 }, sorgente(`anelli/${cosmoBase(n)}/${gid}/${sid}/${p.id}`, ramiCosmo(n)));
+    p.anelli = !!p.anello;
     // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti
     Object.defineProperty(p, 'impatti', { configurable: true, enumerable: false, get() { const v = storiaImpatti(p, Sis, casoP); Object.defineProperty(p, 'impatti', { value: v, enumerable: false }); return v; } });
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
@@ -282,16 +289,15 @@ export const LATO_REGIONE = 0.32; // in raggi del pianeta
 export const pianeta = memo((n, gid, sid, pid) => {
   const P = sistema(n, gid, sid).pianeti[pid], { tra } = casoDi('pianeta', n, gid, sid, pid);
   // l'anello: fasce più e meno dense (come quelle vere); una funzione sola per il disegno e per la fisica
-  const anello = P.anelli ? [tra(1.3, 1.6), tra(2.0, 2.5)] : null;
-  const bande = anello ? Array.from({ length: 5 }, () => ({ r: tra(anello[0], anello[1]), w: tra(0.02, 0.12), a: tra(0.3, 1.2) })) : [];
-  const densitaAnello = (r) => (!anello || r < anello[0] || r > anello[1] ? 0 : Math.min(2, 0.15 + bande.reduce((s, b) => s + b.a * Math.exp(-(((r - b.r) / b.w) ** 2)), 0)));
+  const A = P.anello, anello = A ? [A.interno, A.esterno] : null;
+  const densitaAnello = A ? A.densita : () => 0;
   const regioni = [];
   for (let k = 0; k < REGIONI; k++) {
     const nelAnello = anello && k < 6;
-    const ang = (2 * Math.PI * k) / REGIONI + tra(-0.15, 0.15), rr = nelAnello ? tra(anello[0] + 0.1, anello[1] - 0.1) : tra(1.45, 4);
+    const ang = (2 * Math.PI * k) / REGIONI + tra(-0.15, 0.15), rr = nelAnello ? tra(A.denso[0], A.denso[1]) : tra(1.45, 4);
     regioni.push({ id: k, pos: [rr * Math.cos(ang), rr * Math.sin(ang)], angolo: ang, r: rr, nellAnello: !!nelAnello && densitaAnello(rr) > 0.05 });
   }
-  return { P, anello, densitaAnello, regioni };
+  return { P, anello, densitaAnello, regioni, anelloVero: A };
 });
 
 // ---------- la fisica alla scala del pianeta: il suo campo (un dipolo), il pianeta come ostacolo

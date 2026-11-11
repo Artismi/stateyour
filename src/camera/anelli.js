@@ -252,7 +252,7 @@ function anelloDi(P, lune, stella, materiale, massa0, anni, cosa) {
   // il ghiaccio sublima: conta la luce più forte che ha visto (una stella morta, da viva, era più luminosa e più vicina)
   let Tgrano = Math.pow((assorbe + calore) / (4 * SIGMA), 0.25), evapora = 0;
   if (materiale === 'ghiaccio') {
-    const viva = stellaVera(P.Mstella / MSOLE).L * LSOLE, aViva = stella?.morta != null && stella.massa ? (P.aM * stella.massa * MSOLE) / P.Mstella : P.aM;
+    const Mn = stella?.massaNascita || P.Mstella / MSOLE, viva = stellaVera(Mn).L * LSOLE, aViva = stella?.morta ? (P.aM * P.Mstella) / (Mn * MSOLE) : P.aM; // (P.Mstella è la massa di oggi; da viva la stella pesava massaNascita e l'orbita era più stretta)
     Tgrano = Math.pow((Math.max(flusso, viva / (4 * Math.PI * aViva ** 2)) * (1 - alb) + calore) / (4 * SIGMA), 0.25);
     evapora = sublimazione(Tgrano);
   } else if (Tgrano > MATERIALI.roccia.fusione) return null; // anche la roccia fonde ed evapora
