@@ -167,7 +167,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   let mareFraz = 0; for (let k = 0; k < W * H; k++) mareFraz += 1 - terra[k]; mareFraz /= W * H;
   // senza acqua niente ghiaccio; piove solo se c'è acqua che evapora e un'aria che la porta
   const acquaPerGhiaccio = mareFraz > 0 ? Math.min(1, 0.15 + 2.5 * mareFraz) : 0, piove = mareFraz > 0.005 && isFinite(P.clima.pressione) && P.clima.pressione > 100, nuvole = mareFraz > 0.02 && isFinite(P.clima.pressione) && P.clima.pressione > 1e4 ? 0.5 * Math.min(1, mareFraz * 2 + 0.3) : 0;
-  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.38 * (1 - suolo); };
+  const albedo = (k, t) => { const ghiaccio = acquaPerGhiaccio * 0.5 * (1 - Math.tanh((t - (terra[k] ? 268 : 266)) / 4)), suolo = ghiaccio * 0.62 + (1 - ghiaccio) * (terra[k] ? 0.25 : 0.08), caldo = t > 268 ? nuvole : nuvole * 0.4; return suolo + caldo * 0.34 * (1 - suolo); };
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
