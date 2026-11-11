@@ -331,3 +331,104 @@ Qui le leggi fisiche finiscono: restano identità contabili (bilanci di energia 
 - Cook 1971: cifre non verificate sulla fonte; i numeri di Smil per stadio (GJ pro capite) non aperti.
 - Carneiro, Tainter, Zipf, gravità: [R]; Henrich 2004 e Powell e altri 2009 non riletti.
 - Licenza d'uso dettagliata di Seshat (accordo utente del sito) non letta; codice del modello di Turchin 2013 non cercato.
+
+---
+
+## 7. Prerequisiti planetari della tecnica come catena verificabile; tecnofirme, ipotesi siluriana, Drake, passi difficili
+
+### Takeaway
+La catena «terre emerse → ossigeno nella finestra del fuoco → biomassa legnosa → giacimenti accessibili → clima stabile → specie che manipola» è fatta di anelli ciascuno calcolabile dallo stato del pianeta, e la letteratura di astrobiologia la sta formalizzando solo ora (collo di bottiglia dell'ossigeno a ≥18%; continenti + oceani + placche per ≥0,5 Ga). Quanto sia probabile percorrerla resta ignoto: i modelli a «passi difficili» e la loro critica del 2025 danno risposte opposte con gli stessi dati.
+
+### Cited Findings
+- [V] Collo di bottiglia dell'ossigeno: la combustione all'aperto chiede pO₂ ≥ 18%, più di quanto serva alla vita complessa; senza fuoco niente metallurgia (il ferro fuso chiede 1535 °C) e niente sintesi ad alta temperatura; gli autori propongono pO₂ ≥ 18% come condizione di contesto nella ricerca di tecnofirme — [Balbi e Frank 2023, Nature Astronomy, arXiv:2308.01160](https://arxiv.org/abs/2308.01160).
+- [V] Continenti, oceani e placche: f_oc × f_pt < 0,00003–0,002 (§4.4) — [Stern e Gerya 2024](https://www.nature.com/articles/s41598-024-54700-x).
+- [V] Ipotesi siluriana — che cosa resterebbe di una civiltà industriale dopo milioni di anni: la nostra dura da ~300 anni; le superfici urbanizzate sono meno dell'1% della Terra; la superficie esposta più antica ha ~1,8 Ma (deserto del Negev); il fondo oceanico conserva sedimenti solo dal Giurassico (~170 Ma); la frazione di vita che fossilizza è minuscola, quindi oggetti e fossili diretti sono improbabili. Restano firme geochimiche in uno strato sottile (pochi cm per 1000 anni di sedimentazione): anomalia negativa di δ¹³C (oltre 0,5·10¹² t di carbonio fossile bruciate), riscaldamento registrato in δ¹⁸O, anomalia di δ¹⁵N da fertilizzanti, più sedimento e più metalli nei delta, zone anossiche costiere, estinzioni e ricambio di fauna, molecole sintetiche persistenti, microplastiche, e — in caso di guerra nucleare — isotopi a vita lunga (²⁴⁴Pu, emivita 80,8 Ma; ²⁴⁷Cm, 15 Ma). Quasi nessun marcatore è unico da solo (il Massimo Termico del Paleocene–Eocene ne condivide molti): l'indizio è la **molteplicità di segnali indipendenti e simultanei** senza una sola causa geofisica — [Schmidt e Frank 2018, Int. J. Astrobiol. 18:142, arXiv:1804.03748](https://arxiv.org/abs/1804.03748).
+- [V] Passi difficili: con un modello bayesiano sui tempi delle transizioni (origine della vita, eucarioti, sesso, intelligenza) e sul tempo di abitabilità residuo (0,8–1,3 Ga), i tempi attesi delle transizioni «probabilmente superano la vita della Terra, forse di molti ordini di grandezza»: la vita intelligente sarebbe «eccezionalmente rara» (Carter 1983; 4 passi per Watson 2008, 5–6 per Carter 2008) — [Snyder‑Beattie e altri 2021, Astrobiology 21:265](https://pmc.ncbi.nlm.nih.gov/articles/PMC7997718/).
+- [V] Critica: un modello alternativo «senza passi difficili», in cui le singolarità evolutive si spiegano senza improbabilità intrinseca e i tempi dell'origine umana sono dettati dall'«apertura successiva di finestre globali di abitabilità» (ossigeno, nutrienti, temperatura) nella storia della Terra — [Mills, Macalady, Frank e Wright 2025, Science Advances, arXiv:2408.10293](https://arxiv.org/abs/2408.10293). Se è così, ciò che conta è la storia geochimica del pianeta: proprio ciò che stateyour calcola.
+- [V] Gravità: su una super‑Terra di 10 masse terrestri e 1,7 raggi (velocità di fuga 27,1 km/s contro 11,2) il rapporto di massa di un razzo chimico per fuggire sale da ~26 a ~2700 (2700 t di propellente per tonnellata di carico): il volo spaziale chimico diventa quasi impraticabile — [Hippke 2018, arXiv:1804.04727](https://arxiv.org/abs/1804.04727). (Per il fuoco e la metallurgia la gravità conta poco; conta per il tiraggio dei camini, ∝ √(g·h·ΔT/T) [L].)
+- [R] Equazione di Drake come contabilità: N = R*·f_p·n_e·f_l·f_i·f_c·L; ogni fattore dopo n_e è ignoto entro ordini di grandezza. Frank e Sullivan (2016, [arXiv:1510.08837](https://arxiv.org/abs/1510.08837)): l'umanità è l'unica specie tecnologica mai esistita nell'universo osservabile solo se la probabilità per pianeta abitabile è sotto ~10⁻²⁴ (cifra ricordata; il PDF scaricato non è leggibile come testo).
+
+### Inferences
+- **La catena come predicati (ognuno legge moduli esistenti o livelli della vita ancora da scrivere):**
+  1. *Terre emerse stabili* — `tettonica.js` (frazione di continente, quota): già calcolabile.
+  2. *Ossidante in aria nella finestra* — `chimica.js` dà l'O₂ abiotico (tracce); la finestra chiede fotosintesi ossigenica + sepoltura di carbonio per 10⁸–10⁹ anni: richiesta al livello «vita» e al ciclo del carbonio (già collegato). Soglie: ≥ ~16% per bruciare, ≥ ~18% per tecnica, ≤ ~25–35% perché la vegetazione sopravviva [St].
+  3. *Combustibile solido secco* — piante terrestri con tessuti di sostegno (richiesta alla biologia; fisica del sostegno in `materiali_scheletri_movimento.md`) + una stagione secca (`meteo.js`).
+  4. *Innesco naturale* — `fulmini(luogo)`, vulcani: già calcolabile.
+  5. *Materiali* — pietra che si scheggia (selce, ossidiana: `rocce.js` vetro), argilla (`chimica.js` alterazione), minerali in zona ossidata (manca: elementi in traccia e processi del §4).
+  6. *Clima stabile per ≥ 10³–10⁴ anni e CO₂ ≥ ~200 ppm* per l'agricoltura — `climaEAria`, ma al clima mancano gli eventi e la variabilità tra anni (dichiarato in INTRECCIO regola 3).
+  7. *Specie con manipolatori, vita terrestre, vita sociale* — altri ricercatori.
+  8. *Tempo* — ogni anello ha il suo: 10⁹ anni per l'ossigeno, 10⁸ per carbone e petrolio, 10⁵–10⁷ per i giacimenti supergeni e le lateriti, 10³ per la domesticazione, 10³–10⁴ dall'agricoltura allo stato.
+- **Dove sono leggi:** anelli 1, 4, 5 e le soglie termiche; **regolarità:** soglie di O₂ in percento, tempi dall'agricoltura allo stato; **contingenza o ignoto:** se e quando una specie compare e percorre la catena (un solo caso).
+- **Tecnofirma come regola 5 al contrario:** uno strato con δ¹³C negativo + δ¹⁵N anomalo + metalli + plastiche è una bolla che chiede alle spalle una civiltà industriale; ciascun segnale da solo ammette cause naturali (vulcanismo, idrati di metano): è esattamente il caso «più bolle, causa comune» della regola 12.
+
+### Gaps
+- Nessun lavoro trovato che metta numeri sulla gravità o sulla densità dell'aria come limiti a fuoco, forni e manipolazione (a parte il volo spaziale).
+- Tecnofirme atmosferiche (NO₂, CFC) non approfondite: fuori dal tema «che cosa serve», dentro «che cosa si vede».
+- Carter 1983, Watson 2008: non riletti; i numeri dei passi vengono da Snyder‑Beattie e altri.
+- L'O₂ biologico non è nei moduli: la finestra del fuoco oggi non è calcolabile in stateyour, solo dichiarabile come richiesta.
+
+---
+
+## 8. All'indietro: che cosa un manufatto permette di inferire; archeometria come inferenza
+
+### Takeaway
+Ogni manufatto è una misura: la composizione elementare e isotopica dice da quale giacimento (con ambiguità note), le fasi minerali dicono temperatura e atmosfera del forno, il carbonio‑14 e la termoluminescenza dicono quando, la taglia del sito dice quante persone. Sono le stesse funzioni dei §§1–6 lette al contrario, ed è la forma concreta della regola 5 per i livelli umani.
+
+### Cited Findings
+- [V] Provenienza dei metalli con più sistemi insieme: per lo stagno di Uluburun isotopi del piombo, elementi in traccia e isotopi dello stagno (δ¹²⁴Sn) distinguono lo stagno del Tauro (68 lingotti, con piombo aggiunto a Bolkardağ) da quello dell'Asia centrale (35 lingotti; firma compatibile solo con Mušiston in Tagikistan e l'Altai orientale) — [Powell e altri 2022](https://pmc.ncbi.nlm.nih.gov/articles/PMC9710885).
+- [S] Limiti degli isotopi del piombo: campi isotopici che si sovrappongono tra distretti lontani (Pollard 2009); in uno studio sulle galene cinesi solo ~20% dei giacimenti è distinguibile; mescolanza e riciclo cancellano la firma; la banca dati di Oxford (OXALID, 27 anni di misure) non è pubblicata per intero in forma digitale; l'«impronta digitale» è una metafora fuorviante perché i rapporti evolvono con l'età e la geochimica della sorgente — [De Ceuster, Hoogewerff e Degryse, «overlap uncovered»](https://library.kab.ac.ug/Record/doaj-art-99132169855c4b77b845984618712ed4/Description); [De Ceuster, Machaira e Degryse 2023, RSC Advances](https://pubs.rsc.org/en/content/articlepdf/2023/ra/d3ra02763e).
+- [V] Inquinamento come registro economico: il piombo nel ghiaccio della Groenlandia segue l'estrazione di piombo‑argento europea dall'antichità; emissioni stimate 0,3–3,8 kt l'anno, in media 1,1 kt l'anno all'apogeo dell'impero romano nel I secolo; crollo con la peste antonina e livelli bassi per oltre 500 anni — [McConnell e altri 2018, PNAS 115:5726](https://pmc.ncbi.nlm.nih.gov/articles/PMC5984509/). [S] Lo stesso metodo data la prima metallurgia estesa del rame nelle Ande (§3.4).
+- [S] Temperatura di cottura di un coccio dalle fasi: presenza o assenza di caolinite (sparisce a 450–650 °C), calcite (sopra 700–800 °C), fasi neoformate (spinello ~950–980 °C, mullite, cristobalite >1000 °C) (§2).
+- [V] Dalla taglia alla popolazione: area dell'insediamento ∝ N^(2/3…5/6) (§6.4); cinque stanze o una casa a fossa = una famiglia di 5 persone nel modello di Long House Valley (§6.9).
+- [V] Tracce d'uso: lucidature e strie su bifacciali → percussione con pirite → accensione del fuoco (§1.4); sedimento arrossato, selce spaccata dal calore, ossa bruciate lette al microscopio e in infrarosso → fuoco in posto (Wonderwerk, §1.6).
+- [R] Datazioni: carbonio‑14 (emivita 5730 anni; prodotto dai raggi cosmici in aria — il flusso è già in `risalita.js`; utile fino a ~50 000 anni, curva di calibrazione IntCal20 fino a 55 000); termoluminescenza e luminescenza ottica (l'orologio si azzera sopra ~400–500 °C: data la cottura del coccio o la selce bruciata); dendrocronologia (all'anno); archeomagnetismo (l'argilla cotta fissa la direzione del campo raffreddandosi sotto ~580 °C, punto di Curie della magnetite); potassio‑argon sui livelli vulcanici.
+- [R] Altri lettori: δ¹³C delle ossa (piante C4 come mais e miglio nella dieta), δ¹⁵N (livello trofico, concimazione), ⁸⁷Sr/⁸⁶Sr dei denti (luogo d'infanzia: geologia locale), fitoliti e amidi (piante coltivate), scorie (fayalite + wüstite → forno a ~1150–1250 °C con pO₂ vicino all'equilibrio Fe/FeO: vedi tabella del §3.1).
+
+### Inferences
+- **L'archeometria è la regola 5 già praticata:** ogni metodo è una funzione inversa con la sua incertezza — spesso un insieme di sorgenti compatibili, non una (isotopi del piombo), cioè proprio «infiniti mondi compatibili, pesati». In stateyour ogni legge diretta dei §§1–6 dovrebbe esporre la sua inversa: `chiede(oggetto) → vincoli` su composizione dell'aria, temperatura raggiunta, giacimenti entro una distanza, popolazione, tempo.
+- **Ciò che si conserva dice ciò che è successo:** elementi e isotopi pesanti non frazionano nel forno (firma della sorgente); le fasi minerali registrano il massimo di temperatura e l'atmosfera; gli orologi nucleari si azzerano col calore. Sono grandezze che il progetto ha già (isotopi, decadimenti, fasi): il costo è solo dichiarare gli eventi di azzeramento.
+
+### Gaps
+- OXALID e le banche dati isotopiche dei giacimenti: accesso e licenza non verificati.
+- Nessuna fonte aperta letta sulla termodinamica delle scorie (FeO–SiO₂–CaO–Al₂O₃) come termometro e barometro di ossigeno.
+- Datazioni: tutti i numeri sono [R].
+
+---
+
+## Tabelle di chiusura
+
+### Tabella 1 — soglia → prerequisiti fisici e numeri → che cosa chiede al pianeta e ai livelli sotto → che cosa sblocca → dettaglio minimo delle regole → già calcolabile dai moduli esistenti → stato della scienza
+
+| Soglia | Prerequisiti fisici e numeri | Chiede al pianeta e ai livelli sotto | Sblocca | Dettaglio minimo delle regole | Già calcolabile (moduli) | Stato della scienza |
+|---|---|---|---|---|---|---|
+| Fuoco naturale | O₂ ≥ 16% (soppresso <18,5%); combustibile sotto l'umidità di estinzione (~12–40%); innesco ~10⁻³–10⁻² per fulmine | terre emerse, fotosintesi ossigenica da 10⁸–10⁹ anni, piante terrestri, stagione secca | finestra del fuoco; carbone fossile come archivio | xO₂, P, carico e umidità del combustibile, fulmini | fulmini (`risalita.js`), pioggia e stagioni (`meteo.js`); O₂ biologico no | soglie [St] da pochi esperimenti; legge chiusa per altre arie mancante |
+| Fuoco controllato e acceso | accensione del legno ~300–365 °C; pirite + selce (−828 kJ/mol FeS₂) o attrito; esca secca | fuoco naturale; pirite o legni adatti; ambiente subaereo (in acqua: vietato) | cottura (proteine dell'uovo digerite 91–94% contro 51–65%), calore, luce, trattamento termico | predicato «ambiente gassoso ossidante» + materiali d'innesco | chimica dei solfuri in parte (FeS in tabella, FeS₂ no) | uso da ~1,0 Ma, abituale da ~0,4 Ma, accensione provata ~0,4 Ma [K] |
+| Ceramica | deossidrilazione 450–650 °C; fuoco aperto 600–900 °C | argille (acqua liquida + silicati), fuoco | contenitori, bollitura, crogioli, refrattari | reazioni di decomposizione con ΔH, ΔS; sinterizzazione da frazione di fuso | alterazione in argille (`chimica.js`), `ferroStabile` per il colore | fisica solida; prima ceramica 26 ka, vasi 20 ka, prima dell'agricoltura [K] |
+| Calce e gesso | CaCO₃ → CaO a ~850–900 °C in CO₂ a 1 bar (3,2 MJ/kg CaO); gesso 100–150 °C | calcare (ciclo dei carbonati), evaporiti, combustibile | intonaci, malte, fondente per scorie e vetro | K(T) = exp(−ΔG/RT) | sì: CaCO₃, CO₂ in `SPECIE`; manca CaO | legge [L] |
+| Vetro | sabbia + alcali: lavorabile a 1000–1100 °C (silice pura 1713 °C) | quarzo selezionato, natron o ceneri, forno a tiraggio | recipienti inerti, poi ottica | liquidus da composizione (diagramma Na₂O–CaO–SiO₂) | evaporiti (`mare.js`), vetro (`rocce.js`) | legge; numeri qui [R] |
+| Rame fuso | Cu₂O riducibile da CO/CO₂ > 10⁻⁴; fusione 1085 °C; forno chiuso con aria forzata | zona ossidata di giacimenti idrotermali (archi, ofioliti) → O₂ + falda + 10⁵–10⁶ anni; legna; refrattari | utensili colati, lega | Ellingham (rette della tabella) + punto di fusione + pCO/pCO₂ | metodo sì (`equilibrio`), elementi no (Cu assente) | legge; prima fusione ~5000 a.C. Balcani [K] |
+| Bronzo allo stagno | SnO₂ riducibile a 635 °C, CO/CO₂ ≈ 0,15; lega al 10%: liquidus ~1000 °C; durezza ×2–4 | stagno: 2 ppm, graniti collisionali o placer, pochi distretti → scambio a 10²–10³ km | armi e utensili duri; reti di scambio; specialisti | come sopra + rete di trasporto tra celle | no (Sn assente; nessun modulo di scambio) | fisica [L]; geografia e date [K] |
+| Ferro in massello | wüstite → Fe con CO ≥ 61–74%; 1100–1300 °C; scoria fayalitica (~1180–1205 °C); 5–11 kg di carbone per kg | minerale di ferro (ovunque: 5% della crosta), molto bosco (10–25 ha per t l'anno), mantici | metallo comune: aratri, asce, chiodi | Boudouard + Fe–O (`ferroStabile`) + scoria (Fe₂SiO₄ già in tabella) | in buona parte sì | legge; origine anatolica ~2000 a.C., africana discussa [K] |
+| Ghisa e acciaio | 4,3% C fonde a 1147 °C; altoforno 1500 °C con aria soffiata; acciaio 0,2–2,1% C | come sopra + energia meccanica (acqua) per i mantici, fondente calcareo | colata di ferro, macchine | diagramma Fe–C | no (manca Fe–C) | legge; Cina V sec. a.C., Europa XII–XIV [K] |
+| Alluminio, titanio, silicio | col carbone solo sopra 1670–2035 °C: serve elettrolisi o arco | bauxite (laterite: tropici, 10⁵–10⁷ anni); elettricità | metalli leggeri, semiconduttori | stessa tabella: l'incrocio è fuori dalla portata dei forni | sì per Al₂O₃ e SiO₂ (in `SPECIE`) | legge [L] |
+| Agricoltura | CO₂ ≥ ~200–250 ppm; clima stabile per ≥10³ anni; ~20 kg N per t di granella; 500–1000 kg d'acqua per kg | stagioni, suolo, acqua dolce, specie adatte, fissatori d'azoto | densità ×10²–10³ (da 0,11/km² di mediana a 20–400 per km² coltivato); surplus | produttività primaria, K, bilanci N, acqua, sale | CO₂, pioggia, stagioni sì; variabilità tra anni e suolo no | ipotesi climatica forte ma su una deglaciazione; 10–20 origini [St/K] |
+| Città e stato | K alta + circoscrizione; legna a ~0,3 W/m² limita la taglia; morbillo endemico sopra 2,5–4·10⁵ | agricoltura, trasporto (fiumi, coste), terra chiusa | scrittura, specialisti, grandi opere; malattie di folla | densità su celle, reti, soglie SIR, scala Y ∝ N^(1±1/6) | no | regolarità [St]; modelli tarati (65% di varianza) |
+| Industria | carbone e petrolio (10⁶–10⁸ anni di sepoltura); 118–350 GJ a testa l'anno | piante terrestri e plancton sepolti, bacini, trappole | tutto il resto; tecnofirme | serbatoi fossili come eventi di sepoltura | ciclo del carbonio sì, sepoltura organica no | regolarità geologiche; unico caso [K] |
+
+### Tabella 2 — manufatto osservato → che cosa implica attorno e alle spalle
+
+| Manufatto (bolla) | Attorno (stesso tempo) | Alle spalle (storia) | Come lo si legge |
+|---|---|---|---|
+| Focolare, carbone, selce spaccata dal calore | aria con O₂ ≥ ~16–18%; biomassa secca nel raggio di raccolta; terra emersa | ≥10⁸–10⁹ anni di fotosintesi ossigenica; flora terrestre; una specie che manipola | micromorfologia, infrarosso, termoluminescenza |
+| Coccio di terracotta | argilla (alterazione di feldspati con acqua liquida); fuoco a 600–900 °C; atmosfera del forno dal colore | suoli o depositi fluviali; tradizione tecnica; spesso cibo da bollire o conservare | fasi minerali → T di cottura; luminescenza → età; residui organici → uso |
+| Intonaco di calce | calcare; forno a ~850–900 °C per ore; molto combustibile | ciclo dei carbonati (mare, vita o precipitazione chimica) | microstruttura; ¹⁴C della CO₂ riassorbita |
+| Perla di vetro | sabbia quarzosa, alcali (lago evaporitico o ceneri), forno a ≥1000 °C | evaporiti o piante alofite; ceramica refrattaria | composizione → fondente → regione |
+| Ascia di rame | rame nativo o malachite da zona ossidata; forno ≥1085 °C con aria forzata; carbone di legna | giacimento idrotermale (arco, ofiolite) esumato; O₂ e falda per 10⁵–10⁶ anni; foresta | elementi in traccia, isotopi del piombo → distretto (con sovrapposizioni) |
+| Ascia di bronzo | tutto il precedente + stagno da 10²–10³ km: rete di scambio; specialisti mantenuti da un surplus agricolo | graniti collisionali o placer (tettonica a placche); agricoltura da millenni; probabile società stratificata | isotopi di Sn e Pb, tracce → due sorgenti distinte; tenore di Sn → intenzione |
+| Scoria fayalitica con gocce di ferro | forno a 1150–1250 °C, gas con >70% di CO, mantici; ~8 kg di carbone per kg di ferro → ettari di bosco gestito | conoscenza del rame o della ceramica (forni); minerale di ferro comune | fasi (fayalite, wüstite) → T e pO₂; massa delle scorie → produzione e legna |
+| Ghisa | altoforno ≥1400–1500 °C, aria soffiata (ruota ad acqua), fondente calcareo | secoli di ferro in massello; economia che regge un impianto fisso | % di C, microstruttura |
+| Campo arato, canale | specie domesticate; clima stagionale stabile; acqua; densità ≥ 20–100 per km² coltivato | ≥10³ anni di domesticazione; Olocene o equivalente; CO₂ ≥ ~200 ppm | pollini, fitoliti, δ¹³C/δ¹⁵N, sali nel suolo |
+| Città (area A) | popolazione N ≈ (A/a)^(1/α), α = 2/3–5/6; entroterra agricolo 10–100 volte più grande; bosco 30–60 volte l'area per la legna; acqua, trasporti | stato o equivalente; 4–6 millenni dopo l'agricoltura locale (sulla Terra) | leggi di scala; rango‑taglia della regione |
+| Lingotto lontano dalla miniera (relitto) | rete di scambio a lunga distanza; pesi e misure; navigazione | domanda di lega; più centri che cooperano | isotopi e tracce → sorgenti multiple |
+| Strato con δ¹³C negativo, δ¹⁵N anomalo, metalli, plastiche, ²⁴⁴Pu | — | civiltà industriale: fossili bruciati (>0,5·10¹² t C), azoto di sintesi, fissione | molteplicità di segnali indipendenti e simultanei; uno solo non basta |
+| Picco di piombo in una carota di ghiaccio | — | estrazione di argento e piombo a ~kt l'anno a migliaia di km; economia monetaria | concentrazione + isotopi → regione e intensità nel tempo |
