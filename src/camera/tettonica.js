@@ -12,10 +12,10 @@
 //      affonda. Nasce a poco a poco sopra le fosse (gli archi di vulcani), il mantello la raccoglie dove
 //      converge, e lì si salda in continenti. Un continente è una zattera rigida e coesa: va tutto insieme,
 //      e tirato da due parti non si assottiglia ma si strappa. Dove è compresso si ispessisce (le catene)
-//      finché la spinta lo regge; poi si ingorga, e si allarga. Sotto un continente che resta fermo a
-//      lungo il mantello, coperto, si scalda: la discesa si spegne, diventa una salita, e il continente
-//      si spacca. I pezzi vanno alla deriva e si scontrano altrove (il ciclo dei supercontinenti: nessuno
-//      lo impone, viene da questo).
+//      finché la spinta lo regge; poi si ingorga, e si allarga. I fiumi consumano ciò che sporge e lo
+//      depositano sulle coste, che così avanzano. Sotto un continente che resta fermo a lungo il mantello,
+//      coperto, si scalda: la discesa si spegne, diventa una salita, e il continente si spacca. I pezzi
+//      vanno alla deriva e si scontrano altrove (il ciclo dei supercontinenti: nessuno lo impone).
 //   3. LA CROSTA OCEANICA nasce alle dorsali e dietro i continenti che si separano, invecchia
 //      allontanandosi, affonda nelle fosse. Raffreddandosi si contrae: l'oceano è più profondo dove è
 //      più vecchio.
@@ -26,15 +26,17 @@
 //   · quanta crosta continentale si è separata dal mantello nel tempo (crostaAttesa);
 //   · la velocità delle placche: 4 cm/anno sulla Terra, e cresce come q² (legge di scala della convezione);
 //   · lo spessore che la crosta regge sotto spinta: da 39 km (spinta debole) a 70 km (il Tibet);
-//   · l'erosione: i pendii si spianano (una catena in ~10 milioni di anni) e i fiumi portano alle coste ciò che
-//     sporge dal livello di riferimento (lo dimezzano in ~100 milioni di anni); la fossa, fino a 2500 m più fonda;
-//   · la coesione dei continenti e il tempo con cui scaldano il mantello sotto di sé: scelti perché i
-//     continenti si spacchino e si riuniscano in tempi dell'ordine di quelli terrestri (centinaia di
-//     milioni di anni).
+//   · l'erosione: i pendii si spianano (una catena larga 300 km in ~10 milioni di anni, se nulla la sostiene) e i
+//     fiumi portano alle coste ciò che sporge dal livello di riferimento (lo dimezzano in ~100 milioni di anni);
+//   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
+// PARAMETRI LIBERI (non misurati: scelti guardando il risultato, perché i continenti restino interi, si spacchino
+// e si riuniscano): quanto è larga la zattera rigida, la coesione, quanto e in quanto tempo un continente scalda
+// il mantello che ha sotto (rigida, coesione, coperta, inerzia).
 // SEMPLIFICAZIONI: la carta è trattata come piana (longitudine periodica, i poli sono muri): vicino ai
 // poli le forme sono stirate. La rigidità delle placche è approssimata (velocità uguale in modulo ovunque,
-// continenti rigidi entro un quarto di cella del mantello): niente faglie trasformi né rotazioni. Il calore
+// continenti rigidi entro un ottavo di cella del mantello): niente faglie trasformi né rotazioni. Il calore
 // q è quello di oggi per tutta la storia. Il mantello è un'equazione delle celle, non le equazioni dei fluidi.
+// I sedimenti dei fiumi non seguono i fiumi uno per uno: si spargono sulle coste di tutto il pianeta.
 
 export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
@@ -49,6 +51,7 @@ export const COSTANTI = {
   qPlacche: 0.05, qVivo: 0.02, // sotto qPlacche (o senz'acqua) la crosta non si rompe; sotto qVivo il mantello è fermo
   fiumi: 130e6, // (anni) il tempo con cui i fiumi consumano ciò che sporge dal livello di riferimento (si riduce a 1/e)
   erosione: 800, // (m²/anno) quanto in fretta i pendii si spianano: ciò che è alto scivola sulla cella accanto
+  rigida: 0.12, // fin dove un continente va tutto insieme: il raggio della finestra, come frazione di una cella del mantello
   coesione: 0.5, // quanto forte la crosta robusta tira a sé quella vicina (celle per passo, per unità di differenza)
   inerzia: 4, // in quanti giri di cella il mantello sotto un continente si scalda (o si raffredda quando se ne va)
   coperta: 1.3, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
@@ -166,12 +169,14 @@ export function velocitaCrosta(h, ca, W, H, R) {
     for (let giro = 0; giro < 2; giro++) { sfoca(giro ? Q : p, Q, T, W, H, 1); for (let j = 0; j < H; j++) { const nj = (Math.min(H - 1, j + 1) - Math.max(0, j - 1) + 1) * 3; for (let i = 0; i < W; i++) Q[j * W + i] /= nj; } }
     sfoca(A, A, T, W, H, R); sfoca(B, B, T, W, H, R); sfoca(p, P, T, W, H, R);
     for (let k = 0; k < N; k++) { const f = Q[k], q = P[k]; if (q > 1e-9) { A[k] = vx[k] + f * (A[k] / q - vx[k]); B[k] = vy[k] + f * (B[k] / q - vy[k]); } else { A[k] = vx[k]; B[k] = vy[k]; } }
-  } else { A.set(vx); B.set(vy); }
+  } else { A.set(vx); B.set(vy); Q.fill(0); }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] = 0.5 * (A[k] + A[j * W + ((i + 1) % W)]); hy[k] = j < H - 1 ? 0.5 * (B[k] + B[k + W]) : 0; }
-  // la COESIONE: la lastra tiene insieme. La crosta è tirata verso dove, lì attorno, c'è più crosta robusta:
-  // così un continente stirato non diventa un velo, ma si strappa in pezzi che restano spessi
-  if (c && C.coesione > 0) { const kc = (C.coesione * c0) / 0.3;
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] += kc * (Q[j * W + ((i + 1) % W)] - Q[k]); if (j < H - 1) hy[k] += kc * (Q[k + W] - Q[k]); } }
+  // la COESIONE: la lastra tiene insieme. La crosta è tirata verso dove, lì attorno, c'è più crosta robusta, finché
+  // lì la crosta è più sottile del normale (c'è posto): così un continente stirato non diventa un velo, ma si
+  // strappa in pezzi che restano spessi. Su un continente intero non fa nulla: non lo frena e non lo schiaccia
+  if (c && C.coesione > 0) { const kc = (C.coesione * c0) / 0.3, ip = 1 / (C.hZero - C.hMargine), posto = (k) => { const f = (C.hZero - h[k]) * ip; return f <= 0 ? 0 : f < 1 ? f : 1; };
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, e = j * W + ((i + 1) % W), gx = kc * (Q[e] - Q[k]); if (gx !== 0) hx[k] += gx * posto(gx > 0 ? e : k);
+      if (j < H - 1) { const gy = kc * (Q[k + W] - Q[k]); if (gy !== 0) hy[k] += gy * posto(gy > 0 ? k + W : k); } } }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, esce = Math.max(hx[k], 0) + Math.max(-hx[j * W + ((i + W - 1) % W)], 0) + Math.max(hy[k], 0) + Math.max(j > 0 ? -hy[k - W] : 0, 0);
     tetto[k] = esce > 0.35 ? 0.7 / esce : 2; // da una cella non può uscire più di quello che c'è
@@ -278,9 +283,9 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 // IL TEMPO. La velocità è quella vera, e in un passo la crosta non può fare più di un terzo di cella: quindi il
 // passato lontano si simula a grana grossa (griglie larghe 64, 128… celle: tanto il rimescolamento ne cancella i
 // dettagli) e solo gli ultimi «passi» passi su ogni griglia più fine, fino a W×H (sulla Terra, con 160 passi: fino
-// a 560 milioni di anni fa a 64, poi a 128, e gli ultimi 190 a 256: vedi storia.livelli). Se la storia chiede più di PASSI_GROSSI passi sulla griglia più
-// grossa (pianeti molto caldi o molto vecchi), il tratto più antico si salta (storia.saltati) e si parte con la
-// crosta separata fino a quel momento, stesa in un velo uniforme.
+// a 560 milioni di anni fa a 64, poi a 128, e gli ultimi 190 a 256: vedi storia.livelli). Se la storia chiede più
+// di PASSI_GROSSI passi sulla griglia più grossa (pianeti molto caldi, o piccoli, o molto vecchi), il tratto più
+// antico si salta (storia.saltati) e si parte con la crosta separata fino a quel momento, stesa in un velo uniforme.
 // RESTITUISCE { W, H, alt, cont, spinta, etaCrosta, celle } e in più { spessore, fosse, regime, bilancio, storia }:
 //   alt        Float32Array, metri rispetto al livello a cui galleggia la crosta normale (35 km): circa il mare terrestre
 //   cont       Uint8Array, 1 dove c'è crosta continentale (spessore ≥ 25 km)
@@ -325,7 +330,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     st = st ? { W: w, H: hh, h: raffina(st.h, w / 2, hh / 2), a: raffina(st.a, w / 2, hh / 2), sub: raffina(st.sub, w / 2, hh / 2), sommaSub: st.sommaSub * 4, fango: (st.fango ?? 0) * 4 } : { W: w, H: hh, h: new Float64Array(Nl).fill(prodotta), a: new Float64Array(Nl), sub: new Float64Array(Nl), sommaSub: 0 };
     ca = null; if (!n && l < liv.length - 1) continue;
     c0 = (dt * V * w) / (2 * Math.PI * raggioM);
-    const R = Math.max(2, Math.round(w / (4 * onde))), ogni = Math.max(1, Math.min(4, Math.round((0.25 * tau) / dt))), dtM = (ogni * dt) / tau, kappa = Math.min(0.04, (C.erosione * dt) / ((2 * Math.PI * raggioM) / w) ** 2);
+    const R = Math.max(2, Math.round((C.rigida * w) / onde)), ogni = Math.max(1, Math.min(4, Math.round((0.25 * tau) / dt))), dtM = (ogni * dt) / tau, kappa = Math.min(0.04, (C.erosione * dt) / ((2 * Math.PI * raggioM) / w) ** 2);
     const coperta = new Float64Array(man.Wm * man.Hm), lento = 1 - Math.exp(-dtM / C.inerzia), uL = new Float64Array(Nl), rm = w / man.Wm;
     const aggiorna = (avanza) => {
       // la coperta: quanta parte di ogni cella del mantello sta sotto un continente (rispetto alla media)
@@ -353,7 +358,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     spinta[k] = cont[k] ? conv[k] : 0; // dove la crosta dei continenti è compressa oggi: lì i monti crescono
     // la fossa: dove la crosta oceanica affonda in fretta, qui o sotto il bordo del continente accanto
     let s = sub[k]; s = Math.max(s, sub[j * W + ((i + 1) % W)], sub[j * W + ((i + W - 1) % W)], j > 0 ? sub[k - W] : 0, j < H - 1 ? sub[k + W] : 0);
-    fosse[k] = wo * Math.max(0, Math.min(1, (s / c0 - 0.3) / 0.5));
+    fosse[k] = wo * Math.max(0, Math.min(1, (s / c0 - 0.1) / 0.35));
     // ISOSTASIA: il fondo (oceano secondo l'età, o la radice fredda del continente) più quanto sporge la crosta leggera
     alt[k] = -(wo * profonditaOceano(a[k]) + (1 - wo) * C.radice) + C.galleggia * hk - C.fossa * fosse[k];
   }
