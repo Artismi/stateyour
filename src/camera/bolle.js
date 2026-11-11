@@ -239,7 +239,7 @@ function acquaInStato(M, stato) {
   const P = M.P, cl = P.clima, senza = haSuperficie(P); if (senza) return senza;
   if (!cl || cl.acqua === 'assente') return no('il pianeta non ha acqua in superficie (leggi.js acquaInSuperficie)', 'leggi.js acquaInSuperficie');
   if (String(cl.acqua).startsWith('vapore')) return no(`lì l'acqua è ${cl.acqua}: non resta in superficie (leggi.js clima e statoAcqua)`, 'leggi.js statoAcqua');
-  const F = fasce(P), buone = F.filter((b) => statoAcqua(b.T, cl.pressione) === stato), area = buone.reduce((a, b) => a + b.peso, 0), Tmax = Math.max(...F.map((b) => b.T)), Tmin = Math.min(...F.map((b) => b.T));
+  const F = fasce(P), buone = F.filter((b) => statoAcqua(b.T, cl.pressione) === stato), area = Math.min(1, buone.reduce((a, b) => a + b.peso, 0)), Tmax = Math.max(...F.map((b) => b.T)), Tmin = Math.min(...F.map((b) => b.T));
   if (!(area > 0)) return no(stato === 'liquida' ? `nessuna fascia sta tra 273,15 K e i ${cifre(ebollizione(cl.pressione), 4)} K a cui l'acqua bolle a ${cifre(cl.pressione)} Pa (la più calda è a ${cifre(Tmax, 4)} K): leggi.js statoAcqua` : `nessuna fascia è sotto 273,15 K (la più fredda è a ${cifre(Tmin, 4)} K): leggi.js statoAcqua`, 'leggi.js statoAcqua');
   // il mare copre la parte `mare` del pianeta (leggi.js mareAtteso); il ghiaccio sta su mare e terra
   const parte = stato === 'liquida' ? area * (cl.mare ?? 0) : area;
