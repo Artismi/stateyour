@@ -346,7 +346,7 @@ const dischi = new Map();
 export function discoPianeta(v, P) {
   if (P.tipo === 'gassoso' || !P.interno) return null;
   const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
-  const sf0 = superficiePianeta(k, P, P.interno, 7 + v.stella * 31 + v.pianeta), cl = climaSuperficie(k, P, sf0), sf = erosione(k, sf0, cl), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
+  const sf0 = superficiePianeta(k, P, P.interno, P.origine), cl = climaSuperficie(k, P, sf0), sf = erosione(k, sf0, cl), px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -364,7 +364,7 @@ export function discoPianeta(v, P) {
 const superfici = new Map(), tessereFatte = new Map();
 function superficieDi(v) {
   const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
-  const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], seme = 7 + v.stella * 31 + v.pianeta;
+  const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; const seme = P.origine;
   const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
   const out = { k, P, cl, se, seme }; superfici.set(k, out); if (superfici.size > 4) superfici.delete(superfici.keys().next().value);
   return out;

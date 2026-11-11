@@ -219,6 +219,9 @@ export const sistema = memo((n, gid, sid) => {
     } catch { p.atmosfera = null; p.prebiotica = null; }
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1 }, hash('lune', n, gid, sid, p.id));
+    // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
+    // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
+    p.origine = hash('mantello', n, gid, sid, p.id, Math.round(Math.log(p.massaKg) * 1e6));
   }
   return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });
