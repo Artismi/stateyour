@@ -425,7 +425,7 @@ export function simulaMondo(mondo, opzioni = {}) {
       percorso += Math.hypot(s.x - x, s.y - y); x = s.x; y = s.y; vx = s.vx; vy = s.vy; t += dt; if (rel) tp += dt / gam;
       if (rel && !luce) { // γ: nuovo dove materia o gravità hanno cambiato la velocità; altrove resta lui, e la velocità lo segue
         const u = Math.hypot(vx, vy);
-        if (kq || masse.length) gamS = 1 / Math.sqrt(Math.max(1e-12, 1 - (u * u) / (C * C)));
+        if (kq || masse.some((ms) => ms.M)) gamS = 1 / Math.sqrt(Math.max(1e-12, 1 - (u * u) / (C * C)));
         else if (u > 0) { const k = veloceCome(gamS) / u; vx *= k; vy *= k; }
       }
       // il corpo di una massa: chi lo tocca ci cade dentro
