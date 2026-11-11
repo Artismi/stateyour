@@ -82,10 +82,22 @@ export const trattiene = (M, R, T, massaMolecola) => (COSTANTI.G * M * massaMole
 export const MOLECOLE = { idrogeno: 2, elio: 4, acqua: 18, azoto: 28, 'anidride carbonica': 44, metano: 16 };
 // il punto di ebollizione dell'acqua a una pressione (dove la pressione del vapore la uguaglia); il ghiaccio fonde a 273 K;
 // sotto 611 Pa (il punto triplo) l'acqua liquida non può esistere
-// (l'evaporazione dell'acqua: calore 44,00 kJ/mol ed entropia 118,89 J/mol/K, gli STESSI delle tabelle di chimica.js, da
-// cui viene la pressione del vapore che sta nell'aria: così il mare bolle esattamente dove l'aria è satura a quella pressione)
-export const ACQUA = Object.freeze({ evaporazione: 44000, entropia: 118.89, critica: 647, tripla: 611 });
+// L'ACQUA NEI SUOI TRE STATI: UNA TABELLA SOLA (misurata: calore di formazione in kJ/mol ed entropia in J/mol/K a 298 K, le
+// tabelle termochimiche standard). Da qui vengono le righe dell'acqua nella tabella di chimica.js (che le legge, non le
+// riscrive), la pressione del vapore sopra il liquido e sopra il ghiaccio (vaporeSaturo, più sotto: la usano il clima a
+// fasce, meteo.js, il mare e l'aria di chimica.js, che la chiama pressioneVapore) e il punto di ebollizione: così il
+// mare bolle esattamente dove l'aria è satura a quella pressione. «evaporazione» (44,00 kJ/mol) ed «entropia»
+// (118,89 J/mol/K) sono le differenze tra vapore e liquido della tabella, non numeri a parte
+const ACQUA_STATI = Object.freeze({ vapore: Object.freeze([-241.83, 188.84]), liquida: Object.freeze([-285.83, 69.95]), ghiaccio: Object.freeze([-291.84, 47.95]) });
+export const ACQUA = Object.freeze({ stati: ACQUA_STATI, evaporazione: 1000 * (ACQUA_STATI.vapore[0] - ACQUA_STATI.liquida[0]), entropia: ACQUA_STATI.vapore[1] - ACQUA_STATI.liquida[1], critica: 647, tripla: 611 });
 export const ebollizione = (P) => ACQUA.evaporazione / (ACQUA.entropia - R_GAS * Math.log(Math.max(P, 1e-300) / 1e5));
+// LA PRESSIONE DEL VAPORE D'ACQUA (Pa) sopra il liquido o sopra il ghiaccio: la costante di equilibrio tra lo stato
+// condensato e il vapore, exp(−ΔG/RT) con ΔG = ΔH − T·ΔS dalla tabella qui sopra (ΔH e S costanti con la temperatura:
+// l'approssimazione dichiarata di chimica.js); tra liquido e ghiaccio comanda quello che ne lascia in aria di meno (il più
+// stabile). A 288 K dà 1,70 kPa (misurati 1,71), a 373,15 K 1,12 bar (misurato 1,013: il calore di evaporazione cala
+// col caldo, e qui è costante). È LA SOLA FORMULA: chimica.js (pressioneVapore), meteo.js e mare.js la prendono da qui
+const [H_VAPORE, S_VAPORE] = ACQUA_STATI.vapore, [H_LIQUIDA, S_LIQUIDA] = ACQUA_STATI.liquida, [H_GHIACCIO, S_GHIACCIO] = ACQUA_STATI.ghiaccio;
+export const vaporeSaturo = (T) => { const g = 1000 * H_VAPORE - T * S_VAPORE, rt = R_GAS * T; return 1e5 * Math.min(Math.exp(-(g - (1000 * H_LIQUIDA - T * S_LIQUIDA)) / rt), Math.exp(-(g - (1000 * H_GHIACCIO - T * S_GHIACCIO)) / rt)); };
 export function statoAcqua(T, P) {
   if (T >= ACQUA.critica) return 'vapore'; // (sopra il punto critico, 647 K, liquido e vapore non si distinguono più: non c'è un mare)
   if (P < ACQUA.tripla) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
@@ -109,12 +121,15 @@ export function acquaInSuperficie({ tipo, massaKg = 0, composizione = {} } = {})
 // un millisecondo): è il clima che ogni pianeta ha appena esiste (clima()). geologia.js (climaSuperficie) risolve
 // LA STESSA legge, con gli stessi pezzi, sulla mappa vera del pianeta (64 × 32, terre e mari dove sono): le due
 // temperature medie coincidono entro pochi gradi, e dove non coincidono è per ciò che la mappa ha in più (dove sono
-// i continenti; e, quando il pianeta gira, i venti e le nuvole veri di meteo.js al posto dei coefficienti).
+// i continenti; e, quando il pianeta gira, i venti e le nuvole veri di meteo.js al posto dei valori attesi).
+// IL CALORE PORTATO DAI VICINI non è più un coefficiente tarato sulla Terra (era 0,6·√p W/m²/K): è una legge, scritta più
+// sotto (L'ARIA CHE PORTA IL CALORE), che dipende da rotazione, raggio, gravità, pressione, gradiente di temperatura,
+// stratificazione e attrito di quel pianeta. clima() ne riporta l'equivalente come un numero solo (D, W/m²/K), con la
+// stessa definizione con cui meteo.js misura il suo (diffusivita), perché la mappa e le prove li confrontino.
 export const CLIMA = Object.freeze({
   capacitaTerra: 1e7, capacitaMare: 1e8, // (J/m²/K) quanto calore serve per scaldare di un grado il suolo, e lo strato di mare rimescolato
   albedoTerra: 0.25, albedoMare: 0.08, albedoGhiaccio: 0.62, // la parte di luce rimandata indietro (misurate)
   geloTerra: 268, geloMare: 266, // (K) sotto, la neve e il ghiaccio coprono (e sopra di 4 K non ce n'è più)
-  trasporto: 0.6, // (W/m²/K, a 1 bar) il calore che l'aria e il mare portano dal caldo al freddo; cresce come la radice della pressione
   // il rilievo che l'acqua deve coprire: la parte sommersa attesa è 1 − exp(−profondità media / rilievo). TARATO sulle
   // superfici che escono da superficiePianeta: 2 km con le placche (continenti e oceani), mezzo senza
   rilievoPlacche: 2000, rilievoFermo: 500,
@@ -135,22 +150,28 @@ export const acquaPerIlGhiaccio = (mare) => (mare > 0 ? Math.min(1, 0.15 + 2.5 *
 //   · l'infrarosso trattenuto è 1 − exp(−130·acqua) (Stephens 1978, non riletto);
 //   · la copertura non ha una legge (lo dice la letteratura): Sundqvist 1989 dall'umidità, 1 − √((1 − U)/(1 − 0,6)), e per
 //     le nubi basse Klein e Hartmann 1993 dalla stabilità, 5,7·LTS − 55,73 per cento (empiriche e terrestri).
-// Dove non c'è una circolazione calcolata (il clima a fasce) servono i valori ATTESI di ciò che meteo.js calcola: la
-// pioggia attesa è l'evaporazione di massa alla soglia della pioggia, ce·V·e_s(T)·(1 − 0,8)/(R_v·T), con V = 5 m/s; sopra
-// un mare le colonne stanno in media al 90% della soglia (copertura 0,5) e le nubi basse coprono 0,35 del resto: sono
-// le medie che escono da meteo.js su un mondo d'acqua temperato (DICHIARATE: sono un riassunto, non una legge)
+// Dove non c'è una circolazione calcolata (il clima a fasce) servono i valori ATTESI di ciò che meteo.js calcola:
+//   · la pioggia attesa è l'evaporazione di massa alla soglia della pioggia, ce·V·e_s(T)·(1 − 0,8)/(R_v·T). IL VENTO V non
+//     è più un numero (erano 5 m/s): viene dalla STESSA LEGGE DEL TRASPORTO (ventoDellAria, più sotto): il vento che serve
+//     alla cella per portare quel calore, quello che la rotazione gli aggiunge, quello dei vortici, più le raffiche.
+//     Un'aria densa porta lo stesso calore andando piano: evapora di meno e le sue nuvole tengono meno acqua. «ventoAtteso»
+//     (5 m/s) resta solo come RISERVA DICHIARATA per chi chiama senza un pianeta: su una griglia di pianeti d'acqua
+//     (rotazione ×¼…×4, 0,1…10 bar, raggio ×½…×2) meteo.js dà 2–13 m/s (dal 10° al 90° percentile; mediana 5,6);
+//   · «coperturaAttesa» 0,5 (le colonne sopra un mare stanno in media al 90% della soglia) e «stratiAttesi» 0,35 (le nubi
+//     basse del resto) NON SONO UNA LEGGE: sono il RIASSUNTO DICHIARATO di ciò che esce da meteo.js su un mondo d'acqua
+//     temperato; insieme danno il cielo coperto a 0,675. Sulla stessa griglia meteo.js copre da 0,40 a 0,85 del cielo (dal
+//     10° al 90° percentile; mediana 0,70; estremi 0,23 e 1,00). La copertura non ha una legge nemmeno in letteratura
+//     (Sundqvist e Klein-Hartmann sono empiriche): finché non c'è, questi due numeri restano liberi e misurati così
 export const NUVOLE = Object.freeze({ kessler: 1e-3, raggioGocce: 1e-5, asimmetria: 0.85, densitaAcqua: 1000, assorbeInfrarosso: 130,
   sogliaPioggia: 0.8, sereno: 0.6, strati: Object.freeze([0.057, -0.5573]), ce: 1.3e-3, ventoAtteso: 5, coperturaAttesa: 0.5, stratiAttesi: 0.35 });
 // quanta luce rimanda una nube che tiene «acqua» kg/m² (due flussi, senza assorbimento)
 export const luceDellaNube = (acqua) => { const x = ((1 - NUVOLE.asimmetria) * 1.5 * acqua) / (NUVOLE.densitaAcqua * NUVOLE.raggioGocce); return x / (2 + x); };
-// la pressione del vapore d'acqua sopra il liquido o il ghiaccio (Clausius-Clapeyron dal punto triplo: 611,2 Pa a 273,16 K;
-// calore di evaporazione 45,05 kJ/mol, di sublimazione 51,06: misurati)
-export const vaporeSaturo = (T) => 611.2 * Math.exp(((T < 273.16 ? 51060 : 45050) / R_GAS) * (1 / 273.16 - 1 / T));
 // la luce che le nuvole ATTESE rimandano sopra un mare a temperatura T (già per la loro copertura). «luce» è la luce
 // che arriva lì (W/m²): l'acqua non può evaporare, e poi piovere, più in fretta di quanto quella luce la faccia evaporare
-// (2,5 MJ per chilo: il calore di evaporazione)
-export function riflessoNuvoleAtteso(T, luce = Infinity) {
-  const N = NUVOLE, pioggia = Math.min((N.ce * N.ventoAtteso * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T), luce / 2.5e6);
+// (2,5 MJ per chilo: il calore di evaporazione). «vento» (m/s) è quello al suolo, raffiche comprese: dalla legge del
+// trasporto, se chi chiama ha un pianeta; se manca, la riserva dichiarata
+export function riflessoNuvoleAtteso(T, luce = Infinity, vento = NUVOLE.ventoAtteso) {
+  const N = NUVOLE, pioggia = Math.min((N.ce * vento * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T), luce / 2.5e6);
   return N.coperturaAttesa * luceDellaNube(pioggia / (N.coperturaAttesa * N.kessler)) + (1 - N.coperturaAttesa) * N.stratiAttesi * luceDellaNube(pioggia / N.kessler);
 }
 // quanto le nuvole attese ci sono (0…1), dove non c'è una circolazione calcolata: servono mare che evapora e un'aria di
@@ -162,13 +183,157 @@ export const coperturaDelCielo = NUVOLE.coperturaAttesa + (1 - NUVOLE.coperturaA
 // loro copertura; se manca, quella attesa dalla stessa legge, per quanto ce ne sono: «nuvole» = nuvoleAttese())
 // («sotto»: quanto rimanda la superficie, se chi chiama lo sa già — il mare di mare.js, con il suo ghiaccio —; allora
 // qui si aggiungono solo le nuvole)
-export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto = null, luce = Infinity) {
+// («vento»: quello al suolo atteso per quel pianeta, clima().vento, per le nuvole attese; se manca, la riserva)
+export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto = null, luce = Infinity, vento = undefined) {
   const ghiaccio = acquaGhiaccio * 0.5 * (1 - Math.tanh((t - (mare ? CLIMA.geloMare : CLIMA.geloTerra)) / 4)), suolo = sotto ?? ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * (mare ? CLIMA.albedoMare : CLIMA.albedoTerra);
-  const cielo = riflesso ?? (nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce) : 0);
+  const cielo = riflesso ?? (nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce, vento) : 0);
   return suolo + cielo * (1 - suolo);
 }
-// il calore portato dai vicini (W/m²/K): tanto più quanto più l'aria è densa
-export const trasportoCalore = (pressione) => (isFinite(pressione) ? CLIMA.trasporto * Math.pow(Math.max(1e-4, pressione / 1e5), 0.5) : 1);
+// ---------- L'ARIA CHE PORTA IL CALORE: UNA LEGGE SOLA per il clima a fasce (qui) e per i venti della mappa (meteo.js, che
+// prende da qui la colonna d'aria a due strati, l'adiabatica, l'attrito e lo scambio con la superficie).
+// Nel clima a fasce il calore non passa più da una fascia all'altra con un coefficiente tarato: sopra ogni fascia c'è
+// la sua ARIA (una temperatura «A», senza inerzia), legata alla superficie dallo SCAMBIO e alle fasce vicine da ciò che
+// l'aria sa portare:   scambio·(T − A) + div(portata·grad A) = 0,   e la superficie riceve scambio·(A − T).
+//   1. LA COLONNA è quella di meteo.js: due strati di uguale massa, a tre quarti e a un quarto della pressione; lo strato
+//      alto è più «caldo» del basso di quanto dice l'adiabatica (satura, se c'è un mare) che parte dalla superficie:
+//      è la stratificazione Δθ; le onde interne corrono a c = √(R·½^κ/3 · Δθ); lo spessore è hs = R·T/g.
+//   2. I VORTICI (dove il pianeta gira in fretta): la diffusività è quella del «gas di vortici» con la curvatura del
+//      pianeta dentro (Gallet e Ferrari 2020, PNAS 117, 4491, arXiv:2010.10983, per il piano f; 2021, AGU Advances,
+//      arXiv:2109.04091, per il piano β; modello quasi-geostrofico a due strati, attrito quadratico sullo strato basso):
+//          𝒟 = D*·U·λ,   D* = c₃ / [√μ* + √(c₃/c_γ)·β*^(γ/2)]²,   β* = β·λ²/U,   μ* = μ·λ
+//      con U = ⅔·R·|∂T/∂y|/f la metà della differenza di vento tra i due strati (il vento termico del gradiente CORRENTE,
+//      scritto come lo scrive il modello a due strati di meteo.js), λ = c/f il raggio di deformazione, β = 2Ω·cos φ/a,
+//      μ = 2·c_d/hs l'attrito dello strato basso (lo stesso c_d di meteo.js: mare 1,3·10⁻³, terra 3·10⁻³).
+//      COSTANTI: c₃ = 2,0, c_γ = 0,113, γ = 3,64 (letti nel 2021: eq. 19 e limite senza attrito; √(c₃/c_γ) = 4,2), e
+//      c₁ = 2,5 per la lunghezza di mescolamento ℓ = c₁·λ/√μ* (eq. 8; nel 2020 era 2,62): vengono da simulazioni
+//      numeriche di turbolenza baroclina, NON dalla Terra. Dove la curvatura comanda, D* = c_γ·ξ^γ con ξ = 1/β* la
+//      criticità: β* = ¾·c²/(R·|∂T/∂φ|·tan φ) non dipende né dalla rotazione né dal raggio (dipende dalla pendenza
+//      delle isentropiche), e 𝒟 cresce con la 4,6ª potenza del gradiente: è quasi un «aggiustamento baroclino».
+//      Il vortice non mescola più lontano di quanto è grande il pianeta: D* ≤ (c₃/c₁²)·(a/λ)² (dalla chiusura D* ∝ ℓ*²).
+//      Con i vortici viaggia il vapore della colonna (quello di meteo.js: saturo alla soglia della pioggia, alto
+//      quanto il vapore si dirada): alla capacità dell'aria c_p·p/g si aggiunge L·d(vapore)/dT.
+//   3. LA CELLA (Hadley; e, su un pianeta bloccato, la circolazione dal giorno alla notte): l'aria in quota conserva il
+//      momento angolare (Held e Hou 1980; il vento esatto sulla sfera u = Ω·a·sin²φ/cos φ da Kaspi e Showman 2015), e il
+//      vento termico che ne segue fissa il gradiente massimo che la cella lascia:
+//          |∂T/∂φ| ≤ G_M = ¾·Ω²a²/R · (2·sin³φ/cos φ + sin⁵φ/cos³φ)
+//      (¾/R al posto di θ₀/(g·H): è la stessa relazione scritta per i due strati; equivale a H = 4/3·hs, vicino
+//      all'altezza di scala che Rees e Garrett 2019 trovano giusta per i pianeti di roccia). Oltre G_M l'aria pareggia le
+//      differenze alla velocità delle onde interne (𝒟 = c·a·(1 − G_M/|G|): di fatto subito). Dove G_M è piccolo (vicino
+//      all'equatore; ovunque, su un pianeta lento) la cella tiene l'aria quasi uniforme: è il regime «a gradiente
+//      debole» dei rotatori lenti (Showman e altri 2013; Haqq-Misra e altri 2018). Il bordo della cella non è scritto:
+//      è dove il gradiente che resta scende sotto G_M, e più in là portano i vortici (il bordo baroclino di Held 2000).
+//   4. LO SCAMBIO con la superficie (W/m²/K), quello di meteo.js: lo strato basso irraggia verso l'equilibrio con il
+//      suolo, 4σT³·w₂/(w₁ + w₂), e gli scambia calore con il vento, c_p·(p/2g)·w₂·2·c_e·V/hs. Quando la cella tiene
+//      l'aria uniforme è LUI il limite: su un mondo lento o bloccato il calore portato vale scambio/n(n+1) (n = 1 tra
+//      giorno e notte, 2 tra equatore e poli), ed è ciò che meteo.js misura lì (Wordsworth 2015: sui pianeti bloccati
+//      comanda lo strato limite).
+//   5. IL VENTO al suolo viene dalla stessa legge: il vento della cella è il flusso di calore diviso per ciò che un
+//      chilo d'aria porta scendendo e risalendo, v = flusso/(c_p·(p/2g)·Δθ); dove il pianeta gira, la rotazione lo piega
+//      finché l'attrito lo ferma, u = √(f·v/μ) (gli alisei; non su un pianeta bloccato, dove il vento va dal giorno alla
+//      notte; mai più del vento a momento angolare conservato, e la cella mai più veloce delle onde interne); i vortici aggiungono V = (√c₃/c₁)·U·√D* (dalla chiusura: ⟨u²⟩ ~ (𝒟/ℓ)², senza il logaritmo); più le
+//      raffiche. Serve allo scambio e alle nuvole attese (al posto dei 5 m/s di prima). Sulla Terra dà 3,7 m/s (misurati
+//      6–7); contro i venti di meteo.js: ×1,6 sui pianeti asciutti, ×0,45 su quelli d'acqua, ×1,0 sui bloccati lenti;
+//      su Marte dà 34 m/s (misurati 2–10): in un'aria sottile la cella deve correre per portare quel calore, ed è troppo.
+// CHE COSA NON C'È (dichiarato): il mare non porta calore (lo fa mare.js sulla mappa: sulla Terra vera un terzo del
+// trasporto ai tropici è del mare); il vapore viaggia solo con i vortici (la cella lo riporta verso l'equatore, e qui
+// non si conta); su un pianeta bloccato le fasce girano attorno all'asse che punta alla stella ma il vento sente la
+// rotazione attorno all'asse vero: f, β e G_M sono presi a 45° (un numero solo per tutte le fasce); il gradiente
+// dell'aria in quota è preso uguale a quello dell'aria bassa; l'aria non ha inerzia (un'aria di decine di bar ne ha più
+// del mare). Se il giorno non è dato vale quello della Terra (riserva dichiarata).
+// CHE COSA TORNA E CHE COSA NO (i numeri li stampano le prove; «entro un fattore 2» è il metro):
+//   · CON I VENTI DI METEO.JS, sulla stessa superficie tenuta ferma (test_meteo: rotazione ×¼…×4, pressione 0,1…10 bar,
+//     raggio ×½…×2): pianeti lenti e bloccati ×1,16 (4 casi su 4 entro ×2: è lo scambio con la superficie a comandare,
+//     per i due); pianeti asciutti che girano ×2,1 (5 su 11 entro ×2, tutti tra ×1,1 e ×5,6: la legge porta di più, e
+//     di più dove 64×32 non risolve i vortici: rotazione ×4, aria sottile); pianeti d'acqua che girano ×0,29 (4 su 11):
+//     lì i venti portano 10–13 PW quasi senza sentire né la rotazione né la pressione (è la cella di Hadley umida di
+//     meteo.js, una volta e mezza più forte del vero, che porta il doppio della Terra), la legge 0,2–33 PW;
+//   · CON LA TERRA VERA: sul profilo misurato (North 1975) la legge porta 3,6 PW a 45° (misurati 5–6 PW a 35–40° con il
+//     mare; la sola aria ≈ 5 PW a 43°); i venti di meteo.js 10,8 PW a 28°. Nel clima a fasce la Terra sta a 290 K con
+//     31 K tra equatore e poli e 2,0 PW (veri: 288, 40–45, 5–6): con la serra fissa la luce irradiata cresce di 3,4 W/m²
+//     per grado (veri ~2), e a tenere quel contrasto bastano 2 PW: contrasto e trasporto veri insieme non possono tornare;
+//   · SULLA POPOLAZIONE (test_coerenza): clima() e la mappa con i venti coincidono entro 3 K su tutti i mondi tranne
+//     dove decidono le nuvole (un mare caldo sotto un sole fisso: i venti concentrano la pioggia sotto il sole); prima,
+//     con 0,6·√p, gli scarti arrivavano a 64 K. Il ghiaccio del lato notte dei mondi bloccati non coincide (la mappa
+//     spiana ancora la superficie con il coefficiente equivalente, non con quest'aria).
+export const ARIA = Object.freeze({
+  cdMare: 1.3e-3, cdTerra: 3e-3, ce: NUVOLE.ce, // l'attrito sul mare e sulla terra, lo scambio di calore e di vapore (formule di massa: misurati sulla Terra)
+  raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
+  stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco (Marte 0,55, Venere 0,8-0,9)
+  vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
+  molareAcqua: 0.018015, massaMolare: 0.029, // (kg/mol) l'acqua; e l'aria di riserva (azoto e ossigeno), se i gas non sono dati
+  vortici: Object.freeze({ c3: 2.0, cGamma: 0.113, gamma: 3.64, c1: 2.5 }), // Gallet e Ferrari 2020, 2021 (da simulazioni, non dalla Terra)
+  giornoDiRiserva: 86164, // (s) il giorno, se chi chiama non lo dà: quello della Terra
+});
+const R_VAPORE = R_GAS / ARIA.molareAcqua;
+// il vapore che l'aria tiene a saturazione (resta un ospite dell'aria che lo porta), e d ln e_s / dT (per un grado)
+export const vaporeNellAria = (T, p) => Math.min(vaporeSaturo(T), ARIA.vaporeMassimo * p);
+export const pendenzaVapore = (T) => Math.log(vaporeSaturo(T + 0.5)) - Math.log(vaporeSaturo(T - 0.5));
+// LA COLONNA D'ARIA A DUE STRATI (Lorenz 1960, Held e Suarez 1978): la costante dei gas e il calore specifico (dai gas),
+// i pesi che legano la temperatura di ogni strato alla sua temperatura potenziale, la stabilità minima di un'aria secca
+export function colonnaAria({ pressione, gravita, massaMolare = ARIA.massaMolare, cp = null }) {
+  const R = R_GAS / massaMolare, cpA = cp ?? 3.5 * R, kappa = R / cpA, eps = ARIA.molareAcqua / massaMolare;
+  const wm = Math.pow(0.5, kappa), w1 = wm / (1 + kappa), w2 = wm / (1 - kappa / 3), es = 1 - ARIA.stabilitaSecca, minimo = Math.pow(0.25, -kappa * es) - Math.pow(0.75, -kappa * es);
+  const capStrato = (cpA * 0.5 * pressione) / gravita;
+  return { pressione, gravita, R, cp: cpA, kappa, eps, wm, w1, w2, minimo, c2: (R * wm) / 3, capStrato, irraggia: (4 * COSTANTI.sigma * w2) / (w1 + w2), striscia: (capStrato * w2 * 2 * ARIA.ce * gravita) / R };
+}
+// l'adiabatica (satura se «umida») dalla superficie a T0 fino alla pressione fp·p: la temperatura lassù
+// («n»: in quanti passi si sale; 24 per i venti di meteo.js, meno per le tabelle del clima a fasce, che la chiede molte volte)
+export function adiabatica(col, T0, fp, umida, n = 24) {
+  const { pressione, R, cp, kappa, eps } = col, dl = Math.log(fp) / n; let T = T0, lp = 0;
+  const der = (T, lp) => { if (!umida) return kappa * T; const p = pressione * Math.exp(lp), e = vaporeNellAria(T, p), r = (eps * e) / (p - e), L = R_VAPORE * T * T * pendenzaVapore(T); return (R * T + L * r) / (cp + (L * L * r * eps) / (R * T * T)); };
+  for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * der(T, lp); T += dl * der(m, lp + 0.5 * dl); lp += dl; } return T;
+}
+// L'EQUILIBRIO sopra una superficie a temperatura T: le temperature potenziali dei due strati lungo l'adiabatica che
+// parte da lì ([alto, basso]); un'aria secca resta comunque stabile del minimo misurato. La differenza è la stratificazione
+export function equilibrioAria(col, T, umida, n = 24) { const t2 = adiabatica(col, T, 0.75, umida, n) / col.w2; return [Math.max(adiabatica(col, T, 0.25, umida, n) / col.w1, t2 + col.minimo * T), t2]; }
+// il gradiente termico verticale (K/m) sopra una superficie a T: quello dell'adiabatica tra la superficie e metà pressione
+export function gradienteTermico(col, T, umida, n = 24) { const Tm = adiabatica(col, T, 0.5, umida, n); return Math.min((T - Tm) / (((col.R * 0.5 * (T + Tm)) / col.gravita) * Math.LN2), (ARIA.stabilitaSecca * col.gravita) / col.cp); }
+// LO SCAMBIO tra la superficie e l'aria bassa (W/m² per K): l'irraggiamento dello strato basso e il calore scambiato con
+// un vento «vento» (m/s, raffiche comprese)
+// (cioè capacità dello strato basso × (1/tempo di irraggiamento della colonna + 2·c_e·V/hs), con il tempo di irraggiamento
+// capacità/4σT³ e hs = R·T/g: qui con le costanti raccolte, perché il clima a fasce lo chiede a ogni passo)
+export const scambioConLAria = (col, T, vento) => col.irraggia * T * T * T + (col.striscia * vento) / T;
+// CIÒ CHE L'ARIA SA PORTARE tra due fasce (la legge qui sopra, punti 2, 3 e 5). «aria»: ariaDelPianeta(); «par»: il
+// parallelo, aria.parallelo(sinLat, cosLat) (ciò che lì dipende solo dalla latitudine: si calcola una volta); T la
+// temperatura dell'aria lì (K), G il suo gradiente (K per radiante di latitudine). Riempie «out»:
+//   k   la conduttanza (W/m²/K per il laplaciano sulla sfera unitaria: il flusso verso il freddo è k·G)
+//   kd  d(k·G)/dG (per risolvere: il flusso cresce molto più in fretta del gradiente)
+//   v2, u2, e2  i quadrati dei venti al suolo che ne seguono (m²/s²): della cella, piegato dalla rotazione, dei vortici
+export function portataDellAria(aria, par, T, G, out) {
+  const { col, a, umido, bloccato, onde, radice, vapore } = aria, Ga = Math.abs(G), x = Math.max(1, Math.min(127.999, T / 8)), k = Math.floor(x), fr = x - k;
+  if (!(onde[k] >= 0)) aria.prepara(k); if (!(onde[k + 1] >= 0)) aria.prepara(k + 1);
+  // (c: la velocità delle onde interne, √(c2·Δθ); dTheta: la stratificazione; mu: l'attrito dello strato basso, 2·c_d/hs)
+  const c = onde[k] * (1 - fr) + onde[k + 1] * fr, c2T = c * c, dTheta = c2T / col.c2, mu = aria.attrito / T, cap = 2 * col.capStrato;
+  let kv = 0, kdv = 0, e2 = 0;
+  if (Ga > 1e-9) { // i vortici
+    const lam = c / par.f, U = par.cU * Ga, M = par.cM * (radice[k] * (1 - fr) + radice[k + 1] * fr), X = Q_VORTICI * Math.pow((par.cB * c2T) / Ga, 0.5 * V_GAMMA), tetto = T_VORTICI * (a / lam) * (a / lam);
+    let Ds = V_C3 / ((M + X) * (M + X)), m = (V_GAMMA * X) / (M + X); if (Ds > tetto) { Ds = tetto; m = 0; }
+    kv = ((cap + umido * (vapore[k] * (1 - fr) + vapore[k + 1] * fr) * T) * Ds * U * lam) / (a * a); kdv = kv * (2 + m); e2 = T_VORTICI * U * U * Ds; }
+  // la cella: oltre il gradiente del momento angolare conservato
+  // (i venti: la cella non corre più delle onde interne, e la rotazione non le dà più del vento a momento angolare conservato)
+  const kc = (cap * c) / a, kh = Ga > par.GM ? kc * (1 - par.GM / Ga) : 0, v = Math.min((kh * Ga * a) / (col.capStrato * dTheta), c);
+  out.k = kv + kh; out.kd = Math.max(out.k, kdv + (Ga > par.GM ? kc : 0)); out.v2 = v * v; out.u2 = bloccato ? 0 : Math.min((par.f * v) / mu, par.uM2); out.e2 = e2;
+  return out;
+}
+const V_C3 = ARIA.vortici.c3, V_GAMMA = ARIA.vortici.gamma, Q_VORTICI = Math.sqrt(ARIA.vortici.c3 / ARIA.vortici.cGamma), T_VORTICI = ARIA.vortici.c3 / (ARIA.vortici.c1 * ARIA.vortici.c1);
+// l'aria di un pianeta, pronta per la legge: la colonna, la rotazione, l'attrito (dal mare e dalla terra che ha), il vapore
+// (umido: 0…1, quanto ce n'è rispetto a un mondo d'acqua), e le tabelle per temperatura (si riempiono solo dove servono):
+// la velocità delle onde interne c = √(R·½^κ/3·Δθ) (onde), √(c/T) (radice: entra nell'attrito), e la capacità del
+// vapore L·d(vapore)/dT diviso T. parallelo(sinLat, cosLat): Coriolis f, il vento termico per unità di gradiente (cU),
+// β·λ²/U senza la parte che dipende dalla temperatura (cB), √(μ·λ) senza la parte che dipende dalla temperatura (cM), e
+// il gradiente massimo che la cella lascia (GM), il quadrato del vento a momento angolare conservato, Ω·a·sin²φ/cos φ (uM2:
+// il tetto degli alisei). Su un pianeta bloccato vale per tutte le fasce il parallelo a 45°
+export function ariaDelPianeta({ pressione, gravita, raggioM, giorno, mare = 0, bloccato = false, massaMolare = ARIA.massaMolare, cp = null }) {
+  const col = colonnaAria({ pressione, gravita, massaMolare, cp }), umida = mare > 0, onde = new Float64Array(130).fill(NaN), radice = new Float64Array(130), vapore = new Float64Array(130), omega = (2 * Math.PI) / giorno, a = raggioM;
+  const cd = mare * ARIA.cdMare + (1 - mare) * ARIA.cdTerra, attrito = (2 * cd * gravita) / col.R; // (μ = attrito/T)
+  // (le tabelle: un valore ogni 8 K, fino a 1030 K, e in mezzo si interpola; l'adiabatica qui sale in 8 passi. Al gelo
+  // profondo il vapore è così poco che il suo logaritmo non si calcola più: lì l'aria è secca)
+  const prepara = (k) => { const T = 8 * k, bagnata = umida && vaporeSaturo(T - 0.5) > 1e-200, [e1, e2] = equilibrioAria(col, T, bagnata, 8), d = e1 - e2, dTheta = d > 0 && isFinite(d) ? d : col.minimo * T; onde[k] = Math.sqrt(col.c2 * dTheta); radice[k] = Math.sqrt(onde[k] / T); vapore[k] = 0;
+    if (bagnata) { const dl = pendenzaVapore(T), hq = Math.min((col.R * T) / gravita, 1 / (Math.max(gradienteTermico(col, T, true, 8), 1e-12) * dl)), x = NUVOLE.sogliaPioggia * vaporeNellAria(T, pressione) * hq * dl * dl; if (isFinite(x) && x > 0) vapore[k] = x; } };
+  const parallelo = (sinLat, cosLat) => { const s = bloccato ? Math.SQRT1_2 : Math.max(Math.abs(sinLat), 1e-3), co = bloccato ? Math.SQRT1_2 : Math.max(cosLat, 1e-3), f = 2 * omega * s, cU = (2 * col.R) / (3 * a * f);
+    return { f, cU, cB: (2 * omega * co) / (a * f * f * cU), cM: Math.sqrt(attrito / f), uM2: ((omega * a * s * s) / co) ** 2, GM: ((3 * omega * omega * a * a) / (4 * col.R)) * ((2 * s * s * s) / co + (s * s * s * s * s) / (co * co * co)) }; };
+  return { col, a, omega, cd, attrito, umido: nuvoleAttese(mare, pressione), bloccato, onde, radice, vapore, prepara, parallelo };
+}
 // L'EFFETTO SERRA: lo spessore ottico dell'aria per la luce infrarossa. La superficie irradia σT⁴/(1 + ¾τ).
 // LEGGE EMPIRICA di riserva, quando dell'aria si conosce solo la pressione: τ = 0,8·(p / 1 bar)^0,6 (la Terra: 0,8)
 export const serraDaPressione = (pressione) => (isFinite(pressione) ? 0.8 * Math.pow(Math.max(0, pressione) / 1e5, 0.6) : 2);
@@ -184,60 +349,137 @@ export function mareAtteso({ acquaKg = 0, raggioM, placche = false }) {
 // (una sicurezza del passo nel tempo, uguale alle due risoluzioni: in un passo la temperatura non raddoppia e non si
 // dimezza, e sotto i 50 K di salto non si tocca niente; a regime non scatta mai)
 export const frenaPasso = (t, dT) => Math.max(-Math.max(50, t / 2), Math.min(Math.max(50, t), dT));
+// L'ARIA SOPRA LE FASCE (una per parallelo, da nord a sud; «lat» in radianti): il passo che la legge chiede. Dato ciò che
+// la superficie è («Ts», K) e quanto in fretta può cedere («cdt» = capacità/passo di tempo, W/m²/K; Infinity se la
+// superficie è tenuta ferma): lo scambio di ogni fascia con la sua aria (dal vento del passo prima; ridotto di quanto la
+// superficie cede nel passo: è il passo implicito), ciò che l'aria porta tra le fasce (linearizzato attorno all'aria di
+// prima: un passo di Newton), la temperatura dell'aria «A» (un sistema a tre diagonali) e il calore che dà a ogni fascia
+// («dato», W/m²: ciò che una riceve un'altra lo ha dato, esattamente), e il vento al suolo che ne segue («vento», m/s,
+// raffiche comprese; a metà strada con quello di prima: non rimbalza)
+function ariaSulleFasce(aria, lat) {
+  const H = lat.length, dphi = Math.PI / H, raffica2 = ARIA.raffica * ARIA.raffica, cosLat = new Float64Array(H), peso = new Float64Array(H), paralleli = [];
+  for (let j = 0; j < H; j++) { cosLat[j] = Math.cos(lat[j]); if (j < H - 1) { peso[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)) / (dphi * dphi); paralleli.push(aria.parallelo(Math.sin(lat[j] - dphi / 2), Math.cos(lat[j] - dphi / 2))); } }
+  const A = new Float64Array(H), vento = new Float64Array(H).fill(ARIA.raffica), scambio = new Float64Array(H), ridotto = new Float64Array(H), kd = new Float64Array(H), sorg = new Float64Array(H), v2 = new Float64Array(H), dato = new Float64Array(H);
+  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H), porta = { k: 0, kd: 0, v2: 0, u2: 0, e2: 0 };
+  const passo = (Ts, cdt) => {
+    for (let j = 0; j < H; j++) { const sj = scambioConLAria(aria.col, Ts[j], vento[j]); scambio[j] = sj; ridotto[j] = cdt === Infinity ? sj : (sj * cdt) / (cdt + sj); }
+    for (let i = 0; i < H - 1; i++) { const dA = A[i] - A[i + 1]; portataDellAria(aria, paralleli[i], 0.5 * (A[i] + A[i + 1]), dA / dphi, porta); kd[i] = porta.kd * peso[i]; sorg[i] = (porta.kd - porta.k) * peso[i] * dA; v2[i] = porta.v2 + porta.u2 + porta.e2; }
+    for (let j = 0; j < H; j++) { const sj = ridotto[j] * cosLat[j], kn = j > 0 ? kd[j - 1] : 0, ks = j < H - 1 ? kd[j] : 0; sotto[j] = -kn; sopra[j] = -ks; diag[j] = sj + kn + ks; A[j] = sj * Ts[j] + (j < H - 1 ? sorg[j] : 0) - (j > 0 ? sorg[j - 1] : 0); }
+    cp[0] = sopra[0] / diag[0]; A[0] /= diag[0];
+    for (let j = 1; j < H; j++) { const d = diag[j] - sotto[j] * cp[j - 1]; cp[j] = sopra[j] / d; A[j] = (A[j] - sotto[j] * A[j - 1]) / d; }
+    for (let j = H - 2; j >= 0; j--) A[j] -= cp[j] * A[j + 1];
+    for (let j = 0; j < H; j++) { dato[j] = ridotto[j] * (A[j] - Ts[j]); const q = j === 0 ? v2[0] : j === H - 1 ? v2[H - 2] : 0.5 * (v2[j - 1] + v2[j]); vento[j] = 0.5 * vento[j] + 0.5 * Math.sqrt(q + raffica2); }
+    return dato;
+  };
+  return { A, vento, scambio, dato, passo };
+}
+// il calore portato, misurato come lo misura meteo.js (diffusivita): il coefficiente che spianerebbe le differenze di
+// temperatura della superficie con la stessa forza, D = −∫F·T/∫|∇T|² (W/m²/K), e il flusso verso il polo attraverso ogni
+// parallelo (W; «raggioM» per averlo in watt). T e calore per fascia, da nord a sud. (Nel bilancio per fasce D si misura
+// istante per istante lungo l'ultimo anno — sommaDelTrasporto —: con le stagioni, e ancora di più con un asse molto
+// inclinato, le medie dell'anno sono quasi uniformi mentre il calore passa da un emisfero all'altro)
+function sommaDelTrasporto(lat, T, calore, somma) {
+  const H = lat.length, dphi = Math.PI / H; let Tm = 0, Fm = 0, w = 0; for (let j = 0; j < H; j++) { const c = Math.cos(lat[j]); Tm += c * T[j]; Fm += c * calore[j]; w += c; } Tm /= w; Fm /= w;
+  for (let j = 0; j < H; j++) { somma.FT += (calore[j] - Fm) * (T[j] - Tm) * Math.cos(lat[j]); if (j < H - 1) { const g = (T[j] - T[j + 1]) / dphi; somma.GG += g * g * Math.max(0, Math.cos(lat[j] - dphi / 2)); } }
+}
+function misuraDelTrasporto(lat, T, calore, raggioM) {
+  const H = lat.length, dphi = Math.PI / H, area = raggioM > 0 ? 2 * Math.PI * raggioM * raggioM * dphi : 0, flusso = [], latFlusso = [];
+  let Tm = 0, Fm = 0, w = 0; for (let j = 0; j < H; j++) { const c = Math.cos(lat[j]); Tm += c * T[j]; Fm += c * calore[j]; w += c; } Tm /= w; Fm /= w;
+  let sFT = 0, sGG = 0, q = 0, massimo = 0, latitudine = 0;
+  for (let j = 0; j < H; j++) { const c = Math.cos(lat[j]); sFT += (calore[j] - Fm) * (T[j] - Tm) * c; if (j < H - 1) { const g = (T[j] - T[j + 1]) / dphi; sGG += g * g * Math.max(0, Math.cos(lat[j] - dphi / 2)); q += (calore[j] - Fm) * c * area; flusso.push(q); const l = ((lat[j] - dphi / 2) * 180) / Math.PI; latFlusso.push(l); if (l > 0 && q > massimo) { massimo = q; latitudine = l; } } }
+  return { D: sGG > 1e-12 ? Math.max(0, -sFT / sGG) : 0, lat: latFlusso, flusso, massimo, latitudine };
+}
+// LA LEGGE SU UNA SUPERFICIE DATA: quanto calore porta l'aria di un pianeta sopra una superficie che ha le temperature
+// «T» (K, una per fascia, da nord a sud; per un pianeta bloccato dal punto sotto il sole a quello opposto), tenute ferme.
+// È ciò che meteo.js calcola con i venti sulla stessa superficie: serve a confrontarli (test_meteo, la griglia di pianeti).
+// → { D (W/m²/K), vento (m/s, medio), scambio (W/m²/K, medio), aria (K), calore (W/m² dato a ogni fascia), lat, flusso (W),
+//     massimo (W), latitudine (gradi) }
+export function trasportoSuSuperficie({ T, pressione, gravita, raggioM, giorno, mare = 0, bloccato = false, massaMolare = ARIA.massaMolare, cp = null, giri = 80 }) {
+  const H = T.length, lat = Float64Array.from({ length: H }, (_, j) => Math.PI / 2 - ((j + 0.5) * Math.PI) / H), su = ariaSulleFasce(ariaDelPianeta({ pressione, gravita, raggioM, giorno, mare, bloccato, massaMolare, cp }), lat);
+  su.A.set(T); for (let n = 0; n < giri; n++) su.passo(T, Infinity);
+  let v = 0, sc = 0, w = 0; for (let j = 0; j < H; j++) { const c = Math.cos(lat[j]); v += c * su.vento[j]; sc += c * su.scambio[j]; w += c; }
+  return { ...misuraDelTrasporto(lat, T, su.dato, raggioM), vento: v / w, scambio: sc / w, aria: Array.from(su.A), calore: Array.from(su.dato) };
+}
 // LA LEGGE RISOLTA PER FASCE. Una colonna per parallelo (per un pianeta bloccato le fasce girano attorno all'asse che
 // punta alla stella: il «polo» è il punto sotto il sole). In ogni fascia terra e mare stanno nella proporzione «mare»
 // e hanno la stessa temperatura. Il passo nel tempo è quello di climaSuperficie: la luce irradiata linearizzata, il
 // calore dei vicini implicito (l'energia si conserva con qualunque passo), i primi anni al rallentatore se il mare ha
-// la memoria lunga. → { T (media sul pianeta, K), ghiaccio (0…1), assorbita, irradiata, arriva (W/m²), lat, fasce }
-export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = trasportoCalore(pressione), Tavvio = 288, fasce = 16, anni = 8, passiAnno = 16 }) {
+// la memoria lunga.
+// IL CALORE DEI VICINI è quello che l'aria porta (la legge qui sopra): servono «giorno» (s), «raggioM» e «gravita», e se
+// si conoscono i gas «massaMolare» e «cp». A ogni passo: lo scambio di ogni fascia con la sua aria (dal vento del passo
+// prima), ciò che l'aria sa portare tra le fasce (dal gradiente dell'aria del passo prima, con la sua derivata: un passo
+// di Newton), la temperatura dell'aria (un sistema a tre diagonali) e il calore che dà alla superficie (implicito: ciò
+// che una fascia riceve un'altra lo ha dato, esattamente). Senz'aria (o senza raggio e gravità) nessun calore passa.
+// «D» (W/m²/K), se è dato, sostituisce la legge con una diffusione uniforme della temperatura della superficie: serve
+// alle prove (dare alle fasce il trasporto misurato da meteo.js) e a chi vuole il vecchio modello di Budyko-Sellers.
+// → { T (media sul pianeta, K), ghiaccio (0…1), assorbita, irradiata, arriva (W/m²), lat, fasce } e, del calore portato:
+//   D (W/m²/K: il coefficiente di diffusione equivalente, −∫F·T/∫|∇T|², la stessa definizione di meteo.diffusivita),
+//   vento (m/s: quello al suolo, medio sul pianeta e sull'anno, raffiche comprese), scambio (W/m²/K, medio),
+//   trasporto { lat (gradi: i paralleli tra le fasce), flusso (W verso il «polo nord» attraverso ognuno), massimo (W) e
+//   latitudine (gradi) del più grande flusso verso il polo nell'emisfero nord, calore (W/m² dato a ogni fascia), aria (K) }
+export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = null, giorno = null, raggioM = null, gravita = null, massaMolare = ARIA.massaMolare, cp = null, Tavvio = 288, fasce = 16, anni = 8, passiAnno = 16 }) {
   const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
   const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
   for (let j = 0; j < H; j++) { lat[j] = Math.PI / 2 - (j + 0.5) * dphi; cosLat[j] = Math.cos(lat[j]); cosN[j] = Math.max(0, Math.cos(lat[j] + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)); }
   const C = mare * CLIMA.capacitaMare + (1 - mare) * CLIMA.capacitaTerra, ghiaccioAcqua = acquaPerIlGhiaccio(mare), nuvole = nuvoleAttese(mare, pressione);
+  // l'aria che porta il calore (se c'è, e se il pianeta è dato): la legge; se no, D dato o niente
+  const fisso = D != null, conAria = !fisso && isFinite(pressione) && pressione > 0 && raggioM > 0 && gravita > 0;
+  const aria = conAria ? ariaDelPianeta({ pressione, gravita, raggioM, giorno: giorno > 0 ? giorno : bloccato ? anno : ARIA.giornoDiRiserva, mare, bloccato, massaMolare, cp }) : null, raffica = ARIA.raffica;
+  const su = aria ? ariaSulleFasce(aria, lat) : null, A = su ? su.A : new Float64Array(H), vento = su ? su.vento : new Float64Array(H).fill(raffica), scambio = su ? su.scambio : new Float64Array(H), dato = su ? su.dato : new Float64Array(H);
   // la luce rimandata da una fascia: la media di riflette() sulla sua terra e sul suo mare (scritta qui per esteso, con
   // gli stessi numeri: è il conto che si ripete di più; lontano dal gelo la tangente iperbolica vale già −1 o 1)
   const { albedoTerra: aT, albedoMare: aM, albedoGhiaccio: aG, geloTerra: gT, geloMare: gM } = CLIMA;
   const gelo = (t, soglia) => (t > soglia + 80 ? 0 : t < soglia - 80 ? ghiaccioAcqua : ghiaccioAcqua * 0.5 * (1 - Math.tanh((t - soglia) / 4)));
-  const albedo = (t, luce) => {
-    const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce) : 0; let a = 0;
+  const albedo = (t, luce, v) => {
+    const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce, v) : 0; let a = 0;
     if (mare < 1) { const g = gelo(t, gT), suolo = g * aG + (1 - g) * aT; a += (1 - mare) * (suolo + cielo * (1 - suolo)); }
     if (mare > 0) { const g = gelo(t, gM), suolo = g * aG + (1 - g) * aM; a += mare * (suolo + cielo * (1 - suolo)); }
     return a;
   };
-  const T = new Float64Array(H).fill(Tavvio), nuovo = new Float64Array(H), media = new Float64Array(H), sole = new Float64Array(H);
+  const T = new Float64Array(H).fill(Tavvio), nuovo = new Float64Array(H), media = new Float64Array(H), sole = new Float64Array(H), calore = new Float64Array(H), ariaMedia = new Float64Array(H);
   const memoria = (C * serra) / (4 * sigma * Math.max(3, Tavvio / 1.25) ** 3), veri = Math.min(4, anni - 1), totale = anni * passiAnno, lenti = bloccato ? totale : (anni - veri) * passiAnno, dtVero = anno / passiAnno;
   const dtLento = dtVero * Math.max(1, bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
-  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H);
+  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp_ = new Float64Array(H);
   // la luce di ogni fascia in ogni momento dell'anno (si calcola una volta)
   const luci = bloccato ? null : new Float64Array(passiAnno * H);
   if (bloccato) for (let j = 0; j < H; j++) sole[j] = S0 * Math.max(0, Math.sin(lat[j]));
   else for (let f = 0; f < passiAnno; f++) { const del = eps * Math.sin((2 * Math.PI * f) / passiAnno); for (let j = 0; j < H; j++) luci[f * H + j] = luceDelGiorno(S0, lat[j], del); }
+  A.set(T);
   // se alla fine il pianeta irradia ancora più (o meno) di quanto assorbe, non è a regime (il ghiaccio che avanza è
   // lento): si va avanti per altri anni, finché il bilancio torna. (Il passo lento non si allunga oltre: un passo
   // molto più lungo della memoria di una fascia la porterebbe da sola al suo equilibrio, prima che i vicini contino.)
-  let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0; const dtAdesso = dtLento;
+  let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0, ventoMedio = 0, scambioMedio = 0, giri = 0; const dtAdesso = dtLento, somma = { FT: 0, GG: 0 };
   for (let giro = 0; giro < 8; giro++) {
-  assorbita = 0; irradiata = 0; pesi = 0; ghiaccio = 0; media.fill(0);
+  giri++; somma.FT = 0; somma.GG = 0; assorbita = 0; irradiata = 0; pesi = 0; ghiaccio = 0; ventoMedio = 0; scambioMedio = 0; media.fill(0); calore.fill(0); ariaMedia.fill(0);
   for (let n = 0; n < totale; n++) {
     const ultimo = n >= totale - passiAnno, dt = n < lenti && (giro === 0 || bloccato) ? dtAdesso : dtVero; // (gli anni lenti solo al primo giro: poi anni veri)
     if (!bloccato) { const o = (n % passiAnno) * H; for (let j = 0; j < H; j++) sole[j] = luci[o + j]; }
     for (let j = 0; j < H; j++) {
-      const t = T[j], entra = sole[j] * (1 - albedo(t, sole[j])), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
+      const t = T[j], entra = sole[j] * (1 - albedo(t, sole[j], vento[j])), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
       nuovo[j] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
-    // il calore portato dai vicini, da un polo all'altro (tre diagonali)
-    const q = (dt * D) / (C * dphi * dphi);
-    for (let j = 0; j < H; j++) { sotto[j] = j > 0 ? (-q * cosN[j]) / cosLat[j] : 0; sopra[j] = j < H - 1 ? (-q * cosS[j]) / cosLat[j] : 0; diag[j] = 1 - sotto[j] - sopra[j]; }
-    cp[0] = sopra[0] / diag[0]; nuovo[0] /= diag[0];
-    for (let j = 1; j < H; j++) { const d = diag[j] - sotto[j] * cp[j - 1]; cp[j] = sopra[j] / d; nuovo[j] = (nuovo[j] - sotto[j] * nuovo[j - 1]) / d; }
-    for (let j = H - 2; j >= 0; j--) nuovo[j] -= cp[j] * nuovo[j + 1];
-    for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; ghiaccio += (cosLat[j] * ghiaccioAcqua * (mare * (nuovo[j] < 271 ? 1 : 0) + (1 - mare) * (nuovo[j] < CLIMA.geloTerra ? 1 : 0))) / passiAnno; } }
+    if (su) { // L'ARIA: la sua temperatura, il calore che dà alla superficie (implicito), il vento
+      const cdt = C / dt; su.passo(nuovo, cdt); for (let j = 0; j < H; j++) nuovo[j] = Math.max(3, nuovo[j] + dato[j] / cdt);
+    } else if (fisso && D > 0) {
+      // il calore portato dai vicini con un coefficiente dato, da un polo all'altro (tre diagonali)
+      const q = (dt * D) / (C * dphi * dphi);
+      for (let j = 0; j < H; j++) { dato[j] = nuovo[j]; sotto[j] = j > 0 ? (-q * cosN[j]) / cosLat[j] : 0; sopra[j] = j < H - 1 ? (-q * cosS[j]) / cosLat[j] : 0; diag[j] = 1 - sotto[j] - sopra[j]; }
+      cp_[0] = sopra[0] / diag[0]; nuovo[0] /= diag[0];
+      for (let j = 1; j < H; j++) { const d = diag[j] - sotto[j] * cp_[j - 1]; cp_[j] = sopra[j] / d; nuovo[j] = (nuovo[j] - sotto[j] * nuovo[j - 1]) / d; }
+      for (let j = H - 2; j >= 0; j--) nuovo[j] -= cp_[j] * nuovo[j + 1];
+      for (let j = 0; j < H; j++) { dato[j] = ((nuovo[j] - dato[j]) * C) / dt; A[j] = nuovo[j]; }
+    } else { dato.fill(0); A.set(nuovo); }
+    if (ultimo && su) sommaDelTrasporto(lat, nuovo, dato, somma);
+    for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; calore[j] += dato[j] / passiAnno; ariaMedia[j] += A[j] / passiAnno; ventoMedio += (cosLat[j] * vento[j]) / passiAnno; scambioMedio += (cosLat[j] * scambio[j]) / passiAnno;
+      ghiaccio += (cosLat[j] * ghiaccioAcqua * (mare * (nuovo[j] < 271 ? 1 : 0) + (1 - mare) * (nuovo[j] < CLIMA.geloTerra ? 1 : 0))) / passiAnno; } }
   }
   if (Math.abs(irradiata - assorbita) < 0.01 * assorbita) break;
   }
-  let Tm = 0, w = 0; for (let j = 0; j < H; j++) { Tm += media[j] * cosLat[j]; w += cosLat[j]; }
-  return { T: Tm / w, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media) };
+  let Tm = 0, w = 0; for (let j = 0; j < H; j++) { Tm += media[j] * cosLat[j]; w += cosLat[j]; } Tm /= w;
+  const mis = misuraDelTrasporto(lat, media, calore, raggioM);
+  return { T: Tm, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media),
+    giri, D: fisso ? D : somma.GG > 1e-12 ? Math.max(0, -somma.FT / somma.GG) : 0, vento: ventoMedio / w, scambio: scambioMedio / w, trasporto: { lat: mis.lat, flusso: mis.flusso, massimo: mis.massimo, latitudine: mis.latitudine, calore: Array.from(calore), aria: Array.from(ariaMedia) } };
 }
 // IL CLIMA DI UN PIANETA: dalla luce della stella, dalla distanza, dalla massa, dall'acqua che ha in superficie,
 // da come gira (anno, inclinazione dell'asse, bloccato o no). È il bilancio per fasce qui sopra: la temperatura «T»
@@ -249,9 +491,13 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
 //   aria      { pressione, tau }: la pressione vera dell'aria e la sua serra, quando i gas sono noti (chimica.js,
 //             climaEAria); se manca, valgono le leggi di riserva: gas liberati per un milionesimo della massa, e la
 //             serra dalla sola pressione
+//   giorno    la durata del giorno (s): entra nel calore che l'aria porta (la rotazione); se manca: l'anno per un
+//             pianeta bloccato, il giorno della Terra per gli altri (riserva dichiarata)
 // → { Teq, T, g, pressione, tenuti, acqua, albedo } come sempre, e in più ciò che climaSuperficie deve condividere:
-//   tau (la serra), D (il calore portato), Tavvio (da dove parte), mare e ghiaccio attesi, nuvole, bilancio, fasce
-export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, obliquita = 0, bloccato = false, placche = false, aria = null }) {
+//   tau (la serra), D (il calore portato: il coefficiente equivalente alla legge dell'aria, W/m²/K), vento (m/s, al
+//   suolo, dalla stessa legge), scambio, trasporto (il flusso verso i poli), Tavvio (da dove parte), mare e ghiaccio
+//   attesi, nuvole, bilancio, fasce
+export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = null, anno = null, giorno = null, obliquita = 0, bloccato = false, placche = false, aria = null }) {
   const g = (COSTANTI.G * massaKg) / (raggioM * raggioM), mu = COSTANTI.mp;
   if (tipo === 'gassoso') {
     const albedo = 0.35, Teq = temperaturaEquilibrio(Lw, aM, albedo), tenuti = Object.entries(MOLECOLE).filter(([, m]) => trattiene(massaKg, raggioM, Teq, m * mu)).map(([n]) => n);
@@ -263,17 +509,19 @@ export function clima({ Lw, aM, massaKg, raggioM, tipo, acqua = 0, acquaKg = nul
   // Terra: 0,86 milionesimi, cioè 1 bar), un po' di più se c'è molta acqua; se la gravità li trattiene
   const gas = tenuti.includes('azoto') || tenuti.includes('anidride carbonica') ? 1e-6 * massaKg * (0.85 + 3 * acqua) : 0;
   // (oltre τ = 10⁴ l'aria è così spessa che il calore sale per convezione, non per irraggiamento: la serra non cresce più)
-  const pressione = aria ? aria.pressione : (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = Math.min(1e4, aria ? aria.tau : serraDaPressione(pressione)), D = trasportoCalore(pressione);
+  const pressione = aria ? aria.pressione : (gas * g) / (4 * Math.PI * raggioM * raggioM), tau = Math.min(1e4, aria ? aria.tau : serraDaPressione(pressione));
   const S0 = Lw / (4 * Math.PI * aM * aM), periodo = anno ?? ANNO * Math.pow(aM / UA, 1.5), kg = acquaKg ?? acquaInSuperficie({ tipo, massaKg, composizione: { acqua } }).kg;
   // si parte caldo (un pianeta nasce caldo e si raffredda), ma non più di un quarto sopra dove lo porterebbe la sola luce
   // (e sotto un'aria spessa, da dove la porta la serra)
   const Tserra = Math.max(3, Tnuda * Math.pow(1 + 0.75 * tau, 0.25)), Tavvio = Lw > 0 ? Math.max(Tnuda, Math.min(310, 1.25 * Tserra), Tserra) : 3;
-  const risolvi = (mare) => (S0 > 0 ? bilancioPerFasce({ S0, anno: periodo, obliquita, bloccato, mare, pressione, tau, D, Tavvio }) : { T: 3, ghiaccio: mare > 0 ? 1 : 0, assorbita: 0, irradiata: 0, arriva: 0, lat: [], fasce: [] });
+  // (il calore portato: la legge dell'aria, con il giorno del pianeta — se manca, quello dell'anno per un pianeta bloccato e
+  // quello della Terra per gli altri — e con i suoi gas, se chi chiama li dà in «aria»: massaMolare, cp)
+  const risolvi = (mare) => (S0 > 0 ? bilancioPerFasce({ S0, anno: periodo, obliquita, bloccato, mare, pressione, tau, giorno, raggioM, gravita: g, massaMolare: aria?.massaMolare || ARIA.massaMolare, cp: aria?.cp ?? null, Tavvio }) : { T: 3, ghiaccio: mare > 0 ? 1 : 0, assorbita: 0, irradiata: 0, arriva: 0, lat: [], fasce: [], D: 0, vento: ARIA.raffica, scambio: 0, trasporto: null });
   let mare = acqua > 0 ? mareAtteso({ acquaKg: kg, raggioM, placche }) : 0, b = risolvi(mare);
   // lo stato dell'acqua: dalla temperatura e dalla pressione; e in ogni caso vapore se il pianeta assorbe più luce di quanta
   // un'aria satura di vapore riesca a irradiare (LIMITE_VAPORE): allora il mare evapora tutto, qualunque sia la serra
   const stato = acqua > 0 ? (b.assorbita > LIMITE_VAPORE ? 'vapore' : statoAcqua(b.T, pressione)) : 'assente';
   if (mare > 0 && stato.startsWith('vapore')) { mare = 0; b = risolvi(0); }
   const albedo = b.arriva > 0 ? 1 - b.assorbita / b.arriva : 0.3, Teq = temperaturaEquilibrio(Lw, aM, albedo);
-  return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione) * coperturaDelCielo, bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };
+  return { Teq, T: b.T, g, pressione, tenuti, acqua: stato, albedo, tau, D: b.D, vento: b.vento, scambio: b.scambio, trasporto: b.trasporto, Tavvio, mare, ghiaccio: b.ghiaccio, nuvole: nuvoleAttese(mare, pressione) * coperturaDelCielo, bilancio: { assorbita: b.assorbita, irradiata: b.irradiata, arriva: b.arriva }, fasce: { lat: b.lat, T: b.fasce } };
 }

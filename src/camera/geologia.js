@@ -1,19 +1,10 @@
 // geologia.js — l'interno e la superficie di un pianeta, che emergono da massa, composizione ed età.
 //
-// INTERNO. Un pianeta giovane è caldo e fuso: il ferro, pesante, scende e fa il
-// nucleo; la roccia resta sopra (mantello); in cima si separa una crosta leggera.
-// Le proporzioni vengono dalla composizione. Il calore che esce dall'interno è
-// quello del decadimento radioattivo (uranio, torio, potassio: tanti più quanto
-// più la stella era ricca di metalli), che cala con l'età.
-// LA DINAMO. Il campo magnetico nasce solo se il nucleo è ancora liquido e il
-// calore lo rimescola: un pianeta piccolo o vecchio si raffredda, il nucleo si
-// ferma e il campo sparisce (Marte). La forza segue la legge di scala delle dinamo
-// (Christensen): B ∝ ρ^(1/6)·(flusso)^(1/3), poi cala come (R_nucleo/R)³ fino in
-// superficie. Tarata sulla Terra.
-// TETTONICA. Se il mantello è abbastanza caldo da spingere e la crosta abbastanza
-// debole da rompersi (l'acqua la indebolisce), la crosta si spezza in placche; se
-// no resta un coperchio unico. Dove le placche si scontrano si alzano montagne,
-// dove si separano si aprono dorsali e vulcani.
+// INTERNO, DINAMO, TETTONICA. Lo stato dell'interno di un pianeta a un istante viene dalla sua storia (storia.js): il
+// mantello e il nucleo che si raffreddano dalla nascita (convezione parametrizzata, calore radiogenico e di marea), il
+// nucleo interno che cresce, la dinamo (finché il nucleo cede più calore di quanto l'adiabatica ne porti per
+// conduzione, o finché il nucleo interno cresce), il regime della crosta dal criterio di Korenaga con l'attrito che
+// l'acqua abbassa. interno(P, stella) è quella storia letta all'età della stella: una fonte sola.
 // SUPERFICIE. Il rilievo nasce dalle placche; l'acqua che il pianeta ha riempie
 // i punti più bassi (mari e laghi emergono da quanta acqua c'è); dove piove l'acqua
 // scende lungo la pendenza più ripida e si raccoglie: i fiumi e le loro valli.
@@ -23,35 +14,17 @@ import { minerali, coloreRoccia } from './chimica.js';
 import { evolviTettonica } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { acquaInSuperficie, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, trasportoCalore, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
-const TERRA = { M: 5.97e24, R: 6.371e6, q: 0.087, Rc: 3.48e6, rhoC: 11000, giorno: 86164, rossby: 0.09 };
-
-export function interno(P, stella) {
-  if (P.tipo === 'gassoso') {
-    // nei giganti la dinamo è nell'idrogeno metallico: cresce con la massa (Giove ~ 4·10⁻⁴ T)
-    const B0 = 4.2e-4 * Math.pow(P.massaKg / 1.9e27, 0.6);
-    return { nucleo: 0.1, mantello: 'idrogeno metallico', crosta: 0, q: 5, dinamo: true, B0, tettonica: 'nessuna (è un gas)', vulcani: 0 };
-  }
-  const ferro = P.composizione.ferro ?? 0.1, eta = stella?.eta ?? 4.5e9, Z = stella?.Z ?? 1;
-  const M = P.massaKg, R = P.raggioM, rhoMedia = M / ((4 / 3) * Math.PI * R ** 3);
-  const Rc = R * Math.cbrt((ferro * rhoMedia) / TERRA.rhoC);
-  // il calore: radioattività (più metalli, più calore) che cala con l'età, più il calore iniziale che resta
-  const q = TERRA.q * (M / TERRA.M) / (R / TERRA.R) ** 2 * Math.sqrt(Math.max(0.05, Z)) * (caloreDellaRoccia(eta) / caloreDellaRoccia(4.5e9)) * Math.pow(M / TERRA.M, 0.3); // (cala con l'età come la radioattività della roccia: la stessa legge delle lune)
-  // il nucleo resta liquido se il pianeta è abbastanza grande da non essersi raffreddato (tempo ∝ R²)
-  const nucleoLiquido = q > 0.025 && R > 3.5e6;
-  // LA ROTAZIONE (P.giorno, da rotazione.js; se manca, la dinamo resta quella di prima). Una dinamo dà un campo a dipolo
-  // solo se la rotazione ordina i moti del nucleo: il numero di Rossby locale deve stare sotto 0,12; sopra, il campo è a
-  // molti poli e alla superficie è almeno dieci volte più debole (Olson e Christensen 2006, EPSL 250, 561). Lì
-  // Ro_l ∝ Ra_Q^(1/2)·E^(−1/3): con il flusso di galleggiamento ∝ q·Rc², la gravità ∝ Rc e lo spessore del guscio ∝ Rc
-  // viene Ro_l ∝ q^(1/2)·Ω^(−7/6)·Rc^(1/6). DATI: la soglia 0,12 (verificata: Christensen, Aubert e Olson); la Terra a
-  // Ro_l ≈ 0,09 (ricordato; verificato solo che «la geodinamo sta vicino alla transizione»). Nessuna taratura. Che cosa
-  // manca: il flusso di calore dal nucleo (qui va come quello in superficie) e di quanto cala il campo senza dipolo.
-  const rossby = P.giorno > 0 && nucleoLiquido ? TERRA.rossby * Math.sqrt(q / TERRA.q) * Math.pow(P.giorno / TERRA.giorno, 7 / 6) * Math.pow(Rc / TERRA.Rc, 1 / 6) : null, dipolo = !(rossby > 0.12);
-  const B0 = nucleoLiquido ? 3.1e-5 * Math.pow(q / TERRA.q, 1 / 3) * Math.pow((Rc / R) / (TERRA.Rc / TERRA.R), 3) * Math.pow(Rc / TERRA.Rc, 0.5) * (dipolo ? 1 : 0.1) : 1e-9;
-  const acqua = acquaInSuperficie(P).frazione > 0.005;
-  const tettonica = q > 0.05 && acqua && M > 0.3 * TERRA.M ? 'a placche' : q > 0.02 ? 'coperchio unico, con vulcani' : 'ferma';
-  return { eta, nucleo: Rc / R, crosta: Math.min(0.02, 0.004 * Math.pow(q / TERRA.q, 0.5)), q, dinamo: nucleoLiquido, B0, tettonica, vulcani: q > 0.02 ? Math.round(q / 0.02) : 0, ...(rossby != null ? { rossby, dipolo } : {}) };
-}
+import { internoDaStoria } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
+import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, bilancioPerFasce, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
+// L'INTERNO DI OGGI: lo stato della storia del pianeta (storia.js) all'età della sua stella, nella forma di sempre:
+// { eta, nucleo (raggio del nucleo / raggio), crosta (spessore della crosta di basalto / raggio), q (W/m²), dinamo, B0 (T
+// all'equatore), tettonica ('a placche' | 'coperchio unico, con vulcani' | 'ferma'), vulcani, rossby e dipolo (se il
+// pianeta porta il giorno) }. Le soglie nette di prima (q > 0,025 e R > 3500 km per il nucleo liquido; q > 0,05, acqua
+// > 0,5% e M > 0,3 Terre per le placche; q > 0,02 per i vulcani) non ci sono più: decidono il galleggiamento nel nucleo,
+// il criterio di Korenaga e la roccia che fonde o no sotto il coperchio. RESTANO, dichiarate in storia.js: il numero di
+// edifici vulcanici da disegnare (uno ogni 0,02 W/m² dove il mantello fonde), il campo di 10⁻⁹ T di chi non ha dinamo,
+// «dieci volte più debole» senza dipolo (soglia di Rossby 0,12), e per i giganti di gas la legge di prima.
+export function interno(P, stella) { return internoDaStoria(P, stella); }
 
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
 const memo = new Map();
@@ -67,7 +40,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // e dove due masse si scontrano si ispessisce in catene di montagne; la crosta degli oceani nasce alle dorsali,
   // invecchia allontanandosi (e il fondo sprofonda come la radice dell'età) e affonda nelle fosse. Le quote
   // vengono dal galleggiamento: la crosta spessa sta alta. Forma, numero e storia dei continenti non sono scelti.
-  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), spinta = new Float32Array(W * H);
+  const alt = new Float32Array(W * H), quale = new Int16Array(W * H), spinta = new Float32Array(W * H), lava = new Float32Array(W * H);
   // l'acqua che sta in superficie, come mare o come ghiaccio: quella che l'interno le dà, ma solo se lo stato che il
   // clima le assegna non è vapore. Dove bolle o sublima non c'è mare: l'acqua è nell'aria, o è già fuggita
   const acquaKg = String(P.clima?.acqua ?? '').startsWith('vapore') ? 0 : int.acquaKg || 0;
@@ -123,7 +96,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
     for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const v = u[j * W + i]; if (!(v > 0)) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) if ((a || b) && u[(j + b) * W + ((i + a + W) % W)] > v) { cima = false; break; } if (cima) tutte.push([v, i, j]); }
     tutte.sort((a, b) => b[0] - a[0] || a[2] - b[2] || a[1] - b[1]);
     for (const [, i, j] of tutte) { const pi = sfera(i, j); if (cime.every(([a, b]) => dot(pi, sfera(a, b)) < Math.cos(0.25))) cime.push([i, j]); } } // (almeno un quarto di radiante tra due vulcani)
-  for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
+  for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) { const colata = 2500 * Math.exp(-(di * di + dj * dj) / 3); alt[jj * W + ii] += colata; lava[jj * W + ii] += colata; } } } // (l'edificio è una pila di lave: quello spessore è roccia vulcanica)
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = acquaKg / 1000;
@@ -158,7 +131,13 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // (con le placche la superficie porta anche l'età della crosta degli oceani, in milioni di anni (0 sui continenti), e le
   // fosse dove affonda (0…1): servono a chi guarda le rocce — materia.js: da quanto tempo quella roccia ricorda — e al mare
   // — mare.js: le sorgenti calde stanno dove la crosta è giovane davvero)
-  const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati, ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse } : {}) };
+  // LA ROCCIA E IL MOTO, per l'erosione (dalla storia delle placche, tettonica.js): copertura = metri di sedimento posato
+  // nella storia e non più tolto (0 = basamento a nudo); lava = metri di lave degli edifici vulcanici; arco = la crosta
+  // nuova che nasce sopra le fosse (m/anno); sollevamento = di quanto la superficie sale oggi perché la crosta si
+  // ispessisce (m/anno); tetto = la quota (m) oltre la quale la crosta, più spessa di quanto la spinta regge, cede
+  const tetto = tt ? new Float32Array(W * H) : null; if (tt) for (let k = 0; k < W * H; k++) tetto[k] = alt[k] + tt.regge[k];
+  const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati,
+    ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita } } : {}) };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
@@ -209,7 +188,8 @@ export function immagineSuperficie(sf, T, cl = null) {
 // Si parte caldo, come un pianeta appena nato, e si lascia evolvere per molti anni: quello che resta è il suo clima
 // (se il ghiaccio, riflettendo, prende il sopravvento, il pianeta scivola in una glaciazione totale).
 const memoClima = new Map();
-// L'ARIA CHE CIRCOLA (meteo.js). Il clima qui sopra tratta il calore portato dall'aria e le nuvole con due coefficienti;
+// L'ARIA CHE CIRCOLA (meteo.js). Il clima qui sopra tratta il calore portato dall'aria con un coefficiente (quello equivalente
+// alla legge dell'aria di leggi.js, che clima() ha calcolato per questo pianeta) e le nuvole con i loro valori attesi;
 // quando il pianeta ha un giorno e un'aria, si fa un secondo giro: dal primo clima si calcolano i venti, il vapore, le
 // nuvole e la pioggia veri (meteo.js), e con quelli si rifà il bilancio (meteo: nuvole punto per punto, e quanto calore
 // l'aria porta davvero). La pioggia che l'erosione usa viene da lì (cl.meteo).
@@ -237,11 +217,19 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // (la serra, il calore portato e la temperatura di partenza sono quelli di clima(), leggi.js: è la stessa legge, risolta
   // lì per fasce e qui sulla mappa; se il pianeta non li porta con sé, valgono le stesse formule di riserva)
   const sigma = 5.67e-8, S0 = P.Lw / (4 * Math.PI * P.aM * P.aM), tau = P.clima.tau ?? serraDaPressione(P.clima.pressione);
-  // (nel secondo giro il calore portato è la media tra quello atteso del primo giro e quello che i venti hanno portato
-  // davvero: i due si rispondono, e a metà strada non rimbalzano)
-  const Dattesa = Dprima ?? P.clima.D ?? trasportoCalore(P.clima.pressione), D = meteo ? (Dattesa + Math.max(0, meteo.diffusivita)) / 2 : Dattesa, kx = sf.W / W, ky = sf.H / H;
+  const kx = sf.W / W, ky = sf.H / H;
   const terra = new Uint8Array(W * H), quota = new Float32Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let h = 0; for (let b = 0; b < ky; b++) for (let a = 0; a < kx; a++) h += sf.alt[(j * ky + b) * sf.W + i * kx + a]; h /= kx * ky; quota[j * W + i] = h; terra[j * W + i] = h >= sf.mare ? 1 : 0; }
+  // IL CALORE PORTATO. Senza i venti è quello ATTESO: il coefficiente equivalente alla legge dell'aria di leggi.js, che
+  // clima() ha già calcolato per questo pianeta (P.clima.D, W/m²/K; con la stessa definizione di meteo.diffusivita). Se il
+  // pianeta non lo porta con sé (un mondo costruito a mano, con la sola pressione) si chiede alla stessa legge, con ciò
+  // che si sa: il giorno, il raggio, la gravità, il mare di questa mappa. Con i venti (dal secondo giro) è la media tra
+  // quello del giro prima e quello che i venti hanno portato davvero (meteo.diffusivita): i due si rispondono, e a metà
+  // strada non rimbalzano
+  const attesoDallaLegge = () => { let m = 0; for (let k = 0; k < W * H; k++) m += 1 - terra[k]; m /= W * H;
+    return bilancioPerFasce({ S0, anno: P.anno, obliquita: P.obliquita ?? 0, bloccato: !!P.bloccato, mare: m, pressione: P.clima.pressione, tau, giorno: P.giorno ?? null, raggioM: P.raggioM, gravita: (COSTANTI_LEGGI.G * P.massaKg) / (P.raggioM * P.raggioM), Tavvio: P.clima.Tavvio ?? 288 }); };
+  const riserva = (Dprima == null && P.clima.D == null) || (!meteo && P.clima.vento == null) ? attesoDallaLegge() : null;
+  const Dattesa = Dprima ?? P.clima.D ?? riserva.D, D = meteo ? (Dattesa + Math.max(0, meteo.diffusivita)) / 2 : Dattesa, ventoAtteso = P.clima.vento ?? riserva?.vento;
   const lat = (j) => Math.PI / 2 - ((j + 0.5) / H) * Math.PI, dphi = Math.PI / H, dlam = (2 * Math.PI) / W;
   // un pianeta nasce caldo (gli urti che l'hanno formato) e si raffredda: si parte da lì, non dal freddo. Per un mondo
   // lontano dalla sua stella «caldo» vuol dire un quarto sopra la temperatura a cui lo porterebbe la sola luce (Tfine:
@@ -264,8 +252,9 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     const r = mare.albedo ? Math.round(Math.sqrt(mare.albedo.length / (W * H))) : 0;
     if (r >= 1 && mare.albedo.length === W * H * r * r) { albedoMare = new Float32Array(W * H).fill(-1); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let x = 0, n = 0; for (let b = 0; b < r; b++) for (let c = 0; c < r; c++) { const v = mare.albedo[(j * r + b) * W * r + i * r + c]; if (v > 0) { x += v; n++; } } if (n && !terra[j * W + i]) albedoMare[j * W + i] = x / n; } }
   }
-  // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; senza meteo, quelle attese dalla stessa legge)
-  const albedo = (k, t, luce) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t, luce) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null, luce);
+  // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; senza meteo, quelle attese dalla stessa
+  // legge, con il vento al suolo atteso per questo pianeta — clima().vento, dalla legge del trasporto)
+  const albedo = (k, t, luce) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t, luce, ventoAtteso) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null, luce, ventoAtteso);
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
@@ -363,36 +352,75 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //  · I FIUMI SCAVANO: E = K·A^m·S^n (m/anno), con m = 0,4 e n = 1, e K MISURATO per classe di roccia (Stock e Montgomery
 //    1999, J. Geophys. Res. 104, 4983: graniti e rocce metamorfiche 10⁻⁷–10⁻⁶ m^0,2/anno; vulcaniche 10⁻⁵–10⁻⁴; argilliti e
 //    sedimenti 10⁻⁴–10⁻²: di ogni classe qui la media geometrica). A è l'area drenata: qui la portata vera (pioggia × area,
-//    m³/anno) divisa per un metro di pioggia l'anno, così dove piove il doppio il fiume vale un bacino doppio. La roccia è
-//    quella del luogo: granito sui continenti, vulcanica sulla crosta dei fondali emersa, sedimento dove il fiume ha posato.
+//    m³/anno) divisa per un metro di pioggia l'anno, così dove piove il doppio il fiume vale un bacino doppio.
 //    Il passo è implicito (Braun e Willett 2013): stabile con qualunque passo di tempo.
+//  · LA ROCCIA È QUELLA CHE LA STORIA HA LASCIATO, a strati dall'alto. Il SEDIMENTO SCIOLTO: ciò che si posa durante
+//    questa erosione (laghi, coste, conoidi): la classe delle argilliti, K = 10⁻³. La COPERTURA sedimentaria (sf.copertura,
+//    metri: ciò che nella storia delle placche fiumi e pendii hanno posato e nessuno ha più tolto, fino alla profondità
+//    dove il sedimento sepolto diventa roccia metamorfica: tettonica.js): è stata sepolta, è roccia; la sola classe di
+//    roccia clastica litificata che Stock e Montgomery misurano è quella di mezzo (le loro «volcaniclastic rocks», 10⁻⁵–
+//    10⁻⁴): K = 3,2·10⁻⁵, cento volte il granito. Le LAVE (sf.lava: gli edifici dei vulcani; sf.arco × durata: la crosta
+//    nuova degli archi sopra le fosse, contata tutta come vulcanica): la stessa classe. Poi il BASAMENTO: granito e
+//    metamorfiche sotto i continenti, vulcanica (basalto) dove la crosta è quella dei fondali. Il fiume scava lo strato
+//    che ha sotto, e quando lo ha consumato passa a quello dopo dentro lo stesso passo. Nessuna quota di terre
+//    «sedimentarie» è data: quanta copertura resta è un'uscita (terreCoperte).
 //  · I PENDII SCIVOLANO: diffusione, ∂h/∂t = K_d·∇²h con K_d = 0,01 m²/anno (il valore d'uso di FastScape; le misure vanno
 //    da 10⁻³ a 10⁻²). Il LETTO di un fiume non è un pendio: una cella che riceve acqua da altre non viene spianata; ciò
-//    che i versanti le portano entra nel carico del fiume. (Prima «i pendii si sgretolano» avvicinava ogni cella, letto
-//    compreso, alla media dei vicini del 5% ogni quattro passi: spianava le valli più in fretta di quanto il fiume le
-//    scavasse. Provato togliendolo: l'incasso medio passa da −10 m a +2 m; togliere il sollevamento non cambia niente.)
-//  · IL SEDIMENTO scende col fiume e si posa dove la capacità di portarlo cala: Q_s = 0,041·I·Q·S^(7/6), con I = 0,01 la
-//    parte del tempo in piena (Wickert e Schildgen 2019); nei laghi; sulla costa (i delta). Il conto torna: eroso =
-//    depositato + portato al mare.
+//    che i versanti le portano entra nel carico del fiume.
+//  · IL SEDIMENTO scende col fiume. È di due specie. Fin dove il SUOLO riesce a formarsi (al più P₀ = 0,31 mm/anno: Heimsath
+//    e altri 1997, misure da 0,05 a 2 mm/anno, media geometrica) la roccia esce dai versanti disfatta in grani: sabbia e
+//    argilla, che l'acqua porta SOSPESE senza un tetto (numero di Rouse < 1) e che si posano solo dove l'acqua si ferma:
+//    nei laghi e sulle coste (i delta). Ciò che è scavato più in fretta di P₀ viene da roccia nuda, a BLOCCHI: ghiaia, che
+//    il fiume porta sul fondo al più quanto la sua capacità, Q_s = 0,041·I·Q·S^(7/6), con I = 0,01 la parte del tempo in
+//    piena (Wickert e Schildgen 2019), e che per strada si consuma in carico fine: del 0,42% al km il granito, del 2% le
+//    vulcaniche, del 20% le rocce tenere (Attal e Lavé 2009: granito 0,3–0,6, classi tipo 0,2 / 2 / 20). Se la ghiaia
+//    supera la capacità, il fiume non scava il di più (lo lascia dov'è, dal fondo dello scavo), e quella che arriva da
+//    monte in più si posa lì: una conoide. (Prima la capacità della ghiaia era il tetto di TUTTO il carico: da sola
+//    teneva la denudazione 25 volte sotto, misurato togliendola; il sedimento vero ai mari è per nove decimi sospeso.)
+//    Il conto torna: eroso = depositato + portato al mare.
 //  · LA CROSTA RISPONDE: tolto un carico, risale di ρ_crosta/ρ_mantello = 2800/3300 dello spessore tolto (isostasia), sulla
-//    media della regione (la crosta è rigida: flette su ~200 km); e dove le placche spingono (spinta, da tettonica.js)
-//    la crosta si ispessisce di nuovo: la quota media della regione torna quella che la spinta regge. Nessun sollevamento
-//    uniforme messo a mano.
+//    media della regione (la crosta è rigida: flette su ~200 km). E LE PLACCHE LA SOLLEVANO: sf.sollevamento (m/anno, da
+//    tettonica.js: quanto la crosta si ispessisce oggi perché è stretta, o si assottiglia perché è stirata, per quanto
+//    sporge ciò che galleggia), finché la quota non passa sf.tetto (oltre, la crosta cede di lato invece di alzarsi). Solo
+//    le terre: il fondo del mare resta quello della tettonica, salvo dove si posa sedimento: lì il fondo cede sotto il
+//    peso di (ρ_sedimento − ρ_acqua)/(ρ_mantello − ρ_acqua) = 0,74 dello spessore posato.
+//  · L'ACQUA SI CONSERVA: il volume del mare resta quello di partenza; il sedimento che riempie le coste sposta acqua, e
+//    il livello del mare (out.mare) sale di quanto serve.
 //  · QUANTO DURA: quanto è durata la geografia di oggi, cioè l'età media dei fondali (etaCrosta, da tettonica.js: sulla Terra
 //    ~60–100 milioni di anni); senza placche, 100 milioni di anni (manca un orologio migliore). Una tessera, che aggiunge
 //    il dettaglio a una scala più piccola, dura in proporzione al lato delle sue celle (un gradino risale un fiume in un
 //    tempo proporzionale alla distanza).
-// Escono, oltre al rilievo: flusso (la pioggia raccolta, in celle × metri l'anno, come prima), lago, depositato (m),
-// versoValle (per ogni cella, la cella in cui versa; −1 il mare), e i numeri veri: durataErosione (anni), denudazione (m/anno, media sulle terre), fangoAlMare (kg/anno), bilancio (m³).
+// DATI (misurati, con la fonte, in EROSIONE): K per classe, m e n; K_d; k_Qs e I; i tre consumi della ghiaia; P₀; le due
+// densità dell'isostasia. PARAMETRI LIBERI: velo (1 m: sotto, una copertura è un velo che un suolo attraversa: conta solo
+// per dire, alla fine, quali terre sono coperte); durataSenzaPlacche.
+// CHE COSA NON TORNA O MANCA: la geografia sta ferma per tutta la durata mentre le placche fanno ~1700 km, e il
+// sollevamento è quello di oggi; la copertura che arriva dalla tettonica ha già subìto l'erosione a grana grossa di
+// quella (le sue due leggi empiriche: la denudazione è così contata da due fonti, test_erosione le confronta); tutta la
+// copertura della storia vale come roccia clastica litificata (manca una legge della litificazione: quanto in fretta e
+// a che profondità un sedimento diventa roccia; e manca una misura di K per calcari e arenarie: con il K delle argilliti,
+// 10⁻³, la copertura delle terre sparisce lo stesso: provato); il clima è quello di oggi; ciò che si posa sulle coste
+// la tettonica lo ha già contato a modo suo nei margini dei continenti (i due conti si sommano), e il fondo del mare, che
+// in quel tempo si rinnova, qui sta fermo; niente ghiacciai, frane, vento, carsismo; le conche sotto il livello del mare
+// chiuse dentro un continente contano come mare; le celle di ~150 km non vedono le valli (vedi tessera).
+// Escono, oltre al rilievo e al livello del mare (mare: quello a cui l'acqua di partenza riempie il rilievo eroso): flusso (la pioggia raccolta, in celle × metri l'anno, come prima), lago, depositato (m),
+// versoValle (per ogni cella, la cella in cui versa; −1 il mare), copertura, sciolto e lava (m: ciò che resta; sciolto è
+// la parte della copertura posata durante questa erosione), litologia (per
+// cella: 0 basamento, 1 vulcanica, 2 sedimentaria), e i numeri veri: durataErosione (anni), denudazione (m/anno di roccia
+// tolta, in media sulle terre di partenza), fangoAlMare (kg/anno), terreCoperte e terreVulcaniche (frazioni delle terre
+// di oggi), sollevamentoMedio (m/anno, ciò che le placche hanno dato davvero alle terre), bilancio (m³) e
+// bilancioCopertura (m³: prima + posata − erosa = dopo).
 // kQs = 0,041 (Wickert e Schildgen 2019, eq. 19, riletta 2026-11) è costruita sul trasporto di Wong e Parker,
 // 3,97·(τ* − 0,0495)^1,5, e vale per granuli di roccia in acqua (Δ = (ρs − ρ)/ρ = 1,65); con altri fluidi o granuli va
 // moltiplicata per (1,65/Δ)^(7/6). Non dipende dalla gravità. Vale per fiumi ghiaiosi a larghezza d'equilibrio.
 export const EROSIONE = Object.freeze({ m: 0.4, n: 1, K: Object.freeze({ granito: 3.2e-7, vulcanica: 3.2e-5, sedimento: 1e-3 }), pioggiaRif: 1, pendii: 0.01, kQs: 0.041, piena: 0.01, capacitaEsponente: 7 / 6,
-  isostasia: 2800 / 3300, densita: 2700, durataSenzaPlacche: 1e8 });
+  consumo: Object.freeze({ granito: 4.2e-6, vulcanica: 2e-5, sedimento: 2e-4 }), // (1/m) la parte della ghiaia che si disfa in carico fine per ogni metro di strada
+  suolo: 3.1e-4, // (m/anno) P₀: quanto in fretta, al più, la roccia diventa suolo
+  velo: 1, // (m) sotto, una copertura non conta
+  isostasia: 2800 / 3300, sottoIlMare: (2700 - 1000) / (3300 - 1000), densita: 2700, durataSenzaPlacche: 1e8 });
 const memoErosione = new Map();
 export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso = null, crescita = true, scala = 1, durata = null } = {}) {
   if (memoErosione.has(chiave)) return memoErosione.get(chiave);
-  const { W, H, mare } = sf, N = W * H, alt = Float32Array.from(sf.alt), alt0 = sf.alt;
+  const { W, H } = sf, N = W * H, alt = Float32Array.from(sf.alt); let mare = sf.mare;
   // la pioggia: dove fa abbastanza caldo e non c'è ghiaccio (dal clima simulato)
   const pioggia = new Float32Array(N), pm = cl.meteo ? pioggiaPerErosione(cl.meteo, sf) : null;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
@@ -407,17 +435,30 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   const push = (k, v) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (heapV[p] <= v) break; heapK[i] = heapK[p]; heapV[i] = heapV[p]; i = p; } heapK[i] = k; heapV[i] = v; };
   const pop = () => { const k = heapK[0], lk = heapK[--hn], lv = heapV[hn]; let i = 0; for (;;) { let c = 2 * i + 1; if (c >= hn) break; if (c + 1 < hn && heapV[c + 1] < heapV[c]) c++; if (heapV[c] >= lv) break; heapK[i] = heapK[c]; heapV[i] = heapV[c]; i = c; } heapK[i] = lk; heapV[i] = lv; return k; };
   const pieno = new Float32Array(N), ricevente = new Int32Array(N), ordine = new Int32Array(N), visto = new Uint8Array(N), area = new Float32Array(N), dist = new Float32Array(N);
-  let laghi = 0; const eroso = new Float64Array(N), sedimento = new Float64Array(N), depositato = new Float32Array(N), portata = new Float64Array(N), versante = new Float64Array(N), coperta = new Float32Array(N), inizio = new Float32Array(N), calo = new Float32Array(N);
+  let laghi = 0; const sedimento = new Float64Array(N), depositato = new Float32Array(N), portata = new Float64Array(N), versante = new Float64Array(N), inizio = new Float32Array(N), calo = new Float32Array(N);
+  // ciò che il fiume ha scavato in questo passo, strato per strato (m³), e la ghiaia in viaggio per classe di roccia (m³)
+  const eSci = new Float64Array(N), eMez = new Float64Array(N), eBase = new Float64Array(N), ghS = new Float64Array(N), ghV = new Float64Array(N), ghG = new Float64Array(N), sottoMonte = new Float32Array(N);
   // LE MISURE VERE: il lato di una cella (m) lungo i paralleli e lungo i meridiani, e la sua area
   const E = EROSIONE, R = sf.raggioM ?? 6.371e6, [ru0, rv0, ru1, rv1] = sf.rett || [0, 0, 1, 1], dy = (Math.PI * R * (rv1 - rv0)) / H, dxJ = new Float64Array(H), aJ = new Float64Array(H);
   // (verso i poli i paralleli si stringono: sotto un decimo del lato lungo il meridiano la cella non si stringe più, per il conto)
   for (let j = 0; j < H; j++) { const lat = Math.PI / 2 - (rv0 + ((j + 0.5) / H) * (rv1 - rv0)) * Math.PI; dxJ[j] = Math.max(0.1 * dy, (2 * Math.PI * R * Math.cos(lat) * (ru1 - ru0)) / W); aJ[j] = dxJ[j] * dy; }
+  const aDi = (k) => aJ[(k - (k % W)) / W];
   // QUANTO DURA: l'età media dei fondali (la geografia di oggi), o ciò che dice chi chiama (una tessera: in proporzione al lato)
   let T = durata ? durata * Math.min(1, dy / ((Math.PI * R) / 128)) : E.durataSenzaPlacche;
   if (!durata && sf.etaCrosta && sf.cont) { let e = 0, m = 0; for (let k = 0; k < N; k++) if (!sf.cont[k] && sf.etaCrosta[k] > 0) { e += sf.etaCrosta[k]; m++; } if (m) T = (1e6 * e) / m; }
-  const dt = T / passi, rocciaK = (k) => (coperta[k] > 1 ? E.K.sedimento : sf.cont && !sf.cont[k] ? E.K.vulcanica : E.K.granito);
-  let erosoTot = 0, depTerra = 0, depMare = 0, alMare = 0, daiVersanti = 0, areaTerre = 0;
-  for (let k = 0; k < N; k++) if (!(alt[k] < mare)) areaTerre += aJ[(k - (k % W)) / W];
+  const dt = T / passi;
+  // LA ROCCIA, a strati dall'alto: sedimento sciolto (sci), poi copertura litificata (cop) o lave (lava: dove ci sono, la
+  // copertura di prima, sepolta, non si conta più), poi il basamento (base: 0 granito e metamorfiche, 1 vulcanica)
+  const sci = sf.sciolto ? Float32Array.from(sf.sciolto) : new Float32Array(N), cop = new Float32Array(N), lava = new Float32Array(N), base = new Uint8Array(N), diLava = new Uint8Array(N);
+  for (let k = 0; k < N; k++) { base[k] = sf.roccia ? sf.roccia[k] : sf.cont && !sf.cont[k] ? 1 : 0; if (sf.copertura) cop[k] = Math.max(0, sf.copertura[k] - sci[k]);
+    const l = (sf.lava ? sf.lava[k] : 0) + (sf.arco && !durata ? sf.arco[k] * T : 0); if (l > E.velo) { lava[k] = l; diLava[k] = 1; cop[k] = 0; } }
+  const soll = crescita && sf.sollevamento ? sf.sollevamento : null, tetto = sf.tetto || null, V0 = E.suolo * dt;
+  const kSed = E.K.sedimento, kMez = E.K.vulcanica, kGra = E.K.granito, cS = E.consumo.sedimento, cV = E.consumo.vulcanica, cG = E.consumo.granito;
+  const resiste = (x) => (x > 1e-6 ? (1 - Math.exp(-x)) / x : 1); // quanta della ghiaia nata lungo un tratto ne esce ancora ghiaia (x = consumo × lunghezza)
+  let erosoTot = 0, depTerra = 0, depMare = 0, alMare = 0, daiVersanti = 0, areaTerre = 0, copPrima = 0, copErosa = 0, copPosata = 0, sollevato = 0;
+  for (let k = 0; k < N; k++) { const a = aDi(k); if (!(alt[k] < mare)) areaTerre += a; copPrima += (cop[k] + sci[k]) * a; }
+  // L'ACQUA DEL MARE SI CONSERVA (solo sul pianeta intero): il suo volume è quello di partenza; se il fondo si alza il livello sale
+  const acqua = () => { let v = 0, a = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { const ak = aDi(k); v += (mare - alt[k]) * ak; a += ak; } return [v, a]; }, volumeMare = crescita && Number.isFinite(mare) ? acqua()[0] : 0;
   for (let it = 0; it < passi; it++) {
     // inondazione: dal mare (o dal punto più basso, se non c'è mare) verso l'interno; chi resta sotto il
     // livello di chi lo precede sta in una conca: lì c'è un lago
@@ -432,49 +473,81 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     }
     // la portata: la pioggia raccolta da monte a valle (area: in celle × m/anno, per chi legge il flusso; portata: m³/anno)
     const secco = cl.piove === false ? 0 : 0.2;
-    for (let k = 0; k < N; k++) { area[k] = secco + pioggia[k] + (afflusso ? afflusso[k] : 0); portata[k] = area[k] * aJ[(k - (k % W)) / W]; inizio[k] = alt[k]; }
+    for (let k = 0; k < N; k++) { area[k] = secco + pioggia[k] + (afflusso ? afflusso[k] : 0); portata[k] = area[k] * aDi(k); inizio[k] = alt[k]; }
     for (let x = n - 1; x > 0; x--) { const k = ordine[x], r = ricevente[k]; if (r >= 0) { area[r] += area[k]; portata[r] += portata[k]; } }
-    // I FIUMI SCAVANO (implicito, da valle a monte) dove l'acqua scorre e non ristagna
+    // I FIUMI SCAVANO (implicito, da valle a monte) dove l'acqua scorre e non ristagna: lo strato che c'è sotto, e
+    // consumato quello, nel tempo che resta del passo, lo strato dopo
     for (let x = 0; x < n; x++) {
       const k = ordine[x], r = ricevente[k]; if (r < 0 || alt[k] < mare) continue;
       if (pieno[k] > alt[k] + 0.5) continue; // nel lago non si scava: si deposita
-      const F = (rocciaK(k) * Math.pow(portata[k] / E.pioggiaRif, E.m) * dt) / dist[k];
-      if (alt[r] < alt[k]) { const prima = alt[k]; alt[k] = (alt[k] + F * alt[r]) / (1 + F); const tolto = prima - alt[k]; eroso[k] = tolto * aJ[(k - (k % W)) / W]; coperta[k] = Math.max(0, coperta[k] - tolto); }
+      const zr = alt[r]; let z = alt[k]; if (!(zr < z)) continue;
+      const g = (Math.pow(portata[k] / E.pioggiaRif, E.m) * dt) / dist[k], ak = aDi(k); let resto = 1, tc = 0, tl = 0;
+      let c = sci[k];
+      if (c > 0) { const F = kSed * g, giu = ((z - zr) * F) / (1 + F); if (giu <= c) { tc = giu; resto = 0; } else { tc = c; resto -= c / ((z - zr - c) * F); } z -= tc; sci[k] = c - tc; eSci[k] = tc * ak; }
+      if (resto > 0 && (c = diLava[k] ? lava[k] : cop[k]) > 0) { const F = kMez * g * resto, giu = ((z - zr) * F) / (1 + F); if (giu <= c) { tl = giu; resto = 0; } else { tl = c; resto -= (resto * c) / ((z - zr - c) * F); } z -= tl; if (diLava[k]) lava[k] = c - tl; else cop[k] = c - tl; eMez[k] = tl * ak; }
+      if (resto > 0) { const F = (base[k] ? kMez : kGra) * g * resto, giu = ((z - zr) * F) / (1 + F); z -= giu; eBase[k] = giu * ak; }
+      alt[k] = z;
     }
-    // IL SEDIMENTO (m³): scende con l'acqua, da monte a valle. Il fiume porta al più la sua capacità: ciò che ha scavato
-    // lui in più di quella lo riposa dov'è (non scava più di quanto riesce a portare via); il resto si posa dove l'acqua
-    // rallenta, nei laghi e sulle coste: le conche si riempiono, nascono pianure e delta
+    // IL SEDIMENTO (m³): scende con l'acqua, da monte a valle. Il carico fine passa; la ghiaia al più quanto la capacità
+    // del fiume: quella che lui stesso ha fatto in più non la scava (resta dov'era), quella che arriva in più si posa.
+    // Tutto si posa dove l'acqua si ferma, nei laghi e sulle coste: le conche si riempiono, nascono pianure e delta
+    sottoMonte.fill(Infinity);
     for (let x = n - 1; x > 0; x--) {
       const k = ordine[x], r = ricevente[k]; if (r < 0) continue;
-      const ak = aJ[(k - (k % W)) / W], ar = aJ[(r - (r % W)) / W];
-      let carico = sedimento[k] + eroso[k] + versante[k]; erosoTot += eroso[k] + versante[k]; daiVersanti += versante[k]; versante[k] = 0; sedimento[k] = 0;
-      if (eroso[k] > 0) { const S = Math.max(0, alt[k] - alt[r]) / dist[k], capacita = E.kQs * E.piena * portata[k] * Math.pow(S, E.capacitaEsponente) * dt, troppo = Math.min(eroso[k], Math.max(0, carico - capacita));
-        if (troppo > 0) { alt[k] += troppo / ak; carico -= troppo; erosoTot -= troppo; } }
-      eroso[k] = 0;
-      const spazio = alt[r] < mare ? mare - alt[r] : pieno[r] - alt[r];
-      if (spazio > 0.5) { const dep = Math.max(0, Math.min(carico / ar, spazio * 0.5)); const eraMare = alt[r] < mare; alt[r] += dep; carico = Math.max(0, carico - dep * ar); depositato[r] += dep; coperta[r] += dep; if (eraMare) depMare += dep * ar; else depTerra += dep * ar; }
-      sedimento[r] += carico;
+      const ak = aDi(k), ar = aDi(r); let scavato = eSci[k] + eMez[k] + eBase[k];
+      let carico = sedimento[k] + scavato + versante[k], gS = ghS[k], gV = ghV[k], gG = ghG[k]; daiVersanti += versante[k]; erosoTot += versante[k]; versante[k] = 0; sedimento[k] = 0;
+      if (gS + gV + gG > 0 || scavato > V0 * ak) {
+        const d = dist[k]; ghS[k] = 0; ghV[k] = 0; ghG[k] = 0; gS *= Math.exp(-cS * d); gV *= Math.exp(-cV * d); gG *= Math.exp(-cG * d); // la ghiaia in arrivo si consuma per strada
+        // i blocchi di questo passo: ciò che è stato scavato oltre quanto il suolo riesce a disfare, dal fondo dello scavo
+        let bB = 0, bL = 0, bC = 0; const blocchi = scavato - V0 * ak; if (blocchi > 0) { bB = Math.min(eBase[k], blocchi); bL = Math.min(eMez[k], blocchi - bB); bC = Math.max(0, blocchi - bB - bL); }
+        const pB = resiste((base[k] ? cV : cG) * d), pL = resiste(cV * d), pC = resiste(cS * d), S = Math.max(0, alt[k] - alt[r]) / d;
+        let troppo = gS + gV + gG + pB * bB + pL * bL + pC * bC - E.kQs * E.piena * portata[k] * Math.pow(S, E.capacitaEsponente) * dt;
+        if (troppo > 0) {
+          const uB = Math.min(bB, troppo / pB); troppo -= uB * pB; bB -= uB;
+          const uL = troppo > 0 ? Math.min(bL, troppo / pL) : 0; troppo -= uL * pL; bL -= uL;
+          const uC = troppo > 0 ? Math.min(bC, troppo / pC) : 0; troppo -= uC * pC; bC -= uC;
+          const u = uB + uL + uC; if (u > 0) { alt[k] += u / ak; if (diLava[k]) lava[k] += uL / ak; else cop[k] += uL / ak; sci[k] += uC / ak; eMez[k] -= uL; eSci[k] -= uC; carico -= u; scavato -= u; }
+          // la ghiaia arrivata da monte in più di quanta il fiume ne porta si posa qui (una conoide), senza superare chi sta a monte
+          const arrivata = gS + gV + gG; if (troppo > 1e-9 * arrivata && arrivata > 0) { const posa = Math.min(troppo, arrivata, Math.max(0, 0.5 * (sottoMonte[k] - alt[k])) * ak);
+            if (posa > 0) { const f = 1 - posa / arrivata; gS *= f; gV *= f; gG *= f; alt[k] += posa / ak; sci[k] += posa / ak; depositato[k] += posa / ak; carico -= posa; depTerra += posa; copPosata += posa; } }
+        }
+        gS += pC * bC; gV += pL * bL; if (base[k]) gV += pB * bB; else gG += pB * bB;
+      }
+      erosoTot += scavato; copErosa += eSci[k] + (diLava[k] ? 0 : eMez[k]); eSci[k] = 0; eMez[k] = 0; eBase[k] = 0;
+      if (alt[k] < sottoMonte[r]) sottoMonte[r] = alt[k];
+      // (una conca è tale se era sotto il pelo dell'acqua PRIMA che il fiume scavasse in questo passo: il letto appena inciso non è una conca.
+      // Prima si guardava la quota già scavata: ogni cella incisa passava per conca e si riprendeva metà dello scavo)
+      const spazio = alt[r] < mare ? mare - alt[r] : pieno[r] > inizio[r] + 0.5 ? pieno[r] - alt[r] : 0;
+      if (spazio > 0.5) { const dep = Math.max(0, Math.min(carico / ar, spazio * 0.5)), eraMare = alt[r] < mare, prima = carico; alt[r] += dep; carico = Math.max(0, carico - dep * ar); depositato[r] += dep; sci[r] += dep; copPosata += dep * ar; if (eraMare) depMare += dep * ar; else depTerra += dep * ar;
+        if (gS + gV + gG > 0) { const f = prima > 0 ? carico / prima : 0; gS *= f; gV *= f; gG *= f; } }
+      sedimento[r] += carico; if (gS + gV + gG > 0) { ghS[r] += gS; ghV[r] += gV; ghG[r] += gG; }
     }
-    for (let k = 0; k < N; k++) if (ricevente[k] < 0 && sedimento[k] > 0) { alMare += sedimento[k]; sedimento[k] = 0; } // ciò che arriva al mare (o esce dalla tessera) e non si è posato
+    for (let k = 0; k < N; k++) if (ricevente[k] < 0) { if (sedimento[k] > 0) { alMare += sedimento[k]; sedimento[k] = 0; } ghS[k] = 0; ghV[k] = 0; ghG[k] = 0; } // ciò che arriva al mare (o esce dalla tessera) e non si è posato
     // I PENDII SCIVOLANO: tra due celle di terra vicine passa K_d·Δh/d per metro di confine. Una cella che riceve acqua
     // da altre è un letto di fiume: non cede e non si alza; ciò che i versanti le danno va nel carico del fiume
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const k = j * W + i; if (alt[k] < mare || pieno[k] > alt[k] + 0.5) continue;
       for (let lato = 0; lato < 2; lato++) { const q = lato ? (j + 1 < H ? k + W : -1) : j * W + ((i + 1) % W); if (q < 0 || alt[q] < mare || pieno[q] > alt[q] + 0.5) continue;
-        const d = lato ? dy : 0.5 * (dxJ[j] + dxJ[j]), largo = lato ? dxJ[j] : dy, su = alt[k] > alt[q] ? k : q, giu = su === k ? q : k, aS = aJ[(su - (su % W)) / W], aG = aJ[(giu - (giu % W)) / W];
+        const d = lato ? dy : 0.5 * (dxJ[j] + dxJ[j]), largo = lato ? dxJ[j] : dy, su = alt[k] > alt[q] ? k : q, giu = su === k ? q : k, aS = aDi(su), aG = aDi(giu);
         if (area[su] > secco + pioggia[su] + (afflusso ? afflusso[su] : 0) + 1e-6) continue; // chi cede è un letto: non è un pendio
         // (al più un quinto del dislivello per passo: oltre, il conto esplicito salterebbe; è già il pendio all'equilibrio)
         const vol = Math.min((E.pendii * (cl.sgretola ?? 0.05) / 0.05) * ((alt[su] - alt[giu]) / d) * largo * dt, 0.2 * (alt[su] - alt[giu]) * Math.min(aS, aG));
         calo[su] += vol / aS; if (area[giu] > secco + pioggia[giu] + (afflusso ? afflusso[giu] : 0) + 1e-6) versante[giu] += vol; else calo[giu] -= vol / aG; }
     }
-    for (let k = 0; k < N; k++) if (calo[k] !== 0) { alt[k] -= calo[k]; calo[k] = 0; }
-    // LA CROSTA RISPONDE (solo sul pianeta intero): l'isostasia rialza la regione di ρc/ρm di ciò che ha perso, e dove le
-    // placche spingono la quota media della regione torna quella di prima
-    if (crescita) { for (let k = 0; k < N; k++) calo[k] = alt[k] < mare ? 0 : inizio[k] - alt[k];
-      for (let k = 0; k < N; k++) { if (alt[k] < mare) continue; let m = calo[k], c = 1; vicini(k, (q) => { if (!(alt[q] < mare)) { m += calo[q]; c++; } }); m /= c;
-        portata[k] = E.isostasia * m + (sf.spinta && m > 0 ? sf.spinta[k] * (1 - E.isostasia) * m : 0); }
-      for (let k = 0; k < N; k++) { if (!(alt[k] < mare)) alt[k] += portata[k]; calo[k] = 0; } }
+    // (ciò che un versante perde lo perde dall'alto: prima il sedimento sciolto, poi la copertura o le lave; ciò che riceve è sedimento)
+    for (let k = 0; k < N; k++) { let giu = calo[k]; if (giu === 0) continue; alt[k] -= giu; calo[k] = 0;
+      if (giu < 0) { sci[k] -= giu; copPosata -= giu * aDi(k); } else { let c = sci[k], t = giu < c ? giu : c; sci[k] = c - t; giu -= t; copErosa += t * aDi(k);
+        if (giu > 0) { if (diLava[k]) lava[k] = Math.max(0, lava[k] - giu); else { c = cop[k]; t = giu < c ? giu : c; cop[k] = c - t; copErosa += t * aDi(k); } } } }
+    // LA CROSTA RISPONDE (solo sul pianeta intero): l'isostasia rialza la regione di ρc/ρm di ciò che ha perso; e le
+    // placche la sollevano (o la abbassano) di quanto la crosta si ispessisce, finché regge
+    if (crescita) { for (let k = 0; k < N; k++) { if (alt[k] < mare) { if (alt[k] > inizio[k]) alt[k] -= E.sottoIlMare * (alt[k] - inizio[k]); calo[k] = 0; } else calo[k] = inizio[k] - alt[k]; } // (sotto il mare il fondo cede al peso del sedimento che prende il posto dell'acqua)
+      for (let k = 0; k < N; k++) { if (alt[k] < mare) continue; let m = calo[k], c = 1; vicini(k, (q) => { if (!(alt[q] < mare)) { m += calo[q]; c++; } }); portata[k] = (E.isostasia * m) / c; }
+      for (let k = 0; k < N; k++) { if (!(alt[k] < mare)) { let su = portata[k];
+          if (soll) { const u = soll[k] * dt, z = alt[k] + su, fin = tetto ? tetto[k] : Infinity, s = u < 0 ? u : z < fin ? Math.min(u, fin - z) : 0; su += s; sollevato += s * aDi(k); }
+          alt[k] += su; } calo[k] = 0; }
+      if (volumeMare > 0) { const [v, a] = acqua(); if (a > 0) mare += (volumeMare - v) / a; } }
   }
+  if (volumeMare > 0) for (let giro = 0; giro < 6; giro++) { const [v, a] = acqua(); if (!(a > 0) || Math.abs(volumeMare - v) < 1e-9 * volumeMare) break; mare += (volumeMare - v) / a; }
   // una conca diventa lago solo se l'acqua che le arriva supera quella che evapora (più fa caldo, più
   // evapora); altrimenti resta asciutta, una piana di sale
   const lago = new Float32Array(N);
@@ -486,8 +559,12 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     if (area[k] > evapora * scala) { lago[k] = pieno[k] - alt[k]; laghi++; }
   }
   const flusso = new Float32Array(N); for (let k = 0; k < N; k++) flusso[k] = area[k];
-  const out = { ...sf, alt, flusso, lago, depositato, celleLago: laghi, passiErosione: passi, versoValle: Int32Array.from(ricevente), durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
-    bilancio: { eroso: erosoTot, depositato: depTerra + depMare, alMare, daiVersanti } };
+  // di che roccia è fatta oggi la superficie, e quanta delle terre ha ancora la sua copertura
+  const litologia = new Uint8Array(N); let copDopo = 0, aTerre = 0, aCoperte = 0, aVulcaniche = 0;
+  for (let k = 0; k < N; k++) { const a = aDi(k); cop[k] += sci[k]; const l = cop[k] > E.velo ? 2 : lava[k] > E.velo || base[k] ? 1 : 0; litologia[k] = l; copDopo += cop[k] * a; if (!(alt[k] < mare)) { aTerre += a; if (l === 2) aCoperte += a; else if (l === 1) aVulcaniche += a; } }
+  const out = { ...sf, mare, alt, flusso, lago, depositato, copertura: cop, sciolto: sci, lava, litologia, celleLago: laghi, passiErosione: passi, versoValle: Int32Array.from(ricevente), durataErosione: T, denudazione: areaTerre > 0 ? erosoTot / areaTerre / T : 0, fangoAlMare: ((alMare + depMare) * E.densita) / T,
+    terreCoperte: aTerre > 0 ? aCoperte / aTerre : 0, terreVulcaniche: aTerre > 0 ? aVulcaniche / aTerre : 0, sollevamentoMedio: areaTerre > 0 ? sollevato / areaTerre / T : 0,
+    bilancio: { eroso: erosoTot, depositato: depTerra + depMare, alMare, daiVersanti }, bilancioCopertura: { prima: copPrima, erosa: copErosa, posata: copPosata, dopo: copDopo } };
   memoErosione.set(chiave, out); if (memoErosione.size > 6) memoErosione.delete(memoErosione.keys().next().value);
   return out;
 }
@@ -515,11 +592,15 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   const ix = (x) => (M.giro ? ((x % MW) + MW) % MW : Math.max(0, Math.min(MW - 1, x))), iy = (y) => Math.max(0, Math.min(MH - 1, y));
   const bil = (arr, fx, fy) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0, a = iy(y0) * MW, b = iy(y0 + 1) * MW, p = ix(x0), q = ix(x0 + 1); return arr[a + p] * (1 - u) * (1 - v) + arr[a + q] * u * (1 - v) + arr[b + p] * (1 - u) * v + arr[b + q] * u * v; };
   const alt = new Float32Array(N), afflusso = new Float32Array(N), livelloLago = new Float32Array(N);
+  // la roccia della madre (copertura, lave, basamento), cella per cella: la figlia scava la stessa roccia
+  const copertura = m.copertura ? new Float32Array(N) : null, sciolto = m.sciolto ? new Float32Array(N) : null, lava = m.lava ? new Float32Array(N) : null, roccia = new Uint8Array(N), [nu0, nv0, nu1, nv1] = m.rett;
   const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1;
   for (let j = 0; j < Hl; j++) for (let i = 0; i < Wl; i++) {
     const gu = rettL[0] + ((i + 0.5) / Wl) * (rettL[2] - rettL[0]), gv = rettL[1] + ((j + 0.5) / Hl) * (rettL[3] - rettL[1]), c = j * Wl + i;
     const fx = ((gu - mu0) / (mu1 - mu0)) * MW - 0.5, fy = ((gv - mv0) / (mv1 - mv0)) * MH - 0.5;
     alt[c] = bil(M.alt, fx, fy) + amp * (rumore(gu * f1, gv * f1 * 0.5, seme + L) + 0.45 * rumore(gu * f2, gv * f2 * 0.5, seme + 31 * L));
+    { const mi = Math.floor(((gu - nu0) / (nu1 - nu0)) * W), mj = Math.max(0, Math.min(H - 1, Math.floor(((gv - nv0) / (nv1 - nv0)) * H))), q = mj * W + (L === 1 ? ((mi % W) + W) % W : Math.max(0, Math.min(W - 1, mi)));
+      if (copertura) copertura[c] = m.copertura[q]; if (sciolto) sciolto[c] = m.sciolto[q]; if (lava) lava[c] = m.lava[q]; roccia[c] = m.roccia ? m.roccia[q] : m.cont && !m.cont[q] ? 1 : 0; }
     if (i === 0 || j === 0 || i === Wl - 1 || j === Hl - 1) afflusso[c] = M.flusso[iy(Math.round(fy)) * MW + ix(Math.round(fx))] * 4; // la portata dei fiumi che entrano
     if (M.lago) { // il lago della madre: la sua superficie è piatta, la riva la decide il terreno fine
       const x0 = Math.floor(fx), y0 = Math.floor(fy); let lev = 0;
@@ -527,11 +608,13 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
       livelloLago[c] = lev;
     }
   }
-  const e = erosione(k, { W: Wl, H: Hl, raggioM: radice.raggioM, alt, mare, rett: rettL, vulcani: [] }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L, durata: radice.durataErosione });
+  const e = erosione(k, { W: Wl, H: Hl, raggioM: radice.raggioM, alt, mare, rett: rettL, vulcani: [], roccia, ...(copertura ? { copertura } : {}), ...(sciolto ? { sciolto } : {}), ...(lava ? { lava } : {}) }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L, durata: radice.durataErosione });
   for (let c = 0; c < N; c++) if (livelloLago[c] > e.alt[c]) e.lago[c] = Math.max(e.lago[c], livelloLago[c] - e.alt[c]);
   // ciò che si mostra: il centro, senza il bordo
   const out = { ...e, W, H, rett, livello: L, vulcani: [], materiali: m.materiali };
   for (const [nome, v] of Object.entries(e)) if (ArrayBuffer.isView(v) && v.length === N) { const r = new v.constructor(W * H); for (let j = 0; j < H; j++) r.set(v.subarray((j + Ph) * Wl + Pw, (j + Ph) * Wl + Pw + W), j * W); out[nome] = r; }
+  // (versoValle parla delle celle della tessera larga: qui diventa l'indice nella parte mostrata; −1 se l'acqua esce dal bordo)
+  if (out.versoValle) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const q = e.versoValle[(j + Ph) * Wl + i + Pw], qi = q < 0 ? -1 : (q % Wl) - Pw, qj = q < 0 ? -1 : Math.floor(q / Wl) - Ph; out.versoValle[j * W + i] = qi >= 0 && qi < W && qj >= 0 && qj < H ? qj * W + qi : -1; }
   const qx = tx & 3, qy = ty & 3, cont = new Uint8Array(W * H); if (m.cont) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) cont[j * W + i] = m.cont[Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))];
   out.cont = cont; out.largo = { W: Wl, H: Hl, rett: rettL, alt: e.alt, flusso: e.flusso, lago: e.lago };
   // l'età della crosta e le fosse della madre, ricampionate come i continenti

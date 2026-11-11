@@ -229,9 +229,9 @@ export const sistema = memo((n, gid, sid) => {
     try { const gr = gasRadiogenici({ pianeta: { g: (6.674e-11 * massaKg) / p.raggioM ** 2, raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
       inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
     const ariaDelPianeta = () => {
-      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
+      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
         calore: p.interno.vulcani > 0 ? p.interno.q : 0, inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
-      p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato }; // (con quale asse e quale giorno è stato calcolato)
+      p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato, giorno: p.giorno }; // (con quale asse e quale giorno è stato calcolato: il giorno entra nel calore che l'aria porta, leggi.js)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
       // aminoacidi e zuccheri (scariche e ultravioletto)
       try {
@@ -248,7 +248,7 @@ export const sistema = memo((n, gid, sid) => {
       // la dinamo sente il giorno (geologia.interno: il numero di Rossby): con il giorno di oggi il campo si rifà
       const oggi = interno(p, S); Object.assign(p.interno, { B0: oggi.B0, ...(oggi.rossby != null ? { rossby: oggi.rossby, dipolo: oggi.dipolo } : {}) }); p.B0 = oggi.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8))); } }
     // (il clima è stato calcolato prima delle lune, che lo leggono: se la luna dell'urto ha poi cambiato l'asse o il blocco, si rifà)
-    if (p.clima.giro.obliquita !== p.obliquita || p.clima.giro.bloccato !== p.bloccato) ariaDelPianeta();
+    if (p.clima.giro.obliquita !== p.obliquita || p.clima.giro.bloccato !== p.bloccato || p.clima.giro.giorno !== p.giorno) ariaDelPianeta();
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
     // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
     // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere

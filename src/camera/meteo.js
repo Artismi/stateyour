@@ -20,8 +20,8 @@
 //      fretta con la latitudine, e spingono al suolo i venti da ovest. Su un pianeta lento la cella arriva al polo. Su
 //      uno bloccato l'aria sale sotto il sole, va verso la notte in quota e torna al suolo. Niente di questo è scritto.
 //   3. L'ACQUA: il vapore sta nell'aria bassa e viaggia con il suo vento. Evapora dal mare, dai laghi e dal suolo
-//      bagnato in proporzione al vento e a quanto l'aria è lontana dalla saturazione (Clausius-Clapeyron, dalle tabelle
-//      di chimica.js). Dove il vento converge o sale lungo un rilievo, o va verso il freddo, la colonna supera ciò che
+//      bagnato in proporzione al vento e a quanto l'aria è lontana dalla saturazione (Clausius-Clapeyron, dalla tabella
+//      dell'acqua di leggi.js). Dove il vento converge o sale lungo un rilievo, o va verso il freddo, la colonna supera ciò che
 //      può tenere e piove: sul versante sopravvento sì, dietro no (l'aria è già asciutta e scendendo si scalda). Dove
 //      l'aria scende e diverge porta via il vapore: i deserti. Il calore latente di ciò che piove (meno ciò che evapora)
 //      scalda l'aria e rinforza la salita. Il suolo è un secchio: si riempie con la pioggia, evapora, trabocca.
@@ -99,20 +99,22 @@
 // parte nevosa; vapore e suolo kg/m²; nuvole e umidità 0…1; trasportoCalore W/m² (positivo: calore che arriva).
 // Deterministico: nessun numero a caso.
 
-import { COSTANTI, R_GAS, ANNO, NUVOLE } from './leggi.js';
-import { pressioneVapore, atmosfera, MOLECOLE } from './chimica.js';
+import { COSTANTI, R_GAS, ANNO, NUVOLE, ARIA, colonnaAria, adiabatica as adiabaticaDellAria, vaporeNellAria, pendenzaVapore, scambioConLAria } from './leggi.js';
+import { atmosfera, gasDellAria } from './chimica.js';
 
+// (l'attrito, lo scambio, le raffiche, la stabilità dell'aria secca e il tetto del vapore stanno in leggi.js, ARIA: sono gli
+// stessi del calore che l'aria porta nel clima a fasce — una fonte sola; qui si leggono)
 export const PARAMETRI = {
-  cdMare: 1.3e-3, cdTerra: 3e-3, // l'attrito dell'aria sul mare e sulla terra (coefficiente della formula di massa)
-  ce: NUVOLE.ce, // lo stesso per l'evaporazione e per il calore scambiato con la superficie
-  raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
+  cdMare: ARIA.cdMare, cdTerra: ARIA.cdTerra, // l'attrito dell'aria sul mare e sulla terra (coefficiente della formula di massa)
+  ce: ARIA.ce, // lo stesso per l'evaporazione e per il calore scambiato con la superficie
+  raffica: ARIA.raffica, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
   secchio: 150, // (kg/m²) quanta acqua tiene il suolo
-  stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
+  stabilitaSecca: ARIA.stabilitaSecca, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
   umiditaPioggia: NUVOLE.sogliaPioggia, // piove quando il vapore della colonna supera questa frazione della saturazione
   tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore cade
   raggioGocce: NUVOLE.raggioGocce, // (m) il raggio efficace delle gocce di nube: 10 µm, MISURATO sulle nubi d'acqua terrestri (è l'incognita dichiarata delle nuvole)
   umiditaNuvole: NUVOLE.sereno, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
-  vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
+  vaporeMassimo: ARIA.vaporeMassimo, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
   viscosita: 0.003, // numerico: la viscosità, in unità di (velocità delle onde × passo della griglia)
   courant: 0.85, coriolis: 0.5, // numerici: quanta strada (e quanta rotazione) in un passo di tempo
   latCritica: 45, // numerico: oltre questa latitudine si lisciano le onde più corte del passo della griglia a 45°
@@ -120,7 +122,7 @@ export const PARAMETRI = {
 };
 // le nuvole: le costanti e le formule sono in leggi.js (NUVOLE: una legge sola per il clima a fasce e per questa mappa)
 const K_AUTO = NUVOLE.kessler, RHO_ACQUA = NUVOLE.densitaAcqua, ASIMMETRIA = NUVOLE.asimmetria, ASSORBE_IR = NUVOLE.assorbeInfrarosso;
-const MOLARE_ACQUA = 0.018015, SIGMA = COSTANTI.sigma, DIAMETRO_MOLECOLA = 3.7e-10; // (m) il diametro d'urto di una molecola d'aria
+const MOLARE_ACQUA = ARIA.molareAcqua, SIGMA = COSTANTI.sigma, DIAMETRO_MOLECOLA = 3.7e-10; // (m) il diametro d'urto di una molecola d'aria
 
 // ---------- la trasformata di Fourier per righe (lati potenze di 2)
 function tabellaFft(n) {
@@ -313,24 +315,23 @@ function motore(W, H, par, forz) {
 }
 
 // ---------- LA TERMODINAMICA DELL'ARIA: dai gas, dalla pressione e dalla gravità
-const esAcqua = (T, p) => Math.min(pressioneVapore(T), PARAMETRI.vaporeMassimo * p); // il vapore resta un ospite dell'aria che lo porta (oltre, il modello non vale)
-const pendenza = (T) => (Math.log(pressioneVapore(T + 0.5)) - Math.log(pressioneVapore(T - 0.5))); // d ln e_s / dT (Clausius-Clapeyron, dalle tabelle di chimica.js)
+// (la colonna a due strati, l'adiabatica e il vapore che l'aria tiene sono in leggi.js — colonnaAria, adiabatica,
+// vaporeNellAria, pendenzaVapore —: li usa anche il clima a fasce per il calore che l'aria porta. Una fonte sola)
+const esAcqua = vaporeNellAria; // il vapore resta un ospite dell'aria che lo porta (oltre, il modello non vale)
+const pendenza = pendenzaVapore; // d ln e_s / dT (Clausius-Clapeyron, dalla tabella dell'acqua)
 export function aria({ pressione, massaMolare = 0.029, gravita, cp = null, Tmedia, Tmin = Tmedia, Tmax = Tmedia, acqua = true }) {
-  const R = R_GAS / massaMolare, cpA = cp ?? 3.5 * R, kappa = R / cpA, eps = MOLARE_ACQUA / massaMolare, Rv = R_GAS / MOLARE_ACQUA;
+  const col = colonnaAria({ pressione, gravita, massaMolare, cp }), { R, cp: cpA, kappa, wm, w1, w2, minimo } = col, Rv = R_GAS / MOLARE_ACQUA;
   // l'adiabatica (satura se c'è acqua) da T0 alla superficie fino alla pressione fp·p: la temperatura lassù
-  const adiabatica = (T0, fp, umida) => { const n = 24, dl = Math.log(fp) / n; let T = T0, lp = 0;
-    const der = (T, lp) => { if (!umida) return kappa * T; const p = pressione * Math.exp(lp), e = esAcqua(T, p), r = (eps * e) / (p - e), L = Rv * T * T * pendenza(T); return (R * T + L * r) / (cpA + (L * L * r * eps) / (R * T * T)); };
-    for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * der(T, lp); T += dl * der(m, lp + 0.5 * dl); lp += dl; } return T; };
+  const adiabatica = (T0, fp, umida) => adiabaticaDellAria(col, T0, fp, umida);
   // L'EQUILIBRIO sopra una superficie a temperatura T: le temperature potenziali dei due strati (a 3/4 e a 1/4 della
   // pressione) lungo l'adiabatica che parte da lì; un'aria secca resta comunque stabile del minimo misurato
-  const wm = Math.pow(0.5, kappa), w1 = wm / (1 + kappa), w2 = wm / (1 - kappa / 3), es = 1 - PARAMETRI.stabilitaSecca, minimo = Math.pow(0.25, -kappa * es) - Math.pow(0.75, -kappa * es);
   const t0 = Math.floor(Tmin) - 1, nT = Math.ceil(Tmax) + 2 - t0, tab1 = new Float64Array(nT), tab2 = new Float64Array(nT);
   for (let i = 0; i < nT; i++) { const T = t0 + i; tab2[i] = adiabatica(T, 0.75, acqua) / w2; tab1[i] = Math.max(adiabatica(T, 0.25, acqua) / w1, tab2[i] + minimo * T); }
   const equilibrio = (T) => { const x = Math.max(0, Math.min(nT - 1.001, T - t0)), i = Math.floor(x), f = x - i; return [tab1[i] * (1 - f) + tab1[i + 1] * f, tab2[i] * (1 - f) + tab2[i + 1] * f]; };
   // il gradiente termico verticale (K/m): quello dell'adiabatica dalla temperatura media, tra la superficie e metà pressione
   const Tm = adiabatica(Tmedia, 0.5, acqua), gamma = Math.min((Tmedia - Tm) / (((R * 0.5 * (Tmedia + Tm)) / gravita) * Math.LN2), (PARAMETRI.stabilitaSecca * gravita) / cpA);
-  const hs = (R * Tmedia) / gravita, c2 = (R * wm) / 3, capStrato = (cpA * 0.5 * pressione) / gravita;
-  return { R, cp: cpA, kappa, Rv, gamma, hs, c2, capStrato, w1, w2, tauRad: (capStrato * (w1 + w2)) / (4 * SIGMA * Tmedia ** 3), L: Rv * Tmedia * Tmedia * pendenza(Tmedia), equilibrio };
+  const hs = (R * Tmedia) / gravita, c2 = col.c2, capStrato = col.capStrato;
+  return { R, cp: cpA, kappa, Rv, gamma, hs, c2, capStrato, w1, w2, tauRad: (capStrato * (w1 + w2)) / (4 * SIGMA * Tmedia ** 3), L: Rv * Tmedia * Tmedia * pendenza(Tmedia), equilibrio, colonna: col };
 }
 
 // la quota e la parte bagnata di ogni cella del clima, da una carta delle quote uguale o più fine (multipla intera)
@@ -468,7 +469,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
     for (let j = 0; j < H; j++) { const c = peso(j), cs = j < H - 1 ? Math.sin((j + 1) * df) : 0; for (let i = 0; i < W; i++) { const p = j * W + i, t = T[p], gx = (T[j * W + ((i + 1) % W)] - t) / dl, gy = j < H - 1 ? (t - T[p + W]) / df : 0;
       sFT += (ris.trasportoCalore[p] - Fm) * (t - Tm) * c; sGG += (gx * gx) / c + gy * gy * cs; } }
     ris.diffusivita = sGG > 0 ? -sFT / sGG : 0; }
-  ris.scambio = ar.capStrato * ar.w2 * (1 / ar.tauRad + (2 * PARAMETRI.ce * 5) / ar.hs); // (W/m² per K) quanto forte la superficie è legata all'aria bassa, con 5 m/s di vento
+  ris.scambio = scambioConLAria(ar.colonna, Tm, 5); // (W/m² per K) quanto forte la superficie è legata all'aria bassa, con 5 m/s di vento (la formula è in leggi.js: è lo stesso scambio del clima a fasce)
   return Object.assign(ris, { regime: 'aria', dt, giorniSimulati: ((nAvvio + nS * (nAdatta + nMedia)) * dt) / 86400, giorniPerStagione: (nMedia * dt) / 86400, tentativi });
 }
 
@@ -477,12 +478,9 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
 const frazioneNeve = (T, freddo = 0) => Math.max(0, Math.min(1, Math.max((275.15 - T) / 2, freddo)));
 
 // ---------- DI COMODO: dal pianeta, dalla superficie e dal clima come li danno cosmo.js e geologia.js
-// i gas: la massa molare media e il calore specifico (per mole: 5/2 R un atomo solo, 7/2 R due atomi, 4 R tre o più: le
-// rotazioni, senza le vibrazioni)
-export function gasDellAria(gas = {}) {
-  let n = 0, massa = 0, cpMol = 0; for (const f in gas) { const m = MOLECOLE[f]; if (!m || !(gas[f] > 0)) continue; const atomi = Object.values(m.atomi).reduce((x, y) => x + y, 0); n += gas[f]; massa += gas[f] * m.massa * 1e-3; cpMol += gas[f] * (atomi === 1 ? 2.5 : atomi === 2 ? 3.5 : 4) * R_GAS; }
-  return n > 0 ? { massaMolare: massa / n, cp: cpMol / massa } : { massaMolare: 0.029, cp: null };
-}
+// i gas: la massa molare media e il calore specifico: gasDellAria sta in chimica.js (la usa anche il clima a fasce, per il
+// calore che l'aria porta); da qui la si può ancora importare
+export { gasDellAria };
 const memoMeteo = new Map();
 export function meteoPianeta(P, sf, cl, { passi = 1800, chiave = null, seme = P.semeMeteo || null } = {}) {
   if (chiave && memoMeteo.has(chiave)) return memoMeteo.get(chiave);

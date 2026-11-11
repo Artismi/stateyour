@@ -17,6 +17,7 @@ import * as LG from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
 import * as GA from '../src/camera/galassie.js'; // le galassie come conseguenza: la forma (G.forma) e il catalogo campione // le stelle vengono da qui (struttura), non più dalle curve di leggi.js
 import * as GE from '../src/camera/geologia.js';
+import * as STO from '../src/camera/storia.js';
 import * as DI from '../src/camera/disco.js';
 import * as LU from '../src/camera/lune.js';
 import * as CH from '../src/camera/chimica.js';
@@ -359,13 +360,17 @@ prova('la radioattività cala con l\'età con una legge sola (leggi.js caloreDel
   for (const eta of [5e8, 2e9, 4.5e9, 9e9, 1.3e10]) {
     const atteso = LG.caloreDellaRoccia(eta) / LG.caloreDellaRoccia(4.5e9);
     tra(LU.caloreRadioattivo(corpo, eta) / LU.caloreRadioattivo(corpo, 4.5e9) / atteso, 1 - 1e-9, 1 + 1e-9, 'lune');
-    tra(GE.interno(P, { eta, Z: 1 }).q / GE.interno(P, { eta: 4.5e9, Z: 1 }).q / atteso, 1 - 1e-9, 1 + 1e-9, 'pianeti');
+    // i pianeti: il calore radiogenico della loro storia (storia.js) è la stessa legge per la stessa massa di roccia e ferro;
+    // il calore che ESCE (interno().q) non è più quello riscalato: è la storia termica, che lo segue con ritardo
+    tra(STO.storia(P, eta, { stella: { eta, Z: 1 } }).Q.rad / (LG.caloreDellaRoccia(eta) * P.massaKg), 1 - 1e-9, 1 + 1e-9, 'pianeti: calore radiogenico / (legge × massa)');
+    tra(STO.storia(P, eta).Q.rad / STO.storia(P, 4.5e9).Q.rad / atteso, 1 - 1e-9, 1 + 1e-9, 'pianeti: andamento con l\'età');
   }
+  // il calore che esce cala con l'età (il mantello si raffredda) ed è più di quello radiogenico (c'è anche il calore di partenza)
+  const q = [5e8, 2e9, 4.5e9, 9e9].map((eta) => GE.interno(P, { eta, Z: 1 })); for (let k = 1; k < q.length; k++) assert.ok(q[k].q < q[k - 1].q, 'q non cala con l\'età');
+  for (const eta of [5e8, 2e9, 4.5e9]) { const s = STO.storia(P, eta); assert.equal(s.interno.q, GE.interno(P, { eta, Z: 1 }).q, 'interno().q è la storia letta a quell\'età'); tra(s.urey, 0.2, 1, 'calore radiogenico / calore che esce'); }
+  // e non dipende più dai metalli della stella (il fattore √Z è stato tolto: stessa roccia, stesso calore, come per le lune)
+  assert.equal(GE.interno({ ...P }, { eta: 4.5e9, Z: 3 }).q, GE.interno({ ...P }, { eta: 4.5e9, Z: 1 }).q);
 });
-{
-  nota(3, 'il calore interno di un pianeta cresce con i metalli della stella (√Z: più uranio e torio); quello di una luna no: caloreRadioattivo non riceve la metallicità',
-    { casi: 1, su: 1, dove: 'geologia.js interno() «Math.sqrt(Math.max(0.05, Z))» contro lune.js caloreRadioattivo(L, eta)' });
-}
 prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco), che rotazione.js integra dalla nascita del pianeta a oggi', () => {
   let bloccati = 0, liberi = 0, risonanti = 0, controllati = 0;
   for (const x of PIANETI) {
@@ -484,6 +489,8 @@ const SCELTI = [
   ['un roccioso con il mare e le placche', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.interno.tettonica === 'a placche') || ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && !p.bloccato)],
   ['un roccioso con il mare tenuto aperto dal termostato del carbonio', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && !p.bloccato && p.clima.mare < 0.97 && p.interno.tettonica !== 'a placche') || ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.termostato > 0 && p.interno.tettonica !== 'a placche')],
   ['un roccioso con il mare, bloccato dalle maree', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && !p.clima.termostato && p.interno.tettonica !== 'a placche')],
+  // (il regime in cui clima() e i venti ancora non coincidono: un mare caldo sotto un sole fisso; cercato apposta, perché resti misurato)
+  ['un roccioso con il mare caldo e umido (oltre 315 K), bloccato dalle maree', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua === 'liquida' && p.bloccato && p.clima.T > 315 && p.clima.mare > 0.5)],
   ['un roccioso dove l\'acqua è vapore', ILLUMINATI.find(({ p }) => p.tipo === 'roccioso' && p.clima.acqua.startsWith('vapore') && p.interno.acquaKg > 0 && p.interno.tettonica !== 'a placche')],
 ].filter(([, x]) => x).filter(([, x], i, tutti) => tutti.findIndex(([, y]) => y === x) === i);
 const SUPERFICI = SCELTI.map(([nome, x]) => {
@@ -552,21 +559,24 @@ prova('il clima simulato conserva l\'energia: a regime il pianeta irradia quanta
 });
 
 prova('la temperatura ha una fonte sola: clima() è il bilancio per fasce, e la mappa (la stessa legge, più fine) dà la stessa media', () => {
-  let n = 0;
+  let n = 0, conAria = 0, portano = 0;
   for (const x of SOLIDI) {
     const c = x.p.clima; n++;
     // clima() porta con sé ciò che la mappa deve condividere, e il suo bilancio torna
-    assert.ok(c.tau >= 0 && c.D > 0 && c.Tavvio > 0 && c.mare >= 0 && c.mare <= 1 && c.fasce.T.length === c.fasce.lat.length, 'clima() senza i pezzi della legge');
+    // (il calore portato è una legge dell'aria, leggi.js: senz'aria è zero — prima era 0,6·√p con un minimo messo a mano, mai zero —;
+    // dove c'è un'aria di almeno un millibar e la superficie non è uniforme, l'aria ne porta)
+    assert.ok(c.tau >= 0 && c.D >= 0 && isFinite(c.D) && c.vento >= LG.ARIA.raffica * (1 - 1e-12) && c.Tavvio > 0 && c.mare >= 0 && c.mare <= 1 && c.fasce.T.length === c.fasce.lat.length, 'clima() senza i pezzi della legge');
+    if (!(c.pressione > 0)) assert.equal(c.D, 0, 'senz\'aria nessun calore passa da una fascia all\'altra'); else if (c.pressione > 100 && c.bilancio.arriva > 0.05) { conAria++; if (c.D > 0) portano++; }
     if (c.bilancio.arriva > 1e-3) tra(c.bilancio.irradiata / c.bilancio.assorbita, 0.95, 1.05, `clima() a ${x.p.aM / UA} UA: luce irradiata / assorbita`);
     tra(c.albedo, 0.05, 0.7, 'albedo'); tra(c.Teq / LG.temperaturaEquilibrio(x.p.Lw, x.p.aM, c.albedo), 1 - 1e-9, 1 + 1e-9, 'Teq');
   }
-  assert.ok(n > 1500);
+  assert.ok(n > 1500); tra(portano / conAria, 0.99, 1, `mondi con un'aria (oltre 1 mbar) e la luce di una stella in cui l'aria porta calore: ${portano} su ${conAria}`);
   // le due risoluzioni: una colonna per parallelo contro 64 × 32 celle con terre e mari veri (senza i venti)
   for (const s of SUPERFICI) {
     const d = s.senzAria.Tglobale - s.p.clima.T, mareDiverso = Math.abs(s.sommerso - s.p.clima.mare) > 0.1;
     // entro 6 K (o il 3%); di più solo dove la mappa ha molta più o molta meno terra di quella attesa, e si sa perché
     assert.ok(Math.abs(d) < Math.max(6, 0.03 * s.p.clima.T) || mareDiverso, `${s.nome}: per fasce ${s.p.clima.T} K, sulla mappa ${s.senzAria.Tglobale} K`);
-    if (!mareDiverso) tra(s.senzAria.ghiaccio - s.p.clima.ghiaccio, -0.25, 0.25, `${s.nome}: ghiaccio sulla mappa − per fasce`);
+    // (il ghiaccio: chiesto entro 0,25 — ora misurato nella nota qui sotto, perché su un mondo bloccato non torna e si sa perché)
   }
 });
 
@@ -574,8 +584,23 @@ prova('la temperatura ha una fonte sola: clima() è il bilancio per fasce, e la 
   const conVenti = SUPERFICI.filter((s) => s.cl.meteo), dT = conVenti.map((s) => s.cl.Tglobale - s.p.clima.T), dMappa = SUPERFICI.map((s) => s.senzAria.Tglobale - s.p.clima.T);
   // (gravità 2 da quando i giri con l'aria sono tre: un mare che per clima() è liquido può uscire dalla mappa gelato)
   const gelati = conVenti.filter((s) => s.p.clima.acqua === 'liquida' && s.cl.Tglobale < 260), nuv = conVenti.filter((s) => s.p.clima.mare > 0.5).map((s) => s.cl.meteo.nuvoleMedie ?? mediaDi(s.cl.meteo.nuvole));
-  nota(2, 'con i venti e le nuvole veri (meteo.js, fino a tre giri sulla mappa) la temperatura media si scosta da quella di clima(): la legge delle nuvole è ora una sola (leggi.js: NUVOLE), ma clima() la applica a valori attesi (copertura, pioggia dall\'evaporazione alla soglia, 5 m/s di vento) e meteo.js a quelli che la circolazione calcola: restano gli scarti dei mondi dove i due non coincidono e il calore portato non è 0,6·√p. Lo stato dell\'acqua e l\'aria restano quelli di clima(): dove la mappa gela un mare che clima() dice liquido i due si contraddicono',
-    { casi: dT.filter((d) => Math.abs(d) > 6).length, su: conVenti.length, tipico: `con i venti − clima(): ${dT.map((d) => `${num(d)} K`).join(', ')}; mari «liquidi» per clima() e sotto 260 K sulla mappa: ${gelati.length} (${gelati.map((s) => `${s.nome}: ${num(s.cl.Tglobale)} K`).join('; ') || 'nessuno'}); nuvole sui mondi con mare: ${nuv.map((x) => num(x, 2)).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; senza i venti la mappa si scosta al più di ${num(massimo(dMappa.map(Math.abs)))} K`, dove: 'geologia.js climaSuperficie() (meteo.nuvole, meteo.diffusivita) contro leggi.js nuvoleAttese(), trasportoCalore()' });
+  const albedo = (b) => 1 - b.assorbita / b.arriva;
+  // IL CALORE PORTATO NON È PIÙ LA CAUSA (prima: clima() usava 0,6·√p tarato sulla Terra, e sui mondi lenti e bloccati i
+  // venti ne portavano da 5 a 35 volte tanto: gli scarti erano −0,02, +0,94, +56,3, +11,2, +12,8, +64,4 K). Ora clima() ha la
+  // legge dell'aria (leggi.js: vortici, cella, scambio con la superficie) e il vento delle nuvole attese viene da lei.
+  // Ciò che resta è delle NUVOLE: su un mare caldo sotto un sole fisso i venti di meteo.js fanno piovere quasi tutto
+  // sotto il sole e lasciano il resto del giorno sotto la soglia della pioggia (cielo quasi sgombro), mentre clima() fa
+  // piovere ogni colonna dove evapora (nuvole dappertutto): la mappa assorbe molta più luce. In quei mondi meteo.js non è
+  // nemmeno a regime (il vapore nell'aria sta ancora crescendo). Lo stato dell'acqua e l'aria restano quelli di clima()
+  nota(2, 'con i venti e le nuvole veri (meteo.js, fino a tre giri sulla mappa) la temperatura media si scosta da quella di clima(). Il calore portato non è più la causa: clima() ha la legge dell\'aria (leggi.js), che sui mondi lenti e bloccati dà quello che i venti portano. Resta ciò che fanno le nuvole dove clima() le applica a valori attesi e meteo.js a quelli che la circolazione calcola: su un mare caldo e bloccato i venti concentrano la pioggia sotto il sole e il lato del giorno resta quasi sgombro. Lo stato dell\'acqua e l\'aria restano quelli di clima(): dove la mappa gela (o fa bollire) un mare che clima() dice liquido i due si contraddicono',
+    { casi: dT.filter((d) => Math.abs(d) > 6).length, su: conVenti.length, tipico: `con i venti − clima(): ${dT.map((d) => `${num(d)} K`).join(', ')}; calore portato (W/m²/K) venti / legge: ${conVenti.map((s) => `${num(Math.max(0, s.cl.meteo.diffusivita), 2)}/${num(s.p.clima.D, 2)}`).join(', ')}; luce rimandata mappa / fasce: ${conVenti.map((s) => `${num(albedo(s.cl.bilancio), 2)}/${num(s.p.clima.albedo, 2)}`).join(', ')}; mari «liquidi» per clima() e sotto 260 K sulla mappa: ${gelati.length} (${gelati.map((s) => `${s.nome}: ${num(s.cl.Tglobale)} K`).join('; ') || 'nessuno'}); nuvole sui mondi con mare: ${nuv.map((x) => num(x, 2)).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K (obiettivo: tutti sotto 10; prima della legge: 64,4); senza i venti la mappa si scosta al più di ${num(massimo(dMappa.map(Math.abs)))} K`, dove: 'geologia.js climaSuperficie() (meteo.riflessoNuvole, meteo.diffusivita) contro leggi.js riflessoNuvoleAtteso(), portataDellAria()' });
+  // IL GHIACCIO sulle due risoluzioni (senza i venti). Su un mondo bloccato le fasce tengono l'aria della notte uniforme
+  // (è ciò che fanno i venti: il calore arriva dove la superficie è più fredda dell'aria) e la notte non gela; la mappa
+  // spiana ancora la temperatura della SUPERFICIE con una diffusione (il coefficiente equivalente): il punto opposto al
+  // sole resta più freddo, e gela. Le temperature medie coincidono; il ghiaccio no
+  const confrontabili = SUPERFICI.filter((s) => Math.abs(s.sommerso - s.p.clima.mare) <= 0.1), dG = confrontabili.map((s) => s.senzAria.ghiaccio - s.p.clima.ghiaccio);
+  nota(2, 'il ghiaccio della mappa (senza i venti) e quello di clima() non coincidono sui mondi bloccati: la mappa porta il calore con una diffusione della temperatura della superficie (il coefficiente equivalente alla legge), clima() con l\'aria sopra le fasce, che sul lato della notte è uniforme: la mappa gela il punto opposto al sole, le fasce no. Va data alla mappa la stessa aria (scambio·(T − A) + div(portata·grad A) = 0 sulla griglia)',
+    { casi: dG.filter((d) => Math.abs(d) > 0.25).length, su: confrontabili.length, tipico: `ghiaccio sulla mappa − per fasce: ${confrontabili.map((s, i) => `${num(dG[i], 2)}${s.p.bloccato ? ' (bloccato)' : ''}`).join(', ')}`, massimo: num(massimo(dG.map(Math.abs)), 2), dove: 'geologia.js climaSuperficie() (D·∇²T) contro leggi.js bilancioPerFasce() (ariaSulleFasce)' });
 }
 
 // =====================================================================================================

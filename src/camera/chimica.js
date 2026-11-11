@@ -24,7 +24,7 @@
 // è in MOLECOLE[formula].nome. (leggi.js ha una sua piccola MOLECOLE, con le masse dei gas del clima:
 // qui la si legge per sapere quali molecole la gravità trattiene.)
 
-import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI, ACQUA } from './leggi.js';
+import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI, ACQUA, vaporeSaturo } from './leggi.js';
 
 // ---------- 1. GLI ELEMENTI (dati misurati)
 // massa atomica (u) · valenza più comune · elettronegatività di Pauling · abbondanza nel Sole, come
@@ -84,14 +84,14 @@ export const tipoLegame = (a, b) => (dChi(a, b) < 0.4 ? 'covalente' : dChi(a, b)
 const SPECIE = [
   ['H2', 'idrogeno', 'gas', 0, 130.68], ['He', 'elio', 'gas', 0, 126.15], ['N2', 'azoto', 'gas', 0, 191.61],
   ['O2', 'ossigeno', 'gas', 0, 205.15], ['Cl2', 'cloro', 'gas', 0, 223.08], ['S2', 'vapore di zolfo', 'gas', 128.6, 228.17],
-  ['H2O', 'acqua', 'gas', -241.83, 188.84], ['CO', 'monossido di carbonio', 'gas', -110.53, 197.66],
+  ['H2O', 'acqua', 'gas', ...ACQUA.stati.vapore], ['CO', 'monossido di carbonio', 'gas', -110.53, 197.66], // (l'acqua nei suoi tre stati: la tabella è in leggi.js, ACQUA.stati — una fonte sola)
   ['CO2', 'anidride carbonica', 'gas', -393.51, 213.79], ['CH4', 'metano', 'gas', -74.6, 186.25],
   ['NH3', 'ammoniaca', 'gas', -45.94, 192.77], ['HCN', 'acido cianidrico', 'gas', 129.3, 201.82],
   ['H2CO', 'formaldeide', 'gas', -108.6, 218.76], ['CH3OH', 'metanolo', 'gas', -201.0, 239.9],
   ['H2S', 'idrogeno solforato', 'gas', -20.6, 205.81], ['SO2', 'anidride solforosa', 'gas', -296.81, 248.22],
   ['NO', 'ossido di azoto', 'gas', 91.3, 210.76], ['C2H2', 'acetilene', 'gas', 227.4, 200.9],
   ['C2H6', 'etano', 'gas', -84.0, 229.2], ['HCl', 'acido cloridrico', 'gas', -92.31, 186.90],
-  ['H2O(l)', 'acqua liquida', 'liquido', -285.83, 69.95], ['H2O(s)', 'ghiaccio d\'acqua', 'solido', -291.84, 47.95],
+  ['H2O(l)', 'acqua liquida', 'liquido', ...ACQUA.stati.liquida], ['H2O(s)', 'ghiaccio d\'acqua', 'solido', ...ACQUA.stati.ghiaccio],
   ['C', 'grafite', 'solido', 0, 5.74], ['Fe', 'ferro metallico', 'solido', 0, 27.32],
   ['FeO', 'wüstite', 'solido', -272.0, 60.75], ['Fe3O4', 'magnetite', 'solido', -1115.7, 146.1],
   ['Fe2O3', 'ematite', 'solido', -826.2, 87.4], ['FeS', 'troilite', 'solido', -100.0, 60.3],
@@ -151,13 +151,14 @@ export const REAZIONI = {
 export const costanteEquilibrio = (reazione, T) => Math.exp(-dG(typeof reazione === 'string' ? REAZIONI[reazione] : reazione, T) / (R_GAS * T));
 // la pressione del vapore sopra il liquido o il ghiaccio di una specie (Pa): oltre, il gas condensa in
 // gocce, neve o brina. Per l'acqua è la K di H2O(l) ⇌ H2O(gas) dalla tabella; tra liquido e ghiaccio
-// comanda quello che ne lascia in aria di meno (è lui il più stabile): a 288 K dà 1,7 kPa. Per gli altri
+// comanda quello che ne lascia in aria di meno (è lui il più stabile): a 288 K dà 1,7 kPa. La formula sta in
+// leggi.js (vaporeSaturo: la usa anche il clima a fasce), con la tabella dell'acqua da cui vengono le righe qui sopra. Per gli altri
 // gas la legge di Clausius-Clapeyron con due dati misurati: il calore di evaporazione (kJ/mol; per la
 // CO2, che a 1 bar non ha liquido, di sublimazione) e la temperatura a cui bolle a 1 bar (K).
 // Idrogeno ed elio non condensano mai. (Lo zolfo: dalla sua pressione di vapore a 393 K e a 718 K.)
 const EVAPORAZIONE = { Ar: [6.43, 87.3], CO2: [26.1, 194.7], NH3: [23.35, 239.8], CH4: [8.19, 111.7], N2: [5.57, 77.4], SO2: [24.9, 263.1], H2S: [18.7, 212.8], CO: [6.04, 81.6], O2: [6.82, 90.2], HCN: [25.2, 298.8], CH3OH: [35.2, 337.8], S2: [73, 717.8],
   C2H6: [14.7, 184.6], C2H2: [21.3, 189.3], HCl: [16.2, 188.1], H2CO: [23.3, 254.0], NO: [13.8, 121.4], Cl2: [20.4, 239.1] };
-export const pressioneVapore = (T, f = 'H2O') => (f === 'H2O' ? 1e5 * Math.min(costanteEquilibrio([{ 'H2O(l)': 1 }, { H2O: 1 }], T), costanteEquilibrio([{ 'H2O(s)': 1 }, { H2O: 1 }], T))
+export const pressioneVapore = (T, f = 'H2O') => (f === 'H2O' ? vaporeSaturo(T) // (la formula sola dell'acqua: leggi.js, dalla stessa tabella)
   : EVAPORAZIONE[f] ? 1e5 * Math.exp(((-1000 * EVAPORAZIONE[f][0]) / R_GAS) * (1 / T - 1 / EVAPORAZIONE[f][1])) : Infinity);
 // equilibrio di Urey: dove c'è acqua liquida la pioggia scioglie i silicati e l'anidride carbonica finisce
 // nel calcare (CaSiO3 + CO2 ⇌ CaCO3 + SiO2). Questa è la pressione di CO2 che resta nell'aria (Pa):
@@ -402,6 +403,13 @@ export function serra(gas = {}, pressione, g, T = SERRA.Turti) {
   return tau;
 }
 
+// i gas dell'aria: la massa molare media (kg/mol) e il calore specifico (J/kg/K; per mole: 5/2 R un atomo solo, 7/2 R due
+// atomi, 4 R tre o più: le rotazioni, senza le vibrazioni). Li usano i venti di meteo.js e il clima a fasce di leggi.js
+// (se i gas non sono noti: l'aria di riserva, 0,029 kg/mol, e il calore specifico lasciato a chi chiama)
+export function gasDellAria(gas = {}) {
+  let n = 0, massa = 0, cpMol = 0; for (const f in gas) { const m = MOLECOLE[f]; if (!m || !(gas[f] > 0)) continue; const atomi = Object.values(m.atomi).reduce((x, y) => x + y, 0); n += gas[f]; massa += gas[f] * m.massa * 1e-3; cpMol += gas[f] * (atomi === 1 ? 2.5 : atomi === 2 ? 3.5 : 4) * R_GAS; }
+  return n > 0 ? { massaMolare: massa / n, cp: cpMol / massa } : { massaMolare: 0.029, cp: null };
+}
 // IL CLIMA E L'ARIA INSIEME. La temperatura dipende dall'aria (quanta ce n'è, quanto trattiene il calore) e l'aria
 // dalla temperatura (che cosa gela, che cosa piove, se c'è un mare che si mangia l'anidride carbonica): si cercano
 // insieme, a giri alterni, finché non cambiano più. «dati» è ciò che serve a clima() di leggi.js (luce, distanza,
@@ -433,7 +441,8 @@ export function climaEAria(dati, { Z } = {}) {
     return { gas: Object.fromEntries(Object.entries(p).filter(([, v]) => v > 0).map(([f, v]) => [f, v / pressione]).sort((a, b) => b[1] - a[1])), riducente: false, potere: 0, pressione, pO2: (p.O2 || 0) / 1e5, ferro: null, fuliggine: 0 }; };
   const memoria = new Map(), ariaDi = dati.gas ? ariaData : (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria, inerti: dati.inerti || null });
   // (Taria: la temperatura a cui quell'aria è stata calcolata; a giri fermi è quella del clima)
-  const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T) } }), { Taria: T });
+  // (all'aria vera si accompagnano la sua massa molare e il suo calore specifico: entrano nel calore che l'aria porta, leggi.js)
+  const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T), ...gasDellAria(atm.gas) } }), { Taria: T });
   // con l'acqua in uno stato dato: l'aria a una temperatura, il clima che ne viene, l'aria a quella temperatura… finché si fermano
   // IL CICLO DEL CARBONIO (se chi chiama dà il calore dell'interno, «calore» in W/m²): sopra un mare l'anidride carbonica
   // non scende fino all'equilibrio di Urey (ci arriverebbe in un tempo infinito): si ferma dove le rocce consumate dalla

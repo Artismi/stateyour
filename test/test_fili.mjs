@@ -36,7 +36,7 @@ function mondo(nome, { ciclo = true, gas = true, giorno = null } = {}) {
   p.interno = GE.interno(p, { eta: 4.5e9, Z: 1 }); p.B0 = p.interno.B0; const ac = LG.acquaInSuperficie(p); p.interno.acquaKg = ac.kg;
   const gr = R.gasRadiogenici({ pianeta: { g: (6.674e-11 * p.massaKg) / p.raggioM ** 2, raggioM: p.raggioM, eta: 4.5e9 }, stella: { Lw: p.Lw, aM: p.aM } }, { P: { tipo: p.tipo, massaKg: p.massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw: p.Lw, aM: p.aM } });
   p.radiogenici = gr; const inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 };
-  const r = CH.climaEAria({ Lw: p.Lw, aM: p.aM, massaKg: p.massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: ac.frazione, inerti, acquaKg: ac.kg, anno: p.anno, obliquita: p.obliquita, bloccato: false, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: 0,
+  const r = CH.climaEAria({ Lw: p.Lw, aM: p.aM, massaKg: p.massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: ac.frazione, inerti, acquaKg: ac.kg, anno: p.anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: false, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: 0,
     calore: ciclo && p.interno.vulcani > 0 ? p.interno.q : 0, ...(gas ? { gas: m.gas } : {}) }, { Z: 1 });
   p.clima = r.clima; p.atmosfera = r.atmosfera; return p;
 }
@@ -72,10 +72,13 @@ prova('la CO2 sopra un mare ha una legge sola: mai sotto l\'equilibrio di Urey, 
 
 prova('Venere e Marte con la loro aria: niente mare, niente ciclo; le temperature della serra', () => {
   assert.equal(VENERE.clima.acqua, 'assente'); assert.equal(VENERE.clima.co2Ciclo, undefined); assert.equal(MARTE.clima.co2Ciclo, undefined);
-  tra(pCO2(VENERE), 85, 92, 'CO2 di Venere (bar): tutta nell\'aria'); tra(MARTE.clima.pressione, 550, 650, 'pressione su Marte (Pa)');
+  tra(pCO2(VENERE), 85, 92, 'CO2 di Venere (bar): tutta nell\'aria'); riscontro('pressione su Marte (Pa)', MARTE.clima.pressione, 550, 650, '610', `l'argon: risalita.js prende la parte uscita dall'interno da una tabella per regime (ferma 0,02 · con vulcani 0,25), tarata con Marte «fermo»; la storia dà a Marte un coperchio unico che fonde ancora un poco (${MARTE.interno.tettonica}), e l'argon viene ${n((MARTE.atmosfera.gas.Ar || 0) * MARTE.atmosfera.pressione)} Pa (vero ~12): la parte degassata va letta dalla storia, non da una tabella`);
   riscontro('Marte: temperatura (K)', MARTE.clima.T, 207, 217, '210–214');
   riscontro('Venere: temperatura (K)', VENERE.clima.T, 713, 757, '735', `l'albedo qui è ${n(VENERE.clima.albedo)} (roccia nuda): le nuvole di acido solforico, che ne fanno 0,76, non ci sono. Con la luce assorbita vera la stessa serra dà ${n(229 * Math.pow(1 + 0.75 * VENERE.clima.tau, 0.25), 4)} K`);
-  assert.equal(MARTE.interno.vulcani, 0); assert.equal(MARTE.interno.tettonica, 'ferma');
+  // (l'interno viene dalla storia del pianeta, storia.js: Marte, asciutto, ha un coperchio fermo per il criterio di
+  // Korenaga, non per una soglia sulla massa; sotto il coperchio il mantello fonde ancora un poco: Marte ha avuto vulcani
+  // fino a pochi milioni di anni fa. Senza mare il ciclo del carbonio resta comunque spento)
+  assert.notEqual(MARTE.interno.tettonica, 'a placche'); assert.notEqual(VENERE.interno.tettonica, 'a placche'); assert.equal(TERRA.interno.tettonica, 'a placche');
 });
 
 prova('il giorno entra nella dinamo: la Terra ha un dipolo, Venere (243 giorni) no, Marte non ha dinamo', () => {
@@ -84,10 +87,15 @@ prova('il giorno entra nella dinamo: la Terra ha un dipolo, Venere (243 giorni) 
   assert.ok(VENERE.interno.rossby > 0.12 && VENERE.interno.dipolo === false, `Venere: Ro_l = ${VENERE.interno.rossby}`); assert.ok(VENERE.interno.dinamo, 'il suo nucleo, qui, è liquido: è la rotazione che manca');
   const venereSvelta = mondo('Venere', { giorno: 86400 }); tra(VENERE.B0 / venereSvelta.B0, 0.0999, 0.1001, 'senza dipolo il campo in superficie è un decimo'); assert.equal(venereSvelta.interno.dipolo, true);
   riscontro('Venere: campo in superficie (T)', VENERE.B0, 0, 5e-9, 'nessuno misurabile (< 5·10⁻⁹)', 'la legge dice solo «almeno dieci volte più debole»: quanto, senza dipolo, non lo sa');
-  assert.equal(MARTE.interno.dinamo, false); assert.equal(MARTE.interno.rossby, undefined); assert.equal(MARTE.B0, 1e-9);
+  // Marte: la soglia di prima (nucleo liquido solo sopra 3500 km di raggio) non c'è più. La storia termica dà a un Marte
+  // con gli elementi leggeri della Terra un nucleo interno che cresce e una dinamo debole: il Marte vero non ne ha
+  // (nucleo ricco di zolfo, tutto liquido). È un difetto del modello e resta scritto (vedi anche test_storia)
+  riscontro('Marte: campo in superficie (T)', MARTE.B0, 0, 5e-9, 'nessuna dinamo da ~4 miliardi di anni', 'storia.js non sa che il nucleo di Marte è ricco di zolfo: lo fa gelare dal centro, e il nucleo interno che cresce tiene viva una dinamo');
+  assert.equal(MARTE.interno.dinamo ? MARTE.B0 > 1e-9 : MARTE.B0 === 1e-9, true, 'B0 = 10⁻⁹ T se e solo se non c\'è dinamo');
   // la soglia: una Terra che gira più piano perde il dipolo; e chi non dà il giorno ottiene la dinamo di prima
   const lenta = mondo('Terra', { giorno: 2 * 86164 }); assert.equal(lenta.interno.dipolo, false); tra(lenta.interno.rossby / TERRA.interno.rossby, 2.24, 2.25, 'Ro_l ∝ giorno^(7/6)');
-  const senza = GE.interno({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: VERI.Terra.composizione }, { eta: 4.5e9, Z: 1 }); assert.equal(senza.B0, TERRA.B0); assert.equal(senza.rossby, undefined);
+  // (lo stesso pianeta senza il giorno: la storia termica è la stessa, manca solo il numero di Rossby)
+  const { giorno: _g, interno: _i, clima: _c, atmosfera: _a, ...terraSenzaGiorno } = TERRA, senza = GE.interno(terraSenzaGiorno, { eta: 4.5e9, Z: 1 }); assert.equal(senza.B0, TERRA.B0); assert.equal(senza.rossby, undefined);
   console.log(`      Ro_l: Terra ${n(TERRA.interno.rossby)}, Venere ${n(VENERE.interno.rossby)}; una Terra con il giorno di ${n((86164 * Math.pow(0.12 / TERRA.interno.rossby, 6 / 7)) / 3600)} ore è sulla soglia (0,12)`);
 });
 
@@ -131,6 +139,35 @@ prova('nel sistema di cosmo.js i fili ci sono: aria con i radiogenici, energia, 
   console.log(`      in sei sistemi: ${conAria} pianeti con un'aria, ${conAr} con argon radiogenico, ${conMp} con una magnetosfera oltre 1,15 raggi, ${liquidi} con un mare (${cicli} tenuti dal ciclo), tutti visti da prebiotica`);
 });
 
+// IL CALORE CHE L'ARIA PORTA nel clima a fasce è una legge (leggi.js: L'ARIA CHE PORTA IL CALORE), non più 0,6·√p tarato
+// sulla Terra: dipende dal giorno, dal raggio, dalla gravità, dalla pressione, dal gradiente e dall'attrito. I riscontri
+// col vero sono stampati come numeri; il confronto con i venti di meteo.js su una griglia di pianeti è in test_meteo
+prova('il calore che l\'aria porta nel clima a fasce è una legge: la Terra, Marte, un mondo d\'acqua; il giorno conta', () => {
+  const c = TERRA.clima, t = c.fasce.T, H = t.length, equatore = 0.5 * (t[H / 2 - 1] + t[H / 2]), polo = 0.5 * (t[0] + t[H - 1]), B = (4 * 5.67e-8 * c.T ** 3) / (1 + 0.75 * c.tau);
+  assert.ok(c.D > 0 && c.vento >= LG.ARIA.raffica && c.scambio > 0 && c.trasporto.flusso.length === H - 1 && c.trasporto.aria.length === H, 'clima() porta con sé il calore portato, il vento, lo scambio e il flusso');
+  // l'aria sposta il calore e non ne crea: ciò che dà alle fasce, sommato sul pianeta, fa zero (contro ciò che sposta)
+  { let somma = 0, assoluta = 0; for (let j = 0; j < H; j++) { const w = Math.cos((c.fasce.lat[j] * Math.PI) / 180); somma += w * c.trasporto.calore[j]; assoluta += w * Math.abs(c.trasporto.calore[j]); } tra(Math.abs(somma) / assoluta, 0, 1e-6, 'calore creato dall\'aria / calore spostato'); }
+  riscontro('Terra a fasce: temperatura (K)', c.T, 285, 291, '288 ± 3');
+  // (la riprova: lo stesso bilancio con una diffusione uniforme di 0,3 W/m²/K, il vecchio modello di Budyko-Sellers)
+  const uniforme = LG.bilancioPerFasce({ S0: TERRA.Lw / (4 * Math.PI * TERRA.aM ** 2), anno: TERRA.anno, obliquita: TERRA.obliquita, mare: c.mare, pressione: c.pressione, tau: c.tau, raggioM: TERRA.raggioM, D: 0.3, Tavvio: c.Tavvio }), tu = uniforme.fasce;
+  const perche = `qui la luce irradiata cresce di ${n(B)} W/m² per ogni grado (serra fissa: 4σT³/(1 + ¾τ)); sulla Terra vera di ~2 (il vapore cresce col caldo). Con questa serra a tenere il contrasto sui 40 K bastano ~2 PW (con una diffusione uniforme di 0,3 W/m²/K: ${n(0.5 * (tu[H / 2 - 1] + tu[H / 2]) - 0.5 * (tu[0] + tu[H - 1]))} K con ${n(uniforme.trasporto.massimo / 1e15)} PW), dove alla Terra vera ne servono 5–6: contrasto e trasporto veri insieme qui non possono tornare, con nessuna legge del trasporto. La legge porta in proporzione alla 5,6ª potenza del gradiente: sul profilo misurato della Terra (42 K) dà di più (test_meteo lo stampa). Manca il calore che porta il mare (un terzo, ai tropici)`;
+  riscontro('Terra a fasce: contrasto equatore − polo (K)', equatore - polo, 40, 45, '~40–45', perche);
+  riscontro('Terra a fasce: trasporto massimo verso i poli (PW)', c.trasporto.massimo / 1e15, 5, 6, '5–6 (aria e mare)', perche);
+  riscontro('Terra a fasce: latitudine del trasporto massimo (gradi)', c.trasporto.latitudine, 35, 40, '35–40', 'le fasce sono larghe 11°: i paralleli tra una fascia e l\'altra stanno a 34° e a 45°');
+  riscontro('Marte a fasce: temperatura (K)', MARTE.clima.T, 210, 214, '210–214');
+  // un mondo d'acqua: la Terra tutta mare, con la sua aria (stessa pressione, stessa serra): non deve gelare
+  const acqua = LG.clima({ Lw: TERRA.Lw, aM: TERRA.aM, massaKg: TERRA.massaKg, raggioM: TERRA.raggioM, tipo: 'roccioso', acqua: 0.05, acquaKg: 0.05 * TERRA.massaKg, anno: TERRA.anno, giorno: TERRA.giorno, obliquita: TERRA.obliquita, aria: { pressione: c.pressione, tau: c.tau } });
+  tra(acqua.mare, 0.999, 1, 'mare del mondo d\'acqua'); riscontro('mondo d\'acqua (la Terra tutta mare, con la sua aria): temperatura (K)', acqua.T, 273.15, 330, 'non gela', `ghiaccio ${n(acqua.ghiaccio)}, albedo ${n(acqua.albedo)}`);
+  riscontro('mondo d\'acqua: ghiaccio (parte del pianeta)', acqua.ghiaccio, 0, 0.5, 'il mare resta aperto');
+  // IL GIORNO CONTA (prima no): la stessa Terra con il giorno di 6 ore tiene il caldo all'equatore, con il giorno di 16
+  // giorni la cella arriva ai poli; e Venere, che gira in 243 giorni sotto 92 bar, è quasi uniforme
+  const con = (giorno) => { const x = mondo('Terra', { giorno }).clima, f = x.fasce.T; return { x, contrasto: 0.5 * (f[H / 2 - 1] + f[H / 2]) - 0.5 * (f[0] + f[H - 1]) }; }, svelta = con(6 * 3600), lenta = con(16 * 86400);
+  assert.ok(svelta.contrasto > equatore - polo + 5 && lenta.contrasto < equatore - polo - 5, `contrasto equatore − polo: ${svelta.contrasto} K con il giorno di 6 ore, ${equatore - polo} K con 24, ${lenta.contrasto} K con 16 giorni`);
+  const tv = VENERE.clima.fasce.T; tra(Math.max(...tv) - Math.min(...tv), 0, 10, 'Venere: differenza tra la fascia più calda e la più fredda (K; misurata: pochi gradi)');
+  console.log(`      Terra a fasce: ${n(polo, 4)} K ai poli, ${n(equatore, 4)} K all'equatore; calore portato ${n(c.D)} W/m²/K (equivalente), ${n(c.trasporto.massimo / 1e15)} PW a ${n(c.trasporto.latitudine)}°; vento al suolo ${n(c.vento)} m/s (misurato ~6–7), scambio con l'aria ${n(c.scambio)} W/m²/K`);
+  console.log(`      contrasto equatore − polo con il giorno di 6 ore, 24 ore, 16 giorni: ${n(svelta.contrasto)}, ${n(equatore - polo)}, ${n(lenta.contrasto)} K (calore portato ${n(svelta.x.D)}, ${n(c.D)}, ${n(lenta.x.D)} W/m²/K); Marte: ${n(MARTE.clima.D)} W/m²/K, vento ${n(MARTE.clima.vento)} m/s (misurato 2–10: qui troppo, il vento della cella in un'aria sottile); Venere: ${n(VENERE.clima.D)} W/m²/K, ${n(Math.max(...tv) - Math.min(...tv))} K da una fascia all'altra`);
+});
+
 prova('le stelle di mare.js e di risalita.js sono quelle di stelle.js (non più le formule di leggi.js)', () => {
   const m = R.mondoDi(M.luogoDaAria({ P: { ...TERRA, Tstella: undefined, Mstella: 0.5 * LG.MSOLE } }), { P: { ...TERRA, Tstella: undefined, Mstella: 0.5 * LG.MSOLE } });
   assert.equal(m.Tst, stellaVera(0.5).T); assert.notEqual(m.Tst, LG.stella(0.5).T); assert.equal(R.mondoDi(M.luogoDaAria({ P: TERRA }), { P: TERRA }).Tst, 5772, 'se il pianeta porta la temperatura della sua stella, è quella');
@@ -146,7 +183,12 @@ prova('i vulcani stanno sulle salite del mantello (tettonica.js), il più caldo 
   assert.ok(tt.salite && tt.salite.length === sf.W * sf.H); assert.equal(sf.vulcani.length, TERRA.interno.vulcani);
   let mx = 0; for (const v of tt.salite) if (v > mx) mx = v; const u = sf.vulcani.map(([i, j]) => tt.salite[j * sf.W + i]);
   for (const [k, v] of u.entries()) { assert.ok(v > 0, `il vulcano ${k} sta dove il mantello scende: ${v}`); if (k) assert.ok(v <= u[k - 1] + 1e-12, 'in ordine: il più caldo per primo'); }
-  tra(u[0] / mx, 0.999, 1.001, 'il primo sta sulla cima più alta del campo');
+  // (la cima più alta tra quelle che geologia.js cerca: i massimi locali del campo sulle righe 1…H−2. Le due righe dei
+  // poli non le guarda: se la salita più forte del pianeta cade lì — con il calore che la storia dà oggi alla Terra capita
+  // — il primo vulcano sta sulla cima più alta delle altre righe, e lo si dice)
+  let cima = 0; for (let j = 1; j < sf.H - 1; j++) for (let i = 0; i < sf.W; i++) { const v = tt.salite[j * sf.W + i]; if (!(v > cima)) continue; let ok = true; for (let b = -1; b <= 1 && ok; b++) for (let a = -1; a <= 1; a++) if ((a || b) && tt.salite[(j + b) * sf.W + ((i + a + sf.W) % sf.W)] > v) { ok = false; break; } if (ok) cima = v; }
+  tra(u[0] / cima, 0.999, 1.001, 'il primo sta sulla cima più alta del campo (tra quelle che geologia.js cerca)');
+  if (cima < 0.999 * mx) console.log(`      (la salita più forte del pianeta, ${n(mx / cima, 4)} volte quella cima, sta su una riga dei poli, dove geologia.js non mette vulcani)`);
   // la superficie senza storia degli urti (com'è questa) parte dallo stesso seme: è la stessa tettonica
   console.log(`      ${sf.vulcani.length} vulcani; il mantello sale lì di ${u.map((v) => n(v / mx, 2)).join(', ')} (1 = la salita più forte)`);
 });

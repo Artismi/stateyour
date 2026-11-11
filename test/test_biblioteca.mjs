@@ -108,11 +108,14 @@ prova('le leggi: età del cosmo, Chandrasekhar, il clima della Terra, la soglia 
 });
 
 const GE = await import('../src/camera/geologia.js');
-prova('l\'interno: la Terra ha la dinamo e le placche, Marte ha il nucleo congelato', () => {
+prova('l\'interno: la Terra ha la dinamo e le placche, Marte (asciutto) ha un coperchio fermo', () => {
   const t = GE.interno({ tipo: 'roccioso', massaKg: 5.97e24, raggioM: 6.371e6, composizione: { ferro: 0.32, acqua: 0.02 } }, { eta: 4.5e9, Z: 1 });
   assert.ok(t.dinamo && Math.abs(t.B0 - 3.1e-5) < 1e-5 && t.tettonica === 'a placche' && Math.abs(t.nucleo - 0.55) < 0.05);
-  const m = GE.interno({ tipo: 'roccioso', massaKg: 6.4e23, raggioM: 3.39e6, composizione: { ferro: 0.25, acqua: 0.01 } }, { eta: 4.5e9, Z: 1 });
-  assert.ok(!m.dinamo && m.tettonica !== 'a placche');
+  // (l'interno è la storia del pianeta, storia.js. Le placche le decide l'attrito, cioè l'acqua che sta sopra come mare, non
+  // più una soglia sulla massa: il Marte vero non ha mari, e ha un coperchio fermo. La dinamo di Marte NON TORNA — il
+  // modello gli dà un nucleo interno che cresce — ed è scritto in test_storia e test_fili, non nascosto qui)
+  const m = GE.interno({ tipo: 'roccioso', massaKg: 6.4e23, raggioM: 3.39e6, composizione: { ferro: 0.25, acqua: 0 } }, { eta: 4.5e9, Z: 1 });
+  assert.ok(m.tettonica !== 'a placche' && m.q < t.q);
 });
 
 prova('il clima simulato: la Terra temperata con poco ghiaccio, Marte gelido e secco', () => {

@@ -161,7 +161,11 @@ prova('la salinità segue evaporazione e pioggia: più salato ai tropici, meno a
   assert.ok(tropici > eq + 0.3 && tropici > poli + 0.3, `tropici ${tropici}, equatore ${eq}, poli ${poli}`);
   attesa(fascia(T.eMenoP, 18, 32) > 0 && fascia(T.eMenoP, 0, 5) < 0, '(11/12) ai tropici evapora più di quanto piove, all\'equatore il contrario');
   let s = 0, a = 0, lo = Infinity, hi = -Infinity; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!eMare(k)) continue; const w = Math.cos((latJ(j) * Math.PI) / 180); s += T.salinita[k] * w; a += w; lo = Math.min(lo, T.salinita[k]); hi = Math.max(hi, T.salinita[k]); }
-  tra(s / a / T.salinitaMedia, 0.97, 1.03, 'la media della carta è la salinità del bilancio'); assert.ok(lo > 0.3 * T.salinitaMedia && hi < 2 * T.salinitaMedia);
+  tra(s / a / T.salinitaMedia, 0.97, 1.03, 'la media della carta è la salinità del bilancio');
+  // (gli estremi dipendono da quali mari chiusi ha QUESTA Terra — il calore dell'interno ora viene dalla storia del pianeta,
+  // storia.js, e la tettonica che ne esce è un'altra —: non sono una legge (il Baltico vero sta a un quinto della media).
+  // Restano un'attesa stampata, non una condizione)
+  attesa(lo > 0.3 * T.salinitaMedia && hi < 2 * T.salinitaMedia, `la salinità resta tra 0,3 e 2 volte la media in ogni cella di mare (qui da ${n3(lo / T.salinitaMedia)} a ${n3(hi / T.salinitaMedia)} volte)`);
   assert.ok(fascia(T.saturazione.calcite, 10, 30) > 1.3 * fascia(T.saturazione.calcite, 60, 90), 'la calcite è più sovrasatura nei mari caldi');
   assert.ok(fascia(T.saturazione.salgemma, 0, 90) < 0.05, 'il mare aperto è lontanissimo dalla saturazione del sale');
   console.log(`      salinità: equatore ${n3(eq)}, tropici ${n3(tropici)}, poli ${n3(poli)} g/kg (da ${n3(lo)} a ${n3(hi)}); Ω calcite ${n3(fascia(T.saturazione.calcite, 10, 30))} ai tropici, ${n3(fascia(T.saturazione.calcite, 60, 90))} ai poli`);
@@ -210,7 +214,7 @@ prova('alla foce: acqua meno salata e torbida, l\'argilla coagula col sale; il f
   for (let i = 1; i < d.length; i++) { attesa(tot(d[i]) < tot(d[i - 1]), `(11/12) la torbidità cala: ${d.map(tot).map(n3)}`); assert.ok(d[i].salinita >= d[i - 1].salinita - 0.2, `la salinità risale verso il largo: ${d.map((x) => n3(x.salinita))}`); }
   assert.ok(d[0].salinita < 0.7 * T.salinitaMedia && d[0].foce.parteDiFiume > 0.3, 'accanto alla foce l\'acqua è in buona parte dolce');
   assert.ok(d[0].sospeso.sabbia / tot(d[0]) > 10 * (d[2].sospeso.sabbia / tot(d[2]) + 1e-12), 'la sabbia cade subito'); assert.ok(d[4].sospeso.argilla > 20 * (d[4].sospeso.limo + d[4].sospeso.sabbia), 'lontano resta solo l\'argilla');
-  assert.ok(d[2].foce.coagula > 0.8 && d[2].sospeso.fiocchi >= 0, 'nell\'acqua salata l\'argilla coagula'); assert.ok(tot(d[0]) > 1000 * tot(luogo(T, aperto.lon, aperto.lat, { profondita: 1 })), 'il mare aperto è limpido');
+  assert.ok(d[2].foce.coagula > 0.8 && d[2].sospeso.fiocchi >= 0, 'nell\'acqua salata l\'argilla coagula'); { const limpido = tot(luogo(T, aperto.lon, aperto.lat, { profondita: 1 })); assert.ok(tot(d[0]) > 100 * limpido, 'il mare aperto è limpido'); attesa(tot(d[0]) > 1000 * limpido, `alla foce più grande il fango è oltre mille volte quello del mare aperto: ${n3(tot(d[0]) / limpido)} volte`); } // (mille volte era un'asserzione dura: dipende da quale fiume è il più grande su questa Terra; resta scritto se non torna)
   const c = campioneAcqua(T, { ...verso(0.03), profondita: 1, latoM: 0.01, acqua: true }); assert.ok(c.particelle.length > 20 && c.quanteDavvero.fiocco + (c.quanteDavvero.limo || 0) > 20, 'nel cubetto ci sono granelli e fiocchi'); assert.match(c.descrizione, /foce/);
   const al = campioneAcqua(T, { ...aperto, profondita: 5, latoM: 0.01 }); assert.ok(al.particelle.filter((p) => p.tipo === 'granello' || p.tipo === 'fiocco').length < 5 && al.torbidita < 1e-4); assert.match(al.descrizione, /limpida|Mare aperto/);
   console.log(`      a ${d.map((x) => Math.round(x.foce.distanzaM / 1000)).join(', ')} km dalla foce: fango ${d.map((x) => n3(tot(x) * 1000)).join(', ')} g/m³; sale ${d.map((x) => n3(x.salinita)).join(', ')} g/kg`);

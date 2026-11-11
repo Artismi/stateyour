@@ -205,4 +205,41 @@ prova('lo stato iniziale del mantello è l\'impronta degli urti: stessa impronta
   assert.equal(fermo.regime, 'coperchio unico'); assert.notDeepEqual(fermo.alt, fermo2.alt);
 });
 
+// ---------- ciò che la tettonica passa all'erosione (geologia.js): quanto la crosta è stretta, la copertura, le velocità
+prova('seguire la copertura e il moto non cambia la crosta; la deriva non ispessisce, lo scontro sì', () => {
+  const conto = () => ({ stretta: new Float64Array(N0), arco: new Float64Array(N0), tolto: new Float64Array(N0), posato: new Float64Array(N0) });
+  // un continente che va alla deriva intero: con e senza i conti la crosta è la stessa, bit per bit, e nessuno la stringe
+  const ca = dueMeta(), a = stato(), b = { ...stato(), cop: new Float64Array(N0), conto: conto() }; blocco(a, 8, 16, 10, 22, 35e3); blocco(b, 8, 16, 10, 22, 35e3);
+  for (let p = 0; p < 40; p++) { if (p % 4 === 0) velocitaCrosta(a.h, ca, W0, H0, 4); passoCrosta(a, ca, { dtMa: 1, kappa: 0.03, fiumi: 0.01 }); }
+  const cb = dueMeta(); for (let p = 0; p < 40; p++) { if (p % 4 === 0) velocitaCrosta(b.h, cb, W0, H0, 4); passoCrosta(b, cb, { dtMa: 1, kappa: 0.03, fiumi: 0.01 }); }
+  assert.deepEqual(Array.from(b.h), Array.from(a.h)); assert.deepEqual(Array.from(b.a), Array.from(a.a));
+  const passata = 40 * C0 * somma(b.h), stretta = b.conto.stretta.reduce((s, v) => s + Math.abs(v), 0);
+  assert.ok(stretta < 0.1 * passata, `alla deriva: stretta ${stretta.toExponential(2)} m contro ${passata.toExponential(2)} m di crosta passata`);
+  // due continenti che si scontrano: lungo la sutura la crosta è stretta (lo stesso spessore che la catena guadagna)
+  const cc = dueMeta(), c = { ...stato(), cop: new Float64Array(N0), conto: conto() }; blocco(c, 14, 24, 10, 22, 35e3); blocco(c, 40, 50, 10, 22, 35e3); const prima = Float64Array.from(c.h);
+  for (let p = 0; p < 120; p++) { if (p % 4 === 0) velocitaCrosta(c.h, cc, W0, H0, 4); passoCrosta(c, cc); }
+  let guadagno = 0, strettaLi = 0, altrove = 0; for (let j = 12; j < 20; j++) for (let i = 0; i < W0; i++) { const k = j * W0 + i; if (c.h[k] > 45e3) { guadagno += c.h[k] - prima[k]; strettaLi += c.conto.stretta[k]; } else altrove += Math.abs(c.conto.stretta[k]); }
+  assert.ok(strettaLi > 0 && guadagno > 0 && Math.abs(strettaLi - guadagno) < 0.2 * guadagno, `nella catena: stretta ${strettaLi}, guadagno ${guadagno}`);
+  console.log(`      alla deriva: stretta ${(100 * stretta / passata).toFixed(2)}% della crosta passata; nello scontro la catena guadagna ${(guadagno / 1e3).toFixed(0)} km di spessore (sommati), stretta ${(strettaLi / 1e3).toFixed(0)} km`);
+  // la copertura: nasce dove i fiumi e i pendii posano, non supera la crosta, e ciò che è sepolto oltre copMax è basamento
+  const d = { ...stato(), cop: new Float64Array(N0), copMax: 5e3 }, cd = dueMeta(); blocco(d, 20, 30, 8, 24, 45e3);
+  for (let p = 0; p < 200; p++) { if (p % 4 === 0) velocitaCrosta(d.h, cd, W0, H0, 4); passoCrosta(d, cd, { dtMa: 1, kappa: 0.03, fiumi: 0.01 }); }
+  let coperta = 0; for (let k = 0; k < N0; k++) { assert.ok(d.cop[k] >= 0 && d.cop[k] <= d.h[k] + 1e-6 && d.cop[k] <= 5e3 + 1e-6); if (d.cop[k] > 1) coperta++; }
+  assert.ok(coperta > 0, 'dove si è posato sedimento c\'è copertura');
+});
+prova('sulla Terra di prova: sollevamento in m/anno dove la crosta è stretta, scudi fermi, copertura fin dove non è metamorfica', () => {
+  const { sollevamento, regge, copertura, arco, consumata, posata, velEst, velSud } = terra, copMax = ((COSTANTI.Tmetamorfismo - COSTANTI.Tsuolo) * COSTANTI.conducibilita) / COSTANTI.qTerra;
+  for (const x of [sollevamento, regge, copertura, arco, consumata, posata, velEst, velSud]) assert.ok(x instanceof Float32Array && x.length === N && x.every(Number.isFinite));
+  let vMax = 0, coperti = 0, continenti = 0; const attive = [], ferme = [];
+  for (let k = 0; k < N; k++) { assert.ok(regge[k] >= 0 && arco[k] >= 0 && consumata[k] >= 0 && posata[k] >= 0 && copertura[k] >= 0 && copertura[k] <= Math.min(spessore[k], copMax) * (1 + 1e-6) + 1e-3);
+    vMax = Math.max(vMax, Math.hypot(velEst[k], velSud[k])); if (!cont[k]) continue; continenti++; if (copertura[k] > 1) coperti++; (spinta[k] > 0 ? attive : ferme).push(sollevamento[k] / COSTANTI.galleggia); }
+  const q = (v, f) => [...v].sort((x, y) => x - y)[Math.floor(f * (v.length - 1))];
+  assert.ok(vMax > 0.2 * terra.storia.velocita && vMax <= 1.5 * terra.storia.velocita, `la crosta va al più come le placche: ${vMax} contro ${terra.storia.velocita} m/anno`);
+  assert.ok(terra.storia.finestra > 0 && terra.storia.finestra < 3e7 && coperti > 0 && coperti < continenti);
+  assert.ok(q(attive, 0.9) > 10 * Math.abs(q(ferme, 0.5)), 'dove la crosta è stretta la roccia sale molto più che negli scudi');
+  console.log(`      velocità delle placche ${terra.storia.velocita} m/anno, la crosta più veloce ${vMax.toFixed(4)}; la roccia sale (mm/anno): catene, 50° e 90° percentile ${(1e3 * q(attive, 0.5)).toFixed(2)} e ${(1e3 * q(attive, 0.9)).toFixed(2)}; scudi, mediana ${(1e3 * q(ferme, 0.5)).toFixed(3)}; continenti con copertura ${Math.round((100 * coperti) / continenti)}% (fino a ${(copMax / 1e3).toFixed(1)} km: più giù è metamorfica)`);
+  // un coperchio unico non ha né moto né copertura
+  const fermo = evolviTettonica({ q: 0.04, seme: 7, W: 64, H: 32 }); assert.ok(fermo.sollevamento.every((v) => v === 0) && fermo.copertura.every((v) => v === 0) && fermo.velEst.every((v) => v === 0) && fermo.storia.finestra === 0);
+});
+
 console.log(`tettonica: ${ok} prove, tutto ok`);

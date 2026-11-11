@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { circolazione, meteoPianeta, pioggiaFine, pioggiaPerErosione, suGrigliaFine, gasDellAria, aria, PARAMETRI } from '../src/camera/meteo.js';
 import { interno, superficiePianeta, climaSuperficie } from '../src/camera/geologia.js';
+import { trasportoSuSuperficie, ARIA } from '../src/camera/leggi.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -116,7 +117,7 @@ prova('la Terra: deserti sulla terraferma, nuvole dove piove, neve al freddo, ca
   tra(fascia(zQ, 60, 90), 30, 250, 'calore portato ai poli (W/m²; misurato ≈ +100)');
   // (il lavoro dei venti consumato dall'attrito torna come calore; resta la piccola parte consumata dalla viscosità numerica)
   assert.ok(Math.abs(globale(terra.trasportoCalore)) < 0.1 * mediaAssoluta(terra), `il trasporto sposta il calore, non lo crea: media ${globale(terra.trasportoCalore)} W/m² su ${mediaAssoluta(terra)}`);
-  tra(terra.diffusivita, 0.2, 2, 'il coefficiente di diffusione equivalente (W/m²/K; i modelli a bilancio di energia usano 0,6)');
+  tra(terra.diffusivita, 0.2, 2, 'il coefficiente di diffusione equivalente (W/m²/K; i modelli a bilancio di energia tarati sulla Terra usano 0,6; la legge del clima a fasce è confrontata più sotto)');
   // l'aria in quota è più uniforme della superficie (è lei che porta il calore)
   const zTa = zonale(terra.temperaturaAria), zT = zonale(terra.temperatura);
   assert.ok(fascia(zTa, 0, 15) < fascia(zT, 0, 15) && fascia(zTa, 70, 90) > fascia(zT, 70, 90), 'l\'aria è più fresca del mare ai tropici e più tiepida del suolo ai poli');
@@ -345,6 +346,64 @@ prova('dal pianeta, dalla superficie e dal clima di geologia.js: gira, conserva 
   assert.throws(() => circolazione({ ...base, T: new Float32Array(10) })); assert.throws(() => circolazione({ ...base, W: 60, H: 30, T: new Float32Array(1800) }));
   assert.throws(() => circolazione({ ...base, T: terraMisurata(), alt: new Float32Array(1000) })); assert.throws(() => meteoPianeta({ ...P, giorno: undefined }, sf, cl));
   console.log(`      con il clima di geologia.js (Tglobale ${(cl.Tglobale - 273.15).toFixed(1)} °C): pioggia ${m.bilancio.piovuta.toFixed(0)} mm/anno, celle ${m.celle}, fasce ${m.fasce}, nuvole ${m.nuvoleMedie.toFixed(2)}, ${ms.toFixed(0)} ms (${m.tentativi} passi di tempo accorciati)`);
+});
+
+// IL CALORE CHE L'ARIA PORTA: UNA LEGGE, DUE RISOLUZIONI. Il clima a fasce (leggi.js) non ha più un coefficiente tarato
+// sulla Terra (0,6·√p): ha una legge (i vortici di Gallet e Ferrari 2020-2021 con la curvatura del pianeta, la cella di
+// Held e Hou, lo scambio con la superficie) che dipende da rotazione, raggio, gravità, pressione, gradiente e attrito.
+// Deve essere la stessa cosa che i venti di questo modulo fanno. Qui si confrontano SULLA STESSA SUPERFICIE, tenuta ferma:
+// pianeti tutti d'acqua e pianeti asciutti con T(φ) = 288 − 28·P₂(sin φ) (il profilo misurato della Terra), e pianeti
+// bloccati con T = 288 + 20·cos(angolo dal punto sotto il sole), cambiando una cosa alla volta: la rotazione (×¼…×4), la
+// pressione (0,1…10 bar), il raggio (×½…×2). La misura è la stessa per i due: il coefficiente che spianerebbe quella
+// superficie con la stessa forza (meteo.diffusivita; leggi.js la calcola allo stesso modo).
+// «TORNA» vuol dire ENTRO UN FATTORE 2 (una chiusura della turbolenza contro un modello a 64×32 che i vortici li risolve
+// appena): si contano i casi, e dove meno della metà torna resta scritto «≠ NON TORNA» con i numeri. Le asserzioni dure
+// sono solo ciò che la legge garantisce: l'aria sposta il calore e non ne crea; più rotazione, meno calore; più aria, più
+// calore; su un mondo lento e bloccato il limite è lo scambio con la superficie.
+prova('il calore che l\'aria porta: la legge del clima a fasce (leggi.js) contro i venti, su una griglia di pianeti', () => {
+  const t0 = performance.now(), HF = 32, latF = Array.from({ length: HF }, (_, j) => Math.PI / 2 - ((j + 0.5) * Math.PI) / HF), Tm = 288.12, n2 = (x, c = 2) => x.toFixed(c);
+  // (un'attesa che non dipende dai continenti di questa Terra: se manca resta scritta come difetto della legge o dei venti)
+  const attesoQui = (bene, che) => { if (!bene) { nonTorna.push(`legge e venti: ${che}`); console.log(`      ≠ NON TORNA  ${che}`); } return bene; };
+  const caso = ({ rot = 1, bar = 1, raggi = 1, acqua, bloccato = false, giorni = null }) => {
+    const giorno = giorni ? giorni * 86400 : GIORNO / rot, dT = bloccato ? 20 : 28, T = new Float32Array(N);
+    for (let j = 0; j < H; j++) { const la = (lat(j) * Math.PI) / 180, sn = Math.sin(la); for (let i = 0; i < W; i++) { const lo = ((i + 0.5) / W) * 2 * Math.PI - Math.PI; T[j * W + i] = bloccato ? Tm + dT * Math.cos(la) * Math.cos(lo) : Tm - dT * (1.5 * sn * sn - 0.5); } }
+    const pianeta = { raggioM: 6.371e6 * raggi, gravita: 9.81, giorno, pressione: bar * 1e5 }, m = circolazione({ ...pianeta, T, acqua, bloccato });
+    // il flusso verso il polo nord attraverso ogni parallelo (W): dal calore che l'aria dà alla superficie
+    const z = zonale(m.trasportoCalore), media = globale(m.trasportoCalore); let q = 0, fMax = 0, lMax = 0, vel = 0, area = 0;
+    for (let j = 0; j < H - 1; j++) { q += (z[j] - media) * 2 * Math.PI * pianeta.raggioM ** 2 * peso(j) * (Math.PI / H); const l = 90 - ((j + 1) * 180) / H; if (l > 0 && q > fMax) { fMax = q; lMax = l; } }
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { vel += Math.hypot(m.u[j * W + i], m.v[j * W + i], PARAMETRI.raffica) * peso(j); area += peso(j); }
+    // la legge, sulla stessa superficie (per fasce: attorno all'asse di rotazione, o all'asse verso la stella se è bloccato)
+    const l = trasportoSuSuperficie({ ...pianeta, T: latF.map((x) => (bloccato ? Tm + dT * Math.sin(x) : Tm - dT * (1.5 * Math.sin(x) ** 2 - 0.5))), mare: acqua ? 1 : 0, bloccato });
+    let somma = 0, assoluta = 0; for (let j = 0; j < HF; j++) { somma += l.calore[j] * Math.cos(latF[j]); assoluta += Math.abs(l.calore[j]) * Math.cos(latF[j]); }
+    assert.ok(isFinite(l.D) && l.D >= 0 && Math.abs(somma) <= 1e-6 * Math.max(assoluta, 1e-9), `la legge sposta il calore, non lo crea: somma ${somma} su ${assoluta}`);
+    return { rot, bar, raggi, acqua, bloccato, giorni, meteo: m.diffusivita, legge: l.D, rapporto: l.D / m.diffusivita, pwMeteo: fMax / 1e15, latMeteo: lMax, pwLegge: l.massimo / 1e15, latLegge: l.latitudine, ventoMeteo: vel / area, ventoLegge: l.vento, scambio: l.scambio };
+  };
+  const serie = (nome, acqua) => { const casi = [];
+    for (const rot of [0.25, 0.5, 1, 2, 4]) casi.push(caso({ rot, acqua })); for (const bar of [0.1, 0.3, 3, 10]) casi.push(caso({ bar, acqua })); for (const raggi of [0.5, 2]) casi.push(caso({ raggi, acqua }));
+    return { nome, casi }; };
+  const secca = serie('pianeti asciutti che girano', false), umida = serie('pianeti d\'acqua che girano', true);
+  const bloccati = { nome: 'pianeti lenti e bloccati (giorno di 50 giorni)', casi: [caso({ giorni: 50, bar: 1, acqua: false, bloccato: true }), caso({ giorni: 50, bar: 5, acqua: false, bloccato: true }), caso({ giorni: 50, bar: 20, acqua: false, bloccato: true }), caso({ giorni: 50, bar: 5, acqua: true, bloccato: true })] };
+  for (const { nome, casi } of [secca, umida, bloccati]) {
+    const buoni = casi.filter((c) => c.meteo > 0.02), lg = buoni.map((c) => Math.log(c.rapporto)), mg = Math.exp(lg.reduce((a, b) => a + b, 0) / lg.length), entro = buoni.filter((c) => c.rapporto > 0.5 && c.rapporto < 2).length, lv = casi.map((c) => Math.log(c.ventoLegge / c.ventoMeteo)), mv = Math.exp(lv.reduce((a, b) => a + b, 0) / lv.length);
+    console.log(`      ${nome}: legge / venti = ×${n2(mg)} in media (da ×${n2(Math.min(...buoni.map((c) => c.rapporto)))} a ×${n2(Math.max(...buoni.map((c) => c.rapporto)))}); entro un fattore 2: ${entro} su ${buoni.length}; vento al suolo legge / venti ×${n2(mv)}`);
+    for (const c of casi) console.log(`        ${c.bloccato ? `giorno ${c.giorni} d` : `rotazione ×${c.rot}`}, ${c.bar} bar, raggio ×${c.raggi}${c.bloccato ? (c.acqua ? ', d\'acqua' : ', asciutto') : ''}: venti ${n2(c.meteo, 3)} W/m²/K (${n2(c.pwMeteo, 1)} PW a ${c.latMeteo.toFixed(0)}°, ${n2(c.ventoMeteo, 1)} m/s) · legge ${n2(c.legge, 3)} (${n2(c.pwLegge, 1)} PW a ${c.latLegge.toFixed(0)}°, ${n2(c.ventoLegge, 1)} m/s) · ×${n2(c.rapporto)}`);
+    attesoQui(2 * entro >= buoni.length, `${nome}: la legge del clima a fasce e i venti danno lo stesso calore portato entro un fattore 2 in ${entro} casi su ${buoni.length} (in media la legge dà ×${n2(mg)})`);
+  }
+  // ciò che la legge garantisce: più rotazione meno calore, più aria più calore (asciutti e d'acqua)
+  for (const { nome, casi } of [secca, umida]) { const perRot = casi.slice(0, 5).map((c) => c.legge), perBar = [casi[5], casi[6], casi[2], casi[7], casi[8]].map((c) => c.legge);
+    for (let k = 1; k < 5; k++) { assert.ok(perRot[k] < perRot[k - 1], `${nome}: più rotazione, meno calore portato (legge): ${perRot}`); assert.ok(perBar[k] > perBar[k - 1], `${nome}: più aria, più calore portato (legge): ${perBar}`); } }
+  // su un mondo lento e bloccato la cella tiene l'aria uniforme e il limite è lo scambio con la superficie: D = scambio/2
+  // (n(n+1) = 2 tra giorno e notte). È ciò che i venti misurano lì
+  for (const c of bloccati.casi) tra(c.legge / (c.scambio / 2), 0.6, 1.02, `bloccato a ${c.bar} bar: calore portato dalla legge / (scambio/2)`);
+  console.log(`      bloccati: legge / (scambio/2) = ${bloccati.casi.map((c) => n2(c.legge / (c.scambio / 2))).join(', ')}; venti / (scambio/2) = ${bloccati.casi.map((c) => n2(c.meteo / (c.scambio / 2))).join(', ')}`);
+  // LA TERRA VERA: il trasporto massimo verso i poli è 5–6 PW a 35–40° (aria e mare insieme; la sola aria ≈ 5 PW a 43°:
+  // Trenberth e Caron 2001, valori ricordati, non riletti). Sul profilo misurato della Terra, con il 70% di mare:
+  const TerraF = latF.map((x) => Tm - 28 * (1.5 * Math.sin(x) ** 2 - 0.5)), lt = trasportoSuSuperficie({ ...base, T: TerraF, mare: 0.7 });
+  let q = 0, fMax = 0, lMax = 0; for (let j = 0; j < H - 1; j++) { q += (zQ[j] - globale(terra.trasportoCalore)) * 2 * Math.PI * base.raggioM ** 2 * peso(j) * (Math.PI / H); const l = 90 - ((j + 1) * 180) / H; if (l > 0 && q > fMax) { fMax = q; lMax = l; } }
+  attesoQui(lt.massimo / 1e15 >= 5 && lt.massimo / 1e15 <= 6 && lt.latitudine >= 35 && lt.latitudine <= 40, `la legge, sul profilo misurato della Terra: trasporto massimo verso il polo ${n2(lt.massimo / 1e15)} PW a ${lt.latitudine.toFixed(0)}° (misurato 5–6 PW a 35–40°, aria e mare; la sola aria ≈ 5 PW a 43°): la legge non ha il mare, e il vapore viaggia solo con i vortici`);
+  attesoQui(fMax / 1e15 >= 5 && fMax / 1e15 <= 6 && lMax >= 35 && lMax <= 40, `i venti di meteo.js, sulla stessa Terra: trasporto massimo verso il polo ${n2(fMax / 1e15)} PW a ${lMax.toFixed(0)}° (misurato 5–6 PW a 35–40°): la cella di Hadley qui è più forte del vero e porta il doppio`);
+  console.log(`      la Terra (profilo misurato): legge ${n2(lt.D, 3)} W/m²/K, ${n2(lt.massimo / 1e15)} PW a ${lt.latitudine.toFixed(0)}°, vento ${n2(lt.vento, 1)} m/s · venti ${n2(terra.diffusivita, 3)} W/m²/K, ${n2(fMax / 1e15)} PW a ${lMax.toFixed(0)}°  [griglia: ${((performance.now() - t0) / 1000).toFixed(0)} s]`);
+  assert.ok(ARIA.vortici.c3 === 2.0 && ARIA.vortici.cGamma === 0.113 && ARIA.vortici.gamma === 3.64, 'le costanti dei vortici sono quelle lette in Gallet e Ferrari (2021)');
 });
 
 prova('i tempi: un pianeta a 64×32 in circa un secondo', () => {
