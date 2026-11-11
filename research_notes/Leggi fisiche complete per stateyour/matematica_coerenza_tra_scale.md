@@ -238,7 +238,7 @@ La regola 5 è, alla lettera, l'**inversione bayesiana del programma generativo*
 #### 4.2 Condizionare un programma generativo: WebPPL (JavaScript) e Gen
 - **WebPPL** [V] — [documentazione, metodi di inferenza](https://webppl.readthedocs.io/en/master/inference/methods.html): `Infer` con `enumerate` (esplorazione esaustiva; strategie `likelyFirst`, `depthFirst`, `breadthFirst`; tetto `maxExecutions`), `rejection` (con `maxScore`, variante incrementale che rigetta presto se ogni `factor` ha punteggio ≤ 0), `MCMC` (nucleo `MH` a sito singolo oppure `HMC` per le variabili continue), `incrementalMH` (il metodo C3), `SMC` (filtro di particelle, con passi di ringiovanimento a ogni `factor`), `optimize` (variazionale su un programma guida), `forward`. «condition and observe are written in terms of factor». Licenza MIT [V] — [LICENSE](https://raw.githubusercontent.com/probmods/webppl/master/LICENSE.md).
 - **Gen** [V licenza; R contenuto] — [Gen.jl, LICENSE Apache-2.0](https://raw.githubusercontent.com/probcomp/Gen.jl/master/LICENSE): Julia; il concetto centrale è la *traccia* (mappa indirizzo → valore di ogni scelta casuale) con un'interfaccia per aggiornarla e ricalcolare solo ciò che dipende dalla scelta cambiata.
-- **La corrispondenza con stateyour** (inferenza): `rami = { indirizzo dell'evento: esito }` di `intreccio.js` **è** una traccia; `nelRamo(a, evento, esito)` è la proposta di un MH a sito singolo; `puoToccare` (R3: un evento cambia solo ciò che sta dentro il suo contenitore e dopo) è esattamente l'informazione che rende economico il ricalcolo incrementale (C3, Gen). L'idea di nominare le scelte casuali con un indirizzo strutturale perché le tracce si possano riusare è di Wingate, Stuhlmüller e Goodman (2011) [R] — [«Lightweight implementations of probabilistic programming languages»](http://proceedings.mlr.press/v15/wingate11a.html).
+- **La corrispondenza con stateyour** (inferenza): `rami = { indirizzo dell'evento: esito }` di `intreccio.js` **è** una traccia; `nelRamo(a, evento, esito)` è la proposta di un MH a sito singolo; `puoToccare` (R3: un evento cambia solo ciò che sta dentro il suo contenitore e dopo) è esattamente l'informazione che rende economico il ricalcolo incrementale (C3, Gen). L'idea di nominare le scelte casuali con un indirizzo strutturale perché le tracce si possano riusare è di Wingate, Stuhlmüller e Goodman (2011) [R] — [«Lightweight implementations of probabilistic programming languages»](https://proceedings.mlr.press/v15/wingate11a.html).
 - **Che cosa cambierebbe.** Non serve adottare WebPPL (è un linguaggio a sé, con trasformazione del codice): bastano ~100 righe sopra `sorgente`: (1) un peso (log-probabilità) per ogni esito, (2) una funzione `verosimiglianza(osservazione, mondo)`, (3) un ciclo MH che propone `nelRamo` su eventi scelti tra quelli che `puoToccare` dice rilevanti per l'osservazione.
 
 #### 4.3 A priori «simile al mondo d'origine»
@@ -311,7 +311,7 @@ La teoria della decoerenza dà alla regola 3 la sua fisica: non serve un osserva
 | Corpo rigido caotico (Iperione) | Λ⁻¹·ln(I/ħ) | 42 giorni × ln 10⁷⁷ ≈ 20 anni | [V] [Zurek](https://ar5iv.labs.arxiv.org/html/quant-ph/0105127); [C] 20,4 |
 | Tempo atmosferico | cascata + instabilità barocline (`risalita.tempoMeteo`) | limite intrinseco ~2 settimane; < 3 giorni sotto 200 km | [V] [Zhang e altri 2019](https://adapt.psu.edu/ZHANG/papers/Zhangetal2019JAS.pdf) |
 | Pianeti interni | T_L·ln(Δ/δ) | T_L ≈ 5 Myr; da 10⁻¹⁰ m a 1 UA ≈ 244 Myr | [S] [Laskar](https://arxiv.org/abs/1209.5996); [C] |
-| Stato metastabile (nucleazione) | R = N_S·Z·j·e^(−ΔG*/k_BT), ΔG* = 16πσ³/(3Δg_v²), r_c = 2σ/Δg_v; su una superficie × (2 − 3cosθ + cos³θ)/4 | ghiaccio a −19,5 °C: ΔG* ≈ 275 k_BT, j ≈ 10¹¹/s, Z ≈ 10⁻³ → R ≈ 10⁻⁸³ /s/m³ | [V] [Wikipedia, Classical nucleation theory](https://en.wikipedia.org/wiki/Classical_nucleation_theory) |
+| Stato metastabile (nucleazione) | R = N_S·Z·j·e^(−ΔG*/k_BT), ΔG* = 16πσ³/(3Δg_v²), r_c = 2σ/Δg_v; su una superficie × (2 − 3cosθ + cos³θ)/4 | ghiaccio a 19,5 K di sottoraffreddamento (modello d'acqua TIP4P/2005): ΔG* ≈ 275 k_BT, j ≈ 10¹¹/s, Z ≈ 10⁻³ → R ≈ 10⁻⁸³ /s/m³ | [V] [Wikipedia, Classical nucleation theory](https://en.wikipedia.org/wiki/Classical_nucleation_theory) |
 | Biforcazione / rottura di simmetria | crescita e^(ε·t) dal rumore: t ≈ (1/ε)·ln(1/δ) | il *quale* ramo (fase, orientazione dei rulli) è un evento del rumore iniziale | [R] [Cross e Hohenberg 1993](https://doi.org/10.1103/RevModPhys.65.851) |
 | Chimica che si copia (mutazione) | probabilità di fissazione ≈ 2s; tempo ≈ (2/s)·ln N generazioni | — | [R] [Wikipedia, Fixation](https://en.wikipedia.org/wiki/Fixation_(population_genetics)) |
 
@@ -385,3 +385,161 @@ Le leggi micro sono reversibili; la freccia viene da una **condizione iniziale a
 - Buscemi–Scarani letto solo nel riassunto: la costruzione esplicita del canale inverso non è stata verificata.
 - Non ho cercato integratori reversibili al bit per sistemi con urti (dinamica a eventi) né per fluidi.
 - La voce dell'enciclopedia non nomina lo *Stosszahlansatz*: l'attribuzione dell'asimmetria a quell'ipotesi è ricordata.
+
+---
+
+## 7. Moti e sistemi di riferimento a tutte le scale; precisione numerica
+
+### Takeaway
+Dalla rotazione del pianeta al moto rispetto al fondo cosmico le velocità vere vanno da 0,5 a 620 km/s (v/c ≤ 2·10⁻³): la composizione galileiana lungo la catena dei riferimenti sbaglia al più di parti su 10⁶, e le correzioni relativistiche (aberrazione, Doppler, tempo proprio) sono formule chiuse da applicare alla fine. La catena dei riferimenti **è** il percorso dell'indirizzo: ogni livello porta scarto, velocità, rotazione e ritmo del proprio tempo rispetto al genitore. Il tempo dell'indirizzo è il tempo cosmico; il tempo proprio di un luogo ne differisce di ≤ 10⁻⁶, salvo vicino a oggetti compatti.
+
+### Cited Findings
+
+#### 7.1 Le velocità vere e le loro fonti
+
+| Moto | Velocità | v/c | Aberrazione | v²/2c² (ritardo dell'orologio) | Fonte del numero |
+|---|---|---|---|---|---|
+| Rotazione terrestre all'equatore | 0,465 km/s | 1,55·10⁻⁶ | 0,3″ | 1,2·10⁻¹² (38 µs/anno) | [C] 2πR/giorno siderale |
+| Orbita terrestre | 29,78 km/s | 9,94·10⁻⁵ | 20,5″ | 4,9·10⁻⁹ (0,16 s/anno) | [C] 2π·UA/anno |
+| Sole attorno al centro galattico | ~246–248 km/s (tangenziale); circolare ~233; moto peculiare del Sole ~12 | 8,2·10⁻⁴ | 169″ | 3,4·10⁻⁷ (10,6 s/anno) | [S] R₀ = 8,178 kpc (GRAVITY 2019) × moto proprio di Sgr A\* ≈ 6,4 mas/anno — [arXiv:2212.00632](https://arxiv.org/abs/2212.00632), [arXiv:2012.02036](https://arxiv.org/abs/2012.02036); un'analisi più recente dà R₀ = 8,275 kpc — [arXiv:2412.12252](https://arxiv.org/abs/2412.12252) |
+| Sole rispetto al fondo cosmico | 369,82 ± 0,11 km/s verso l = 264,02°, b = 48,25° | 1,23·10⁻³ | 254″ | 7,6·10⁻⁷ (24 s/anno) | [S] [Planck 2018, I](https://arxiv.org/abs/1807.06205) |
+| Gruppo Locale rispetto al fondo | 620 ± 15 km/s verso l = 271,9°, b = 29,6° | 2,1·10⁻³ | 427″ | 2,1·10⁻⁶ (67 s/anno) | [S] ivi (dal dipolo meno il moto Sole–Gruppo Locale, 299 ± 15 km/s) |
+
+- **Da dove deve venire ciascuna nel progetto** (R7, una fonte per grandezza): rotazione ← momento angolare d'accrescimento e impatti (`rotazione.js`); orbita ← v = √(GM/a) (`orbite.js`); moto galattico ← curva di rotazione + epicicli (`galassie.curvaRotazione`, `motoStella`); moto della galassia ← campo di velocità peculiari del campo di densità cosmico: in teoria lineare v = (2f/(3·H·Ω_m))·g, f ≈ Ω_m^0,55, con g l'accelerazione peculiare del campo di `cosmo3d.js` [R] — [Strauss e Willick, arXiv:astro-ph/9502079](https://arxiv.org/abs/astro-ph/9502079). Il dipolo del fondo cosmico (ΔT/T = v/c → 3,36 mK [C]) diventa allora una **previsione** del mondo, non un dato.
+
+#### 7.2 Composizione relativistica, aberrazione, Doppler
+- **Formule** [R] — [Wikipedia, Relativistic aberration](https://en.wikipedia.org/wiki/Relativistic_aberration): somma delle velocità u′ = (u + v)/(1 + u·v/c²); aberrazione cos θ′ = (cos θ − β)/(1 − β·cos θ); fattore Doppler 𝒟 = 1/(γ(1 − β·cos θ)); l'intensità bolometrica scala come 𝒟⁴.
+- **Quando servono:** per i corpi (tabella 7.1) l'errore galileiano è ≤ v²/c² ~ 4·10⁻⁶: si compone galileianamente lungo la catena e si applicano aberrazione e Doppler **solo all'ultimo passo, verso chi guarda**. Per le finestre di particelle (`mondo.js`, «osservatore in moto» di R10) serve Lorentz pieno, già presente.
+
+#### 7.3 Riferimenti non inerziali: Coriolis, centrifuga, maree
+- **Equazione** [R] — [Wikipedia, Rotating reference frame](https://en.wikipedia.org/wiki/Rotating_reference_frame): a_rel = a − 2Ω×v − Ω×(Ω×r) − (dΩ/dt)×r.
+- **Ordini di grandezza** [C] per la Terra: Ω = 7,2921·10⁻⁵ rad/s; centrifuga all'equatore 0,0339 m/s² (0,35% di g); Coriolis 1,5·10⁻³ m/s² a 10 m/s; numero di Rossby U/(f·L): ~3200 per un lavandino (Coriolis irrilevante), 0,1 per un ciclone (dominante). Marea 2GM·r/d³ sulla Terra: Luna 1,10·10⁻⁶, Sole 5,1·10⁻⁷ m/s²; marea della Galassia su 1 UA ≈ 1,3·10⁻¹⁹ m/s².
+- **Chi possiede chi** [R] — [Wikipedia, Hill sphere](https://en.wikipedia.org/wiki/Hill_sphere): r_H = a·(m/3M)^(1/3): è il criterio fisico del «contenitore» di R1/R3 (una luna sta nell'indirizzo del pianeta finché sta nella sua sfera di Hill).
+- **Regola.** R1 + R10: ogni nodo dell'indirizzo è un riferimento con (origine, velocità, Ω); le forze apparenti di un livello sono *ricavate* dal moto del nodo, non aggiunte.
+
+#### 7.4 Tempo proprio: ordini di grandezza
+- **Formula** [R; numeri V e C]: dτ/dt ≈ 1 + Φ/c² − v²/(2c²) in campo debole.
+- **Potenziali** [C]: superficie terrestre GM/(Rc²) = 6,95·10⁻¹⁰ (22 ms/anno); Sole a 1 UA 9,87·10⁻⁹ (0,31 s/anno); superficie del Sole 2,1·10⁻⁶; nana bianca (0,6 M☉, 8800 km) 1,0·10⁻⁴; stella di neutroni (1,4 M☉, 12 km) 0,17 (qui il campo debole non vale: il fattore esatto √(1 − 2GM/rc²) è 0,81).
+- **GPS** [V + C] — [Ashby, «Relativity in the Global Positioning System», Living Rev. Relativ. 6, 1](https://pmc.ncbi.nlm.nih.gov/articles/PMC5253894/): gli orologi fermi sul geoide «all beat at the same rate» (la superficie è equipotenziale nel riferimento rotante), con Φ₀/c² = 6,969290134·10⁻¹⁰; effetto Sagnac lungo l'equatore 207,4 ns; 1 ns d'errore ≈ 30 cm; correzione d'eccentricità fino a ~23 ns per e = 0,01. [C] per a = 26 562 km: +45,7 µs/giorno gravitazionale, −7,2 µs/giorno di velocità, netto +38,4 µs/giorno ≈ 11,5 km/giorno d'errore se non corretto (i valori numerici di Ashby per questi tre numeri stanno in equazioni non estratte: qui sono ricalcolati).
+- **Sulla vita dell'universo** [C]: superficie terrestre contro spazio lontano, 4,5 Gyr × 6,97·10⁻¹⁰ ≈ 3,1 anni; il moto galattico su 13,8 Gyr ≈ 4700 anni. Il centro della Terra è ~2,5 anni più giovane della superficie [R] — [Uggerhøj, Mikkelsen, Faye, arXiv:1604.05507](https://arxiv.org/abs/1604.05507).
+- **Regola.** R1/R6/R7: il `tempo` dell'indirizzo sia dichiarato **tempo cosmico** (quello degli osservatori comoventi); il tempo proprio di un luogo è una grandezza ricavata, τ = ∫(1 + Φ/c² − v²/2c²)dt lungo la catena dei riferimenti. Conta per: età radiometriche vicino a oggetti compatti, vite delle particelle veloci (già), sincronizzazione.
+
+#### 7.5 Coordinate comoventi e cono di luce
+- **Formule** [R] — [Wikipedia, Comoving and proper distances](https://en.wikipedia.org/wiki/Comoving_and_proper_distances): r_fisica = a(t)·x; velocità = H·r + a·dx/dt (flusso di Hubble + peculiare); le velocità peculiari libere decadono come 1/a; ciò che si *vede* sta sul cono di luce passato: χ = ∫c·dt/a(t).
+- **Regola e scelta da dichiarare.** R10 («la finestra è un punto di osservazione»): a rigore un osservatore vede ogni oggetto com'era a t − d/c (centro galattico: 26 000 anni fa; Andromeda: 2,5 milioni). Il progetto mostra la fetta «adesso» (simultaneità del tempo cosmico): va dichiarato. La vista sul cono di luce è economica per tutto ciò che è di classe A (§3.4): basta valutare ogni oggetto al suo tempo ritardato.
+
+#### 7.6 Precisione numerica su 40 ordini di grandezza (complementi)
+- **Passi** [C]: float32 a raggio terrestre 0,76 m; float64 a 1 UA 3,3·10⁻⁵ m, a 8 kpc 55 km, a 14 Gpc 0,64 UA; da 10²⁶ a 10⁻¹⁵ m servono 136 bit.
+- **Interi a 64 bit** [V scala; C portata]: con il passo di JANUS (10⁻¹⁶ UA = 15 µm) un intero a 64 bit copre ± 922 UA — [Rein e Tamayo](https://ar5iv.labs.arxiv.org/html/1704.07715). In JavaScript: `BigInt64Array` esiste ma l'aritmetica `BigInt` è lenta; i `Number` sono interi esatti fino a 2⁵³ (basta per una griglia 2⁻⁴⁰ su un dominio di ~8000 unità [C, §6.3]).
+- **Doppia-doppia** [C; algoritmo R] — [Shewchuk, «Adaptive Precision Floating-Point Arithmetic»](https://www.cs.cmu.edu/~quake/robust.html): somma senza errore `twoSum(a, b)`: s = a + b; bb = s − a; err = (a − (s − bb)) + (b − bb); una coppia (alto, basso) dà ~106 bit con una decina di operazioni. Prova: (1 UA + 1 nm) − 1 UA = 10⁻⁹ esatto, contro 0 in float64. Lo standard ha ora anche `Math.sumPrecise` [V] — [ECMA-262](https://tc39.es/ecma262/multipage/numbers-and-dates.html).
+- **Catena dei riferimenti** (inferenza, estende lo schema già adottato «cammino di indirizzi + scarto locale»): la trasformazione camera → oggetto compone solo i nodi tra i due lungo l'albero (antenato comune), sommando per primi i termini piccoli; lo stesso cammino compone le velocità (7.1) e i ritmi del tempo (7.4).
+
+### Inferences
+- Una struttura `riferimento(nodo, t) → { origine, velocità, assi, Ω, ritmo }` per ogni livello dell'indirizzo dà in un colpo: posizioni precise (7.6), moto relativo di chi guarda (R10), forze apparenti (7.3), tempo proprio (7.4). `spazio3d.js` ha già `assiSistema`/`assiGalassia`: mancano velocità e ritmo.
+- Aberrazione e Doppler del cielo (stelle spostate di 20″ dall'orbita, dipolo di 3,4 mK) sono **uscite verificabili** della catena: prove «NON TORNA» a costo quasi nullo.
+
+### Gaps
+- I valori di Planck, GRAVITY e Sgr A\* vengono dai riassunti del motore di ricerca, non dalle tabelle aperte; il «circolare ~233 km/s» viene da una fonte secondaria.
+- Le formule di aberrazione, Hill, coordinate comoventi e teoria lineare delle velocità sono ricordate.
+- I tre numeri del GPS non sono stati letti in Ashby (equazioni non estratte): sono ricalcolati e coincidono con i valori che ricordo dall'articolo.
+- Riferimenti in relatività generale forte (vicino a buchi neri) non trattati.
+
+---
+
+## 8. Resa 3D animata e continua tra le scale
+
+### Takeaway
+Novità rispetto al rapporto precedente: la **profondità invertita** è ora disponibile anche in WebGL attraverso l'estensione `EXT_clip_control` (three.js 0.187 la espone come `reversedDepthBuffer`) ed è nativa in WebGPU (profondità 0…1, `depth32float`, confronto `greater`, pulizia a 0); la profondità logaritmica resta il ripiego. Per la continuità tra scale la regola è quella fisica: la rappresentazione del figlio deve **conservare** ciò che il genitore mostrava (flusso luminoso, massa, numero), e il campione mostrato è scelto per indirizzo. Per il tempo: una sola velocità dichiarata, e ciò che oscilla più in fretta di metà fotogramma si mostra come media, non come istantanea.
+
+### Cited Findings
+
+#### 8.1 Profondità invertita in WebGL2 e WebGPU
+- **three.js** [V, sorgente] — [WebGLRenderer.js](https://raw.githubusercontent.com/mrdoob/three.js/dev/src/renderers/WebGLRenderer.js), [WebGLState.js](https://raw.githubusercontent.com/mrdoob/three.js/dev/src/renderers/webgl/WebGLState.js): opzione `reversedDepthBuffer` («Whether to use a reverse depth buffer. Requires the `EXT_clip_control` extension»), accanto a `logarithmicDepthBuffer`; quando attiva chiama `ext.clipControlEXT(ext.LOWER_LEFT_EXT, ext.ZERO_TO_ONE_EXT)` e usa `gl.GREATER`; versione del ramo di sviluppo alla data: 0.187.0. Introdotta nel settembre 2024 (PR #29445), descritta come miglioramento netto sulla profondità logaritmica dove disponibile; con la realtà virtuale non funziona ancora senza interventi [S] — [forum three.js](https://discourse.threejs.org/t/reverseddepthbuffer-and-vr/90689). Licenza MIT [V] — [LICENSE](https://raw.githubusercontent.com/mrdoob/three.js/dev/LICENSE).
+- **WebGPU** [V, sorgente] — [webgpu-samples, reversedZ/main.ts](https://raw.githubusercontent.com/webgpu/webgpu-samples/main/sample/reversedZ/main.ts): formato `depth32float`; confronto `'greater'`; valore di pulizia 0.0; matrice di rimappatura della profondità (elemento [10] = −1, [14] = 1) moltiplicata alla proiezione.
+- **Perché funziona** [R] — [Reed, «Depth Precision Visualized»](https://developer.nvidia.com/content/depth-precision-visualized): i float hanno più risoluzione vicino a 0; mandando il piano lontano a 0 la densità dei float compensa quella di 1/z e la precisione relativa diventa quasi uniforme; ammette il piano lontano all'infinito. Il rapporto precedente [V, Outerra] dava: invertito a 32 bit float poco meglio del logaritmico a 24 bit.
+- **Che cosa fare in stateyour** (WebGL2 scritto a mano, `src/tre/`): chiedere `EXT_clip_control`; se c'è, disegnare su un framebuffer con profondità `DEPTH_COMPONENT32F` [R: formato del nucleo di WebGL2], `clipControlEXT(LOWER_LEFT_EXT, ZERO_TO_ONE_EXT)`, `depthFunc(GREATER)`, `clearDepth(0)`; altrimenti la formula logaritmica già verificata. **Limite:** sul framebuffer predefinito (profondità intera a 24 bit) l'inversione aiuta poco [R].
+- **Regola.** R8/R10 (prerequisito tecnico).
+
+#### 8.2 Continuità tra scale: che cosa deve conservare una transizione
+- **Tecniche già verificate** (rapporto precedente): origine sulla camera, grafo di scena dinamico di OpenSpace, octree di stelle con soglia sull'angolo solido, CDLOD/clipmap per il terreno, criterio unico «dimensione apparente in pixel».
+- **Regola fisica della dissolvenza** (inferenza da R4 e R9): nel passare da «punto» a «oggetto risolto» la quantità mostrata si conserva: il flusso luminoso integrato del disco risolto = quello del punto; la somma dei puntini della nebbia × il loro peso = il numero vero; la massa della nube di molecole = quella della cella. Due rappresentazioni che rispettano la stessa integrale si possono sfumare l'una nell'altra senza stacco *e senza mentire*.
+- **Partizione della profondità per passate** [R]: in alternativa alla profondità logaritmica, disegnare le scale dalla più lontana alla più vicina in passate separate (ognuna con il suo vicino/lontano), pulendo la profondità tra una e l'altra: è ciò che la gerarchia dei contenitori rende naturale (un pianeta non interseca mai la sua galassia). — [Cozzi e Ring, *3D Engine Design for Virtual Globes*](https://www.routledge.com/product/isbn/9781568817118)
+
+#### 8.3 Milioni di atomi e di stelle (solo le aggiunte)
+- **Mesoscale Explorer** [V] — [Rose, Sehnal, Goodsell, Autin 2024, PMC11409463](https://pmc.ncbi.nlm.nih.gov/articles/PMC11409463/): istanziazione (un solo insieme di coordinate per tipo di molecola), sfere a impostore con ray-casting, livelli di dettaglio per fusione di sfere vicine, scarto per tronco di vista e per occlusione, risoluzione ridotta; quattro preimpostazioni (Ultra, Quality, Balanced, Performance); con «Quality» interattivo «even those with up to 3 billion atoms» su Threadripper + Quadro RTX 8000 e su Apple M1, a 1598 × 1776. Limiti dichiarati: i primi piani costano di più; illuminazione globale e dati dinamici sono lavoro futuro. Mol\* è MIT [V] — [LICENSE](https://raw.githubusercontent.com/molstar/molstar/master/LICENSE). (Il rapporto precedente ne ha già estratto `lodPixelSize` e la ricetta dell'impostore.)
+- **Visualizzatori molecolari su WebGPU** [S, nessuno aperto]: molar_vis (Rust, impostori in WGSL), PyMOL-RS (BSD-3, wgpu), speck-pbr (illuminazione globale a tracciamento di cammini), megane («1M+ atoms at 60 fps» dichiarati); VTX regge alcuni milioni di atomi su un portatile ma non è web e la licenza è per uso non commerciale. — [molar_vis](https://macinchem.org/2026/06/18/molar_vis-a-modern-molecular-viewer-in-pure-rust/), [PyMOL-RS](https://zmactep.github.io/pymol-rs/), [megane](https://hodakamori.github.io/megane/introduction), [VTX](https://www.frontiersin.org/articles/10.3389/fbinf.2025.1588661/full)
+- **Licenze dei riferimenti** [V]: CesiumJS Apache-2.0 — [LICENSE](https://raw.githubusercontent.com/CesiumGS/cesium/main/LICENSE.md); OpenSpace MIT — [LICENSE](https://raw.githubusercontent.com/OpenSpace/OpenSpace/master/LICENSE.md); Gaia Sky MPL-2.0 (rapporto precedente); SpaceEngine chiuso (solo riferimento).
+
+#### 8.4 Volumi (nebulose, atmosfere, nubi, polvere galattica)
+- **Schema** [R] — [Wikipedia, Volume ray casting](https://en.wikipedia.org/wiki/Volume_ray_casting): per pixel si marcia lungo il raggio accumulando emissione e trasmittanza T = exp(−∫σ_t·ds) (Beer–Lambert); costo ∝ pixel × passi; rimedi: mezza risoluzione, passo proporzionale alla distanza, uscita anticipata a T < soglia, riuso temporale. Le texture 3D sono nel nucleo di WebGL2.
+- **Regola.** R4/R9: il volume si campiona dallo **stesso campo** di densità che i livelli sotto raffinano (§2.3), valutato alla risoluzione che il passo del raggio chiede; non una texture a parte.
+
+#### 8.5 Animare da femtosecondi a miliardi di anni in modo onesto (inferenze, con i numeri [C]/[R])
+- **Scala dei tempi**: vibrazione di un legame ~10 fs; urti in un liquido ~0,1 ps; diffusione su 1 nm ~1 ns; giorno 8,6·10⁴ s; anno 3,2·10⁷ s; anno galattico ≈ 216 Myr ([C]: 2π·8,178 kpc / 233 km/s); età del cosmo 4,4·10¹⁷ s: 31 decadi.
+- **Regole proposte**: (1) il tempo è una coordinata dell'indirizzo: animare = far scorrere `tempo` a una velocità **mostrata** (secondi di mondo per secondo di schermo), su manopola logaritmica; (2) limite di Nyquist: se un moto ha periodo P < 2 passi di fotogramma, l'istantanea produce moti finti (ruote che girano al contrario): si passa alla **media temporale** (orbita → anello di probabilità; rotazione → sfocatura; vibrazione → ellissoide termico di Debye–Waller; molecole → densità). È la nebbia (R9) nel tempo, e coincide con «il lento vede del veloce solo le medie» (R6); (3) ciò che è di classe A (§3.4) si valuta esatto a ogni fotogramma a qualunque velocità; ciò che è caotico, oltre il suo orizzonte, si mostra come *una* realizzazione dichiarata tale; (4) i livelli più lenti della finestra restano fermi, ed è vero: lo si dice.
+- **Regola.** R6, R9, R10.
+
+### Inferences
+- L'ordine di lavoro per `src/tre/`: catena dei riferimenti (§7) → profondità invertita con ripiego logaritmico → dissolvenze che conservano l'integrale → medie temporali sopra Nyquist.
+- La «nebbia nel tempo» è un concetto che il progetto non ha ancora nominato e che risolve insieme l'onestà dell'animazione e il costo.
+
+### Gaps
+- La pagina del registro Khronos di `EXT_clip_control` ha risposto 403: stato dell'estensione e copertura sui dispositivi non verificati (solo il codice di three.js che la usa).
+- Nessuna misura di prestazioni aperta per WebGL2/WebGPU su hardware 2026; i visualizzatori WebGPU sono noti solo dai riassunti.
+- Ray-marching dei volumi e partizione della profondità: ricordati, senza fonte aperta.
+- Nessuna fonte trovata su zoom continuo *sotto* il metro fino agli atomi in un motore integrato (il vuoto segnalato dal rapporto precedente resta).
+- Come OpenSpace, Gaia Sky e Celestia trattano la velocità del tempo e l'aliasing dei moti veloci: non cercato.
+
+---
+
+## 9. Emergenza: definizioni operative e che cosa hanno (e non hanno) gli automi e i sistemi di particelle
+
+### Takeaway
+«Emerge e non è messo a mano» si può **provare** con quattro controlli: (1) provenienza (nessun numero o nome del codice descrive il fenomeno: R2); (2) ablazione (tolta la causa al livello sotto, il fenomeno sparisce); (3) previsione senza parametri contro una misura («NON TORNA»); (4) **chiusura**: la legge-scorciatoia del livello sopra commuta con il grossolanamento del livello sotto su un campione piccolo. Per la (4) esistono misure precise: accorpabilità forte di una catena di Markov, chiusura informazionale/causale/computazionale (Rosas e altri 2024), informazione effettiva (Hoel). Lenia, Particle Life e simili mostrano strutture che si organizzano da regole locali, ma non hanno conservazioni (salvo Flow Lenia), unità, termodinamica né più livelli: sono un confronto, non un motore.
+
+### Cited Findings
+
+#### 9.1 Emergenza debole e provenienza
+- **Definizione** [R] — [Bedau 1997, «Weak Emergence»](https://doi.org/10.1111/0029-4624.31.s11.17): un macrostato è debolmente emergente se si ricava dalla microdinamica e dalle condizioni esterne **solo per simulazione**.
+- **Controllo operativo** (inferenza): R2 la rende verificabile dal codice: se ogni numero è dichiarato ricavato/misurato/libero, «messo a mano» = esiste un parametro libero (o un ramo `if`) che nomina il fenomeno. L'elenco unico dei parametri liberi generato dal codice (che `INTRECCIO.md` dà come mancante) è lo strumento.
+
+#### 9.2 Chiusura: quando un livello alto è un livello vero
+- **Definizioni** [V] — [Rosas e altri, «Software in the natural world», arXiv:2402.09090](https://ar5iv.labs.arxiv.org/html/2402.09090): un processo macro Z = f(X) è **informazionalmente chiuso** se conoscere il micro non aggiunge nulla alla previsione del suo futuro: I(Z_t; Z_futuro) = I(X_t; Z_futuro) (eq. 3); **causalmente chiuso** se la sua macchina-ε (stati causali ottimali per la previsione) coincide con quella costruita dal micro; **computazionalmente chiuso** se la macchina-ε del macro è un grossolanamento di quella del micro (grossolanare e calcolare la macchina-ε commutano). Teoremi: per Z_t = g(X_t) chiusura informazionale ⇔ causale (T1); per grossolanamenti spaziali la informazionale implica la computazionale, non viceversa (T2); un grossolanamento **fortemente accorpabile** degli stati causali dà chiusura causale, uno debolmente accorpabile solo computazionale (T3). Esempi: il numero di particelle in una camera nel modello di Ehrenfest; l'energia nel modello di Ising con dinamica di Glauber; la parità nella regola 150; l'etichetta del modulo in una passeggiata su una rete modulare.
+- **Accorpabilità forte** [R; C] — [Kemeny e Snell, *Finite Markov Chains*](https://en.wikipedia.org/wiki/Lumpability): una partizione è fortemente accorpabile se, per ogni coppia di blocchi A, B, la probabilità di andare da x ∈ A in B è la stessa per ogni x di A. [C] funzione di prova di dieci righe: per la catena dell'esempio 9.3, {0,1,2},{3} è accorpabile, {0,1},{2,3} no.
+- **Uso nel progetto** (inferenza): è la forma rigorosa di R2 («i livelli più alti sono scorciatoie … da controllare su un campione piccolo») e della robustezza ai rami (§5.7). Prova `test_chiusura`: per ogni coppia di livelli, (a) si simula il micro su un campione piccolo da più stati micro con lo stesso stato macro; (b) si grossolana; (c) si confronta con la legge macro. Se stati micro diversi con lo stesso macro danno futuri macro diversi oltre il rumore previsto (§1.5), la variabile macro **non è chiusa**: manca una variabile (Mori–Zwanzig, §1.6: è la memoria).
+
+#### 9.3 Informazione effettiva ed emergenza causale (Hoel)
+- **Idea** [V, abstract] — [Hoel, «When the map is better than the territory», arXiv:1612.09592](https://arxiv.org/abs/1612.09592): un modello macro può essere più informativo del micro («causal emergence»); l'analogia è con la capacità di canale: il grossolanamento agisce come un codice a correzione d'errore.
+- **Definizione** [R; C] — [Hoel, Albantakis, Tononi 2013, PNAS 110, 19790](https://doi.org/10.1073/pnas.1314922110) (pagina: 403): EI = informazione mutua tra causa ed effetto quando le cause sono poste con distribuzione uniforme = (1/n)·Σᵢ D_KL(Tᵢ ‖ T̄), con Tᵢ la riga i della matrice di transizione e T̄ la media delle righe; emergenza causale = EI(macro) − EI(micro) > 0, possibile quando il micro è rumoroso o degenere. [C] esempio a 4 stati (tre che si mescolano uniformemente tra loro, uno fisso): EI micro = 0,811 bit, EI macro (2 stati) = 1,000 bit.
+- **Limiti** [R]: dipende dalla scelta della distribuzione d'intervento uniforme e del grossolanamento; è una diagnostica di «quale descrizione è più deterministica», non una prova che qualcosa emerga. Per il progetto è meno utile della chiusura di 9.2, che si prova direttamente.
+
+#### 9.4 Automi cellulari e sistemi di particelle: che cosa hanno e che cosa no
+- **Lenia** [V, abstract; R regola] — [Chan, arXiv:1812.05433](https://arxiv.org/abs/1812.05433): automa cellulare con spazio, tempo e stato continui; «more than 400 species in 18 families»; forme «geometric, metameric, fuzzy, resilient, adaptive, and rule-generic». Regola: A ← clip(A + dt·G(K ∗ A), 0, 1), K nucleo ad anelli, G funzione di crescita a campana. Nessuna grandezza conservata.
+- **Flow Lenia** [V, abstract] — [Plantec e altri, arXiv:2212.07906](https://arxiv.org/abs/2212.07906): estensione che **conserva la massa**; i parametri della regola diventano locali e trasportati con la materia, così creature con regole diverse convivono («multi-species simulations»); l'evoluzione intrinseca è indicata come prospettiva («paves the way»), non dimostrata.
+- **Particle Life** [V licenza; R contenuto] — [hunar4321/particle-life, MIT](https://raw.githubusercontent.com/hunar4321/particle-life/main/LICENSE): particelle di pochi tipi con una matrice di attrazioni **non simmetrica** (A attrae B, B respinge A): viola azione–reazione, quindi niente conservazione di quantità di moto né d'energia; ne escono grumi che si inseguono. **Particle Lenia** [R] — [Mordvintsev e altri](https://google-research.github.io/self-organising-systems/particle-lenia/): Lenia come particelle che scendono lungo un'energia.
+- **Wolfram Physics** [R] — [Wolfram, arXiv:2004.08210](https://arxiv.org/abs/2004.08210): riscrittura di ipergrafi; il «grafo multivia» tiene tutti gli ordini di applicazione delle regole (rami) e l'invarianza causale è l'indipendenza del risultato dall'ordine. Analogia formale con `rami` e con l'indipendenza dall'ordine di valutazione (R1/R3); non ricava costanti né spettri misurati: non è usabile come livello fisico.
+- **Bilancio** (inferenza): *hanno* regole locali chiuse, nessun contenuto disegnato, strutture localizzate e mobili che nessuna riga nomina (emergenza debole genuina). *Non hanno*: grandezze conservate (R4; eccezione: la massa in Flow Lenia), unità e dati misurati (R2), temperatura ed entropia (niente equilibrio né freccia del tempo: §6), più di un livello (niente R4–R7), eventi con indirizzo (R3). L'osservazione utile è di Flow Lenia: imporre la conservazione **ha allargato** ciò che può emergere (più specie nello stesso mondo): la regola 4 non è un vincolo estetico.
+
+### Inferences
+- I quattro controlli del Takeaway sono tutti automatizzabili in `test/`: (1) scansione delle dichiarazioni dei moduli; (2) prove di ablazione (spegnere una legge e verificare che il fenomeno sparisca); (3) i «NON TORNA» esistenti; (4) `test_chiusura` con l'accorpabilità.
+- Quadro d'insieme: regola → strumento → modifica → costo.
+
+| Regola | Strumento rigoroso | Modifica concreta | Costo |
+|---|---|---|---|
+| R1 indirizzo | generatore a contatore e chiavi divisibili (3.1); aritmetica deterministica (niente `Math.log/cos/pow` nei percorsi che fanno il mondo; arrotondamento simmetrico) | portare 4 funzioni di fdlibm; mettere algoritmo e passo nell'indirizzo dei livelli caotici | ore |
+| R2 solo leggi | Chapman–Enskog, Debye, Lindemann, Wiedemann–Franz (1.2, 1.10); Green–Kubo per ciò che non ha formula (1.3) | `trasporto.js`; coefficienti dei materiali ricavati; `test_chiusura` | O(1) a punto; tabelle fuori linea |
+| R3 evento/rami | storie decoerenti = albero di eventi pesati (5.3–5.8); tempi di amplificazione (5.6) | peso per esito; chiave di memoria proiettata sul contenitore; `finDoveRisale` collegato; cono di causalità in `puoToccare` | basso |
+| R4 dettaglio condizionato | Hoffman–Ribak / ottalbero di Haar (2.1–2.3); multinomiale (2.4); massima entropia con flussi (2.5); ampiezza da fluttuazione–dissipazione (1.5) | `scendi(genitore, indirizzo)` unico; prova `restringi(scendi(g)) = g` | O(profondità) per cella |
+| R5 mondo compatibile | condizionamento del programma generativo: `chiede` + propagazione (4.4), HR per le parti gaussiane (2.1), MH sui rami (4.2), peso e^(−Δχ²/2) e grandi deviazioni (1.9) | `mondoCompatibile(osservazione)` | quello di qualche decina–migliaio di mondi generati |
+| R6 tempo | classi A/B/C (3.4–3.5); ipotesi del passato e retrodizione (6.1–6.2); integratore reversibile al bit (6.3); punti di ripresa e ponti (6.4) | dichiarare la classe di ogni livello; leapfrog a interi per orbite e particelle | O(1) (A); O(Δt/h) (B) |
+| R7 una fonte | parametri rilevanti (1.7); omogeneizzazione (1.8); catena dei riferimenti (7.1) | distinguere conservate / coefficienti / parametri; velocità di ogni livello dal livello sopra | basso |
+| R8 calcolo pigro | nuclei compatti (3.2); dominio di dipendenza e memoria sul contenuto (3.3); ponti nel tempo (2.2) | margine c·Δt; tempi campionati gerarchicamente | — |
+| R9 nebbia | suddivisione per indirizzo (2.4); fluttuazioni note (1.5); media temporale sopra Nyquist (8.5) | «nebbia nel tempo» | — |
+| R10 finestra | catena dei riferimenti con velocità e tempo proprio (7.2–7.5); profondità invertita (8.1) | `riferimento(nodo, t)`; scelta dichiarata tra fetta «adesso» e cono di luce | basso |
+
+### Gaps
+- Hoel, Albantakis, Tononi (2013): pagina bloccata (403); la definizione di EI è ricordata e verificata solo numericamente sull'esempio classico. Dell'articolo del 2017 è stato letto solo l'abstract.
+- Rosas e altri: letti i primi 100 000 caratteri; le prove pratiche proposte (appendice A.7) e i casi con reti neurali non sono stati letti.
+- Bedau, Kemeny–Snell, Wolfram, Particle Lenia: citati a memoria. La regola d'aggiornamento di Lenia non era nel riassunto letto.
+- Non ho trovato alcun lavoro che applichi prove di chiusura o di emergenza a motori procedurali di mondi: l'uso proposto è un'inferenza.
+- **Fonti bloccate o non raggiunte in questa sessione**: PNAS (403), registro Khronos (403), rassegna HMM su global-sci (404) e copia su math.pku.edu.cn (503), Living Reviews su Springer (reindirizzamento con accesso: letta la copia su PMC), ar5iv per arXiv:1612.09592 (reindirizzato all'abstract). Le pagine oltre 100 000 caratteri (Zurek, Schlosshauer, Touchette, Rosas, Donev, Panphasia, MUSIC) sono state lette solo in parte: ciò che ne è riportato è ciò che stava nella parte letta.
