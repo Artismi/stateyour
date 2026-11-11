@@ -8,26 +8,26 @@ Il censimento completo, una riga per fonte, è in `reports/Fonti da recuperare.c
 
 | Grandezza | Numero |
 |---|---|
-| Voci che dopo questo giro portano ancora una marca non primaria nelle 15 note ([R], [S], [V2], [V‑sec], [V‑cod], [Va], [V‑ab], [V‑r], [V*]; escluse le annotazioni storiche «era [R]») | 1355 |
-| di cui senza alcuna fonte indicata nella riga (fatti da manuale ricordati) | 355 |
-| Fonti distinte ricavate dalle altre voci | 878 |
-| per tipo: articoli e libri con DOI 510, pagine o documenti in rete e libri senza DOI 151, pagine Wikipedia 100, PubMed Central 85, arXiv 26, schede ADS 6 | |
-| per priorità: A 332, B 499, C 47 | |
-| Fonti con una copia aperta indicata da almeno un servizio (Wikipedia esclusa) | 305 |
+| Voci che dopo questo giro portano ancora una marca non primaria nelle 15 note ([R], [S], [V2], [V‑sec], [V‑cod], [Va], [V‑ab], [V‑r], [V*]; escluse le annotazioni storiche «era [R]») | 1347 |
+| di cui senza alcuna fonte indicata nella riga (fatti da manuale ricordati) | 356 |
+| Fonti distinte ricavate dalle altre voci | 872 |
+| per tipo: articoli e libri con DOI 505, pagine o documenti in rete e libri senza DOI 151, pagine Wikipedia 100, PubMed Central 85, arXiv 25, schede ADS 6 | |
+| per priorità: A 325, B 499, C 48 | |
+| Fonti con una copia aperta indicata da almeno un servizio (Wikipedia esclusa) | 299 |
 | Fonti di priorità A e B per cui lo scarico è stato tentato, una volta | 345 |
 | di cui scaricate con testo leggibile | 157 |
 | Fonti senza copia aperta trovata (articoli 271, libri 40) | 311 |
-| Fonti con copia aperta dichiarata ma non servita a un client automatico (403, 429, pagina a script) | 177 |
-| Voci toccate nelle note in questo giro | 75 |
-| verificate sul testo intero di una copia aperta, marca [V] | 10 |
+| Fonti con copia aperta dichiarata ma non servita a un client automatico (403, 429, pagina a script) | 176 |
+| Voci toccate nelle note in questo giro | 85 |
+| verificate sul testo intero di una copia aperta, marca [V] | 19 |
 | triangolate, marca [T] | 6 |
-| derivate qui con riscontro numerico, marca [D] | 53 |
+| derivate qui con riscontro numerico, marca [D] | 54 |
 | annotate: una sola fonte aperta o solo codice, marca invariata | 6 |
-| Copie aperte scaricate e non ancora lette (priorità A 39; il resto priorità B) | 144 |
+| Copie aperte scaricate e non ancora lette (priorità A 28; il resto priorità B) | 133 |
 
-Come leggere i numeri. La priorità è assegnata da una regola automatica sul testo attorno alla marca: A se c'è una formula, un coefficiente, una soglia o una licenza; B se c'è un numero; C altrimenti. La regola è larga: molte voci A sono riscontri e non costanti del codice. Dei 510 DOI, OpenAlex ne classifica 331 come chiusi; gli altri hanno una copia dichiarata aperta, ma un terzo abbondante di quelle copie sta su siti di editori che rispondono 403 a un client dichiarato.
+Come leggere i numeri. La priorità è assegnata da una regola automatica sul testo attorno alla marca: A se c'è una formula, un coefficiente, una soglia o una licenza; B se c'è un numero; C altrimenti. La regola è larga: molte voci A sono riscontri e non costanti del codice. Dei 505 DOI, OpenAlex ne classifica 330 come chiusi; gli altri hanno una copia dichiarata aperta, ma un terzo abbondante di quelle copie sta su siti di editori che rispondono 403 a un client dichiarato.
 
-Fin dove è arrivato il lavoro. La ricerca automatica ha fatto un solo passaggio per fonte su tutte le fonti con DOI. La lettura e la ricostruzione hanno coperto 75 voci di priorità A, scelte tra quelle che portano una formula operativa. Restano non lavorate: 559 voci di priorità A (in gran parte nelle note sulla vita, dove i numeri sono misure e non si derivano), tutte le B e le C, e le 355 voci senza fonte indicata. Le note `quantistica_legami_cinetica`, `fisiologia_piante_ecosistemi` e `fuoco_metalli_civilta` hanno ricevuto solo la definizione delle marche nuove.
+Fin dove è arrivato il lavoro. La ricerca automatica ha fatto un solo passaggio per fonte su tutte le fonti con DOI. In un secondo passaggio ho letto 11 delle 39 copie aperte di priorità A già scaricate, più Wickert e Schildgen 2019, dando la precedenza a ciò che sta nel codice; ne restano 28 non lette. La lettura e la ricostruzione hanno coperto 85 voci di priorità A, scelte tra quelle che portano una formula operativa. Restano non lavorate: 551 voci di priorità A (in gran parte nelle note sulla vita, dove i numeri sono misure e non si derivano), tutte le B e le C, e le 356 voci senza fonte indicata. Le note `quantistica_legami_cinetica`, `fisiologia_piante_ecosistemi` e `fuoco_metalli_civilta` hanno ricevuto solo la definizione delle marche nuove.
 
 ## 2. Che cosa è stato ricostruito, e come
 
@@ -47,6 +47,12 @@ Due marche nuove, definite nella legenda di ogni nota. **[T]**, triangolata: la 
 | Frazione elettromagnetica dello sciame adronico (particelle §3) | PDG 2012, rassegna sui rivelatori, eq. 31.33 | `f_em = 1 − (E/E₀)^(m−1)`, m = 0,80–0,87, E₀ ≈ 1 GeV; il resto della voce no |
 | Parametri di Gray–Scott di Pearson (vita §5) | prestampa arXiv:patt-sol/9304003 | D_u = 2·10⁻⁵, D_v = 10⁻⁵, dominio 2,5 × 2,5; F e k solo come assi di figura |
 | HCN nell'oceano primitivo (cellula §1, due marche) | Miyakawa, Cleaves e Miller 2002, PDF aperto dell'editore | 7·10⁻¹³ mol/L a 100 °C, 2·10⁻⁶ a 0 °C; soglia di polimerizzazione 0,01–0,1 mol/L |
+| Capacità di trasporto del sedimento (interno §6; secondo passaggio) | Wickert e Schildgen 2019, *ESurf* 7:17, PDF aperto | `Q_s = k_Qs·I·Q·S^(7/6)`, k_Qs = 0,041 (eq. 19), costruita su φ = 3,97 e τ*_c = 0,0495 di Wong e Parker con ε = 0,2; ricalcolata qui: 0,0410 |
+| Teoria di scala dei vortici baroclini (clima §2, due voci; secondo passaggio) | Held e Larichev 1996, prestampa arXiv:ao-sci/9503001 | `ξ = U/(β·λ²)`; `V/U ≈ ξ`, `D/(U·λ) ≈ ξ²`; la profondità di Charney non è nel testo |
+| Sezione d'urto protone–aria (particelle §2; secondo passaggio) | Auger 2012, arXiv:1208.1520 | 505 ± 22 (stat) +28/−36 (sist) mb |
+| Età del centro della Terra (matematica §8; secondo passaggio) | Uggerhøj e altri 2016, arXiv:1604.05507, eq. 12 | 2,49 anni più giovane della superficie |
+| Neuroni dell'elefante e del moscerino (comportamento §2, due righe di tabella; secondo passaggio) | Herculano-Houzel e altri 2014; Dorkenwald e altri 2024, testi aperti | 257 miliardi (97,5% nel cervelletto), corteccia 5,6 miliardi; 139 255 neuroni e 5·10⁷ sinapsi |
+| Indice di assemblaggio e transizione di Vicsek (comportamento §9 e §4; secondo passaggio) | Marshall e altri 2021; Grégoire e Chaté 2004, arXiv:cond-mat/0401208 | soglia ~15 solo nei campioni viventi; transizione «sempre discontinua» |
 
 ### 2.2 Triangolate ([T])
 
@@ -63,7 +69,7 @@ Sulla triangolazione di Voigt: la seconda «fonte» è un calcolo esatto, non un
 
 ### 2.3 Derivate qui con riscontro numerico ([D])
 
-53 voci. La derivazione e il riscontro sono scritti in coda a ciascuna voce nella nota; qui l'elenco per gruppi, con il riscontro.
+54 voci. La derivazione e il riscontro sono scritti in coda a ciascuna voce nella nota; qui l'elenco per gruppi, con il riscontro.
 
 - **Cosmo e stelle.** Tasso di crescita `f ≈ Ω_m(z)^0,55`: integrata l'equazione di crescita, scarto massimo 0,5% tra z = 0 e 5. Criterio di Toomre: il gas dalla relazione di dispersione; il 3,36 delle stelle riprodotto come 2π × massimo di `[1 − e^(−χ)I₀(χ)]/√χ` = 3,358. Luminosità di Eddington 1,257·10³⁸ erg/s per M☉ e tempo di Salpeter 45,0 Ma. Inclinazioni sul piano invariabile ricalcolate dagli elementi del JPL: 6,34°; 2,20°; 1,58°; 1,68°; 0,33°; 0,93°; 1,03°; 0,73°, uguali a Souami e Souchay entro 0,01°.
 - **Vento, campo, alta atmosfera.** Vento di Parker (430 km/s a 1 UA per 10⁶ K), spirale (45°), magnetopausa di Chapman–Ferraro (10,2 R⊕), flusso di Jeans (quadratura identica alla formula), linea di campo e modulo del dipolo, specchio e cono di perdita, risonanze di Schumann, frequenza di plasma 8,98·√N, strato di Chapman, profondità di pelle 503·√(ρ/f).
@@ -71,10 +77,31 @@ Sulla triangolazione di Voigt: la seconda «fonte» è un calcolo esatto, non un
 - **Interno e rocce.** Lane–Emden n = 1, pressione termica di Mie–Grüneisen, teoria classica della nucleazione, Avrami, problema di Stefan, flessione della piastra (D = 1,68·10²³ N·m, α = 73,9 km), conseguenze dell'attrito dipendente da velocità e stato (regime, picco, rigidezza critica).
 - **Matematica e scale.** Langevin con il teorema di fluttuazione e dissipazione, fluttuazioni del numero di particelle (acqua: 0,0620), dilatazione dei tempi in campo debole (GPS: +38,6 µs al giorno), probabilità e tempo di fissazione.
 - **Particelle.** Riscontri aggiunti a Gell‑Mann–Okubo (0,6%), Klein–Nishina (0,2112 b a 1 MeV), angolo di Lindhard (0,3075°), Bateman, picco di Gamow (1,2204), rapporto di compressione dell'urto.
-- **Clima e fluidi.** `w ≤ √(2·CAPE)`, crescita del ghiaccio marino (1,58 m in 100 giorni), rilassamento viscoso del semispazio (4100 anni per la Fennoscandia), van der Waals dal punto critico, fattore di forma della nucleazione eterogenea, costante di Smagorinsky dall'argomento di Lilly.
+- **Clima e fluidi.** `w ≤ √(2·CAPE)`, crescita del ghiaccio marino (1,58 m in 100 giorni), rilassamento viscoso del semispazio (4100 anni per la Fennoscandia), van der Waals dal punto critico, fattore di forma della nucleazione eterogenea, costante di Smagorinsky dall'argomento di Lilly, copertura nuvolosa di Sundqvist (dalla media di cella di una parte satura e di una serena).
 - **Vita.** Regola delle miscele (Voigt e Reuss), carico di punta di Eulero, limite Fr = 1 del cammino, altezza del salto, trasmissione a un'interfaccia (−29,5 dB tra aria e acqua), limite di diffrazione 1,2197, equazione di Price a più livelli (è la legge della covarianza totale).
 
-### 2.4 Correzioni e precisazioni trovate (vecchio → nuovo)
+### 2.4 Valori che differiscono da ciò che oggi sta nel codice
+
+Confronto fatto leggendo il codice senza modificarlo. Tutto ciò che segue va corretto, o dichiarato, in `src/camera/`.
+
+| File e costante | Oggi nel codice | Che cosa dice la fonte letta | Che cosa fare |
+|---|---|---|---|
+| `chimica.js`, tabella `SPECIE`, Fe₂O₃ (ematite) | ΔH = −824,2 kJ/mol; S = 87,4 | Robie e Hemingway 1995: −826,2; 87,4 | il commento dice che i minerali vengono da Robie e Hemingway, ma il numero è quello NIST‑JANAF: portare a −826,2 oppure correggere il commento |
+| `chimica.js`, `SPECIE`, Fe₃O₄ (magnetite) | −1118,4; 146,4 | −1115,7; 146,1 | idem |
+| `chimica.js`, `SPECIE`, FeO (wüstite) | −272,0; 60,75 | per la wüstite reale Fe₀,₉₄₇O: −266,3; 56,6 | scegliere: FeO stechiometrico (valore attuale, non in Robie e Hemingway) o wüstite reale |
+| `chimica.js`, `SPECIE`, MgSiO₃ (enstatite) | −1549,0; 67,74 | enstatite −1545,6; 66,3 (clinoenstatite −1545,0; 67,9) | portare a −1545,6 e 66,3 |
+| `chimica.js`, `SPECIE`, Mg₂SiO₄ (forsterite) | −2174,0; 95,1 | −2173,0; 94,1 | portare a −2173,0 e 94,1 |
+| `chimica.js`, `SPECIE`, CaSO₄ (anidrite) | −1434,5; 106,5 | −1434,4; 107,4 | entropia a 107,4 |
+| `chimica.js`, `SPECIE`, NaCl, CaCO₃, albite | −411,2; −1207,6; −3935,1 | −411,3; −1207,4; −3935,0 | scarti di 0,1–0,2 kJ/mol: trascurabili |
+| `leggi.js`, `NUVOLE.strati` = [0,057; −0,5573] | applicata a ogni cella con evaporazione e senza convezione profonda | nel sorgente di E3SM (fisica di CAM) gli stessi coefficienti sono moltiplicati per la frazione di mare: sulla terra la copertura di strati è zero | limitare al mare, o dichiarare l'estensione alla terra come scelta; l'articolo resta non letto |
+| `leggi.js`, `NUVOLE.assorbeInfrarosso` = 130 | un solo valore | Stephens 1978 non raggiunto (AMS 403; nessuna fonte aperta trovata); ricordo due coefficienti, 0,130 m²/g verso l'alto e 0,158 verso il basso | lasciare 130 come «ricordato»; fascia 130–158 m²/kg |
+| `geologia.js`, `EROSIONE.kQs` = 0,041 | costante | confermata; ma vale per Δ = (ρ_s − ρ)/ρ = 1,65 e scala come Δ^(−7/6); non dipende da g | su mondi con altri fluidi o granuli usare `0,041·(1,65/Δ)^(7/6)`; vale solo per fiumi ghiaiosi a larghezza d'equilibrio |
+
+Coincidono con le fonti lette, e non vanno toccati: `NUVOLE.kessler` = 10⁻³ s⁻¹ (sorgente WRF; l'originale ha anche una soglia di 10⁻³ kg/kg sotto cui la nube non piove); la copertura di Sundqvist in `meteo.js` (forma ora derivata); i pozzi d'idrolisi di `molecole_pozzi.js` (ammide 385 anni e 25,2 kcal/mol; glicoside 4 milioni di anni e 31,5; RNA 5 anni e 15,6; DNA 7·10⁻¹⁶ s⁻¹ e 29,5; nucleobasi; ribosio 73 minuti e 44 anni; ΔG°′ 9,2; 13,8; 15,9 kJ/mol), tutti uguali alle voci già [V] della nota sulla cellula; quarzo, periclasio, corindone, anortite, microclino in `chimica.js`. Di Robie e Hemingway ho confrontato 15 solidi su 19 (grafite compresa, che coincide): ferro metallico, troilite, fayalite e wollastonite non sono stati confrontati.
+
+Trasporto al fondo: il codice non usa la legge di Meyer‑Peter e Müller con 8 e 0,047; usa già, attraverso k_Qs, la forma di Wong e Parker `3,97·(τ* − 0,0495)^1,5`. Non c'è nulla da cambiare; il confronto da fare è solo quello sulla densità relativa scritto in tabella.
+
+### 2.5 Correzioni e precisazioni trovate (vecchio → nuovo)
 
 1. **Tempo di fissazione di un mutante vantaggioso** (matematica §6): `(2/s)·ln N` → `(2/s)·[ln(2Ns) + 0,577]`. Una simulazione di Wright–Fisher (N = 1000, s = 0,02) dà 422 generazioni; la forma vecchia dava 691, quella nuova 427. La probabilità di fissazione ≈ 2s è confermata (0,0398).
 2. **Trasporto al fondo**: il coefficiente 8 con 0,047 di Meyer‑Peter e Müller include una correzione per le forme di fondo; con fondo piano sovrastima di circa due volte. In codice usare `3,97·(τ* − 0,0495)^1,5`, ora [V].
@@ -93,6 +120,8 @@ Sulla triangolazione di Voigt: la seconda «fonte» è un calcolo esatto, non un
 | Parametri dell'attrito dipendente da velocità e stato (a, b, D_c) | forma [D], valori [R]; Marone 1998 chiuso | a, b = 0,005–0,015; D_c = 10⁻⁵–10⁻⁴ m in laboratorio; trattarli come intervalli |
 | Fattore d'addensamento f_c del gas molecolare | non è nella fonte citata | 1 per celle ≲ 100 pc, fino a 5 per celle ~1 kpc |
 | Nubi basse, `0,057·LTS − 0,5573` | solo sul codice E3SM; articolo AMS 403 | usare i coefficienti del codice, solo sul mare, saturando a 0 e 1 |
+| Emissività infrarossa delle nubi, `1 − exp(−130·W)` | Stephens 1978 non raggiunto; nessuna fonte aperta trovata in un tentativo | 130 m²/kg verso l'alto, 158 verso il basso (ricordati) |
+| Arrotondamento dei ciottoli, «primi 10–30% di massa» | Domokos e altri 2014 letto: la percentuale non compare nel testo estratto | lasciare [R]; non usare come soglia |
 | Calcificazione, polinomi k(T) e n(T) | una sola fonte aperta (Wall e altri 2019) | `k = −0,0177·T² + 1,47·T + 14,9`; `n = 0,0628·T + 0,0985`; unità di k da confermare |
 | Modello di Govardovskii, banda α | una sola fonte aperta più normalizzazione verificata | costanti come nella nota; la banda β e il modello A2 non sono ricostruiti |
 | Legge di Byerlee | una sola fonte aperta più continuità | 0,85·σ_n sotto 200 MPa; 50 MPa + 0,6·σ_n sopra |
@@ -105,17 +134,13 @@ Sulla triangolazione di Voigt: la seconda «fonte» è un calcolo esatto, non un
 
 ## 4. Copie aperte trovate e non ancora lette
 
-Le fonti scaricate con testo e non lette sono 144; per ciascuna il CSV dà l'indirizzo della copia e le righe delle note che ne dipendono (colonna `esito_censimento` = «copia aperta scaricata, non ancora letta»). Qui le 39 di priorità A.
+Le fonti scaricate con testo e non lette sono 133; per ciascuna il CSV dà l'indirizzo della copia e le righe delle note che ne dipendono (colonna `esito_censimento` = «copia aperta scaricata, non ancora letta»). Qui le 28 di priorità A.
 
 | Voci A | Riferimento | Copia aperta | Note e righe |
 |---|---|---|---|
-| 2 | Domokos; Jerolmack; Sipos; Török (2014). How River Rocks Round: Resolving the Shape-Size Paradox. PLoS ONE 9:e88657 | <https://arxiv.org/abs/1311.6574> (prestampa) | interno_rocce_paesaggio:412; interno_rocce_paesaggio:412; interno_rocc |
 | 2 | Segura; Krelove; Kasting; Sommerlatt; Meadows; Crisp e altri (2003). Ozone Concentrations and Ultraviolet Fluxes on Earth-Like Planets Around Other St | <http://www.nucleares.unam.mx/~antigona/articles/ozone_in_exoplanets.pdf> (GREEN) | fisiologia_piante_ecosistemi:109; fisiologia_piante_ecosistemi:315; fi |
 | 2 | Deitrick e altri 2018, arXiv:1712.10060 | <https://arxiv.org/abs/1712.10060> (prestampa (arXiv)) | astrofisica_cosmo_stelle_pianeti:380; astrofisica_cosmo_stelle_pianeti |
-| 2 | Held; Larichev (1996). A Scaling Theory for Horizontally Homogeneous, Baroclinically Unstable Flow on a Beta Plane. Journal of the Atmospheric Science | <https://arxiv.org/abs/ao-sci/9503001> (prestampa) | termodinamica_fluidi_clima:45; termodinamica_fluidi_clima:46 |
-| 2 | Herculano-Houzel; Avelino-de-Souza; Neves; PorfÃ­rio; Messeder; Mattos FeijÃ³ e altri (2014). The elephant brain in numbers. Frontiers in Neuroanatomy | <https://www.frontiersin.org/articles/10.3389/fnana.2014.00046/pdf> (versione dell'editore) | comportamento_intenzioni_cultura:95; comportamento_intenzioni_cultura: |
 | 2 | Redl e altri 2017, eq. 7 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC5469130.> (versione OA (deposito PMC su AWS)) | fisiologia_piante_ecosistemi:53; fisiologia_piante_ecosistemi:53 |
-| 2 | (1995). Thermodynamic properties of minerals and related substances at 298.15 K and 1 bar (10^5 pascals) pressure and at higher temperatures. | <https://pubs.usgs.gov/bul/2131/report.pdf> (versione dell'editore) | fuoco_metalli_civilta:43; fuoco_metalli_civilta:86 |
 | 1 | NN-xTB 2026, PMC13402705 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC13402705.> (versione OA (deposito PMC su AWS)) | quantistica_legami_cinetica:59; quantistica_legami_cinetica:59; quanti |
 | 1 | Lenski; Ofria; Pennock; Adami (2003). The evolutionary origin of complex features. Nature 423:139-144 | <https://authors.library.caltech.edu/records/8gckk-p8p83/files/nature01568-s1.pdf?download=1> (GREEN) | comportamento_intenzioni_cultura:417; sviluppo_forma_evoluzione:287; s |
 | 1 | Blitz & Rosolowsky 2006, arXiv:astro-ph/0605035 | <https://arxiv.org/abs/astro-ph/0605035> (prestampa (arXiv)) | astrofisica_cosmo_stelle_pianeti:79 |
@@ -123,20 +148,14 @@ Le fonti scaricate con testo e non lette sono 144; per ciascuna il CSV dà l'ind
 | 1 | Delle Site e altri, rassegna, arXiv:1412.4540 | <https://arxiv.org/abs/1412.4540> (prestampa (arXiv)) | matematica_coerenza_tra_scale:141 |
 | 1 | Gell-Mann e Hartle, arXiv:gr-qc/9210010 | <https://arxiv.org/abs/gr-qc/9210010> (prestampa (arXiv)) | matematica_coerenza_tra_scale:294 |
 | 1 | Strauss e Willick, arXiv:astro-ph/9502079 | <https://arxiv.org/abs/astro-ph/9502079> (prestampa (arXiv)) | matematica_coerenza_tra_scale:408 |
-| 1 | Uggerhøj, Mikkelsen, Faye, arXiv:1604.05507 | <https://arxiv.org/abs/1604.05507> (prestampa (arXiv)) | matematica_coerenza_tra_scale:424 |
 | 1 | Dürr; Fodor; Frison; Hoelbling; Hoffmann; Katz e altri (2008). Ab Initio Determination of Light Hadron Masses. Science 322:1224-1227 | <https://arxiv.org/abs/0906.3599> (prestampa) | particelle_nuclei_raggi_cosmici:58 |
-| 1 | Abreu; Aglietta; Ahn; Albuquerque; Allard; Allekotte e altri (2012). Measurement of the Proton-Air Cross Section ats=57 TeVwith the Pierre Auger Obser | <https://arxiv.org/abs/1208.1520> (prestampa) | particelle_nuclei_raggi_cosmici:107 |
 | 1 | Cowan e altri 2021, arXiv:1901.01410 | <https://arxiv.org/abs/1901.01410> (prestampa (arXiv)) | particelle_nuclei_raggi_cosmici:266 |
 | 1 | Blasi 2013, arXiv:1311.7346 | <https://arxiv.org/abs/1311.7346> (prestampa (arXiv)) | particelle_nuclei_raggi_cosmici:301 |
 | 1 | Keramati; Gutkin (2014). Homeostatic reinforcement learning for integrating reward collection and physiological stability. eLife 3 | <https://doi.org/10.7554/elife.04811> (versione dell'editore) | comportamento_intenzioni_cultura:21 |
 | 1 | Bialek; Nemenman; Tishby (2001). Predictability, Complexity, and Learning. Neural Computation 13:2409-2463 | <https://arxiv.org/abs/physics/0007070> (prestampa) | comportamento_intenzioni_cultura:52 |
-| 1 | Dorkenwald; Matsliah; Sterling; Schlegel; Yu; McKellar e altri (2024). Neuronal wiring diagram of an adult brain. Nature 634:124-138 | <https://doi.org/10.1038/s41586-024-07558-y> (versione dell'editore) | comportamento_intenzioni_cultura:82 |
 | 1 | Herculano-Houzel 2011, *PLoS ONE* 6:e17514 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC3046985.> (versione OA (deposito PMC su AWS)) | comportamento_intenzioni_cultura:100 |
 | 1 | Pyke (2014). Understanding movements of organisms: it's time to abandon the Lévy foraging hypothesis. Methods in Ecology and Evolution 6:1-16 | <https://opus.lib.uts.edu.au/bitstream/10453/37555/5/Understanding%20movements%20of%20organisms-It%27s%20time%20to%20abandon%20the%20L%c3%a9vy%20paradigm-MEE%20resubmitted%20-%20Jun%202014.pdf> (GREEN) | comportamento_intenzioni_cultura:136 |
-| 1 | Grégoire; Chaté (2004). Onset of Collective and Cohesive Motion. Physical Review Letters 92 | <https://arxiv.org/abs/cond-mat/0401208> (prestampa) | comportamento_intenzioni_cultura:183 |
 | 1 | Steels (1995). A Self-Organizing Spatial Vocabulary. Artificial Life 2:319-332 | <https://direct.mit.edu/artl/article-pdf/2/3/319/1661525/artl.1995.2.3.319.pdf> (versione dell'editore) | comportamento_intenzioni_cultura:298 |
-| 1 | Marshall; Mathis; Carrick; Keenan; Cooper; Graham e altri (2021). Identifying molecules as biosignatures with assembly theory and mass spectrometry. N | <https://www.nature.com/articles/s41467-021-23258-x.pdf> (versione dell'editore) | comportamento_intenzioni_cultura:368 |
-| 1 | Bonk e altri 2019 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC6375858.> (versione OA (deposito PMC su AWS)) | fisiologia_piante_ecosistemi:53 |
 | 1 | Korotayev e Malkov, arXiv:1206.0496 | <https://arxiv.org/abs/1206.0496> (prestampa (arXiv)) | fuoco_metalli_civilta:288 |
 | 1 | rassegna sui sistemi a molla e scatto, PMC6907395 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC6907395.> (versione OA (deposito PMC su AWS)) | materiali_scheletri_movimento:257 |
 | 1 | Lauga e Powers 2009, *Rep. Prog. Phys.* 72:096601 | <https://arxiv.org/abs/0812.2887> (prestampa (arXiv)) | materiali_scheletri_movimento:263 |
@@ -145,13 +164,12 @@ Le fonti scaricate con testo e non lette sono 144; per ciascuna il CSV dà l'ind
 | 1 | Tu 2013, PMC3737589 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC3737589.> (versione OA (deposito PMC su AWS)) | sensi_sistema_nervoso:188 |
 | 1 | Hiscock e Megason 2015 | <https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=PMC4707970.> (versione OA (deposito PMC su AWS)) | sviluppo_forma_evoluzione:144 |
 | 1 | Plantec; Hamon; Etcheverry; Chan; Oudeyer; Moulin-Frier (2025). Flow-Lenia: Emergent Evolutionary Dynamics in Mass Conservative Continuous Cellular Au | <https://arxiv.org/abs/2506.08569> (prestampa) | sviluppo_forma_evoluzione:348 |
-| 1 | Chabrier; Debras (2021). A New Equation of State for Dense Hydrogen–Helium Mixtures. II. Taking into Account Hydrogen–Helium Interactions. The Astroph | <https://iopscience.iop.org/article/10.3847/1538-4357/abfc48/pdf> (versione dell'editore) | interno_rocce_paesaggio:87 |
 | 1 | Bastolla; Parisi (1998). The modular structure of Kauffman networks. Physica D: Nonlinear Phenomena 115:219-233 | <https://arxiv.org/pdf/cond-mat/9708214> (prestampa o manoscritto) | sviluppo_forma_evoluzione:83 |
 | 1 | Samuelsson; Troein (2003). Superpolynomial Growth in the Number of Attractors in Kauffman Networks. Physical Review Letters 90 | <https://arxiv.org/pdf/cond-mat/0211020> (prestampa o manoscritto) | sviluppo_forma_evoluzione:83 |
 
 Altre due copie aperte sono scansioni senza testo, da leggere con un riconoscimento dei caratteri: Lacey e Cole 1993 (<https://articles.adsabs.harvard.edu/pdf/1993MNRAS.262..627L>) per il tasso di fusione degli aloni, e Hoffman e Ribak 1991 (<https://articles.adsabs.harvard.edu/pdf/1991ApJ...380L...5H>) per i campi vincolati.
 
-**Copie dichiarate aperte ma non servite a un client automatico**: 177 fonti, di cui 57 di priorità A. Si aprono da un browser senza abbonamento. Le più usate nelle note:
+**Copie dichiarate aperte ma non servite a un client automatico**: 176 fonti, di cui 56 di priorità A. Si aprono da un browser senza abbonamento. Le più usate nelle note:
 
 | Voci A | Riferimento | Indirizzo dichiarato aperto | Risposta |
 |---|---|---|---|
@@ -178,8 +196,8 @@ Altre due copie aperte sono scansioni senza testo, da leggere con un riconoscime
 | 1 | SantaLucia (1998). A unified view of polymer, dumbbell, and oligonucleotide DNA nearest-neighbor thermodynamics. Proceedings of the National Academy o | <http://europepmc.org/pmc/articles/PMC19045> | www.ebi.ac.uk→500 europepmc.org→403 europepmc.org→403 |
 | 1 | Radzicka & Wolfenden 1995 e seguito (PMC15745) | <https://pmc.ncbi.nlm.nih.gov/articles/PMC15745/> | www.ebi.ac.uk→500 |
 | 1 | Frierson (2007). The Dynamics of Idealized Convection Schemes and Their Effect on the Zonally Averaged Tropical Circulation. Journal of the Atmospheri | <https://journals.ametsoc.org/downloadpdf/journals/atsc/64/6/jas3935.1.pdf> | journals.ametsoc.org→403 |
-| 1 | Sundqvist; Berge; Kristjánsson (1989). Condensation and Cloud Parameterization Studies with a Mesoscale Numerical Weather Prediction Model. Monthly We | <http://journals.ametsoc.org/doi/pdf/10.1175/1520-0493%281989%29117%3C1641%3ACACPSW%3E2.0.CO%3B2> | journals.ametsoc.org→403 |
 | 1 | Hartmann; Larson (2002). An important constraint on tropical cloud ‐ climate feedback. Geophysical Research Letters 29 | <https://onlinelibrary.wiley.com/doi/pdfdirect/10.1029/2002GL015835> | onlinelibrary.wiley.com→403 |
+| 1 | Marshall; Radko (2003). Residual-Mean Solutions for the Antarctic Circumpolar Current and Its Associated Overturning Circulation. Journal of Physical  | <https://journals.ametsoc.org/downloadpdf/journals/phoc/33/11/1520-0485_2003_033_2341_rsftac_2.0.co_2.pdf> | journals.ametsoc.org→403 dspace.mit.edu→429 |
 
 ## 5. Collegamenti morti e copie d'archivio
 
@@ -204,7 +222,7 @@ Per il deposito dell'Università del Maine l'archivio ha la scheda di Jumars 200
 | Servizio | Risposta | Utilità |
 |---|---|---|
 | Crossref (`/works/<DOI>`, ricerca per autore e anno) | 200; due 429 su circa 600 richieste | metadati per quasi tutti i DOI; due DOI scritti nelle note non risultano (Aitken 1985, `10.1016/0277-3791(87)90019-4`; Clapham e Miller 2011, `10.1073/pnas.1114193108`): vanno ricontrollati |
-| OpenAlex senza indirizzo di posta | 200 | la fonte migliore per le copie aperte: 227 DOI su 510 |
+| OpenAlex senza indirizzo di posta | 200 | la fonte migliore per le copie aperte: 222 DOI su 505 |
 | Semantic Scholar, interrogazione a lotti | 429 alla prima, 200 alla seconda | 500 DOI in due richieste; aggiunge gli identificativi arXiv |
 | Europe PMC, ricerca | 200 | ottima anche per cercare una costante a testo pieno negli articoli aperti: così sono state trovate le triangolazioni di Io, Dunbar, Alexander |
 | Europe PMC, `fullTextXML` | 200 per gli aperti, 500 per gli altri (68 su 82) | testo intero pulito |
@@ -213,6 +231,7 @@ Per il deposito dell'Università del Maine l'archivio ha la scheda di Jumars 200
 | arXiv (`export.arxiv.org/pdf/…`) | 200, 61 su 61 | il canale più affidabile |
 | HAL, OSTI, DOAJ (interfacce) | 200 | quasi nulla per queste fonti: 2 file da HAL, nessuno da OSTI |
 | CORE v3 senza chiave | 429 subito, 200 dopo qualche minuto | funziona ma con un limite stretto; un solo riscontro fatto, senza risultati |
+| Copernicus (`esurf`, `gmd`, `acp`: PDF diretto) | 200 | articoli aperti serviti senza ostacoli |
 | Zenodo, NASA NTRS, USGS | 200 | NTRS e USGS servono i PDF (2 e 1 scaricati); Zenodo 410 su un file rimosso |
 | Wayback Machine (`/wayback/available`) | 200 | 7 istantanee su 9 indirizzi |
 | Scansioni ADS (`articles.adsabs.harvard.edu/pdf/…`) | 200 per ApJ e MNRAS vecchi (2 su 8 provati), 403 per il resto | scansioni senza testo |
@@ -225,6 +244,8 @@ Per il deposito dell'Università del Maine l'archivio ha la scheda di Jumars 200
 Le strade che restano: leggere le copie già scaricate (sezione 4); passare un riconoscimento dei caratteri sulle due scansioni ADS; usare la ricerca a testo pieno di Europe PMC in modo sistematico per le costanti delle note sulla vita; aprire da un browser le copie della seconda tabella della sezione 4.
 
 ## Appendice. Le fonti che non si ricostruiscono e da cui dipende qualcosa che va nel codice
+
+Va aggiunta, fuori tabella, Stephens 1978, *J. Atmos. Sci.* 35:2123 (<https://doi.org/10.1175/1520-0469(1978)035%3C2123:RPIEWC%3E2.0.CO;2>): i due coefficienti d'assorbimento infrarosso dell'acqua di nube, oggi nel codice come «non riletto».
 
 Sono le fonti per cui servono parametri misurati o tabelle, non forme: nessuna derivazione le sostituisce e nessuna copia aperta è stata trovata o servita. In ordine di peso per il codice.
 
