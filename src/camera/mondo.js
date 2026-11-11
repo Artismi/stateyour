@@ -213,10 +213,13 @@ function spartisci(W, masse, caso) {
   for (let k = 0; k < 90; k++) { const m = (lo + hi) / 2; if (energia(m) < W) lo = m; else hi = m; }
   return masse.map((m, i) => ({ e: Math.sqrt(m * m + lo * lo * (qx[i] * qx[i] + qy[i] * qy[i])), x: lo * qx[i], y: lo * qy[i] }));
 }
-// la spinta di Lorentz: un quadrivettore visto da un riferimento in cui il suo va a velocità (bx, by)·c
-function spinta(v, bx, by) {
+// la spinta di Lorentz: un quadrivettore visto da un riferimento in cui il suo va a velocità (bx, by)·c.
+// «gamma»: chi chiama lo conosce già come rapporto esatto (energia / massa invariante) e lo passa: ricavarlo da
+// 1/√(1 − β²) quando β è a un passo da 1 perde cifre (l'errore cresce come γ²: una coppia nata da un fotone di 6 GeV,
+// γ ≈ 6500, usciva con l'energia sbagliata di una parte su 10⁹)
+function spinta(v, bx, by, gamma = 0) {
   const b2 = bx * bx + by * by; if (!(b2 > 0)) return v;
-  const g = 1 / Math.sqrt(1 - b2), lungo = (v.x * bx + v.y * by) / b2, k = (g - 1) * lungo + g * v.e;
+  const g = gamma > 0 ? gamma : 1 / Math.sqrt(1 - b2), lungo = (v.x * bx + v.y * by) / b2, k = (g - 1) * lungo + g * v.e;
   return { e: g * (v.e + v.x * bx + v.y * by), x: v.x + k * bx, y: v.y + k * by };
 }
 // IL DECADIMENTO β (solo se la specie lo dichiara: beta = { Z: carica del nucleo figlio, segno: −1 per β⁺, proibita: 0, 1 o 3 }).
@@ -258,7 +261,7 @@ function figlieVere(sp, madre, dx, dy, catalogo, caso) {
       // le figlie prendono proprio ciò che il nucleo lascia: energia e impulso tornano al bit, non «quasi»)
       for (let k = 0; k < 60; k++) { ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf; const r = Math.sqrt(M * M + q * q) - M, fermo = Math.abs(r - rinculo) <= 1e-16 * madre.e; rinculo = r; if (fermo) break; }
       ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf;
-      const bx = (pf / ef) * dx, by = (pf / ef) * dy, fuori = spartisci(w, masse, caso).map((v, i) => ({ specie: nomi[i], ...spinta(v, bx, by) }));
+      const bx = (pf / ef) * dx, by = (pf / ef) * dy, fuori = spartisci(w, masse, caso).map((v, i) => ({ specie: nomi[i], ...spinta(v, bx, by, ef / w) }));
       fuori.push({ specie: sp.bersaglio, e: M + rinculo, x: q * dx, y: q * dy });
       return fuori;
     }
@@ -267,7 +270,7 @@ function figlieVere(sp, madre, dx, dy, catalogo, caso) {
   const e = madre.e + M, W = Math.sqrt(Math.max(0, e * e - pm * pm));
   for (const nomi of canali) {
     const masse = nomi.map(massa); if (nomi.length < 2 || !(W > masse.reduce((a, b) => a + b, 0) * (sp.margine ?? 1.000001))) continue; // (margine: per i nuclei, dove l'energia liberata è un milionesimo della massa)
-    return (sp.beta && !sp.bersaglio && nomi.length === 3 ? spartisciBeta(W, masse, caso, sp.beta) : spartisci(W, masse, caso)).map((v, i) => ({ specie: nomi[i], ...spinta(v, madre.x / e, madre.y / e) }));
+    return (sp.beta && !sp.bersaglio && nomi.length === 3 ? spartisciBeta(W, masse, caso, sp.beta) : spartisci(W, masse, caso)).map((v, i) => ({ specie: nomi[i], ...spinta(v, madre.x / e, madre.y / e, e / W) }));
   }
   return null;
 }

@@ -147,3 +147,26 @@ altri sono i suoi rami (regola 3).
   lo stato di sistema, galassia e cosmo a un istante qualsiasi (`spazio3d.js`).
 - Manca: partire da una bolla qualunque invece che da un numero; il passato come inferenza pesata; la continuità al
   bordo tra regioni calcolate in momenti diversi come prova; la vista 3D unica a tutte le scale (in lavorazione).
+
+## 12. Più bolle: si incontrano nell'antenato comune
+Le bolle possono essere molte, prese a caso: quattro, mille. Fissarle tutte vuol dire mettersi tra gli universi che
+le contengono tutte, e se ciascuna è permessa dalle leggi quegli universi esistono, purché le bolle non si
+contraddicano. Fissarle è una condizione sola, fatta di più pezzi: non si fa crescere un mondo attorno a ciascuna
+per poi cucirli (al bordo non combacerebbero), si condiziona lo stesso mondo a tutte insieme.
+- **Dove si incontrano.** Ogni bolla dice che cosa chiede a chi le sta sopra (regola 5), e la richiesta sale lungo
+  l'indirizzo. Due bolle si incontrano nel primo livello che le contiene entrambe: due sassi nello stesso pianeta,
+  due pianeti di galassie diverse nel campo del cosmo. Quel livello deve soddisfare tutte le richieste insieme.
+- **Posizione libera o data.** Se non si dice dove stanno una rispetto all'altra, un posto c'è sempre: in un mondo
+  abbastanza grande ogni bolla possibile capita da qualche parte, tanto più lontano quanto più è rara. Se la
+  posizione reciproca è data, l'incontro può essere vietato (una stella a un metro da un fiocco di neve; una bolla
+  che sta nel futuro di un'altra senza poterne discendere): allora quell'universo non c'è, e lo si dice.
+- **Il peso.** L'universo che le contiene tutte ha un peso: per il campo del cosmo è esatto (e^(−χ²/2), con la
+  correzione lineare che fa passare il campo libero per tutte le bolle e si spegne allontanandosene); per i livelli
+  non lineari lo si stima campionando. Lontane tra loro, le bolle pesano ciascuna per conto suo.
+- **La causa comune.** Più bolle dicono più di una sola: mille bolle con un batterio hanno quasi sempre alle spalle
+  un mondo vivo, non mille coincidenze. Tra i mondi compatibili vince quello in cui le bolle hanno una causa in
+  comune. Per questo un mondo si può nominare anche con un insieme di bolle invece che con un numero: più sono, meno
+  mondi restano.
+- Fatto: nulla.
+- Manca: il campo del cosmo condizionato a più punti; le richieste che salgono fino all'antenato comune e la loro
+  intersezione; il peso; la prova che, ridiscendendo, ogni bolla torna identica e che al bordo tutto combacia.
