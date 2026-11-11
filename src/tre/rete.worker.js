@@ -16,7 +16,10 @@ self.onmessage = (e) => {
     const G = classiSuGriglia(campo, reg, { celle: d.celle }), n = G.n, F = G.campo, dati = new Float32Array(8 * n * n * n), l = [0, 0, 0], L = O.toroM;
     for (let k = 0, q = 0; k < n; k++) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++, q++) {
       dentro.autovalori(F.xx[q], F.yy[q], F.zz[q], F.xy[q], F.xz[q], F.yz[q], l);
-      const x = (G.origine[0] + i * G.passo) * L, y = (G.origine[1] + j * G.passo) * L, z = (G.origine[2] + k * G.passo) * L;
+      // (dentro la sua cella l'elemento sta in un punto a caso — sempre lo stesso: dipende dal suo posto —: tutti al centro,
+      // visti lungo le file della griglia, farebbero righe che non ci sono)
+      const h = (m) => { let v = Math.imul(q + 1, 0x9e3779b1) ^ Math.imul(m + 7 + d.celle, 0x85ebca6b); v = Math.imul(v ^ (v >>> 15), 0xc2b2ae35); return ((v ^ (v >>> 13)) >>> 0) / 4294967296 - 0.5; };
+      const x = (G.origine[0] + (i + h(1)) * G.passo) * L, y = (G.origine[1] + (j + h(2)) * G.passo) * L, z = (G.origine[2] + (k + h(3)) * G.passo) * L;
       dati.set([x, y, z, G.latoCellaM, l[0], l[1], l[2], 1], 8 * q);
     }
     self.postMessage({ n: d.n, dati, celle: n, cellaM: G.latoCellaM, toroM: L, kmax: campo.kmax, ms: performance.now() - t0 }, [dati.buffer]);

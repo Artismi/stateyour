@@ -23,7 +23,8 @@
 // in secondo piano ciò che in quel volume c'è. Ogni corpo del nucleo porta il nome del suo luogo (`corpo.luogo`): il
 // percorso si legge risalendo l'albero dei corpi, senza sapere che livelli ci sono.
 import { indirizzo, scrivi, leggi } from '../camera/intreccio.js';
-import { ANNI_OGGI } from '../camera/spazio3d.js'; // l'età del cosmo oggi (anni): t = 0
+import { ANNI_OGGI, motiRegione } from '../camera/spazio3d.js'; // l'età del cosmo oggi (anni): t = 0
+import { sezioneDi, conoPassato } from '../camera/relativita.js';
 
 const ANNO = 3.15576e7;
 
@@ -69,3 +70,16 @@ const SCALE = [
 ];
 export function scalaDi(grandezza) { for (const [min, nome, passo] of SCALE) if (grandezza >= min) return { nome, passo }; return { nome: 'gli atomi', passo: 1e-15 }; }
 export const passoSensato = (grandezza) => scalaDi(grandezza).passo;
+
+// ---------- LA SEZIONE E IL CONO di una bolla (relativita.js)
+// Il moto del riferimento in cui sta la bolla, rispetto al fondo cosmico (m/s): pianeta attorno alla stella + stella
+// nella galassia + galassia nel cosmo (spazio3d.js `motiRegione`, km/s negli assi del sistema). Fin dove il percorso
+// arriva: senza pianeta né stella resta il moto della galassia, o zero.
+export function motoRiferimento(b) {
+  const v = viaDi(b); if (v.cosmo == null || v.galassia == null || v.stella == null) return [0, 0, 0];
+  try { const m = motiRegione({ cosmo: v.cosmo, galassia: v.galassia, stella: v.stella, pianeta: v.pianeta ?? 0 }), p = v.pianeta != null ? m.pianeta : [0, 0, 0]; return [0, 1, 2].map((k) => (p[k] + m.stella[k] + m.galassia[k]) * 1e3); } catch { return [0, 0, 0]; }
+}
+// la sezione: l'«adesso» della bolla (quali eventi lontani sono simultanei al suo qui-e-ora, per come si muove)
+export const sezioneBolla = (b, moto = motoRiferimento(b)) => sezioneDi(b, { riferimento: moto });
+// il cono passato: a che istante è partita la luce che la bolla vede da un luogo ({ distanza } | { comovente } | { posizione })
+export const conoBolla = (b, luogo) => conoPassato(b, luogo);

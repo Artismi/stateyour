@@ -163,6 +163,14 @@ const indirizzo = GZ.indirizzoDi;
   console.log(`  ${tot} seconde vie per la stessa grandezza (un'altra funzione, un altro posto): ${tot - male} danno lo stesso numero, ${male} un numero diverso`);
 }
 
+// A4. I DOPPIONI DICHIARATI: lo stesso dato scritto in due moduli (fuori dal campione): si controlla solo che siano ancora lì
+{ R.dichiarati = [];
+  for (const d of GZ.DOPPIONI_DICHIARATI) { const posti = d.posti.map((q) => ({ ...q, riga: rigaDi(q.modulo, q.cerca) })), spariti = posti.filter((q) => !q.riga);
+    if (spariti.length) { console.log(`  ○ doppione dichiarato «${d.che}»: in ${spariti.map((q) => q.modulo).join(', ')} il testo non c'è più: forse sanato, va tolto dal grafo`); continue; }
+    R.dichiarati.push({ che: d.che, posti, sanare: d.sanare });
+    nonTorna(`DOPPIONE DICHIARATO ${d.che}: ${posti.map((q) => `${q.modulo}:${q.riga} (${q.valore})`).join(' e ')}`); }
+}
+
 // =====================================================================================================
 sezione('B. CONTINUITÀ');
 // =====================================================================================================
@@ -563,7 +571,7 @@ sezione('E. NUMERI E FORMULE SCRITTI A MANO DOVE ESISTE UNA FONTE');
 // =====================================================================================================
 // IL CONTO
 // =====================================================================================================
-const doppioni = [...R.fonte.filter((r) => r.diversi), ...R.copie.filter((r) => r.diversi), ...R.controlli.filter((r) => r.diversi), ...R.fonte.filter((r) => r.altraFormula)];
+const doppioni = [...(R.dichiarati || []), ...R.fonte.filter((r) => r.diversi), ...R.copie.filter((r) => r.diversi), ...R.controlli.filter((r) => r.diversi), ...R.fonte.filter((r) => r.altraFormula)];
 const diComodo = R.soglie.filter((s) => s.specie === 'comodo'), nonDichiarateSoglie = R.soglie.filter((s) => s.specie === 'non dichiarata');
 R.conto = { doppioni: doppioni.length, soglieDiComodo: diComodo.length, soglieFisiche: R.soglie.filter((s) => s.specie === 'fisica').length, cicliCheSaltano: R.soglie.filter((s) => s.specie === 'ciclo').length, soglieNonDichiarate: nonDichiarateSoglie.length, saliteRipide: R.soglie.filter((s) => s.specie === 'ripida').length,
   filiStaccati: R.staccati.length, dipendenzeNonDichiarate: R.nonDichiarate.length, secondi: Number(secondi()) };

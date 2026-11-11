@@ -159,6 +159,8 @@
 import { ELEMENTI, atomiDi, mezzo, perdita, CATENE, SOLI, CONDRITI, VOLATILI_RIMASTI, ETA_RIFERIMENTO, radioelementi, concentrazioni, attivita, calore, raggiCosmici, energiaDeiPrimari, sogliaStormer, radonNellAria, fmtTempo, ritenzione, luogoDaAria, luogoDaRoccia } from './materia.js';
 import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio, gravitaDiSuperficie, LIVELLO_GIGANTI } from './leggi.js';
 import { stella as stellaDiMassa } from './stelle.js'; // le stelle dalla loro struttura
+import { LEGGI as LEGGI_GALASSIE } from './galassie.js'; // lo spessore del disco di gas: una fonte
+import { raggiCosmiciIn } from './vuoto_mezzo.js'; // l'energia dei raggi cosmici di una galassia nota
 import { rocceDelPianeta } from './chimica.js';
 import { sorgente } from './eventi.js';
 import { puoToccare } from './intreccio.js';
@@ -187,7 +189,12 @@ export const DATI = Object.freeze({
   PESO_ALFA: 20, RADON_SV: 9e-9 * 0.6 * 8766, // Sv all'anno per Bq/m³ di radon all'aperto (per chi ha polmoni)
   ROTTURE_PER_GY: 1000 / 6.4e9, IDROLISI: 3e-11, IDROLISI_T: 310, IDROLISI_EA: 1.3e5, // per base per gray; 1/s a 310 K; J/mol
   COSMICI_GALASSIA: 1.602e-13, DIFFUSIONE: 3e24, ENERGIA_SN_COSMICI: 1e43, ENERGIA_SN_GAMMA: 1.8e40, OZONO: 2e4, // J/m³, m²/s, J, J, J/m²
-  VITA_RESTO: 3e4, SPESSORE_DISCO: 100, SN_VIA_LATTEA: 0.02, RAGGIO_VIA_LATTEA: 15e3, // parsec; all'anno; parsec
+  // (SPESSORE_DISCO: la mezza altezza dello strato di gas, letta da galassie.js LEGGI.spessoreGas (0,1 kpc): una fonte.
+  // COSMICI_GALASSIA è la RISERVA per quando la galassia non è nota: dove lo è, supernovaVicina legge l'energia dei raggi
+  // cosmici di QUELLA galassia da vuoto_mezzo.js raggiCosmiciIn. Restano doppioni dichiarati (vedi la mappa delle grandezze):
+  // VITA_RESTO (3·10⁴ anni; galassie.js LEGGI.sedov dà 2,9·10⁴·n^(−9/17)), SN_VIA_LATTEA e RAGGIO_VIA_LATTEA (gli stessi
+  // 0,02 all'anno e 15 kpc che materia.js cieloRelativo scrive in linea: nessuno dei due li espone con un nome))
+  VITA_RESTO: 3e4, SPESSORE_DISCO: LEGGI_GALASSIE.spessoreGas * 1e3, SN_VIA_LATTEA: 0.02, RAGGIO_VIA_LATTEA: 15e3, // anni; parsec; all'anno; parsec
   LYAPUNOV_PICCOLI: 1e5, LYAPUNOV_PIANETI: 5e6, // anni
   ARIA_SPOSTATA: 1e-3, GIRI_MANTELLO: 5, GIRI_DINAMO: 10, GIRI_MARE: 10, // PARAMETRI LIBERI
 });
@@ -564,20 +571,23 @@ function energiaTerra() { if (!eTerra) eTerra = energiaPerLaChimica({ ...luogoDa
 //     distanzaPericolosa (pc: la dose dei cosmici raddoppia), vicine: i resti veri di quella galassia, dal più vicino,
 //     prossima (se si passa opz.caso, la sorgente degli eventi della stella): { tra (anni), distanza (pc) } entro 100 pc }
 export function supernovaVicina(luogo, opz = {}) {
+  // (la densità di energia dei raggi cosmici del posto, J/m³: quella di questa galassia se è nota — vuoto_mezzo.js, dal suo
+  // ritmo di supernove e dal suo disco —, se no la riserva dichiarata, 1 eV/cm³)
+  const uCosmici = opz.galassia?.forma?.ritmoSN?.totale > 0 ? raggiCosmiciIn(opz.galassia.forma).energia : D.COSMICI_GALASSIA; // (serve la forma vera della galassia, con il suo ritmo di supernove)
   const Gx = opz.galassia, ritmoSN = Gx?.ritmoSN > 0 ? Gx.ritmoSN : D.SN_VIA_LATTEA, Rd = Gx?.forma?.unitaM > 0 ? Gx.forma.unitaM / PARSEC : D.RAGGIO_VIA_LATTEA;
   const ritmo = ritmoSN / (Math.PI * Rd * Rd * 2 * D.SPESSORE_DISCO), h = D.SPESSORE_DISCO; // per anno e per parsec cubo
   const volume = (d) => (d <= h ? (4 / 3) * Math.PI * d ** 3 : Math.PI * (2 * d * d * h - (2 / 3) * h ** 3)); // la sfera tagliata dal disco
   const ogniQuanto = (dPc) => 1 / (ritmo * volume(dPc)), base = dose(luogo, opz).cosmici.Sv;
   // due casi estremi: tutti i raggi liberati insieme (un picco alto e breve: al tempo d²/6D) o liberati piano nella vita
   // del resto (una sorgente che dura: E/(4πDd·τ)). L'integrale nel tempo è lo stesso, E/(4πDd): è il numero solido
-  const effetto = (dPc) => { const d = dPc * PARSEC, cosmici = (0.0736 * D.ENERGIA_SN_COSMICI) / d ** 3 / D.COSMICI_GALASSIA, gamma = D.ENERGIA_SN_GAMMA / (4 * Math.PI * d * d), anniDiFondo = D.ENERGIA_SN_COSMICI / (4 * Math.PI * D.DIFFUSIONE * d * D.COSMICI_GALASSIA) / ANNO;
+  const effetto = (dPc) => { const d = dPc * PARSEC, cosmici = (0.0736 * D.ENERGIA_SN_COSMICI) / d ** 3 / uCosmici, gamma = D.ENERGIA_SN_GAMMA / (4 * Math.PI * d * d), anniDiFondo = D.ENERGIA_SN_COSMICI / (4 * Math.PI * D.DIFFUSIONE * d * uCosmici) / ANNO;
     return { cosmici, durata: (d * d) / (6 * D.DIFFUSIONE) / ANNO, dose: base * cosmici, cosmiciLento: anniDiFondo / D.VITA_RESTO, durataLento: D.VITA_RESTO, anniDiFondo, doseTotale: base * anniDiFondo, gamma, ozono: gamma > D.OZONO }; };
   const vicine = []; const qui = opz.posizione;
   if (Gx?.sorgenti && qui && Gx.forma?.unitaM > 0) for (const s of Gx.sorgenti) { if (s.tipo !== 'supernova') continue; const d = Math.hypot(s.pos[0] - qui[0], s.pos[1] - qui[1]) * Gx.forma.unitaM, t = Math.max(s.eta, 1) * ANNO, l2 = 4 * D.DIFFUSIONE * t;
-    vicine.push({ nome: s.nome, distanzaPc: d / PARSEC, eta: s.eta, cosmici: (D.ENERGIA_SN_COSMICI / Math.pow(Math.PI * l2, 1.5)) * Math.exp(-(d * d) / l2) / D.COSMICI_GALASSIA }); }
+    vicine.push({ nome: s.nome, distanzaPc: d / PARSEC, eta: s.eta, cosmici: (D.ENERGIA_SN_COSMICI / Math.pow(Math.PI * l2, 1.5)) * Math.exp(-(d * d) / l2) / uCosmici }); }
   vicine.sort((a, b) => a.distanzaPc - b.distanzaPc);
   let prossima = null; if (opz.caso) { const c = opz.caso.sotto ? opz.caso.sotto('supernova vicina') : sorgente(`${opz.caso}/supernova vicina`); prossima = { tra: -Math.log(1 - c('quando')) * ogniQuanto(100), distanza: 100 * Math.cbrt(c('dove')) }; prossima.effetto = effetto(prossima.distanza); }
-  return { ritmo, ogniQuanto, effetto, distanzaPericolosa: Math.cbrt((0.0736 * D.ENERGIA_SN_COSMICI) / D.COSMICI_GALASSIA) / PARSEC, vicine, prossima };
+  return { ritmo, ogniQuanto, effetto, distanzaPericolosa: Math.cbrt((0.0736 * D.ENERGIA_SN_COSMICI) / uCosmici) / PARSEC, vicine, prossima };
 }
 
 // =====================================================================================

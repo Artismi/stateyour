@@ -713,4 +713,4 @@ export function scenaRagnatela(cosmo, regione = null, t = 0, opz = {}) {
 }
 
 // per le prove e per chi vuole i numeri della cosmologia usata qui
-export const dentro = { OmR, OmG, OmNu, F_NU, RB0, E: E_, TAB, ETA0, T_OGGI, N_FOTONI, U_FOTONI, RHO_C, H0s, CH, MPC, GA, nelPunto, autovalori, autovettore, bessel, phiSuDelta, ZETA_SU_PHI, G0, T2BBKS, tabelle, f0Crescita, legendre };
+export const dentro = { OmR, OmG, OmNu, F_NU, RB0, E: E_, TAB, ETA0, T_OGGI, N_FOTONI, U_FOTONI, RHO_C, H0s, CH, MPC, GA, nelPunto, autovalori, autovettore, bessel, phiSuDelta, ZETA_SU_PHI, G0, T2BBKS, tabelle, f0Crescita, legendre, sorgentiContinue };

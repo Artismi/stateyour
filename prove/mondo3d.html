@@ -59,6 +59,8 @@ if (!livello) {
 // il pianeta vero che c'è adesso (quello da solo, o quello a cui ci si è avvicinati nell'universo)
 const pianeta = () => soloPianeta || universo?.sistema()?.vero() || null;
 N.tempo.velocita = num('velocita', 1); N.tempo.pausa = par.has('pausa');
+// ?cono=0: la sezione «adesso» (tutto allo stesso istante) al posto del cono di luce (ciò che si vede è il passato)
+if (par.has('cono')) N.vista.cono = par.get('cono') !== '0';
 $('nome').textContent = `universo n. ${numeroDi({ ...via, regione: 0 })} — pianeta ${P.tipo}, raggio ${(P.raggioM / 1000).toFixed(0)} km, giorno ${(P.giorno / 3600).toFixed(1)} h, asse ${(P.obliquita || 0).toFixed(0)}°${P.bloccato ? ', bloccato' : ''}, aria ${((P.clima?.pressione || 0) / 1e5).toFixed(2)} bar, ${(P.lune || []).length} lune${P.anello ? ', anelli' : ''}; stella a ${Sis.stella.T.toFixed(0)} K`;
 
 // il tempo: quanto vale, e i comandi

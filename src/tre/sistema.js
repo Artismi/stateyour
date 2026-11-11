@@ -66,7 +66,7 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   // modello non gli dà niente da inghiottire. Sotto 2,5 r_g non si scende (lì chi sta fermo non esiste quasi più).
   const eBuco = Sis.stella.stato === 'buco nero' || (!(defs[0].luminosita > 0) && defs[0].raggio < 1e6 && Sis.stella.massa > 2.5), massaBuco = eBuco ? (defs[0].raggio * COSTANTI.c ** 2) / (2 * COSTANTI.G) : 0;
   const buco = eBuco ? bucoNelMondo(N, { corpo: stella, massaKg: massaBuco, radice: `cosmo ${via.cosmo}/galassia ${via.galassia}/stella ${via.stella}/buco` }) : null;
-  if (buco) stella.raggio = 2.5 * buco.raggioGravitazionale;
+  if (buco) { stella.raggio = 2.5 * buco.raggioGravitazionale; stella.influenza = 2000 * buco.raggioGravitazionale; }
   const punti = creaPunti(N), alone = punti.insieme(1), segni = punti.insieme(defs.length), posS = new Float32Array(3 * defs.length), luceS = new Float32Array(4 * defs.length), prgSfera = N.programma(V_SFERA, F_SFERA, { a_angolo: 0 });
   const quadrato = (() => { const vao = gl.createVertexArray(), b = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null); return { vao, b }; })();
   // le orbite: 256 punti ciascuna, riferiti al corpo attorno a cui girano (gli elementi sono quelli di oggi)
@@ -109,8 +109,9 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
       if (passata === 'solido') {
         const u = prgSfera.u; gl.useProgram(prgSfera.p); gl.bindVertexArray(quadrato.vao);
         gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform1f(u.u_espo, 1); gl.uniform2f(u.u_minimo, (1.6 * S.tanY * 2) / S.H, 0);
+        // (un buco nero non è una sfera nera: lo disegna il suo strato)
         for (const s of schede) {
-          if (s.vero) continue; const c = s.corpo; gl.uniform4f(u.u_sfera, s.rel[0], s.rel[1], s.rel[2], c.raggio);
+          if (s.vero || (buco && s.corpo === stella)) continue; const c = s.corpo; gl.uniform4f(u.u_sfera, s.rel[0], s.rel[1], s.rel[2], c.raggio);
           if (c === stella) { gl.uniform4f(u.u_tinta, nero[0], nero[1], nero[2], Math.min(1e7, S.espo(stella.luminosita / (4 * Math.PI * c.raggio ** 2)))); gl.uniform4f(u.u_ombra, 0, 0, 0, 0); gl.uniform4f(u.u_asse, 0, 1, 0, 0); gl.uniform3f(u.u_luce, 0, 0, 0); gl.uniform3f(u.u_sole, 1, 0, 0); }
           else {
             const col = s.c.colore || [170, 170, 165], k = S.espo(s.E), gas = s.P && s.P.tipo === 'gassoso', A = c.assetto ? S.assetto(c) : null; gl.uniform4f(u.u_tinta, (col[0] / 255) ** 2.2, (col[1] / 255) ** 2.2, (col[2] / 255) ** 2.2, 0);

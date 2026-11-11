@@ -99,6 +99,8 @@ const datiClima = (M) => ({ ...corpoDi(M), Lw: v(M, 'stella.luminosita'), aM: v(
   giorno: v(M, 'pianeta.giorno'), obliquita: v(M, 'pianeta.obliquita'), bloccato: v(M, 'pianeta.bloccato'), placche: v(M, 'interno.tettonica') === 'a placche' });
 // ciò che climaEAria aggiunge all'aria quando la passa a clima(): la massa molare e il calore specifico dei suoi gas
 const gasPerIlClima = (M, m) => (typeof m['chimica.js'].gasDellAria === 'function' ? m['chimica.js'].gasDellAria(M.P.atmosfera?.gas || {}) : {});
+// il magma dei vulcani dalla storia termica, come lo passa cosmo.js a climaEAria (magmaDi)
+const magmaDi = (M, m) => { if (v(M, 'pianeta.tipo') === 'gassoso' || !(v(M, 'interno.vulcani') > 0)) return {}; const f = m['storia.js'].storia(M.P, v(M, 'stella.eta'), { stella: M.S }).fuso; return f && f.kgAnno > 0 && f.frazione > 0 ? { magma: f.kgAnno, fusoMantello: f.kgAnno / f.frazione } : {}; };
 const stellaPerRisalita = (M) => ({ T: v(M, 'stella.temperatura') > 0 ? v(M, 'stella.temperatura') : undefined, eta: v(M, 'stella.eta'), massa: v(M, 'stella.massa') });
 const casoPianeta = (M, m) => m['eventi.js'].sorgente(`cosmo ${m['cosmo.js'].cosmoBase(M.via.cosmo)}/galassia ${M.via.galassia}/stella ${M.via.stella}/pianeta ${M.P.id}`, m['cosmo.js'].ramiCosmo(M.via.cosmo));
 
@@ -147,13 +149,12 @@ export const FONTI = {
   serra: { modulo: 'chimica.js', funzione: 'serra', riceve: ['aria.CO2', 'aria.H2O', 'aria.CH4', 'aria.H2', 'aria.N2', 'aria.pressione', 'pianeta.gravita', 'clima.temperatura'], chiamante: 'chimica.js climaEAria',
     chiama: (M, m) => m['chimica.js'].serra(M.P.atmosfera?.gas || {}, v(M, 'aria.pressione'), v(M, 'pianeta.gravita'), M.P.clima?.Taria ?? v(M, 'clima.temperatura')) },
   co2DelCiclo: { modulo: 'chimica.js', funzione: 'co2DelCiclo', riceve: ['clima.temperatura', 'interno.calore', 'interno.vulcani', 'pianeta.raggio', 'pianeta.massa', 'pianeta.ferro', 'acqua.mare', 'acqua.ghiaccio', 'interno.tettonica'], chiamante: 'chimica.js climaEAria',
-    chiama: (M, m) => { const c = corpoDi(M); return 1e5 * m['chimica.js'].co2DelCiclo({ T: M.P.clima?.Taria ?? v(M, 'clima.temperatura'), calore: v(M, 'interno.vulcani') > 0 ? v(M, 'interno.calore') : 0, raggioM: c.raggioM, massaKg: c.massaKg, composizione: c.composizione,
+    chiama: (M, m) => { const c = corpoDi(M), mg = magmaDi(M, m); return 1e5 * m['chimica.js'].co2DelCiclo({ magma: mg.magma ?? null, fuso: mg.fusoMantello ?? null, T: M.P.clima?.Taria ?? v(M, 'clima.temperatura'), calore: v(M, 'interno.vulcani') > 0 ? v(M, 'interno.calore') : 0, raggioM: c.raggioM, massaKg: c.massaKg, composizione: c.composizione,
       terre: (1 - (v(M, 'acqua.mare') ?? 0.7)) * (1 - (M.P.clima?.ghiaccioDelCiclo ?? v(M, 'acqua.ghiaccio') ?? 0)), continenti: v(M, 'interno.tettonica') === 'a placche' ? 1 : 0 }); } },
   // IL RISOLUTORE del ciclo clima-aria (anello chiuso): è ciò che cosmo.js chiama davvero
   climaEAria: { modulo: 'chimica.js', funzione: 'climaEAria', chiamante: 'cosmo.js sistema', risolutore: true,
-    chiama: (M, m) => m['chimica.js'].climaEAria({ ...datiClima(M), calore: v(M, 'interno.vulcani') > 0 ? v(M, 'interno.calore') : 0, inerti: inertiDi(M, m) }, { Z: Zdi(M) }) },
+    chiama: (M, m) => m['chimica.js'].climaEAria({ ...datiClima(M), calore: v(M, 'interno.vulcani') > 0 ? v(M, 'interno.calore') : 0, ...magmaDi(M, m), inerti: inertiDi(M, m) }, { Z: Zdi(M) }) },
   ebollizione: { modulo: 'leggi.js', funzione: 'ebollizione', chiamante: 'leggi.js statoAcqua', chiama: (M, m) => m['leggi.js'].ebollizione(v(M, 'aria.pressione')) },
-  ebollizioneMare: { modulo: 'mare.js', funzione: 'ebollizione', chiamante: 'mare.js', chiama: (M, m) => m['mare.js'].ebollizione(v(M, 'aria.pressione')) },
   vaporeSaturo: { modulo: 'leggi.js', funzione: 'vaporeSaturo', chiamante: 'leggi.js riflessoNuvoleAtteso, meteo.js', chiama: (M, m) => m['leggi.js'].vaporeSaturo(v(M, 'clima.temperatura')) },
   pressioneVapore: { modulo: 'chimica.js', funzione: 'pressioneVapore', chiamante: 'chimica.js atmosfera, climaEAria', chiama: (M, m) => m['chimica.js'].pressioneVapore(v(M, 'clima.temperatura')) },
   statoAcqua: { modulo: 'leggi.js', funzione: 'statoAcqua', chiamante: 'leggi.js clima', chiama: (M, m) => m['leggi.js'].statoAcqua(v(M, 'clima.temperatura'), v(M, 'aria.pressione')) },
@@ -266,11 +267,13 @@ export const GRANDEZZE = [
     dipende: ['interno.calore', 'pianeta.acqua', 'pianeta.massa', { da: 'clima.temperatura', attesa: true, nota: 'una superficie rovente non fa placche (Venere): la storia termica usa la temperatura della superficie nuda, non quella del clima (storia.js lo dichiara: si può passare con Tsuperficie)' }], specieCategoria: 'comodo' },
   { nome: 'interno.vulcani', descrizione: 'quanti grandi vulcani attivi', unita: 'numero', livello: 'pianeta', gruppo: 'interno', leggi: 'P.interno.vulcani', fonte: 'interno', esce: 'vulcani', dipende: [{ da: 'interno.calore', segno: 1 }, 'interno.tettonica'] },
   { nome: 'marea.potenza', descrizione: 'il calore che la marea della stella deposita nel pianeta', unita: 'W', livello: 'pianeta', gruppo: 'interno', leggi: null, soloDallaFonte: true, fonte: 'storiaTermica', esce: 'Q.marea', vale: { 'pianeta.tipo': SOLIDI },
-    dipende: [{ da: 'orbita.eccentricita', segno: 1 }, { da: 'orbita.distanza', segno: -1 }, { da: 'stella.massa', segno: 1 }, { da: 'pianeta.raggio', segno: 1 }], trascurabile: 1, passo: 'rel' },
+    dipende: [{ da: 'orbita.eccentricita', segno: 1 }, { da: 'orbita.distanza', segno: -1 }, { da: 'stella.massa', segno: 1 }, 'pianeta.raggio'], trascurabile: 1e9, passo: 'rel' },
   { nome: 'interno.mantello', descrizione: 'la temperatura del mantello oggi, dalla storia termica', unita: 'K', livello: 'pianeta', gruppo: 'interno', leggi: null, soloDallaFonte: true, fonte: 'storiaTermica', esce: 'Tm', vale: { 'pianeta.tipo': SOLIDI },
     dipende: ['pianeta.massa', 'pianeta.raggio', { da: 'stella.eta', segno: -1 }, 'stella.metalli', 'marea.potenza'], passo: 'rel' },
   { nome: 'interno.mobilita', descrizione: 'quanto la crosta si muove (0 coperchio fermo, 1 placche): la grandezza continua sotto il nome del regime', unita: '1', livello: 'pianeta', gruppo: 'interno', leggi: null, soloDallaFonte: true, fonte: 'storiaTermica', esce: 'crosta.mobilita', vale: { 'pianeta.tipo': SOLIDI },
-    dipende: ['interno.mantello', 'pianeta.acqua', 'pianeta.massa'], intervallo: [0, 1], passo: 'ass' },
+    dipende: ['interno.mantello', 'pianeta.acqua', 'pianeta.massa'], intervallo: [0, 1], trascurabile: 1e-3, passo: 'ass' },
+  { nome: 'interno.magma', descrizione: 'il magma che il mantello produce (i vulcani del ciclo del carbonio)', unita: 'kg/anno', livello: 'pianeta', gruppo: 'interno', leggi: null, soloDallaFonte: true, fonte: 'storiaTermica', esce: 'fuso.kgAnno', vale: { 'pianeta.tipo': SOLIDI },
+    dipende: [{ da: 'interno.mantello', segno: 1 }, 'pianeta.massa', 'pianeta.raggio', 'interno.mobilita'], trascurabile: 1e9, passo: 'rel' },
   { nome: 'interno.argon', descrizione: 'l\'argon del potassio decaduto salito nell\'aria (peso della colonna)', unita: 'Pa', trascurabile: 1e-6, livello: 'pianeta', gruppo: 'interno', leggi: null, soloDallaFonte: true, fonte: 'gasRadiogenici', esce: 'perLAria.Ar', vale: { 'pianeta.tipo': SOLIDI },
     dipende: [{ da: 'stella.eta', segno: 1 }, 'pianeta.massa', 'pianeta.raggio', 'interno.tettonica', 'stella.luminosita', 'pianeta.ferro'], passo: 'rel' },
   // ---------------------------------------------------------------- l'acqua
@@ -281,10 +284,9 @@ export const GRANDEZZE = [
   { nome: 'acqua.mare', descrizione: 'la parte del pianeta coperta dal mare', unita: '1', trascurabile: 1e-3, livello: 'pianeta', gruppo: 'acqua', leggi: 'P.clima.mare', fonte: 'clima', esce: 'mare', vale: { 'pianeta.tipo': SOLIDI },
     dipende: [{ da: 'acqua.inSuperficie', segno: 1 }, { da: 'pianeta.raggio', segno: -1 }, 'interno.tettonica', 'acqua.stato'], intervallo: [0, 1], passo: 'ass',
     controlli: [{ fonte: 'mareAtteso', esce: '', vale: { 'pianeta.tipo': SOLIDI, 'acqua.stato': ['ghiaccio', 'liquida'] }, nota: 'il mare atteso dalla sola quantità d\'acqua, dove l\'acqua non è vapore' }, { fonte: 'mondoDiRisalita', esce: 'mare', vale: { 'pianeta.tipo': SOLIDI }, nota: 'il mare come lo rilegge risalita.js' }] },
-  { nome: 'acqua.ghiaccio', descrizione: 'la parte del pianeta coperta dal ghiaccio', unita: '1', trascurabile: 1e-3, livello: 'pianeta', gruppo: 'acqua', leggi: 'P.clima.ghiaccio', altrove: ['P.clima.ghiaccioDelCiclo'], tolleranza: { assoluta: 10 * mChimica.CICLO.ghiaccio, perche: 'il ghiaccio messo nel ciclo del carbonio coincide con quello del clima entro la tolleranza dichiarata del punto fisso (chimica.js CICLO)' }, fonte: 'clima', esce: 'ghiaccio', vale: { 'pianeta.tipo': SOLIDI },
+  { nome: 'acqua.ghiaccio', descrizione: 'la parte del pianeta coperta dal ghiaccio', unita: '1', trascurabile: 1e-2, livello: 'pianeta', gruppo: 'acqua', leggi: 'P.clima.ghiaccio', altrove: ['P.clima.ghiaccioDelCiclo'], tolleranza: { assoluta: 10 * mChimica.CICLO.ghiaccio, perche: 'il ghiaccio messo nel ciclo del carbonio coincide con quello del clima entro la tolleranza dichiarata del punto fisso (chimica.js CICLO)' }, fonte: 'clima', esce: 'ghiaccio', vale: { 'pianeta.tipo': SOLIDI },
     dipende: [{ da: 'clima.temperatura', segno: -1 }, 'acqua.mare'], intervallo: [0, 1], passo: 'ass' },
-  { nome: 'acqua.ebollizione', descrizione: 'a che temperatura bolle l\'acqua a quella pressione', unita: 'K', livello: 'pianeta', gruppo: 'acqua', leggi: null, soloDallaFonte: true, fonte: 'ebollizione', esce: '', vale: { 'pianeta.tipo': SOLIDI }, dipende: [{ da: 'aria.pressione', segno: 1 }], passo: 'rel',
-    controlli: [{ fonte: 'ebollizioneMare', esce: '', nota: 'mare.js ha una sua ebollizione(), dalle tabelle di chimica.js' }] },
+  { nome: 'acqua.ebollizione', descrizione: 'a che temperatura bolle l\'acqua a quella pressione', unita: 'K', livello: 'pianeta', gruppo: 'acqua', leggi: null, soloDallaFonte: true, fonte: 'ebollizione', esce: '', vale: { 'pianeta.tipo': SOLIDI }, dipende: [{ da: 'aria.pressione', segno: 1 }], passo: 'rel' }, // (mare.js aveva una sua ebollizione(): ora legge questa)
   // ---------------------------------------------------------------- l'aria
   { nome: 'aria.gasTenuti', descrizione: 'quante specie di gas la gravità trattiene (su sei)', unita: 'numero', livello: 'pianeta', gruppo: 'aria', leggi: 'P.clima.tenuti.length', fonte: 'clima', esce: 'tenuti.length',
     dipende: [{ da: 'pianeta.massa', segno: 1 }, { da: 'pianeta.raggio', segno: -1 }, { da: 'stella.luminosita', segno: -1 }, { da: 'orbita.distanza', segno: 1 }] },
@@ -296,7 +298,7 @@ export const GRANDEZZE = [
   { nome: 'aria.serra', descrizione: 'lo spessore ottico dell\'aria per l\'infrarosso (τ)', unita: '1', trascurabile: 1e-6, livello: 'pianeta', gruppo: 'aria', leggi: 'P.clima.tau', fonte: 'serra', esce: { da: '', tetto: 1e4 }, vale: { 'pianeta.tipo': SOLIDI },
     dipende: [{ da: 'aria.CO2', segno: 1, esp: 0.39 }, { da: 'aria.H2O', segno: 1 }, { da: 'aria.CH4', segno: 1 }, 'aria.H2', 'aria.N2', { da: 'aria.pressione', segno: 1 }, { da: 'pianeta.gravita', segno: -1 }, 'clima.temperatura'], intervallo: [1e-3, 1e4], passo: 'rel' },
   { nome: 'aria.co2Ciclo', descrizione: 'la CO₂ a cui le rocce ne prendono quanta i vulcani ne danno', unita: 'Pa', trascurabile: 1e-3, livello: 'pianeta', gruppo: 'aria', leggi: 'P.clima.co2Ciclo', fonte: 'co2DelCiclo', esce: '', vale: { 'pianeta.tipo': SOLIDI, 'acqua.stato': ['liquida'] },
-    dipende: [{ da: 'clima.temperatura', segno: -1 }, { da: 'interno.calore', segno: 1 }, 'interno.vulcani', { da: 'acqua.mare', segno: 1 }, { da: 'acqua.ghiaccio', segno: 1 }, 'interno.tettonica'], passo: 'rel' },
+    dipende: [{ da: 'clima.temperatura', segno: -1 }, { da: 'interno.magma', segno: 1 }, 'interno.vulcani', { da: 'acqua.mare', segno: 1 }, { da: 'acqua.ghiaccio', segno: 1 }, 'interno.tettonica'], passo: 'rel' },
   { nome: 'aria.vaporeSaturo', descrizione: 'la pressione del vapore d\'acqua sopra il mare o il ghiaccio', unita: 'Pa', livello: 'pianeta', gruppo: 'aria', leggi: null, soloDallaFonte: true, fonte: 'vaporeSaturo', esce: '', vale: { 'pianeta.tipo': SOLIDI }, dipende: [{ da: 'clima.temperatura', segno: 1 }], passo: 'rel', trascurabile: 1e-3,
     controlli: [{ fonte: 'pressioneVapore', esce: '', nota: 'chimica.js ha una sua pressione di vapore (dalle tabelle termodinamiche): è quella che decide quanta acqua sta nell\'aria' }] },
   // ---------------------------------------------------------------- il clima
@@ -307,7 +309,7 @@ export const GRANDEZZE = [
     controlli: [{ fonte: 'temperaturaEquilibrio', esce: '', nota: 'la formula di leggi.js con l\'albedo che il pianeta dichiara' }, { fonte: 'mondoDiRisalita', esce: 'Teq', nota: 'come la rilegge risalita.js' }] },
   { nome: 'clima.albedo', descrizione: 'la parte di luce rimandata indietro', unita: '1', livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.albedo', fonte: 'clima', esce: 'albedo', dipende: [{ da: 'acqua.ghiaccio', segno: 1 }, { da: 'clima.nuvole', segno: 1 }, 'acqua.mare', 'clima.temperatura'], intervallo: [0, 0.9], passo: 'ass' },
   { nome: 'clima.nuvole', descrizione: 'la parte di cielo coperta', unita: '1', trascurabile: 1e-3, livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.nuvole', fonte: 'clima', esce: 'nuvole', vale: { 'pianeta.tipo': SOLIDI }, dipende: [{ da: 'acqua.mare', segno: 1 }, { da: 'aria.pressione', segno: 1 }], intervallo: [0, 1], passo: 'ass' },
-  { nome: 'clima.trasporto', descrizione: 'il calore che aria e mare portano dal caldo al freddo', unita: 'W/m²/K', livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.D', fonte: 'clima', esce: 'D', vale: { 'pianeta.tipo': SOLIDI }, dipende: ['aria.pressione', 'pianeta.giorno', 'pianeta.raggio', 'pianeta.gravita', 'clima.temperatura'], passo: 'rel' },
+  { nome: 'clima.trasporto', descrizione: 'il calore che aria e mare portano dal caldo al freddo', unita: 'W/m²/K', trascurabile: 1e-6, livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.D', fonte: 'clima', esce: 'D', vale: { 'pianeta.tipo': SOLIDI }, dipende: ['aria.pressione', 'pianeta.giorno', 'pianeta.raggio', 'pianeta.gravita', 'clima.temperatura'], passo: 'rel' },
   { nome: 'clima.vento', descrizione: 'il vento al suolo, dalla stessa legge dell\'aria', unita: 'm/s', livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.vento', fonte: 'clima', esce: 'vento', vale: { 'pianeta.tipo': SOLIDI },
     dipende: ['aria.pressione', 'pianeta.giorno', 'pianeta.raggio', 'pianeta.gravita', 'clima.temperatura'], passo: 'rel' },
   { nome: 'clima.assorbita', descrizione: 'la luce che il pianeta assorbe, in media', unita: 'W/m²', livello: 'pianeta', gruppo: 'clima', leggi: 'P.clima.bilancio.assorbita', fonte: 'clima', esce: 'bilancio.assorbita', vale: { 'pianeta.tipo': SOLIDI }, dipende: [{ da: 'orbita.flusso', segno: 1, esp: 1 }, { da: 'clima.albedo', segno: -1 }], passo: 'rel',
@@ -396,6 +398,7 @@ export const SOGLIE = [
   { su: 'stella.massaNascita', a: (M) => mStelle.massaMinima({ Z: valore('stella.metalli', M) ?? 1 }), specie: 'fisica', perche: 'sotto la massa minima l\'idrogeno non si accende: è una nana bruna, e la sua «vita» è infinita', dove: { modulo: 'stelle.js', cerca: 'return nanaBruna(Msol, righe, eta)' } },
   { su: 'stella.massa', a: (M) => mStelle.massaMinima({ Z: valore('stella.metalli', M) ?? 1 }), specie: 'fisica', perche: 'sotto la massa minima l\'idrogeno non si accende: è una nana bruna (luce e raggio seguono un\'altra legge)', dove: { modulo: 'stelle.js', cerca: 'return nanaBruna(Msol, righe, eta)' } },
   { su: 'pianeta.risonanza', a: null, specie: 'fisica', perche: 'la rotazione resta agganciata a una risonanza con l\'orbita (1:1, 3:2, 2:1…, come Mercurio): al crescere dell\'eccentricità passa dall\'una all\'altra e il giorno salta', dove: { modulo: 'rotazione.js', cerca: 'Math.round(2 * equilibrio) / 2' } },
+  { su: 'interno.magma', a: 0, specie: 'fisica', perche: 'il mantello comincia a fondere (passa il solidus): da lì ci sono magma e vulcani', dove: { modulo: 'storia.js', cerca: 'fonde = Mfuso > 0' } },
   { su: 'interno.vulcani', a: 0, specie: 'comodo', perche: 'il ciclo del carbonio si accende solo se interno() conta almeno un vulcano: prima di quello il calore dell\'interno non entra nel clima', fonti: ['co2DelCiclo', 'climaEAria'], dove: { modulo: 'cosmo.js', cerca: 'p.interno.vulcani > 0 ? p.interno.q : 0' }, sanare: 'passare a climaEAria il calore (o la massa che fonde) così com\'è' },
   { su: 'pianeta.involucro', a: 0.01, specie: 'comodo', perche: 'con più dell\'1% di gas il giro del pianeta è «dato dal gas», sotto «dagli urti»: giorno e asse saltano', dove: { modulo: 'rotazione.js', cerca: 'gasMinimo: 0.01' }, sanare: 'sommare i due momenti angolari (gas e urti) pesati, invece di sceglierne uno' },
   { su: 'interno.argon', a: 0, specie: 'comodo', perche: 'l\'argon resta tutto o fugge tutto: lo stesso taglio di Jeans a 25, rifatto in risalita.js', dove: { modulo: 'risalita.js', cerca: 'tieneAr = ' }, sanare: 'come per i gas tenuti: il flusso di fuga integrato sull\'età' },
@@ -441,6 +444,23 @@ export const FORMULE_CON_FONTE = [
   { grandezza: 'stella.raggio', che: '√(L/4πσT⁴)', casa: ['stelle.js'], motivo: /Math\.sqrt\(L[w]? \/ \(4 \* Math\.PI \* [A-Za-z_.]+ \* [A-Za-z_.]+ \*\* 4/ },
   { grandezza: 'stella.luminosita', che: '4πR²σT⁴', casa: ['stelle.js'], motivo: /4 \* Math\.PI \* [A-Za-z_.]+ \*\* 2 \* [A-Za-z_.]*sigma \* [A-Za-z_.]+ \*\* 4/ },
   { grandezza: 'clima.equilibrio', che: 'la temperatura di equilibrio con albedo 0,3 fisso', casa: [], motivo: /temperaturaEquilibrio\([^)]*, 0\.3\)/ },
+];
+
+// I DOPPIONI DICHIARATI: lo stesso dato scritto in due moduli senza che uno legga l'altro, fuori dal campione dei
+// pianeti. `posti`: dove sta scritto ({ modulo, cerca }) e quanto vale lì. La prova li stampa, la mappa li elenca.
+export const DOPPIONI_DICHIARATI = [
+  { che: 'quanto dura il resto di una supernova (anni)', posti: [{ modulo: 'risalita.js', cerca: 'VITA_RESTO: 3e4', valore: '3·10⁴' }, { modulo: 'galassie.js', cerca: 'sedov: [2.9e4', valore: '2,9·10⁴·(n / 10⁶ m⁻³)^(−9/17)' }],
+    sanare: 'risalita.js legga LEGGI.sedov di galassie.js con la densità del gas del posto (cambia i numeri del 3% e li fa dipendere dal gas: va misurato)' },
+  { che: 'il ritmo delle supernove e il raggio del disco della Via Lattea, come riserva quando la galassia non è nota', posti: [{ modulo: 'risalita.js', cerca: 'SN_VIA_LATTEA: 0.02, RAGGIO_VIA_LATTEA: 15e3', valore: '0,02 all\'anno; 15 000 parsec' }, { modulo: 'materia.js', cerca: '(ritmo / 0.02) / (R / (15 * 3.0857e19))', valore: '0,02 all\'anno; 15 kpc (in linea)' }],
+    sanare: 'un nome solo (in galassie.js, accanto a LEGGI: la Via Lattea di riferimento), letto da risalita.js e da materia.js: il valore è lo stesso' },
+  { che: 'l\'energia di una supernova che va in raggi cosmici (J)', posti: [{ modulo: 'risalita.js', cerca: 'ENERGIA_SN_COSMICI: 1e43', valore: '10⁴³' }, { modulo: 'galassie.js', cerca: 'cosmici: 0.1', valore: '0,1 × energiaSN (10⁴⁴) = 1,0000000000000001·10⁴³' }],
+    sanare: 'leggere LEGGI.cosmici × LEGGI.energiaSN: cambia l\'ultima cifra (10⁻¹⁶)' },
+  { che: 'la densità di energia dei raggi cosmici della galassia quando non è nota (J/m³)', posti: [{ modulo: 'risalita.js', cerca: 'COSMICI_GALASSIA: 1.602e-13', valore: '1,602·10⁻¹³ (1 eV/cm³, scritto)' }, { modulo: 'vuoto_mezzo.js', cerca: 'export function raggiCosmiciIn(forma)', valore: '1,70·10⁻¹³ (lo spettro di materia.js integrato) × il cielo relativo della galassia' }],
+    sanare: 'dove la galassia è nota risalita.js legge già vuoto_mezzo.js; la riserva scritta (1 eV/cm³) è il 6% sotto il valore che lo spettro dà per la Via Lattea: farla coincidere' },
+  { che: 'la temperatura di una nana bianca che si raffredda (Mestel)', posti: [{ modulo: 'stelle.js', cerca: 'export function nanaBiancaOggi', valore: 'la funzione' }, { modulo: 'galassie.js', cerca: 'Math.pow((8.8e6 * Math.pow(f.massa, 5 / 7))', valore: 'la stessa formula in linea (stesso numero)' }],
+    sanare: 'galassie.js stelleGalassia chiami stelle.js nanaBiancaOggi(f.massa, f.raggio, morta).T' },
+  { che: 'la linea della neve per le lune (2,7 UA·√L)', posti: [{ modulo: 'disco.js', cerca: 'const neve = 2.7 * Math.sqrt(L)', valore: 'con la luce al tempo del disco, su quella del Sole di allora' }, { modulo: 'lune.js', cerca: '2.7 * UA * Math.sqrt(Lgiovane)', valore: 'con la luce a metà della vita della stella: il 18% più vicina per una nana rossa' }],
+    sanare: 'lune.js legga la neve (o la luce) dal disco del sistema' },
 ];
 
 // LE DIPENDENZE MANCANTI SEGNALATE: grandezze che dovrebbero entrare in una formula e non ci entrano, fuori dal

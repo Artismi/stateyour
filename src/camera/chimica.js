@@ -417,7 +417,8 @@ export function gasDellAria(gas = {}) {
 // dalla temperatura (che cosa gela, che cosa piove, se c'è un mare che si mangia l'anidride carbonica): si cercano
 // insieme, a giri alterni, finché non cambiano più. «dati» è ciò che serve a clima() di leggi.js (luce, distanza,
 // massa, raggio, tipo, acqua, anno, asse, placche…) più composizione e involucro del pianeta; e, se ci sono: «calore»
-// (W/m²: il calore dell'interno che alimenta i vulcani; accende il ciclo del carbonio), «inerti» (Pa: argon ed elio
+// (W/m²: il calore dell'interno che alimenta i vulcani; accende il ciclo del carbonio), «magma» e «fusoMantello» (kg/anno:
+// il magma e il mantello che fonde, dalla storia termica: se ci sono, i vulcani sono quelli), «inerti» (Pa: argon ed elio
 // radiogenici saliti dall'interno, da risalita.js), «gas» (Pa: l'aria vera di un mondo vero, al posto dell'inventario).
 // IL TERMOSTATO DEL CARBONIO. Dove c'è un mare la pioggia porta l'anidride carbonica nel calcare (Urey) e l'aria ne
 // resta senza; ma se così il mare gela, la pioggia smette, i vulcani continuano, e la CO2 torna ad accumularsi
@@ -454,7 +455,7 @@ export function climaEAria(dati, { Z } = {}) {
   // non scende fino all'equilibrio di Urey (ci arriverebbe in un tempo infinito): si ferma dove le rocce consumate dalla
   // pioggia ne prendono quanta i vulcani ne emettono (co2DelCiclo, più sotto). È la stessa CO2 che sta sciolta nel mare:
   // aria e mare sono un serbatoio solo (mare.js legge questa pressione, e la ricalcola con le terre e le piogge vere).
-  const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), continenti: dati.placche ? 1 : 0 }) : 0);
+  const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), continenti: dati.placche ? 1 : 0, magma: dati.magma ?? null, fuso: dati.fusoMantello ?? null }) : 0);
   const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null, cc = co2; for (let k = 0; k < (stato === 'liquida' && dati.calore > 0 ? giri + 3 : giri); k++) { if (stato === 'liquida') cc = Math.max(co2, ciclo(T, r?.c)); const a = ariaDi(T, stato, cc), c = climaDi(a, T); r = { a, c, co2: cc }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } if (r && stato === 'liquida' && cc > 0) r.c.co2Ciclo = cc; return r; };
   // SOPRA UN MARE temperatura, vapore e CO2 non si trovano a giri alterni: la CO2 che pareggia i vulcani cala di ordini di
   // grandezza in pochi gradi (e il vapore cresce col caldo), e i giri rimbalzano tra un'aria e un clima che non si corrispondono (un'aria calcolata a
@@ -478,17 +479,26 @@ export function climaEAria(dati, { Z } = {}) {
     const g = (T) => { let r = con(T, 0); if (!(dati.calore > 0) || !(terre0 > 0.005) || !(r.c.ghiaccio > CICLO.ghiaccio)) return r;
       let lo = 0, hi = 1; for (let k = 0; k < 14 && Math.abs(r.c.ghiaccio - r.m) > CICLO.ghiaccio; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; }
       if (Math.abs(r.c.ghiaccio - r.m) > 10 * CICLO.ghiaccio) r.bilico = true; return r; };
-    let sotto = g(273.5); if (!(sotto.d > 0)) return sotto; // (gelato anche con la CO2 che il ciclo lascia al gelo)
+    // ciò che resta scritto nel clima quando c'è il ciclo: la sua CO2, il ghiaccio con cui è stata calcolata (uguale a
+    // clima.ghiaccio entro CICLO.ghiaccio se il punto fisso c'è) e se il ciclo è in bilico
+    const segna = (r) => { if (dati.calore > 0) { r.c.co2Ciclo = r.co2; r.c.ghiaccioDelCiclo = r.m; if (r.bilico) r.c.cicloInBilico = true; } return r; };
+    let sotto = g(273.5), sopra = null;
+    if (!(sotto.d > 0)) { // più freddo di 273,5 K con l'aria di 273,5 K: gelato… a meno che lo stato fermo stia tra il gelo e 273,5 K
+      const alGelo = dati.calore > 0 && sotto.c.T >= 273.15 ? g(273.16) : null; if (!alGelo || !(alGelo.d > 0)) return segna(sotto); // (gelato anche con la CO2 che il ciclo lascia al gelo)
+      sopra = sotto; sotto = alGelo; }
     // (si sale fino al punto critico dell'acqua, 647 K: fin lì sotto abbastanza pressione un mare può esserci. Fermandosi a
     // 640 K i mari più caldi uscivano con l'aria fatta a 640 K e il clima qualche grado sopra: una coppia non cercata)
-    let sopra = null; for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640, ACQUA.critica - 0.5]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
-    if (!sopra) return sotto; // (più caldo a ogni temperatura: il mare bolle)
+    if (!sopra) for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640, ACQUA.critica - 0.5]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
+    if (!sopra) return segna(sotto); // (più caldo a ogni temperatura: il mare bolle)
     // (con il ciclo del carbonio la CO2 cambia del 10% in pochi decimi di grado: lì la temperatura si stringe cento volte di più)
     const fino = dati.calore > 0 ? 0.003 : 0.3;
     for (let k = 0; k < 16 && sopra.T - sotto.T > fino; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
+    // (se i due capi non si incontrano — sotto, il clima è ancora più caldo dell'aria di oltre un grado; un filo sopra, il
+    // mare non c'è più — lì non c'è una coppia ferma: il mare si scalda finché bolle, o passa il punto critico. Si dà il
+    // capo senza mare, e chi chiama prosegue da «troppo caldo». Prima restava un mare con l'aria fatta sei gradi sotto il suo clima)
+    if (sotto.d > 1 && sopra.c.acqua.startsWith('vapore')) return segna(sopra);
     const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra;
-    // ciò che resta scritto: la CO2 del ciclo, il ghiaccio con cui è stata calcolata (uguale a clima.ghiaccio se il punto fisso c'è) e se il ciclo è in bilico
-    if (dati.calore > 0) { r.c.co2Ciclo = r.co2; r.c.ghiaccioDelCiclo = r.m; if (r.bilico) r.c.cicloInBilico = true; } return r;
+    return segna(r);
   };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
   if (!(dati.acqua > 0)) return esce(cerca('assente', primo.T));
@@ -695,23 +705,28 @@ export function sciolto(minerale, T, anni, aH = acidoDelSuolo(ROCCE.pCO2suoli, R
   return 1 - Math.exp(-perMetroQuadro * cambia * ROCCE.superficieGrani * MINERALI_ROCCIA[minerale][2]);
 }
 // ciò che un kg di roccia consumata cede all'acqua (mol), a T e sotto pCO2 (bar); quanta della sua massa diventa argilla
-export function rilascio(roccia, T, pCO2 = 2.8e-4) {
-  const t = ROCCE.suolo / ROCCE.denudazione, o = roccia.ospiti, aH = acidoDelSuolo(pCO2, T), f = (m) => (T > 271 ? sciolto(m, T, t, aH) : 0);
+// («denudazione» (m/anno): quanto in fretta l'erosione porta via il suolo, se chi chiama lo sa — mare.js, dalla carta vera —;
+// se manca, quella di riferimento. Prima il quarto argomento era ignorato)
+export function rilascio(roccia, T, pCO2 = 2.8e-4, denudazione = ROCCE.denudazione) {
+  const t = ROCCE.suolo / (denudazione > 0 ? denudazione : ROCCE.denudazione), o = roccia.ospiti, aH = acidoDelSuolo(pCO2, T), f = (m) => (T > 271 ? sciolto(m, T, t, aH) : 0);
   const fAb = f('albite'), fOr = f('ortoclasio'), fAn = f('anortite'), fPx = f('pirosseno'), fOl = f('olivina');
   const Na = roccia.Na * fAb, K = roccia.K * fOr, Ca = roccia.Ca * (o.anortite * fAn + (1 - o.anortite) * fPx), Mg = roccia.Mg * (o.olivina * fOl + (1 - o.olivina) * fPx);
   return { Na, K, Ca, Mg, Si: 2 * Na + 2 * K + 0.5 * Mg, // la silice che i feldspati cedono diventando argilla (2 su 3), e metà di quella dei pirosseni
     cariche: Na + K + 2 * Ca + 2 * Mg, argilla: Math.min(1, roccia.Na * fAb * 0.262 + roccia.K * fOr * 0.278 + roccia.Ca * o.anortite * fAn * 0.278 + (roccia.Mg + roccia.Fe) * fPx * 0.1) };
 }
 // i vulcani: il magma (kg/anno), il mantello che fonde per farlo, e l'anidride carbonica che ne esce (mol/anno)
-export function vulcani({ calore, raggioM, composizione }) {
-  const magma = (ROCCE.magma * Math.max(0, calore) * 4 * Math.PI * raggioM * raggioM * 3.156e7) / ROCCE.caloreMagma, fuso = magma / F_BASALTO;
+// («magma» e «fuso» (kg/anno): se chi chiama li sa dalla storia termica del pianeta (storia.js: fuso.kgAnno, e il mantello
+// che fonde per farlo, fuso.kgAnno / fuso.frazione) valgono quelli: UNA stima sola del magma. Se mancano — un pianeta
+// fatto a mano in una prova — resta la legge di riserva: il magma porta un decimo del calore dell'interno)
+export function vulcani({ calore, raggioM, composizione, magma: dato = null, fuso: fusoDato = null }) {
+  const magma = dato ?? (ROCCE.magma * Math.max(0, calore) * 4 * Math.PI * raggioM * raggioM * 3.156e7) / ROCCE.caloreMagma, fuso = fusoDato ?? magma / F_BASALTO;
   return { magma, fuso, CO2: fuso * ROCCE.rimasto.C, rocce: rocceDelPianeta({ composizione }) };
 }
 // la pressione di CO2 (bar) a cui le rocce consumate ne prendono quanta i vulcani ne emettono. «terre»: la parte della
 // superficie emersa e bagnata dalla pioggia; «continenti»: quanta di quella è granito (il resto basalto). Si può dare
 // «consumo(pCO2)» (mol/anno) per fare il conto con una carta vera delle terre e delle temperature (lo fa mare.js).
-export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null } = {}) {
-  const v = vulcani({ calore, raggioM, composizione }), fonte = emissione ?? v.CO2; if (!(fonte > 0)) return 0;
+export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null, magma = null, fuso = null } = {}) {
+  const v = vulcani({ calore, raggioM, composizione, magma, fuso }), fonte = emissione ?? v.CO2; if (!(fonte > 0)) return 0;
   const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre);
   const prende = consumo || ((p) => massa * (continenti * rilascio(v.rocce.granito, T, p).cariche + (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche));
   if (prende(100) < fonte) return 100; // nemmeno sotto cento bar le rocce tengono il passo: la CO2 si accumula (qui ci si ferma)

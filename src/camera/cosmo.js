@@ -23,6 +23,7 @@ import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js'
 import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie, gravitaDiSuperficie } from './leggi.js';
 import { stellaOggi } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
+import { storia } from './storia.js'; // la storia termica (per il magma dei vulcani: una stima sola)
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
@@ -164,6 +165,10 @@ export const metriPerUnita = (livello, via) => {
 export const LATO_SISTEMA_M = 30 * UA; // l'unità del sistema: trenta unità astronomiche
 // quanto è grande un sistema (30 UA) nelle unità della sua galassia: la taglia vera, circa 10⁻⁸
 export const raggioSistema = (n, gid) => LATO_SISTEMA_M / cosmo(n).galassie[gid].forma.unitaM;
+// il magma dei vulcani di un pianeta, dalla sua storia termica (storia.js: la stessa che interno() riassume, già in
+// memoria): il magma (kg/anno) e il mantello che fonde per farlo. Così i vulcani del ciclo del carbonio (chimica.js)
+// sono quelli della storia, non una seconda stima dal calore
+const magmaDi = (p, S) => { if (p.tipo === 'gassoso' || !(p.interno.vulcani > 0)) return {}; const f = storia(p, S.eta, { stella: S }).fuso; return f && f.kgAnno > 0 && f.frazione > 0 ? { magma: f.kgAnno, fusoMantello: f.kgAnno / f.frazione } : {}; };
 export const sistema = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
   // I PIANETI NASCONO DAL DISCO della stella giovane (disco.js): la sua massa e i suoi metalli fanno il
@@ -231,7 +236,7 @@ export const sistema = memo((n, gid, sid) => {
       inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
     const ariaDelPianeta = () => {
       const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
-        calore: p.interno.vulcani > 0 ? p.interno.q : 0, inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
+        calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
       p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato, giorno: p.giorno }; // (con quale asse e quale giorno è stato calcolato: il giorno entra nel calore che l'aria porta, leggi.js)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
       // aminoacidi e zuccheri (scariche e ultravioletto)
