@@ -26,7 +26,8 @@
 //   · quanta crosta continentale si è separata dal mantello nel tempo (crostaAttesa);
 //   · la velocità delle placche: 4 cm/anno sulla Terra, e cresce come q² (legge di scala della convezione);
 //   · lo spessore che la crosta regge sotto spinta: da 39 km (spinta debole) a 70 km (il Tibet);
-//   · l'erosione, che spiana una catena in ~200 milioni di anni, e la fossa, fino a 2500 m più fonda;
+//   · l'erosione: i pendii si spianano (una catena in ~10 milioni di anni) e i fiumi portano alle coste ciò che
+//     sporge dal livello di riferimento (lo dimezzano in ~100 milioni di anni); la fossa, fino a 2500 m più fonda;
 //   · la coesione dei continenti e il tempo con cui scaldano il mantello sotto di sé: scelti perché i
 //     continenti si spacchino e si riuniscano in tempi dell'ordine di quelli terrestri (centinaia di
 //     milioni di anni).
@@ -39,19 +40,20 @@ export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
   hZero: 35e3, // la crosta spessa così galleggia a quota 0 (il livello di riferimento: all'incirca il mare terrestre)
   hMargine: 25e3, // sopra è continente; sotto è crosta di transizione (archi, altopiani sommersi)
-  hLibero: 28e3, hFermo: 39e3, hMassimo: 70e3, // fino a hLibero la crosta si lascia comprimere; oltre resiste; il massimo retto dalla spinta va da hFermo (spinta debole) a hMassimo (Tibet)
+  hFermo: 39e3, hMassimo: 70e3, // lo spessore massimo che la spinta riesce a reggere: da hFermo (spinta debole o nulla) a hMassimo (uno scontro: il Tibet)
   galleggia: 0.15, // 1 − densità della crosta / densità del mantello (2800 / 3300): quanto sporge ciò che galleggia
   dorsale: 2500, raffredda: 350, abisso: 6000, // la profondità dell'oceano (m) con l'età (milioni di anni)
   radice: 5250, // la quota (−m) a cui starebbe un continente senza crosta: così hZero sta a 0
   fossa: 2500, // quanto si piega in giù la crosta oceanica dove affonda
   vTerra: 0.04, qTerra: 0.087, // (m/anno, W/m²) la velocità media delle placche terrestri e il calore che la muove
   qPlacche: 0.05, qVivo: 0.02, // sotto qPlacche (o senz'acqua) la crosta non si rompe; sotto qVivo il mantello è fermo
-  erosione: 800, // (m²/anno) quanto in fretta i rilievi si spianano e i sedimenti allargano i continenti
+  fiumi: 130e6, // (anni) il tempo con cui i fiumi consumano ciò che sporge dal livello di riferimento (si riduce a 1/e)
+  erosione: 800, // (m²/anno) quanto in fretta i pendii si spianano: ciò che è alto scivola sulla cella accanto
   coesione: 0.5, // quanto forte la crosta robusta tira a sé quella vicina (celle per passo, per unità di differenza)
   inerzia: 4, // in quanti giri di cella il mantello sotto un continente si scalda (o si raffredda quando se ne va)
   coperta: 1.3, // quanto un continente scalda il mantello che ha sotto (nelle unità dell'equazione delle celle)
 };
-const C = COSTANTI, C_PASSO = 0.3, CEDE = 0.03, PASSI_GROSSI = 2400;
+const C = COSTANTI, C_PASSO = 0.3, CEDE = 0.03, GIRI = 2, PASSI_GROSSI = 2400;
 
 // ---------- la trasformata di Fourier (griglie periodiche, lati potenze di 2)
 const tabelle = new Map();
@@ -153,26 +155,26 @@ const robusta = (h) => { let f = h / C.hZero; if (f > 1) f = 1; f *= f; return f
 // della velocità del mantello pesata con quanto è robusta la crosta: quella spessa è molto più forte di quella
 // sottile). Perciò un continente tirato da due parti non si assottiglia come una pasta: cede dove è più debole
 // e si spacca, e i due pezzi se ne vanno interi. La crosta sottile (veli, archi) segue invece il mantello.
-// hx, hy: come cx, cy, ma per la crosta continentale; stretta: dove quella velocità converge (0…1).
+// hx, hy: come cx, cy, ma per la crosta continentale.
 export function velocitaCrosta(h, ca, W, H, R) {
   const N = W * H, { vx, vy, c0 } = ca;
-  const hx = (ca.hx ??= new Float64Array(N)), hy = (ca.hy ??= new Float64Array(N)), tetto = (ca.tetto ??= new Float64Array(N)), stretta = (ca.stretta ??= new Float32Array(N));
-  const A = (ca.A ??= new Float64Array(N)), B = (ca.B ??= new Float64Array(N)), P = (ca.P ??= new Float64Array(N)), p = (ca.p ??= new Float64Array(N)), T = (ca.T ??= new Float64Array(N));
+  const hx = (ca.hx ??= new Float64Array(N)), hy = (ca.hy ??= new Float64Array(N)), tetto = (ca.tetto ??= new Float64Array(N));
+  const A = (ca.A ??= new Float64Array(N)), B = (ca.B ??= new Float64Array(N)), P = (ca.P ??= new Float64Array(N)), p = (ca.p ??= new Float64Array(N)), Q = (ca.Q ??= new Float64Array(N)), T = (ca.T ??= new Float64Array(N));
   let c = false; for (let k = 0; k < N; k++) { const f = robusta(h[k]); p[k] = f; A[k] = f * vx[k]; B[k] = f * vy[k]; if (f > 1e-4) c = true; }
-  if (c) { sfoca(A, A, T, W, H, R); sfoca(B, B, T, W, H, R); sfoca(p, P, T, W, H, R); for (let k = 0; k < N; k++) { const f = p[k], q = P[k]; if (q > 1e-9) { A[k] = vx[k] + f * (A[k] / q - vx[k]); B[k] = vy[k] + f * (B[k] / q - vy[k]); } else { A[k] = vx[k]; B[k] = vy[k]; } } }
-  else { A.set(vx); B.set(vy); }
+  if (c) {
+    // quanto è robusta la lastra attorno a ogni cella (5 × 5 celle: una lastra non ha crepe larghe una cella sola)
+    for (let giro = 0; giro < 2; giro++) { sfoca(giro ? Q : p, Q, T, W, H, 1); for (let j = 0; j < H; j++) { const nj = (Math.min(H - 1, j + 1) - Math.max(0, j - 1) + 1) * 3; for (let i = 0; i < W; i++) Q[j * W + i] /= nj; } }
+    sfoca(A, A, T, W, H, R); sfoca(B, B, T, W, H, R); sfoca(p, P, T, W, H, R);
+    for (let k = 0; k < N; k++) { const f = Q[k], q = P[k]; if (q > 1e-9) { A[k] = vx[k] + f * (A[k] / q - vx[k]); B[k] = vy[k] + f * (B[k] / q - vy[k]); } else { A[k] = vx[k]; B[k] = vy[k]; } }
+  } else { A.set(vx); B.set(vy); }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] = 0.5 * (A[k] + A[j * W + ((i + 1) % W)]); hy[k] = j < H - 1 ? 0.5 * (B[k] + B[k + W]) : 0; }
-  // la COESIONE: la lastra tiene insieme. La crosta è tirata verso dove, lì attorno (5 × 5 celle), c'è più crosta
-  // robusta: così un continente stirato non diventa un velo, ma si strappa in pezzi che restano spessi
-  if (c && C.coesione > 0) { sfoca(p, P, T, W, H, 2); const kc = C.coesione * c0 / 0.3;
-    for (let j = 0; j < H; j++) { const nj = (Math.min(H - 1, j + 2) - Math.max(0, j - 2) + 1) * 5; for (let i = 0; i < W; i++) P[j * W + i] /= nj; }
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] += kc * (P[j * W + ((i + 1) % W)] - P[k]); if (j < H - 1) hy[k] += kc * (P[k + W] - P[k]); } }
-  const is = c0 > 0 ? 1 / (0.03 * c0) : 0; // (basta poco: la lastra non si lascia comprimere)
+  // la COESIONE: la lastra tiene insieme. La crosta è tirata verso dove, lì attorno, c'è più crosta robusta:
+  // così un continente stirato non diventa un velo, ma si strappa in pezzi che restano spessi
+  if (c && C.coesione > 0) { const kc = (C.coesione * c0) / 0.3;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; hx[k] += kc * (Q[j * W + ((i + 1) % W)] - Q[k]); if (j < H - 1) hy[k] += kc * (Q[k + W] - Q[k]); } }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const k = j * W + i, e = hx[k], o = hx[j * W + ((i + W - 1) % W)], s = hy[k], n = j > 0 ? hy[k - W] : 0;
-    const esce = Math.max(e, 0) + Math.max(-o, 0) + Math.max(s, 0) + Math.max(-n, 0);
+    const k = j * W + i, esce = Math.max(hx[k], 0) + Math.max(-hx[j * W + ((i + W - 1) % W)], 0) + Math.max(hy[k], 0) + Math.max(j > 0 ? -hy[k - W] : 0, 0);
     tetto[k] = esce > 0.35 ? 0.7 / esce : 2; // da una cella non può uscire più di quello che c'è
-    stretta[k] = Math.max(0, Math.min(1, (o - e + n - s) * is));
   }
   return ca;
 }
@@ -187,32 +189,42 @@ function vicine(W, H) {
 // ---------- UN PASSO DELLA CROSTA. stato = { W, H, h (spessore della crosta continentale, m), a (età della crosta
 // oceanica, milioni di anni), sub (quanta crosta oceanica è affondata qui nell'ultimo passo, in frazione di cella) }.
 // Tutto è scritto come scambio tra celle vicine: ciò che esce da una entra nell'altra, quindi la crosta
-// continentale si conserva esattamente (salvo «apporto», la crosta nuova, distribuita dove l'oceano affonda).
-export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0 } = {}) {
-  const { W, H, h, a, sub } = st, N = W * H, { cx, cy, hx, hy, cap, tetto, stretta } = ca;
-  const dh = (st.dh ??= new Float64Array(N)), dw = (st.dw ??= new Float64Array(N)), dq = (st.dq ??= new Float64Array(N)), fermo = (st.fermo ??= new Float32Array(N)), fermo2 = (st.fermo2 ??= new Float32Array(N));
-  const ihw = 1 / C.hMargine, iD = 1 / (C.hFermo - C.hLibero), h0 = C.hZero;
+// continentale si conserva esattamente (salvo «apporto», la crosta nuova, distribuita dove l'oceano affonda; ciò che
+// i fiumi portano via resta in viaggio un passo, in stato.fango, e si deposita al passo dopo). campo = quello fatto
+// da campoDaPotenziale e poi velocitaCrosta. dtMa: milioni di anni del passo; kappa, fiumi: erosione per passo.
+export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0, fiumi = 0 } = {}) {
+  const { W, H, h, a, sub } = st, N = W * H, { cx, cy, hx, hy, cap, tetto, Q } = ca;
+  const dh = (st.dh ??= new Float64Array(N)), dw = (st.dw ??= new Float64Array(N)), dq = (st.dq ??= new Float64Array(N));
+  const ihw = 1 / C.hMargine, h0 = C.hZero;
   // lo scambio attraverso ogni lato, tra la cella k e la sua vicina v (velocità > 0: da k a v); prima i lati est, poi
   // i lati sud. m e p: le celle oltre k e oltre v. c: la velocità del mantello (porta la crosta oceanica); ch: quella
   // della crosta continentale
-  const geo = (st.geo ??= vicine(W, H));
-  for (let verso = 0; verso < 2; verso++) { const vv = geo.v[verso], mm = geo.m[verso], pp = geo.p[verso], cm = verso ? cy : cx, cc = verso ? hy : hx, fine = verso ? N - W : N;
+  const geo = (st.geo ??= vicine(W, H)), FF = (st.FF ??= new Float64Array(2 * N)), entra = (st.entra ??= new Float64Array(N)), esce = (st.esce ??= new Float64Array(N)), passa = (st.passa ??= new Float64Array(N).fill(1));
+  for (let verso = 0; verso < 2; verso++) { const vv = geo.v[verso], mm = geo.m[verso], pp = geo.p[verso], cm = verso ? cy : cx, cc = verso ? hy : hx, fine = verso ? N - W : N, o = verso * N;
     for (let k = 0; k < fine; k++) { const v = vv[k], c = cm[k], ch = cc[k], hk = h[k], hv = h[v];
       // la crosta oceanica (la parte di cella non coperta dal continente) va col mantello, con la sua età
       if (c !== 0) { const d = c > 0 ? k : v; let wd = 1 - (c > 0 ? hk : hv) * ihw; if (wd > 0) { wd *= c; dw[k] -= wd; dw[v] += wd; wd *= a[d]; dq[k] -= wd; dq[v] += wd; } }
-      if (hk <= 0 && hv <= 0) continue;
-      let F = 0; const hd = ch > 0 ? hk : hv;
+      const hd = ch > 0 ? hk : hv; let F = 0;
       if (ch !== 0 && hd > 0) {
-        // la crosta continentale: quanta ne passa (lo schema tiene netti i bordi dei continenti invece di sfumarli)…
-        const d = ch > 0 ? k : v, n = ch > 0 ? v : k, hn = ch > 0 ? hv : hk, D = hn - hd; let f = hd;
-        if (D !== 0) { const r = (hd - h[ch > 0 ? mm[k] : pp[k]]) / D; if (r > 0) f += 0.5 * (1 - (ch > 0 ? ch : -ch)) * (r < 0.5 ? 2 * r : r < 1 ? 1 : r < 2 ? r : 2) * D; }
+        // la crosta continentale: quanta ne passerebbe (guardando anche la cella a monte, per non sfumare i bordi dei continenti)
+        const d = ch > 0 ? k : v, n = ch > 0 ? v : k, D = (ch > 0 ? hv : hk) - hd; let f = hd;
+        if (D !== 0) { const r = (hd - h[ch > 0 ? mm[k] : pp[k]]) / D; if (r > 0) f += 0.5 * (1 - (ch > 0 ? ch : -ch)) * ((2 * r) / (1 + r)) * D; }
         const t = hd * tetto[d]; if (f > t) f = t;
-        // …ma chi la riceve, se è stretto (il flusso gli converge addosso, o chi ha davanti è fermo) ed è già
-        // spesso quanto la spinta di lì riesce a reggere, non ne prende più: l'ingorgo, che risale all'indietro
-        const J = stretta[n] > fermo[n] ? stretta[n] : fermo[n];
-        if (J > 0) { const g = (cap[n] - hn) * iD, b = g <= 0 ? J : g < 1 ? J * (1 - g) : 0; if (b > 0) { f *= 1 - b; if (b > fermo2[d]) fermo2[d] = b; } }
-        F = ch * f;
+        F = ch * f; f = F > 0 ? F : -F; entra[n] += f; esce[d] += f * passa[n];
       }
+      FF[o + k] = F;
+    } }
+  // …ma la crosta non si lascia comprimere oltre lo spessore che la spinta di lì riesce a reggere: in una cella
+  // ne entra solo quanta ne esce (per quel che chi le sta davanti lasciava passare un attimo fa), più lo spazio
+  // che resta. È l'ingorgo, che risale all'indietro: il continente si ferma e si allarga invece di accartocciarsi
+  for (let giro = 0; giro < GIRI; giro++) {
+    if (giro) { esce.fill(0); for (let verso = 0; verso < 2; verso++) { const vv = geo.v[verso], fine = verso ? N - W : N, o = verso * N; for (let k = 0; k < fine; k++) { const F = FF[o + k]; if (F > 0) esce[k] += F * passa[vv[k]]; else if (F < 0) esce[vv[k]] -= F * passa[k]; } } }
+    for (let k = 0; k < N; k++) { const e = entra[k]; if (e > 0) { const spazio = cap[k] - h[k], q = ((spazio > 0 ? spazio : 0) + esce[k]) / e; passa[k] = q < 1 ? q : 1; } else passa[k] = 1; }
+  }
+  entra.fill(0); esce.fill(0);
+  for (let verso = 0; verso < 2; verso++) { const vv = geo.v[verso], fine = verso ? N - W : N, o = verso * N;
+    for (let k = 0; k < fine; k++) { const v = vv[k], hk = h[k], hv = h[v]; if (hk <= 0 && hv <= 0) continue;
+      let F = FF[o + k]; if (F !== 0) F *= passa[F > 0 ? v : k];
       // l'erosione: ciò che sta sopra il livello di riferimento si consuma e si deposita accanto, più in basso…
       const xk = hk - h0, xv = hv - h0;
       if (xk > 0 || xv > 0) { F += kappa * ((xk > 0 ? xk : 0) - (xv > 0 ? xv : 0));
@@ -220,21 +232,23 @@ export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0 } = {}) {
         const yk = hk - cap[k], yv = hv - cap[v]; if (yk > 0 || yv > 0) F += CEDE * ((yk > 0 ? yk : 0) - (yv > 0 ? yv : 0)); }
       if (F !== 0) { dh[k] -= F; dh[v] += F; }
     } }
-  st.fermo = fermo2; st.fermo2 = fermo; fermo.fill(0);
   // il bilancio di ogni cella. Se dopo il trasporto la crosta oceanica non basta a coprire il fondo, lo spazio
   // si riempie di crosta nuova, di età zero (una dorsale, o il mare che si apre dietro un continente che si
   // spacca); se è troppa, la parte in più affonda nel mantello (una fossa).
-  let somma = 0, totale = 0;
+  const sete = (st.sete ??= new Float64Array(N)), deposito = st.sommaSete > 0 ? (st.fango ?? 0) / st.sommaSete : 0; let somma = 0, totale = 0, fango = deposito > 0 ? 0 : st.fango ?? 0, sete2 = 0;
   for (let k = 0; k < N; k++) {
     let w0 = 1 - h[k] * ihw; if (w0 < 0) w0 = 0;
     let q = w0 * a[k] + dq[k]; if (q < 0) q = 0; const w1 = w0 + dw[k], s0 = sub[k];
-    let hn = h[k] + dh[k] + apporto * s0 * s0; if (hn < 0) hn = 0; h[k] = hn; totale += hn;
+    let hn = h[k] + dh[k] + apporto * s0 * s0 + deposito * sete[k]; if (hn < 0) hn = 0;
+    // i FIUMI: ciò che sta sopra il livello di riferimento è terra emersa, e l'acqua la porta via…
+    if (hn > h0) { const e = fiumi * (hn - h0); hn -= e; fango += e; sete[k] = 0; } else { const s = Q[k] * (h0 - hn); sete[k] = s; sete2 += s; } // …fino alle coste, dove si deposita
+    h[k] = hn; totale += hn;
     let wt = 1 - hn * ihw; if (wt < 0) wt = 0;
     const s = w1 > wt ? w1 - wt : 0, den = w1 > wt ? w1 : wt; sub[k] = s; somma += s * s;
     a[k] = den > 1e-6 ? q / den + dtMa : 0;
     dh[k] = 0; dw[k] = 0; dq[k] = 0;
   }
-  st.sommaSub = somma; st.totale = totale; // (la crosta nuova nasce sopra le fosse più attive: peso s²)
+  st.sommaSub = somma; st.totale = totale; st.fango = fango; st.sommaSete = sete2; // (la crosta nuova nasce sopra le fosse più attive: peso s²)
   return st;
 }
 
@@ -263,8 +277,8 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 // dall'acqua (senza, non si rompe in placche); seme: il caso iniziale; passi: quanti passi sulla griglia finale.
 // IL TEMPO. La velocità è quella vera, e in un passo la crosta non può fare più di un terzo di cella: quindi il
 // passato lontano si simula a grana grossa (griglie larghe 64, 128… celle: tanto il rimescolamento ne cancella i
-// dettagli) e solo gli ultimi «passi» passi su ogni griglia più fine, fino a W×H (sulla Terra: gli ultimi 370
-// milioni di anni a 128, gli ultimi 125 a 256). Se la storia chiede più di PASSI_GROSSI passi sulla griglia più
+// dettagli) e solo gli ultimi «passi» passi su ogni griglia più fine, fino a W×H (sulla Terra, con 160 passi: fino
+// a 560 milioni di anni fa a 64, poi a 128, e gli ultimi 190 a 256: vedi storia.livelli). Se la storia chiede più di PASSI_GROSSI passi sulla griglia più
 // grossa (pianeti molto caldi o molto vecchi), il tratto più antico si salta (storia.saltati) e si parte con la
 // crosta separata fino a quel momento, stesa in un velo uniforme.
 // RESTITUISCE { W, H, alt, cont, spinta, etaCrosta, celle } e in più { spessore, fosse, regime, bilancio, storia }:
@@ -276,8 +290,9 @@ export const profonditaOceano = (etaMa) => Math.min(C.abisso, C.dorsale + C.raff
 //   spessore   Float32Array, metri di crosta continentale (anche i veli sottili fuori dai continenti)
 //   fosse      Float32Array 0…1, dove la crosta oceanica sta affondando (lì alt è più fonda, fino a 2500 m)
 //   regime     'a placche' | 'coperchio unico' | 'fermo'
-//   bilancio   { prodotta, presente }: metri di spessore medio di crosta continentale, nata e rimasta (devono coincidere)
-//   storia     { simulati, saltati (anni), passi, velocita (m/anno) }
+//   bilancio   { prodotta, presente, inViaggio }: metri di spessore medio di crosta continentale: quanta ne è nata,
+//              quanta ce n'è, quanta è sedimento portato dai fiumi nell'ultimo passo (prodotta = presente + inViaggio)
+//   storia     { simulati, saltati (anni), passi, velocita (m/anno), livelli: [{ W, passi, anni }] }
 // SE LA CROSTA NON SI ROMPE (q ≤ 0,05 o niente acqua; «placche» true/false forza la scelta, per esempio per
 // seguire interno() di geologia.js, che guarda anche la massa): un COPERCHIO UNICO. Nessuna deriva: cont = 0,
 // spinta = 0, spessore = 0, fosse = 0, etaCrosta = l'età del pianeta ovunque; alt = solo i rigonfiamenti sopra i
@@ -294,7 +309,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   if (!aPlacche) {
     etaCrosta.fill(eta / 1e6);
     if (vivo) { const u = man.su(W, H), A = 1500 * Math.min(1, q / C.qTerra); let mx = 1e-9; for (const v of u) mx = Math.max(mx, Math.abs(v)); for (let k = 0; k < N; k++) alt[k] = (A * u[k]) / mx; }
-    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0 } };
+    return { W, H, alt, cont, spinta, etaCrosta, celle: vivo ? man.celle() : 0, spessore, fosse, regime: vivo ? 'coperchio unico' : 'fermo', bilancio: { prodotta: 0, presente: 0, inViaggio: 0 }, storia: { simulati: 0, saltati: eta, passi: 0, velocita: 0, livelli: [] } };
   }
   // LEGGE DI SCALA (strato limite della convezione): la velocità delle placche cresce come il quadrato del calore che esce
   const V = C.vTerra * (q / C.qTerra) ** 2, tau = Dm / V; // tau: il tempo di un giro di una cella (sulla Terra ~70 milioni di anni): l'orologio del mantello
@@ -307,7 +322,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   let t = saltati, prodotta = crostaAttesa(t) * C.hMisura, debito = 0, st = null, ca = null, nPassi = 0, c0 = C_PASSO;
   for (let l = 0; l < liv.length; l++) {
     const { W: w, H: hh, dt, n } = liv[l], Nl = w * hh;
-    st = st ? { W: w, H: hh, h: raffina(st.h, w / 2, hh / 2), a: raffina(st.a, w / 2, hh / 2), sub: raffina(st.sub, w / 2, hh / 2), sommaSub: st.sommaSub * 4 } : { W: w, H: hh, h: new Float64Array(Nl).fill(prodotta), a: new Float64Array(Nl), sub: new Float64Array(Nl), sommaSub: 0 };
+    st = st ? { W: w, H: hh, h: raffina(st.h, w / 2, hh / 2), a: raffina(st.a, w / 2, hh / 2), sub: raffina(st.sub, w / 2, hh / 2), sommaSub: st.sommaSub * 4, fango: (st.fango ?? 0) * 4 } : { W: w, H: hh, h: new Float64Array(Nl).fill(prodotta), a: new Float64Array(Nl), sub: new Float64Array(Nl), sommaSub: 0 };
     ca = null; if (!n && l < liv.length - 1) continue;
     c0 = (dt * V * w) / (2 * Math.PI * raggioM);
     const R = Math.max(2, Math.round(w / (4 * onde))), ogni = Math.max(1, Math.min(4, Math.round((0.25 * tau) / dt))), dtM = (ogni * dt) / tau, kappa = Math.min(0.04, (C.erosione * dt) / ((2 * Math.PI * raggioM) / w) ** 2);
@@ -325,7 +340,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       // la crosta nuova di questo passo (se non c'è ancora nessuna fossa dove farla nascere, resta in debito)
       const nuova = (crostaAttesa(t + dt) - crostaAttesa(t)) * C.hMisura * Nl + debito; let apporto = 0;
       if (st.sommaSub > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; debito = 0; } else debito = nuova;
-      passoCrosta(st, ca, { dtMa: dt / 1e6, kappa, apporto }); t += dt; nPassi++;
+      passoCrosta(st, ca, { dtMa: dt / 1e6, kappa, apporto, fiumi: 1 - Math.exp(-dt / C.fiumi) }); t += dt; nPassi++;
     }
     debito *= 4; // (alla griglia successiva le celle sono quattro volte tante)
     if (!ca) aggiorna(false);
@@ -342,5 +357,5 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     // ISOSTASIA: il fondo (oceano secondo l'età, o la radice fredda del continente) più quanto sporge la crosta leggera
     alt[k] = -(wo * profonditaOceano(a[k]) + (1 - wo) * C.radice) + C.galleggia * hk - C.fossa * fosse[k];
   }
-  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V } };
+  return { W, H, alt, cont, spinta, etaCrosta, celle: man.celle(), spessore, fosse, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, anni: L.n * L.dt })) } };
 }

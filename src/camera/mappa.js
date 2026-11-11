@@ -12,6 +12,7 @@
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA } from './nebbia.js';
+import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
 import { simulaMondo } from './mondo.js';
 
@@ -46,6 +47,10 @@ export function camSuRegione(a, W, H) {
 export function zoomMappa(cam, fx, fy, k, W, H) {
   const ax = cam.cx + (fx - W / 2) / cam.z, ay = cam.cy + (fy - H / 2) / cam.z;
   cam.z *= k; cam.cx = ax - (fx - W / 2) / cam.z; cam.cy = ay - (fy - H / 2) / cam.z;
+  const m = minimo(W, H);
+  // LA ROCCIA (livello 5): in fondo alla superficie, avvicinandosi ancora, si guarda di che cosa è fatto quel punto
+  if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; return null; }
+  if (cam.livello === 5) { if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; return null; } cam.z = Math.min(cam.z, 12 * m); return null; }
   return passaggi(cam, W, H);
 }
 function passaggi(cam, W, H) {
@@ -110,6 +115,7 @@ function passaggi(cam, W, H) {
 // ---------- che cosa c'è sotto il cursore
 export function colpisciMappa(cam, sx, sy, W, H) {
   const x = cam.cx + (sx - W / 2) / cam.z, y = cam.cy + (sy - H / 2) / cam.z, px = 9 / cam.z;
+  if (cam.livello === 5) return null;
   if (cam.livello === 4) { // sulla superficie: la quota e la temperatura del punto
     const S = superficieDi(cam.via), L = livelloTessere(cam.z), n = 4 ** L, u = ((x % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, y * 2));
     const t = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (!t) return null;
@@ -160,6 +166,7 @@ export function percorso(cam) {
   if (cam.livello >= 2) out.push(`stella ${v.stella + 1}`);
   if (cam.livello >= 3) out.push(`pianeta ${v.pianeta + 1}`);
   if (cam.livello >= 4) out.push('la superficie');
+  if (cam.livello >= 5) out.push(rocciaDi(cam).nome);
   return out;
 }
 
@@ -216,6 +223,8 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
     }
   } else if (cam.livello === 2) {
     disegnaSistema(ctx, sistema(v.cosmo, v.galassia, v.stella), X, Y, z, dpr, v);
+  } else if (cam.livello === 5) {
+    const r = rocciaDi(cam); ctx.imageSmoothingEnabled = false; ctx.drawImage(r.cv, X(0), Y(0), z, z); ctx.imageSmoothingEnabled = true;
   } else if (cam.livello === 4) {
     disegnaSuperficie(ctx, W, H, cam, dpr);
   } else {
@@ -223,7 +232,7 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
   }
   // il metro: le distanze vere
   {
-    const mpp = metriPerUnita(cam.livello, v) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
+    const mpp = (cam.livello === 5 ? rocciaDi(cam).larghezzaM : metriPerUnita(cam.livello, v)) / z, voluto = 140 * dpr * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e;
     const L = passo / mpp, x0 = 18 * dpr, y0 = H - 22 * dpr;
     ctx.strokeStyle = 'rgba(235,230,215,0.85)'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x0, y0 - 5 * dpr); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0); ctx.lineTo(x0 + L, y0 - 5 * dpr); ctx.stroke();
     ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(235,230,215,0.9)'; ctx.fillText(fmtLunghezza(passo), x0 + L + 8 * dpr, y0); if (cam.livello === 3) ctx.fillText(`il tempo scorre ${ACCELERA} volte più in fretta`, x0, y0 - 20 * dpr);
@@ -382,4 +391,28 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
       ctx.drawImage(t.cv, px0, py0, z / n + 0.5, (0.5 * z) / n + 0.5);
     }
   }
+}
+
+// ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto
+// (crosta continentale o vulcanica, fiume o lago, ghiaccio), e la sua tessitura nasce da come si è formata
+const rocceFatte = new Map();
+export function rocciaDi(cam) {
+  const S = superficieDi(cam.via), u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)), k = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}`;
+  if (rocceFatte.has(k)) return rocceFatte.get(k);
+  // il punto, letto alla risoluzione più fine già calcolata (o sulla mappa intera)
+  let t = S.se; for (let L = 7; L >= 1; L--) { const n = 4 ** L, q = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (q) { t = q.sf; break; } }
+  const [u0, v0, u1, v1] = t.rett || [0, 0, 1, 1], i = Math.min(t.W - 1, Math.floor(((u - u0) / (u1 - u0)) * t.W)), j = Math.min(t.H - 1, Math.floor(((v - v0) / (v1 - v0)) * t.H)), c = j * t.W + i;
+  const cl = S.cl, ck = Math.min(cl.H - 1, Math.floor(v * cl.H)) * cl.W + Math.min(cl.W - 1, Math.floor(u * cl.W)), T = cl.media[ck], seme = 1 + Math.floor(u * 1e6) + Math.floor(v * 1e6) * 7;
+  const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
+  const conAnisotropia = (lista, base) => (lista && lista.length ? lista.map((x) => ({ nome: x.nome, frazione: x.frazione, colore: x.colore, anisotropia: 1.2 })) : base);
+  let r, nome, larghezzaM, frase;
+  if (cl.neve > 0 && cl.freddo[ck] > 0.6) { r = fioccoDiNeve({ T: Math.max(238, Math.min(271, T)), umidita: 0.86 + 0.14 * ((seme % 97) / 97), seme }); nome = `un cristallo di neve (${r.forma})`; larghezzaM = 0.004; frase = 'cresciuto dal vapore: la forma a sei viene dal reticolo del ghiaccio, i rami dall\'umidità'; }
+  else if (bagnato) { const e = Math.max(0.05, Math.min(1, Math.log10(1 + (t.flusso[c] || 0)) / 4)); r = sedimento({ energia: e, seme }); nome = e > 0.6 ? 'ghiaia e sabbia grossa' : e > 0.3 ? 'sabbia' : 'limo'; larghezzaM = 0.02 + 0.3 * e; frase = 'granelli portati e depositati dall\'acqua: più corre, più sono grossi e mescolati'; }
+  else if (t.cont && t.cont[c]) { r = cristallizza({ raffreddamento: 0.003, minerali: conAnisotropia(mat.continente, GRANITO), seme }); nome = 'roccia dei continenti, a cristalli grossi'; larghezzaM = 0.04; frase = 'raffreddata lentamente in profondità: pochi cristalli, cresciuti a lungo'; }
+  else { r = cristallizza({ raffreddamento: 0.15, minerali: conAnisotropia(mat.basalto, BASALTO), seme }); nome = 'basalto, a cristalli minuti'; larghezzaM = 0.004; frase = 'lava raffreddata in fretta in superficie: tanti cristalli piccoli'; }
+  const N = r.N || Math.round(Math.sqrt(immagineRoccia(r).length / 4)), px = immagineRoccia(r);
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
+  cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
+  const out = { cv, nome, larghezzaM, frase }; rocceFatte.set(k, out); if (rocceFatte.size > 12) rocceFatte.delete(rocceFatte.keys().next().value);
+  return out;
 }
