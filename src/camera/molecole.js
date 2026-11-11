@@ -53,7 +53,8 @@
 //   · rete: minimo dell'energia di Gibbs con gli atomi conservati; autocatalisi stechiometrica; RAF.
 // DATI (misurati; la fonte è accanto a ogni tabella, nel file dove sta):
 //   · atomi: PubChem (IUPAC, NIST), Cordero 2008, Pyykkö 2009, CODATA; parametri di UFF e QEq (Rappé e altri 1991-92);
-//   · ΔHf di 89 molecole di riferimento (NIST WebBook) → 75 termini di legame; ΔG di idratazione di 70 molecole
+//   · ΔHf di 89 molecole di riferimento (18 da ATcT 1.202, Argonne; 71 dalla letteratura primaria raccolta da Pedley 1986-94
+//     e CODATA 1989, trovate attraverso l'indice del NIST WebBook e non ancora rilette lì) → 75 termini di legame; ΔG di idratazione di 70 molecole
 //     (FreeSolv, costanti di Henry) → i contributi dei siti; pKa di base per classe di sito (CRC; Perrin 1981) e σ
 //     induttive (Charton 1981); numeri d'onda caratteristici dei piegamenti; raggi ionici (Shannon 1976);
 //   · barriere intrinseche di Marcus per famiglia, ciascuna da una velocità misurata (INTRINSECHE in molecole_reazioni.js);

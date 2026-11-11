@@ -17,7 +17,7 @@
 //     di ossidazione osservati: PubChem Periodic Table (NIH/NLM, dominio pubblico; a sua volta da IUPAC e NIST);
 //   · raggi covalenti: Cordero e altri 2008, Dalton Trans. 2832 (per Mn, Fe, Co il valore ad alto spin; per il carbonio
 //     0,76 sp³, 0,73 sp², 0,69 sp);
-//   · entalpia di formazione dell'atomo gassoso a 298 K (kJ/mol): CODATA 1989 e NIST-JANAF;
+//   · entalpia di formazione dell'atomo gassoso a 298 K (kJ/mol): CODATA 1989 (Cox, Wagman e Medvedev);
 //   · per il campo di forze (molecole_forze.js): distanza e profondità di van der Waals, carica efficace, barriera di
 //     torsione, elettronegatività e durezza per l'equilibrio delle cariche: Rappé, Casewit, Colwell, Goddard e Skiff 1992,
 //     J. Am. Chem. Soc. 114, 10024 (UFF, tabella 1) e Rappé e Goddard 1991, J. Phys. Chem. 95, 3358 (QEq). Sono numeri

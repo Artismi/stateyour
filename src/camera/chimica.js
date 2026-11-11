@@ -77,7 +77,7 @@ export const tipoLegame = (a, b) => (dChi(a, b) < 0.4 ? 'covalente' : dChi(a, b)
 
 // ---------- 3. LE MOLECOLE E I MINERALI (dati misurati)
 // entalpia di formazione ΔH (kJ/mol) ed entropia S (J/mol·K) a 298 K e 1 bar, dalle tabelle
-// termochimiche (NIST-JANAF, CODATA; per i minerali Robie e Hemingway 1995), arrotondate: tra una
+// termochimiche (CODATA 1989 e Robie e Hemingway 1995: vedi «STATO DELLE FONTI» più sotto), arrotondate: tra una
 // tabella e l'altra cambiano di qualche kJ. ΔH dice quanto calore si libera a formare la specie dagli
 // elementi; S quanto «disordine» porta con sé: un gas ne ha molto, un cristallo poco.
 // Il ghiaccio è il liquido meno il calore di fusione (6,01 kJ/mol a 273 K).
@@ -110,7 +110,9 @@ const SPECIE = [
 // di riferimento» protetti (Standard Reference Data Act): i numeri restano quelli, ma la fonte da citare è la primaria.
 // Per H2O, CO, CO2, CH4, NH3, H2S, SO2, HCl, O2, H2, N2, S2 e per tutti i minerali: Robie e Hemingway 1995 (che riporta i
 // valori CODATA di Cox, Wagman e Medvedev 1989), coincidenti con quelli di qui entro l'arrotondamento; per HCN, H2CO,
-// CH3OH, NO, C2H2, C2H6 la fonte primaria (Gurvich e altri 1989-94, o le Active Thermochemical Tables) NON è stata riletta.
+// CH3OH, NO, C2H2, C2H6 il confronto è con le Active Thermochemical Tables (ATcT 1.202, Argonne, lette l'11-2026): tornano
+// entro 1 kJ/mol tranne HCN, che qui ha 135,1 e in ATcT 129,3 kJ/mol: NON corretto qui, perché sposterebbe (di poco) le
+// tracce di HCN nell'aria dei pianeti già calcolati; molecole_energia.js usa già il valore di ATcT.
 const SPECIE_METALLI = [
   ['Cu2O', 'cuprite', -170.6, 92.4], ['CuO', 'tenorite', -156.1, 42.6], ['SnO2', 'cassiterite', -577.6, 49.0], ['PbO', 'litargirio', -219.0, 66.5],
   ['ZnO', 'zincite', -350.5, 43.2], ['As2O3', 'arsenolite', -657.0, 107.4], ['TiO2', 'rutilo', -944.0, 50.6], ['NiO', 'bunsenite', -239.3, 38.0], ['HgO', 'montroydite', -90.8, 70.3],

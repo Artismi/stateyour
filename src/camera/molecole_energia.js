@@ -29,18 +29,25 @@ const KB = 1.380649e-23, HP = 6.62607015e-34, NA = 6.02214076e23, UMA = 1.660539
 const LN10 = Math.LN10;
 
 // ---------- DATI: le molecole di riferimento (ΔHf gas, 298 K, kJ/mol)
-// Fonte: NIST Chemistry WebBook (SRD 69), valori di rassegna (Pedley 1994, CODATA, NIST-JANAF, Chase 1998); letti dal
-// sito l'11-11-2026. Dove il WebBook elenca più misure si è preso il valore di rassegna.
+// FONTI (riviste l'11-2026: il NIST WebBook e le tabelle NIST-JANAF sono «dati standard di riferimento» protetti, e non
+// sono la fonte da citare). Diciotto molecole piccole (H2O, CH4, CO2, CO, NH3, HCN, H2CO, CH3OH, etano, propano, etilene,
+// acetilene, benzene, etanolo, acido formico, acido acetico, urea, etilammina) hanno ora il valore delle Active
+// Thermochemical Tables (Ruscic e Bross, ATcT versione 1.202 della rete termochimica, Argonne National Laboratory,
+// atct.anl.gov, lette l'11-11-2026): rispetto a prima cambiano di meno di 1 kJ/mol tranne HCN (135,1 → 129,3),
+// etilammina (−47,5 → −49,8) e acetilene (226,7 → 228,3). Le altre settantuno sono misure della letteratura primaria,
+// raccolte da Pedley, Naylor e Kirby 1986 (Thermochemical Data of Organic Compounds, 2ª ed.), Pedley 1994, Cox, Wagman e
+// Medvedev 1989 (CODATA) e Gurvich e altri 1989-94: sono state trovate consultando l'indice del WebBook e NON rilette
+// sulle fonti primarie né su ATcT (resta da fare: è detto in testa a molecole.js).
 export const RIFERIMENTI = [
-  ['O', -241.83], ['C', -74.6], ['CC', -84.0], ['CCC', -104.7], ['CCCC', -125.6], ['CC(C)C', -134.2], ['CC(C)(C)C', -167.9], ['CCCCCC', -167.1],
-  ['C1CCCCC1', -123.4], ['C1CC1', 53.3], ['C1CCC1', 28.4], ['C1CCCC1', -76.4], ['C=C', 52.47], ['CC=C', 20.41], ['CC=CC', -10.8], ['CC(C)=C', -17.9], ['C=CC=C', 108.8],
-  ['C#C', 226.73], ['CC#C', 185.4], ['c1ccccc1', 82.9], ['Cc1ccccc1', 50.1],
-  ['CO', -201.0], ['CCO', -234.8], ['CC(C)O', -272.8], ['CCCO', -256.0], ['COC', -184.1], ['COCOC', -348.2], ['C1CCOC1', -184.2], ['C1CO1', -52.64], ['OCCO', -389.0],
-  ['C=O', -108.6], ['CC=O', -166.2], ['CC(C)=O', -217.1], ['CCC=O', -188.7], ['O=CC=O', -212.0],
-  ['OC=O', -378.6], ['CC(=O)O', -433.0], ['COC(C)=O', -410.0], ['O=C=O', -393.51], ['[C-]#[O+]', -110.53],
-  ['N', -45.94], ['CN', -22.5], ['CNC', -18.8], ['CN(C)C', -23.7], ['CCN', -47.5],
-  ['C#N', 135.14], ['CC#N', 74.04], ['N#CC#N', 309.07], ['C=N', 69.0],
-  ['NC=O', -186.0], ['CC(N)=O', -238.33], ['CNC(C)=O', -248.0], ['NC(N)=O', -235.5], ['C=CC#N', 180.6], ['C=CC=O', -77.6],
+  ['O', -241.81], ['C', -74.51], ['CC', -84.01], ['CCC', -104.99], ['CCCC', -125.6], ['CC(C)C', -134.2], ['CC(C)(C)C', -167.9], ['CCCCCC', -167.1],
+  ['C1CCCCC1', -123.4], ['C1CC1', 53.3], ['C1CCC1', 28.4], ['C1CCCC1', -76.4], ['C=C', 52.4], ['CC=C', 20.41], ['CC=CC', -10.8], ['CC(C)=C', -17.9], ['C=CC=C', 108.8],
+  ['C#C', 228.34], ['CC#C', 185.4], ['c1ccccc1', 83.19], ['Cc1ccccc1', 50.1],
+  ['CO', -200.84], ['CCO', -234.89], ['CC(C)O', -272.8], ['CCCO', -256.0], ['COC', -184.1], ['COCOC', -348.2], ['C1CCOC1', -184.2], ['C1CO1', -52.64], ['OCCO', -389.0],
+  ['C=O', -109.22], ['CC=O', -166.2], ['CC(C)=O', -217.1], ['CCC=O', -188.7], ['O=CC=O', -212.0],
+  ['OC=O', -378.27], ['CC(=O)O', -432.59], ['COC(C)=O', -410.0], ['O=C=O', -393.48], ['[C-]#[O+]', -110.52],
+  ['N', -45.56], ['CN', -22.5], ['CNC', -18.8], ['CN(C)C', -23.7], ['CCN', -49.79],
+  ['C#N', 129.3], ['CC#N', 74.04], ['N#CC#N', 309.07], ['C=N', 69.0],
+  ['NC=O', -186.0], ['CC(N)=O', -238.33], ['CNC(C)=O', -248.0], ['NC(N)=O', -234.56], ['C=CC#N', 180.6], ['C=CC=O', -77.6],
   ['S', -20.6], ['CS', -22.9], ['CSC', -37.5], ['CSSC', -24.1], ['O=S=O', -296.81], ['O=S(=O)=O', -395.77], ['CS(C)=O', -150.5], ['O=C=S', -138.41], ['S=C=S', 116.94], ['S=S', 128.6],
   ['Cl', -92.31], ['CCl', -81.9], ['ClC(Cl)(Cl)Cl', -95.7], ['F', -273.3], ['CF', -234.3],
   ['OO', -136.11], ['NN', 95.35], ['[N]=O', 91.3], ['[N-]=[N+]=O', 82.05], ['O[N+](=O)[O-]', -134.31], ['C[N+](=O)[O-]', -74.3], ['[O-][O+]=O', 142.67], ['ON=O', -76.73],
