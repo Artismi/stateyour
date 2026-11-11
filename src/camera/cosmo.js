@@ -23,7 +23,7 @@ import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js'
 import { COSTANTI, etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
 import { interno } from './geologia.js';
 import { formaPianeti } from './disco.js';
-import { lune } from './lune.js';
+import { lune, tempoBlocco } from './lune.js';
 import { atmosfera, prebiotica, minerali } from './chimica.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
@@ -229,7 +229,10 @@ export const sistema = memo((n, gid, sid) => {
     // è pesante; allora il giorno dura quanto l'anno (Keplero)
     // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
     const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
-    const eta = S.eta, bloccato = aM < 0.4 * UA * Math.cbrt(Mst / 1.989e30) * Math.pow(eta / 4.5e9, 1 / 6) && p.tipo !== 'gassoso';
+    // IL BLOCCO MAREALE ha una legge sola, quella di lune.js (la stessa delle lune attorno ai pianeti): il tempo in cui
+    // la marea della stella frena la rotazione, dalla massa, dal raggio e dalla rigidità del pianeta; è bloccato se
+    // quel tempo è più corto della sua età. (Un gigante di gas non è un corpo rigido: non si blocca.)
+    const eta = S.eta, bloccato = p.tipo !== 'gassoso' && tempoBlocco({ massaKg: Mst }, { massaKg, raggioM: p.raggioM, aM, composizione: p.composizione }) < eta * ANNO;
     const giorno = bloccato ? anno : (p.tipo === 'gassoso' ? tra(9, 16) : tra(10, 40)) * 3600;
     const omega = (2 * Math.PI) / giorno;
     Object.assign(p, { aM, Lw, Mstella: Mst, anno, giorno, bloccato, obliquita: bloccato ? 0 : Math.min(85, Math.abs((c() + c() + c() - 1.5) * 30) + (c() < 0.08 ? tra(30, 90) : 0)) });
@@ -424,18 +427,25 @@ export function cellaDi(a, rami = null) {
   const L = padre.larghezza / 10, x0 = i * L, y0 = j * L, k = 10, dentro = (p) => p[0] >= x0 && p[0] <= x0 + L && p[1] >= y0 && p[1] <= y0 + L;
   const ts = padre.sezione ? Math.max(0, padre.sezione.fine - padre.sezione.durata) : 0, te = ts + padre.tempo / k;
   const visibili = new Set(tracce.map((t) => t.evento));
+  // chi decade dentro la bolla mentre dura: la bolla ne rifà da sé il decadimento, con tutte le figlie e le nipoti
+  const decadeQui = new Set(tracce.filter((t) => t.evento && t.fine === 'decade' && dentro(t.punti.at(-1)) && t.punti.at(-1)[3] >= ts && t.punti.at(-1)[3] <= te).map((t) => t.evento));
+  // l'antenata più vicina che lascia traccia (l'indirizzo di una figlia è quello della madre più un punto e un numero)
+  const antenata = (ev) => { for (let e = String(ev), n = e.lastIndexOf('.'); n > 0; n = e.lastIndexOf('.')) { e = e.slice(0, n); if (visibili.has(e)) return e; } return null; };
   const sorgenti = [];
   for (const tr of tracce) {
     if (tr.sagoma || !tr.evento) continue;
     const P = tr.punti, src = tr.madre == null ? padre.sorgenti[tr.sorgente] : null;
     let tp = src?.tp0 ?? 0, strada = src?.percorso0 ?? 0;
-    const nome = tr.specie.nome, entra = (q, d, vx, vy) => sorgenti.push({ pos: [Math.min(999.99, Math.max(0.01, (q[0] - x0) * k)), Math.min(999.99, Math.max(0.01, (q[1] - y0) * k))], dir: Math.atan2(vy, vx), v: Math.hypot(vx, vy), t0: (q[3] - ts) * k, nascita: (P[0][3] - ts) * k, specie: nome, ev: tr.evento, tp0: d.tp * k, percorso0: d.strada * k, generazione: tr.generazione, origine: src?.origine });
-    // nata qui dentro (nella bolla) da una madre che non lascia traccia (la luce, le neutre): comincia qui
-    if (dentro(P[0]) && P[0][3] >= ts && P[0][3] <= te && (tr.madre == null || !visibili.has(tr.madre.evento)) && P.length > 1) { const dt = P[1][3] - P[0][3] || 1e-9; entra(P[0], { tp, strada }, (P[1][0] - P[0][0]) / dt, (P[1][1] - P[0][1]) / dt); }
+    const nome = tr.specie.nome, entra = (q, d, vx, vy) => sorgenti.push({ pos: [Math.min(999.99, Math.max(0.01, (q[0] - x0) * k)), Math.min(999.99, Math.max(0.01, (q[1] - y0) * k))], dir: Math.atan2(vy, vx), v: Math.hypot(vx, vy), t0: (q[3] - ts) * k, nascita: (P[0][3] - ts) * k, specie: nome, ev: tr.evento, tp0: d.tp * k, percorso0: d.strada * k, generazione: tr.generazione, origine: src?.origine, gamma: tr.gamma, impulso: tr.impulso });
+    // nata qui dentro (nella bolla) da una madre che non lascia traccia (la luce, le neutre): comincia qui. Ma se la
+    // sua antenata visibile decade anche lei dentro la bolla, la bolla rifà tutta la cascata (la luce va dritta e non
+    // esce): questa figlia nascerà da sola, e metterla qui la farebbe esistere due volte
+    if (dentro(P[0]) && P[0][3] >= ts && P[0][3] <= te && (tr.madre == null || (!visibili.has(tr.madre.evento) && !decadeQui.has(antenata(tr.evento)))) && P.length > 1) { const dt = P[1][3] - P[0][3] || 1e-9; entra(P[0], { tp, strada }, (P[1][0] - P[0][0]) / dt, (P[1][1] - P[0][1]) / dt); }
     for (let n = 1; n < P.length; n++) {
       const a0 = P[n - 1], b = P[n], dt = b[3] - a0[3], ds = Math.hypot(b[0] - a0[0], b[1] - a0[1]);
       if (!(dt > 0)) continue;
-      const v = Math.min(0.999 * padre.c, ds / dt), dtp = padre.relativita ? dt * Math.sqrt(1 - (v / padre.c) ** 2) : dt;
+      // (il tempo proprio: con il γ della particella, che la traccia porta con sé; la velocità della corda non basta vicino a c)
+      const v = Math.min(0.999 * padre.c, ds / dt), dtp = padre.relativita ? (tr.gamma ? dt / tr.gamma : dt * Math.sqrt(1 - (v / padre.c) ** 2)) : dt;
       if (b[3] > te) break;
       // già dentro quando la bolla comincia: continua dal suo stato in quell'istante
       if (a0[3] < ts && b[3] >= ts && a0[2]) {

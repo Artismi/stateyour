@@ -11,13 +11,12 @@
 // Come si muove: i protoni della fascia scivolano attorno al pianeta in un
 // verso, gli elettroni nell'altro (deriva di gradiente: Ω = 3·r·W / (q·B0·R²),
 // con W l'energia); i granelli dell'anello girano con la velocità di Keplero
-// (Ω = √(G·M / (rR)³)), e la massa del pianeta discende dal suo raggio e da
-// che cosa è fatto.
+// (Ω = √(G·M / (rR)³)), con la massa vera del pianeta (quella che gli ha dato
+// il disco: la stessa di tutti gli altri calcoli).
 
 import { sistema, pianeta, fascia, semeEvento } from './cosmo.js';
 
 const Q = 1.602e-19, MEV = 1.602e-13, G = 6.674e-11;
-const DENSITA = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 };
 export const ACCELERA = 40; // il tempo della mappa scorre 40 volte più in fretta
 const memo = new Map();
 
@@ -32,7 +31,7 @@ export function nebbiaPianeta(n, gid, sid, pid) {
     const p = Math.sqrt(E * E + 2 * E * m), B = P.B0 / r ** 3;
     fascia_.push({ r, fi: caso() * 2 * Math.PI, rg: (p * 3.336e-3) / B / P.raggioM, elettrone, omega: ((elettrone ? -1 : 1) * 3 * r * E * MEV) / (Q * P.B0 * P.raggioM ** 2) });
   }
-  const M = (4 / 3) * Math.PI * P.raggioM ** 3 * DENSITA[P.tipo];
+  const M = P.massaKg;
   if (Pl.anello) for (let i = 0; i < 60000 && anello.length < 3000; i++) {
     const r = Pl.anello[0] + caso() * (Pl.anello[1] - Pl.anello[0]); if (caso() * 2 > Pl.densitaAnello(r)) continue;
     anello.push({ r, fi: caso() * 2 * Math.PI, omega: Math.sqrt((G * M) / (r * P.raggioM) ** 3) });

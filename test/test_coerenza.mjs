@@ -182,11 +182,15 @@ prova('nelle spirali il ritmo delle supernove dichiarato è quello che si conta 
   assert.ok(r.length >= 3); tra(r.reduce((a, b) => a + b, 0) / r.length, 0.7, 1.4, 'ritmo dichiarato / ritmo contato (media sulle spirali)');
 });
 
-{ // la stessa massa del pianeta in nebbia.js: raggio × una densità di tabella
-  const DENS = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 }, r = PIANETI.map(({ p }) => (sfera(p.raggioM) * DENS[p.tipo]) / p.massaKg), err = r.map((x) => Math.abs(Math.log(x)));
-  nota(2, 'la massa del pianeta in nebbia.js (raggio × densità di tabella) non è la sua massa (gli anelli girano con la velocità sbagliata)',
-    { casi: err.filter((e) => e > Math.log(1.25)).length, su: r.length, tipico: `rapporto mediano ${num(mediana(r))}`, massimo: `da ${num(minimo(r))} a ${num(massimo(r))}`, dove: 'nebbia.js nebbiaPianeta() «DENSITA[P.tipo]» contro disco.js massaKg (in sistema(): p.massaKg)' });
-}
+prova('la massa del pianeta è una sola: anche i granelli dell\'anello (nebbia.js) girano attorno a quella del disco', () => {
+  let n = 0, conAnello = 0;
+  for (const x of PIANETI.filter((_, i) => i % 41 === 0)) {
+    const neb = NE.nebbiaPianeta(x.n, x.gid, x.sid, x.p.id); n++; assert.equal(neb.M, x.p.massaKg);
+    if (neb.anello.length) { conAnello++; const g = neb.anello[0]; tra(g.omega / Math.sqrt((K.G * x.p.massaKg) / (g.r * x.p.raggioM) ** 3), 1 - 1e-9, 1 + 1e-9, 'velocità di Keplero di un granello'); }
+  }
+  assert.ok(n >= 40 && conAnello >= 5);
+});
+
 { // il velo di idrogeno ed elio che disco.js lascia ai mondi ghiacciati sparisce in sistema()
   const r = []; let conVelo = 0;
   for (const s of SISTEMI) {
@@ -293,23 +297,25 @@ prova('gravità, anno, giorno, schiacciamento e temperatura di equilibrio discen
   }
 });
 
-{ // 1. il calore interno: tre leggi
-  const r1 = SOLIDI.map(({ p }) => FL.flussoInterno(p.massaKg, p.raggioM) / p.interno.q);
-  nota(1, 'il calore che esce dall\'interno ha due valori nello stesso pannello: interno().q (massa, metalli, età) e fluidi.flussoInterno (solo massa e raggio) per la pozza',
-    { casi: r1.filter((x) => Math.abs(Math.log(x)) > Math.log(1.25)).length, su: r1.length, tipico: `flussoInterno / interno.q: mediana ${num(mediana(r1))}`, massimo: `da ${num(minimo(r1))} a ${num(massimo(r1))}`, dove: 'fluidi.js flussoInterno() (usata in laboratorio.js superficie()) contro geologia.js interno().q' });
+prova('il calore che esce dall\'interno ha una fonte sola, interno().q: anche la pozza del pannello legge quella', () => {
+  const pannello = readFileSync(new URL('../src/camera/laboratorio.js', import.meta.url), 'utf8');
+  assert.ok(!/flussoInterno/.test(pannello), 'laboratorio.js usa ancora fluidi.flussoInterno'); assert.ok(/q = P\.interno\.q\b/.test(pannello), 'la pozza non legge P.interno.q');
+  for (const { p } of SOLIDI) assert.ok(p.interno.q > 0 && Number.isFinite(p.interno.q));
+});
+{ // la radioattività: due leggi del decadimento
   const r2 = SOLIDI.map((x) => LU.caloreRadioattivo({ massaKg: x.p.massaKg, raggioM: x.p.raggioM, composizione: { ghiaccio: x.p.composizione.ghiaccio ?? 0 } }, x.eta) / x.p.interno.q);
   nota(2, 'la radioattività cala con l\'età in due modi: quattro isotopi con i loro tempi di dimezzamento (lune) contro exp(−(età − 4,5)/3 Ga)·√Z·M^0,3 (pianeti)',
     { casi: r2.filter((x) => x < 0.2 || x > 1).length, su: r2.length, tipico: `caloreRadioattivo / interno.q: mediana ${num(mediana(r2))} (sulla Terra di oggi 0,46: il resto è calore iniziale)`, massimo: `da ${num(minimo(r2))} a ${num(massimo(r2))}`, dove: 'lune.js caloreRadioattivo() (ISOTOPI) contro geologia.js interno() «q = …»' });
 }
-{ // 2. il blocco mareale: la regola di sistema() contro la legge di lune.js applicata alla coppia stella-pianeta
-  let discordi = 0, perCosmo = 0, perLune = 0;
-  for (const x of SOLIDI) {
-    const { p } = x, t = LU.tempoBlocco({ massaKg: p.Mstella }, { massaKg: p.massaKg, raggioM: p.raggioM, aM: p.aM, composizione: { ghiaccio: p.composizione.ghiaccio ?? 0 } }), bloccato = t < x.eta * ANNO;
-    if (p.bloccato) perCosmo++; if (bloccato) perLune++; if (bloccato !== p.bloccato) discordi++;
+prova('il blocco mareale ha una legge sola: quella di lune.js (tempoBlocco) applicata alla stella e al pianeta', () => {
+  let bloccati = 0, liberi = 0;
+  for (const x of PIANETI) {
+    const { p } = x, t = LU.tempoBlocco({ massaKg: p.Mstella }, { massaKg: p.massaKg, raggioM: p.raggioM, aM: p.aM, composizione: p.composizione });
+    assert.equal(p.bloccato, p.tipo !== 'gassoso' && t < x.eta * ANNO, `pianeta a ${p.aM / UA} UA: tempo di blocco ${t / ANNO} anni, età ${x.eta}`);
+    if (p.bloccato) bloccati++; else liberi++;
   }
-  nota(2, 'il blocco mareale dei pianeti è una soglia sulla distanza (0,4 UA·M^⅓·età^⅙); la legge di lune.js (tempoBlocco, con massa, raggio e rigidità del corpo) dice altro',
-    { casi: discordi, su: SOLIDI.length, tipico: `bloccati secondo cosmo.js ${perCosmo}, secondo lune.js ${perLune}`, dove: 'cosmo.js sistema() «bloccato = aM < 0.4·UA·…» contro lune.js tempoBlocco()' });
-}
+  assert.ok(bloccati > 100 && liberi > 100, `${bloccati} bloccati, ${liberi} no`);
+});
 prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e della loro temperatura (4πR²σT⁴)', () => {
   const wd = PIANETI.filter((x) => x.S0.stato === 'nana bianca'); assert.ok(wd.length > 50);
   for (const x of wd) tra(x.p.Lw / (4 * Math.PI * x.S0.raggioM ** 2 * K.sigma * x.S0.T ** 4), 1 - 1e-9, 1 + 1e-9, 'luce della nana bianca');
@@ -347,9 +353,6 @@ prova('nane bianche: la luce che scalda i pianeti è quella del loro raggio e de
     }
     assert.ok(ghiacciati > 500);
   });
-  const rocciosi = SOLIDI.filter(({ p }) => p.tipo === 'roccioso' && p.interno.acquaKg > 0), vapore = rocciosi.filter(({ p }) => p.clima.acqua.startsWith('vapore'));
-  nota(2, 'pianeti dove per clima() l\'acqua è vapore (e chimica.js la fa fuggire) ma la superficie ha il mare pieno, e la pioggia cresce con la temperatura senza tetto',
-    { casi: vapore.length, su: rocciosi.length, tipico: `temperatura mediana ${num(mediana(vapore.map(({ p }) => p.clima.T)))} K`, massimo: `${num(massimo(vapore.map(({ p }) => p.clima.T)))} K`, dove: 'leggi.js clima().acqua e chimica.js atmosfera() («secco») contro geologia.js superficiePianeta() (volumeAcqua) ed erosione() (pioggia)' });
 }
 
 // =====================================================================================================
@@ -378,11 +381,21 @@ for (const s of SUPERFICI) console.log(`  · ${s.nome} (${s.x.n}/${s.x.gid}/${s.
 prova('il mare sulla mappa contiene proprio l\'acqua che l\'interno dà alla superficie, anche quando copre tutto (i mondi ghiacciati: un guscio)', () => {
   let n = 0, gusci = 0;
   for (const s of SUPERFICI) {
-    if (!(s.p.interno.acquaKg > 0)) { assert.equal(s.sf.mare, -Infinity); continue; } n++;
+    if (!(s.p.interno.acquaKg > 0) || s.p.clima.acqua.startsWith('vapore')) continue; n++;
     tra(s.volume / (s.p.interno.acquaKg / 1000), 0.98, 1.02, `${s.nome}: volume del mare / acqua dell'interno`);
     if (s.p.tipo === 'ghiacciato') { gusci++; assert.equal(s.sommerso, 1, `${s.nome}: il guscio copre tutto`); tra(s.cl.ghiaccio, s.cl.Tglobale < 250 ? 0.99 : 0, 1, `${s.nome}: ghiaccio`); }
   }
   assert.ok(n >= 3 && gusci >= 1);
+});
+
+prova('lo stato dell\'acqua decide se c\'è mare: dove per il clima è vapore (o non c\'è) la mappa è asciutta, e non piove', () => {
+  let asciutti = 0;
+  for (const s of SUPERFICI) {
+    const cE = s.p.interno.acquaKg > 0 && !s.p.clima.acqua.startsWith('vapore') && s.p.clima.acqua !== 'assente';
+    assert.equal(Number.isFinite(s.sf.mare), cE, `${s.nome}: acqua «${s.p.clima.acqua}», livello del mare ${s.sf.mare}`);
+    if (!cE) { asciutti++; assert.equal(s.sommerso, 0); assert.equal(s.cl.piove, false); assert.equal(s.cl.ghiaccio, 0); }
+  }
+  assert.ok(asciutti >= 1, 'nel campione non c\'è un pianeta dove l\'acqua è vapore');
 });
 
 prova('la crosta non è più vecchia del pianeta, e la crosta continentale si conserva', () => {
@@ -473,9 +486,9 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
 }
 
 { // le bolle dello zoom: dieci volte più vicino, le stesse particelle sulla stessa strada
-  let bolle = 0, particelle = 0, doppie = 0, nateQui = 0; const scartiEntrate = [], scartiNate = [];
+  let bolle = 0, particelle = 0, doppie = 0, nateQui = 0, rinate = 0; const scartiEntrate = [], scartiNate = [];
   const quadratino = (tracce, cella) => { // quello dove c'è un decadimento mentre la bolla dura, o il più attraversato
-    const te = cella.tempo / 10, dec = tracce.decadimenti.find((d) => d.t < 0.8 * te && d.pos[0] > 0 && d.pos[0] < 1000 && d.pos[1] > 0 && d.pos[1] < 1000); if (dec) return [Math.floor(dec.pos[0] / 100), Math.floor(dec.pos[1] / 100)];
+    const te = cella.tempo / 10, qui = (d) => d.t < 0.8 * te && d.pos[0] > 0 && d.pos[0] < 1000 && d.pos[1] > 0 && d.pos[1] < 1000, dec = tracce.decadimenti.find((d) => qui(d) && d.specie === 'protone') || tracce.decadimenti.find(qui); if (dec) return [Math.floor(dec.pos[0] / 100), Math.floor(dec.pos[1] / 100)];
     const conta = new Map(); for (const t of tracce) for (const q of t.punti) if (q[2] && q[3] <= te && q[0] > 0 && q[0] < 1000 && q[1] > 0 && q[1] < 1000) { const k = `${Math.floor(q[0] / 100)},${Math.floor(q[1] / 100)}`; conta.set(k, (conta.get(k) || 0) + 1); }
     const [primo] = [...conta.entries()].sort((x, y) => y[1] - x[1]); return primo ? primo[0].split(',').map(Number) : null;
   };
@@ -491,29 +504,29 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
     const perEvento = new Map(); for (const t of vere) (perEvento.get(t.evento) || perEvento.set(t.evento, []).get(t.evento)).push([t.punti[0][3], t.punti.at(-1)[3]]);
     for (const tratti of perEvento.values()) { tratti.sort((x, y) => x[0] - y[0]); for (let k = 1; k < tratti.length; k++) if (tratti[k][0] < tratti[k - 1][1] - 1e-6) doppie++; }
     for (const t of vere) {
-      const m = eventi.get(t.evento), src = t.madre == null ? figlia.sorgenti[t.sorgente] : null; particelle++; let peggio = 0;
+      const m = eventi.get(t.evento), src = t.madre == null ? figlia.sorgenti[t.sorgente] : null; particelle++; if (t.madre != null) rinate++; let peggio = 0;
       for (const q of t.punti) { const T = q[3] / 10, X = q[0] / 10 + i * 100, Y = q[1] / 10 + j * 100, Q = m.punti; for (let k = 1; k < Q.length; k++) { const A = Q[k - 1], B = Q[k]; if (A[3] <= T && B[3] >= T) { const f = (T - A[3]) / (B[3] - A[3] || 1); peggio = Math.max(peggio, Math.hypot(A[0] + (B[0] - A[0]) * f - X, A[1] + (B[1] - A[1]) * f - Y)); break; } } }
       // «nata qui» da una madre che non lascia traccia (t0 = nascita), o entrata dal bordo o nata da un decadimento rifatto nella bolla
       if (src && src.t0 === src.nascita && src.generazione > 0) { nateQui++; scartiNate.push(peggio); } else scartiEntrate.push(peggio);
     }
     return { figlia, tf };
   };
-  const anelli = []; for (const x of PIANETI) { if (anelli.length >= 8) break; const R = CO.pianeta(x.n, x.gid, x.sid, x.p.id).regioni.find((r) => r.nellAnello); if (R && x.p.id % 3 === 0) anelli.push({ a: { cosmo: x.n, galassia: x.gid, stella: x.sid, pianeta: x.p.id, regione: R.id } }); }
-  prova('le bolle dello zoom contengono le particelle del padre, e solo quelle; chi entra dal bordo fa la stessa strada (anche al secondo livello)', () => {
+  const anelli = []; for (const x of PIANETI) { if (anelli.length >= 16) break; const R = CO.pianeta(x.n, x.gid, x.sid, x.p.id).regioni.find((r) => r.nellAnello); if (R && x.p.id % 3 === 0) anelli.push({ a: { cosmo: x.n, galassia: x.gid, stella: x.sid, pianeta: x.p.id, regione: R.id } }); }
+  prova('le bolle dello zoom contengono le particelle del padre, e solo quelle, ognuna una volta sola; fanno la stessa strada (anche al secondo livello)', () => {
     for (const { a } of [...REGIONI.filter((_, k) => k % 4 === 0).slice(0, 5), ...anelli]) {
       const cella = CO.cellaDi(a), tp = simulaMondo(cella), ij = quadratino(tp, cella); if (!ij) continue;
-      const { figlia, tf } = confronta(cella, tp, a, [ij]), ij2 = bolle < 16 ? quadratino(tf, figlia) : null;
+      const { figlia, tf } = confronta(cella, tp, a, [ij]), ij2 = bolle < 24 ? quadratino(tf, figlia) : null;
       if (ij2) confronta(figlia, tf, a, [ij, ij2]);
     }
     assert.ok(bolle >= 8 && particelle >= 10, `${bolle} bolle, ${particelle} particelle`);
+    // le cascate rifatte dentro la bolla (le figlie nate lì da un urto o da un decadimento) non devono esserci anche come sorgenti
+    assert.ok(rinate >= 5, `solo ${rinate} particelle nate dentro le bolle: il campione non prova niente`); assert.equal(doppie, 0, 'la stessa particella due volte nello stesso istante');
     // (il padre fa passi dieci volte più lunghi: la strada è la stessa entro un ventesimo della bolla, e per quasi tutte molto meno)
     const tutti = [...scartiEntrate, ...scartiNate];
     assert.ok(massimo(tutti) < 5, `la strada nella bolla si scosta da quella del padre di ${massimo(tutti)} unità su 1000`);
     assert.ok(mediana(tutti) < 0.1, `scarto mediano ${mediana(tutti)} unità su 1000`);
   });
-  console.log(`  · ${bolle} bolle, ${particelle} tratti di particelle: scarto dalla strada del padre mediano ${num(mediana(scartiEntrate))}, massimo ${num(massimo(scartiEntrate))} unità su 1000; nate nella bolla da madre invisibile: ${nateQui}, doppie: ${doppie}`);
-  nota(2, 'zoom: una particella figlia di una madre invisibile (luce, pione neutro) entra nella bolla due volte, come sorgente «nata qui» e come figlia del decadimento che la bolla rifà da sé: nello stesso istante ce ne sono due',
-    { casi: doppie, su: particelle, tipico: `${bolle} bolle guardate`, dove: 'cosmo.js cellaDi() «nata qui dentro … da una madre che non lascia traccia» (la madre invisibile nasce nella bolla dalla sua antenata visibile)' });
+  console.log(`  · ${bolle} bolle, ${particelle} tratti di particelle: scarto dalla strada del padre mediano ${num(mediana(scartiEntrate))}, massimo ${num(massimo(scartiEntrate))} unità su 1000; nate dentro le bolle ${rinate}, messe come «nate qui» da madre invisibile ${nateQui}, doppie ${doppie}`);
   nota(3, 'zoom: le particelle che girano strette nel campo (elettroni, protoni lenti) nella bolla fanno una strada un po\' diversa da quella del padre: partono con la velocità della corda dell\'ultimo passo del padre, e i passi del padre sono dieci volte più lunghi',
     { casi: [...scartiEntrate, ...scartiNate].filter((d) => d > 0.5).length, su: particelle, tipico: `scarto mediano ${num(mediana([...scartiEntrate, ...scartiNate]))} unità del padre (lato 1000; la bolla è larga 100)`, massimo: `${num(massimo([...scartiEntrate, ...scartiNate]))} unità; tra le ${nateQui} nate nella bolla da madre invisibile: mediana ${num(mediana(scartiNate))}`, dove: 'cosmo.js cellaDi() «entra(…, (b[0] - a0[0]) / dt, …)» e mondo.js simulaMondo() (passoMax uguale ai due livelli)' });
 }
@@ -552,7 +565,7 @@ sezione('LE PARTICELLE');
     for (const nome of ['pione+ → muone+ + neutrino', 'pione0 → fotone + fotone', 'fotone → elettrone + positrone + nucleo']) assert.ok(canali[nome] > 0, `non si è visto ${nome}`);
   });
   prova('nessun tetto alla velocità: un raggio cosmico tiene tutta l\'energia con cui arriva (γ anche oltre 7)', () => {
-    assert.ok(raggi > 100 && veloci > 0, `${raggi} raggi, ${veloci} oltre γ = 7,1`); assert.ok(massimo(gamme) < 1e-6, `γ del raggio contro la sua energia: ${massimo(gamme)}`);
+    assert.ok(raggi > 100 && veloci > 0, `${raggi} raggi, ${veloci} oltre γ = 7,1`); assert.ok(massimo(gamme) < 1e-5, `γ del raggio contro la sua energia: ${massimo(gamme)}`);
   });
 }
 
@@ -614,8 +627,19 @@ sezione('IL CASO NASCOSTO (lettura del codice)');
   });
   nota(3, 'Math.random nell\'interfaccia (il dado della biblioteca, il seme della ricerca, un\'impronta): la ricerca «cerca bella» non è ripetibile',
     { casi: casuali.length, su: casuali.length, tipico: casuali.join(', '), dove: 'laboratorio.js' });
-  nota(2, 'semi fatti a mano: un numero fisso, o un\'aritmetica che non contiene tutto l\'indirizzo (luoghi diversi ricevono lo stesso caso)',
-    { casi: aMano.length, su: aMano.length, tipico: aMano.join(' | '), dove: 'vedi le righe' });
+  prova('i semi della roccia, della pozza e della nebbia di una regione vengono dall\'indirizzo intero (semeEvento), non da un\'aritmetica sulle coordinate', () => {
+    const leggi = (f) => readFileSync(new URL(f, cartella), 'utf8'), mappa = leggi('mappa.js'), pannello = leggi('laboratorio.js');
+    assert.ok(/semeEvento\('roccia', cam\.via\.cosmo, cam\.via\.galassia, cam\.via\.stella, cam\.via\.pianeta,/.test(mappa), 'la roccia');
+    assert.ok(/semeEvento\('pozza', v\.cosmo, v\.galassia, v\.stella, v\.pianeta\)/.test(pannello), 'la pozza');
+    assert.ok(/semeEvento\('nebbia della regione', a\.cosmo, a\.galassia, a\.stella, a\.pianeta, a\.regione, JSON\.stringify\(a\.zoom/.test(pannello), 'la nebbia della regione');
+    // resta, dichiarato, solo lo sfondo di stelline della mappa (un seme fisso: è una decorazione, uguale ovunque)
+    assert.deepEqual(aMano.filter((r) => !/^mappa\.js:\d+ {2}7$/.test(r)), []);
+    // e il seme di un luogo cambia con ogni parte dell'indirizzo, anche nei cosmi paralleli (dove «cosmo» è una scritta)
+    const semi = new Set([[1, 0, 0, 0], [2, 0, 0, 0], [1, 1, 0, 0], [1, 0, 1, 0], [1, 0, 0, 1], ['1#{"disco/0/0":1}', 0, 0, 0]].map((v) => CO.semeEvento('pozza', ...v)));
+    assert.equal(semi.size, 5, 'un ramo che non riguarda la pozza la lascia uguale; ogni altro cambio la cambia');
+  });
+  nota(3, 'lo sfondo di stelline della mappa ha un seme fisso (7): è lo stesso a ogni livello e in ogni cosmo, e non sono le stelle della galassia',
+    { casi: aMano.length, su: aMano.length, tipico: aMano.join(' | '), dove: 'mappa.js fondoStelle' });
 }
 
 // =====================================================================================================

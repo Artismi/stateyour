@@ -57,6 +57,9 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // invecchia allontanandosi (e il fondo sprofonda come la radice dell'età) e affonda nelle fosse. Le quote
   // vengono dal galleggiamento: la crosta spessa sta alta. Forma, numero e storia dei continenti non sono scelti.
   const alt = new Float32Array(W * H), quale = new Int16Array(W * H), spinta = new Float32Array(W * H);
+  // l'acqua che sta in superficie, come mare o come ghiaccio: quella che l'interno le dà, ma solo se lo stato che il
+  // clima le assegna non è vapore. Dove bolle o sublima non c'è mare: l'acqua è nell'aria, o è già fuggita
+  const acquaKg = String(P.clima?.acqua ?? '').startsWith('vapore') ? 0 : int.acquaKg || 0;
   const aPlacche = int.tettonica === 'a placche';
   const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
@@ -73,7 +76,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // dipende da quanto la superficie si rinnova: un mondo fermo e senz'aria li conserva tutti (la Luna), uno
   // con tettonica, vulcani e pioggia li cancella quasi tutti (la Terra). L'erosione, dopo, fa il resto.
   const etaG = (int.eta ?? 4.5e9) / 1e9, aria = isFinite(P.clima?.pressione) ? P.clima.pressione / 1e5 : 100;
-  const rinnovo = (aPlacche ? 3 : int.vulcani > 0 ? 1 : 0) + (aria > 0.01 && (int.acquaKg || 0) > 0 ? 1.5 : 0);
+  const rinnovo = (aPlacche ? 3 : int.vulcani > 0 ? 1 : 0) + (aria > 0.01 && acquaKg > 0 ? 1.5 : 0);
   const conservati = Math.exp(-rinnovo * Math.min(4, etaG) * 0.9), nCrateri = Math.round(900 * (1 - Math.exp(-etaG / 1.2)) * conservati);
   for (let n = 0; n < nCrateri; n++) {
     const raggio = Math.min(22, 1.2 * Math.pow(1 - caso() * 0.985, -1 / 1.8)); if (raggio < 2.2 && aria > 0.5) { caso(); caso(); continue; } // (in celle; i piccoli bruciano nell'aria)
@@ -85,7 +88,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   for (let k = 0; k < int.vulcani; k++) { const p = casuale(), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const i = Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, j = Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H)); vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) alt[jj * W + ii] += 2500 * Math.exp(-(di * di + dj * dj) / 3); } }
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
-  const volumeAcqua = int.acquaKg / 1000 || 0;
+  const volumeAcqua = acquaKg / 1000;
   let lo = Infinity, hi = -Infinity, areaTutta = 0, capienza = 0;
   for (let j = 0; j < H; j++) { const A = area(j); for (let i = 0; i < W; i++) { const h = alt[j * W + i]; if (h < lo) lo = h; if (h > hi) hi = h; areaTutta += A; capienza -= h * A; } }
   capienza += hi * areaTutta; // quanta acqua sta sotto la cima più alta
@@ -110,7 +113,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // i MINERALI (chimica.js): di che cosa sono fatte la crosta dei continenti e quella vulcanica, dalla
   // composizione del pianeta, dalla temperatura, dall'ossigeno e dall'acqua; il colore è il loro
   try {
-    const base = { composizione: P.composizione, T: P.clima?.T ?? P.clima?.Teq ?? 280, ossidato: materiali.ossidato, acqua: (int.acquaKg || 0) > 0 };
+    const base = { composizione: P.composizione, T: P.clima?.T ?? P.clima?.Teq ?? 280, ossidato: materiali.ossidato, acqua: acquaKg > 0 };
     materiali.continente = minerali({ ...base, continente: true }); materiali.basalto = minerali({ ...base, continente: false });
     materiali.coloreContinente = coloreRoccia(materiali.continente); materiali.coloreBasalto = coloreRoccia(materiali.basalto);
   } catch { /* senza chimica restano i colori di riserva */ }

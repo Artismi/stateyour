@@ -15,10 +15,10 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
-import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo } from './cosmo.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
-import { convezione, celle, flussoInterno } from './fluidi.js';
+import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi } from './mappa.js';
@@ -407,7 +407,7 @@ function scriviMondo(testo, x, y, colore, dim = 11) { ctx.save(); ctx.setTransfo
 function disegnaNebbiaRegione(c) {
   const a = c.indirizzo, d = c.dipoli?.[0]; if (!a || !d) return;
   const P = sistemaDi(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], Pl = pianetaDi(a.cosmo, a.galassia, a.stella, a.pianeta);
-  let s = (c.seme * 7919 + (a.zoom || []).length * 104729) % 2147483647 || 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  let s = (semeEvento('nebbia della regione', a.cosmo, a.galassia, a.stella, a.pianeta, a.regione, JSON.stringify(a.zoom || [])) % 2147483646) + 1; const caso = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   const px = 1.2 / vt.s;
   ctx.fillStyle = 'rgba(110,90,200,0.35)';
   for (let i = 0; i < 6000; i++) {
@@ -946,9 +946,9 @@ function pannelloPattern(h) {
 const superfici = new Map();
 function superficie(v) {
   const k = JSON.stringify(v); if (superfici.has(k)) return superfici.get(k);
-  const P = sistemaDi(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], q = flussoInterno(P.massaKg, P.raggioM), g = P.clima.g;
+  const P = sistemaDi(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], q = P.interno.q, g = P.clima.g; // il calore che esce dall'interno: quello di interno(), lo stesso scritto nel pannello
   let lo = 1e-4, hi = 1; for (let i = 0; i < 50; i++) { const m = Math.sqrt(lo * hi); if (convezione({ g, q, d: m }).epsilon < 0) lo = m; else hi = m; }
-  let sd = (cosmoBase(v.cosmo) * 131 + v.galassia * 17 + v.stella * 7 + v.pianeta) % 2147483647 || 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  let sd = (semeEvento('pozza', v.cosmo, v.galassia, v.stella, v.pianeta) % 2147483646) + 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const d = hi * (1.03 + 0.35 * caso()), c = convezione({ g, q, d }), r = c.epsilon > 0 ? celle(c, { seme: sd }) : null;
   let url = null;
   if (r) { const cv = document.createElement('canvas'); cv.width = cv.height = r.N; const x = cv.getContext('2d'), im = x.createImageData(r.N, r.N); let mx = 1e-9; for (const w of r.u) mx = Math.max(mx, Math.abs(w)); for (let i = 0; i < r.N * r.N; i++) { const t = 0.5 + 0.5 * (r.u[i] / mx); im.data[4 * i] = 40 + 150 * t; im.data[4 * i + 1] = 80 + 140 * t; im.data[4 * i + 2] = 120 + 120 * t; im.data[4 * i + 3] = 255; } x.putImageData(im, 0, 0); url = cv.toDataURL(); }

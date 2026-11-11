@@ -433,7 +433,7 @@ export function rocciaDi(cam) {
   // il punto, letto alla risoluzione più fine già calcolata (o sulla mappa intera)
   let t = S.se; for (let L = 7; L >= 1; L--) { const n = 4 ** L, q = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (q) { t = q.sf; break; } }
   const [u0, v0, u1, v1] = t.rett || [0, 0, 1, 1], i = Math.min(t.W - 1, Math.floor(((u - u0) / (u1 - u0)) * t.W)), j = Math.min(t.H - 1, Math.floor(((v - v0) / (v1 - v0)) * t.H)), c = j * t.W + i;
-  const cl = S.cl, ck = Math.min(cl.H - 1, Math.floor(v * cl.H)) * cl.W + Math.min(cl.W - 1, Math.floor(u * cl.W)), T = cl.media[ck], seme = 1 + Math.floor(u * 1e6) + Math.floor(v * 1e6) * 7;
+  const cl = S.cl, ck = Math.min(cl.H - 1, Math.floor(v * cl.H)) * cl.W + Math.min(cl.W - 1, Math.floor(u * cl.W)), T = cl.media[ck], seme = semeEvento('roccia', cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta, Math.floor(u * 1e6), Math.floor(v * 1e6)); // il caso di QUEL punto di QUEL pianeta
   const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
   const conAnisotropia = (lista, base) => (lista && lista.length ? lista.map((x) => ({ nome: x.nome, frazione: x.frazione, colore: x.colore, anisotropia: 1.2 })) : base);
   let r, nome, larghezzaM, frase;
