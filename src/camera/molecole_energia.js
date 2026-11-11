@@ -21,7 +21,7 @@
 // Unità: kJ/mol, J/(mol·K), K, Pa.
 
 import { atomo, raggioDiBorn, SIMBOLI, NUMERO } from './molecole_atomi.js';
-import { molecola, chiave, anelli, ranghi, grezzo, componenti as componentiDi, coppieSolitarie, viciniSigma, sommaLegami, carica as caricaDi, conta } from './molecole_grafo.js';
+import { molecola, chiave, anelli, ranghi, speculare, grezzo, componenti as componentiDi, coppieSolitarie, viciniSigma, sommaLegami, carica as caricaDi, conta } from './molecole_grafo.js';
 import { forma, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio } from './molecole_forma.js';
 
 export const R = 8.314462618e-3; // kJ/(mol·K)
@@ -150,6 +150,8 @@ export function entalpiaGas(x) {
     for (const k in t) { const f = fisso(k); let e = f ?? tv[k]; if (e == null) { e = riserva(k); if (e) riservati.push(k); } H -= e * t[k]; }
     // i legami ionici: attrazione di Coulomb alla distanza dei raggi (1389,35 kJ·Å/mol)
     for (const l of m.legami) if (l.t === 'i') H += (1389.35 * m.atomi[l.a].q * m.atomi[l.b].q) / (atomo(m.atomi[l.a].Z).raggioCovalente + atomo(m.atomi[l.b].Z).raggioCovalente);
+    // cis e trans: due sostituenti pesanti dalla stessa parte di un doppio legame si urtano (cis-2-butene 4,3 kJ/mol sopra il trans: dato); contato rispetto alla media, così la forma non assegnata non si sposta
+    for (const l of m.legami) { if (!l.ez) continue; const sa = m.vic[l.a].filter((v) => v.j !== l.b).map((v) => v.j), sb = m.vic[l.b].filter((v) => v.j !== l.a).map((v) => v.j); let cis = 0; for (const x_ of sa) for (const y of sb) if (((x_ === l.ez.p) === (y === l.ez.q)) === l.ez.cis) cis++; H += 4.3 * (cis - (sa.length * sb.length) / 2); }
     out = { H, stima: riservati.length ? 'riserva' : 'riferimenti', riservati }; }
   Object.defineProperty(m, '_hf', { value: out, enumerable: false });
   return out;
@@ -160,7 +162,9 @@ export function entalpiaGas(x) {
 function modi(m0) {
   if (m0._modi) return m0._modi;
   // (la forma si costruisce sulla molecola riletta dalla sua chiave: così l'entropia non dipende dall'ordine in cui gli atomi sono stati scritti)
-  const m = molecola(chiave(m0)); if (m !== m0) { const r = modi(m); Object.defineProperty(m0, '_modi', { value: r, enumerable: false }); return r; }
+  // (e, se è chirale, su quella delle due immagini allo specchio che ha la chiave minore: le due mani hanno la stessa entropia, esattamente)
+  let kc = chiave(m0); if (m0.atomi.some((x) => x.chir)) { const ks = chiave(speculare(m0)); if (ks < kc) kc = ks; }
+  const m = molecola(kc); if (m !== m0) { const r = modi(m); Object.defineProperty(m0, '_modi', { value: r, enumerable: false }); return r; }
   const f = forma(m), n = f.n, nu = [], rotori = [];
   const { massa, momenti } = inerzia(f), lineare = n === 2 || (n > 2 && momenti[0] < 1e-3 * momenti[2]);
   const out = { f, n, massa, momenti, lineare, sigma: numeroDiSimmetria(f), nu, rotori, elettronica: 1 };
@@ -332,16 +336,24 @@ export function sitiAcidoBase(x) {
     for (let j = 0; j < siti.length; j++) { if (i === j) continue; const d = dist.get(siti[j].atomo); if (d != null) W[i][j] = RHO * 0.6 * SMORZA ** (Math.max(d, 1) - 2) * (siti[i].tipo === siti[j].tipo ? 1 : -1); } }
   const out = { m, siti, W }; Object.defineProperty(m, '_siti', { value: out, enumerable: false }); return out;
 }
+// FORZA IONICA: il coefficiente di attività di uno ione di carica z (legge di Debye e Hückel estesa da Davies 1962):
+// −log γ = A·z²·(√I/(1 + √I) − 0,3·I), A = 0,509 a 25 °C (∝ (εT)^−3/2). → −log γ (positivo: lo ione è stabilizzato)
+export const debyeHuckel = (z, I, T = 298.15) => { const eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), A = 0.509 * Math.pow((78.3 * 298.15) / (eps * T), 1.5), r = Math.sqrt(Math.max(I, 0)); return A * z * z * (r / (1 + r) - 0.3 * I); };
+// IL pKa CON LA TEMPERATURA (van 't Hoff): pKa(T) = pKa(25 °C) + ΔH/(R·ln 10)·(1/T − 1/298). ΔH di ionizzazione per classe
+// (kJ/mol; Christensen, Hansen e Izatt 1976 [ricordati]): acidi carbossilici ~0, ammonio 52, acqua 55,8, fenoli 23, tioli 26,
+// fosforico 4 (medio), imidazolio 36, HCN 44; le altre classi: 20.
+const DH_IONIZZAZIONE = { 'acido carbossilico': 0, ammonio: 52, acqua: 55.8, fenolo: 23, tiolo: 26, 'idrogeno solforato': 22, 'acido del fosforo': 4, imidazolio: 36, piridinio: 20, 'acido cianidrico': 44, alcol: 40, anilinio: 31, amidinio: 55 };
+export const pKaAllaT = (pKa, classe, T) => (T === 298.15 ? pKa : pKa + ((DH_IONIZZAZIONE[classe] ?? 20) / (R * LN10)) * (1 / T - 1 / 298.15));
 // tutti gli stati di protonazione a un pH → { dG (kJ/mol: di quanto l'insieme sta sotto la forma neutra), carica (media),
 // stato: [sito ionizzato sì/no] del più popolato, pKa: i pKa apparenti (macroscopici) in ordine }
-export function speciazione(x, pH = 7, T = 298.15) {
+export function speciazione(x, pH = 7, T = 298.15, I = 0) {
   const { m, siti, W } = sitiAcidoBase(x), n = siti.length; if (!n) return { dG: 0, carica: caricaDi(m), stato: [], siti, neutra: m };
   // i siti lontani non si sentono: si sommano gli stati a gruppi (qui: tutti insieme fino a 14 siti, poi a uno a uno)
-  const esp = (i) => (siti[i].tipo === 'acido' ? pH - siti[i].pKa : siti[i].pKa - pH);
+  const pk = siti.map((s) => pKaAllaT(s.pKa, s.classe, T)), esp = (i) => (siti[i].tipo === 'acido' ? pH - pk[i] : pk[i] - pH), q0 = caricaDi(m), dh = I > 0 ? (z) => debyeHuckel(z, I, T) : null;
   if (n > 14) { let ln = 0, q = 0; const stato = []; for (let i = 0; i < n; i++) { const e = esp(i), p = 1 / (1 + 10 ** -e); ln += Math.log(1 + 10 ** e); q += p * (siti[i].tipo === 'acido' ? -1 : 1); stato.push(p > 0.5); } return { dG: -R * T * ln, carica: caricaDi(m) + q, stato, siti, neutra: m }; }
   let Zs = 0, qm = 0, meglio = -Infinity, statoM = 0;
   for (let s = 0; s < 1 << n; s++) { let e = 0, q = 0; for (let i = 0; i < n; i++) { if (!((s >> i) & 1)) continue; e += esp(i); q += siti[i].tipo === 'acido' ? -1 : 1; for (let j = i + 1; j < n; j++) if ((s >> j) & 1) e -= W[i][j]; }
-    const w = 10 ** e; Zs += w; qm += w * q; if (e > meglio) { meglio = e; statoM = s; } }
+    if (dh) e += dh(q0 + q); const w = 10 ** e; Zs += w; qm += w * q; if (e > meglio) { meglio = e; statoM = s; } }
   return { dG: -R * T * Math.log(Zs), carica: caricaDi(m) + qm / Zs, stato: siti.map((_, i) => !!((statoM >> i) & 1)), siti, neutra: m };
 }
 // la molecola nello stato di protonazione più popolato a quel pH (per la forma, le cariche, il disegno)
@@ -366,11 +378,18 @@ const EVAP = (T) => 44.0 - 0.0447 * (T - 298.15);
 export const condensaAcqua = (T) => { const a = 44.0 + 0.0447 * 298.15, b = 0.0447, Tb = 373.15; return T * (a * (1 / Tb - 1 / T) + b * Math.log(Tb / T)) + R * T * Math.log(1.01325); };
 // raggi ionici (Å, coordinazione 6): Shannon 1976, Acta Cryst. A32, 751 [ricordati]; dove mancano: la regola di molecole_atomi.js
 const SHANNON = { Li1: 0.76, Na1: 1.02, K1: 1.38, Be2: 0.45, Mg2: 0.72, Ca2: 1.00, Al3: 0.535, Sc3: 0.745, Ti4: 0.605, Cr3: 0.615, Mn2: 0.83, Fe2: 0.78, Fe3: 0.645, Co2: 0.745, Ni2: 0.69, Cu1: 0.77, Cu2: 0.73, Zn2: 0.74, Ga3: 0.62 };
+// IONI SEMPLICI IN ACQUA, MISURATI: ΔHf (kJ/mol) e S (J/mol/K) nella convenzione H⁺(aq) = 0 (NBS Tables, Wagman e altri
+// 1982 [ricordati]; Na, K, Mg, Ca, Cl sono gli stessi di mare.js). L'energia di Born di qui sotto resta come regola di
+// riserva per gli ioni che non ci sono, e la prova ne stampa l'errore (Mg²⁺ −87, Fe²⁺ +190 kJ/mol: manca il campo dei
+// leganti). Con questi dati i potenziali di ossidoriduzione escono da soli (Fe³⁺/Fe²⁺: +0,77 V).
+export const IONI_MISURATI = { '[Li+]': [-278.5, 13.4], '[Na+]': [-240.34, 58.45], '[K+]': [-252.14, 101.2], '[Mg+2]': [-467.0, -137.0], '[Ca+2]': [-543.0, -56.2], '[Al+3]': [-531.0, -321.7], '[Mn+2]': [-220.8, -73.6], '[Fe+2]': [-89.1, -137.7], '[Fe+3]': [-48.5, -315.9], '[Co+2]': [-58.2, -113.0], '[Ni+2]': [-54.0, -128.9], '[Cu+]': [71.7, 40.6], '[Cu+2]': [64.8, -99.6], '[Zn+2]': [-153.9, -112.1] };
+// lo stesso metallo con un elettrone in più o in meno, se è tra gli ioni misurati → la sua chiave (o null)
+export const statoRedox = (Z, q, d) => { const k = `[${SIMBOLI[Z]}+${q + d > 1 ? q + d : ''}]`; return q + d >= 1 && IONI_MISURATI[k] ? k : null; };
 const DS_SOLUTO = -0.085; // kJ/mol/K: ciò che un soluto perde entrando in acqua dal gas (regola di Barclay e Butler 1938: dato)
 // energia(molecola, { T, P, solvente: null | 'acqua', pH, attivitaAcqua }) →
 //   { H, S, G (alla T e P date; gas: stato 1 bar corretto a P; in acqua: soluto 1 M, già sommato sugli stati di protonazione a quel pH),
 //     Hf298, S298, stima, in acqua anche: idratazione, carica, protonazione (ΔG degli stati), fase }
-export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attivitaAcqua = 1, misure = null } = {}) {
+export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attivitaAcqua = 1, misure = null, born = false, forzaIonica = 0 } = {}) {
   // (si lavora sempre sulla molecola riletta dalla sua chiave: stessa molecola → stessi numeri fino all'ultima cifra, comunque sia stata scritta)
   const m0 = canonica(x), acqua = solvente === 'acqua', m = acqua ? canonica(neutra(m0)) : m0;
   // (misure: { chiave: [ΔHf, S] } di specie misurate — per esempio gli ioni di mare.js — usate al posto della stima)
@@ -384,12 +403,13 @@ export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attiv
   const H = hf.H + tT.Htermica - t298.Htermica, S = tT.S;
   if (!acqua) return { H, S: S - 1000 * R * Math.log(P / 1e5), G: H - (T * S) / 1000 + R * T * Math.log(P / 1e5), fase: 'gas', stima: hf.stima, riservati: hf.riservati, Hf298: hf.H, S298: t298.S };
   if (chiave(m) === 'O') { const g = condensaAcqua(T); return { H: H - EVAP(T), S: S - (1000 * (EVAP(T) + g)) / T, G: H - (T * S) / 1000 + g + R * T * Math.log(Math.max(attivitaAcqua, 1e-12)), fase: 'acqua (solvente)', stima: hf.stima, carica: 0, Hf298: hf.H, S298: t298.S }; }
-  if (mono) { // ione semplice: Born, nella convenzione H⁺(aq) = 0
+  if (mono && !born && IONI_MISURATI[chiave(m)]) { const d = IONI_MISURATI[chiave(m)], q = m.atomi[0].q, gamma = forzaIonica > 0 ? -R * T * LN10 * debyeHuckel(q, forzaIonica, T) : 0; return { H: d[0], S: d[1], G: d[0] - (T * d[1]) / 1000 + gamma, fase: 'acqua', stima: 'misurato', carica: q, Hf298: d[0], S298: d[1] }; }
+  if (mono) { // ione semplice senza dati: Born, nella convenzione H⁺(aq) = 0
     const a = m.atomi[0], eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), born = (-694.65 * a.q * a.q * (1 - 1 / eps)) / (SHANNON[SIMBOLI[a.Z] + a.q] != null ? SHANNON[SIMBOLI[a.Z] + a.q] + (a.q > 0 ? 0.85 : 0.1) : raggioDiBorn(a.Z, a.q));
     // (la scala: ΔG di idratazione assoluta di H⁺ −1056 kJ/mol, Marcus 1991, la stessa su cui sono tarati i raggi di Latimer; S di H⁺ gas 108,9 J/mol/K)
     const G = H - (T * S) / 1000 + born - a.q * (HF_PROTONE - T * 0.1089 - 1056);
     return { H, S, G, fase: 'acqua', stima: 'ione semplice: Born', idratazione: born, carica: a.q, Hf298: hf.H, S298: t298.S }; }
-  const idr = idratazione(m) + R * 298.15 * Math.log(24.465), sp = speciazione(m, pH, T); // (da gas a 1 bar a soluzione 1 M)
+  const idr = idratazione(m) + R * 298.15 * Math.log(24.465), sp = speciazione(m, pH, T, forzaIonica); // (da gas a 1 bar a soluzione 1 M)
   const Gn = H - (T * S) / 1000 + idr - (T - 298.15) * DS_SOLUTO;
   return { H: H + idr + 298.15 * DS_SOLUTO, S: S + 1000 * DS_SOLUTO, G: Gn + sp.dG, Gneutra: Gn, fase: 'acqua', stima: hf.stima, riservati: hf.riservati, idratazione: idr, protonazione: sp.dG, carica: sp.carica, Hf298: hf.H, S298: t298.S };
 }

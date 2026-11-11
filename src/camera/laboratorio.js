@@ -115,7 +115,7 @@ function tracceDi(e) {
   return m;
 }
 function simula() {
-  if (vista === 'pattern' && !comp.reticolo) { const c = comp.elementi[0].cella; $('misure').textContent = `universo n. ${c.seme}${c.rami && Object.keys(c.rami).length ? `, un ramo (${Object.keys(c.rami).length} eventi diversi)` : ''} · sezione di lato ${fmt(c.finestra.lato)} · tempo da ${fmt(c.sezione.fine - c.sezione.durata)} a ${fmt(c.sezione.fine)}`; return; }
+  if (vista === 'pattern' && !comp.reticolo) { const c = comp.elementi[0].cella; $('misure').textContent = `${c.indirizzo?.materia ? `dentro la materia (${c.indirizzo.materia}, ${fmtLunghezza(c.scala.latoM)})` : `universo n. ${c.seme}`}${c.rami && Object.keys(c.rami).length ? `, un ramo (${Object.keys(c.rami).length} eventi diversi)` : ''} · sezione di lato ${fmt(c.finestra.lato)} · tempo da ${fmt(c.sezione.fine - c.sezione.durata)} a ${fmt(c.sezione.fine)}`; return; }
   if (vista === 'pattern') { const ne = comp.elementi.length, np = comp.elementi.reduce((n, e) => n + e.posti.length, 0); $('misure').textContent = `${ne} ${ne === 1 ? 'elemento' : 'elementi'} · ${np} ${np === 1 ? 'posto' : 'posti'} per piastrella`; return; }
   const t0 = performance.now();
   try { tracce = tracceDi(el()).tracce; $('errore').textContent = ''; } catch (e) { tracce = []; $('errore').textContent = e.message; }
@@ -273,9 +273,10 @@ function entraRegione(a) {
 // roccia, un'acqua, l'aria sopra un luogo) si entra nella cella dove corrono le particelle di quel punto: ciò che un
 // cristallo ha registrato in milioni di anni (modo «memoria») o un evento vero al suo istante. È una finestra come le
 // altre (sezione, osservatore in moto, ricerca, rami). La cella ricorda il luogo, e la camera della mappa per tornarci.
+const celleMateria = new Map(); // (le ultime celle costruite: rientrare nello stesso punto non ricalcola niente)
 function entraMateria(luogo, opzioni = {}) {
-  volo = null; let r;
-  try { r = cellaMateria(luogo, { ...opzioni, via: { ...camMappa.via } }, sorgente(luogo.indirizzo, ramiCosmo(camMappa.via.cosmo))); }
+  volo = null; let r; const chiave = JSON.stringify([luogo.indirizzo, opzioni, camMappa.via]);
+  try { r = celleMateria.get(chiave); if (!r) { r = cellaMateria(luogo, { ...(opzioni.modo === 'memoria' ? { massimo: 110 } : {}), ...opzioni, via: { ...camMappa.via } }, sorgente(luogo.indirizzo, ramiCosmo(camMappa.via.cosmo))); celleMateria.set(chiave, r); if (celleMateria.size > 6) celleMateria.delete(celleMateria.keys().next().value); } r = { ...r, cella: clona(r.cella) }; }
   catch (err) { $('dove').textContent = String(err.message || err).replace(/^cellaMateria: /, ''); return; }
   if (!r.cella.sorgenti.length) { $('dove').textContent = r.racconto.frasi.slice(1).join(' '); return; } // (una roccia che non ricorda niente: lo si dice, e si resta sulla mappa)
   r.cella.indirizzo.camera = clona(camMappa); r.cella.materia = { luogo: clona(luogo), opzioni: clona(opzioni) };
@@ -1523,7 +1524,7 @@ function cercaBella(come = 'ovunque') {
       corrente = 0; sel = null; scelto = null;
       vista = 'pattern'; adattaPattern(); aggiornaVista();
       const x = b.bellezza;
-      stato(`trovata: universo n. ${b.numero}${nomeRamo(b.cella) ? `, ${nomeRamo(b.cella)}` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · ${GRUPPI[b.ripeti.gruppo].nome} · inchiostro ${x.pieno.toFixed(2)}, celle ${x.celle.toFixed(2)}, nitidezza ${x.nitido.toFixed(2)}, linee distese ${x.distese.toFixed(2)}, pulizia ${x.pulizia.toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
+      stato(`trovata: ${b.cella.indirizzo?.materia ? `«${comp.nome}»` : `universo n. ${b.numero}`}${nomeRamo(b.cella) ? `, ${nomeRamo(b.cella)}` : ''}, ${x.totale.toFixed(2)} di bellezza${b.partenza != null ? ` (era ${b.partenza.toFixed(2)})` : ''} · ${GRUPPI[b.ripeti.gruppo].nome} · inchiostro ${x.pieno.toFixed(2)}${x.celle != null ? `, celle ${x.celle.toFixed(2)}, nitidezza ${x.nitido.toFixed(2)}, linee distese ${x.distese.toFixed(2)}` : `, equilibrio ${(x.equilibrio ?? 0).toFixed(2)}, simmetria ${(x.simmetria ?? 0).toFixed(2)}`}, pulizia ${(x.pulizia ?? 0).toFixed(2)}${inclinata(b.vista) ? ` · guardata inclinata di ${Math.round(b.vista.inclinazione)}°` : ''}`);
     }
   };
   const da = 1 + Math.floor(Math.random() * REGIONI * PIANETI_MAX * STELLE * cosmoDi(1).galassie.length * 0.98);

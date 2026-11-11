@@ -57,6 +57,8 @@ export function forma(x, { diedri = [] } = {}) {
   const distH = (k) => lunghezzaLegame(Z[k], 1);
   const anello = anelli(m), anelliDi = m.atomi.map(() => []); anello.forEach((r, q) => r.forEach((k) => anelliDi[k].push(q))); const anelloFatto = anello.map(() => false);
   const chiesti = new Map(); for (const [a, b, c, d, g] of diedri) chiesti.set(`${b},${c}`, [a, d, g]);
+  // (cis e trans dei doppi legami: sono diedri di 0° e 180° tra i due vicini di riferimento)
+  for (const l of m.legami) if (l.ez) { const g = l.ez.cis ? 0 : 180; if (!chiesti.has(`${l.a},${l.b}`)) chiesti.set(`${l.a},${l.b}`, [l.ez.p, l.ez.q, g]); if (!chiesti.has(`${l.b},${l.a}`)) chiesti.set(`${l.b},${l.a}`, [l.ez.q, l.ez.p, g]); }
   const posti = (k) => m.vic[k].filter((v) => P[v.j]).map((v) => v.j);
   // i posti liberi attorno a un atomo, dati i vicini già messi
   const liberi = (k, messi, rif) => {

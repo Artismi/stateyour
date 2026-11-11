@@ -59,21 +59,26 @@
 // Unità: kJ/mol, J/(mol·K), K, Pa, mol/L, Å (le coordinate; nm nella scena 3D).
 
 import { atomo as atomo_, NUMERI_ATOMICI } from './molecole_atomi.js';
-import { molecola as molecola_, chiave as chiave_, valida as valida_, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli } from './molecole_grafo.js';
+import { molecola as molecola_, chiave as chiave_, valida as valida_, stereoisomeri, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli } from './molecole_grafo.js';
 import { forma as forma_, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio } from './molecole_forma.js';
-import { energia as energia_, entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso, risolvi, R } from './molecole_energia.js';
-import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoni, conservata, bilancio, INTRINSECHE } from './molecole_reazioni.js';
-import { campo, forze as forze_, minimizza, passo, insieme, cariche, aggregazione, polimero as polimero_, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa, scena3D as scena3D_ } from './molecole_forze.js';
-import { rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche } from './molecole_rete.js';
+import { energia as energia_, entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso, risolvi, IONI_MISURATI, statoRedox, debyeHuckel, pKaAllaT, R } from './molecole_energia.js';
+import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, bilancio, INTRINSECHE, espandiStereo } from './molecole_reazioni.js';
+import { tensione, energiaStereo, campo, forze as forze_, minimizza, passo, insieme, cariche, aggregazione, polimero as polimero_, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa, scena3D as scena3D_ } from './molecole_forze.js';
+import { evolvi, rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche } from './molecole_rete.js';
 
 // ---------- l'interfaccia (i nomi chiesti; il resto è esportato più sotto)
-export const atomo = atomo_, molecola = molecola_, chiave = chiave_, valida = valida_, forma = forma_, energia = energia_;
-export const reazioni = reazioni_, velocita = velocita_, polimero = polimero_, rete = rete_, autocatalitici = autocatalitici_, scena3D = scena3D_;
+export const atomo = atomo_, molecola = molecola_, chiave = chiave_, valida = valida_, forma = forma_;
+// energia(…, { stereo: true }): in più, di quanto questa forma stereo sta sopra la più stabile delle sue (dal campo di forze)
+export const energia = (x, c = {}) => { const e = energia_(x, c); if (!c.stereo) return e; const d = energiaStereo(x, { solvente: c.solvente }); return d ? { ...e, G: e.G + d, H: e.H + d, stereo: d } : e; };
+// reazioni(…, { stereo: true }): i prodotti con centri chirali o doppi legami nuovi escono in tutte le loro forme, alla pari
+export const reazioni = (a, b = null, opz = {}) => (opz.stereo ? espandiStereo(reazioni_(a, b, opz)) : reazioni_(a, b, opz));
+export const velocita = (r, c = {}) => velocita_(r, c.stereo ? { ...c, energiaDi: energia } : c);
+export const polimero = polimero_, rete = rete_, autocatalitici = autocatalitici_, scena3D = scena3D_;
 // forze(configurazione): una molecola, una forma, un insieme([...]) o un campo già preparato → energia e forze
 export const forze = (x, opzioni = {}) => forze_(x && x.escl ? x : campo(x, opzioni));
-export { NUMERI_ATOMICI, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio,
+export { NUMERI_ATOMICI, stereoisomeri, espandiStereo, tensione, energiaStereo, evolvi, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio,
   entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso,
-  siti, catalisi, fotolisi, fotoni, conservata, bilancio, INTRINSECHE, campo, minimizza, passo, insieme, cariche, aggregazione, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa,
+  siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, IONI_MISURATI, statoRedox, debyeHuckel, pKaAllaT, bilancio, INTRINSECHE, campo, minimizza, passo, insieme, cariche, aggregazione, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa,
   equilibrioRete, stazionarie, raf, anfifiliche };
 
 // ---------- IL RACCORDO con chimica.js e mare.js

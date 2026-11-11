@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import * as M from '../src/camera/molecole.js';
 import { equilibrio, MOLECOLE } from '../src/camera/chimica.js';
+import { sorgente } from '../src/camera/eventi.js';
 
 let ok = 0, nonTorna = 0;
 const prova = (nome, f) => { const t0 = performance.now(); f(); ok++; console.log('  ✓', nome, `(${(performance.now() - t0).toFixed(0)} ms)`); };
@@ -47,7 +48,7 @@ prova('la chiave canonica: stessa molecola → stessa chiave, comunque sia scrit
   assert.equal(M.chiave('C[C@H](C)O'), M.chiave('CC(C)O'), 'un carbonio con due sostituenti uguali non è chirale');
   // un grafo dato come atomi e legami
   assert.equal(M.chiave({ atomi: [{ Z: 6, h: 3 }, { Z: 6, h: 2 }, { Z: 8, h: 1 }], legami: [{ a: 0, b: 1, o: 1 }, { a: 1, b: 2, o: 1 }] }), M.chiave('CCO'));
-  if (M.chiave('F/C=C/F') === M.chiave('F/C=C\\F')) stona('cis e trans di un doppio legame hanno la stessa chiave (non distinti: dichiarato)');
+  assert.notEqual(M.chiave('F/C=C/F'), M.chiave('F/C=C\\F'), 'cis e trans sono molecole diverse'); assert.equal(M.chiave('F/C=C/F'), M.chiave('F\\C=C\\F')); assert.equal(M.chiave('F/C=C/F'), M.chiave('C(\\F)=C/F'));
 });
 
 // ───────────── 3. la forma
@@ -112,8 +113,8 @@ prova('in acqua: idratazione, pKa di acido acetico, ammonio e acqua, zwitterione
   assert.equal(M.chiave(M.alPH(GLY, 7)), M.chiave('[NH3+]CC(=O)[O-]'), 'a pH 7 la glicina è uno zwitterione'); assert.equal(M.chiave(M.alPH(GLY, 1)), M.chiave('[NH3+]CC(=O)O')); assert.equal(M.chiave(M.alPH(GLY, 12)), M.chiave('NCC(=O)[O-]'));
   tra(M.energia(GLY, ACQUA).G, -575, -550, 'glicina in acqua: ΔHf − T·S (misurato −561 kJ/mol)'); tra(M.energia('O=C=O', ACQUA).G, -460, -440, 'CO2 sciolta (misurato −448,8)');
   // gli ioni semplici: Born (gli stessi dati di mare.js IONI: ΔHf e S misurati)
-  for (const [ione, dH, S] of [['[Na+]', -240.34, 58.45], ['[K+]', -252.14, 101.2], ['[Mg+2]', -467.0, -137.0], ['[Ca+2]', -543.0, -56.2], ['[Fe+2]', -90.0, -101.6], ['[Cl-]', -167.08, 56.6]]) { const g = M.energia(ione, ACQUA).G, mis = dH - 298.15 * S / 1000; if (Math.abs(g - mis) > 20) stona(`${ione} in acqua: G = ${g.toFixed(0)} contro ${mis.toFixed(0)} kJ/mol misurati (${ione === '[Cl-]' ? 'dal pKa e dall\'idratazione stimata di HCl' : 'Born'}${ione === '[Fe+2]' ? ': manca la stabilizzazione del campo dei leganti' : ''})`); else console.log(`      ${ione} in acqua: ${g.toFixed(0)} contro ${mis.toFixed(0)} kJ/mol misurati`); }
-  tra(M.energia('[Mg+2]', { ...ACQUA, misure: { '[Mg+2]': [-467.0, -137.0] } }).G, -427, -425, 'con le misure di mare.js si usa il dato');
+  for (const [ione, dH, S] of [['[Na+]', -240.34, 58.45], ['[K+]', -252.14, 101.2], ['[Mg+2]', -467.0, -137.0], ['[Ca+2]', -543.0, -56.2], ['[Fe+2]', -90.0, -101.6], ['[Cl-]', -167.08, 56.6]]) { const g = M.energia(ione, { ...ACQUA, born: true }).G, mis = dH - 298.15 * S / 1000; if (Math.abs(g - mis) > 20) stona(`${ione} in acqua: G = ${g.toFixed(0)} contro ${mis.toFixed(0)} kJ/mol misurati (${ione === '[Cl-]' ? 'dal pKa e dall\'idratazione stimata di HCl' : 'Born'}${ione === '[Fe+2]' ? ': manca la stabilizzazione del campo dei leganti' : ''})`); else console.log(`      ${ione} in acqua: ${g.toFixed(0)} contro ${mis.toFixed(0)} kJ/mol misurati`); }
+  tra(M.energia('[Mg+2]', ACQUA).G, -427, -425, 'per gli ioni misurati (IONI_MISURATI) si usa il dato, non Born'); tra(M.energia('[Mg+2]', { ...ACQUA, misure: { '[Mg+2]': [-460.0, -137.0] } }).G, -420, -418, 'e chi chiama può dare le sue misure (mare.js)');
 });
 prova('le molecole della vita sono molecole valide con energie sensate', () => {
   for (const [nome, s, lo, hi] of [['glicina', GLY, -420, -360], ['alanina', ALA, -460, -390], ['glucosio', GLUCOSIO, -1400, -1100], ['ribosio', RIBOSIO, -1150, -900], ['adenina', ADENINA, 150, 300], ['acido laurico', LAURICO, -700, -600], ['fosfolipide', FOSFOLIPIDE, -2600, -1700], ['glicilglicina', GLYGLY, -600, -450]]) {
@@ -254,6 +255,57 @@ prova('tempi (una molecola in micro-millisecondi) e determinismo', () => {
   console.log(`      leggere un grafo e dargli la chiave: ${(1000 * t1).toFixed(0)} µs; forma 3D: ${(1000 * t2).toFixed(0)} µs; energia in acqua (forma, H, S, G, idratazione, pKa) di una molecola mai vista, da 3 a 13 atomi pesanti: ${t3.toFixed(2)} ms; reazioni tra due molecole: ${t4.toFixed(2)} ms; campo e forze del glucosio: ${t5.toFixed(2)} ms`);
   tra(t1, 0, 2, 'chiave (ms)'); tra(t3, 0, 30, 'energia (ms)');
   assert.deepEqual([...M.forma(GLUCOSIO).pos], [...M.forma(M.chiave(GLUCOSIO) && GLUCOSIO).pos]); assert.equal(M.energia(GLY, ACQUA).G, M.energia('OC(=O)CN', ACQUA).G, 'la stessa molecola scritta in due modi ha la stessa energia'); assert.equal(M.entalpiaGas(ADENINA).H, M.entalpiaGas('n1cnc2[nH]cnc2c1N').H, 'l\'energia non dipende dalla forma di Kekulé');
+});
+
+// ───────────── 9. ciò che le regole prima vietavano
+const prendi = (a, b, tipo, prod, opz) => { const r = M.reazioni(a, b, opz).find((x) => x.tipo === tipo && (!prod || x.prodotti.includes(k(prod)))); assert.ok(r, `manca ${tipo}: ${a}${b ? ' + ' + b : ''}${prod ? ' → ' + prod : ''}`); assert.ok(M.conservata(r)); return r; };
+prova('le famiglie di reazioni che mancavano: coniugate, su carbonio saturo, epossidi, aromatiche, pericicliche, riarrangiamenti, disolfuri', () => {
+  const casi = [['addizione coniugata (Michael)', 'C=CC#N', 'N', 'addizione coniugata', 'NCCC#N', ACQUA, null], ['metanolo + metanolo → etere', 'CO', 'CO', 'sostituzione', 'COC', ACQUA, 'lenta'], ['apertura di un epossido', 'C1CO1', 'O', 'sostituzione', 'OCCO', ACQUA, null], ['fenolo + formaldeide', 'Oc1ccccc1', 'C=O', 'sostituzione aromatica', 'OCc1ccccc1O', ACQUA, null],
+    ['Diels-Alder: butadiene + etene', 'C=CC=C', 'C=C', 'pericyclica', 'C1=CCCCC1', { T: 298.15 }, 'gas'], ['Claisen: allil vinil etere', 'C=CCOC=C', null, 'pericyclica', 'C=CCCC=O', { T: 298.15 }, 'gas'], ['pinacolica', 'CC(C)(O)C(C)(C)O', null, 'riarrangiamento', 'CC(=O)C(C)(C)C', ACQUA, null],
+    ['due tioli → disolfuro + H2', 'CS', 'CS', 'accoppiamento', 'CSSC', ACQUA, null], ['tiolo + O2', 'CS', 'O=O', 'addizione', 'CSOO', ACQUA, null], ['…poi un altro tiolo: disolfuro + H2O2', 'CSOO', 'CS', 'sostituzione', 'CSSC', ACQUA, null], ['scambio di due idrogeni: isopropanolo + acetaldeide', 'CC(C)O', 'CC=O', 'trasferimento di idrogeno', 'CCO', ACQUA, null], ['un\'enammina attacca un\'aldeide con il carbonio', 'C=C(C)N', 'CC=O', 'addizione enolica', null, ACQUA, null]];
+  for (const [nome, a, b, tipo, prod, c] of casi) { const r = prendi(a, b, tipo, prod), v = M.velocita(r, c); console.log(`      ${nome}: ΔG ${v.dG.toFixed(0)}, barriera ${v.barriera.toFixed(0)} kJ/mol, k = ${v.k.toExponential(0)}`); assert.ok(isFinite(v.dG) && v.barriera >= 0); }
+  const da = M.velocita(prendi('C=CC=C', 'C=C', 'pericyclica', 'C1=CCCCC1'), { T: 298.15 }); tra(da.barriera, 85, 135, 'barriera della Diels-Alder butadiene + etene (misurata: Ea 115 kJ/mol)'); tra(da.dG, -140, -70, 'ΔG della Diels-Alder (misurato circa −110)');
+  const ep = M.velocita(prendi('C1CO1', 'O', 'sostituzione', 'OCCO'), ACQUA), et = M.velocita(prendi('CO', 'CO', 'sostituzione', 'COC'), ACQUA); assert.ok(ep.k > 1e6 * et.k, 'la tensione dell\'anello fa dell\'epossido un elettrofilo; l\'etere da due alcoli in acqua neutra non si fa'); tra(Math.log10(Math.log(2) / ep.k / 86400), -1, 2.5, 'log10 del tempo di dimezzamento dell\'ossido di etilene in acqua neutra, in giorni (misurato: 14 giorni)');
+  assert.ok(!M.reazioni('CO', 'CO', { lente: false }).some((x) => x.prodotti.includes(k('COC'))) && !M.reazioni('C=CC=C', 'C=C', { tutte: false }).length, 'le famiglie rare e lente si possono lasciare fuori (è ciò che la rete fa di suo)');
+});
+prova('ossidoriduzione vera: gli elettroni passano per gli ioni metallici, con i potenziali misurati', () => {
+  const g = (s, pH = 0) => M.energia(s, { ...ACQUA, pH }).G, F = 96.485, E0 = (oss, rid) => -(g(rid) - g(oss) - 0.5 * M.energia('[HH]', {}).G) / F; // M(n+1) + ½H2 → M(n) + H⁺
+  tra(E0('[Fe+3]', '[Fe+2]'), 0.72, 0.82, 'E° di Fe³⁺/Fe²⁺ (0,771 V)'); tra(E0('[Cu+2]', '[Cu+]'), 0.10, 0.21, 'E° di Cu²⁺/Cu⁺ (0,153 V)'); console.log(`      E°(Fe³⁺/Fe²⁺) = ${E0('[Fe+3]', '[Fe+2]').toFixed(3)} V (misurato 0,771); E°(Cu²⁺/Cu⁺) = ${E0('[Cu+2]', '[Cu+]').toFixed(3)} V (0,153)`);
+  const oss = prendi('[Fe+3]', 'CS', 'trasferimento di elettroni', 'CSSC'), v = M.velocita(oss, ACQUA); assert.deepEqual(oss.prodotti.filter((x) => x === '[Fe+2]').length, 2); assert.ok(v.dG < -50 && v.k > 1, 'il ferro ferrico ossida i tioli a disolfuro');
+  const o2 = prendi('[Fe+2]', 'O=O', 'trasferimento di elettroni', 'OO'), a2 = M.velocita(o2, { ...ACQUA, pH: 2 }).dG, a8 = M.velocita(o2, { ...ACQUA, pH: 8 }).dG; tra(a2, -30, 60, '2 Fe²⁺ + O2 + 2 H⁺ → 2 Fe³⁺ + H2O2 a pH 2 (dai potenziali 0,695 e 0,771 V: +15 kJ/mol, più la solubilità di O2)'); tra(a8 - a2, 60, 76, 'e con il pH sale di 2·RT·ln 10 per unità (gli ioni liberi: senza gli idrossidi che nella realtà precipitano)');
+  const h2 = prendi('[Fe+2]', 'O', 'trasferimento di elettroni', '[HH]'); assert.ok(M.velocita(h2, ACQUA).dG > 100, 'Fe²⁺ sciolto da solo non riduce l\'acqua a idrogeno (serve il minerale: la serpentinizzazione)');
+  const cu = prendi('[Cu+2]', 'OCCO', 'trasferimento di elettroni', 'OCC=O'); assert.ok(M.velocita(cu, ACQUA).dG < 0); assert.equal(M.reazioni('[Na+]', 'CS').filter((x) => x.tipo === 'trasferimento di elettroni').length, 0, 'il sodio non ha un altro stato: non fa ossidoriduzione');
+});
+prova('la luce oltre l\'omolisi: fotoionizzazione e stati eccitati che reagiscono', () => {
+  const sole = { Tstella: 5772, diluizione: 2.16e-5 }, am = M.fotoreazioni('CN', sole, ACQUA), ion = am.find((x) => x.tipo === 'fotoionizzazione'); assert.deepEqual(ion.prodotti, [k('C[NH2+]')]); tra(ion.sottoNm, 130, 145, 'la metilammina perde un elettrone sotto 139 nm (8,9 eV)'); assert.ok(ion.J > 0 && ion.J < am.find((x) => x.tipo === 'fotolisi').J);
+  const gl = M.fotoreazioni('OCC=O', sole, ACQUA), ecc = gl.filter((x) => x.tipo.startsWith('stato eccitato')); assert.ok(ecc.some((x) => x.prodotti.includes(k('OC=CO'))), 'la glicolaldeide eccitata può fare da sé la tautomeria a enediolo'); console.log(`      glicolaldeide al Sole: ${gl.filter((x) => x.tipo === 'fotolisi').length} fotolisi, ${ecc.length} passi da stato eccitato (${ecc.map((x) => x.tipo.slice(16)).join(', ')}), fotoionizzazione sotto ${gl.find((x) => x.tipo === 'fotoionizzazione').sottoNm.toFixed(0)} nm`);
+  tra(M.pKaAllaT(14, 'acqua', 373.15), 11.8, 12.5, 'pKa dell\'acqua a 100 °C (misurato 12,26)'); tra(M.pKaAllaT(9.25, 'ammonio', 373.15), 7.2, 7.6, 'pKa dell\'ammonio a 100 °C (7,4)');
+  tra(Math.pow(10, -M.debyeHuckel(1, 0.7)), 0.6, 0.8, 'coefficiente di attività di uno ione 1+ nell\'acqua di mare (0,67-0,71)'); assert.ok(M.speciazione(GLY, 7, 298.15, 0.7).dG < M.speciazione(GLY, 7).dG, 'la forza ionica stabilizza le forme cariche'); assert.ok(M.pKaApparenti('CC(=O)O')[0] > 4.5);
+});
+
+prova('la mano: cis e trans distinti; i centri nuovi nascono assegnati, alla pari; i diastereomeri hanno energie diverse', () => {
+  for (const x of ['C/C=C/C', 'C/C=C\\C', 'OC(=O)/C=C/C(=O)O', 'OC(=O)/C=C\\C(=O)O', 'N/C(C#N)=C(/N)C#N']) assert.equal(M.chiave(M.chiave(x)), M.chiave(x), `la chiave di ${x} riletta`);
+  tra(Math.abs(M.diedro(M.forma('C/C=C\\C'), 0, 1, 2, 3)), -1, 1, 'cis-2-butene: diedro 0°'); tra(Math.abs(M.diedro(M.forma('C/C=C/C'), 0, 1, 2, 3)), 179, 181, 'trans-2-butene: 180°');
+  tra(M.entalpiaGas('C/C=C\\C').H - M.entalpiaGas('C/C=C/C').H, 4.2, 4.4, 'il cis sta 4,3 kJ/mol sopra il trans (dato)'); const iso = M.reazioni('C/C=C\\C').find((r) => r.tipo === 'isomerizzazione'); assert.deepEqual(iso.prodotti, [M.chiave('C/C=C/C')]); tra(M.velocita(iso, { T: 298.15 }).barriera, 250, 280, 'la rotazione attorno a C=C al buio (misurato 272 kJ/mol)');
+  assert.ok(M.fotoreazioni('C/C=C\\C', { Tstella: 5772, diluizione: 2.16e-5 }, { T: 298.15 }).some((r) => r.tipo === 'stato eccitato: isomerizzazione'), 'con la luce il cis diventa trans');
+  // la cianidrina dell'acetaldeide: due enantiomeri, metà e metà, stessa energia
+  const cian = M.reazioni('CC=O', 'C#N', { stereo: true }).filter((r) => r.tipo === 'addizione C' && r.peso === 0.5); assert.equal(cian.length, 2); assert.notEqual(cian[0].prodotti[0], cian[1].prodotti[0]); assert.equal(M.chiave(M.speculare(cian[0].prodotti[0])), cian[1].prodotti[0]);
+  const va = M.velocita(cian[0], { ...ACQUA, stereo: true }), vb = M.velocita(cian[1], { ...ACQUA, stereo: true }); assert.equal(va.k, vb.k, 'senza niente di chirale attorno le due mani nascono alla stessa velocità'); assert.equal(M.stereoisomeri('CC(N)C(=O)NC(C)C(=O)O').length, 4);
+  // il dipeptide L-L contro L-D: diastereomeri, energie diverse; L-L e D-D: uguali fino all'ultima cifra
+  const LL = 'N[C@@H](C)C(=O)N[C@@H](C)C(=O)O', LD = 'N[C@@H](C)C(=O)N[C@H](C)C(=O)O', DD = 'N[C@H](C)C(=O)N[C@H](C)C(=O)O'; assert.equal(M.tensione(LL), M.tensione(DD)); const d = M.tensione(LD) - M.tensione(LL);
+  console.log(`      Ala-Ala: L-D meno L-L = ${d.toFixed(1)} kJ/mol nel campo di forze in vuoto (${(M.tensione(LD, { solvente: 'acqua' }) - M.tensione(LL, { solvente: 'acqua' })).toFixed(1)} in acqua); L-L e D-D identici`); assert.ok(Math.abs(d) > 0.05, 'i diastereomeri si distinguono'); assert.notEqual(M.energia(LL, { stereo: true }).G, M.energia(LD, { stereo: true }).G); assert.equal(M.energia(LL, { stereo: true }).G, M.energia(DD, { stereo: true }).G);
+  // un accoppiamento L + L e L + D ha quindi ΔG diversi: la rete con «stereo» li tiene come specie distinte
+  const r = M.rete(['CC=O', 'C#N', 'N'], { pH: 8 }, { profondita: 3, atomiMassimi: 6, stereo: true }), chirali = [...r.specie.keys()].filter((x) => x.includes('@')); assert.ok(chirali.length >= 4 && chirali.length % 2 === 0); for (const x of chirali) assert.ok(r.specie.has(M.chiave(M.speculare(x))), 'ogni forma ha la sua immagine allo specchio nella rete'); console.log(`      rete con le mani distinte (acetaldeide + HCN + NH3, 3 generazioni): ${r.specie.size} specie, ${chirali.length} chirali, a coppie di immagini speculari`);
+});
+prova('una rete con un autocatalizzatore chirale rompe la simmetria da uno sbilancio piccolo (un evento)', () => {
+  // la rete di prova è il modello di Frank (1953): L e D si copiano dal cibo A, e insieme si spengono. Le costanti qui NON vengono dalle regole
+  // (un autocatalizzatore chirale vero le regole non l'hanno ancora trovato): la prova è che la cinetica amplifica, non che la chimica lo faccia.
+  const caso = sorgente('molecole/prova/rottura della simmetria'), N = 1e6, eps = caso.normale('quante L in più') / Math.sqrt(N); // lo sbilancio di N molecole fatte a caso
+  const frank = (spegne) => [{ reagenti: ['A', 'L'], prodotti: ['L', 'L'], k: 1, kInversa: 0 }, { reagenti: ['A', 'D'], prodotti: ['D', 'D'], k: 1, kInversa: 0 }, { reagenti: ['L', 'D'], prodotti: ['P'], k: spegne, kInversa: 0 }];
+  const ee = (spegne, e0, t) => { const e = M.evolvi(frank(spegne), { A: 1, L: 1e-3 * (1 + e0), D: 1e-3 * (1 - e0), P: 0 }, t, { fisse: ['A'], passi: 900 }); return (e.c.L - e.c.D) / (e.c.L + e.c.D); };
+  const senza = ee(0, eps, 300), con = ee(10, eps, 300), opposto = ee(10, -eps, 300); console.log(`      sbilancio iniziale ${(100 * eps).toFixed(3)}% (un evento): senza antagonismo resta ${(100 * senza).toFixed(3)}%; con L + D → spenti arriva a ${(100 * con).toFixed(1)}%; l'evento opposto dà ${(100 * opposto).toFixed(1)}%`);
+  tra(Math.abs(senza), 0, 3 * Math.abs(eps) + 1e-9, 'senza antagonismo lo sbilancio non cresce'); assert.ok(Math.abs(con) > 0.95 && Math.sign(con) === Math.sign(eps) && Math.sign(opposto) === -Math.sign(con), 'con l\'antagonismo vince la mano che era in vantaggio');
+  assert.equal(ee(10, 0, 300), 0, 'da una parità esatta non nasce niente: serve l\'evento');
 });
 
 console.log(`\n${ok} prove superate; ${nonTorna} cose che non tornano con la realtà (stampate sopra).`);

@@ -24,7 +24,7 @@ const errore = (s) => { throw new Error(`molecole: ${s}`); };
 export function leggi(testo) {
   const s = String(testo).trim(), atomi = [], legami = [], pila = [], aperti = new Map(); let prec = -1, leg = null, i = 0;
   const lega = (a, b, sim) => { const ar = sim === ':' || (sim == null && atomi[a]._min && atomi[b]._min);
-    legami.push(sim === '>' ? { a, b, o: 1, t: 'd' } : sim === '<' ? { a: b, b: a, o: 1, t: 'd' } : sim === '~' ? { a, b, o: 0, t: 'i' } : { a, b, o: sim === '=' ? 2 : sim === '#' ? 3 : 1, t: 'c', _ar: ar }); };
+    legami.push(sim === '>' ? { a, b, o: 1, t: 'd' } : sim === '<' ? { a: b, b: a, o: 1, t: 'd' } : sim === '~' ? { a, b, o: 0, t: 'i' } : { a, b, o: sim === '=' ? 2 : sim === '#' ? 3 : 1, t: 'c', _ar: ar, _dir: sim === '/' || sim === '\\' ? sim : null }); };
   const nuovo = (at) => { atomi.push(at); const k = atomi.length - 1; at.ord = prec >= 0 ? [prec] : []; if (at._quadre && at.h > 0) at.ord.push(-1);
     if (prec >= 0) { lega(prec, k, leg); atomi[prec].ord.push(k); } prec = k; leg = null; };
   while (i < s.length) {
@@ -32,7 +32,7 @@ export function leggi(testo) {
     if (c === '(') { pila.push(prec); i++; } else if (c === ')') { prec = pila.pop() ?? errore(`parentesi in ${s}`); i++; }
     else if (c === '.') { prec = -1; leg = null; i++; }
     else if (c === '-' && s[i + 1] === '>') { leg = '>'; i += 2; } else if (c === '<' && s[i + 1] === '-') { leg = '<'; i += 2; }
-    else if ('-=#:~/\\'.includes(c)) { leg = c === '/' || c === '\\' ? null : c; i++; }
+    else if ('-=#:~/\\'.includes(c)) { leg = c; i++; }
     else if (c === '%' || (c >= '0' && c <= '9')) {
       const n = c === '%' ? +s.slice(i + 1, i + 3) : +c; i += c === '%' ? 3 : 1; if (prec < 0) errore(`anello senza atomo in ${s}`);
       if (aperti.has(n)) { const ap = aperti.get(n); aperti.delete(n); lega(ap.atomo, prec, leg ?? ap.sim); atomi[ap.atomo].ord[ap.posto] = prec; atomi[prec].ord.push(ap.atomo); }
@@ -54,7 +54,7 @@ export function leggi(testo) {
   const somma = atomi.map(() => 0); for (const l of legami) if (l.t === 'c') { somma[l.a] += l.o; somma[l.b] += l.o; }
   atomi.forEach((a, k) => { if (a.h < 0) { const bs = somma[k] + (a._min ? 1 : 0), V = valenzeDi(a.Z, 0), v = a._min ? V[0] : V.find((x) => x >= bs); a.h = v > bs ? v - bs : 0; } });
   // gli aromatici scritti in minuscolo: si mettono i doppi legami (una delle forme di Kekulé; poi «percepisci» li riconosce)
-  const serve = atomi.map((a, k) => { if (!a._min) return false; const sg = somma[k] + a.h, V = valenzeDi(a.Z, a.q); return !V.includes(sg) && V.includes(sg + 1); });
+  const serve = atomi.map((a, k) => { if (!a._min) return false; const sg = somma[k] + a.h, V = valenzeDi(a.Z, a.q); return !V.includes(sg) && V.some((v) => v > sg); });
   const quali = serve.map((v, k) => (v ? k : -1)).filter((k) => k >= 0);
   if (quali.length) {
     const vicA = atomi.map(() => []); legami.forEach((l, k) => { if (l._ar && serve[l.a] && serve[l.b]) { vicA[l.a].push([l.b, k]); vicA[l.b].push([l.a, k]); } });
@@ -64,6 +64,10 @@ export function leggi(testo) {
     if (!prova()) errore(`anello aromatico impossibile in ${s}`);
     for (const k of new Set(coppia.values())) legami[k].o = 2;
   }
+  // cis e trans: «/» e «\\» sui legami accanto a un doppio legame dicono da che parte sta il sostituente (scritto X/Y: Y sta
+  // sopra X). ez = { p, q, cis }: il vicino p del primo atomo e il vicino q del secondo stanno dalla stessa parte, o no.
+  for (const l of legami) { if (l.o !== 2 || l.t !== 'c') continue; const lato = (x, altro) => { for (const d of legami) { if (!d._dir || d === l) continue; if (d.a === x && d.b !== altro) return [d.b, d._dir === '/' ? 1 : -1]; if (d.b === x && d.a !== altro) return [d.a, d._dir === '/' ? -1 : 1]; } return null; };
+    const A = lato(l.a, l.b), B = lato(l.b, l.a); if (A && B) l.ez = { p: A[0], q: B[0], cis: A[1] === B[1] }; }
   return molecola({ atomi, legami });
 }
 
@@ -73,20 +77,22 @@ export function molecola(x) {
   if (typeof x === 'string') { let m = LETTE.get(x); if (!m) { m = leggi(x); if (LETTE.size > 50000) LETTE.clear(); LETTE.set(x, m); } return m; }
   if (x && x._molecola) return x;
   let atomi = x.atomi.map((a) => ({ Z: a.Z, q: a.q || 0, h: a.h || 0, r: 0, ar: false, chir: a.chir || 0, ord: a.chir && a.ord ? a.ord.slice() : null }));
-  let legami = x.legami.filter((l) => l.a !== l.b).map((l) => ({ a: l.a, b: l.b, o: l.t === 'i' ? 0 : l.o || 1, t: l.t || 'c', ar: false }));
+  let legami = x.legami.filter((l) => l.a !== l.b).map((l) => ({ a: l.a, b: l.b, o: l.t === 'i' ? 0 : l.o || 1, t: l.t || 'c', ar: false, ez: l.ez && l.o === 2 ? { p: l.ez.p, q: l.ez.q, cis: !!l.ez.cis } : null }));
   // gli idrogeni scritti come atomi tornano sul loro atomo
   const grado = atomi.map(() => 0); for (const l of legami) { grado[l.a]++; grado[l.b]++; }
   const via = new Set();
   legami.forEach((l, k) => { if (l.t !== 'c' || l.o !== 1) return; for (const [hh, su] of [[l.a, l.b], [l.b, l.a]]) { const H = atomi[hh];
     if (H.Z === 1 && !H.q && !H.h && grado[hh] === 1 && !via.has(hh) && !via.has(su) && (atomi[su].Z !== 1 || su < hh || grado[su] > 1)) { via.add(hh); atomi[su].h++; l._via = true; if (atomi[su].ord) atomi[su].ord = atomi[su].ord.map((v) => (v === hh ? -1 : v)); break; } } });
   if (via.size) { const nuovoIndice = []; let n = 0; atomi.forEach((a, k) => { nuovoIndice[k] = via.has(k) ? -1 : n++; });
-    atomi = atomi.filter((a, k) => !via.has(k)); legami = legami.filter((l) => !l._via).map((l) => ({ ...l, a: nuovoIndice[l.a], b: nuovoIndice[l.b] }));
+    atomi = atomi.filter((a, k) => !via.has(k)); legami = legami.filter((l) => !l._via).map((l) => ({ ...l, a: nuovoIndice[l.a], b: nuovoIndice[l.b], ez: l.ez && nuovoIndice[l.ez.p] >= 0 && nuovoIndice[l.ez.q] >= 0 ? { p: nuovoIndice[l.ez.p], q: nuovoIndice[l.ez.q], cis: l.ez.cis } : null }));
     for (const a of atomi) if (a.ord) a.ord = a.ord.map((v) => (v < 0 ? v : nuovoIndice[v])); }
   const vic = atomi.map(() => []); legami.forEach((l, k) => { vic[l.a].push({ j: l.b, k }); vic[l.b].push({ j: l.a, k }); });
   const m = { atomi, legami, vic, _molecola: true };
   // gli elettroni spaiati: ciò che manca alla valenza
   atomi.forEach((a, k) => { const bs = sommaLegami(m, k), V = valenzeDi(a.Z, a.q); a.r = V.includes(bs) || atomo(a.Z).blocco === 'd' ? 0 : Math.max(0, (V.find((v) => v > bs) ?? bs) - bs); });
   percepisci(m);
+  // (un cis/trans vale solo su un doppio legame non aromatico i cui vicini di riferimento ci sono ancora)
+  for (const l of legami) if (l.ez && (l.o !== 2 || l.ar || l.t !== 'c' || !vic[l.a].some((v) => v.j === l.ez.p && v.j !== l.b) || !vic[l.b].some((v) => v.j === l.ez.q && v.j !== l.a))) l.ez = null;
   for (const a of atomi) if (a.chir && (!a.ord || a.ord.length !== 4)) { a.chir = 0; a.ord = null; }
   return m;
 }
@@ -162,34 +168,42 @@ export function valida(x) {
 // ---------- i ranghi canonici e la chiave
 const segnoPermutazione = (da, a) => { const p = da.map((v) => a.indexOf(v)); let s = 1; for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) if (p[i] > p[j]) s = -s; return s; };
 const codiceLegame = (l, k) => (l.t === 'i' ? 'i' : l.t === 'd' ? (l.a === k ? 'd' : 'e') : l.ar ? 'a' : String(l.o));
+const CODICE = { i: 0, d: 1, e: 2, a: 3, 1: 4, 2: 5, 3: 6 };
 export function ranghi(m) {
   if (m._ranghi) return m._ranghi;
-  const n = m.atomi.length, inAnello = new Set(anelli(m).flat());
-  const denso = (firme) => { const u = [...new Set(firme)].sort(), pos = new Map(u.map((f, i) => [f, i])); return [firme.map((f) => pos.get(f)), u.length]; };
-  const p3 = (x) => String(x + 500).padStart(4, '0');
-  let [cls, quante] = denso(m.atomi.map((a, k) => p3(a.Z) + p3(a.q) + p3(a.h) + p3(m.vic[k].length) + (a.ar ? 1 : 0) + p3(a.r) + (inAnello.has(k) ? 1 : 0)));
-  const raffina = () => { for (let giro = 0; giro < n + 2; giro++) {
-    const [c2, q2] = denso(cls.map((c, k) => p3(c) + '|' + m.vic[k].map((v) => codiceLegame(m.legami[v.k], k) + p3(cls[v.j])).sort().join(',')));
-    const fermo = q2 === quante; cls = c2; quante = q2; if (fermo) break; } };
+  const n = m.atomi.length, inAnello = new Set(anelli(m).flat()), ord = new Array(n);
+  // (tutto con numeri: il rango di un atomo e un'impronta dei ranghi dei suoi vicini; è la parte che la rete chiama più spesso)
+  const denso = (ch) => { for (let i = 0; i < n; i++) ord[i] = i; ord.sort((x, y) => ch[x] - ch[y]); const c = new Array(n); let r = -1, prec = NaN; for (const i of ord) { if (ch[i] !== prec) { r++; prec = ch[i]; } c[i] = r; } return [c, r + 1]; };
+  let [cls, quante] = denso(m.atomi.map((a, k) => (((((a.Z * 9 + a.q + 4) * 6 + Math.min(a.h, 5)) * 10 + Math.min(m.vic[k].length, 9)) * 2 + (a.ar ? 1 : 0)) * 6 + Math.min(a.r, 5)) * 2 + (inAnello.has(k) ? 1 : 0)));
+  const cod = m.vic.map((vv, k) => vv.map((v) => CODICE[codiceLegame(m.legami[v.k], k)])), tmp = [];
+  const raffina = () => { for (let giro = 0; giro < n + 2; giro++) { const ch = new Array(n);
+      for (let k = 0; k < n; k++) { const vv = m.vic[k]; tmp.length = vv.length; for (let i = 0; i < vv.length; i++) tmp[i] = cod[k][i] * n + cls[vv[i].j] + 1; if (vv.length > 1) tmp.sort((x, y) => x - y); let h = 7; for (let i = 0; i < tmp.length; i++) h = (h * 1000003 + tmp[i]) % 2147483647; ch[k] = cls[k] * 2147483648 + h; }
+      const [c2, q2] = denso(ch), fermo = q2 === quante; cls = c2; quante = q2; if (fermo) break; } };
   raffina();
   // la chiralità entra nei ranghi dove i quattro vicini sono già distinti
   const centri = []; m.atomi.forEach((a, k) => { if (!a.chir) return; const cl = a.ord.map((v) => (v < 0 ? -1 : cls[v])); if (new Set(cl).size === 4) centri.push([k, a.chir * segnoPermutazione(cl, cl.slice().sort((x, y) => x - y))]); });
-  if (centri.length) { const par = new Map(centri); [cls, quante] = denso(cls.map((c, k) => p3(c) + (par.get(k) > 0 ? 'p' : par.has(k) ? 'm' : 'n'))); raffina(); }
+  if (centri.length) { const par = new Map(centri); [cls, quante] = denso(cls.map((c, k) => c * 3 + (par.get(k) > 0 ? 0 : par.has(k) ? 1 : 2))); raffina(); }
+  const simm = cls.slice(); // (le classi di simmetria, prima delle scelte arbitrarie)
   // gli atomi ancora alla pari sono simmetrici: se ne sceglie uno, e si raffina di nuovo
-  while (quante < n) { const conta = new Map(); cls.forEach((c) => conta.set(c, (conta.get(c) || 0) + 1));
-    const c0 = Math.min(...[...conta].filter(([, v]) => v > 1).map(([c]) => c)), scelto = cls.indexOf(c0);
-    [cls, quante] = denso(cls.map((c, k) => p3(c) + (k === scelto ? 'a' : 'b'))); raffina(); }
-  const veri = new Set(centri.map(([k]) => k));
-  Object.defineProperty(m, '_ranghi', { value: { cls, centri: veri }, enumerable: false });
+  while (quante < n) { const conta = new Array(quante).fill(0); for (const c of cls) conta[c]++; let c0 = 0; while (conta[c0] < 2) c0++; const scelto = cls.indexOf(c0);
+    [cls, quante] = denso(cls.map((c, k) => c * 2 + (k === scelto ? 0 : 1))); raffina(); }
+  Object.defineProperty(m, '_ranghi', { value: { cls, centri: new Set(centri.map(([k]) => k)), simm }, enumerable: false });
   return m._ranghi;
 }
 const hSottintesi = (m, k) => { const a = m.atomi[k]; let bs = a.ar ? 1 : 0; for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t === 'c') bs += l.ar ? 1 : l.o; } const V = valenzeDi(a.Z, 0), v = a.ar ? V[0] : V.find((x) => x >= bs); return v > bs ? v - bs : 0; };
 export function chiave(x) {
   const m = molecola(x); if (m._chiave) return m._chiave;
-  const { cls, centri } = ranghi(m), n = m.atomi.length, visto = new Array(n).fill(false), figli = m.atomi.map(() => []), chiusure = m.atomi.map(() => []), padre = new Array(n).fill(-1);
+  const { cls, centri, simm } = ranghi(m), n = m.atomi.length, visto = new Array(n).fill(false), figli = m.atomi.map(() => []), chiusure = m.atomi.map(() => []), padre = new Array(n).fill(-1), legameDelPadre = new Array(n).fill(-1), segnoEZ = new Map();
   const scendi = (a, legPadre) => { visto[a] = true;
-    for (const v of m.vic[a].slice().sort((x, y) => cls[x.j] - cls[y.j])) { if (v.k === legPadre) continue; if (visto[v.j]) { if (!chiusure[a].some((c) => c.k === v.k)) { chiusure[a].push(v); chiusure[v.j].push({ j: a, k: v.k }); } } else { padre[v.j] = a; figli[a].push(v); scendi(v.j, v.k); } } };
-  const simboloLegame = (k, da, verso) => { const l = m.legami[k]; return l.t === 'i' ? '~' : l.t === 'd' ? (l.a === da ? '->' : '<-') : l.ar ? '' : l.o === 2 ? '=' : l.o === 3 ? '#' : m.atomi[da].ar && m.atomi[verso].ar ? '-' : ''; };
+    for (const v of m.vic[a].slice().sort((x, y) => cls[x.j] - cls[y.j])) { if (v.k === legPadre) continue; if (visto[v.j]) { if (!chiusure[a].some((c) => c.k === v.k)) { chiusure[a].push(v); chiusure[v.j].push({ j: a, k: v.k }); } } else { padre[v.j] = a; legameDelPadre[v.j] = v.k; figli[a].push(v); scendi(v.j, v.k); } } };
+  // cis e trans: un segno «/» o «\\» sul legame dell'albero verso il vicino di rango più basso di ciascuno dei due atomi
+  const segnaEZ = () => { m.legami.forEach((l) => { if (!l.ez) return;
+    const scegli = (x, y, rif) => { const altri = m.vic[x].filter((v) => v.j !== y && m.legami[v.k].t === 'c' && m.legami[v.k].o === 1); if (!altri.length || altri.length + m.atomi[x].h !== 2 || (altri.length === 2 && simm[altri[0].j] === simm[altri[1].j])) return null;
+      const al = altri.filter((v) => legameDelPadre[v.j] === v.k || legameDelPadre[x] === v.k).sort((p, q) => cls[p.j] - cls[q.j])[0]; return al ? { j: al.j, k: al.k, inverti: al.j !== rif, padre: legameDelPadre[x] === al.k } : null; };
+    const A = scegli(l.a, l.b, l.ez.p), B = scegli(l.b, l.a, l.ez.q); if (!A || !B) return; const cis = l.ez.cis !== (A.inverti !== B.inverti);
+    const sA = segnoEZ.get(A.k) || '/', latoA = (sA === '/') === A.padre ? -1 : 1, latoB = cis ? latoA : -latoA, sB = (latoB > 0) === B.padre ? '\\' : '/';
+    if (segnoEZ.has(B.k) && segnoEZ.get(B.k) !== sB) return; segnoEZ.set(A.k, sA); segnoEZ.set(B.k, sB); }); };
+  const simboloLegame = (k, da, verso) => { const l = m.legami[k]; if (segnoEZ.has(k)) return segnoEZ.get(k); return l.t === 'i' ? '~' : l.t === 'd' ? (l.a === da ? '->' : '<-') : l.ar ? '' : l.o === 2 ? '=' : l.o === 3 ? '#' : m.atomi[da].ar && m.atomi[verso].ar ? '-' : ''; };
   const cifre = new Map(); let libere = [];
   const scriviAtomo = (a, ordineScritto) => { const at = m.atomi[a], A = atomo(at.Z), min = at.ar && AROMATICI.has(at.Z), stereo = at.chir && centri.has(a);
     if (ORGANICI.has(at.Z) && !at.q && !stereo && at.h === hSottintesi(m, a)) return min ? A.simbolo.toLowerCase() : A.simbolo;
@@ -204,7 +218,7 @@ export function chiave(x) {
     figli[a].forEach((f, i) => { const ramo = simboloLegame(f.k, a, f.j) + scrivi(f.j); s += i < figli[a].length - 1 ? `(${ramo})` : ramo; });
     return s; };
   const pezzi = []; const perRango = m.atomi.map((_, k) => k).sort((x, y) => cls[x] - cls[y]);
-  for (const k of perRango) if (!visto[k]) { scendi(k, -1); cifre.clear(); cifre._max = 0; libere = []; pezzi.push(scrivi(k)); }
+  for (const k of perRango) if (!visto[k]) { scendi(k, -1); segnoEZ.clear(); segnaEZ(); cifre.clear(); cifre._max = 0; libere = []; pezzi.push(scrivi(k)); }
   const ch = pezzi.sort().join('.');
   Object.defineProperty(m, '_chiave', { value: ch, enumerable: false });
   return ch;
@@ -223,14 +237,14 @@ export function componenti(x) {
   if (q === 1) return [m];
   const out = [];
   for (let c = 0; c < q; c++) { const idx = new Map(); m.atomi.forEach((a, k) => { if (di[k] === c) idx.set(k, idx.size); });
-    out.push(molecola({ atomi: [...idx.keys()].map((k) => ({ ...m.atomi[k], ord: m.atomi[k].ord ? m.atomi[k].ord.map((v) => (v < 0 ? v : idx.get(v))) : null })), legami: m.legami.filter((l) => idx.has(l.a)).map((l) => ({ ...l, a: idx.get(l.a), b: idx.get(l.b) })) })); }
+    out.push(molecola({ atomi: [...idx.keys()].map((k) => ({ ...m.atomi[k], ord: m.atomi[k].ord ? m.atomi[k].ord.map((v) => (v < 0 ? v : idx.get(v))) : null })), legami: m.legami.filter((l) => idx.has(l.a)).map((l) => ({ ...l, a: idx.get(l.a), b: idx.get(l.b), ez: l.ez ? { p: idx.get(l.ez.p), q: idx.get(l.ez.q), cis: l.ez.cis } : null })) })); }
   return out;
 }
 // una copia che si può modificare (per le reazioni): poi molecola(copia) la rimette in ordine
-export const grezzo = (x) => { const m = molecola(x); return { atomi: m.atomi.map((a) => ({ Z: a.Z, q: a.q, h: a.h, chir: a.chir, ord: a.ord ? a.ord.slice() : null })), legami: m.legami.map((l) => ({ a: l.a, b: l.b, o: l.o, t: l.t })) }; };
+export const grezzo = (x) => { const m = molecola(x); return { atomi: m.atomi.map((a) => ({ Z: a.Z, q: a.q, h: a.h, chir: a.chir, ord: a.ord ? a.ord.slice() : null })), legami: m.legami.map((l) => ({ a: l.a, b: l.b, o: l.o, t: l.t, ez: l.ez ? { ...l.ez } : null })) }; };
 // più molecole in un grafo solo (per le reazioni tra due molecole): → { grezzo, inizio: [indice del primo atomo di ognuna] }
 export function unisci(...ms) { const g = { atomi: [], legami: [] }, inizio = [];
-  for (const x of ms) { const m = grezzo(x), d = g.atomi.length; inizio.push(d); for (const a of m.atomi) { if (a.ord) a.ord = a.ord.map((v) => (v < 0 ? v : v + d)); g.atomi.push(a); } for (const l of m.legami) g.legami.push({ ...l, a: l.a + d, b: l.b + d }); }
+  for (const x of ms) { const m = grezzo(x), d = g.atomi.length; inizio.push(d); for (const a of m.atomi) { if (a.ord) a.ord = a.ord.map((v) => (v < 0 ? v : v + d)); g.atomi.push(a); } for (const l of m.legami) g.legami.push({ ...l, a: l.a + d, b: l.b + d, ez: l.ez ? { p: l.ez.p + d, q: l.ez.q + d, cis: l.ez.cis } : null }); }
   return { grezzo: g, inizio }; }
 
 // ---------- chiralità: R e S (Cahn, Ingold, Prelog)
@@ -260,6 +274,17 @@ export function chiralita(x) {
     out.push({ atomo: k, RS: a.chir * segnoPermutazione(a.ord, bersaglio) > 0 ? 'R' : 'S' }); void cls;
   });
   return out;
+}
+// tutte le forme di una molecola che ha centri chirali o doppi legami non assegnati (fino a 16): gli enantiomeri, i
+// diastereomeri, i cis e i trans, ognuno una molecola con la sua chiave. Una molecola già tutta assegnata dà sé stessa.
+export function stereoisomeri(x, massimo = 16) {
+  const m = molecola(x), { simm } = ranghi(m), centri = chiralita(m).filter((c) => !c.RS).map((c) => c.atomo), inAnello = new Set(anelli(m).flat()), doppi = [];
+  m.legami.forEach((l, k) => { if (l.ez || l.o !== 2 || l.ar || l.t !== 'c' || (inAnello.has(l.a) && inAnello.has(l.b))) return; const lato = (x_, y) => { const altri = m.vic[x_].filter((v) => v.j !== y && m.legami[v.k].o === 1 && m.legami[v.k].t === 'c'); return altri.length && altri.length + m.atomi[x_].h === 2 && !(altri.length === 2 && simm[altri[0].j] === simm[altri[1].j]) ? altri[0].j : -1; };
+    const p = lato(l.a, l.b), q = lato(l.b, l.a); if (p >= 0 && q >= 0) doppi.push([k, p, q]); });
+  const nn = centri.length + doppi.length; if (!nn || 2 ** nn > massimo) return [m];
+  const out = new Map();
+  for (let s = 0; s < 2 ** nn; s++) { const g = grezzo(m); centri.forEach((c, i) => { g.atomi[c].chir = (s >> i) & 1 ? 1 : -1; g.atomi[c].ord = (m.atomi[c].h ? [-1] : []).concat(viciniSigma(m, c).map((v) => v.j)); }); doppi.forEach(([k, p, q], i) => { g.legami[k].ez = { p, q, cis: !!((s >> (centri.length + i)) & 1) }; }); const mm = molecola(g); out.set(chiave(mm), mm); }
+  return [...out.values()];
 }
 // l'immagine allo specchio
 export const speculare = (x) => { const g = grezzo(x); for (const a of g.atomi) a.chir = -a.chir; return molecola(g); };

@@ -5,6 +5,8 @@
 // con pochi atomi: sono loro che in un luogo vero abbondano). La rete è PIGRA: si ferma alla profondità chiesta e
 // riparte da dove era (espandi); con «verso» si allarga di preferenza verso una molecola (si guarda in una direzione:
 // le regole restano le stesse, cambia solo quali specie si tengono quando sono troppe).
+// Di suo usa le famiglie di reazioni più comuni; «famiglie: 'tutte'» le apre tutte (pericicliche, riarrangiamenti, enoli
+// al carbonio, sostituzione aromatica, scambio di idrogeni: da tre a cinque volte più specie).
 // LIMITI DICHIARATI: non tutte le coppie reagiscono (solo quelle con una molecola piccola); le specie oltre atomiMassimi
 // atomi pesanti e le reazioni con ΔG oltre sogliaDG non entrano; gli stati di protonazione sono dentro ogni specie (in
 // equilibrio veloce), non specie a parte.
@@ -14,7 +16,7 @@
 
 import { molecola, chiave, conta, valida } from './molecole_grafo.js';
 import { energia, neutra, sitiAcidoBase, risolvi, R } from './molecole_energia.js';
-import { reazioni, velocita, conservata } from './molecole_reazioni.js';
+import { reazioni, velocita, conservata, espandiStereo } from './molecole_reazioni.js';
 import { aggregazione } from './molecole_forze.js';
 
 const pesanti = (m) => m.atomi.filter((a) => a.Z > 1).length;
@@ -26,23 +28,23 @@ function somiglianza(m, T) { const a = conta(m), b = conta(T), na = Object.value
 //   { specie: Map(chiave → { chiave, generazione, pesanti, da: reazione che l'ha data per prima }), reazioni: [...], generazioni: [quante specie nuove],
 //     ha(x), via(x) (le reazioni che dalla partenza portano a x), espandi(n) (altre n generazioni), condizioni, partenza, tempoMs }
 // partenza: lista di molecole, o { molecola: concentrazione (mol/L) }; condizioni: { T, P, pH, solvente, attivitaAcqua, ioni, minerali, luce, misure }
-export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000, atomiMassimi = 8, piccole = 3, sogliaDG = 60, kMinima = 1e-16, radicali = false, verso = null, fascio = Infinity, tempoMassimo = Infinity } = {}) {
-  const cond = { T: 298.15, solvente: 'acqua', pH: 7, ...condizioni }, t0 = Date.now(), bersaglio = verso ? molecola(verso) : null, bersaglioK = bersaglio ? chiave(bersaglio) : null;
+export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000, atomiMassimi = 8, piccole = 3, sogliaDG = 60, kMinima = 1e-16, radicali = false, verso = null, fascio = Infinity, tempoMassimo = Infinity, lente: opzLente = null, soglia = null, famiglie = 'veloci', stereo = false } = {}) {
+  const cond = { T: 298.15, solvente: 'acqua', pH: 7, ...condizioni, memoria: new Map() }, lente = opzLente ?? cond.T >= 340, t0 = Date.now(), bersaglio = verso ? molecola(verso) : null, bersaglioK = bersaglio ? chiave(bersaglio) : null;
   const iniziali = Array.isArray(partenza) ? Object.fromEntries(partenza.map((x) => [forma0(x), 1])) : Object.fromEntries(Object.entries(partenza).map(([k, v]) => [forma0(k), v]));
   if (cond.solvente === 'acqua' && !('O' in iniziali)) iniziali.O = 55.5;
   const specie = new Map(), lista = [], viste = new Set(), generazioni = [];
   const metti = (k, gen, da = null) => { if (specie.has(k)) return false; const m = molecola(k); specie.set(k, { chiave: k, generazione: gen, pesanti: pesanti(m), da }); return true; };
   for (const k in iniziali) metti(k, 0);
   let fronte = [...specie.keys()], gen = 0;
-  const provaReazioni = (rr, nuove) => { for (const r0 of rr) { const r = { ...r0, reagenti: r0.reagenti.map(forma0).sort(), prodotti: r0.prodotti.map(forma0).sort() }; const id = [r.reagenti.join('.'), r.prodotti.join('.')].sort().join('>'); if (viste.has(id) || r.reagenti.join('.') === r.prodotti.join('.')) continue; viste.add(id);
+  const provaReazioni = (rr0, nuove) => { const rr = stereo ? espandiStereo(rr0) : rr0; for (const r0 of rr) { const r = { ...r0, reagenti: r0.reagenti.map(forma0).sort(), prodotti: r0.prodotti.map(forma0).sort() }; const id = [r.reagenti.join('.'), r.prodotti.join('.')].sort().join('>'); if (viste.has(id) || r.reagenti.join('.') === r.prodotti.join('.')) continue; viste.add(id);
       if (r.prodotti.some((p) => { const s = specie.get(p); return (s ? s.pesanti : pesanti(molecola(p))) > atomiMassimi; })) continue;
       let v; try { v = velocita(r, cond); } catch { continue; } if (!(v.dG <= sogliaDG) || !isFinite(v.dG) || !(v.k >= kMinima)) continue; // (kMinima: ciò che non avviene nemmeno in cento milioni di anni non entra)
       r.dG = v.dG; r.barriera = v.barriera; r.k = v.k; r.kInversa = v.kInversa; lista.push(r); for (const p of r.prodotti) if (!specie.has(p)) { const c = nuove.get(p); if (!c || r.barriera < c.barriera) nuove.set(p, r); } } };
   const passo = () => { gen++; const nuove = new Map(), tutte = [...specie.keys()], piccoleK = tutte.filter((k) => specie.get(k).pesanti <= piccole || k in iniziali), inFronte = new Set(fronte);
-    for (const a of fronte) { if (Date.now() - t0 > tempoMassimo) break; const A = molecola(a); provaReazioni(reazioni(A, null, { radicali }), nuove);
+    for (const a of fronte) { if (Date.now() - t0 > tempoMassimo) break; const A = molecola(a); provaReazioni(reazioni(A, null, { radicali, lente, tutte: famiglie === 'tutte' }), nuove);
       // (una specie nuova con tutte le piccole; una piccola nuova anche con tutte le vecchie)
       const compagni = specie.get(a).pesanti <= piccole || a in iniziali ? tutte : piccoleK;
-      for (const b of compagni) { if (inFronte.has(b) && b < a && (specie.get(b).pesanti <= piccole || b in iniziali || compagni === tutte)) continue; if (specie.get(a).pesanti + specie.get(b).pesanti > atomiMassimi + 3) continue; provaReazioni(reazioni(A, molecola(b), { radicali, metalli: false }), nuove); } }
+      for (const b of compagni) { if (inFronte.has(b) && b < a && (specie.get(b).pesanti <= piccole || b in iniziali || compagni === tutte)) continue; if (specie.get(a).pesanti + specie.get(b).pesanti > atomiMassimi + 3) continue; provaReazioni(reazioni(A, molecola(b), { radicali, metalli: false, lente, tutte: famiglie === 'tutte' }), nuove); } }
     let cand = [...nuove.entries()];
     if (bersaglio) cand = cand.map(([k, r]) => [k, r, k === bersaglioK ? 1 : somiglianza(molecola(k), bersaglio)]).sort((x, y) => y[2] - x[2] || (x[0] < y[0] ? -1 : 1)).slice(0, fascio); else cand.sort((x, y) => (x[0] < y[0] ? -1 : 1));
     cand = cand.slice(0, Math.max(0, massimo - specie.size)); fronte = []; for (const [k, r] of cand) if (metti(k, gen, r)) fronte.push(k); generazioni.push(fronte.length); return fronte.length; };
@@ -77,18 +79,27 @@ export function equilibrioRete(r, { quali = null } = {}) {
   const out = {}; nomi.forEach((k, i) => { out[k] = Math.exp(Math.min(esp(lam, i), 300)); }); if (acqua) out.O = 55.5 * (cond.attivitaAcqua ?? 1);
   return out;
 }
+// ---------- la cinetica nel tempo
+// evolvi(reazioni, concentrazioni, tempo, { fisse, attivita }) → { c, converge }: integra le velocità (mol/L/s) per un
+// tempo dato. Metodo di Eulero «alla Patankar» (1980): c' = (c + dt·produzione)/(1 + dt·perdita/c): resta positivo e non
+// esplode nemmeno con reazioni di tempi lontanissimi tra loro; i passi crescono in progressione geometrica (primo
+// ordine: va bene per i rilassamenti e le crescite, non per contare le oscillazioni). L'acqua e H⁺ hanno attività fissa
+// (la loro energia la contiene già); «fisse» sono le specie tenute alla loro concentrazione (un luogo aperto).
+export function evolvi(reazioni, c0, tempo, { fisse = [], passi = 160, attivita = { O: 1, '[H+]': 1 } } = {}) {
+  const c = new Map(Object.entries(c0)); for (const x of reazioni) for (const k of [...x.reagenti, ...x.prodotti]) if (!c.has(k)) c.set(k, 0);
+  const ferme = new Set(fisse), a = (k) => attivita[k] ?? c.get(k), nomi = [...c.keys()], P = new Map(), L = new Map(), r = 1.18; let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0;
+  for (let n = 0; n < passi; n++, dt *= r) { for (const k of nomi) { P.set(k, 0); L.set(k, 0); }
+    for (const x of reazioni) { let av = x.k, ind = x.kInversa ?? 0; for (const k of x.reagenti) av *= a(k); for (const k of x.prodotti) ind *= a(k); if (!(av > 0) && !(ind > 0)) continue;
+      for (const k of x.prodotti) { P.set(k, P.get(k) + av); const ck = c.get(k); if (ind > 0 && ck > 0) L.set(k, L.get(k) + ind / ck); }
+      for (const k of x.reagenti) { P.set(k, P.get(k) + ind); const ck = c.get(k); if (av > 0 && ck > 0) L.set(k, L.get(k) + av / ck); } }
+    cambia = 0; for (const k of nomi) { if (ferme.has(k) || attivita[k] != null) continue; const ck = c.get(k), nuovo = (ck + dt * P.get(k)) / (1 + dt * L.get(k)); if (nuovo > 1e-30) cambia = Math.max(cambia, Math.abs(nuovo - ck) / nuovo); c.set(k, nuovo); } }
+  return { c: Object.fromEntries(c), converge: cambia < 1e-3 };
+}
 // le concentrazioni stazionarie con le sorgenti tenute fisse (un luogo aperto: ciò che arriva dall'aria o dal camino
-// resta alla sua concentrazione): ogni specie sta dove ciò che la produce pareggia ciò che la consuma. Iterazione
-// produzione/perdita; se non converge lo dice. → { c: { chiave: mol/L }, converge, flussi: [mol/L/s per reazione] }
-export function stazionarie(r, { tenute = r.partenza, giri = 300, tempo = Infinity } = {}) {
-  const c = new Map(); for (const k of r.specie.keys()) c.set(k, tenute[k] ?? 0); const ferme = new Set(Object.keys(tenute));
-  const prodotto = (lista) => lista.reduce((p, k) => p * c.get(k), 1), di = new Map(); r.reazioni.forEach((x, i) => { for (const k of new Set([...x.reagenti, ...x.prodotti])) (di.get(k) || di.set(k, []).get(k)).push(i); });
-  let cambia = 1; for (let g = 0; g < giri && cambia > 1e-6; g++) { cambia = 0;
-    for (const [k, quali] of di) { if (ferme.has(k)) continue; let P = 0, L = 1 / tempo; const ck = c.get(k);
-      for (const i of quali) { const x = r.reazioni[i], nr = x.reagenti.filter((q) => q === k).length, np = x.prodotti.filter((q) => q === k).length, av = x.k * prodotto(x.reagenti), ind = x.kInversa * prodotto(x.prodotti);
-        if (np) P += np * av; if (nr) P += nr * ind; if (nr && ck > 0) L += (nr * av) / ck; if (np && ck > 0) L += (np * ind) / ck; if (nr && !(ck > 0)) L += x.k * x.reagenti.filter((q) => q !== k).reduce((p, q) => p * c.get(q), 1); if (np && !(ck > 0)) L += x.kInversa * x.prodotti.filter((q) => q !== k).reduce((p, q) => p * c.get(q), 1); }
-      const nuovo = L > 0 ? Math.min(P / L, 100) : ck, misto = ck > 0 ? Math.sqrt(ck * Math.max(nuovo, 1e-300)) : nuovo; if (ck > 1e-30 || misto > 1e-30) cambia = Math.max(cambia, Math.abs(Math.log((misto + 1e-30) / (ck + 1e-30)))); c.set(k, misto); } }
-  return { c: Object.fromEntries(c), converge: cambia <= 1e-6, flussi: r.reazioni.map((x) => x.k * prodotto(x.reagenti) - x.kInversa * prodotto(x.prodotti)) };
+// resta alla sua concentrazione), dopo un tempo (di suo: tre miliardi di anni). → { c, converge, flussi }
+export function stazionarie(r, { tenute = r.partenza, tempo = 1e17 } = {}) {
+  const c0 = {}; for (const k of r.specie.keys()) c0[k] = tenute[k] ?? 0; const e = evolvi(r.reazioni, c0, tempo, { fisse: Object.keys(tenute), attivita: { O: r.condizioni.attivitaAcqua ?? 1, '[H+]': 1 } });
+  const a = (k) => (k === 'O' || k === '[H+]' ? 1 : e.c[k]); return { ...e, flussi: r.reazioni.map((x) => x.k * x.reagenti.reduce((p, k) => p * a(k), 1) - x.kInversa * x.prodotti.reduce((p, k) => p * a(k), 1)) };
 }
 
 // ---------- i cicli autocatalitici

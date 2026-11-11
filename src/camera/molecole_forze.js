@@ -21,7 +21,7 @@
 // Unità: Å, kJ/mol, kJ/mol/Å, fs, u.
 
 import { atomo } from './molecole_atomi.js';
-import { molecola, grezzo, chiave, anelli, viciniSigma } from './molecole_grafo.js';
+import { molecola, grezzo, chiave, anelli, viciniSigma, speculare, stereoisomeri } from './molecole_grafo.js';
 import { forma, dominio, lunghezzaLegame } from './molecole_forma.js';
 import { energia, sitiAcidoBase, speciazione, alPH, idratazione, inOlio, R } from './molecole_energia.js';
 import { numero } from './eventi.js';
@@ -115,6 +115,17 @@ export function passo(c, stato = null, { dt = 1, T = 298.15, attrito = 0.01, cas
   return { pos: P2, vel: V2, forze: f2.forze, energia: f2.energia, n: n + 1 };
 }
 
+// ---------- la mano: i diastereomeri hanno energie diverse
+// la tensione di una molecola: l'energia del campo di forze dopo una breve minimizzazione (la stessa, esattamente, per le
+// due immagini allo specchio: si calcola su quella delle due che ha la chiave minore)
+const TENSIONI = new Map();
+export function tensione(x, { solvente = null, passi = 60 } = {}) { const m = molecola(x), sp = speculare(m), ka = chiave(m), kb = chiave(sp), rap = ka <= kb ? ka : kb, k = `${rap}|${solvente}|${passi}`;
+  if (!TENSIONI.has(k)) { if (TENSIONI.size > 5000) TENSIONI.clear(); TENSIONI.set(k, minimizza(campo(forma(molecola(rap)), { solvente }), { passi }).energia); } return TENSIONI.get(k); }
+// di quanto una forma stereo sta sopra la più stabile delle sue (0 per gli enantiomeri tra loro e per chi non ha stereo)
+export function energiaStereo(x, opz = {}) { const m = molecola(x); if (!m.atomi.some((a) => a.chir) && !m.legami.some((l) => l.ez)) return 0;
+  const g = grezzo(m); for (const a of g.atomi) { a.chir = 0; a.ord = null; } for (const l of g.legami) l.ez = null; const tutte = stereoisomeri(molecola(g)); if (tutte.length < 3 && !m.legami.some((l) => l.ez)) return 0;
+  return tensione(m, opz) - Math.min(...tutte.map((y) => tensione(y, opz))); }
+
 // ---------- chi si scioglie e chi si aggrega
 // → { idratazione, inOlio, trasferimento (acqua → olio, kJ/mol: negativo = preferisce stare tra i suoi simili),
 //     coda (atomi di carbonio della catena apolare più lunga), testa, cmc (mol/L, se è un'anfifilica), impacchettamento, forma: 'sciolta' | 'micelle' | 'doppio strato' | 'gocce d'olio' }
@@ -155,13 +166,13 @@ const SITI = {
 export function polimero(unita, legame = 'peptide', condizioni = null) {
   const regola = typeof legame === 'string' ? SITI[legame] : legame; if (!regola) throw new Error(`molecole: legame «${legame}» sconosciuto`);
   const ms = unita.map((u) => molecola(u)), g = { atomi: [], legami: [] }, parti = [], togliere = new Set(), giunti = []; let precedente = null;
-  ms.forEach((m, q) => { const d = g.atomi.length, r = grezzo(m); for (const a of r.atomi) { if (a.ord) a.ord = a.ord.map((v) => (v < 0 ? v : v + d)); g.atomi.push(a); } for (const l of r.legami) g.legami.push({ ...l, a: l.a + d, b: l.b + d });
+  ms.forEach((m, q) => { const d = g.atomi.length, r = grezzo(m); for (const a of r.atomi) { if (a.ord) a.ord = a.ord.map((v) => (v < 0 ? v : v + d)); g.atomi.push(a); } for (const l of r.legami) g.legami.push({ ...l, a: l.a + d, b: l.b + d, ez: l.ez ? { p: l.ez.p + d, q: l.ez.q + d, cis: l.ez.cis } : null });
     if (precedente) { const nu = regola.a(m); if (nu == null) throw new Error(`molecole: l'unità ${q} (${chiave(m)}) non ha il sito per il legame`); const [C, O] = precedente; togliere.add(O); g.legami.push({ a: C, b: nu + d, o: 1, t: 'c' }); g.atomi[nu + d].h--; if (g.atomi[nu + d].ord) { g.atomi[nu + d].chir = 0; g.atomi[nu + d].ord = null; } if (g.atomi[C].ord) g.atomi[C].ord = g.atomi[C].ord.map((v) => (v === O ? nu + d : v)); giunti.push([C, nu + d]); }
     const e = regola.da(m); precedente = e ? [e[0] + d, e[1] + d] : null; if (!e && q < ms.length - 1) throw new Error(`molecole: l'unità ${q} (${chiave(m)}) non ha il gruppo che si lega`);
     parti.push({ nome: typeof unita[q] === 'string' ? unita[q] : chiave(m), da: d, a: g.atomi.length }); });
   // si tolgono gli ossigeni usciti con l'acqua, e si rinumerano gli atomi
   const nuovo = []; let k = 0; g.atomi.forEach((_, i) => { nuovo[i] = togliere.has(i) ? -1 : k++; });
-  const G = { atomi: g.atomi.filter((_, i) => !togliere.has(i)).map((a) => ({ ...a, ord: a.ord ? a.ord.map((v) => (v < 0 ? v : nuovo[v])) : null })), legami: g.legami.filter((l) => nuovo[l.a] >= 0 && nuovo[l.b] >= 0).map((l) => ({ ...l, a: nuovo[l.a], b: nuovo[l.b] })) };
+  const G = { atomi: g.atomi.filter((_, i) => !togliere.has(i)).map((a) => ({ ...a, ord: a.ord ? a.ord.map((v) => (v < 0 ? v : nuovo[v])) : null })), legami: g.legami.filter((l) => nuovo[l.a] >= 0 && nuovo[l.b] >= 0).map((l) => ({ ...l, a: nuovo[l.a], b: nuovo[l.b], ez: l.ez && nuovo[l.ez.p] >= 0 && nuovo[l.ez.q] >= 0 ? { p: nuovo[l.ez.p], q: nuovo[l.ez.q], cis: l.ez.cis } : null })) };
   const m = molecola(G), out = { m, unita: parti.map((p) => ({ nome: p.nome, da: nuovo.slice(p.da, p.a).find((v) => v >= 0), a: Math.max(...nuovo.slice(p.da, p.a)) + 1 })), legami: ms.length - 1, acqua: ms.length - 1, giunti: giunti.map(([a, b]) => [nuovo[a], nuovo[b]]), tipo: typeof legame === 'string' ? legame : 'condensazione' };
   if (condizioni && ms.length > 1) out.dG = passoDiCondensazione(ms[0], ms[1], legame, condizioni).dG;
   return out;
