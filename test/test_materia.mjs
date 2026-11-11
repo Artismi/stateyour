@@ -238,4 +238,54 @@ prova('le tracce di fissione: densità = età × uranio × costante di fissione 
   assert.equal(M.ritenzione(M.luogoDaRoccia({ P: { ...TERRA, clima: { ...TERRA.clima, acqua: 'assente' } }, minerali: GRANITO, etaRoccia: 1.5e9, bagnato: false }), 'apatite').anni, 1.5e9, "senza pioggia non c'è erosione: la memoria è l'età della roccia");
 });
 
+prova('i reticoli veri: celle, distanze di legame, densità; gli atomi con la loro agitazione termica', () => {
+  const dist = (R, elA, elB) => { let m = Infinity; for (const a of R.atomi) if (a.el === elA) for (const b of R.atomi) if (b.el === elB) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) { const p = [0, 1, 2].map((n) => b.pos[n] + i * R.base.A[n] + j * R.base.B[n] + k * R.base.C[n] - a.pos[n]), d = Math.hypot(...p); if (d > 0.05 && d < m) m = d; } return m; };
+  const q = M.reticolo('quarzo'), s = M.reticolo('salgemma'), g = M.reticolo('ghiaccio'), ca = M.reticolo('calcite'), bi = M.reticolo('biotite');
+  assert.equal(q.sistema, 'trigonale'); assert.equal(s.sistema, 'cubico'); assert.equal(g.sistema, 'esagonale'); assert.equal(q.atomi.length, 9); assert.equal(s.atomi.length, 8);
+  tra(dist(q, 'Si', 'O'), 1.59, 1.62, 'Si–O nel quarzo (Å; 1,61)'); tra(dist(s, 'Na', 'Cl'), 2.815, 2.825, 'Na–Cl (2,820)'); tra(dist(g, 'O', 'O'), 2.74, 2.78, 'O–O nel ghiaccio (2,76)'); tra(dist(g, 'O', 'H'), 0.95, 1.01, 'O–H (0,98)');
+  tra(dist(ca, 'C', 'O'), 1.27, 1.29, 'C–O nella calcite (1,28)'); tra(dist(bi, 'K', 'O'), 2.9, 3.0, 'K–O nella mica (2,96)'); tra(dist(M.reticolo('olivina'), 'Si', 'O'), 1.6, 1.63, "Si–O nell'olivina"); tra(dist(M.reticolo('pirosseno'), 'Si', 'O'), 1.57, 1.61, 'Si–O nel pirosseno'); tra(dist(M.reticolo('feldspato potassico'), 'Si', 'O'), 1.62, 1.65, '(Si,Al)–O nel feldspato');
+  for (const [m, rho] of [['quarzo', 2.65], ['salgemma', 2.165], ['ghiaccio', 0.917], ['calcite', 2.71], ['olivina', 3.22], ['pirosseno', 3.28], ['feldspato potassico', 2.56], ['plagioclasio', 2.62], ['biotite', 2.8]]) tra(M.reticolo(m).densita / rho, 0.97, 1.03, `densità della cella di ${m}`);
+  // Debye-Waller: nel quarzo a 300 K il silicio è spostato di ~0,08 Å, l'ossigeno di più; a caldo di più; a zero non è zero
+  tra(M.agitazione(28.086, 470, 300), 0.06, 0.1, 'agitazione del silicio (Å)'); assert.ok(M.agitazione(15.999, 470, 300) > M.agitazione(28.086, 470, 300) && M.agitazione(28.086, 470, 900) > 1.5 * M.agitazione(28.086, 470, 300) && M.agitazione(28.086, 470, 1) > 0.03);
+  const a = M.atomi('quarzo', { latoM: 3e-9, T: 288 }, sorgente('prova/quarzo')), caldo = M.atomi('quarzo', { latoM: 3e-9, T: 800 }, sorgente('prova/quarzo'));
+  tra(a.atomi.length, 250, 700, 'atomi in uno strato di quarzo di 3 nm'); tra(a.quantiDavvero, 1800, 2500, 'in un cubo di 3 nm'); assert.ok(a.atomi.every((p) => p.x >= 0 && p.x <= 3e-9 && p.y >= 0 && p.y <= 3e-9));
+  tra(a.atomi.filter((p) => p.el === 'O').length / a.atomi.filter((p) => p.el === 'Si').length, 1.8, 2.2, 'due ossigeni per silicio'); assert.ok(caldo.agitazione.Si > a.agitazione.Si);
+  assert.equal(JSON.stringify(M.atomi('quarzo', { latoM: 3e-9, T: 288 }, sorgente('prova/quarzo')).atomi.slice(0, 20)), JSON.stringify(a.atomi.slice(0, 20))); assert.equal(M.immagineAtomi(a, 64).length, 64 * 64 * 4);
+  assert.throws(() => M.reticolo('kriptonite'), /non conosco la cella/);
+});
+
+prova("l'incanalamento: angolo critico di Lindhard, e una stella con la simmetria del reticolo", () => {
+  const t0 = performance.now(), q = M.incanalamento('quarzo', 'protone', 1, 'c'), s = M.incanalamento('salgemma', 'protone', 1, 'a'), ms = (performance.now() - t0) / 2;
+  tra(q.psi1Gradi, 0.1, 1, 'angolo critico di un protone da 1 MeV nel quarzo (gradi)'); tra(s.psi1Gradi, 0.1, 1, 'nel salgemma');
+  // ψ1 = 0,307°·√(Z1·Z2/(E[MeV]·d[Å])): nel salgemma lungo [100] la fila più carica è il cloro (Z = 17), un atomo ogni 5,64 Å
+  tra(s.psi1Gradi / (0.3075 * Math.sqrt(17 / 5.6402)), 0.99, 1.01, 'la formula di Lindhard'); tra(M.incanalamento('salgemma', 'protone', 4, 'a', { N: 12, punti: 2 }).psi1 / s.psi1, 0.49, 0.51, "a energia quadrupla, metà dell'angolo");
+  tra(M.incanalamento('salgemma', 'alfa', 1, 'a', { N: 12, punti: 2 }).psi1 / s.psi1, 1.40, 1.43, 'una α (carica 2): √2 volte');
+  assert.equal(q.simmetria, 6, `quarzo lungo c: ${JSON.stringify(q.rotazioni)}`); assert.equal(s.simmetria, 4, `salgemma lungo [100]: ${JSON.stringify(s.rotazioni)}`);
+  assert.ok(s.rotazioni[4] > 0.9 && s.rotazioni[6] < 0.2 && q.rotazioni[6] > 0.5 && q.rotazioni[4] < q.rotazioni[6]);
+  assert.equal(M.incanalamento('ghiaccio', 'protone', 1, 'c', { T: 260 }).simmetria, 6); assert.equal(M.incanalamento('olivina', 'protone', 1, 'a').simmetria, 2, "l'olivina è ortorombica: due");
+  // al centro (dentro l'angolo critico) quasi tutte passano lontano dai nuclei; lontano dall'asse e dai piani no
+  assert.ok(s.incanalate > 0.8 && q.incanalate > 0.6); const N = s.N, angolo = s.mappa[Math.floor(N * 0.3) * N + Math.floor(N * 0.12)]; assert.ok(angolo < 0.5 * s.incanalate, `fuori dai piani: ${angolo}`);
+  assert.ok(s.punte.length >= 4 && s.punte.includes(0) && s.punte.includes(90)); assert.equal(s.immagine.length, N * N * 4); assert.ok(s.piani[0].spaziatura > 5.6 && s.piani[0].psi < s.psi1);
+  // la figura non dipende da chi guarda: stesso minerale, stessa particella, stessa figura
+  assert.equal(JSON.stringify(Array.from(M.incanalamento('salgemma', 'protone', 1, 'a').mappa)), JSON.stringify(Array.from(s.mappa)));
+  // più caldo, gli atomi vibrano di più e il canale si stringe
+  assert.ok(M.incanalamento('salgemma', 'protone', 1, 'a', { T: 900, N: 12, punti: 2 }).psiTermico < s.psiTermico);
+  console.log(`      (una figura: ${ms.toFixed(0)} ms; quarzo ψ1 = ${q.psi1Gradi.toFixed(2)}°, salgemma ${s.psi1Gradi.toFixed(2)}°)`);
+});
+
+prova('i luoghi: da ciò che la mappa ha in mano al luogo delle particelle', () => {
+  // (i minerali della norma di chimica.js: senz'acqua il pirosseno; con l'acqua, nei continenti, diventa biotite)
+  const norma = [{ nome: 'quarzo', frazione: 0.49 }, { nome: 'plagioclasio', frazione: 0.35 }, { nome: 'feldspato potassico', frazione: 0.09 }, { nome: 'pirosseno', frazione: 0.06 }, { nome: 'ferro metallico', frazione: 0.01 }];
+  const S = { k: 'prova/pianeta', P: TERRA, se: { materiali: { continente: norma, basalto: [{ nome: 'pirosseno', frazione: 0.48 }, { nome: 'plagioclasio', frazione: 0.43 }, { nome: 'quarzo', frazione: 0.05 }, { nome: 'feldspato potassico', frazione: 0.02 }] } }, mare: { esiste: true, totali: { K: 0.0102 }, carbonio: 0.0022, pO2: 0.2 } };
+  const r = M.luogoDaRoccia({ S, continente: true, lat: 30, lon: 12, quotaM: 500 }), b = M.luogoDaRoccia({ S, continente: false, lat: 30, lon: 12 }), a = M.luogoDaAcqua({ S, lat: 30, lon: -40, profonditaM: 100 }), n = M.luogoDaRoccia({ S, ghiaccio: true, T: 250, lat: 80 });
+  assert.ok(r.minerali.some((m) => m.nome === 'biotite') && !b.minerali.some((m) => m.nome === 'biotite')); tra(r.minerali.reduce((s, m) => s + m.frazione, 0), 0.999, 1.001, 'le frazioni sommano a uno');
+  assert.match(r.indirizzo, /^prova\/pianeta\/roccia\//); assert.match(a.indirizzo, /^prova\/pianeta\/acqua\//); tra(r.aria.pressione, 0.9e5, 1e5, 'la pressione a 500 m'); tra(r.B / TERRA.B0, 1.2, 1.4, 'il campo a 30° di latitudine');
+  tra(r.gradiente * 1000, 25, 33, 'gradiente di temperatura (K per km)'); tra(M.luogoDaRoccia({ S, profonditaM: 3000 }).T, 288 + 75, 288 + 99, 'a 3 km di profondità');
+  // il potassio dei minerali dà l'uranio e il torio (K/U ≈ 17 000 in massa)
+  const el = M.radioelementi(r.minerali); tra(el.K / el.U, 1.5e4, 2e4, 'K/U'); tra(el.Th / el.U, 3.4, 3.9, 'Th/U'); assert.ok(M.sorgentiNaturali(r).totale.perKg > 2 * M.sorgentiNaturali(b).totale.perKg, 'il continente è più radioattivo del basalto');
+  tra(M.sorgentiNaturali(a).totale.perM3 / 1000, 11, 14, 'il mare di S'); assert.equal(M.sorgentiNaturali(n).processi.filter((p) => p.tipo !== 'cosmico').length, 0, 'nel ghiaccio puro solo i raggi cosmici');
+  for (const l of [r, b, a, n]) { const c = M.cellaMateria(l, {}, sorgente(l.indirizzo)); assert.ok(simulaMondo(c.cella).length >= 1 && c.nota.length > 100); }
+  tra(M.cieloRelativo({ ritmoSN: 0.02, forma: { unitaM: 15 * 3.0857e19 } }).relativo, 0.99, 1.01, 'il cielo della Via Lattea'); assert.ok(M.raggiCosmici({ ...r, raggi: { relativo: 10 } }).muoni > 9 * M.raggiCosmici(r).muoni);
+});
+
 console.log(`\n${ok} prove superate`);

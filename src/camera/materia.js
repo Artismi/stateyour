@@ -93,14 +93,19 @@
 //   · lo sciame nell'aria è il suo scheletro: l'urto del primario, i pioni, i muoni, le coppie e i fotoni di frenamento
 //     (modello di Heitler), in un'aria a strati; il campo del pianeta è perpendicolare alla finestra;
 //   · per il plagioclasio la cella dell'albite con le coordinate del sanidino (stessa impalcatura); per la biotite quelle
-//     della flogopite; l'idrogeno del ghiaccio è disordinato (mezzo atomo per posto).
+//     della flogopite; l'idrogeno del ghiaccio è disordinato (mezzo atomo per posto);
+//   · la ricottura è una soglia netta (il modello a ventaglio di Ketcham darebbe tracce accorciate a poco a poco); la
+//     roccia dei continenti risale per erosione solo dove ci sono placche che la sollevano; il radon nell'aria non
+//     guarda quanto è densa l'aria;
+//   · l'incanalamento è il modello continuo (le file come corde cariche), lungo gli assi a, b, c o c*, senza la perdita di
+//     energia lungo il canale; l'agitazione degli atomi è quella di Debye con la massa di ciascuno.
 
-import { ANNO, ISOTOPI, COSTANTI } from './leggi.js';
+import { ANNO, ISOTOPI } from './leggi.js';
 import { sorgente } from './eventi.js';
 import { casoEvento } from './mondo.js';
 import { unita, catalogoVero, fmtLunghezza, ME_MEV, C_LUCE, C_MOTORE } from './unita.js';
 
-const K_BETHE = 0.307075, N_A = 6.02214e23, ALFA_FINE = 1 / 137.036, U_MEV = 931.494, MEV_J = 1.602177e-13, E2 = 1.43996e-13; // e²/(4πε0) in MeV·cm
+const K_BETHE = 0.307075, N_A = 6.02214e23, ALFA_FINE = 1 / 137.036, U_MEV = 931.494, MEV_J = 1.602177e-13;
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 
 // =====================================================================================
@@ -499,8 +504,8 @@ export function raggiCosmici(luogo = {}) {
   // energico (più 1 GeV: sotto, i pioni non nascono); la resa è quella che in alto dà 0,14·E^(−2,7) muoni per (cm²·s·sr·GeV)
   // da 1,8·E^(−2,7) primari. Chi viene da un primario sotto la soglia del campo non c'è.
   const muoniA = (Eg, cos) => { // intensità al suolo, per (m²·s·sr·GeV)
-    if (!(X0 > 0)) return 0; const n = 24, hx = Math.log(X0 / 0.5) / n; let somma = 0;
-    for (let i = 0; i <= n; i++) { const X = 0.5 * Math.exp(i * hx), E1 = Eg + (aAria * (X0 - X)) / cos; if (E1 * 10 + 1 < Ec) continue;
+    if (!(X0 > 1e-3)) return 0; const n = 24, Xa = Math.min(0.5, X0 / 50), hx = Math.log(X0 / Xa) / n; let somma = 0; // (sotto un milligrammo d'aria per cm² non nasce niente)
+    for (let i = 0; i <= n; i++) { const X = Xa * Math.exp(i * hx), E1 = Eg + (aAria * (X0 - X)) / cos; if (E1 * 10 + 1 < Ec) continue;
       const nasce = RESA_MUONI * rel * primari(10 * E1 + 1) * (1 / (1 + (1.1 * E1 * cos) / epsPi) + 0.054 / (1 + (1.1 * E1 * cos) / epsK)) * (Math.exp(-X / (LamN * cos)) / (LamN * cos));
       const vive = Math.pow((X / X0) * (Eg / E1), epsMu / (Eg * cos + aAria * X0));
       somma += (i === 0 || i === n ? 0.5 : 1) * nasce * vive * X; }
@@ -644,8 +649,9 @@ export function luogoDaRoccia({ S = null, P = S?.P || {}, minerali = null, conti
   const acqua = bagnato ?? (P.clima?.acqua === 'liquida' || !!S?.mare?.esiste), mat = S?.se?.materiali || {};
   const base = { ...dp, T: qui, Tsuperficie: Ts, gradiente, profonditaM, lon, raggi: raggi || undefined, indirizzo: indirizzo || (S?.k ? `${S.k}/roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}` : `roccia/${lon.toFixed(4)}/${lat.toFixed(4)}/${profonditaM}`),
     sopra: { acquaM: acquaSopraM, rocciaM: profonditaM }, carbonioKgM2: carbonioScambiato(P, S?.mare),
-    // l'erosione dove piove: 30 m per milione di anni (la stessa legge di chimica.js e geologia.js); altrove niente
-    denudazione: acqua ? 3e-5 : 0 };
+    // l'erosione dove piove: 30 m per milione di anni (la stessa legge di chimica.js e geologia.js); ma dura solo dove le
+    // placche continuano a sollevare la crosta: su un mondo fermo il rilievo si spiana e non c'è più niente da togliere
+    denudazione: acqua && (P.interno?.tettonica ?? 'a placche') === 'a placche' ? 3e-5 : 0 };
   if (ghiaccio) return { ...base, tipo: 'ghiaccio', nome: 'ghiaccio', minerali: [{ nome: 'ghiaccio d\'acqua', frazione: 1 }], sopra: { acquaM: acquaSopraM, ghiaccioM: profonditaM }, etaRoccia: etaRoccia ?? 1e4, elementi: elementi || { K: 0, U: 0, Th: 0, Rb: 0 } };
   let lista = (minerali || (continente ? mat.continente : mat.basalto) || (continente ? [{ nome: 'quarzo', frazione: 0.3 }, { nome: 'feldspato potassico', frazione: 0.35 }, { nome: 'plagioclasio', frazione: 0.25 }, { nome: 'pirosseno', frazione: 0.1 }] : [{ nome: 'plagioclasio', frazione: 0.5 }, { nome: 'pirosseno', frazione: 0.4 }, { nome: 'olivina', frazione: 0.1 }])).filter((m) => MATERIALI[m.nome]).map((m) => ({ nome: m.nome, frazione: m.frazione }));
   if (continente && acqua && !lista.some((m) => m.nome === 'biotite')) { // KAlSi3O8 + 3 (Mg,Fe)SiO3 + H2O → biotite + 3 SiO2
@@ -775,7 +781,7 @@ export function ritenzione(luogo, minerale, tipo = 'fissione') {
   if (luogo.riscaldata && luogo.riscaldata.T >= Tc && luogo.riscaldata.anniFa < anni) { anni = luogo.riscaldata.anniFa; perche = `scaldata a ${Math.round(luogo.riscaldata.T - 273.15)} °C ${fmtTempo(anni * ANNO)} fa: le tracce di prima sono cancellate`; }
   if (luogo.continente !== false && luogo.denudazione > 0 && luogo.gradiente > 0) {
     const z = (Tc - (luogo.Tsuperficie ?? luogo.T ?? 288)) / luogo.gradiente - (luogo.profonditaM || 0), t = z / luogo.denudazione;
-    if (t < anni) { anni = Math.max(0, t); perche = `la roccia è salita: stava a ${fmtLunghezza(z + (luogo.profonditaM || 0))} di profondità, a ${Math.round(Tc - 273.15)} °C, ${fmtTempo(anni * ANNO)} fa (l'erosione toglie ${fmt(luogo.denudazione * 1e6)} m per milione di anni); prima era troppo calda per ricordare`; }
+    if (t < anni && z < 4e4) { /* (più giù di una crosta, 40 km, non è roccia che possa risalire per erosione) */ anni = Math.max(0, t); perche = `la roccia è salita: stava a ${fmtLunghezza(z + (luogo.profonditaM || 0))} di profondità, a ${Math.round(Tc - 273.15)} °C, ${fmtTempo(anni * ANNO)} fa (l'erosione toglie ${fmt(luogo.denudazione * 1e6)} m per milione di anni); prima era troppo calda per ricordare`; }
   }
   return { anni, registra: true, Tc, perche };
 }
@@ -787,7 +793,8 @@ export function ritenzione(luogo, minerale, tipo = 'fissione') {
 //   evento      nel modo istante: il k-esimo evento da quando si comincia a guardare (0: il primo)
 //   esposizione nel modo memoria: quanti anni guardare (se manca: tutta la memoria del minerale)
 //   ospite, granello  nel modo memoria: il minerale in cui si guarda e quello che fa da nucleo (se mancano li sceglie il luogo)
-//   massimo     quante tracce al massimo si disegnano; sopra (GeV): per lo sciame, l'energia minima del primario
+//   massimo     quante tracce al massimo si disegnano; sopra, fino (GeV): per lo sciame, tra quali energie del primario (20–300)
+//   via         l'indirizzo del pianeta ({ cosmo, galassia, stella, pianeta }): finisce in cella.indirizzo, per tornare alla mappa
 // caso: la sorgente degli eventi (eventi.js) di quel luogo; i suoi rami sono universi paralleli.
 export function cellaMateria(luogo, opzioni = {}, caso = null) {
   const c = (caso || sorgente(luogo.indirizzo || 'materia')).sotto(`materia/${opzioni.modo || 'istante'}`);
@@ -806,7 +813,7 @@ const mezzoMotore = (m, u, latoM, { cherenkov = true, taglio = null } = {}) => (
   ...(taglio ? { delta: { A: +(((K_BETHE / 2) * m.ZsuA * m.densita * 100 * u.l) / ME_MEV).toPrecision(6), taglio: +(taglio / ME_MEV).toPrecision(6), specie: 'elettrone' } } : {}) });
 
 // ---------- L'ISTANTE: un evento vero, al suo momento
-function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, massimo = 240 } = {}, c) {
+function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, via = null } = {}, c) {
   const src = sorgentiNaturali(luogo), m = src.mezzo, visibili = src.processi.filter((p) => p.visibile && (p.perM3 > 0 || p.flusso > 0));
   if (!visibili.length) throw new Error('cellaMateria: in questo luogo non accade niente che lasci traccia');
   const tutti = src.processi.filter((p) => p.perM3 > 0 || p.flusso > 0), trova = (id) => tutti.find((p) => p.id === id) || visibili.find((p) => p.id.startsWith(id) || p.nuclide === id || p.id.includes(id)) || tutti.find((p) => p.id.includes(id));
@@ -849,7 +856,7 @@ function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, massim
   cella.scala.attesa = data; cella.scala.ritmo = ritmo;
   if (sorgenti[0].emissione.dal !== 'bordo') cella.finestra.centro = sorgenti[0].pos.map((x) => Math.round(limita(x, 200, 800))); // la finestra guarda dove accade
   if (cella.mezzo.n) cella.scala.fotoniPerLinea = fotoniVeri(m) * cella.mezzo.ogniFotone * u.l; // quanti fotoni veri sta per ogni linea di luce disegnata (a β = 1)
-  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: m.nome, modo: 'istante', latoM, processo: chi.id, evento, data };
+  cella.indirizzo = { ...(via || {}), luogo: luogo.indirizzo || null, materia: m.nome, modo: 'istante', latoM, processo: chi.id, evento, data };
   const attese = src.attesa(latoM), nome = `${m.nome}, ${fmtLunghezza(latoM)}: ${chi.tipo === 'cosmico' ? chi.id : chi.origine}`;
   const frasi = [`Un cubo di ${m.nome} largo ${fmtLunghezza(latoM)}${luogo.profonditaM > 0 ? `, ${fmtLunghezza(luogo.profonditaM)} sotto la superficie` : ''}.`, `${frase}.`,
     `Quanto è raro: in questo volume ${scelto ? 'un evento così' : 'un evento qualsiasi'} accade ogni ${fmtTempo(1 / ritmo)}; questo è il ${evento + 1}° da quando si comincia a guardare, dopo ${fmtTempo(data)}. Dura ${fmtTempo(tempo * u.tu)}: è tutta l'esposizione.`,
@@ -858,7 +865,7 @@ function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, massim
 }
 
 // ---------- LA MEMORIA: ciò che un minerale ha registrato in milioni di anni
-function cellaMemoria(luogo, { latoM = null, esposizione = null, ospite = null, granello, massimo = 160 } = {}, c) {
+function cellaMemoria(luogo, { latoM = null, esposizione = null, ospite = null, granello, massimo = 160, via = null } = {}, c) {
   if (luogo.tipo === 'acqua' || luogo.tipo === 'aria') throw new Error(`cellaMateria: ${luogo.tipo === 'acqua' ? "nell'acqua" : "nell'aria"} non resta memoria: si guarda un evento (modo: 'istante')`);
   const minerali = luogo.minerali || [], acc = luogo.accessori || [], ha = (n) => minerali.some((x) => x.nome === n) || acc.some((x) => x.nome === n);
   ospite ??= ha('biotite') ? 'biotite' : acc.find((x) => MATERIALI[x.nome]?.ricottura)?.nome || minerali[0]?.nome;
@@ -888,14 +895,14 @@ function cellaMemoria(luogo, { latoM = null, esposizione = null, ospite = null, 
   // il granello: un altro mezzo (più denso: frena di più), nello stesso posto per tutte le tracce
   if (granello && rGu > 0.5) cella.domini.push({ forma: { tipo: 'cerchio', centro: [LATO / 2, LATO / 2], r: +rGu.toFixed(3) }, K: +(perdita('alfa', 5, mG).alMetro / perdita('alfa', 5, mO).alMetro).toFixed(4) });
   cella.scala.esposizioneAnni = Math.max(tA, tF); cella.scala.sparso = Tsparso; cella.scala.compressione = (Math.max(tA, tF) * ANNO) / (Tsparso * u.tu);
-  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: ospite, modo: 'memoria', latoM, granello, raggioGranelloM: rG };
+  cella.indirizzo = { ...(via || {}), luogo: luogo.indirizzo || null, materia: ospite, modo: 'memoria', latoM, granello, raggioGranelloM: rG };
   const anelli = granello && tA > 0 ? aloni(luogo, { ospite, granello, raggioM: rG, N: 0 }).anelli : [];
   const nome = `${ospite}${granello ? ` attorno a un granello di ${granello}` : ''}, ${fmtLunghezza(latoM)}: la memoria di ${fmtTempo(Math.max(tA, tF) * ANNO)}`;
   const cg = granello ? concentrazioni(luogo, granello) : null;
   const frasi = [`Una sezione sottile di ${ospite} larga ${fmtLunghezza(latoM)}${granello ? `, con al centro un granello di ${granello} di ${fmtLunghezza(2 * rG)} (uranio ${fmt(cg.U * 1e6)} ppm, torio ${fmt(cg.Th * 1e6)} ppm: li concentra ${fmt(MATERIALI[granello].concentra.U)} e ${fmt(MATERIALI[granello].concentra.Th)} volte)` : ''}.`,
     alone.registra ? (tA > 0 ? `Gli aloni: ${alone.perche}. In quel tempo il granello ha emesso ${fmt(som(alfaG))} particelle α${vereA > maxA ? ` (se ne disegnano ${nA}: una ogni ${fmt(vereA / nA)})` : ''}; ognuna si ferma dove finisce la sua energia, e lì annerisce la mica: ${anelli.length ? `anelli a ${anelli.filter((a) => !a.debole).map((a) => fmt(a.raggioM * 1e6, 2)).join(', ')} µm dal centro (${anelli.filter((a) => !a.debole).map((a) => a.nuclidi.join('+')).join('; ')})` : 'nessun anello'}.` : `Niente aloni: ${alone.perche}.`) : `Le α qui non lasciano un segno che duri (${alone.perche}).`,
     fiss.registra ? (tF > 0 ? `Le tracce di fissione: ${fiss.perche}; in questa fetta ${fmt(vereF)} fissioni spontanee dell'uranio-238 (${nF} disegnate): due frammenti schiena contro schiena, ${fmtLunghezza(percorso({ Z: 38, A: 96 }, 100, mO).m + percorso({ Z: 54, A: 140 }, 70, mO).m)} in tutto.` : `Niente tracce di fissione: ${fiss.perche}.`) : `Le tracce di fissione qui non si conservano (${fiss.perche}).`,
-    `Il tempo è compresso ${fmt(cella.scala.compressione)} volte: ogni evento dura picosecondi e ha la sua data vera, sparsa nella memoria del minerale (eventiDi).`];
+    ...(sorgenti.length ? [`Il tempo è compresso ${fmt(cella.scala.compressione)} volte: ogni evento dura picosecondi e ha la sua data vera, sparsa nella memoria del minerale (eventiDi).`] : ['Non c\'è niente da vedere: questa roccia non ricorda.'])];
   return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese: [], veri: { alfa: vereA, alfaDisegnate: nA, fissioni: vereF, fissioniDisegnate: nF, anniAlone: tA, anniFissione: tF, anelli } } };
 }
 // le date vere degli eventi di una cella (e dei suoi rami): per ogni sorgente quando è partita nel motore e, nel modo
@@ -909,13 +916,14 @@ export function eventiDi(cella) {
 }
 
 // ---------- LO SCIAME di un raggio cosmico nell'aria, su chilometri: la sua impronta al suolo è un disegno alla scala del paesaggio
-function cellaSciame(luogo, { latoM = null, evento = 0, sopra = 20 } = {}, c) {
+function cellaSciame(luogo, { latoM = null, evento = 0, sopra = 20, fino = 300, via = null } = {}, c) {
   const ariaQui = luogo.tipo === 'aria' ? luogo : { ...luogo, tipo: 'aria', nome: 'aria', sopra: {}, minerali: undefined }, rc = raggiCosmici(ariaQui), m = mezzo({ tipo: 'aria', aria: ariaQui.aria });
   if (!(rc.colonnaAria > 30)) throw new Error("cellaMateria: qui non c'è abbastanza aria per uno sciame: i primari arrivano al suolo (processo: 'raggio cosmico primario')");
   const H = rc.scalaAltezza; latoM ??= Math.round((H * Math.log(rc.colonnaAria / 5)) / 0.92 / 1000) * 1000; const u = unita(latoM), ce = c.sotto(`sciame ${evento}`);
   // l'energia del primario: dallo spettro sopra il pianeta, tra quelli con più di «sopra» GeV (sotto, lo sciame si spegne in alto)
-  let lo = 0, hi = 1; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (rc.primarioTipico(mid) < sopra) lo = mid; else hi = mid; }
-  const E = rc.primarioTipico(hi + (1 - hi) * ce('energia')) * 1000, ritmo = rc.primari * (1 - hi) * latoM * latoM;
+  // e meno di «fino» (i più energici sono rarissimi, e il loro sciame ha decine di migliaia di particelle: chi li vuole alzi «fino»)
+  const quantile = (GeV) => { let lo = 0, hi = 1; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (rc.primarioTipico(mid) < GeV) lo = mid; else hi = mid; } return hi; };
+  const qa = quantile(sopra), qb = Math.max(qa, quantile(Math.max(fino, sopra * 1.01))), E = rc.primarioTipico(qa + (qb - qa) * ce('energia')) * 1000, ritmo = rc.primari * (qb - qa) * latoM * latoM;
   let data = 0; for (let k = 0; k <= evento; k++) data += -Math.log(1 - c(`sciame ${k}/attesa`)) / ritmo;
   const cat = catalogoMateria(m, u, { sciame: true }), suolo = 0.94 * LATO, strati = 16, domini = [];
   // l'aria a strati: la densità cala con la quota come e^(−h/H); sotto, il suolo
@@ -926,11 +934,11 @@ function cellaSciame(luogo, { latoM = null, evento = 0, sopra = 20 } = {}, c) {
     origine: `raggio cosmico primario da ${fmt(E / 1000)} GeV${luogo.raggi?.origine ? `, ${luogo.raggi.origine}` : ''}` }];
   const cella = scheletro(ariaQui, m, u, latoM, tempo, ce, { specie: cat, sorgenti, domini, mezzo: mezzoMotore(m, u, latoM, { cherenkov: false }) });
   cella.scala.attesa = data; cella.scala.ritmo = ritmo; cella.scala.suolo = suolo; cella.scala.scalaAltezza = H;
-  cella.indirizzo = { luogo: luogo.indirizzo || null, materia: 'aria', modo: 'istante', latoM, processo: 'sciame', evento, data };
+  cella.indirizzo = { ...(via || {}), luogo: luogo.indirizzo || null, materia: 'aria', modo: 'istante', latoM, processo: 'sciame', evento, data };
   const nome = `aria, ${fmtLunghezza(latoM)}: lo sciame di un raggio cosmico da ${fmt(E / 1000)} GeV`;
   const frasi = [`Una fetta d'aria alta e larga ${fmtLunghezza(latoM)}, dal suolo (la fascia in basso) fin dove resta ${fmt((rc.colonnaAria * Math.exp(-(suolo * u.l) / H)))} g/cm² d'aria sopra; la densità cala con la quota (scala ${fmtLunghezza(H)}).`,
     `Un protone da ${fmt(E / 1000)} GeV entra dall'alto. In media urta un nucleo dell'aria dopo ${fmt(m.lambdaNucleare)} g/cm² (a ${fmt(rc.quotaNascita / 1000)} km di quota): ne escono pioni. Quelli neutri diventano subito due fotoni, che fanno coppie di elettroni e positroni, che irraggiano altri fotoni: la cascata cresce finché l'energia di ognuno scende sotto ${fmt(710 / (m.z2suA / m.ZsuA + 0.92))} MeV, poi si spegne. Quelli carichi decadono in muoni, che arrivano al suolo e lo attraversano.`,
-    `Quanto è raro: sopra questo quadrato di ${fmtLunghezza(latoM)} di lato un primario con più di ${fmt(sopra)} GeV arriva ogni ${fmtTempo(1 / ritmo)}; lo sciame dura ${fmtTempo(tempo * u.tu)}.`,
+    `Quanto è raro: sopra questo quadrato di ${fmtLunghezza(latoM)} di lato un primario tra ${fmt(sopra)} e ${fmt(fino)} GeV arriva ogni ${fmtTempo(1 / ritmo)}; lo sciame dura ${fmtTempo(tempo * u.tu)}.`,
     `Al suolo, su tutto il pianeta lì: ${fmt(rc.muoni / 1e4 * 60)} muoni per cm² al minuto (soglia del campo: ${fmt(rc.soglia)} GV).`];
   return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese: [], veri: { ritmo, data, energiaGeV: E / 1000 } } };
 }
@@ -1008,3 +1016,181 @@ export function etaDaTracce(densita, uranioPpm, minerale = 'apatite', etaPianeta
   const m = mezzo(minerale), c = CATENE['uranio-238'], atomi = ((uranioPpm * 1e-6 * m.densita) / 238.03) * N_A * c.abbondanza * quantoResta(c.mezza, etaPianeta), lunga = (percorso({ Z: 38, A: 96 }, 99, m).m + percorso({ Z: 54, A: 140 }, 68, m).m) * 100, lam = Math.LN2 / c.mezza;
   return Math.log(1 + (densita * lam) / (atomi * c.fissione * (lunga / 2))) / lam;
 }
+
+// =====================================================================================
+// 9. IL CRISTALLO VISTO DALLE PARTICELLE: reticoli, atomi, incanalamento
+// =====================================================================================
+// LE CELLE ELEMENTARI (dati misurati). cella: [a, b, c (Å), α, β, γ (gradi)]; ops: le operazioni del gruppo spaziale; centri:
+// le traslazioni del reticolo centrato; atomi: [elemento, x, y, z (frazioni della cella), occupazione] per ogni posto
+// indipendente. Controllo fatto su ognuna: le distanze di legame che ne escono (Si–O 1,60–1,65 Å; C–O 1,281; Na–Cl 2,820;
+// O–O del ghiaccio 2,76; K–O 2,96 e 3,30 nella mica…) e la densità della cella (entro l'1–2% da quella misurata).
+const CENTRO_C = [[0, 0, 0], [0.5, 0.5, 0]], CENTRO_F = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]], CENTRO_R = [[0, 0, 0], [2 / 3, 1 / 3, 1 / 3], [1 / 3, 2 / 3, 2 / 3]];
+const OPS_C2M = ['x,y,z', '-x,y,-z', '-x,-y,-z', 'x,-y,z'], T_FELDSPATO = [['Si', 0.0097, 0.185, 0.2233], ['Si', 0.7089, 0.1178, 0.3444], ['O', 0, 0.1472, 0], ['O', 0.6343, 0, 0.2858], ['O', 0.8273, 0.1469, 0.2253], ['O', 0.0347, 0.31, 0.2579], ['O', 0.1793, 0.1269, 0.4024]];
+export const RETICOLI = {
+  quarzo: { sistema: 'trigonale', gruppo: 'P3₁21', cella: [4.9134, 4.9134, 5.4052, 90, 90, 120], fonte: 'Levien, Prewitt e Weidner 1980', asse: 'c', formula: 3,
+    ops: ['x,y,z', '-y,x-y,z+1/3', '-x+y,-x,z+2/3', 'y,x,-z', 'x-y,-y,-z+2/3', '-x,-x+y,-z+1/3'], atomi: [['Si', 0.4697, 0, 1 / 3], ['O', 0.4135, 0.2669, 0.2142]] },
+  salgemma: { sistema: 'cubico', gruppo: 'Fm3̄m', cella: [5.6402, 5.6402, 5.6402, 90, 90, 90], fonte: 'CRC Handbook; Wyckoff 1963', asse: 'a', formula: 4, ops: ['x,y,z'], centri: CENTRO_F, atomi: [['Na', 0, 0, 0], ['Cl', 0.5, 0.5, 0.5]] },
+  'ghiaccio d\'acqua': { sistema: 'esagonale', gruppo: 'P6₃/mmc', cella: [4.5181, 4.5181, 7.356, 90, 90, 120], fonte: 'Röttger e altri 1994 (ghiaccio Ih a 250 K)', asse: 'c', formula: 4,
+    ops: ['x,y,z', '-x,-y,z+1/2', '-x,-y,-z', 'x,y,-z+1/2'], atomi: [['O', 1 / 3, 2 / 3, 0.0623]], idrogeno: true },
+  calcite: { sistema: 'trigonale', gruppo: 'R3̄c', cella: [4.9896, 4.9896, 17.061, 90, 90, 120], fonte: 'Markgraf e Reeder 1985', asse: 'c', formula: 6, centri: CENTRO_R,
+    ops: ['x,y,z', '-y,x-y,z', '-x+y,-x,z', '-x,-y,-z', 'y,-x+y,-z', 'x-y,x,-z', '-y,-x,z+1/2', '-x+y,y,z+1/2', 'x,x-y,z+1/2', 'y,x,-z+1/2', 'x-y,-y,-z+1/2', '-x,-x+y,-z+1/2'], atomi: [['Ca', 0, 0, 0], ['C', 0, 0, 0.25], ['O', 0.2568, 0, 0.25]] },
+  olivina: { sistema: 'ortorombico', gruppo: 'Pbnm', cella: [4.7535, 10.1943, 5.9807, 90, 90, 90], fonte: 'Smyth e Hazen 1973 (forsterite)', asse: 'a', formula: 4,
+    ops: ['x,y,z', '-x,-y,z+1/2', 'x+1/2,-y+1/2,-z', '-x+1/2,y+1/2,-z+1/2', '-x,-y,-z', 'x,y,-z+1/2', '-x+1/2,y+1/2,z', 'x+1/2,-y+1/2,z+1/2'],
+    atomi: [['Mg', 0, 0, 0], ['Mg', 0.9915, 0.2774, 0.25], ['Si', 0.4262, 0.094, 0.25], ['O', 0.7657, 0.0913, 0.25], ['O', 0.2215, 0.4474, 0.25], ['O', 0.2777, 0.1628, 0.0331]] },
+  pirosseno: { sistema: 'monoclino', gruppo: 'C2/c', cella: [9.746, 8.899, 5.251, 90, 105.63, 90], fonte: 'Cameron e altri 1973 (diopside)', asse: 'c', formula: 4, centri: CENTRO_C, ops: ['x,y,z', '-x,y,-z+1/2', '-x,-y,-z', 'x,-y,z+1/2'],
+    atomi: [['Ca', 0, 0.3015, 0.25], ['Mg', 0, 0.9082, 0.25], ['Si', 0.2862, 0.0933, 0.2293], ['O', 0.1156, 0.0873, 0.1422], ['O', 0.3611, 0.25, 0.318], ['O', 0.3505, 0.0176, 0.9953]] },
+  'feldspato potassico': { sistema: 'monoclino', gruppo: 'C2/m', cella: [8.539, 13.015, 7.179, 90, 115.99, 90], fonte: 'Phillips e Ribbe 1973 (sanidino; un quarto dei posti del silicio è alluminio)', asse: 'a', formula: 4, centri: CENTRO_C, ops: OPS_C2M, atomi: [['K', 0.284, 0, 0.1352], ...T_FELDSPATO] },
+  plagioclasio: { sistema: 'triclino', gruppo: 'C1̄', cella: [8.142, 12.785, 7.159, 94.19, 116.61, 87.68], fonte: "cella dell'albite (Harlow e Brown 1980) con le coordinate del sanidino: stessa impalcatura, distorsioni di pochi centesimi di Å trascurate", asse: 'a', formula: 4, centri: CENTRO_C, ops: OPS_C2M, atomi: [['Na', 0.284, 0, 0.1352], ...T_FELDSPATO] },
+  biotite: { sistema: 'monoclino', gruppo: 'C2/m', cella: [5.3078, 9.1901, 10.1547, 90, 100.08, 90], fonte: 'Hazen e Burnham 1973 (flogopite 1M; nella biotite metà del magnesio è ferro)', asse: 'c*', formula: 2, centri: CENTRO_C, ops: OPS_C2M,
+    atomi: [['K', 0, 0.5, 0], ['Mg', 0, 0, 0.5], ['Mg', 0, 0.3333, 0.5], ['Si', 0.0757, 0.1669, 0.2254], ['O', 0.0185, 0, 0.1667], ['O', 0.3251, 0.231, 0.1654], ['O', 0.1304, 0.1672, 0.3907], ['O', 0.1329, 0.5, 0.399]] },
+};
+RETICOLI.ghiaccio = RETICOLI['ghiaccio d\'acqua'];
+// raggi ionici (Å; Shannon 1976) e colori convenzionali dei modelli, per disegnare gli atomi
+export const ATOMI_DISEGNO = { H: [0.3, [255, 255, 255]], C: [0.3, [144, 144, 144]], O: [1.4, [226, 64, 56]], Na: [1.02, [171, 92, 242]], Mg: [0.72, [138, 255, 0]], Al: [0.39, [191, 166, 166]], Si: [0.26, [240, 200, 160]], K: [1.38, [143, 64, 212]], Ca: [1.0, [61, 255, 0]], Fe: [0.78, [224, 102, 51]], Cl: [1.81, [31, 240, 31]] };
+const GRADI = Math.PI / 180;
+const leggiOp = (s) => { const f = s.split(',').map((t) => { const m = [0, 0, 0, 0]; t.replace(/([+-]?)(\d+\/\d+|\d*\.?\d+)?([xyz])?/g, (tutto, sg, num, v) => { if (!tutto) return ''; const k = (sg === '-' ? -1 : 1) * (num ? (num.includes('/') ? num.split('/')[0] / num.split('/')[1] : +num) : 1); if (v) m['xyz'.indexOf(v)] += k; else if (num) m[3] += k; return ''; }); return m; }); return (p) => f.map((m) => m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]); };
+const reticoliFatti = new Map();
+// → { nome, sistema, gruppo, cella: { a, b, c, alfa, beta, gamma }, base: { A, B, C } (i tre spigoli, in Å), volume (Å³), atomi:
+//     [{ el, f: [x, y, z] (frazioni), pos: [Å], occ }], formulePerCella, densita (g/cm³, dalla cella), asse (quello lungo cui la
+//     figura d'incanalamento è più ricca), fonte }
+export function reticolo(minerale) {
+  if (reticoliFatti.has(minerale)) return reticoliFatti.get(minerale);
+  const R = RETICOLI[minerale]; if (!R) throw new Error(`reticolo: non conosco la cella di «${minerale}» (ci sono: ${Object.keys(RETICOLI).join(', ')})`);
+  const [a, b, c, al, be, ga] = R.cella, ca = Math.cos(al * GRADI), cb = Math.cos(be * GRADI), cg = Math.cos(ga * GRADI), sg = Math.sin(ga * GRADI), V = a * b * c * Math.sqrt(1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg);
+  const base = { A: [a, 0, 0], B: [b * cg, b * sg, 0], C: [c * cb, (c * (ca - cb * cg)) / sg, V / (a * b * sg)] }, cart = (f) => [f[0] * base.A[0] + f[1] * base.B[0] + f[2] * base.C[0], f[1] * base.B[1] + f[2] * base.C[1], f[2] * base.C[2]];
+  const ops = R.ops.map(leggiOp), atomi = [], uguali = (p, q) => [0, 1, 2].every((i) => { const d = Math.abs(p[i] - q[i]); return Math.min(d, 1 - d) < 1e-3; });
+  for (const [el, x, y, z, occ = 1] of R.atomi) for (const o of ops) for (const t of R.centri || [[0, 0, 0]]) { const f = o([x, y, z]).map((v, i) => { let w = (v + t[i]) % 1; if (w < 0) w += 1; return w > 1 - 1e-6 ? 0 : w; }); if (!atomi.some((q) => q.el === el && uguali(q.f, f))) atomi.push({ el, f, pos: cart(f), occ }); }
+  if (R.idrogeno) { // il ghiaccio: tra due ossigeni vicini c'è un idrogeno, vicino all'uno o all'altro (regole di Bernal e Fowler): mezzo atomo per posto, a 0,98 Å
+    const O = atomi.filter((q) => q.el === 'O'); for (const p of O) for (const q of O) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) { const g = cart([q.f[0] + i, q.f[1] + j, q.f[2] + k]), d = Math.hypot(g[0] - p.pos[0], g[1] - p.pos[1], g[2] - p.pos[2]); if (d > 0.1 && d < 3) { const pos = p.pos.map((v, n) => v + ((g[n] - v) * 0.98) / d); atomi.push({ el: 'H', f: null, pos, occ: 0.5 }); } } }
+  let massa = 0; for (const q of atomi) massa += ELEMENTI[q.el].A * q.occ;
+  const out = { nome: minerale, sistema: R.sistema, gruppo: R.gruppo, cella: { a, b, c, alfa: al, beta: be, gamma: ga }, base, volume: V, atomi, formulePerCella: R.formula, densita: massa / (0.602214 * V), asse: R.asse, fonte: R.fonte };
+  reticoliFatti.set(minerale, out); return out;
+}
+// L'AGITAZIONE TERMICA (Debye-Waller): lo scarto quadratico medio di un atomo di massa M (u) lungo una direzione, in Å, a
+// temperatura T, in un cristallo di temperatura di Debye Θ: ⟨u²⟩ = (3ħ²/(M·k·Θ))·[Φ(Θ/T)/(Θ/T) + ¼], Φ(x) = (1/x)·∫₀ˣ t/(eᵗ − 1) dt.
+// A zero assoluto non è zero (moto di punto zero); cresce con la temperatura; gli atomi leggeri si agitano di più.
+export function agitazione(massaU, debye, T) {
+  const x = debye / Math.max(T, 1e-3); let fi = 0; const n = 60; for (let i = 0; i < n; i++) { const t = ((i + 0.5) * x) / n; fi += t / Math.expm1(t); } fi /= n; // (1/x)·∫ = media sull'intervallo
+  return Math.sqrt(((3 * 1.0546e-34 ** 2) / (massaU * 1.66054e-27 * 1.381e-23 * debye)) * (fi / x + 0.25)) * 1e10;
+}
+// l'asse lungo cui si guarda: i due spigoli che gli stanno di traverso (proiettati) e il periodo lungo di lui
+function vistaLungo(R, asse = R.asse) {
+  const { A, B, C } = R.base, chi = { a: [A, B, C], b: [B, C, A], c: [C, A, B], 'c*': [null, A, B] }[String(asse).replace(/[[\]]/g, '').replace('100', 'a').replace('010', 'b').replace('001', 'c')];
+  if (!chi) throw new Error(`asse «${asse}»: si può guardare lungo a, b, c (o c*, la normale ai piani a-b)`);
+  const croce = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2], norma = (u) => { const n = Math.hypot(...u); return u.map((x) => x / n); };
+  // (c*: la normale al piano a-b; le file lungo di lei hanno il periodo dello spessore di uno strato)
+  const D = chi[0] || croce(A, B).map((x) => (x * R.volume) / dot(croce(A, B), croce(A, B))), ez = norma(D), ex = norma(chi[1].map((x, i) => x - dot(chi[1], ez) * ez[i])), ey = croce(ez, ex);
+  const pr = (u) => [dot(u, ex), dot(u, ey)];
+  return { ez, ex, ey, periodo: Math.hypot(...D), p1: pr(chi[1]), p2: pr(chi[2]), proietta: (u) => [dot(u, ex), dot(u, ey), dot(u, ez)] };
+}
+// GLI ATOMI di un campione di cristallo largo latoM (pochi nanometri), visti lungo un asse: le posizioni vere della cella
+// ripetuta, ognuna spostata dalla sua agitazione termica (un esito per atomo, dal suo indirizzo: è un'istantanea).
+//   latoM, T (K), asse ('a', 'b', 'c', 'c*'), spessoreM (quanto cristallo in profondità; se manca: un periodo), massimo (atomi)
+// → { atomi: [{ x, y, z (m; z la profondità), el, raggio (m), colore, occ }], quantiDavvero (nel cubo di lato latoM), agitazione:
+//     { elemento: Å }, periodoM (lungo l'asse), cella, descrizione }
+export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM = null, massimo = 6000 } = {}, caso = null) {
+  const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), c = (caso || sorgente(`reticolo/${minerale}`)).sotto(`atomi/${minerale}/${latoM.toExponential(2)}/${Math.round(T)}`), L = latoM * 1e10, debye = (MATERIALI[minerale] || {}).debye || 400;
+  const { A, B, C } = R.base, ag = {}; for (const q of R.atomi) ag[q.el] ??= agitazione(q.el === 'H' ? 18.015 : ELEMENTI[q.el].A, debye, T); // (l'idrogeno si muove con la sua molecola)
+  let spess = (spessoreM ?? V.periodo * 1e-10) * 1e10; const perA3 = R.atomi.reduce((s, q) => s + q.occ, 0) / R.volume; if (perA3 * L * L * spess > massimo) spess = massimo / (perA3 * L * L);
+  // quante celle servono per coprire il campione: il raggio della sfera che lo contiene, in celle
+  // quante celle servono per coprire il campione: il raggio della sfera che lo contiene, diviso la distanza tra i piani della cella
+  const croce = (u, v) => Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]), raggio = Math.hypot(L, L, 2 * spess) / 2 + 2, out = [];
+  const nA = Math.ceil(raggio / (R.volume / croce(B, C))) + 1, nB = Math.ceil(raggio / (R.volume / croce(C, A))) + 1, nC = Math.ceil(raggio / (R.volume / croce(A, B))) + 1;
+  for (let i = -nA; i <= nA; i++) for (let j = -nB; j <= nB; j++) for (let k = -nC; k <= nC; k++) for (let q = 0; q < R.atomi.length; q++) {
+    const at = R.atomi[q], p = V.proietta([at.pos[0] + i * A[0] + j * B[0] + k * C[0], at.pos[1] + i * A[1] + j * B[1] + k * C[1], at.pos[2] + i * A[2] + j * B[2] + k * C[2]]);
+    if (Math.abs(p[0]) > L / 2 + 1 || Math.abs(p[1]) > L / 2 + 1 || p[2] < -0.01 || p[2] >= spess - 0.01) continue;
+    const id = `${i},${j},${k},${q}`, s = ag[at.el]; if (at.occ < 1 && c(`${id}/c'è`) >= at.occ) continue; // (un posto occupato a metà: c'è o non c'è)
+    const x = p[0] + s * c.normale(`${id}/x`), y = p[1] + s * c.normale(`${id}/y`), z = p[2] + s * c.normale(`${id}/z`);
+    if (Math.abs(x) > L / 2 || Math.abs(y) > L / 2) continue;
+    out.push({ x: (x + L / 2) * 1e-10, y: (y + L / 2) * 1e-10, z: z * 1e-10, el: at.el, raggio: ATOMI_DISEGNO[at.el][0] * 1e-10, colore: ATOMI_DISEGNO[at.el][1], occ: at.occ });
+  }
+  out.sort((p, q) => q.z - p.z); // dal più profondo al più vicino: così chi disegna copre nel verso giusto
+  return { atomi: out, quantiDavvero: perA3 * L ** 3, agitazione: ag, periodoM: V.periodo * 1e-10, spessoreM: spess * 1e-10, cella: R.cella, asse: asse || R.asse, latoM,
+    descrizione: `${minerale} (${R.sistema}, ${R.gruppo}; a = ${fmt(R.cella.a, 3)}, b = ${fmt(R.cella.b, 3)}, c = ${fmt(R.cella.c, 3)} Å), visto lungo ${asse || R.asse}: ${out.length} atomi in uno strato di ${fmtLunghezza(spess * 1e-10)} (in un cubo di ${fmtLunghezza(latoM)} sarebbero ${fmt(perA3 * L ** 3)}); a ${Math.round(T)} K ognuno è spostato dal suo posto di ${Object.entries(ag).map(([e, v]) => `${ELEMENTI[e].nome} ${fmt(v, 1)} Å`).join(', ')}` };
+}
+// l'immagine degli atomi (RGBA N×N): dischi con il raggio ionico vero, i più profondi più scuri
+export function immagineAtomi(campione, N = 192) {
+  const px = new Uint8ClampedArray(N * N * 4), k = N / campione.latoM, zmax = Math.max(1e-12, campione.spessoreM);
+  for (let i = 0; i < N * N; i++) { px[i * 4] = 10; px[i * 4 + 1] = 12; px[i * 4 + 2] = 18; px[i * 4 + 3] = 255; }
+  for (const a of campione.atomi) { const r = Math.max(1, a.raggio * k), cx = a.x * k, cy = a.y * k, lume = 0.45 + 0.55 * (1 - a.z / zmax);
+    for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(N - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(N - 1, Math.ceil(cx + r)); x++) { const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r; if (d > 1) continue; const o = (y * N + x) * 4, s = lume * (1 - 0.45 * d * d); px[o] = a.colore[0] * s; px[o + 1] = a.colore[1] * s; px[o + 2] = a.colore[2] * s; } }
+  return px;
+}
+
+// L'INCANALAMENTO. Una carica che entra in un cristallo quasi parallela a un asse non vede atomi uno per uno ma FILE di atomi:
+// ogni fila è una corda carica che la respinge con il potenziale continuo di Lindhard, U(r) = (Z1·Z2·e²/d)·ln(1 + 3a²/r²) (d la
+// distanza tra gli atomi lungo la fila, a il raggio di schermo di Thomas-Fermi). Se l'angolo con l'asse è sotto quello critico,
+// ψ1 = √(2·Z1·Z2·e²/(E·d)), la particella rimbalza dolcemente tra le file senza mai avvicinarsi ai nuclei: perde poca energia
+// e va molto più lontano. Lo stesso accade tra i PIANI di atomi che contengono l'asse. Qui si segue davvero il moto
+// trasverso (d²r/dz² = −∇U/(p·v)) nel potenziale delle file vere di quel minerale, sfumato dall'agitazione termica, per
+// ogni direzione d'ingresso attorno all'asse: la mappa dice quanta parte delle particelle passa lontano dai nuclei.
+// Vista da dietro un cristallo sottile è una stella: una macchia al centro (l'asse) e una riga per ogni piano. La sua
+// simmetria è quella del reticolo lungo quell'asse (più l'inversione: una riga è una riga nei due versi).
+//   particella ('protone', 'alfa', …), energiaMeV, asse ('a', 'b', 'c', 'c*'; se manca: quello del minerale)
+//   T (K), N (lato della mappa), campo (semiapertura in angoli critici), spessoreM (del cristallo; se manca: qualche oscillazione)
+// → { asse, periodo (Å, tra gli atomi di una fila), psi1 (rad), psi1Gradi, psiTermico (rad: con l'agitazione), file: [{ el, Z, x, y }],
+//     piani: [{ angolo (gradi nel disegno), spaziatura (Å), psi (rad) }], mappa (Float32Array N×N, 0…1), immagine (RGBA), N,
+//     campoRad, simmetria (ordine di rotazione della figura), punte (gli angoli dei raggi della stella, gradi), profilo (quanto è
+//     chiara in ogni direzione), incanalate (frazione entro ψ1/2), spessoreM, descrizione }
+export function incanalamento(minerale, part = 'protone', energiaMeV = 1, asse = null, { T = 288, N = 36, campo = 3.5, spessoreM = null, punti = 16 } = {}) {
+  const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), p = particella(part), Z1 = Math.abs(p.Z ?? p.q), E = energiaMeV * 1e6, debye = (MATERIALI[minerale] || {}).debye || 400, e2 = 14.39964; // eV·Å
+  const g = 1 + energiaMeV / p.mMeV, pv = E * ((g + 1) / g), d = V.periodo; // p·v = E·(γ + 1)/γ (2E quando è lenta)
+  // le file: gli atomi della cella proiettati lungo l'asse (chi cade nello stesso punto sta sulla stessa fila)
+  const [p1, p2] = [V.p1, V.p2], det = p1[0] * p2[1] - p1[1] * p2[0], file = [];
+  for (const a of R.atomi) { const q = V.proietta(a.pos); let s = (q[0] * p2[1] - q[1] * p2[0]) / det, t = (p1[0] * q[1] - p1[1] * q[0]) / det; s -= Math.floor(s + 1e-9); t -= Math.floor(t + 1e-9);
+    const Z = ELEMENTI[a.el].Z * a.occ, v = file.find((f) => f.el === a.el && Math.min(Math.abs(f.s - s), 1 - Math.abs(f.s - s)) < 1e-3 && Math.min(Math.abs(f.t - t), 1 - Math.abs(f.t - t)) < 1e-3);
+    if (v) v.Z += Z; else file.push({ el: a.el, Z, s, t, a: (0.8853 * 0.529177) / Math.pow(Math.sqrt(Z1) + Math.sqrt(ELEMENTI[a.el].Z), 2 / 3), u: agitazione(ELEMENTI[a.el].A, debye, T) }); }
+  for (const f of file) { f.x = f.s * p1[0] + f.t * p2[0]; f.y = f.s * p1[1] + f.t * p2[1]; }
+  const Zmedia = file.reduce((s, f) => s + f.Z, 0) / file.length, Zmax = file.reduce((s, f) => Math.max(s, f.Z), 0), psi1 = Math.sqrt((2 * Z1 * Zmax * e2) / (pv / 2 * d)), forte = file.reduce((b, f) => (f.Z > b.Z ? f : b), file[0]);
+  const psiT = psi1 * Math.sqrt(0.5 * Math.log(1 + (3 * forte.a * forte.a) / (2 * forte.u * forte.u)));
+  // il potenziale e la vicinanza ai nuclei su una griglia della cella proiettata (si ripete: basta una cella)
+  const Gn = 72, U = new Float32Array(Gn * Gn), Vn = new Float32Array(Gn * Gn), passoG = Math.sqrt(Math.abs(det)) / Gn; let mediaV = 0;
+  for (let j = 0; j < Gn; j++) for (let i = 0; i < Gn; i++) { const x = ((i + 0.5) / Gn) * p1[0] + ((j + 0.5) / Gn) * p2[0], y = ((i + 0.5) / Gn) * p1[1] + ((j + 0.5) / Gn) * p2[1]; let u = 0, v = 0;
+    for (const f of file) for (let m = -2; m <= 2; m++) for (let n = -2; n <= 2; n++) { const dx = x - f.x - m * p1[0] - n * p2[0], dy = y - f.y - m * p1[1] - n * p2[1], r2 = dx * dx + dy * dy, s2 = Math.max(f.u * f.u, passoG * passoG);
+      u += ((Z1 * f.Z * e2) / d) * Math.log(1 + (3 * f.a * f.a) / (r2 + 2 * f.u * f.u)); v += (f.Z * f.Z * Math.exp(-r2 / (2 * s2))) / s2; }
+    U[j * Gn + i] = u; Vn[j * Gn + i] = v; mediaV += v / (Gn * Gn); }
+  for (let i = 0; i < Gn * Gn; i++) Vn[i] /= mediaV;
+  // l'accelerazione trasversa nelle coordinate (s, t) della cella: −G⁻¹·∇U/(p·v), G la metrica della cella proiettata (così il
+  // moto si segue tutto in frazioni di cella, e la griglia si ripete da sé)
+  const As = new Float32Array(Gn * Gn), At = new Float32Array(Gn * Gn), mod = (i) => ((i % Gn) + Gn) % Gn, g11 = p1[0] * p1[0] + p1[1] * p1[1], g12 = p1[0] * p2[0] + p1[1] * p2[1], g22 = p2[0] * p2[0] + p2[1] * p2[1], dG = g11 * g22 - g12 * g12;
+  for (let j = 0; j < Gn; j++) for (let i = 0; i < Gn; i++) { const us = ((U[j * Gn + mod(i + 1)] - U[j * Gn + mod(i - 1)]) * Gn) / 2, ut = ((U[mod(j + 1) * Gn + i] - U[mod(j - 1) * Gn + i]) * Gn) / 2; As[j * Gn + i] = -(g22 * us - g12 * ut) / dG / pv; At[j * Gn + i] = -(-g12 * us + g11 * ut) / dG / pv; }
+  const lato = Math.sqrt(Math.abs(det)), W = campo * psi1, lambda = (Math.PI * lato) / (2 * psi1), spess = spessoreM != null ? spessoreM * 1e10 : 3 * lambda, mappa = new Float32Array(N * N);
+  // i punti d'ingresso: sparsi in modo uniforme nella cella (una successione a bassa discrepanza: il fascio è uniforme, non c'è caso)
+  const ingressi = []; for (let k = 0; k < punti; k++) { let a = 0, f = 0.5, n = k + 1; while (n) { a += f * (n & 1); n >>= 1; f /= 2; } let b = 0; f = 1 / 3; n = k + 1; while (n) { b += f * (n % 3); n = Math.floor(n / 3); f /= 3; } ingressi.push([a, b]); }
+  for (let jy = 0; jy < N; jy++) for (let ix = 0; ix < N; ix++) {
+    const tx0 = ((ix + 0.5) / N * 2 - 1) * W, ty0 = ((jy + 0.5) / N * 2 - 1) * W, vs0 = (tx0 * p2[1] - ty0 * p2[0]) / det, vt0 = (p1[0] * ty0 - p1[1] * tx0) / det; let lontane = 0;
+    for (let k = 0; k < punti; k++) {
+      let ss = ingressi[k][0], tt = ingressi[k][1], vs = vs0, vt = vt0, z = 0, vicino = 0;
+      while (z < spess) {
+        const ang = Math.sqrt(g11 * vs * vs + 2 * g12 * vs * vt + g22 * vt * vt), dz = Math.min(spess - z, lambda / 16, (0.12 * lato) / Math.max(ang, 0.3 * psi1));
+        // (interpolazione bilineare sulla griglia, che si ripete)
+        let fs = (ss - Math.floor(ss)) * Gn - 0.5, ft = (tt - Math.floor(tt)) * Gn - 0.5; if (fs < 0) fs += Gn; if (ft < 0) ft += Gn;
+        const i0 = fs | 0, j0 = ft | 0, a = fs - i0, b = ft - j0, i1 = i0 + 1 === Gn ? 0 : i0 + 1, j1 = j0 + 1 === Gn ? 0 : j0 + 1, k00 = j0 * Gn + i0, k10 = j0 * Gn + i1, k01 = j1 * Gn + i0, k11 = j1 * Gn + i1, w00 = (1 - a) * (1 - b), w10 = a * (1 - b), w01 = (1 - a) * b, w11 = a * b;
+        vs += (As[k00] * w00 + As[k10] * w10 + As[k01] * w01 + As[k11] * w11) * dz; vt += (At[k00] * w00 + At[k10] * w10 + At[k01] * w01 + At[k11] * w11) * dz; ss += vs * dz; tt += vt * dz; z += dz;
+        vicino += (Vn[k00] * w00 + Vn[k10] * w10 + Vn[k01] * w01 + Vn[k11] * w11) * dz;
+      }
+      lontane += Math.max(0, 1 - vicino / spess);
+    }
+    mappa[jy * N + ix] = lontane / punti;
+  }
+  // la simmetria della figura: è una stella, cioè raggi a certi angoli attorno all'asse. Si misura quanto è chiara in ogni
+  // direzione (la media lungo il raggio, fuori dalla macchia centrale), e si cerca il più alto ordine di rotazione che
+  // lascia uguale quel profilo (la correlazione con la sua copia girata di 360°/n)
+  const settori = 72, raggi = new Float64Array(settori), vedi = (x, y) => { const fx = (x / W + 1) * N / 2 - 0.5, fy = (y / W + 1) * N / 2 - 0.5, i = Math.max(0, Math.min(N - 2, Math.floor(fx))), j = Math.max(0, Math.min(N - 2, Math.floor(fy))), a = fx - i, b = fy - j; return mappa[j * N + i] * (1 - a) * (1 - b) + mappa[j * N + i + 1] * a * (1 - b) + mappa[(j + 1) * N + i] * (1 - a) * b + mappa[(j + 1) * N + i + 1] * a * b; };
+  for (let k = 0; k < settori; k++) { const f = (DUE_PI * k) / settori; let v = 0, n = 0; for (let r = 1.6 * psi1; r < 0.94 * W; r += W / N) { v += vedi(r * Math.cos(f), r * Math.sin(f)); n++; } raggi[k] = v / n; }
+  const mediaRaggi = raggi.reduce((x, y) => x + y, 0) / settori, correla = (n) => { const salto = settori / n; let sab = 0, saa = 0; for (let k = 0; k < settori; k++) { const x = raggi[k] - mediaRaggi, y = raggi[(k + salto) % settori] - mediaRaggi; sab += x * y; saa += x * x; } return saa > 0 ? sab / saa : 0; };
+  const rotazioni = { 2: correla(2), 3: correla(3), 4: correla(4), 6: correla(6) }, simmetria = [6, 4, 3, 2].find((n) => rotazioni[n] > 0.5 && (n !== 6 || rotazioni[3] > 0.5) && (n !== 4 || rotazioni[2] > 0.5)) || 1;
+  // le punte della stella: le direzioni in cui il profilo ha un massimo che sporge dalla media
+  const punte = []; { let sc = 0; for (const v of raggi) sc += (v - mediaRaggi) ** 2; sc = Math.sqrt(sc / settori); for (let k = 0; k < settori; k++) { const v = raggi[k], prima = raggi[(k + settori - 1) % settori], dopo = raggi[(k + 1) % settori]; if (v > prima && v >= dopo && v > mediaRaggi + sc) punte.push((360 * k) / settori); } }
+  // i piani che contengono l'asse: le righe più fitte del reticolo proiettato (spaziatura = area della cella / lunghezza del passo)
+  const piani = [], Natomi = R.atomi.reduce((s, a) => s + a.occ, 0) / R.volume, aTF = (0.8853 * 0.529177) / Math.pow(Math.sqrt(Z1) + Math.sqrt(Zmedia), 2 / 3);
+  for (let m = -3; m <= 3; m++) for (let n = 0; n <= 3; n++) { if ((n === 0 && m <= 0) || mcd(Math.abs(m), n) !== 1) continue; const vx = m * p1[0] + n * p2[0], vy = m * p1[1] + n * p2[1], sp = Math.abs(det) / Math.hypot(vx, vy); piani.push({ indici: [m, n], angolo: ((Math.atan2(vy, vx) / GRADI) % 180 + 180) % 180, spaziatura: sp, psi: Math.sqrt((2 * Math.PI * Natomi * sp * Z1 * Zmedia * e2 * aTF) / (pv / 2)) }); }
+  piani.sort((a, b) => b.spaziatura - a.spaziatura); piani.length = Math.min(piani.length, 8);
+  let dentro = 0, quanti = 0; for (let jy = 0; jy < N; jy++) for (let ix = 0; ix < N; ix++) { const x = ((ix + 0.5) / N * 2 - 1) * W, y = ((jy + 0.5) / N * 2 - 1) * W; if (Math.hypot(x, y) < 0.5 * psi1) { dentro += mappa[jy * N + ix]; quanti++; } }
+  let lo = Infinity, hi = -Infinity; for (const v of mappa) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const immagine = new Uint8ClampedArray(N * N * 4); for (let i = 0; i < N * N; i++) { const v = hi > lo ? (mappa[i] - lo) / (hi - lo) : 0; immagine[i * 4] = 20 + 235 * v; immagine[i * 4 + 1] = 16 + 220 * v * v; immagine[i * 4 + 2] = 30 + 150 * v * v * v; immagine[i * 4 + 3] = 255; }
+  const nomeP = p.nome === 'alfa' ? 'una particella α' : `un ${p.nome}`;
+  return { minerale, asse: asse || R.asse, periodo: d, psi1, psi1Gradi: psi1 / GRADI, psiTermico: psiT, file: file.map((f) => ({ el: f.el, Z: f.Z, x: f.x, y: f.y, agitazione: f.u })), piani, mappa, immagine, N, campoRad: W, rotazioni, simmetria, punte, profilo: raggi, incanalate: quanti ? dentro / quanti : 0, spessoreM: spess * 1e-10,
+    descrizione: `${nomeP} da ${fmt(energiaMeV)} MeV che entra in un cristallo di ${minerale} (${R.sistema}) lungo ${asse || R.asse}: le file di atomi (uno ogni ${fmt(d, 3)} Å) la guidano se l'angolo è sotto ${fmt(psi1 / GRADI)}° (a ${Math.round(T)} K, con gli atomi che vibrano: ${fmt(psiT / GRADI)}°). Dietro un cristallo di ${fmtLunghezza(spess * 1e-10)} esce una stella a ${punte.length} punte, con simmetria di ordine ${simmetria}: una riga per ogni piano di atomi che contiene l'asse (i più larghi a ${piani.slice(0, 3).map((q) => `${fmt(q.angolo, 2)}°`).join(', ')}).` };
+}
+const mcd = (a, b) => (b ? mcd(b, a % b) : a);

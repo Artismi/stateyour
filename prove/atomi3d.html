@@ -56,6 +56,7 @@ let sporco = 3; // con ?fermo si ridisegna solo quando qualcosa cambia
 const opzioni = { densita: +(par.get('densita') || 0), vecchio: par.has('webgl1'), alCambio: () => { sporco = 2; } };
 for (const k of ['agitazione', 'massimoIstanze', 'dettaglio', 'risoluzioneOmbre', 'ombre', 'ombreForma', 'raggioOmbre', 'contorno', 'nebbia', 'sfoca', 'scalaRaggi', 'profonditaSepolti']) if (par.has(k)) opzioni[k] = +par.get(k);
 if (par.get('sepolti') === 'no') opzioni.scartaSepolti = false;
+if (par.get('punti') === 'no') opzioni.punti = false;
 if (par.has('colora')) opzioni.colora = par.get('colora');
 if (par.has('nudo')) document.body.classList.add('nudo');
 
@@ -80,7 +81,18 @@ function mostra(nome) {
   for (const k of ['yaw', 'pitch', 'dist']) if (par.has(k)) c[k] = +par.get(k);
   aggiornaTaglio();
 }
-function aggiornaTaglio() { vista.taglio($('taglia').checked && scena ? { vista: true, scarto: +$('scarto').value * 0.5 * Math.hypot(...scena.scatola) } : null); }
+// il taglio: di norma un piano che guarda l'occhio e passa dal centro di rotazione (lo scorrevole lo sposta); nell'acqua,
+// finché lo scorrevole è a zero, il piano che passa per i due ioni indicati dalle etichette (così se ne vedono i gusci)
+function aggiornaTaglio() {
+  if (!$('taglia').checked || !scena) return vista.taglio(null);
+  const sc = +$('scarto').value, v = scena.ioniVicini, p = scena.atomi.pos;
+  if (nomeScena === 'acqua' && sc === 0 && v && v.length >= 2) {
+    const a = [p[3 * v[0]], p[3 * v[0] + 1], p[3 * v[0] + 2]], b = [p[3 * v[1]], p[3 * v[1] + 1], p[3 * v[1] + 2]], c = vista.camera, cp = Math.cos(c.pitch), f = [cp * Math.sin(c.yaw), Math.sin(c.pitch), cp * Math.cos(c.yaw)];
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], lu = Math.hypot(...u), k = (f[0] * u[0] + f[1] * u[1] + f[2] * u[2]) / (lu * lu), n = [f[0] - k * u[0], f[1] - k * u[1], f[2] - k * u[2]], ln = Math.hypot(...n);
+    return vista.taglio({ normale: n.map((x) => x / ln), quota: (n[0] * a[0] + n[1] * a[1] + n[2] * a[2]) / ln + 0.03, interi: !par.has('sezione') });
+  }
+  vista.taglio({ vista: true, scarto: sc * 0.5 * Math.hypot(...scena.scatola) });
+}
 
 for (const [k, s] of Object.entries(SCENE)) { const b = document.createElement('button'); b.textContent = s.nome; b.dataset.scena = k; b.onclick = () => mostra(k); $('scene').appendChild(b); }
 $('ombre').onchange = (e) => { O.ombre = e.target.checked ? 1 : 0; sporco = 2; };
