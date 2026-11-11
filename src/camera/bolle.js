@@ -406,7 +406,7 @@ function posa(b, via, g, c, nome) {
   let lon = 360 * c(`${nome}/longitudine`) - 180, lat = Math.asin(2 * c(`${nome}/latitudine`) - 1) / RAD;
   if (g.misura?.dove) { lon = g.misura.dove.lon; lat = g.misura.dove.lat; }
   else if (g.misura?.fasce?.length) { const F = g.misura.fasce, w = F.map((x) => Math.cos(x * RAD)), tot = w.reduce((a, x) => a + x, 0); let r = c(`${nome}/fascia`) * tot, j = 0; while (j < F.length - 1 && (r -= w[j]) >= 0) j++; lat = F[j]; }
-  const dove = { ...via, punto: [Math.round(lon * 100) / 100, Math.round(lat * 100) / 100] };
+  const dove = { ...via, punto: [Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4] };
   return bolla({ luogo: percorsoDi(dove), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto });
 }
 
@@ -433,8 +433,9 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
     const Bg = g.quali.map((i) => B[i]), nome = g.quali.map((i) => ordine[i]).sort().join('|'), R = cerca(Bg, g.pre, c, nome, { mondi, cosmi });
     ricerche.push({ bolle: g.quali, luogo: percorsoDi(g.pre).join('/') || 'la biblioteca', provati: R.provati, esatto: R.esatto, buoni: R.buoni.length, frazione: R.frazione, forse: R.forse, peso: R.peso, motivi: R.motivi });
     if (!R.buoni.length && !R.dubbi.length) {
-      const m = R.motivi[0], dato = g.pre.pianeta != null;
-      return fuori(dato ? `non esiste: ${giudica({ luogo: percorsoDi(g.pre), grandezza: Bg[0].grandezza, istante: Bg[0].istante, contenuto: Bg.find((b) => giudica({ luogo: percorsoDi(g.pre), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }).esito === 'no').contenuto }).perche}` : `nessun mondo su ${R.provati} provati in ${percorsoDi(g.pre).join('/') || `${cosmi} cosmi della biblioteca`} contiene ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')}${Bg.length > 1 ? ' insieme' : ''}${m ? ` (il più delle volte lo vieta: ${m.legge})` : ''}`, { ricerche });
+      const m = R.motivi[0];
+      if (g.pre.pianeta != null) { const neg = Bg.map((b) => giudica({ luogo: percorsoDi(g.pre).slice(0, 4), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto })).find((x) => x.esito === 'no'); return fuori(`non esiste: ${neg ? neg.perche : 'quel pianeta non c\'è'}`, { legge: neg?.legge ?? null, ricerche }); }
+      return fuori(`nessun mondo su ${R.provati} provati in ${percorsoDi(g.pre).join('/') || `${cosmi} cosmi della biblioteca`} contiene ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')}${Bg.length > 1 ? ' insieme' : ''}${m ? ` (il più delle volte lo vieta: ${m.legge})` : ''}`, { ricerche });
     }
     // la scelta: in proporzione al peso tra i mondi che vanno bene; se nessuno è deciso, il primo dei «forse»
     let scelto = null, daVerificare = false;
