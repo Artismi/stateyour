@@ -43,7 +43,7 @@ export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000
   const passo = () => { gen++; const nuove = new Map(), tutte = [...specie.keys()], piccoleK = tutte.filter((k) => specie.get(k).pesanti <= piccole || k in iniziali), inFronte = new Set(fronte);
     // CON UNA SOGLIA DI CONCENTRAZIONE: reagiscono tra loro tutte le specie che, lasciando andare la rete per «tempo» con le
     // sorgenti fisse, stanno sopra la soglia (qualunque sia la loro taglia: peptide + peptide); le altre solo da sole.
-    if (soglia != null) { const e = evolvi(lista, Object.fromEntries(tutte.map((k) => [k, iniziali[k] ?? 0])), tempo, { fisse: Object.keys(iniziali), attivita: { O: cond.attivitaAcqua ?? 1, '[H+]': 1 } }); out.concentrazioni = e.c;
+    if (soglia != null) { const e = evolvi(lista, Object.fromEntries(tutte.map((k) => [k, iniziali[k] ?? 0])), tempo, { attivita: { O: cond.attivitaAcqua ?? 1, '[H+]': 1 } }); out.concentrazioni = e.c; // (un sistema chiuso: ciò che c'è all'inizio, lasciato andare)
       const presenti = tutte.filter((k) => k in iniziali || e.c[k] >= soglia); out.presenti = presenti;
       for (const a of fronte) provaReazioni(reazioni(molecola(a), null, { radicali, lente, tutte: famiglie === 'tutte' }), nuove);
       for (const a of presenti) for (const b of presenti) { if (b < a || Date.now() - t0 > tempoMassimo) continue; const id = a + '|' + b; if (coppieFatte.has(id)) continue; coppieFatte.add(id); if (specie.get(a).pesanti + specie.get(b).pesanti > atomiMassimi + 3) continue; provaReazioni(reazioni(molecola(a), molecola(b), { radicali, metalli: false, lente, tutte: famiglie === 'tutte' }), nuove); } }
@@ -68,14 +68,14 @@ export function rete(partenza, condizioni = {}, { profondita = 3, massimo = 3000
 // scioglie nell'olio, k = k0·exp(−ΔG(acqua → olio)/RT) per la parte non carica, k0 = 1 1/s [PARAMETRO LIBERO].
 // → { nome: { specie: mol/L }, converge, reazioni }. (Due scatole accoppiate possono rendere autocatalitica una rete che in
 // una sola non lo è — Blokhuis e altri 2020 —: qui c'è ciò che serve per provarlo, non una prova fatta.)
-export function scatole(r, definizioni, { passa = null, tempo = 1e9, k0 = 1 } = {}) {
+export function scatole(r, definizioni, { passa = null, tempo = 1e9, k0 = 1, ricambio = 1e-9 } = {}) {
   const nomi = Object.keys(definizioni), reaz = [], c0 = {}, fisse = [], att = {}, T = r.condizioni.T;
   const overton = (k) => { try { const a = aggregazione(k, { T, pH: r.condizioni.pH }); return Math.abs(a.carica) > 0.5 ? 0 : k0 * Math.exp(-Math.max(0, a.trasferimento) / (R * T)); } catch { return 0; } };
   for (const n of nomi) { const d = definizioni[n], cond = { ...r.condizioni, ...(d.condizioni || {}), memoria: new Map() };
     for (const x of r.reazioni) { let v; try { v = velocita(x, cond); } catch { continue; } reaz.push({ tipo: x.tipo, reagenti: x.reagenti.map((k) => `${k}@${n}`), prodotti: x.prodotti.map((k) => `${k}@${n}`), k: v.k, kInversa: v.kInversa }); }
     for (const k of r.specie.keys()) c0[`${k}@${n}`] = d.tenute?.[k] ?? d.inizio?.[k] ?? 0; for (const k in d.tenute || {}) fisse.push(`${k}@${n}`); att[`O@${n}`] = cond.attivitaAcqua ?? 1; att[`[H+]@${n}`] = 1; }
   for (const k of r.specie.keys()) { if (k === 'O' || k === '[H+]') continue; const p = passa ? (typeof passa === 'function' ? passa(k) : passa[k] ?? 0) : overton(k); if (p > 0) for (let i = 0; i < nomi.length - 1; i++) reaz.push({ tipo: 'scambio', reagenti: [`${k}@${nomi[i]}`], prodotti: [`${k}@${nomi[i + 1]}`], k: p, kInversa: p }); }
-  const e = evolvi(reaz, c0, tempo, { fisse, attivita: att }), out = {}; for (const n of nomi) out[n] = {}; for (const kk in e.c) { const i = kk.lastIndexOf('@'); out[kk.slice(i + 1)][kk.slice(0, i)] = e.c[kk]; }
+  const e = evolvi(reaz, c0, tempo, { fisse, attivita: att, ricambio, passi: 240 }), out = {}; for (const n of nomi) out[n] = {}; for (const kk in e.c) { const i = kk.lastIndexOf('@'); out[kk.slice(i + 1)][kk.slice(0, i)] = e.c[kk]; }
   return { ...out, converge: e.converge, reazioni: reaz };
 }
 
@@ -110,23 +110,29 @@ export function equilibrioRete(r, { quali = null } = {}) {
 // materia secondo la sua stechiometria), non va sotto zero, non esplode con reazioni di tempi lontanissimi, e per dt
 // grande porta ogni reazione al suo equilibrio. I passi crescono in progressione geometrica (primo ordine: va bene per
 // rilassamenti e crescite). L'acqua e H⁺ hanno attività fissa; «fisse» sono le specie tenute ferme (un luogo aperto).
-export function evolvi(reazioni, c0, tempo, { fisse = [], passi = 160, attivita = { O: 1, '[H+]': 1 } } = {}) {
+export function evolvi(reazioni, c0, tempo, { fisse = [], passi = 160, attivita = { O: 1, '[H+]': 1 }, ricambio = 0 } = {}) {
   const c = new Map(Object.entries(c0)); for (const x of reazioni) for (const k of [...x.reagenti, ...x.prodotti]) if (!c.has(k)) c.set(k, 0);
   const ferme = new Set(fisse), libera = (k) => !ferme.has(k) && attivita[k] == null, a = (k) => attivita[k] ?? c.get(k), r = 1.18, fin = (v) => (v > 1e60 ? 1e60 : v > 0 ? v : 0);
   const rz = reazioni.map((x) => ({ re: x.reagenti, pr: x.prodotti, k: fin(x.k), ki: fin(x.kInversa ?? 0) })).filter((x) => x.k > 0 || x.ki > 0);
-  let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0;
-  for (let n = 0; n < passi; n++, dt *= r) { cambia = 0;
+  let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0; const prima = new Map(); let peggio = '';
+  const dtMax = ricambio > 0 ? 0.2 / ricambio : Infinity; // (con il ricambio il passo non supera un quinto del tempo di rinnovo: poi si va avanti a passi uguali fino a regime)
+  for (let n = 0; n < passi; n++, dt = Math.min(dt * r, dtMax)) {
     for (const x of rz) { let av = x.k, ind = x.ki, den = 0, maxAv = Infinity, maxInd = Infinity; for (const k of x.re) av *= a(k); for (const k of x.pr) ind *= a(k); if (!(av > 0) && !(ind > 0)) continue;
       for (const k of x.re) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += av / ck; maxAv = Math.min(maxAv, ck); }
       for (const k of x.pr) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += ind / ck; maxInd = Math.min(maxInd, ck); }
-      let xi = (dt * (av - ind)) / (1 + dt * den); if (xi > 0) xi = Math.min(xi, 0.5 * maxAv === Infinity ? xi : 0.5 * maxAv); else xi = Math.max(xi, maxInd === Infinity ? xi : -0.5 * maxInd); if (!xi || !isFinite(xi)) continue;
-      for (const k of x.re) if (libera(k)) c.set(k, c.get(k) - xi); for (const k of x.pr) if (libera(k)) { const prima = c.get(k), dopo = prima + xi; c.set(k, dopo); if (dopo > 1e-30) cambia = Math.max(cambia, Math.abs(xi) / dopo); } } }
-  return { c: Object.fromEntries(c), converge: cambia < 1e-3 };
+      let xi = (dt * (av - ind)) / (1 + dt * den); if (xi > 0) { if (maxAv !== Infinity) xi = Math.min(xi, 0.5 * maxAv); } else if (maxInd !== Infinity) xi = Math.max(xi, -0.5 * maxInd); if (!xi || !isFinite(xi)) continue;
+      for (const k of x.re) if (libera(k)) c.set(k, c.get(k) - xi); for (const k of x.pr) if (libera(k)) c.set(k, c.get(k) + xi); }
+    // (ricambio: il luogo si rinnova, ogni specie che non è una sorgente esce con questo ritmo, 1/s)
+    if (ricambio > 0) for (const [k, v] of c) if (libera(k) && v > 0) c.set(k, v / (1 + dt * ricambio));
+    // (fermo: nell'ultimo decimo dei passi nessuna specie sopra 10⁻¹² mol/L cambia più dell'1% a passo)
+    if (n >= passi * 0.9) { for (const [k, v] of c) { const p = prima.get(k); if (p != null && Math.max(v, p) > 1e-12) { const d = Math.abs(v - p) / Math.max(v, p); if (d > cambia) { cambia = d; peggio = k; } } } } if (n >= passi * 0.9 - 1) for (const [k, v] of c) prima.set(k, v); }
+  return { c: Object.fromEntries(c), converge: cambia < 1e-2, cambia, peggio };
 }
 // le concentrazioni stazionarie con le sorgenti tenute fisse (un luogo aperto: ciò che arriva dall'aria o dal camino
-// resta alla sua concentrazione), dopo un tempo (di suo: tre miliardi di anni). → { c, converge, flussi }
-export function stazionarie(r, { tenute = r.partenza, tempo = 1e17 } = {}) {
-  const c0 = {}; for (const k of r.specie.keys()) c0[k] = tenute[k] ?? 0; const e = evolvi(r.reazioni, c0, tempo, { fisse: Object.keys(tenute), attivita: { O: r.condizioni.attivitaAcqua ?? 1, '[H+]': 1 } });
+// resta alla sua concentrazione) e tutto il resto esce con il ritmo del ricambio (di suo 10⁻⁹ 1/s: il luogo si rinnova in
+// trent'anni; senza ricambio ciò che è in discesa si accumulerebbe senza fine). → { c, converge, flussi }
+export function stazionarie(r, { tenute = r.partenza, tempo = 1e12, ricambio = 1e-9 } = {}) {
+  const c0 = {}; for (const k of r.specie.keys()) c0[k] = tenute[k] ?? 0; const e = evolvi(r.reazioni, c0, tempo, { fisse: Object.keys(tenute), ricambio, passi: 240, attivita: { O: r.condizioni.attivitaAcqua ?? 1, '[H+]': 1 } });
   const a = (k) => (k === 'O' || k === '[H+]' ? 1 : e.c[k]); return { ...e, flussi: r.reazioni.map((x) => x.k * x.reagenti.reduce((p, k) => p * a(k), 1) - x.kInversa * x.prodotti.reduce((p, k) => p * a(k), 1)) };
 }
 
