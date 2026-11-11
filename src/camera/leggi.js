@@ -97,7 +97,13 @@ export const ebollizione = (P) => ACQUA.evaporazione / (ACQUA.entropia - R_GAS *
 // stabile). A 288 K dà 1,70 kPa (misurati 1,71), a 373,15 K 1,12 bar (misurato 1,013: il calore di evaporazione cala
 // col caldo, e qui è costante). È LA SOLA FORMULA: chimica.js (pressioneVapore), meteo.js e mare.js la prendono da qui
 const [H_VAPORE, S_VAPORE] = ACQUA_STATI.vapore, [H_LIQUIDA, S_LIQUIDA] = ACQUA_STATI.liquida, [H_GHIACCIO, S_GHIACCIO] = ACQUA_STATI.ghiaccio;
-export const vaporeSaturo = (T) => { const g = 1000 * H_VAPORE - T * S_VAPORE, rt = R_GAS * T; return 1e5 * Math.min(Math.exp(-(g - (1000 * H_LIQUIDA - T * S_LIQUIDA)) / rt), Math.exp(-(g - (1000 * H_GHIACCIO - T * S_GHIACCIO)) / rt)); };
+// (lontano dal punto dove i due si scambiano — 273,18 K con questa tabella — si sa già chi comanda, e si calcola solo quello:
+// è lo stesso numero, con un esponenziale invece di due; il clima a fasce lo chiede milioni di volte)
+const T_SCAMBIO = (1000 * (H_LIQUIDA - H_GHIACCIO)) / (S_LIQUIDA - S_GHIACCIO);
+export const vaporeSaturo = (T) => { const g = 1000 * H_VAPORE - T * S_VAPORE, rt = R_GAS * T;
+  if (T > T_SCAMBIO + 1) return 1e5 * Math.exp(-(g - (1000 * H_LIQUIDA - T * S_LIQUIDA)) / rt);
+  if (T < T_SCAMBIO - 1) return 1e5 * Math.exp(-(g - (1000 * H_GHIACCIO - T * S_GHIACCIO)) / rt);
+  return 1e5 * Math.min(Math.exp(-(g - (1000 * H_LIQUIDA - T * S_LIQUIDA)) / rt), Math.exp(-(g - (1000 * H_GHIACCIO - T * S_GHIACCIO)) / rt)); };
 export function statoAcqua(T, P) {
   if (T >= ACQUA.critica) return 'vapore'; // (sopra il punto critico, 647 K, liquido e vapore non si distinguono più: non c'è un mare)
   if (P < ACQUA.tripla) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
@@ -367,15 +373,19 @@ function ariaSulleFasce(aria, lat) {
   const H = lat.length, dphi = Math.PI / H, raffica2 = ARIA.raffica * ARIA.raffica, cosLat = new Float64Array(H), peso = new Float64Array(H), paralleli = [];
   for (let j = 0; j < H; j++) { cosLat[j] = Math.cos(lat[j]); if (j < H - 1) { peso[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)) / (dphi * dphi); paralleli.push(aria.parallelo(Math.sin(lat[j] - dphi / 2), Math.cos(lat[j] - dphi / 2))); } }
   const A = new Float64Array(H), vento = new Float64Array(H).fill(ARIA.raffica), scambio = new Float64Array(H), ridotto = new Float64Array(H), kd = new Float64Array(H), sorg = new Float64Array(H), v2 = new Float64Array(H), dato = new Float64Array(H);
-  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H), porta = { k: 0, kd: 0, v2: 0, u2: 0, e2: 0 };
+  const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp = new Float64Array(H), porta = { k: 0, kd: 0, v2: 0, u2: 0, e2: 0 }, dA0 = new Float64Array(H); let vecchio = Infinity;
   const passo = (Ts, cdt) => {
     for (let j = 0; j < H; j++) { const sj = scambioConLAria(aria.col, Ts[j], vento[j]); scambio[j] = sj; ridotto[j] = cdt === Infinity ? sj : (sj * cdt) / (cdt + sj); }
-    for (let i = 0; i < H - 1; i++) { const dA = A[i] - A[i + 1]; portataDellAria(aria, paralleli[i], 0.5 * (A[i] + A[i + 1]), dA / dphi, porta); kd[i] = porta.kd * peso[i]; sorg[i] = (porta.kd - porta.k) * peso[i] * dA; v2[i] = porta.v2 + porta.u2 + porta.e2; }
+    // (ciò che l'aria porta — e il vento — si ricalcolano quando il gradiente dell'aria è cambiato di più del 3% da quando
+    // sono stati calcolati, e comunque ogni quattro passi: vicino al regime la linearizzazione di prima vale ancora)
+    let fresco = ++vecchio >= 4; for (let i = 0; i < H - 1 && !fresco; i++) { const dA = A[i] - A[i + 1]; if (Math.abs(dA - dA0[i]) > 0.03 * Math.abs(dA0[i]) + 1e-4) fresco = true; }
+    if (fresco) { vecchio = 0; for (let i = 0; i < H - 1; i++) { const dA = A[i] - A[i + 1]; dA0[i] = dA; portataDellAria(aria, paralleli[i], 0.5 * (A[i] + A[i + 1]), dA / dphi, porta); kd[i] = porta.kd * peso[i]; sorg[i] = (porta.kd - porta.k) * peso[i] * dA; v2[i] = porta.v2 + porta.u2 + porta.e2; } }
     for (let j = 0; j < H; j++) { const sj = ridotto[j] * cosLat[j], kn = j > 0 ? kd[j - 1] : 0, ks = j < H - 1 ? kd[j] : 0; sotto[j] = -kn; sopra[j] = -ks; diag[j] = sj + kn + ks; A[j] = sj * Ts[j] + (j < H - 1 ? sorg[j] : 0) - (j > 0 ? sorg[j - 1] : 0); }
     cp[0] = sopra[0] / diag[0]; A[0] /= diag[0];
     for (let j = 1; j < H; j++) { const d = diag[j] - sotto[j] * cp[j - 1]; cp[j] = sopra[j] / d; A[j] = (A[j] - sotto[j] * A[j - 1]) / d; }
     for (let j = H - 2; j >= 0; j--) A[j] -= cp[j] * A[j + 1];
-    for (let j = 0; j < H; j++) { dato[j] = ridotto[j] * (A[j] - Ts[j]); const q = j === 0 ? v2[0] : j === H - 1 ? v2[H - 2] : 0.5 * (v2[j - 1] + v2[j]); vento[j] = 0.5 * vento[j] + 0.5 * Math.sqrt(q + raffica2); }
+    for (let j = 0; j < H; j++) dato[j] = ridotto[j] * (A[j] - Ts[j]);
+    if (fresco) for (let j = 0; j < H; j++) { const q = j === 0 ? v2[0] : j === H - 1 ? v2[H - 2] : 0.5 * (v2[j - 1] + v2[j]); vento[j] = 0.5 * vento[j] + 0.5 * Math.sqrt(q + raffica2); }
     return dato;
   };
   return { A, vento, scambio, dato, passo };
