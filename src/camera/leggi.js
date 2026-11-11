@@ -206,8 +206,10 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //      μ = 2·c_d/hs l'attrito dello strato basso (lo stesso c_d di meteo.js: mare 1,3·10⁻³, terra 3·10⁻³).
 //      COSTANTI: c₃ = 2,0, c_γ = 0,113, γ = 3,64 (letti nel 2021: eq. 19 e limite senza attrito; √(c₃/c_γ) = 4,2), e
 //      c₁ = 2,5 per la lunghezza di mescolamento ℓ = c₁·λ/√μ* (eq. 8; nel 2020 era 2,62): vengono da simulazioni
-//      numeriche di turbolenza baroclina, NON dalla Terra. Dove la curvatura comanda, D* = c_γ·ξ^γ con ξ = 1/β* la
-//      criticità: β* = ¾·c²/(R·|∂T/∂φ|·tan φ) non dipende né dalla rotazione né dal raggio (dipende dalla pendenza
+//      numeriche di turbolenza baroclina, NON dalla Terra. (Quelle del 2021 sono state lette due volte, nel 2026-11,
+//      dalla copia ar5iv dell'articolo, e tornano tra loro — √(2,0/0,113) = 4,2; γ = 2/0,55 —, ma non sono ancora nelle
+//      note di verifica di research_notes, dove c'è solo l'articolo del 2020.) Dove la curvatura comanda, D* = c_γ·ξ^γ con ξ = 1/β* la
+//      criticità: β* = 3/2·c²/(R·|∂T/∂φ|·tan φ) non dipende né dalla rotazione né dal raggio (dipende dalla pendenza
 //      delle isentropiche), e 𝒟 cresce con la 4,6ª potenza del gradiente: è quasi un «aggiustamento baroclino».
 //      Il vortice non mescola più lontano di quanto è grande il pianeta: D* ≤ (c₃/c₁²)·(a/λ)² (dalla chiusura D* ∝ ℓ*²).
 //      Con i vortici viaggia il vapore della colonna (quello di meteo.js: saturo alla soglia della pioggia, alto
@@ -230,7 +232,8 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //   5. IL VENTO al suolo viene dalla stessa legge: il vento della cella è il flusso di calore diviso per ciò che un
 //      chilo d'aria porta scendendo e risalendo, v = flusso/(c_p·(p/2g)·Δθ); dove il pianeta gira, la rotazione lo piega
 //      finché l'attrito lo ferma, u = √(f·v/μ) (gli alisei; non su un pianeta bloccato, dove il vento va dal giorno alla
-//      notte; mai più del vento a momento angolare conservato, e la cella mai più veloce delle onde interne); i vortici aggiungono V = (√c₃/c₁)·U·√D* (dalla chiusura: ⟨u²⟩ ~ (𝒟/ℓ)², senza il logaritmo); più le
+//      notte; mai più del vento a momento angolare conservato, e la cella mai più veloce delle onde interne); i vortici
+//      aggiungono V = (√c₃/c₁)·U·√D* (dalla chiusura: ⟨u²⟩ ~ (𝒟/ℓ)², senza il logaritmo); più le
 //      raffiche. Serve allo scambio e alle nuvole attese (al posto dei 5 m/s di prima). Sulla Terra dà 3,6 m/s (misurati
 //      6–7); contro i venti di meteo.js: ×1,6 sui pianeti asciutti, ×0,45 su quelli d'acqua, ×1,0 sui bloccati lenti;
 //      su Marte dà 17 m/s (misurati 2–10): in un'aria sottile la cella deve correre per portare quel calore, ed è troppo.
@@ -251,7 +254,7 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //     mare; la sola aria ≈ 5 PW a 43°); i venti di meteo.js 10,8 PW a 28°. Nel clima a fasce la Terra sta a 291 K con
 //     33 K tra equatore e poli e 2,1 PW (veri: 288, 40–45, 5–6): con la serra fissa la luce irradiata cresce di 3,4 W/m²
 //     per grado (veri ~2), e a tenere 40 K di contrasto bastano 2 PW: contrasto e trasporto veri insieme non possono
-//     tornare (test_fili lo stampa, con la riprova); la mappa con i venti sta entro mezzo grado dalle fasce;
+//     tornare (test_fili lo stampa, con la riprova); la mappa con i venti sta entro un grado dalle fasce (prima 2,7);
 //   · SULLA POPOLAZIONE (test_coerenza): clima() e la mappa con i venti coincidono entro 3 K su tutti i mondi tranne
 //     dove decidono le nuvole (un mare caldo sotto un sole fisso, +37 K: i venti concentrano la pioggia sotto il sole e
 //     lasciano sgombro il resto del giorno, anche a regime); prima, con 0,6·√p, gli scarti arrivavano a 64 K. Il ghiaccio
