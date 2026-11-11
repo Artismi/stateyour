@@ -86,9 +86,20 @@ scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie un
   misurata nel nostro universo. Queste non sono cose «messe da noi»: sono un punto del nostro mondo, che è uno dei
   libri della biblioteca; entrano dichiarate come osservazioni, e vale per loro tutto il resto (devono essere
   compatibili con le leggi e con ciò che sta sopra).
-- Fatto: quasi nulla. Si entra sempre dall'alto (un numero della biblioteca) e si scende.
-- Manca: per ogni livello che cosa chiede a chi sta sopra; la ricerca del mondo compatibile, pesata per
-  probabilità; le osservazioni come ingresso.
+- Fatto (primo pezzo, `src/camera/bolle.js`, `test_bolle`): **che cosa chiede** per otto contenuti che i moduli
+  sanno già giudicare (acqua liquida, ghiaccio, crosta di sale, un minerale, un cratere, un anello, un'aurora,
+  carbonato che precipita): `chiede(bolla)` dà la richiesta livello per livello (punto, superficie, pianeta, stella)
+  con il perché e la legge da cui viene, senza soglie nuove; `giudica` risponde sì / no (con la legge che lo vieta) /
+  forse (decide il livello sotto). **Quale si sceglie**: per il campo del cosmo è esatto (`campoCondizionato`: la
+  correzione di Hoffman e Ribak, peso e^(−χ²/2)); per i pianeti `incontra` campiona indirizzi della biblioteca in
+  modo deterministico, dichiara quanti ne ha provati e quale parte andava bene (con l'errore), e sceglie in
+  proporzione al peso. Ridiscendendo dal mondo trovato il contenuto c'è (prova). L'albero della vita di un pianeta
+  chiede a chi sta sopra da quanto tempo c'è acqua liquida (`albero_vita.js`: la radice non può essere più antica).
+- Manca: le richieste degli altri livelli (roccia e cristallo verso il pianeta, molecola verso l'acqua, macchina
+  molecolare verso la storia); la discesa alla superficie dentro la ricerca (oggi è a parte, `inFondo`, ~11 s a
+  pianeta: le croste di sale dei mari chiusi si decidono solo lì); il peso dei livelli non lineari è una stima su
+  centinaia di mondi di due cosmi, non sulla biblioteca intera; i pesi dei singoli eventi (`rami` non ha
+  probabilità); le osservazioni da fuori (una fotografia) come ingresso; la storia dell'abitabilità (`storia.js`).
 
 ## 6. Il tempo: le cause stanno prima
 Lo stato di una cosa a un istante viene dalla sua storia: le leggi integrate dagli eventi d'origine fino a
@@ -144,9 +155,15 @@ altri sono i suoi rami (regola 3).
   in moto. Ogni vista a ogni scala (cosmo, galassia, sistema, pianeta, roccia, atomi, particelle) è la stessa cosa
   con un'altra grandezza.
 - Fatto: l'indirizzo con luogo, tempo e rami (`intreccio.js`); la finestra delle particelle con chi guarda in moto;
-  lo stato di sistema, galassia e cosmo a un istante qualsiasi (`spazio3d.js`).
-- Manca: partire da una bolla qualunque invece che da un numero; il passato come inferenza pesata; la continuità al
-  bordo tra regioni calcolate in momenti diversi come prova; la vista 3D unica a tutte le scale (in lavorazione).
+  lo stato di sistema, galassia e cosmo a un istante qualsiasi (`spazio3d.js`); la bolla come oggetto (luogo anche
+  solo in parte, grandezza, istante, contenuto) e, per i contenuti che i moduli sanno giudicare, il mondo che la
+  contiene: `incontra` restituisce l'indirizzo completo fino al punto e il numero della biblioteca da cui entrare
+  (`bolle.js`); il primo pezzo del «prima» come inferenza: il tempo dell'antenato comune di due specie di un pianeta,
+  funzione pura dell'indirizzo, ultrametrica, calcolata solo dove si chiede (`albero_vita.js`, `test_albero_vita`).
+- Manca: entrare nell'app da una bolla (oggi la ricerca dà un numero, ma l'interfaccia parte ancora dal numero); la
+  bolla a un istante diverso da adesso (lo stato dei pianeti è solo quello di oggi: una bolla nel passato è giudicata
+  su oggi, e lo dice); il passato come inferenza pesata fuori dall'albero della vita; la continuità al bordo tra
+  regioni calcolate in momenti diversi come prova; la vista 3D unica a tutte le scale (in lavorazione).
 
 ## 12. Più bolle: si incontrano nell'antenato comune
 Le bolle possono essere molte, prese a caso: quattro, mille. Fissarle tutte vuol dire mettersi tra gli universi che
@@ -167,6 +184,19 @@ per poi cucirli (al bordo non combacerebbero), si condiziona lo stesso mondo a t
   un mondo vivo, non mille coincidenze. Tra i mondi compatibili vince quello in cui le bolle hanno una causa in
   comune. Per questo un mondo si può nominare anche con un insieme di bolle invece che con un numero: più sono, meno
   mondi restano.
-- Fatto: nulla.
-- Manca: il campo del cosmo condizionato a più punti; le richieste che salgono fino all'antenato comune e la loro
-  intersezione; il peso; la prova che, ridiscendendo, ogni bolla torna identica e che al bordo tutto combacia.
+- Fatto (`bolle.js`, `test_bolle`): **il campo del cosmo condizionato a più punti**, esatto: campo libero
+  dell'indirizzo più la correzione lineare, in numero qualsiasi di vincoli (provato con 1, 4 e 1000), funzione pura
+  di (indirizzo, vincoli) in qualunque ordine, con χ² e probabilità; i vincoli incompatibili sono riconosciuti e
+  detti; lontano dai vincoli coincide col campo libero (oltre 300 Mpc entro il 2% dello scarto); media e varianza su
+  400 indirizzi sono quelle della teoria; le galassie di un cosmo restano dove sono. **L'antenato comune**
+  (`antenatoComune`) e l'incontro (`incontra`): le bolle nello stesso punto intersecano i loro intervalli, e se sono
+  vuoti si dice quale legge lo vieta; con posizione data l'incontro può non esistere (prima della stella, fuori dal
+  suo stato dell'acqua, più grande del pianeta), con posizione libera si trova sempre se ogni bolla è possibile.
+  **La causa comune** (`causaComune`): il peso di «nello stesso mondo» contro «ognuna nel suo», sugli stessi mondi;
+  due croste di sale stanno nello stesso mondo con probabilità 0,86 (pesa 6 volte di più), mare e ghiaccio no.
+- Manca: l'intersezione delle richieste è fatta nel punto (temperatura, pressione) e nel tempo, non ancora per le
+  distanze («una stella a un metro da un fiocco di neve») né tra istanti diversi (una bolla nel futuro di un'altra);
+  il peso dei pianeti è stimato a livello di pianeta: i contenuti che decide la superficie restano «forse» finché
+  non si scende; le bolle di pianeti diversi non condizionano ancora insieme il campo del cosmo (i due pezzi, A e B,
+  non sono collegati: una galassia non è un vincolo lineare); la prova che al bordo tutto combacia; mille bolle
+  con un batterio (serve il contenuto «vivo», che nessun modulo sa ancora giudicare).

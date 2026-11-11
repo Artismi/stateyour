@@ -26,9 +26,10 @@
 //    DICHIARATO: la finestra di lisciatura è gaussiana, W(k) = e^(−k²R²/2) (R = 0: il valore nel punto); due vincoli
 //    sono «lo stesso» quando il secondo non aggiunge niente al primo oltre 10⁻¹² (RANGO): se chiedono valori diversi
 //    sono incompatibili (lo si dice), se chiedono lo stesso valore uno è di troppo (lo si toglie e lo si dice).
-//    COSTI: con n vincoli e N onde, n²·N somme per la matrice e n³/3 per risolverla. Con il campo di cosmo3d
-//    (N = 28 888): 4 vincoli più le 77 galassie ~0,3 s; 1000 vincoli ~30 s. Per questo la prova dei mille usa un
-//    campo più grosso (kmax = 10, 2 108 onde: ~3 s).
+//    COSTI (misurati): con n vincoli e N onde, n²·N somme per la matrice e n³/3 per risolverla; poi ogni punto
+//    costa N seni e coseni (~0,3 ms). Con il campo di cosmo3d (N = 28 888): 4 bolle più le galassie del cosmo
+//    ~0,05 s; 100 vincoli ~0,6 s; 1000 vincoli 33 s. Per questo la prova dei mille usa un campo più grosso
+//    (kmax = 10, 2 084 onde: 2,8 s). In memoria: la matrice n² e due copie delle ampiezze.
 //    CHE COSA NON C'È: i vincoli sono sul contrasto di densità LINEARE (una massa d'alone, una galassia di un certo
 //    tipo non sono lineari: lì si campiona, parte B); il campo del cosmo di cosmo3d.js non viene ancora dalla
 //    fonte unica (è il generatore di mondo.js con un seme dell'indirizzo): cambiarlo sposterebbe assi e moti di

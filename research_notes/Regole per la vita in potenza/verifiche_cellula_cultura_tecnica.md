@@ -136,4 +136,4 @@ Verifica delle voci marcate [Va], [S], [R] e dei conflitti dichiarati in `dal_nu
 
 ### `fisiologia_piante_ecosistemi.md`
 
-Alla fine del lavoro sugli altri tre il file c'era (503 righe, otto sezioni e una tabella di sintesi finale, ultima modifica alle 17:57 UTC, fermo da almeno dieci minuti): sembra completo. **Non è stato verificato né toccato**: il tempo è stato speso sui tre file assegnati. Resta da fare per intero.
+Alla fine del lavoro sugli altri tre il file c'era (503 righe, otto sezioni e una tabella di sintesi finale, ultima modifica alle 17:57 UTC, fermo da un quarto d'ora): sembra completo. Contiene 89 marche [R] e 69 [S], oltre alle [V*] (testo aperto ma letto con un estrattore automatico). **Non è stato verificato né toccato**: il lavoro è stato speso sui tre file assegnati. Resta da fare per intero.
