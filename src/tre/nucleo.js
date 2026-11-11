@@ -112,10 +112,13 @@ export function creaNucleo(tela, opzioni = {}) {
   }
   // un'immagine: formato 'rgba8' | 'rgba16f' | 'rg32f' | 'rg16f' | 'r8' | 'profondita'
   const FORMATI = { rgba8: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba16f: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rgba16fDaFloat: [gl.RGBA16F, gl.RGBA, gl.FLOAT], rg32f: [gl.RG32F, gl.RG, gl.FLOAT], rg16f: [gl.RG16F, gl.RG, gl.FLOAT], r8: [gl.R8, gl.RED, gl.UNSIGNED_BYTE], profondita: [gl.DEPTH_COMPONENT32F, gl.DEPTH_COMPONENT, gl.FLOAT] };
-  function immagine(w, h, formato = 'rgba8', dati = null, { filtro = gl.LINEAR, ripeti = false } = {}) {
+  // (`mip`: con le copie rimpicciolite, per le immagini che si guardano anche da lontano — senza, più punti dell'immagine
+  // che punti dello schermo fanno un reticolo che non c'è)
+  function immagine(w, h, formato = 'rgba8', dati = null, { filtro = gl.LINEAR, ripeti = false, mip = false } = {}) {
     const t = gl.createTexture(), [interno, forma, tipo] = FORMATI[formato]; gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, interno, w, h, 0, forma, tipo, dati);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filtro); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filtro);
+    if (mip && dati) { gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); }
     const bordo = ripeti === true ? gl.REPEAT : gl.CLAMP_TO_EDGE; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, ripeti === 'x' ? gl.REPEAT : bordo); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, bordo);
     return t;
   }

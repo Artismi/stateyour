@@ -407,7 +407,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const t = tessere.get(d.n); if (!t || d.k !== base.k) return; arrivate++;
     if (d.errore) { console.error('mondo3d: tessera non riuscita:', d.errore); tessere.delete(d.n); return; }
     msTessere += d.ms;
-    Object.assign(t, { pronta: true, alt: N.immagine(TWB, THB, 'rg32f', d.altLiv, { filtro: gl.NEAREST }), pend: N.immagine(TW, TH, 'rgba16fDaFloat', d.pend), terra: N.immagine(TW, TH, 'rgba8', d.terra), acqua: d.acqua ? N.immagine(TW, TH, 'rgba8', d.acqua) : null, altLiv: d.altLiv, hMin: d.hMin, hMax: d.hMax, haAcqua: d.haAcqua });
+    Object.assign(t, { pronta: true, alt: N.immagine(TWB, THB, 'rg32f', d.altLiv, { filtro: gl.NEAREST }), pend: N.immagine(TW, TH, 'rgba16fDaFloat', d.pend, { mip: true }), terra: N.immagine(TW, TH, 'rgba8', d.terra, { mip: true }), acqua: d.acqua ? N.immagine(TW, TH, 'rgba8', d.acqua, { mip: true }) : null, altLiv: d.altLiv, hMin: d.hMin, hMax: d.hMax, haAcqua: d.haAcqua });
     if (t.L === 0) { hMinTutto = d.hMin; hMaxTutto = d.hMax; }
     // la memoria è limitata: si buttano quelle che da più tempo nessuno guarda (mai il livello 0)
     if (tessere.size > O.massimoTessere) { const v = [...tessere.values()].filter((x) => x.pronta && x.L > 0 && x.uso < uso - 2).sort((a, b) => a.uso - b.uso); for (const x of v.slice(0, tessere.size - O.massimoTessere)) butta(x); }
@@ -537,7 +537,9 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     if (spezza && d < DMAX) { for (let q = 0; q < 4; q++) visita(d + 1, 2 * ix + (q & 1), 2 * iy + (q >> 1), S); return; }
     // se la tessera che servirebbe manca, si chiede la prima che manca scendendo da quella che c'è
     if (base.pronta) { const La = t ? t.L : -1, Lq = Math.min(Lv, d >> 1); if (La < Lq) { const L = La + 1, m = 4 ** L; chiedi(L, Math.min(m - 1, Math.floor((u0 + du / 2) * m)), Math.min(m - 1, Math.floor((v0 + du / 2) * m)), vicino * (1 + L)); } if (t) t.uso = uso; }
-    lista.push({ d, u0, v0, du, lon0, lat0, dLon, dLat, c0, t: t || liscio, dist: vicino });
+    // (per disegnare, mai una tessera più fine di quella che la distanza chiede: i suoi punti sarebbero più piccoli di quelli dello schermo)
+    const td = t && t.L > Lv ? migliore(u0 + du / 2, v0 + du / 2, Lv) || t : t; if (td) td.uso = uso;
+    lista.push({ d, u0, v0, du, lon0, lat0, dLon, dLat, c0, t: td || liscio, dist: vicino });
   }
 
   // ---------- lo strato del suolo e del mare
