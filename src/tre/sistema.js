@@ -30,11 +30,13 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   const Tstella = Sis.stella.T || 5772, nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c);
   // il riferimento del sistema (il suo baricentro, coi suoi assi): dentro la galassia, se c'è, altrimenti la radice
   const lontanoMax = Math.max(1, ...Sis.pianeti.map((P) => P.aM || 0));
-  const nodo = N.corpo({ nome: `sistema ${via.stella}`, genitore, posizione, assi, raggio: 0, influenza: Math.max(3 * lontanoMax, 40 * UA) });
+  const nodo = N.corpo({ nome: `sistema ${via.stella}`, luogo: `stella ${via.stella}`, genitore, posizione, assi, raggio: 0, influenza: Math.max(3 * lontanoMax, 40 * UA) });
   const corpi = [], schede = [];
   for (const c of defs) {
     const g = c.genitore < 0 ? nodo : corpi[c.genitore], P = c.cosa === 'pianeta' ? Sis.pianeti[c.id] : null, L = c.cosa === 'luna' ? Sis.pianeti[c.pianeta].lune.find((l) => l.id === c.id) : null;
-    const corpo = N.corpo({ ...c, genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
+    // (il nome del suo luogo, per la bolla — bolla.js —, e i suoi periodi: quando il tempo corre troppo per vederlo girare, il nucleo lo ferma)
+    const luogo = c.cosa === 'stella' ? 'astro' : `${c.cosa} ${c.id}`, periodi = P ? { giro: P.bloccato ? 0 : P.giorno || 0, orbita: P.anno || 0 } : L ? { giro: L.periodo || 0, orbita: L.periodo || 0 } : null;
+    const corpo = N.corpo({ ...c, luogo, periodi, genitore: g, solido: true, assetto: c.assetto || null, luce: c.cosa === 'stella' ? { colore: coloreLuce, T: Tstella } : null,
       // fin dove la camera si attacca a questo corpo: un pianeta 50 raggi (ma dentro l'orbita della sua prima luna larga), una luna 12
       influenza: c.cosa === 'pianeta' ? 50 * c.raggio : c.cosa === 'luna' ? Math.min(12 * c.raggio, 0.3 * (L?.aM || 1e12)) : 0 });
     corpi.push(corpo); schede.push({ c, corpo, P, L, anello: P && P.anello && typeof P.anello.densita === 'function' ? fabbricaAnello(N, P) : null, vero: null, rel: [0, 0, 0], sole: [1, 0, 0], E: 0 });

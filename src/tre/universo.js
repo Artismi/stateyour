@@ -32,7 +32,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
   // accecanti; il resto è la luce diffusa.)
   const O = { batuffoli: 60000, diffusa: 0.95, puntiLuce: 0.05, frammenti: 5e6, ...opzioni }; let sc = scenaGalassia(via.cosmo, via.galassia, N.tempo.t), tScena = N.tempo.t;
   const Rg = sc.riferimento.raggio, n = sc.punti.n, assi = sc.nelGenitore.assi, q0 = [assi[0][0], assi[1][0], assi[2][0], assi[0][1], assi[1][1], assi[2][1], assi[0][2], assi[1][2], assi[2][2]]; // (per righe: le colonne sono i tre assi)
-  const nodo = N.corpo({ nome: `galassia ${via.galassia}`, genitore, posizione, assi: q0, raggio: 0, influenza: 3 * Rg });
+  const nodo = N.corpo({ nome: `galassia ${via.galassia}`, luogo: `galassia ${via.galassia}`, genitore, posizione, assi: q0, raggio: 0, influenza: 3 * Rg });
   const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
   function luciStelle() { const P = sc.punti; for (let i = 0; i < n; i++) { const L = P.esiste[i] ? P.luminosita[i] / LUCE : 0; luce[4 * i] = L * lineare(P.colore[3 * i]); luce[4 * i + 1] = L * lineare(P.colore[3 * i + 1]); luce[4 * i + 2] = L * lineare(P.colore[3 * i + 2]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
   luciStelle();
@@ -104,7 +104,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
 // ---------- il cosmo
 export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   const O = { batuffoli: 70000, rete: 1, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t), tScena = N.tempo.t;
-  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
+  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: `cosmo ${cosmo}`, raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
   let lato = sc.riferimento.periodico[0]; const lato0 = lato, nascosta = new Set();
   function luci() { const P = sc.punti; for (let i = 0; i < n; i++) { const L = P.esiste[i] && !nascosta.has(i) ? P.luminosita[i] / LUCE : 0, c = P.colore; luce[4 * i] = L * lineare(c[3 * i]); luce[4 * i + 1] = L * lineare(c[3 * i + 1]); luce[4 * i + 2] = L * lineare(c[3 * i + 2]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
   luci();

@@ -128,6 +128,14 @@ export function creaNucleo(tela, opzioni = {}) {
 
   // ---------- i corpi
   const corpi = [];
+  // IL TEMPO CHE UN CORPO MOSTRA (INTRECCIO.md, regola 11: sopra il limite di Nyquist si mostra la media, non
+  // l'istantanea). Un corpo può dire i suoi periodi (`periodi: { giro, orbita }`, secondi): quando il mondo corre tanto
+  // che in un fotogramma farebbe più di un quarto di giro — lo si vedrebbe saltare a caso —, quel suo moto si ferma
+  // alla fase che aveva; `N.mediato(corpo, 'giro' | 'orbita')` lo dice a chi disegna (che mostra la media: l'orbita
+  // intera al posto del punto, il mare senza le onde). Tornando lenti riprende dalla fase vera di quell'istante.
+  let passoMondo = 0; // secondi del mondo per fotogramma
+  const tVisto = (c, quale, t) => { const T = c.periodi && c.periodi[quale]; if (!T || passoMondo * 4 < T) { if (c._fermo) c._fermo[quale] = null; return t; } const f = c._fermo || (c._fermo = {}); if (f[quale] == null) f[quale] = t; return f[quale]; };
+  const mediato = (c, quale) => !!(c && c._fermo && c._fermo[quale] != null);
   function corpo(def) {
     const c = { nome: '', genitore: null, raggio: 1, posizione: null, assetto: null, assi: null, influenza: 0, quota: null, colpisci: null, verticale: null, luce: null, ...def, profondita: 0 };
     for (let g = c.genitore; g; g = g.genitore) c.profondita++;
@@ -144,7 +152,7 @@ export function creaNucleo(tela, opzioni = {}) {
   // livelli sopra non entrano mai nel conto di due cose vicine
   function tra(a, b, t, out = [0, 0, 0]) {
     let ox = 0, oy = 0, oz = 0, x = a, y = b;
-    const passo = (c, segno) => { if (!c.posizione) return; c.posizione(t, _p); const m = quadro(c.genitore, t), v = m ? V.mv(m, _p, _q) : _p; ox += segno * v[0]; oy += segno * v[1]; oz += segno * v[2]; };
+    const passo = (c, segno) => { if (!c.posizione) return; c.posizione(tVisto(c, 'orbita', t), _p); const m = quadro(c.genitore, t), v = m ? V.mv(m, _p, _q) : _p; ox += segno * v[0]; oy += segno * v[1]; oz += segno * v[2]; };
     while (x !== y) { if (x && (!y || x.profondita >= y.profondita)) { passo(x, -1); x = x.genitore; } else { passo(y, 1); y = y.genitore; } }
     out[0] = ox; out[1] = oy; out[2] = oz; return out;
   }
@@ -155,7 +163,7 @@ export function creaNucleo(tela, opzioni = {}) {
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
   const cam = { corpo: null, solidale: false, pos: [0, 0, 1], assi: V.identita(), fov: O.fov, perno: null };
-  const assettoDi = (c, t) => { if (!c || !c.assetto) return V.identita(); const a = c.assetto(t, new Array(9)), m = quadro(c.genitore, t); return !a ? V.identita() : m ? V.mm(m, a) : a; };
+  const assettoDi = (c, t) => { if (!c || !c.assetto) return V.identita(); const a = c.assetto(tVisto(c, 'giro', t), new Array(9)), m = quadro(c.genitore, t); return !a ? V.identita() : m ? V.mm(m, a) : a; };
   const quotaSuolo = (c, dirCorpo) => (c.quota ? c.quota(dirCorpo) : c.raggio);
   // la verticale del luogo (per un corpo schiacciato non è la direzione del centro: il corpo la dà con `verticale`)
   const suDi = (p) => (cam.corpo && cam.corpo.verticale ? cam.corpo.verticale(p) : V.norma(p));
@@ -315,6 +323,7 @@ export function creaNucleo(tela, opzioni = {}) {
       if (av || la || su) vola(av * 1.2 * svelto, la * 1.2 * svelto, su * 0.9 * svelto, dtVero); if (gira) guarda(-gira * 1.2 * dtVero, 0);
     }
     scegliRiferimento(tempo.t); scegliCorpo();
+    passoMondo = tempo.pausa ? 0 : Math.abs(tempo.velocita) / 60; S.passo = passoMondo;
     S.t = tempo.t; S.dt = dtVero * (tempo.pausa ? 0 : tempo.velocita); S.dtVero = dtVero; _a.clear();
     preparaImmagini(); const W = S.W = tela.width, H = S.H = tela.height;
     // la camera negli assi inerziali: l'occhio rispetto al centro del suo corpo, e la matrice mondo → occhio
@@ -379,7 +388,7 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.libera) s.libera(); strati.length = 0;
     if (!perso) gl.getExtension('WEBGL_lose_context')?.loseContext(); perso = true;
   }
-  const N = { gl, tela, opzioni: O, V, tempo, camera: cam, corpo, corpi, tra, quadro, assettoDi, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
+  const N = { gl, tela, opzioni: O, V, tempo, camera: cam, corpo, corpi, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
     avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; }, tasti };
   ridimensiona();
   return N;

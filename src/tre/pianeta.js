@@ -328,7 +328,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
   const nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c); // (l'occhio si adatta in parte al colore della stella)
-  const corpoStella = corpi ? corpi.stella : N.corpo({ nome: 'stella', raggio: raggioStella, luce: { colore: coloreLuce, T: Tstella } });
+  const corpoStella = corpi ? corpi.stella : N.corpo({ nome: 'stella', luogo: via ? `cosmo ${via.cosmo}/galassia ${via.galassia}/stella ${via.stella}` : null, raggio: raggioStella, luce: { colore: coloreLuce, T: Tstella } });
   const anno = P.anno || 3.15e7, f0 = (P.fase || 0) / (2 * Math.PI), eps = (P.obliquita || 0) * RAD, verso = P.retrogrado ? -1 : 1, giorno = P.giorno || 86400, inclina = V.giro([0, 0, 1], -eps);
   const frazioneAnno = (t) => { const f = t / anno + f0; return f - Math.floor(f); };
   // verso la stella (assi inerziali): la declinazione della stella è ε·sin(2π·f), come nel clima di geologia.js
@@ -342,11 +342,11 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     // la verticale di un punto (la normale dell'ellissoide), la sua longitudine e latitudine sulla carta, e il punto a una quota data
     verticale: (p) => V.norma([p[0], p[1] / (schiaccia * schiaccia), p[2]]), lonLat: (p) => lonLat(tondo(p)),
     punto: (lon, lat, h) => { const cl = Math.cos(lat), q = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], [a, l] = leggi(lon, lat), r = R + Math.max(a, l), n = V.norma([q[0], q[1] / schiaccia, q[2]]); return [q[0] * r + n[0] * h, q[1] * r * schiaccia + n[1] * h, q[2] * r + n[2] * h]; } };
-  const corpoPianeta = corpi ? Object.assign(corpi.pianeta, terreno) : N.corpo({ nome: P.nome || 'pianeta', genitore: corpoStella, raggio: R, ...suolo3d, ...terreno });
+  const corpoPianeta = corpi ? Object.assign(corpi.pianeta, terreno) : N.corpo({ nome: P.nome || 'pianeta', luogo: via ? `pianeta ${via.pianeta}` : null, periodi: { giro: P.bloccato ? 0 : giorno, orbita: anno }, genitore: corpoStella, raggio: R, ...suolo3d, ...terreno });
   const lune = (O.lune && !corpi ? P.lune || [] : []).map((L) => {
     const fase0 = via ? (semeEvento('fase luna', via.cosmo, via.galassia, via.stella, via.pianeta, L.id) / 4294967296) * 2 * Math.PI : L.id * 2.4, a = L.aM, e = L.eccentricita || 0;
     const ghiaccio = L.composizione?.ghiaccio ?? 0.3, tinta = [0.18 + 0.5 * ghiaccio, 0.17 + 0.5 * ghiaccio, 0.16 + 0.52 * ghiaccio];
-    return { L, tinta, corpo: N.corpo({ nome: `luna ${L.id}`, genitore: corpoPianeta, raggio: L.raggioM, posizione: (t, o) => { const f = fase0 + ((L.retrograda ? -1 : 1) * 2 * Math.PI * t) / L.periodo, r = (a * (1 - e * e)) / (1 + e * Math.cos(f)); return V.mv(inclina, [r * Math.cos(f), 0, -r * Math.sin(f)], o); } }) };
+    return { L, tinta, corpo: N.corpo({ nome: `luna ${L.id}`, luogo: `luna ${L.id}`, periodi: { orbita: L.periodo || 0 }, genitore: corpoPianeta, raggio: L.raggioM, posizione: (t, o) => { const f = fase0 + ((L.retrograda ? -1 : 1) * 2 * Math.PI * t) / L.periodo, r = (a * (1 - e * e)) / (1 + e * Math.cos(f)); return V.mv(inclina, [r * Math.cos(f), 0, -r * Math.sin(f)], o); } }) };
   });
 
   // a che punto dell'anno si è (0…1, come nel clima di geologia.js: la declinazione della stella è ε·sin(2π·f)), dalla
@@ -583,7 +583,9 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         if (t.haAcqua && co && m) {
           const pxM = z.dist / S.fuoco, X0 = R * cf * z.lon0, Y0 = R * z.lat0, scelteF = [];
           for (let q = 0; q < co.n; q++) { const a = co.amp[q]; if (a * co.k[q] < 2e-3) continue; const lam = co.lam[q];
-            if (lam < 3 * pxM) { fine += 0.5 * (a * co.k[q]) ** 2; continue; }
+            // (troppo corta per lo schermo, o troppo svelta per il tempo che corre — meno di quattro fotogrammi per periodo —: non la si
+            // disegna, la sua pendenza va nell'increspatura media del mare)
+            if (lam < 3 * pxM || S.passo * 4 * co.om[q] > 2 * Math.PI) { fine += 0.5 * (a * co.k[q]) ** 2; continue; }
             scelteF.push(q); }
           scelteF.sort((a, b) => co.amp[b] * co.k[b] - co.amp[a] * co.k[a]);
           for (const q of scelteF) { const lam = co.lam[q], a = co.amp[q], ke = co.k[q] * co.cx[q], kn = co.k[q] * co.cy[q], f0 = (ke * X0 + kn * Y0 + co.fase[q] - co.om[q] * (S.t - tOnde)) % (2 * Math.PI);
