@@ -20,13 +20,14 @@
 
 import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
-import { COSTANTI, etaUniverso, massaNascita, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
-import { stella as stellaVera, fine } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
+import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie } from './leggi.js';
+import { stella as stellaVera } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
 import { sorgente } from './eventi.js';
+import { formaGalassia, stelleGalassia, curvaRotazione, velocitaPeculiare } from './galassie.js'; // le galassie come conseguenza: alone → gas → stelle → metalli
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
 import { climaEAria, prebiotica, minerali } from './chimica.js';
@@ -116,92 +117,45 @@ export const cosmo = memo((n) => {
     if (v > 0.2 && c() < 0.25 * v) galassie.push({ pos: [x, y], peso: v * 0.6 });
   }
   galassie.sort((a, b) => b.peso - a.peso); galassie.length = Math.min(galassie.length, GALASSIE_MAX);
-  galassie.forEach((G, id) => {
-    const r = casoDi('galassia', n, id);
-    G.id = id; G.r = 0.0035 + 0.0035 * Math.min(3, G.peso) * r.tra(0.6, 1.2);
-    G.tipo = r.c() < 0.72 ? 'spirale' : 'ellittica'; G.bracci = r.intero(2, 4); G.angolo = r.tra(0, 2 * Math.PI); G.passo = r.tra(0.25, 0.5);
-    G.schiacciata = G.tipo === 'ellittica' ? r.tra(0.45, 0.95) : 1; G.attivita = Math.pow(r.c(), 2.2); G.getto = r.tra(0, Math.PI);
-    G.tinta = G.tipo === 'ellittica' ? [255, 214, 170] : [210, 222, 255];
-    G.formazione = (0.4 + 2.5 / (1 + G.peso) + r.tra(0, 0.8)) * 1e9 * ANNO; // le più dense si formano prima
-  });
+  // LE GALASSIE COME CONSEGUENZA (galassie.js): dal picco la massa dell'alone, dalle maree dei vicini veri lo spin, dalla
+  // storia dell'alone le fusioni; poi gas, disco, stelle, metalli. Tipo, bracci, colore, buco nero ne escono (G.forma li
+  // tiene tutti; qui si copiano i campi di sempre). Gli eventi incerti stanno all'indirizzo della galassia, nella stessa
+  // mappa dei rami del cosmo. Il raggio G.r è quello VERO sul toro: una galassia, nel cosmo, è un puntino.
+  galassie.forEach((G, id) => { G.id = id; });
+  for (const G of galassie) {
+    G.forma = formaGalassia(G, galassie, sorgente(`cosmo ${cosmoBase(n)}/galassia ${G.id}`, ramiCosmo(n)), { toroM: TORO_M });
+    Object.assign(G, G.forma.perG); G.r = G.forma.unitaM / TORO_M;
+  }
   return { n, modi, densita, griglia, N, media, sigma, galassie };
 });
 
 // ---------- una galassia: le stelle, il buco nero, le sorgenti dei raggi cosmici
 // coordinate della galassia: il raggio è 1, il buco nero è al centro
-const colorePerTemperatura = (T) => { // da rossa (3000 K) a azzurra (20000 K)
-  const t = Math.max(0, Math.min(1, Math.log(T / 3000) / Math.log(20000 / 3000)));
-  return [Math.round(255 - 40 * t), Math.round(150 + 90 * t - 20 * t * t), Math.round(90 + 165 * t)];
-};
+// Le STELLE sono un campione (galassie.js: stelleGalassia): ognuna è estratta tra tutte quelle nate nella storia di
+// QUELLA galassia (quando, dove, con che metalli), e ne rappresenta `peso`; le ultime supernove sono stelle vere, e il
+// loro resto sta dove stavano loro. L'unità delle posizioni è G.forma.unitaM (il raggio che tiene il 97% delle stelle).
 export const galassia = memo((n, id) => {
-  const G = cosmo(n).galassie[id], { c, tra, gauss } = casoDi('stelle', n, id);
-  const stelle = [];
-  for (let s = 0; s < STELLE; s++) {
-    let x, y;
-    if (G.tipo === 'ellittica') { const r = Math.abs(gauss()) * 0.35, a = tra(0, 2 * Math.PI); x = r * Math.cos(a); y = r * Math.sin(a) * G.schiacciata; }
-    else if (c() < 0.22) { const r = Math.abs(gauss()) * 0.12, a = tra(0, 2 * Math.PI); x = r * Math.cos(a); y = r * Math.sin(a); }
-    else {
-      // il disco con i bracci: spirali logaritmiche
-      const r = Math.min(1, 0.08 - 0.3 * Math.log(1 - c() * 0.95)), braccio = Math.floor(c() * G.bracci);
-      const a = G.angolo + (2 * Math.PI * braccio) / G.bracci + Math.log(r / 0.08) / Math.tan(G.passo) + gauss() * (c() < 0.7 ? 0.18 : 0.6);
-      x = r * Math.cos(a); y = r * Math.sin(a);
-    }
-    // (ogni stella, viva o morta, porta la sua «eta»: gli anni dalla nascita a oggi. È l'unica età del sistema: quella
-    // dei pianeti, del loro interno e delle lune.) La stella nasce in un momento della storia della galassia, con una massa dalla distribuzione
-    // misurata, e un campo magnetico suo; poi vive secondo le sue equazioni fino a «adesso»
-    const m0 = massaNascita(c()), B0 = Math.pow(10, -5 + 3 * c()), nascita = G.tipo === 'ellittica' ? G.formazione + c() * 1.5e9 * ANNO : G.formazione + c() * (ADESSO - G.formazione), eta = ADESSO - nascita;
-    // la METALLICITÀ (in unità del Sole): il gas da cui nasce è stato arricchito dalle supernove delle
-    // generazioni prima; cresce con il tempo passato dalla nascita della galassia, ed è più alta al centro
-    // (dove le stelle si sono formate prima e più fitte)
-    const Z = 2.2 * (1 - Math.exp(-(nascita - G.formazione) / (2e9 * ANNO))) * Math.exp(-Math.hypot(x, y) / 0.7) * (G.tipo === 'ellittica' ? 1.6 : 1) + 0.01;
-    // quanto vive e com'è adesso: dalla sua massa, dai suoi metalli e dalla sua età (stelle.js)
-    const vita = stellaVera(m0, { Z });
-    if (eta < vita.vita * ANNO) {
-      const ora = stellaVera(m0, { Z, eta: eta / ANNO }), gigante = eta > 0.9 * vita.vita * ANNO, T = gigante ? Math.min(ora.T, 4200) : ora.T;
-      stelle.push({ id: s, pos: [x, y], massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta: eta / ANNO, B: B0, Z });
-    } else {
-      const f = fine(m0, B0, { Z }), morta = (eta - vita.vita * ANNO) / ANNO;
-      stelle.push({ id: s, pos: [x, y], massa: f.massa, massaNascita: m0, eta: eta / ANNO, T: f.tipo === 'nana bianca' ? 8000 + 30000 * Math.exp(-morta / 1e9) : 0, colore: f.tipo === 'nana bianca' ? [225, 230, 255] : f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z });
-    }
-  }
-  // le sorgenti dei raggi cosmici EMERGONO dalla storia: le supernove nascono dalle stelle massicce
-  // che muoiono (quante ne muoiono all'anno discende da quante stelle nascono e da quanto vivono le
-  // grandi), le pulsar sono le stelle di neutroni giovani che quelle lasciano; il getto è del buco nero.
-  const massaStelle = 2e10 * Math.min(4, G.peso + 0.5), frazioneMassicce = 0.0062, durata = ADESSO - G.formazione;
-  const ritmoSN = (G.tipo === 'ellittica' ? 0.05 : 1) * ((massaStelle / 0.57) * frazioneMassicce * ANNO) / durata; // supernove all'anno (nelle ellittiche solo nane bianche che esplodono)
-  const giovani = stelle.filter((x) => x.stato === 'in vita' || x.stato === 'gigante rossa').filter((x) => Math.hypot(...x.pos) > 0.15);
-  const sorgenti = [{ tipo: 'getto', nome: 'il getto del buco nero', pos: [0, 0], potenza: 2 + 10 * G.attivita, angolo: G.getto }];
-  let t = 0;
-  for (let k = 0; k < 8; k++) {
-    t += -Math.log(1 - c()) / Math.max(1e-9, ritmoSN); // le più giovani: gli intervalli tra le morti
-    if (t > 1e5) break;
-    // nelle ellittiche (e una volta su sette nelle spirali) esplode una nana bianca che ha preso troppa
-    // materia da una compagna: non resta niente; altrimenti è il nucleo di una stella grande che collassa
-    const ia = G.tipo === 'ellittica' || c() < 0.15;
-    const dove = (ia ? stelle.filter((x) => x.stato === 'nana bianca') : giovani.length ? giovani : stelle).concat(stelle)[0 + Math.floor(c() * (ia ? stelle.filter((x) => x.stato === 'nana bianca').length || stelle.length : giovani.length || stelle.length))];
-    const prog = 8 + 30 * Math.pow(c(), 2), f = ia ? { tipo: 'niente (è esplosa una nana bianca)' } : fine(prog, Math.pow(10, -5 + 3 * c()));
-    sorgenti.push({ tipo: 'supernova', nome: `il resto della supernova ${k + 1}`, pos: dove.pos.slice(), r: Math.min(0.045, 0.008 + 0.00005 * Math.pow(t, 0.4)), potenza: 2.5 * Math.exp(-t / 3e4), eta: t, resto: f.tipo });
-    if (f.tipo === 'stella di neutroni') sorgenti.push({ tipo: 'pulsar', nome: `la ${f.B > 1e10 ? 'magnetar' : 'pulsar'} nel resto ${k + 1}`, pos: [dove.pos[0] + tra(-0.004, 0.004), dove.pos[1] + tra(-0.004, 0.004)], potenza: 0.4 + Math.min(1.5, Math.log10(f.B / 1e7) * 0.3), B: f.B, eta: t });
-  }
-  // il buco nero centrale: circa due millesimi della massa del nucleo della galassia (relazione misurata)
-  const buco = { M: 0.002 * massaStelle * 0.2, attivita: G.attivita };
-  return { G, stelle, sorgenti, buco, ritmoSN };
+  const G = cosmo(n).galassie[id], cat = stelleGalassia(G.forma, sorgente(`cosmo ${cosmoBase(n)}/galassia ${id}`, ramiCosmo(n)), { quante: STELLE });
+  return { G, forma: G.forma, stelle: cat.stelle, sorgenti: cat.sorgenti, buco: G.forma.buco, ritmoSN: cat.ritmoSN, pesoCampione: cat.pesoCampione, stelleVere: cat.stelleVere };
 });
 
-// ---------- le grandezze vere di ogni livello (per il metro sullo schermo). Tra un livello e
-// l'altro lo zoom fa un salto: dentro ogni livello i rapporti sono quelli veri.
+// ---------- le grandezze vere di ogni livello (per il metro sullo schermo). Dal cosmo al pianeta le scale sono quelle
+// vere anche tra un livello e l'altro: una galassia nel cosmo, un sistema nella galassia, un pianeta nel sistema sono
+// grandi quanto sono (cioè puntini, finché non ci si avvicina moltissimo).
 export const TORO_M = 3.7e25; // il lato del cosmo richiuso (circa 1,2 miliardi di parsec)
 export const metriPerUnita = (livello, via) => {
   if (livello === 0) return TORO_M;
-  if (livello === 1) { const G = cosmo(via.cosmo).galassie[via.galassia]; return (G.tipo === 'ellittica' ? 6e20 : 4.5e20) * (0.7 + 0.15 * Math.min(4, G.peso)); }
-  if (livello === 2) return 30 * 1.496e11;
+  if (livello === 1) return cosmo(via.cosmo).galassie[via.galassia].forma.unitaM;
+  if (livello === 2) return LATO_SISTEMA_M;
   const R = sistema(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
   return livello === 4 ? 2 * Math.PI * R : R; // sulla superficie l'unità è il giro dell'equatore
 };
 
 // ---------- un sistema: la stella e i suoi pianeti
 // coordinate del sistema: l'orbita più esterna è circa 1 (trenta unità astronomiche)
-export const RAGGIO_SISTEMA = 0.0025; // in unità della galassia (sulla mappa)
+export const LATO_SISTEMA_M = 30 * UA; // l'unità del sistema: trenta unità astronomiche
+// quanto è grande un sistema (30 UA) nelle unità della sua galassia: la taglia vera, circa 10⁻⁸
+export const raggioSistema = (n, gid) => LATO_SISTEMA_M / cosmo(n).galassie[gid].forma.unitaM;
 export const sistema = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
   // I PIANETI NASCONO DAL DISCO della stella giovane (disco.js): la sua massa e i suoi metalli fanno il
@@ -510,9 +464,24 @@ export function cellaDi(a, rami = null) {
 export function motiDi(a) {
   const P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta], R = pianeta(a.cosmo, a.galassia, a.stella, a.pianeta).regioni[a.regione], c = COSTANTI.c, gr = 180 / Math.PI;
   const giro = (2 * Math.PI * R.r * P.raggioM) / P.giorno, orbita = (2 * Math.PI * P.aM) / P.anno;
+  // I MOTI PIÙ GRANDI, come vettori nel piano della mappa (m/s): il pianeta lungo l'orbita; la stella attorno al centro
+  // della galassia (galassie.js: la curva di rotazione alla sua distanza; nel disco gira nel verso in cui i bracci
+  // restano indietro; nello sferoide le stelle non girano insieme: ognuna ha la sua velocità, estratta dalla dispersione
+  // σ = V/√2 di un sistema isotermo); la galassia rispetto al fondo cosmico (la teoria lineare sul campo di cosmo(n))
+  const C = cosmo(a.cosmo), Gx = galassia(a.cosmo, a.galassia), F = Gx.forma, S = Gx.stelle[a.stella], KPC = 3.0857e19;
+  const vP = [-orbita * Math.sin(P.fase), orbita * Math.cos(P.fase)];
+  const rS = Math.hypot(S.pos[0], S.pos[1]) * F.unitaM / KPC, vC = curvaRotazione(F, Math.max(rS, 1e-3)) * 1e3, fiS = Math.atan2(S.pos[1], S.pos[0]), verso = -(F.bracci.verso || 1);
+  const casoS = sorgente(`cosmo ${cosmoBase(a.cosmo)}/galassia ${a.galassia}/stella ${a.stella}`, ramiCosmo(a.cosmo));
+  const vS = S.componente === 'sferoide' ? [(vC / Math.SQRT2) * casoS.normale('moto/x'), (vC / Math.SQRT2) * casoS.normale('moto/y')] : [-verso * vC * Math.sin(fiS), verso * vC * Math.cos(fiS)];
+  const vG = velocitaPeculiare(C, C.galassie[a.galassia].pos, { toroM: TORO_M }).map((x) => x * 1e3);
+  // chi guarda è fermo rispetto a qualcosa di più grande: rispetto alla regione va al contrario della somma dei moti di sotto
+  const voce = (nome, v, cosa) => { const m = Math.hypot(v[0], v[1]); return { nome, kmS: m / 1000, velocita: m / c, direzione: ((Math.atan2(-v[1], -v[0]) * gr) % 360 + 360) % 360, cosa }; };
+  const somma = (...vs) => vs.reduce((t, v) => [t[0] + v[0], t[1] + v[1]], [0, 0]);
   return [
     { nome: 'ferma nella regione', kmS: 0, velocita: 0, direzione: 0, cosa: 'chi guarda sta fermo rispetto al pianeta, senza girare con lui' },
     { nome: 'sul pianeta che gira', kmS: giro / 1000, velocita: giro / c, direzione: ((R.angolo * gr + (P.retrogrado ? -90 : 90)) % 360 + 360) % 360, cosa: 'chi guarda gira con il pianeta (e con il suo campo magnetico)' },
     { nome: 'ferma rispetto alla stella', kmS: orbita / 1000, velocita: orbita / c, direzione: ((P.fase * gr - 90) % 360 + 360) % 360, cosa: 'chi guarda sta fermo rispetto alla stella: il pianeta, con la regione, gli corre davanti lungo l\'orbita' },
+    voce('ferma rispetto alla galassia', somma(vP, vS), `chi guarda sta fermo rispetto al centro della galassia: la stella gli passa davanti a ${Math.round(Math.hypot(vS[0], vS[1]) / 1000)} km/s (${S.componente === 'sferoide' ? 'la sua orbita nello sferoide' : `il giro del disco a ${rS.toPrecision(2)} kpc dal centro`}), con il pianeta che le gira attorno`),
+    voce('ferma rispetto al fondo cosmico', somma(vP, vS, vG), `chi guarda sta fermo rispetto all'universo: la galassia cade verso dove c'è più materia a ${Math.round(Math.hypot(vG[0], vG[1]) / 1000)} km/s (teoria lineare sul campo del cosmo), e dentro girano la stella e il pianeta`),
   ];
 }

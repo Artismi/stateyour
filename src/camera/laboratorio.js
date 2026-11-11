@@ -21,7 +21,7 @@ import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, STRATI_MARE, infoStrato } from './mappa.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 
@@ -1020,6 +1020,10 @@ function pannelloCosmo(h) {
         if (!M.esiste) h.push(`<h2>il mare</h2><p class="nota">${M.motivo || 'Qui non c\'è acqua liquida in superficie.'}</p>`);
         else {
           const ioni = Object.entries(M.ioni || {}).map(([f, x]) => [f, typeof x === 'number' ? x : x?.moliPerKg ?? 0]).filter(([, x]) => x > 1e-4).sort((p, q) => q[1] - p[1]).slice(0, 6);
+          // il mare non è uguale dappertutto: quanto varia, e gli strati da guardare sulla mappa
+          const sulMare = (F, f = (x) => x) => { let lo = Infinity, hi = -Infinity; for (let i = 0; i < F.length; i++) if (M.bagnato[i] > 0.3) { const x = f(F[i]); if (x < lo) lo = x; if (x > hi) hi = x; } return [lo, hi]; };
+          const [t0, t1] = sulMare(M.temperatura, (x) => x - 273.15), [s0, s1] = sulMare(M.salinita); let vmax = 0, vmed = 0, nv = 0; for (let i = 0; i < M.corrente.u.length; i++) if (M.bagnato[i] > 0.3) { const q = Math.hypot(M.corrente.u[i], M.corrente.v[i]); vmax = Math.max(vmax, q); vmed += q; nv++; }
+          h.push(`<h2>il mare, punto per punto</h2><p class="nota">L'acqua va da ${t0.toFixed(0)} a ${t1.toFixed(0)} °C e da ${s0.toFixed(1)} a ${s1.toFixed(1)} g di sali per kg; le correnti arrivano a ${(vmax * 100).toFixed(0)} cm/s (in media ${((vmed / Math.max(1, nv)) * 100).toFixed(1)}).${M.foci?.length ? ` ${M.foci.length} foci portano acqua dolce e fango.` : ''} Scendi sulla superficie e scegli che cosa guardare sopra la mappa; passando col cursore sul mare si leggono i valori di quel punto.</p><div class="riga-bottoni scelta">${Object.entries(STRATI_MARE).map(([k, d]) => `<button data-strato="${k}" class="${camMappa.strato === k ? 'attivo' : ''}" title="${d.cosa || d.nome}">${d.nome}</button>`).join('')}<button data-strato="" class="${camMappa.strato ? '' : 'attivo'}">niente</button></div>${(() => { const st = infoStrato(camMappa); return st ? `<p class="nota">${st.nome}: da ${st.lo.toPrecision(3)} a ${st.hi.toPrecision(3)} ${st.unita} (dal colore più freddo al più caldo).</p>` : ''; })()}`);
           h.push(`<h2>il mare</h2><p class="nota">${M.storia || ''}</p><p class="nota">Salinità ${M.salinitaMedia.toFixed(1)} g per kg d'acqua, pH ${M.pH.toFixed(1)}. Sciolti (moli per kg): ${ioni.map(([f, x]) => `${f} ${x.toPrecision(2)}`).join(', ')}.${M.laghi?.length ? ` Laghi: ${M.laghi.length}${M.laghi.some((l) => l.pH > 9) ? ', alcuni di soda' : ''}.` : ''}${M.sorgentiCalde?.length ? ` Sorgenti calde sul fondo: ${M.sorgentiCalde.length}.` : ''} Avvicinati al mare fino in fondo: sotto il terreno più fine c'è un campione di quell'acqua, e dentro, di dieci in dieci, i granelli, i colloidi, gli ioni e le molecole di quel punto.</p>`);
         }
       }
@@ -1220,6 +1224,7 @@ pannello.addEventListener('click', (e) => {
   if (d.univ) { const n = cel()?.seme ?? comp.elementi[0].cella.seme; return cambiaUniverso(Math.max(1, n + +d.univ)); }
   if (d.cerca === 'vicini' && (indirizzoOra()?.zoom || []).length) { $('cercaStato').textContent = "I rami si scelgono al livello della regione (torna su con la rotella): qui dentro le particelle sono le stesse di lassù, e un ramo deve cambiarle a ogni livello insieme."; return; }
   if (d.cerca) return cercaBella(d.cerca);
+  if ('strato' in d) { camMappa.strato = d.strato || null; disegna(); mostraPannello(); return; }
   if ('finestraBella' in d) { const r = cercaFinestra(camMappa, tela.width, tela.height); if (r) { camMappa.cx = r.cx; camMappa.cy = r.cy; camMappa.z = r.z; disegna(); dove(); const s = $('finestraStato'); if (s) s.textContent = `Trovata tra 28 inquadrature (${r.bellezza.totale.toFixed(2)}): ${r.bellezza.simmetria > 0.35 ? 'ha una simmetria' : r.bellezza.ripetizione > 0.35 ? 'ripete un motivo' : 'il disegno più ricco qui attorno'}. Ancora 🎲 per cercare da qui.`; } return; }
   if (d.moto) { const [vv, dd] = d.moto.split('|').map(Number); ricorda(); cel().vista.velocita = vv; cel().vista.direzione = dd; simula(); aggiornaTempo(); disegna(); mostraPannello(); return; }
   if (d.ripeti) { ricorda(); const c = comp.elementi[0].cella; c.ripeti = { ...ripetiDi(c), gruppo: d.ripeti }; adattaPattern(); aggiornaVista(); return; }

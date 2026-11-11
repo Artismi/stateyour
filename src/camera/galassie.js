@@ -62,6 +62,8 @@
 //     zero: frenamento 2,4·10⁻²⁷·√T più le righe dell'elio 5·10⁻²³·(T/10⁵)^−1,5 erg cm³/s; i metalli: 1,6·10⁻¹⁹·Z/√T,
 //     McKee & Cowie 1977). È un raccordo fatto a memoria, buono entro un fattore ~1,5 tra 10⁵ e 10⁸ K;
 //     il flusso di raffreddamento è quello di White & Frenk 1991 (gas isotermo, ρ ∝ r⁻²);
+//   · il momento finale di un resto di supernova: 2,8·10⁵ M☉·km/s · n^−0,17 (Kim & Ostriker 2015, ApJ 802, 99,
+//     simulazioni); la dispersione del gas neutro: 10 km/s (misurata nell'idrogeno delle galassie);
 //   · il buco nero che scalda il gas caldo: Croton et al. 2006 (MNRAS 365, 11: ṁ = 6·10⁻⁶ M☉/anno ·
 //     (M_bn/10⁸)·(f_caldo/0,1)·(V/200)³, resa 0,1). È una legge dei modelli semi-analitici, non una misura;
 //   · il gas lanciato fuori dall'alone ci ricade in 18 Ga·(10¹⁰ M☉/M_alone) (Henriques et al. 2013, MNRAS 431,
@@ -84,15 +86,12 @@
 //     in raggi cosmici; le pulsar: periodo alla nascita 0,3 ± 0,15 s (Faucher-Giguère & Kaspi 2006), spinta
 //     265 km/s (Hobbs et al. 2005); le nane bianche si raffreddano con la legge di Mestel (1952);
 //   · da leggi.js e stelle.js: COSMO, la distribuzione di Kroupa (massaNascita), le vite e i resti delle stelle.
-// PARAMETRI LIBERI (non misurati; scelti guardando la Via Lattea e le frazioni dei tipi):
-//   · LEGGI.raro = 0,6: quanto è rara, tra le fluttuazioni piccole, quella che ha fatto la galassia segnata sulla
-//     mappa (in unità del suo scarto). Fissa la scala delle masse: con 0,6 un picco medio ha un alone di 5·10¹¹ M☉ e il
-//     più alto di 10¹³. È IL PARAMETRO DA CUI DIPENDE LA FRAZIONE DI ELLITTICHE: la massa oltre cui una galassia
-//     diventa ellittica (2–3·10¹² M☉: lì il gas non si raffredda più e le fusioni non sono più riparate) esce dalla
-//     fisica, ma quanti aloni la superano lo decide lui: 3% di ellittiche con 0,5; 17% con 0,6; 66% con 0,8;
-//   · LEGGI.vento = 0,07: la parte dell'energia delle supernove che finisce in gas lanciato fuori dall'alone
-//     (quanto gas: quello che quell'energia basta a far sfuggire da lì, 2·ε·e_SN/v_fuga²). Scelto perché la Via Lattea
-//     abbia 5·10¹⁰ M☉ di stelle; decide anche quanti metalli perdono le galassie piccole (massa–metallicità);
+// PARAMETRI LIBERI (non misurati; nessuno decide le masse, le stelle o i tipi):
+//   (Due scelte che prima erano tarate ora non lo sono più. L'altezza della fluttuazione che fa l'alone, LEGGI.raro, è
+//   la mediana della legge della prima traversata, 0,6745: l'alone mediano di quella regione; ne viene un picco medio
+//   con un alone di 1,3·10¹² M☉ e il più alto di 2·10¹³. E l'energia che le supernove lasciano al vento non è più una
+//   frazione scelta: è quella che resta in moto in un resto quando ha rallentato fino alla velocità del gas, ½·p·σ_g
+//   con p di Kim & Ostriker: il 3% a una particella per cm³. La Via Lattea e le frazioni dei tipi escono come escono.)
 //   · LEGGI.germe = 10⁵ M☉: il buco nero di una galassia senza sferoide; LEGGI.getto = 10⁻³: la parte di ṁc² che
 //     il getto dà ai raggi cosmici; LEGGI.Qstelle = 2: il Q a cui le stelle del disco si regolano da sole;
 //   · il contrasto dei bracci nelle stelle: da 0 (Q = 2: l'amplificatore di Toomre non guadagna) a 0,45 (Q ≈ 1),
@@ -113,17 +112,22 @@
 //     (Freeman) con la massa e il raggio medio degli anelli, sferoide di Hernquist;
 //   · la galassia è disegnata di faccia; uno sferoide ha uno schiacciamento apparente estratto (0,7 ± 0,15);
 //   · la luce è quella di sequenza principale (stelle.js non ha ancora le giganti): serve solo per il colore.
-// CHE COSA NON TORNA (misurato in test/test_galassie.mjs, che stampa il confronto con la Via Lattea e i tipi):
-//   · gli aloni piccoli fanno troppe stelle: a 10¹¹ M☉ l'8% dell'alone è in stelle (nell'universo vero lo 0,5–1%), a
-//     3·10¹¹ l'11% (vero: 2%). Servirebbe un vento molto più forte nelle galassie piccole, ma le rese di stelle.js
-//     (sopra 23 M☉ il nucleo ricade in un buco nero e non restituisce metalli: 0,7 Z☉ per M☉ nata) non lasciano
-//     perdere metalli alla Via Lattea: con più vento il suo gas caldo si arricchisce, si raffredda e fa 10¹¹ M☉;
-//   · per questo quasi tutti i dischi pesano abbastanza da fare una barra (3 spirali su 4: vero, circa 2 su 3 con
-//     le barre deboli) e sono un po' stretti (Via Lattea: scala 2,4 kpc contro 2,6 ± 0,5);
-//   · il gradiente di Z nel disco è la metà del vero (−0,02 contro −0,05 dex/kpc): il gas che ricade è tutto uguale;
+// CHE COSA NON TORNA (misurato in test/test_galassie.mjs, che stampa il confronto con la Via Lattea e i tipi). Niente
+// qui è tarato sulla Via Lattea, e si vede:
+//   · la Via Lattea della prova (alone 10¹², spin 0,04) fa 3,3·10¹⁰ M☉ di stelle (vera: 5–6) e gira a 189 km/s a 8 kpc
+//     (vera: 220–240): il suo gas caldo resta quasi senza metalli (il vento ne porta su pochi) e si raffredda piano;
+//   · gli aloni piccoli fanno troppe stelle: a 10¹¹ M☉ il 10% dell'alone è in stelle (nell'universo vero lo 0,5–1%), a
+//     3·10¹¹ l'11% (vero: 2%); il massimo dell'efficienza cade lì invece che a 10¹². Il vento che esce dalla fisica dei
+//     resti (3% dell'energia) è troppo debole per le galassie piccole; e le rese di stelle.js (sopra 23 M☉ il nucleo
+//     ricade in un buco nero e non restituisce metalli: 0,74 Z☉ per M☉ nata) non ne lascerebbero perdere di più;
+//   · tutte le galassie fanno le stelle presto (metà entro i primi 4 Ga; la Via Lattea vera a 5): le ellittiche non
+//     si distinguono dalle spirali per l'età delle stelle, ma per quando si sono messe insieme;
+//   · le galassie segnate sono le grandi (aloni da 4·10¹¹ a 2·10¹³ M☉, mediana 1,3·10¹²): metà sono ellittiche (41–49%
+//     nei tre cosmi provati; tra le galassie grandi vere, ellittiche e lenticolari sono circa metà; tra tutte il 10–20%).
+//     Nessuna lenticolare: un disco che resta tiene sempre abbastanza gas per i bracci;
+//   · il gradiente di Z nel disco è poco più di metà del vero (−0,03 contro −0,05 dex/kpc);
 //   · senza fusioni (la Via Lattea della prova) non c'è sferoide e il buco nero resta il germe: 10⁵ invece di 4·10⁶ M☉;
-//   · il gas caldo dell'alone della Via Lattea è 9·10¹⁰ M☉ (le misure dicono 2–10·10¹⁰): la legge del raffreddamento è
-//     un raccordo, e da lei dipende quante stelle fa un alone di 10¹² (un fattore 1,5 su Λ sposta la massa del 30%);
+//   · la legge del raffreddamento è un raccordo: da lei dipende quante stelle fa un alone di 10¹²;
 //   · le pulsar vengono debolissime (il campo delle stelle alla nascita, conservando il flusso, dà 10⁵–10⁹ T ma il
 //     periodo di 0,3 s frena poco): nei raggi cosmici contano i resti e il getto.
 
@@ -134,7 +138,7 @@ import { sorgente } from './eventi.js';
 // ---------- LE LEGGI E I PARAMETRI (vedi l'intestazione)
 export const LEGGI = {
   deltaC: 1.686, // la soglia del collasso sferico (in sovradensità lineare)
-  raro: 0.6, // PARAMETRO LIBERO: l'altezza, in scarti, della fluttuazione piccola che ha fatto l'alone della galassia
+  raro: 0.6745, // l'altezza, in scarti, della fluttuazione piccola che ha fatto l'alone: la MEDIANA della legge della prima traversata (|campana|: metà della materia di quella regione sta in aloni più grandi, metà in più piccoli). Non è tarato
   spin: [0.035, 0.5], // mediana e larghezza (in logaritmo naturale) del parametro di spin (Bullock et al. 2001)
   concentrazione: [4, 0.01], // Bullock et al. 2001: c = K·a/a_c, con a_c quando è crollata la frazione F della massa
   crescita: [46.1, 1.1, 1.11], // Fakhouri et al. 2010, eq. 2 (media): M☉/anno a 10¹² M☉, esponente, pendenza in z
@@ -149,7 +153,7 @@ export const LEGGI = {
   Qstelle: 2, // PARAMETRO LIBERO
   resa: [0.0118, 0.00548], // m_Z = (B + C·m)·m (Bailin & Harris 2009)
   energiaSN: 1e44, // joule
-  vento: 0.07, // PARAMETRO LIBERO
+  momentoSN: [2.8e5, -0.17], // (M☉·km/s, esponente della densità in cm⁻³) il momento che un resto di supernova lascia al gas quando ha irradiato il suo calore (Kim & Ostriker 2015, ApJ 802, 99)
   ritorno: 18, // (Ga) il gas soffiato fuori dall'alone ci ricade in ritorno·(10¹⁰ M☉/M_alone) (Henriques et al. 2013)
   Ia: [1.3e-3, -1.1], // per M☉ nata, e pendenza dei ritardi (Maoz & Graur 2017)
   bucoNero: [0.49e9, 1.17, 0.28], // Kormendy & Ho 2013
@@ -288,6 +292,17 @@ export function massaAlone(peso, { toroM = 3.7e25, onde = 9 } = {}) {
   const sb = sigmaCampo(toroM, onde), d = Math.min(peso * sb, 0.9 * LEGGI.deltaC);
   return U.massaDi(Math.hypot(sb, (LEGGI.deltaC - d) / LEGGI.raro));
 }
+// LA VELOCITÀ PECULIARE di un punto del cosmo (km/s, nel piano della mappa): la teoria lineare. La materia cade verso
+// dove ce n'è di più: ∇·v = −H₀·f·δ, con f = dlnD/dlna (≈ Ωm^0,55) il ritmo di crescita. Il campo di cosmo.js è una
+// somma di onde, δ = (σ_onde/σ)·Σ a·cos(2π k·x + φ) (letto come per le masse: lo scarto del campo è σ_onde), e per ogni
+// onda la velocità è lungo k: v = −H₀·f·(L/2π)·Σ A·(k/k²)·sin(2π k·x + φ).
+// (Il campo di cosmo.js ha però le onde lunghe troppo forti rispetto allo spettro vero: le velocità vengono di qualche
+// migliaio di km/s invece dei ~600 del Gruppo Locale. È ciò che quel campo dà, non una misura dell'universo vero.)
+export function velocitaPeculiare(C, pos, { toroM = 3.7e25, onde = 9 } = {}) {
+  const L = toroM / MPC, f = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99), k0 = (sigmaCampo(toroM, onde) / C.sigma) * COSMO.H0 * f * (L / (2 * Math.PI));
+  let vx = 0, vy = 0; for (const m of C.modi) { const q = (-k0 * m.a * Math.sin(2 * Math.PI * (m.kx * pos[0] + m.ky * pos[1]) + m.fi)) / (m.kx * m.kx + m.ky * m.ky); vx += q * m.kx; vy += q * m.ky; }
+  return [vx, vy];
+}
 // LA STORIA DELL'ALONE, ricostruita all'indietro da M0 (al passo nt): a ogni passo, con la massa che ha lì, si chiede
 // se è entrato un compagno (un evento per ogni classe di rapporto, con la probabilità della legge di Fakhouri et al.
 // 2010); il resto della crescita è liscio, al ritmo medio della stessa legge meno la parte che in media portano i
@@ -399,7 +414,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   const NE = nt + 1, est = new Float64Array(4 * NE), estZ = new Float64Array(4 * NE), haEst = new Uint8Array(NE), Zt = new Float32Array((nt + 1) * NR), V = new Float64Array(NR), dove = new Float64Array(NR);
   const S = { sfr: new Float64Array(nt + 1), gas: new Float64Array(nt + 1), stelle: new Float64Array(nt + 1), caldo: new Float64Array(nt + 1), collasso: new Float64Array(nt + 1), Ia: new Float64Array(nt + 1), freddo: new Uint8Array(nt + 1) };
   const B = { caduto: 0, cadutoZ: 0, vento: 0, ventoZ: 0, prodotti: 0, alCaldo: 0, alCaldoZ: 0, fusioniStelle: 0, fusioniStelleZ: 0, fusioniGas: 0, fusioniGasZ: 0, resi: 0 };
-  const [ksA, ksN] = LEGGI.KS, eSN = (P.tab[2].nSN * LEGGI.energiaSN) / MSOLE / 1e6; // (km/s)² per unità di massa nata
+  const [ksA, ksN] = LEGGI.KS, ESN = LEGGI.energiaSN / MSOLE / 1e6, eSN = P.tab[2].nSN * ESN; // l'energia di una supernova in M☉·(km/s)², e per unità di massa nata in (km/s)²
   let caldo = 0, caldoZ = 0, caldoJ = 0, fuori = 0, fuoriZ = 0, fuoriJ = 0, sferoideFino = 0, Mdisco = 0, Msfer = 0, Rsfer = 0, Rd = 0.05 * Rg, ultimaMaggiore = 0, Jprima = 0;
   const arrivi = fusioni.filter((f) => f.passoArrivo <= nt), entrate = fusioni.filter((f) => f.passo <= nt);
   // ciò che una generazione di massa m nata al passo i (tabella q) restituisce tra il ritardo L0 e il ritardo L1
@@ -482,7 +497,10 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
         const k0 = Math.max(0, k - 1), k1 = Math.min(NR - 1, k + 1), pend = Math.log(V[k1] / V[k0]) / Math.log(rc[k1] / rc[k0]), kappa = (V[k] / rc[k]) * Math.sqrt(2 * Math.max(0.05, 1 + pend));
         const sig = gas[k] / area[k], crit = (LEGGI.soglia[0] * kappa * LEGGI.soglia[1]) / (LEGGI.soglia[2] * GK);
         if (sig > crit) {
-          const eta = (LEGGI.vento * 2 * eSN) / fuga2(mod, rc[k]), s6 = sig / 1e6, dopo = Math.max(crit / 1e6, s6 * Math.pow(1 + (ksN - 1) * (1 + eta) * ksA * 1e3 * Math.pow(s6, ksN - 1) * DT, -1 / (ksN - 1))); // (non scende sotto la soglia: lì si ferma)
+          // il vento: di ogni supernova resta in moto l'energia del suo guscio quando ha rallentato fino alla velocità del gas
+          // attorno (½·p·σ_g, con p il momento finale del resto in gas di quella densità); con quella il gas esce dall'alone
+          const nGas = Math.max(1e-3, (sig * MSOLE) / KPC ** 2 / (2 * LEGGI.spessoreGas * KPC) / (1.4 * COSTANTI.mp) / 1e6), resta = (LEGGI.momentoSN[0] * Math.pow(nGas, LEGGI.momentoSN[1]) * LEGGI.sigmaGas) / (2 * ESN);
+          const eta = (resta * 2 * eSN) / fuga2(mod, rc[k]), s6 = sig / 1e6, dopo = Math.max(crit / 1e6, s6 * Math.pow(1 + (ksN - 1) * (1 + eta) * ksA * 1e3 * Math.pow(s6, ksN - 1) * DT, -1 / (ksN - 1))); // (non scende sotto la soglia: lì si ferma)
           const tolto = (s6 - dopo) * 1e6 * area[k], z = met[k] / gas[k]; formate = tolto / (1 + eta);
           gas[k] -= tolto; met[k] -= tolto * z; B.vento += tolto - formate; B.ventoZ += (tolto - formate) * z; fuori += tolto - formate; fuoriZ += (tolto - formate) * z; fuoriJ += (tolto - formate) * rc[k] * V[k];
           nati[o] = formate; Zn[o] = z / ZSOLE; iz[o] = tabellaZ(z / ZSOLE);

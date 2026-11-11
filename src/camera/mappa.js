@@ -9,7 +9,7 @@
 // Ogni livello ha le sue coordinate; la camera della mappa è { livello, via, cx, cy, z }
 // (via = l'indirizzo dei livelli sopra), e passare di livello non muove niente sullo schermo.
 
-import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
+import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, raggioSistema, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA, fmtGrande } from './nebbia.js';
 import { sorgente } from './eventi.js';
@@ -26,7 +26,7 @@ const minimo = (W, H) => Math.min(W, H);
 function figli(cam) {
   const v = cam.via;
   if (cam.livello === 0) return cosmo(v.cosmo).galassie.map((G) => ({ pos: G.pos, scala: G.r, raggio: 1.05, via: { ...v, galassia: G.id }, dato: G }));
-  if (cam.livello === 1) return galassia(v.cosmo, v.galassia).stelle.map((S) => ({ pos: S.pos, scala: RAGGIO_SISTEMA, raggio: 1.2, via: { ...v, stella: S.id }, dato: S }));
+  if (cam.livello === 1) { const rs = raggioSistema(v.cosmo, v.galassia); return galassia(v.cosmo, v.galassia).stelle.map((S) => ({ pos: S.pos, scala: rs, raggio: 1.2, via: { ...v, stella: S.id }, dato: S })); } // (un sistema, 30 UA, nelle unità vere della galassia: ~10⁻⁸)
   if (cam.livello === 2) return sistema(v.cosmo, v.galassia, v.stella).pianeti.map((P) => ({ pos: P.pos, scala: P.r, raggio: Math.max(2.8, 1.1 * estensioneLune(P)), via: { ...v, pianeta: P.id }, dato: P }));
   return [];
 }
@@ -34,7 +34,7 @@ function figli(cam) {
 function nelGenitore(cam) {
   const v = cam.via;
   if (cam.livello === 1) { const G = cosmo(v.cosmo).galassie[v.galassia]; return { pos: G.pos, scala: G.r }; }
-  if (cam.livello === 2) { const S = galassia(v.cosmo, v.galassia).stelle[v.stella]; return { pos: S.pos, scala: RAGGIO_SISTEMA }; }
+  if (cam.livello === 2) { const S = galassia(v.cosmo, v.galassia).stelle[v.stella]; return { pos: S.pos, scala: raggioSistema(v.cosmo, v.galassia) }; }
   if (cam.livello === 3) { const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; return { pos: P.pos, scala: P.r }; }
   return null;
 }
@@ -60,7 +60,7 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
     if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.latoAcqua = undefined; return null; }
     cam.z = Math.min(cam.z, 12 * m); return null;
   }
-  return passaggi(cam, W, H, k > 1);
+  return passaggi(cam, W, H, k > 1, { fx, fy, k });
 }
 // LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
 // (per il passaggio di livello si conta fino a 70 raggi: le lune lontanissime, catturate, restano fuori dallo schermo)
@@ -76,7 +76,7 @@ function descriviLuna(P, L) {
   const giorni = L.periodo / 86400, lun = L.massaKg / 7.35e22;
   return `luna ${L.id + 1}: ${nata}${L.retrograda ? ', gira al contrario' : ''} · raggio ${Math.round(L.raggioM / 1000)} km${L.forma && !L.forma.rotonda ? ' (irregolare)' : ''}, ${lun >= 0.01 ? `${lun.toPrecision(2)} Lune` : `${L.massaKg.toExponential(1)} kg`} · a ${Math.round(L.aM / 1000).toLocaleString('it')} km, un giro in ${giorni < 3 ? `${(giorni * 24).toFixed(1)} ore` : `${giorni.toFixed(1)} giorni`}${L.bloccata ? ' · mostra sempre la stessa faccia' : ''} · ${L.stato}${L.risonanza ? ` · in risonanza ${L.risonanza}` : ''}`;
 }
-function passaggi(cam, W, H, dentro = false) {
+function passaggi(cam, W, H, dentro = false, fuoco = null) {
   const m = minimo(W, H);
   for (let giro = 0; giro < 4; giro++) {
     // LA SUPERFICIE (livello 4): la mappa del pianeta, x = longitudine (0..1, si richiude), y = latitudine (0..0,5)
@@ -106,11 +106,16 @@ function passaggi(cam, W, H, dentro = false) {
       if (scelto) { const { f, dx, dy } = scelto; cam.livello++; cam.via = f.via; cam.cx = dx / f.scala; cam.cy = dy / f.scala; cam.z *= f.scala; continue; }
       // nel vuoto tra le cose non si scende oltre; avvicinandosi, lo sguardo scivola
       // verso la cosa più vicina al centro, così zoomare porta sempre da qualche parte
-      const tetto = cam.livello === 0 ? m / 0.002 : cam.livello === 1 ? m / (RAGGIO_SISTEMA * 0.8) : m / 5e-7; // (nel sistema i pianeti hanno la taglia vera: per arrivarci serve avvicinarsi molto)
-      const vicino = (() => { let b = null, d = Infinity; for (const f of figli(cam)) { let dx = f.pos[0] - cam.cx, dy = f.pos[1] - cam.cy; if (cam.livello === 0) { dx -= Math.round(dx); dy -= Math.round(dy); } const e = Math.hypot(dx, dy); if (e < d) { d = e; b = { f, dx, dy }; } } return b; })();
+      // (a ogni livello i figli hanno la taglia VERA: una galassia nel cosmo, un sistema nella galassia, un pianeta nel sistema
+      // sono puntini, e per arrivarci serve avvicinarsi moltissimo; il tetto è lo zoom a cui il figlio più vicino riempirebbe lo schermo)
+      // Il punto attorno a cui si zooma (il cursore) resta fermo: il figlio più vicino a QUEL punto gli scivola incontro, tanto
+      // più in fretta quanto più forte è il colpo di rotella (se no lo zoom lo porterebbe via più in fretta di quanto arriva)
+      const ax = fuoco ? cam.cx + (fuoco.fx - W / 2) / cam.z : cam.cx, ay = fuoco ? cam.cy + (fuoco.fy - H / 2) / cam.z : cam.cy;
+      const vicino = (() => { let b = null, d = Infinity; for (const f of figli(cam)) { let dx = f.pos[0] - ax, dy = f.pos[1] - ay; if (cam.livello === 0) { dx -= Math.round(dx); dy -= Math.round(dy); } const e = Math.hypot(dx, dy); if (e < d) { d = e; b = { f, dx, dy }; } } return b; })();
+      // (un puntino: avvicinandosi, lo sguardo va verso quello che è già vicino al punto che si guarda)
       if (vicino) { const f = vicino.f, perTaglia = Math.min(1, (f.scala * cam.z * f.raggio) / soglia);
-        // nel sistema un pianeta è un puntino: avvicinandosi, lo sguardo va verso quello che è già vicino al centro dello schermo
-        const prossimita = cam.livello === 2 && dentro ? Math.max(perTaglia, 1 - (Math.hypot(vicino.dx, vicino.dy) * cam.z) / (0.3 * m)) : perTaglia; if (prossimita > 0.3) { const k = 0.25 * prossimita; cam.cx += vicino.dx * k; cam.cy += vicino.dy * k; } }
+        const prossimita = dentro ? Math.max(perTaglia, 1 - (Math.hypot(vicino.dx, vicino.dy) * cam.z) / (0.3 * m)) : perTaglia; if (prossimita > 0.3) { const k = prossimita * Math.max(0.25, dentro && fuoco ? 1 - 0.8 / fuoco.k : 0); cam.cx += vicino.dx * k; cam.cy += vicino.dy * k; } }
+      const tetto = cam.livello === 2 ? m / 5e-7 : vicino ? m / (vicino.f.scala * 0.8) : Infinity;
       cam.z = Math.min(cam.z, tetto);
     } else {
       // una regione grande quanto lo schermo, al centro: si entra
@@ -149,7 +154,10 @@ export function colpisciMappa(cam, sx, sy, W, H) {
     const t = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (!t) return null;
     const i = Math.floor((u * n - Math.floor(u * n)) * t.sf.W), j = Math.floor((v * n - Math.floor(v * n)) * t.sf.H), c = j * t.sf.W + i, h = t.sf.alt[c];
     const T = S.cl.media[Math.min(S.cl.H - 1, Math.floor(v * S.cl.H)) * S.cl.W + Math.min(S.cl.W - 1, Math.floor(u * S.cl.W))];
-    return { tipo: 'punto', pos: [x, y], scala: 0, testo: `${h < S.se.mare ? `mare, profondo ${Math.round(S.se.mare - h)} m` : t.sf.lago[c] > 0 ? `lago, profondo ${Math.round(t.sf.lago[c])} m` : `${Math.round(h - Math.max(S.se.mare, -1e9))} m sul mare`} · ${Math.round(T - 273.15)} °C in media · lat ${(90 - v * 180).toFixed(2)}°` };
+    let acquaQuiTesto = '';
+    if (S.mare?.esiste && (h < S.se.mare || t.sf.lago[c] > 0)) { const M = S.mare, km = Math.max(0, Math.min(M.H - 1, Math.floor(v * M.H))) * M.W + Math.min(M.W - 1, Math.floor(u * M.W)), cu = M.corrente.u[km], cv2 = M.corrente.v[km], vel = Math.hypot(cu, cv2), verso = ['est', 'nord-est', 'nord', 'nord-ovest', 'ovest', 'sud-ovest', 'sud', 'sud-est'][((Math.round(Math.atan2(cv2, cu) / (Math.PI / 4)) % 8) + 8) % 8];
+      acquaQuiTesto = ` · acqua a ${(M.temperatura[km] - 273.15).toFixed(1)} °C, ${M.salinita[km].toFixed(1)} g di sali per kg, corrente ${vel < 0.005 ? 'quasi ferma' : `${(vel * 100).toFixed(vel < 0.1 ? 1 : 0)} cm/s verso ${verso}`}, fango sospeso ${(M.torbidita[km] * 1000).toPrecision(2)} g/m³${M.ghiaccio && M.ghiaccio[km] > 0.3 ? ', sotto il ghiaccio' : ''}${Math.abs(M.risalita[km]) * 3.156e7 > 20 ? (M.risalita[km] > 0 ? ", acqua che sale dal fondo" : ", acqua che scende") : ''}`; }
+    return { tipo: 'punto', pos: [x, y], scala: 0, testo: `${h < S.se.mare ? `mare, profondo ${Math.round(S.se.mare - h)} m` : t.sf.lago[c] > 0 ? `lago, profondo ${Math.round(t.sf.lago[c])} m` : `${Math.round(h - Math.max(S.se.mare, -1e9))} m sul mare`} · ${Math.round(T - 273.15)} °C in media · lat ${(90 - v * 180).toFixed(2)}°${acquaQuiTesto}` };
   }
   if (cam.livello === 3) {
     const P = pianeta(cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta);
@@ -165,7 +173,7 @@ export function colpisciMappa(cam, sx, sy, W, H) {
     const d = Math.hypot(dx, dy), r = Math.max(px, f.scala * (cam.livello === 2 ? 2.5 : 1));
     if (d < r && d < dm) { dm = d; migliore = f; }
   }
-  if (cam.livello === 1 && Math.hypot(x, y) < Math.max(px, 0.02) && (!migliore || dm > 0.01)) return { tipo: 'buco', pos: [0, 0], scala: 0.02, testo: `il buco nero al centro della galassia${galassia(cam.via.cosmo, cam.via.galassia).G.attivita > 0.3 ? ', attivo: il suo getto lancia raggi cosmici' : ''}` };
+  if (cam.livello === 1 && !migliore) { const Gx = galassia(cam.via.cosmo, cam.via.galassia), rb = raggioBuco(Gx); if (Math.hypot(x, y) < Math.max(px, rb)) return { tipo: 'buco', pos: [0, 0], scala: Math.max(px, rb), testo: `il buco nero al centro della galassia: ${fmtGrande(Gx.buco.M)} masse solari, largo ${fmtLunghezza(2 * rb * Gx.forma.unitaM)}${Gx.G.attivita > 0.3 ? ' · attivo: il suo getto lancia raggi cosmici' : ''}` }; }
   if (!migliore) return null;
   const d = migliore.dato;
   const testo = cam.livello === 0 ? `galassia ${d.id + 1} · ${d.tipo}${d.attivita > 0.3 ? ', con il buco nero attivo' : ''} · clic per avvicinarti`
@@ -183,8 +191,11 @@ export function volaVerso(cam, obiettivo, W, H) {
   const m = minimo(W, H), zFin = (0.5 * m) / obiettivo.scala;
   let dx = obiettivo.pos[0] - cam.cx, dy = obiettivo.pos[1] - cam.cy;
   if (cam.livello === 0) { dx -= Math.round(dx); dy -= Math.round(dy); }
-  cam.cx += dx * 0.18; cam.cy += dy * 0.18;
-  const k = Math.exp(Math.max(-0.45, Math.min(0.45, Math.log(zFin / cam.z) * 0.18)));
+  cam.cx += dx * 0.3; cam.cy += dy * 0.3;
+  // (la meta può essere miliardi di volte più piccola dello schermo: ci si avvicina solo quanto basta a tenerla in vista,
+  // così lo zoom segue lo sguardo che converge su di lei)
+  const resta = 0.7 * Math.hypot(dx, dy), zVista = resta > 0 ? (0.25 * m) / resta : Infinity;
+  const k = Math.exp(Math.max(-0.45, Math.min(0.45, Math.log(zFin / cam.z) * 0.18, Math.log(zVista / cam.z))));
   return zoomMappa(cam, W / 2, H / 2, k, W, H);
 }
 
@@ -228,9 +239,15 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
   if (cam.livello === 0) {
     const C = cosmo(v.cosmo), img = immagineRete(v.cosmo);
     // la rete cosmica, ripetuta: lo spazio si richiude
-    ctx.imageSmoothingEnabled = true; ctx.globalAlpha = 0.85;
     const i0 = Math.floor(cam.cx - W / 2 / z) - 1, i1 = Math.floor(cam.cx + W / 2 / z) + 1, j0 = Math.floor(cam.cy - H / 2 / z) - 1, j1 = Math.floor(cam.cy + H / 2 / z) + 1;
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) ctx.drawImage(img, X(i), Y(j), z, z);
+    // (la rete è la materia a grande scala: avvicinandosi a una galassia vera — un punto, sulla rete — una sua cella riempie
+    // lo schermo e poi sbiadisce, fino al buio in cui sta la galassia)
+    const cella = z / C.N, velo = 0.85 * Math.max(0, Math.min(1, 1 - Math.log10(cella / (4 * Math.max(W, H))) / 2));
+    ctx.imageSmoothingEnabled = true; ctx.globalAlpha = velo;
+    if (velo > 0 && cella < 0.5 * Math.max(W, H)) { for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) ctx.drawImage(img, X(i), Y(j), z, z); }
+    else if (velo > 0) { // molto dentro: il colore della rete in quel punto (la stessa densità, calcolata lì), senza stirare l'immagine
+      const d = Math.max(0, (C.densita(cam.cx, cam.cy) - C.media) / C.sigma + 0.6), t = Math.min(1, d / 3); ctx.fillStyle = `rgb(${Math.round(20 + 90 * t)},${Math.round(18 + 40 * t * t)},${Math.round(40 + 110 * t)})`; ctx.fillRect(0, 0, W, H);
+    }
     ctx.globalAlpha = 1;
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (const G of C.galassie) {
       const x = X(G.pos[0] + i), y = Y(G.pos[1] + j), r = G.r * z;
@@ -239,15 +256,15 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
     }
   } else if (cam.livello === 1) {
     const Gx = galassia(v.cosmo, v.galassia);
-    disegnaGalassia(ctx, Gx, X, Y, z, dpr);
+    disegnaGalassia(ctx, Gx, X, Y, z, dpr, v);
     // le sorgenti dei raggi cosmici
     for (const s of Gx.sorgenti) {
-      if (s.tipo === 'supernova') { ctx.strokeStyle = 'rgba(255,140,170,0.55)'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.arc(X(s.pos[0]), Y(s.pos[1]), Math.max(2 * dpr, s.r * z), 0, 7); ctx.stroke(); }
-      if (s.tipo === 'pulsar') { ctx.strokeStyle = 'rgba(150,210,255,0.9)'; ctx.lineWidth = dpr; const x = X(s.pos[0]), y = Y(s.pos[1]), l = 4 * dpr; ctx.beginPath(); ctx.moveTo(x - l, y); ctx.lineTo(x + l, y); ctx.moveTo(x, y - l); ctx.lineTo(x, y + l); ctx.stroke(); }
+      if (s.tipo === 'supernova') { ctx.strokeStyle = 'rgba(255,140,170,0.55)'; ctx.lineWidth = dpr; cerchio(ctx, X(s.pos[0]), Y(s.pos[1]), Math.max(2 * dpr, s.r * z)); }
+      if (s.tipo === 'pulsar') { ctx.strokeStyle = 'rgba(150,210,255,0.9)'; ctx.lineWidth = dpr; const x = X(s.pos[0]), y = Y(s.pos[1]), l = 4 * dpr; if (!(Math.abs(x) < 1e5 && Math.abs(y) < 1e5)) continue; ctx.beginPath(); ctx.moveTo(x - l, y); ctx.lineTo(x + l, y); ctx.moveTo(x, y - l); ctx.lineTo(x, y + l); ctx.stroke(); }
     }
     if (evidenzia?.stella != null && evidenzia.galassia === v.galassia) {
       const S = Gx.stelle[evidenzia.stella];
-      for (const s of Gx.sorgenti) if (evidenzia.sorgenti?.some((n) => n.startsWith(s.nome))) { ctx.strokeStyle = 'rgba(255,190,90,0.7)'; ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(X(s.pos[0]), Y(s.pos[1])); ctx.lineTo(X(S.pos[0]), Y(S.pos[1])); ctx.stroke(); ctx.setLineDash([]); scrivi(ctx, s.nome, X(s.pos[0]) + 6 * dpr, Y(s.pos[1]) - 6 * dpr, 'rgba(255,200,120,0.9)', dpr); }
+      for (const s of Gx.sorgenti) if (evidenzia.sorgenti?.some((n) => n.startsWith(s.nome))) { ctx.strokeStyle = 'rgba(255,190,90,0.7)'; ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.lineWidth = dpr; tratto(ctx, X(s.pos[0]), Y(s.pos[1]), X(S.pos[0]), Y(S.pos[1])); ctx.setLineDash([]); scrivi(ctx, s.nome, X(s.pos[0]) + 6 * dpr, Y(s.pos[1]) - 6 * dpr, 'rgba(255,200,120,0.9)', dpr); }
       ctx.strokeStyle = 'rgba(255,200,120,0.95)'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.arc(X(S.pos[0]), Y(S.pos[1]), 7 * dpr, 0, 7); ctx.stroke();
     }
   } else if (cam.livello === 2) {
@@ -278,32 +295,53 @@ export function disegnaMappa(ctx, W, H, cam, { sopra = null, evidenzia = null, d
 function scrivi(ctx, t, x, y, c, dpr) { ctx.font = `${12 * dpr}px ui-monospace, monospace`; ctx.fillStyle = 'rgba(5,6,11,0.7)'; const w = ctx.measureText(t).width; ctx.fillRect(x - 3 * dpr, y - 12 * dpr, w + 6 * dpr, 16 * dpr); ctx.fillStyle = c; ctx.fillText(t, x, y); }
 function alone(ctx, x, y, r, c, a) { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, rgb(c, a)); g.addColorStop(1, rgb(c, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); }
 
-function disegnaGalassiaLontana(ctx, G, x, y, r, dpr, n) {
-  if (r < 30 * dpr) { alone(ctx, x, y, Math.max(3 * dpr, r * 1.4), G.tinta, 0.8); ctx.fillStyle = 'rgba(255,250,240,0.95)'; ctx.fillRect(x - dpr / 2, y - dpr / 2, dpr, dpr); return; }
-  // da vicino: le sue stelle vere (le stesse che si vedono entrando)
-  const Gx = galassia(n, G.id);
-  alone(ctx, x, y, r * 0.5, G.tinta, 0.55);
-  const passo = r > 200 * dpr ? 1 : r > 90 * dpr ? 2 : 4;
-  for (let i = 0; i < Gx.stelle.length; i += passo) { const s = Gx.stelle[i]; ctx.fillStyle = rgb(s.colore, 0.75); ctx.fillRect(x + s.pos[0] * r, y + s.pos[1] * r, dpr, dpr); }
+// un cerchio che può essere enorme (il resto di una supernova visto da dentro, un'orbita): se è più grande dello
+// schermo se ne disegna solo il tratto che ci passa, per punti (i numeri troppo grandi la tela li sbaglia)
+function cerchio(ctx, x, y, r) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, d = Math.hypot(W / 2 - x, H / 2 - y), mezza = Math.hypot(W, H) / 2;
+  if (d > r + mezza || d < r - mezza) return; // non tocca lo schermo
+  ctx.beginPath();
+  if (r < 8000) ctx.arc(x, y, r, 0, 7);
+  else { const fi0 = Math.atan2(H / 2 - y, W / 2 - x), semi = Math.min(Math.PI, (1.5 * mezza) / r); for (let q = 0; q <= 48; q++) { const fi = fi0 - semi + (2 * semi * q) / 48, px = x + r * Math.cos(fi), py = y + r * Math.sin(fi); q ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } }
+  ctx.stroke();
 }
-function disegnaGalassia(ctx, Gx, X, Y, z, dpr) {
-  const G = Gx.G;
-  alone(ctx, X(0), Y(0), 0.45 * z, G.tinta, 0.35);
-  const sistemaPx = RAGGIO_SISTEMA * z;
+// un tratto tra due punti che possono essere lontanissimi dallo schermo: se ne disegna solo la parte vicina
+function tratto(ctx, x0, y0, x1, y1) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, L = 4 * (W + H); let t0 = 0, t1 = 1;
+  for (const [p, q] of [[x0 - x1, x0 + L], [x1 - x0, W + L - x0], [y0 - y1, y0 + L], [y1 - y0, H + L - y0]]) { if (p === 0) { if (q < 0) return; continue; } const t = q / p; if (p < 0) { if (t > t1) return; if (t > t0) t0 = t; } else { if (t < t0) return; if (t < t1) t1 = t; } }
+  ctx.beginPath(); ctx.moveTo(x0 + t0 * (x1 - x0), y0 + t0 * (y1 - y0)); ctx.lineTo(x0 + t1 * (x1 - x0), y0 + t1 * (y1 - y0)); ctx.stroke();
+}
+// il raggio del buco nero centrale (l'orizzonte, 2GM/c²) nelle unità della galassia: la sua taglia vera
+const raggioBuco = (Gx) => (2 * 6.674e-11 * Gx.buco.M * 1.989e30) / 2.998e8 ** 2 / Gx.forma.unitaM;
+function disegnaGalassiaLontana(ctx, G, x, y, r, dpr, n) {
+  // la taglia è quella vera: da lontano un puntino (più grande se ha più stelle), per poterla trovare
+  if (r < 30 * dpr) { const p = Math.max(2.2, Math.min(4.5, 2.2 + 1.2 * Math.log10(G.forma.massaStelle / 1e10))) * dpr; alone(ctx, x, y, Math.max(p, r * 1.4), G.tinta, 0.8); ctx.fillStyle = 'rgba(255,250,240,0.95)'; ctx.fillRect(x - dpr / 2, y - dpr / 2, dpr, dpr); return; }
+  // da vicino: le sue stelle vere, disegnate come quando ci si entra (così entrare non cambia niente sullo schermo)
+  disegnaGalassia(ctx, galassia(n, G.id), (u) => x + u * r, (u) => y + u * r, r, dpr, { cosmo: n, galassia: G.id });
+}
+function disegnaGalassia(ctx, Gx, X, Y, z, dpr, v) {
+  const G = Gx.G, W = ctx.canvas.width, H = ctx.canvas.height;
+  // il chiarore di tutte le stelle che il campione non mostra: sfuma dal centro; da dentro è una tinta uniforme, che si
+  // spegne avvicinandosi ancora (le stelle si separano: tra l'una e l'altra c'è il buio)
+  if (0.45 * z < 6000) alone(ctx, X(0), Y(0), 0.45 * z, G.tinta, 0.35);
+  else { const d = Math.hypot(W / 2 - X(0), H / 2 - Y(0)) / (0.45 * z), spento = Math.max(0, 1 - Math.log10((0.45 * z) / 6000) / 1.5); if (d < 1 && spento > 0) { ctx.fillStyle = rgb(G.tinta, 0.35 * (1 - d) * spento); ctx.fillRect(0, 0, W, H); } }
+  const rs = raggioSistema(v.cosmo, v.galassia), sistemaPx = rs * z;
   for (const s of Gx.stelle) {
-    const x = X(s.pos[0]), y = Y(s.pos[1]); if (x < -50 || y < -50 || x > ctx.canvas.width + 50 || y > ctx.canvas.height + 50) continue;
-    const b = Math.min(2.2, 0.6 + Math.cbrt(s.massa) * 0.5) * dpr;
-    if (sistemaPx > 25 * dpr) { alone(ctx, x, y, Math.max(4 * dpr, sistemaPx * 0.08), s.colore, 0.6); }
+    const x = X(s.pos[0]), y = Y(s.pos[1]); if (!(x > -50 - sistemaPx && y > -50 - sistemaPx && x < W + 50 + sistemaPx && y < H + 50 + sistemaPx)) continue;
+    // da vicino la stella è il suo sistema, con la taglia vera (30 UA): lo stesso disegno di quando ci si entra
+    if (sistemaPx > 10 * dpr) { disegnaSistema(ctx, sistema(v.cosmo, v.galassia, s.id), (u) => x + u * sistemaPx, (u) => y + u * sistemaPx, sistemaPx, dpr, { ...v, stella: s.id }); continue; }
+    // da lontano un puntino (più grande se pesa di più), per poterla trovare
+    const b = Math.min(2.2, 0.6 + Math.cbrt(s.massa) * 0.5) * dpr, sola = Math.max(0, Math.min(1, Math.log10(z / 3e4) / 2)); // (sola: da vicino ne resta una sullo schermo, e le si dà un alone per non perderla)
+    if (sola > 0) alone(ctx, x, y, (3 + 5 * sola) * dpr, s.colore, 0.6 * sola);
     ctx.fillStyle = rgb(s.colore, 0.95); ctx.fillRect(x - b / 2, y - b / 2, b, b);
-    if (sistemaPx > 40 * dpr) { // si intravedono le orbite dei pianeti
-      const n = Gx.G; void n;
-    }
   }
-  // il buco nero: il disco e il getto
-  const rb = Math.max(2.5 * dpr, 0.012 * z), a = G.getto;
-  if (G.attivita > 0.15) { ctx.strokeStyle = `rgba(150,190,255,${0.25 + 0.5 * G.attivita})`; ctx.lineWidth = Math.max(dpr, 0.004 * z); for (const s of [1, -1]) { ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(s * Math.cos(a) * 0.6), Y(s * Math.sin(a) * 0.6)); ctx.stroke(); } }
-  alone(ctx, X(0), Y(0), rb * 3, [255, 190, 120], 0.8);
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(X(0), Y(0), rb, 0, 7); ctx.fill();
+  // il buco nero: con la sua taglia vera (l'orizzonte), il chiarore di ciò che gli cade dentro, e il getto
+  const rb = Math.max(2 * dpr, raggioBuco(Gx) * z), a = G.getto;
+  if (G.attivita > 0.15) { ctx.strokeStyle = `rgba(150,190,255,${0.25 + 0.5 * G.attivita})`; ctx.lineWidth = Math.max(dpr, Math.min(3 * dpr, 0.004 * z)); for (const q of [1, -1]) tratto(ctx, X(0), Y(0), X(q * Math.cos(a) * 0.6), Y(q * Math.sin(a) * 0.6)); }
+  if (Math.abs(X(0)) < 1e5 + rb && Math.abs(Y(0)) < 1e5 + rb) {
+    if (rb < 6000) { alone(ctx, X(0), Y(0), rb * 3, [255, 190, 120], 0.25 + 0.55 * Math.max(G.attivita, 0.2)); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(X(0), Y(0), rb, 0, 7); ctx.fill(); }
+    else if (Math.hypot(W / 2 - X(0), H / 2 - Y(0)) < rb) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); } // dentro l'orizzonte: buio
+  }
 }
 function disegnaSistema(ctx, S, X, Y, z, dpr, v) {
   const st = S.stella;
@@ -449,6 +487,7 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
   if (!S) { ctx.fillStyle = 'rgba(235,230,215,0.85)'; ctx.font = `${14 * dpr}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText('la superficie si sta formando: tettonica, clima, aria, erosione…', W / 2, H / 2); ctx.textAlign = 'start'; return; }
   const x0 = cam.cx - W / 2 / z, x1 = cam.cx + W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), y1 = Math.min(0.5, cam.cy + H / 2 / z);
   ctx.imageSmoothingEnabled = true; tessereInAttesa = 0; let nuove = 0;
+  const dopo = () => { if (cam.strato) disegnaStratoMare(ctx, W, H, cam, dpr); };
   // dal più grosso al più fine: si disegna quello che c'è, e si calcola una tessera nuova per fotogramma
   for (let L = Math.max(0, Lmax - 2); L <= Lmax; L++) {
     const n = 4 ** L;
@@ -466,6 +505,7 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
       ctx.drawImage(t.cv, px0, py0, z / n + 0.5, (0.5 * z) / n + 0.5);
     }
   }
+  dopo();
 }
 
 // ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto
@@ -536,4 +576,56 @@ export function cercaFinestra(cam, W, H, { prove = 28 } = {}) {
     if (!meglio || b.totale > meglio.bellezza.totale) meglio = { cx: c.cx, cy: c.cy, z: c.z, bellezza: b, prova: q };
   }
   return meglio;
+}
+
+// ---------- GLI STRATI DEL MARE. Il mare non è un colore solo: ogni punto ha la sua temperatura, il suo sale, il suo
+// fango, la sua corrente (mare.js). Sulla superficie del pianeta si può guardare uno di questi campi sopra la mappa;
+// le correnti si vedono come scie che scorrono, più fitte e più lunghe dove l'acqua corre.
+export const STRATI_MARE = {
+  correnti: { nome: 'le correnti', cosa: "scie portate dall'acqua: dove corre di più sono più lunghe" },
+  temperatura: { nome: 'la temperatura', campo: 'temperatura', unita: '°C', vista: (x) => x - 273.15, colori: [[20, 40, 140], [40, 150, 200], [240, 230, 120], [220, 60, 40]] },
+  salinita: { nome: 'il sale', campo: 'salinita', unita: 'g/kg', vista: (x) => x, colori: [[230, 240, 255], [120, 170, 230], [130, 80, 190], [70, 20, 90]] },
+  torbidita: { nome: 'il fango sospeso', campo: 'torbidita', unita: 'g/m³', vista: (x) => x * 1000, log: true, colori: [[20, 60, 120], [90, 110, 110], [160, 130, 80], [200, 160, 90]] },
+  risalita: { nome: "l'acqua che sale e scende", campo: 'risalita', unita: 'm/anno', vista: (x) => x * 3.156e7, simmetrico: true, colori: [[150, 60, 30], [230, 200, 170], [170, 220, 230], [20, 90, 170]] },
+};
+const stratiFatti = new Map(), scie = { k: null, punti: [] };
+const acquaQui = (M, k) => M.bagnato && M.bagnato[k] > 0.3;
+export function infoStrato(cam) { const S = cam.livello === 4 && cam.strato ? superficieDi(cam.via) : null; return S?.mare?.esiste ? stratiFatti.get(`${S.k}|${cam.strato}`) || null : null; }
+function stratoMare(S, quale) {
+  const k = `${S.k}|${quale}`; if (stratiFatti.has(k)) return stratiFatti.get(k);
+  const M = S.mare, d = STRATI_MARE[quale], F = M[d.campo], N = M.W * M.H, v = new Float32Array(N); let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < N; i++) { if (!acquaQui(M, i)) continue; let x = d.vista(F[i]); if (d.log) x = Math.log10(Math.max(1e-6, x)); v[i] = x; if (x < lo) lo = x; if (x > hi) hi = x; }
+  if (d.simmetrico) { const a = Math.max(Math.abs(lo), Math.abs(hi)) || 1; lo = -a; hi = a; }
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(M.W, M.H) : Object.assign(document.createElement('canvas'), { width: M.W, height: M.H }), c = cv.getContext('2d'), im = c.createImageData(M.W, M.H);
+  for (let i = 0; i < N; i++) { if (!acquaQui(M, i)) continue; const t = Math.max(0, Math.min(0.9999, (v[i] - lo) / (hi - lo || 1))) * (d.colori.length - 1), a = Math.floor(t), f = t - a, c0 = d.colori[a], c1 = d.colori[a + 1], o = i * 4;
+    im.data[o] = c0[0] + (c1[0] - c0[0]) * f; im.data[o + 1] = c0[1] + (c1[1] - c0[1]) * f; im.data[o + 2] = c0[2] + (c1[2] - c0[2]) * f; im.data[o + 3] = 215; }
+  c.putImageData(im, 0, 0);
+  const out = { cv, lo: d.log ? 10 ** lo : lo, hi: d.log ? 10 ** hi : hi, unita: d.unita, nome: d.nome };
+  stratiFatti.set(k, out); if (stratiFatti.size > 8) stratiFatti.delete(stratiFatti.keys().next().value);
+  return out;
+}
+function disegnaStratoMare(ctx, W, H, cam, dpr) {
+  const S = superficieDi(cam.via), M = S?.mare; if (!M?.esiste || !STRATI_MARE[cam.strato]) return;
+  const z = cam.z, X = (x) => W / 2 + (x - cam.cx) * z, Y = (y) => H / 2 + (y - cam.cy) * z;
+  if (cam.strato !== 'correnti') {
+    const st = stratoMare(S, cam.strato); ctx.imageSmoothingEnabled = true;
+    for (let g = Math.floor(cam.cx - W / 2 / z); g <= Math.floor(cam.cx + W / 2 / z); g++) ctx.drawImage(st.cv, X(g), Y(0), z, 0.5 * z);
+    return;
+  }
+  // le correnti: scie seminate dentro ciò che si guarda (così la densità è la stessa a ogni scala) e portate dall'acqua
+  const kS = `${S.k}`, x0 = cam.cx - W / 2 / z, y0 = Math.max(0, cam.cy - H / 2 / z), lx = W / z, ly = Math.min(0.5, cam.cy + H / 2 / z) - y0, u = M.corrente.u, vv = M.corrente.v;
+  if (scie.k !== kS) { scie.k = kS; scie.punti = []; }
+  const cella = (x, y) => Math.max(0, Math.min(M.H - 1, Math.floor(y * 2 * M.H))) * M.W + ((Math.floor((((x % 1) + 1) % 1) * M.W) % M.W) + M.W) % M.W;
+  const semina = () => { for (let t = 0; t < 8; t++) { const q = { x: x0 + Math.sin(scie.punti.length * 12.9898 + t * 78.233 + performance.now() * 1e-3) * 0.5 * lx + lx / 2, y: y0 + ((Math.cos(scie.punti.length * 4.1414 + t * 31.7 + performance.now() * 1.7e-3) + 1) / 2) * ly, eta: 0 }; if (acquaQui(M, cella(q.x, q.y))) return q; } return null; };
+  while (scie.punti.length < 900) { const q = semina(); if (!q) break; scie.punti.push(q); }
+  let vmax = 1e-6; for (let i = 0; i < u.length; i += 7) vmax = Math.max(vmax, Math.hypot(u[i], vv[i]));
+  const passo = (0.012 * lx) / Math.max(0.03, Math.min(vmax, 0.6)); // quanta mappa per fotogramma a 1 m/s: le più veloci attraversano lo schermo in un secondo e mezzo
+  ctx.lineWidth = 1.2 * dpr; ctx.lineCap = 'round';
+  for (let i = 0; i < scie.punti.length; i++) {
+    const q = scie.punti[i], k = cella(q.x, q.y), sp = Math.hypot(u[k], vv[k]);
+    const nx = q.x + (u[k] * passo) / Math.max(0.15, Math.cos((0.5 - q.y * 2) * Math.PI)), ny = q.y - vv[k] * passo * 0.5; // (v verso nord: la mappa ha il nord in alto)
+    ctx.strokeStyle = `rgba(235,245,255,${Math.min(0.9, 0.25 + 2.2 * (sp / vmax)) * Math.min(1, q.eta / 6)})`; ctx.beginPath(); ctx.moveTo(X(q.x - (nx - q.x) * 3), Y(q.y - (ny - q.y) * 3)); ctx.lineTo(X(nx), Y(ny)); ctx.stroke();
+    q.x = nx; q.y = ny; q.eta++;
+    if (q.eta > 90 || q.y <= 0 || q.y >= 0.5 || q.x < x0 || q.x > x0 + lx || q.y < y0 || q.y > y0 + ly || !acquaQui(M, cella(q.x, q.y)) || sp < 1e-4) { const r = semina(); if (r) scie.punti[i] = r; else { scie.punti.splice(i, 1); i--; } }
+  }
 }
