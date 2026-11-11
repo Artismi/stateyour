@@ -457,12 +457,13 @@ export function ritardoShapiro(M, r1, r2, b) {
   return ((2 * G * M) / C ** 3) * Math.log((r1 + r2 + R) / (r1 + r2 - R));
 }
 // il tempo ESATTO (coordinata di Schwarzschild) che la luce impiega dal punto più vicino r0 fino a r:
-// t = (1/c)∫ dr / ((1 − r_s/r)·√(1 − (r0/r)²·(1 − r_s/r)/(1 − r_s/r0))) [D]; con r = r0/(1 − s²)… integrando liscio
+// t = (1/c)∫ dr / ((1 − r_s/r)·√(1 − (r0/r)²·(1 − r_s/r)/(1 − r_s/r0))) [D]; con r = r0/(1 − s²) l'integrando è liscio
 export function tempoLuce(M, r0, r, n = 20000) {
   const rs = raggioSchwarzschild(M), A0 = 1 - rs / r0, q = Math.sqrt(1 - r0 / r);
   // r(s) = r0/(1 − s²): dr = 2 r0 s ds/(1 − s²)²; il radicando ≈ ∝ s² vicino a s = 0
-  return simpson((s) => { const x = 1 - s * s, rr = r0 / x, A = 1 - rs / rr, rad = 1 - (x * x * A) / A0; // rad → s²·(…) per s → 0
-    const rapporto = s > 1e-8 ? rad / (s * s) : 2 - rs / (r0 * A0); return (2 * r0) / (x * x * A * Math.sqrt(rapporto)); }, 0, q, n) / C;
+  // il radicando 1 − x²·A/A₀ con A/A₀ = 1 + ε s², ε = r_s/(r0·A₀): diviso per s² è 2 − ε − s²(1 − 2ε) − ε s⁴ (senza sottrazioni tra numeri vicini)
+  const eps = rs / (r0 * A0);
+  return simpson((s) => { const s2 = s * s, x = 1 - s2, A = 1 - (rs * x) / r0; return (2 * r0) / (x * x * A * Math.sqrt(2 - eps - s2 * (1 - 2 * eps) - eps * s2 * s2)); }, 0, q, n) / C;
 }
 
 // ---------- LE PARTICELLE CON MASSA in Schwarzschild
@@ -492,10 +493,9 @@ export const sezioneDiCatturaLenta = (M, v) => (16 * PI * (G * M) ** 2) / (C2 * 
 //     pericentri: [φ…] (per misurare la precessione) }
 export function orbita({ M, r0, vr = 0, vt = 0, durata = Infinity, passo = 2e-3, fuori = null, tieni = false, passiMassimi = 2e6 }) {
   const rs = raggioSchwarzschild(M), GM = G * M, A0 = 1 - rs / r0, v2 = vr * vr + vt * vt, gam = 1 / Math.sqrt(1 - v2 / C2), E = Math.sqrt(A0) * gam, L = r0 * gam * vt; // E per mc²; L = r·γ·v_t
-  let r = r0, pr = gam * vr * Math.sqrt(A0) / Math.sqrt(A0) * 1, fi = 0, tau = 0, t = 0; // dr/dτ = γ·v_r·√A/√A… (vedi sotto)
-  pr = gam * vr; // dr/dτ = γ·v_r (per chi sta fermo: dr_proprio = dr/√A, dt_proprio = √A·dt → dr/dτ = γ v_r·√A/√A·… = γ·v_r·√A₀/√A₀)
-  // (controllo: E² = (dr/cdτ)² + V² con dr/dτ = γ v_r √A₀ … la forma esatta è dr/dτ = γ·v_r·√A₀)
-  pr = gam * vr * Math.sqrt(A0);
+  // (chi sta fermo misura dℓ = dr/√A e dT = √A·dt; la particella ha dτ = dT/γ: dr/dτ = √A·γ·v_r, L = r·γ·v_t, E = √A·γ;
+  // controllo: E² = (dr/cdτ)² + A(1 + L²/c²r²) ⇔ γ² = γ²v²/c² + 1)
+  let r = r0, pr = gam * vr * Math.sqrt(A0), fi = 0, tau = 0, t = 0;
   const acc = (rr) => -GM / (rr * rr) + (L * L) / rr ** 3 - (3 * GM * L * L) / (C2 * rr ** 4), rFuori = fuori ?? 1e3 * r0, punti = tieni ? [[r, 0, 0, 0]] : null, pericentri = []; let prPrima = pr, n = 0;
   while (tau < durata && n++ < passiMassimi) {
     const dt = passo * Math.min(r / Math.max(Math.abs(pr), 1e-300), Math.sqrt(r ** 3 / GM)); // una frazione del tempo dinamico locale
