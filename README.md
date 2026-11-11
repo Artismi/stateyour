@@ -279,15 +279,19 @@ scaldano l'interno di una luna in orbita eccentrica (vulcani come Io, oceani
 sotto il ghiaccio come Europa). Sono calcolate per ogni pianeta e si vedono sulla mappa.
 
 **Le stelle dalla loro struttura** (`src/camera/stelle.js`). Luminosità, raggio,
-temperatura e vita non sono più curve misurate sul Sole: escono dall'equilibrio
-tra gravità e pressione, dal trasporto dell'energia e dalle reazioni nucleari
-(catena protone-protone e ciclo CNO, con il picco di Gamow integrato), in
-funzione di massa, metalli ed età. Ne escono anche la massa minima per
-accendere l'idrogeno (0,076 Soli), il Sole giovane più debole, e il confine tra
-nana bianca e supernova (dove il nucleo di elio supera la massa di
-Chandrasekhar). Limiti detti: la luminosità del Sole è tarata con un
-coefficiente dell'opacità (senza, verrebbe 0,38); per questo le stelle tra 1,2
-e 5 Soli escono troppo luminose (+25–80%) e calde, e vivono circa la metà.
+temperatura e vita escono dall'integrazione delle quattro equazioni della
+struttura stellare (gravità contro pressione, trasporto dell'energia per
+radiazione o convezione, reazioni nucleari con il picco di Gamow), con lo stato
+della materia di Saha e Fermi e un'opacità calcolata dai processi, frequenza per
+frequenza. Nessun numero è stato scelto guardando il Sole, che esce a 0,92 della
+sua luminosità, 1,008 del suo raggio, 5631 K. Ne escono anche la massa minima
+per accendere l'idrogeno (0,079 Soli), il Sole giovane più debole del 27%, il
+confine tra nana bianca e supernova (9 Soli). La tabella (7 metallicità × 36
+masse × 10 età) si rigenera con `node strumenti/tabella_stelle.mjs` (16 minuti)
+ed è salvata in `stelle_tabella.js`. Limiti detti, stampati dalle prove: tra 1,5
+e 3 Soli i raggi escono 15–25% troppo piccoli; la zona convettiva del Sole è
+troppo sottile (l'opacità calcolata non ha le righe); le giganti rosse non ci
+sono.
 
 **La storia degli impatti** (`src/camera/impatti.js`). Dai corpi rimasti dopo la
 formazione: le loro taglie escono da una cascata di collisioni simulata, il
@@ -302,6 +306,19 @@ suo indirizzo: un cosmo parallelo può cambiarne uno solo. Limiti detti: manca
 il bombardamento tardo (nessuna riserva lontana di asteroidi e comete: dopo un
 miliardo di anni non cade quasi più niente); gli urti sono più lenti del vero;
 i pianeti senza una luna che li freni restano con giorni di 2–5 ore.
+
+**La rotazione** (`src/camera/rotazione.js`). Il giorno e l'asse non sono
+sorteggiati: nascono dagli urti giganti (con il bilancio del momento angolare),
+dal gas che cade nei giganti, o dall'embrione; poi la stella e la luna li
+frenano per tutta l'età del sistema, fino a mostrare sempre la stessa faccia o a
+una risonanza (Mercurio esce a 58,62 giorni, in risonanza 3:2). Limiti detti:
+Venere non torna (manca la marea termica dell'aria), Urano e Nettuno girano un
+quarto troppo in fretta, la Terra con la Luna vera esce a 16 ore.
+
+**Il bombardamento tardo** (in `impatti.js`). Le fasce di corpi che un pianeta
+ha scacciato e che un gigante rifornisce, le comete palleggiate dai giganti,
+con le velocità vere dell'incontro. Senza giganti non c'è bombardamento tardo.
+Limite detto: il risultato dipende moltissimo da dove stava il corpo scacciato.
 
 **Gli anelli** (`src/camera/anelli.js`). Non sono più una probabilità: c'è un
 anello solo se materia è finita dentro il limite di Roche (una luna spezzata
@@ -339,12 +356,41 @@ morte restituiscono, i bracci, il ritmo delle supernove. Due parametri sono
 tarati e lo dice: la scala delle masse (da cui dipende la frazione di
 ellittiche) e il vento.
 
+**Il mare** (`src/camera/mare.js`). L'acqua non è una tinta: i sali vengono
+dalle rocce di quel pianeta consumate dall'acqua e dall'anidride carbonica, dai
+gas dei vulcani e dalle sorgenti calde, portati dai fiumi per l'età del pianeta;
+escono quando superano la solubilità (che dipende dalla temperatura). Salinità,
+miscela di ioni e pH escono dal bilancio. Le correnti vengono dal vento e dalla
+rotazione sulla forma vera dei bacini; portano calore, sale e fango. In fondo
+allo zoom, sul mare o su un lago, non c'è la roccia ma un campione di
+quell'acqua: di dieci in dieci, i granelli sospesi, i colloidi in moto
+browniano, poi gli ioni con i loro gusci e le molecole, nelle quantità vere di
+quel punto. Limiti detti: quattro parametri sono tarati sulla Terra (che così
+dà 37 g/kg e pH 8,1); in mare aperto alle scale intermedie l'acqua è limpida e
+si vede poco (il pannello dice che cosa c'è davvero in quel campione).
+
+**La temperatura ha una fonte sola.** La stima rapida del clima di ogni pianeta
+è lo stesso bilancio di energia della mappa, risolto per fasce di latitudine; la
+serra dipende dai gas veri dell'aria (con i gas veri: Terra 289 K, Venere 734,
+Marte 214, Titano 94) e clima e aria si risolvono insieme.
+
+**La finestra è un punto di osservazione qualsiasi.** Nella vista del cosmo,
+«una finestra bella a questa scala» prova molte inquadrature attorno a dove si
+guarda e va dove il mondo disegna di più: vale per le galassie, le orbite, i
+continenti, i fiumi, i cristalli (`cercaFinestra` in `mappa.js`,
+`bellezzaImmagine` in `sezione.js`). Le tessere del terreno si calcolano con un
+bordo in comune, così combaciano. Per le particelle, la finestra diretta (senza
+specchi né copie) è il modo normale; il caleidoscopio è un'aggiunta di chi
+guarda. La sezione dello spaziotempo può essere il punto di vista di un
+osservatore in moto, con la relatività vera (la scala del tempo è la velocità
+della luce); i moti veri della regione sono elencati con le loro velocità.
+
 **La coerenza tra i livelli** (`test/test_coerenza.mjs`). Una prova a sé
 controlla che le stesse grandezze valgano lo stesso a ogni scala, su centinaia
 di sistemi veri: tempo (niente è più vecchio di ciò che lo contiene), massa,
 acqua, energia del clima, conservazione di carica, energia e quantità di moto
 nei decadimenti e negli urti, particelle uguali nelle bolle dello zoom,
-determinismo. 35 controlli passano; le incoerenze che restano (una ventina) non
+determinismo. 47 controlli passano; le incoerenze che restano (14) non
 sono nascoste: la prova le misura e le stampa ogni volta.
 
 **Cosmi paralleli a ogni scala** (`src/camera/eventi.js`, `cosmoRamo` in
