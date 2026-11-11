@@ -50,6 +50,8 @@
 //     l'incognita dichiarata), la LUCE RIMANDATA (1 − g)τ/(2 + (1 − g)τ) con g = 0,85 (due flussi), e l'INFRAROSSO
 //     trattenuto 1 − exp(−130·acqua) (Stephens 1978, non riletto) per quanto la cima è più fredda del suolo (la cima è
 //     nello strato alto dove la convezione arriva fin lì). Così una nuvola senz'acqua (un mondo gelido) non riflette.
+//     (solo sulla parte di mare della cella: la relazione è misurata sugli oceani, e così la usa il modello E3SM da cui
+//     i coefficienti sono stati riletti nel 2026-11; sulla terra non c'è una legge e non se ne mettono)
 //     NUBI BASSE che non piovono (strati): copertura 5,7·LTS − 55,73 per cento, con LTS la differenza di temperatura
 //     potenziale tra l'aria a 0,7 della pressione e la superficie (Klein e Hartmann 1993: EMPIRICA e terrestre, letta
 //     nelle note, non riletta alla fonte); tengono l'acqua che l'evaporazione di sotto dà nel tempo di Kessler; non
@@ -265,7 +267,7 @@ function motore(W, H, par, forz) {
               // le NUBI BASSE che non piovono (strati sopra un'aria bassa stabile): la loro copertura cresce con quanto lo
               // strato basso è più «caldo» della superficie (Klein e Hartmann 1993: 5,7·LTS − 55,73 per cento); tengono
               // l'acqua che l'evaporazione di sotto dà loro nel tempo di Kessler; dove la convezione sfonda non ci sono
-              const cb = profonda || !(ev > 0) ? 0 : Math.max(0, Math.min(1, NUVOLE.strati[0] * (a2 * kLts - ts) + NUVOLE.strati[1])) * (1 - c), lb = ev / K_AUTO, gb = ((1 - ASIMMETRIA) * 1.5 * lb) / (RHO_ACQUA * PARAMETRI.raggioGocce), qb = (a2 * w2) / ts, qb2 = qb * qb;
+              const cb = profonda || !(ev > 0) ? 0 : Math.max(0, Math.min(1, NUVOLE.strati[0] * (a2 * kLts - ts) + NUVOLE.strati[1])) * (1 - c) * bagnato[p], lb = ev / K_AUTO, gb = ((1 - ASIMMETRIA) * 1.5 * lb) / (RHO_ACQUA * PARAMETRI.raggioGocce), qb = (a2 * w2) / ts, qb2 = qb * qb;
               aNuvole[p] += c + cb; aRiflesso[p] += (c * g1) / (2 + g1) + (cb * gb) / (2 + gb); aAcquaNube[p] += c * lwp + cb * lb;
               if (q < 1) aSerra[p] += c * (1 - Math.exp(-ASSORBE_IR * lwp)) * (1 - q2 * q2); if (qb < 1) aSerra[p] += cb * (1 - Math.exp(-ASSORBE_IR * lb)) * (1 - qb2 * qb2); } }
         } }

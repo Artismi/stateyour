@@ -384,6 +384,9 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //    tempo proporzionale alla distanza).
 // Escono, oltre al rilievo: flusso (la pioggia raccolta, in celle × metri l'anno, come prima), lago, depositato (m),
 // versoValle (per ogni cella, la cella in cui versa; −1 il mare), e i numeri veri: durataErosione (anni), denudazione (m/anno, media sulle terre), fangoAlMare (kg/anno), bilancio (m³).
+// kQs = 0,041 (Wickert e Schildgen 2019, eq. 19, riletta 2026-11) è costruita sul trasporto di Wong e Parker,
+// 3,97·(τ* − 0,0495)^1,5, e vale per granuli di roccia in acqua (Δ = (ρs − ρ)/ρ = 1,65); con altri fluidi o granuli va
+// moltiplicata per (1,65/Δ)^(7/6). Non dipende dalla gravità. Vale per fiumi ghiaiosi a larghezza d'equilibrio.
 export const EROSIONE = Object.freeze({ m: 0.4, n: 1, K: Object.freeze({ granito: 3.2e-7, vulcanica: 3.2e-5, sedimento: 1e-3 }), pioggiaRif: 1, pendii: 0.01, kQs: 0.041, piena: 0.01, capacitaEsponente: 7 / 6,
   isostasia: 2800 / 3300, densita: 2700, durataSenzaPlacche: 1e8 });
 const memoErosione = new Map();

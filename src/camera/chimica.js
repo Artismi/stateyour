@@ -93,16 +93,19 @@ const SPECIE = [
   ['C2H6', 'etano', 'gas', -84.0, 229.2], ['HCl', 'acido cloridrico', 'gas', -92.31, 186.90],
   ['H2O(l)', 'acqua liquida', 'liquido', -285.83, 69.95], ['H2O(s)', 'ghiaccio d\'acqua', 'solido', -291.84, 47.95],
   ['C', 'grafite', 'solido', 0, 5.74], ['Fe', 'ferro metallico', 'solido', 0, 27.32],
-  ['FeO', 'wüstite', 'solido', -272.0, 60.75], ['Fe3O4', 'magnetite', 'solido', -1118.4, 146.4],
-  ['Fe2O3', 'ematite', 'solido', -824.2, 87.4], ['FeS', 'troilite', 'solido', -100.0, 60.3],
+  ['FeO', 'wüstite', 'solido', -272.0, 60.75], ['Fe3O4', 'magnetite', 'solido', -1115.7, 146.1],
+  ['Fe2O3', 'ematite', 'solido', -826.2, 87.4], ['FeS', 'troilite', 'solido', -100.0, 60.3],
   ['SiO2', 'quarzo', 'solido', -910.7, 41.46], ['MgO', 'periclasio', 'solido', -601.6, 26.95],
-  ['Al2O3', 'corindone', 'solido', -1675.7, 50.92], ['MgSiO3', 'enstatite (pirosseno)', 'solido', -1549.0, 67.74],
-  ['Mg2SiO4', 'forsterite (olivina)', 'solido', -2174.0, 95.1], ['Fe2SiO4', 'fayalite (olivina)', 'solido', -1479.9, 145.2],
+  ['Al2O3', 'corindone', 'solido', -1675.7, 50.92], ['MgSiO3', 'enstatite (pirosseno)', 'solido', -1545.6, 66.3],
+  ['Mg2SiO4', 'forsterite (olivina)', 'solido', -2173.0, 94.1], ['Fe2SiO4', 'fayalite (olivina)', 'solido', -1479.9, 145.2],
   ['CaSiO3', 'wollastonite', 'solido', -1634.9, 81.9], ['CaCO3', 'calcite', 'solido', -1207.6, 91.7],
-  ['CaSO4', 'anidrite', 'solido', -1434.5, 106.5], ['NaCl', 'salgemma', 'solido', -411.2, 72.1],
+  ['CaSO4', 'anidrite', 'solido', -1434.5, 107.4], ['NaCl', 'salgemma', 'solido', -411.2, 72.1],
   ['NaAlSi3O8', 'albite (feldspato)', 'solido', -3935.1, 207.4], ['KAlSi3O8', 'ortoclasio (feldspato)', 'solido', -3974.6, 214.2],
   ['CaAl2Si2O8', 'anortite (feldspato)', 'solido', -4234.0, 199.3],
 ];
+// Riletti su Robie e Hemingway 1995 (2026-11): magnetite, ematite, enstatite, forsterite, anidrite portati ai valori di
+// quella fonte (erano di poco diversi, da un'altra tabella). La wüstite resta FeO stechiometrico (−272,0; 60,75): in
+// Robie e Hemingway c'è solo quella reale, Fe0,947O (−266,3; 56,6). Non riletti lì: ferro, troilite, fayalite, wollastonite.
 // I MINERALI DEI METALLI: ossidi, solfuri, carbonati principali. ΔH di formazione e S a 298 K da Robie e Hemingway 1995
 // (U.S. Geological Survey Bulletin 2131: opera del governo degli Stati Uniti, di dominio pubblico, letta dal PDF
 // l'11-2026; per bunsenite, covellite e smithsonite il ΔH è ricavato dal loro ΔG e dalle entropie della stessa fonte).
