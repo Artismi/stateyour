@@ -288,11 +288,10 @@ prova('la deflessione: tre vie (integrale esatto, Binet, la forma dello shader) 
     // Binet: da molto lontano (r0 = 10⁶ r_g), con il parametro d'urto b
     const r0 = 1e6 * g, psi = PI - Math.asin((b * g * Math.sqrt(1 - (2 * g) / r0)) / r0), B = R.raggioDiLuce({ M, r0, psi, passo: 2e-4 }), viaBinet = B.angolo - (PI - Math.asin(b / 1e6));
     vicino(viaBinet, esatta, b > 100 ? 2e-3 : 2e-4, `Binet a b = ${b} r_g`);
-    // la forma dello shader (unità r_g), stesso passo dello shader: parte da x = (−300, b, 0) verso +x
-    const T = R.tracciaRaggio([-300, 0, b], [1, 0, 0], { fuori: 300 }), ang = Math.atan2(-T.v[2], T.v[0]) + (T.v[0] < 0 && T.v[2] > 0 ? 2 * PI : 0);
-    // (parte e arriva a distanza finita: mancano 2·(2/b)·(1 − cos…) ≈ 4b/300² … si confronta con Binet dalle stesse distanze)
-    const psi3 = PI - Math.atan2(b, 300), r3 = Math.hypot(300, b), B3 = R.raggioDiLuce({ M, r0: r3 * g, psi: PI - Math.asin((b * Math.sqrt(1 - 2 / r3)) / r3 / Math.sqrt(1 - 2 / r3) * Math.sqrt(1 - 2 / r3)), passo: 2e-4 });
-    void psi3; void B3; assert.equal(T.esito, 'fugge'); let a = ang; while (a < esatta - PI) a += 2 * PI; vicino(a, esatta, b > 100 ? 0.05 : 0.012, `shader a b = ${b} r_g`);
+    // la forma dello shader (unità r_g), con il passo dello shader: parte da (−X, 0, b) verso +x, con X = 60·b (almeno 300),
+    // ed esce alla stessa distanza: della deflessione totale ne vede la parte X/√(X² + b²) (al primo ordine), cioè tutta entro 2·10⁻⁴
+    const X = Math.max(300, 60 * b), T = R.tracciaRaggio([-X, 0, b], [1, 0, 0], { fuori: Math.hypot(X, b) }); assert.equal(T.esito, 'fugge');
+    let ang = Math.atan2(-T.v[2], T.v[0]); while (ang < esatta - PI) ang += 2 * PI; vicino(ang, esatta, b > 6 ? 5e-3 : 2e-2, `la forma dello shader a b = ${b} r_g`);
   }
   assert.equal(R.tracciaRaggio([-300, 0, 5.15], [1, 0, 0]).esito, 'cade'); assert.equal(R.tracciaRaggio([-300, 0, 5.25], [1, 0, 0], { fuori: 300 }).esito, 'fugge');
   console.log(`        b = 8 r_g: ${n((R.deflessione(M, 8 * g) * 180) / PI)}°; b = 5,25 r_g (b_c = 5,196): ${n((R.deflessione(M, 5.25 * g) * 180) / PI)}° — la luce gira attorno prima di ripartire`);
@@ -313,8 +312,7 @@ prova('la deflessione: tre vie (integrale esatto, Binet, la forma dello shader) 
 prova('le particelle: l\'orbita integrata precede quanto dice l\'integrale esatto, anche in campo forte; energia conservata', () => {
   const M = 10 * MSOLE, g = rg(M), a = 40 * g, e = 0.3, rp = a * (1 - e), ra = a * (1 + e);
   // la velocità al pericentro che dà quell'apocentro: da E e L dell'orbita con i due punti di svolta
-  const u1 = 1 / ra, u2 = 1 / rp, l2 = 1 / ((g * (u1 + u2 + (1 / (2 * g) - u1 - u2))) * 2 * g * (1 / (2 * g) - u1 - u2) / (1 / (2 * g) - u1 - u2) * 1) ; void l2;
-  // L² dalla cubica: GM/L² = r_g·c²/L² e u₁u₂ + u₁u₃ + u₂u₃ = GM/(L²r_g)·… → più semplice: V²(r_p) = V²(r_a)
+  // E e L dell'orbita con quei due punti di svolta: V²(r_p) = V²(r_a) = E²
   const A = (r) => 1 - (2 * g) / r, L2 = (C2 * (A(ra) - A(rp))) / (A(rp) / (rp * rp) - A(ra) / (ra * ra)), E = Math.sqrt(A(rp) * (1 + L2 / (C2 * rp * rp)));
   const gam = E / Math.sqrt(A(rp)), vt = C * Math.sqrt(1 - 1 / (gam * gam)), O = R.orbita({ M, r0: rp, vt, durata: 40 * 2 * PI * Math.sqrt(a ** 3 / (G * M)), passo: 5e-4 });
   assert.equal(O.esito, 'legata'); vicino(O.E, E, 1e-12, 'E'); vicino(O.L * O.L, L2, 1e-9, 'L²'); assert.ok(O.pericentri.length > 10);
@@ -325,9 +323,9 @@ prova('le particelle: l\'orbita integrata precede quanto dice l\'integrale esatt
 prova('cattura e caduta: la barriera del potenziale efficace decide chi cade; il tempo proprio di caduta è quello della cicloide', () => {
   const M = 10 * MSOLE, g = rg(M), r0 = 2000 * g;
   // una particella quasi ferma lontano (E ≈ 1): cade se L < 4GM/c
-  for (const [k, atteso] of [[3.9, 'cade'], [4.1, 'fugge']]) { const L = (k * G * M) / C, A0 = 1 - (2 * g) / r0, vt = L / r0 / Math.sqrt(1 + (L / (r0 * C)) ** 2), gam = 1 / Math.sqrt(1 - (vt / C) ** 2), vr = -C * Math.sqrt(Math.max(0, 1 - A0 / (gam * gam) / 1) - (vt / C) ** 2 * 0) ;
-    // velocità radiale tale che E = 1: γ_tot = 1/√A₀
-    const gt = 1 / Math.sqrt(A0), v = C * Math.sqrt(1 - 1 / (gt * gt)), vtt = L / (r0 * gt), vrr = -Math.sqrt(Math.max(0, v * v - vtt * vtt)); void vr; void vt; void gam;
+  for (const [k, atteso] of [[3.9, 'cade'], [4.1, 'fugge']]) { const L = (k * G * M) / C, A0 = 1 - (2 * g) / r0;
+    // E = 1: il fattore di Lorentz misurato da chi sta fermo a r0 è 1/√A₀; la parte trasversa è L/(r0·γ)
+    const gt = 1 / Math.sqrt(A0), v = C * Math.sqrt(1 - 1 / (gt * gt)), vtt = L / (r0 * gt), vrr = -Math.sqrt(Math.max(0, v * v - vtt * vtt));
     const O = R.orbita({ M, r0, vr: vrr, vt: vtt, fuori: 1.2 * r0, passo: 2e-3 }); vicino(O.E, 1, 1e-9, 'E = 1'); assert.equal(O.esito, atteso, `L = ${k} GM/c`); assert.equal(R.cattura(M, O.E, O.L).cade, atteso === 'cade'); }
   assert.equal(R.cattura(M, 0.99, (3.4 * G * M) / C).cade, true, 'sotto √12 GM/c non c\'è barriera'); vicino(R.cattura(M, 1, (4 * G * M) / C).barriera, 1, 1e-12, 'a L = 4GM/c la barriera vale 1'); vicino(R.cattura(M, 1, (4 * G * M) / C).rMassimo / g, 4, 1e-9, 'e sta a 4 r_g');
   vicino(R.sezioneDiCatturaLenta(M, 1e5), PI * ((4 * G * M) / (C * 1e5)) ** 2, 1e-12, 'σ = π(4GM/cv)²');
