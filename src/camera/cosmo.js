@@ -22,9 +22,11 @@ import { generatore, simulaMondo } from './mondo.js';
 import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
 import { etaUniverso, massaNascita, stella as stellaVera, fine, ANNO, LSOLE, UA, clima } from './leggi.js';
 import { interno } from './geologia.js';
+import { formaPianeti } from './disco.js';
+import { lune } from './lune.js';
 const ADESSO = etaUniverso(); // in secondi: tutto il cosmo è guardato in questo istante
 
-export const REGIONI = 12, PIANETI_MAX = 8, STELLE = 2500, GALASSIE_MAX = 200;
+export const REGIONI = 12, PIANETI_MAX = 16, STELLE = 2500, GALASSIE_MAX = 200;
 
 // il caso di un indirizzo
 export function hash(...parti) {
@@ -167,40 +169,30 @@ export const metriPerUnita = (livello, via) => {
 export const RAGGIO_SISTEMA = 0.0025; // in unità della galassia (sulla mappa)
 export const sistema = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
-  // i pianeti nascono dal disco della stella giovane, fatto della sua stessa materia: con poca materia
-  // pesante solo piccoli pianeti; i giganti di gas si formano attorno a un nucleo di ghiaccio e roccia, e
-  // sono tanto più probabili quanto più la stella è metallica (P ∝ Z², come si osserva)
-  const Z = S.Z ?? 1, morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const np = morta ? 0 : Z < 0.05 ? intero(0, 1) : intero(1, PIANETI_MAX), pianeti = [];
-  // le orbite (unità: 30 UA): la prima vicino alla stella, le altre sempre più larghe. La «linea della
-  // neve», oltre la quale il ghiaccio non evapora (sotto 170 K) e i nuclei crescono abbastanza da
-  // catturare gas, discende dalla luminosità della stella giovane: 2,7 UA · √L
-  const Lgiovane = stellaVera(S.massaNascita || S.massa).L, neve = (2.7 * Math.sqrt(Lgiovane)) / 30;
-  let a = tra(0.012, 0.035) * Math.sqrt(Math.max(0.05, Lgiovane));
-  for (let k = 0; k < np; k++) {
-    const freddo = a > neve, gigante = c() < Math.min(0.85, 0.25 * Z * Z + 0.05), tipo = freddo ? (gigante ? 'gassoso' : 'ghiacciato') : (gigante && c() < 0.3 ? 'gassoso' : 'roccioso');
-    const r = tipo === 'gassoso' ? tra(0.022, 0.04) : tra(0.008, 0.018);
-    // le grandezze vere: il raggio (m) e il campo magnetico all'equatore (T)
-    const raggioM = tipo === 'gassoso' ? tra(2.4e7, 7.5e7) : tipo === 'ghiacciato' ? tra(1.5e7, 2.6e7) : tra(2.4e6, 9e6);
-    const B0 = tipo === 'gassoso' ? tra(2e-5, 4.5e-4) : tipo === 'ghiacciato' ? tra(1e-5, 4e-5) : (c() < 0.3 ? tra(1e-8, 1e-6) : tra(1e-5, 6e-5));
-    pianeti.push({
-      id: k, a, fase: tra(0, 2 * Math.PI), r, tipo, raggioM, B0,
-      campo: Math.min(1, Math.log10(B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)),
-      anelli: (tipo !== 'roccioso' && c() < 0.6) || c() < 0.08, lune: intero(0, tipo === 'gassoso' ? 6 : 2),
-      colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
-      // di che cosa è fatto: la materia del disco, più ricca di ferro e roccia dove la stella è metallica
-      composizione: tipo === 'gassoso' ? { idrogeno: 0.71, elio: 0.27, pesanti: 0.02 * Math.max(0.3, Z) } : tipo === 'ghiacciato' ? { ghiaccio: 0.6, roccia: 0.3, ferro: 0.1 } : { ferro: Math.min(0.5, 0.2 + 0.1 * Z), roccia: 1 - Math.min(0.5, 0.2 + 0.1 * Z) - 0.02, acqua: 0.02 },
-    });
-    pianeti[k].pos = [a * Math.cos(pianeti[k].fase), a * Math.sin(pianeti[k].fase)];
-    a *= tra(1.4, 1.9); if (a > 1.6) break;
-  }
+  // I PIANETI NASCONO DAL DISCO della stella giovane (disco.js): la sua massa e i suoi metalli fanno il
+  // disco; oltre la linea della neve anche il ghiaccio è solido; gli embrioni crescono, si scontrano e si
+  // fondono; un nucleo abbastanza grande, se fa in tempo prima che il gas si disperda, lo cattura a valanga
+  // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
+  // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
+  const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
+  const nati = morta ? [] : formaPianeti({ massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: (S.eta ?? 5e9) + (S.morta ?? 0) }, hash('disco', n, gid, sid)).slice(0, PIANETI_MAX);
+  const pianeti = nati.map((q, k) => {
+    const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
+    return {
+      id: k, a, fase, pos: [a * Math.cos(fase), a * Math.sin(fase)], tipo: q.tipo, raggioM: q.raggioM, massaKg: q.massaKg, composizione: q.composizione, eccentricita: q.eccentricita, storia: q.storia,
+      r: Math.max(0.006, Math.min(0.04, 0.006 + 0.03 * (q.raggioM / 7e7))), B0: 0, campo: 0,
+      // gli anelli: frammenti dentro il limite di Roche (per ora una probabilità, più alta per i mondi freddi: da far emergere dalle lune)
+      anelli: (q.tipo !== 'roccioso' && c() < 0.6) || c() < 0.08,
+      colore: { roccioso: [176, 140, 110], gassoso: [214, 178, 128], ghiacciato: [156, 196, 222] }[q.tipo].map((v) => Math.round(v * tra(0.8, 1.15))),
+    };
+  });
   // una nana bianca: quand'era gigante ha inghiottito i pianeti vicini, e perdendo massa ha lasciato
   // allontanare gli altri (l'orbita si allarga come la massa iniziale su quella finale)
   if (S.stato === 'nana bianca') { const k = (S.massaNascita || 1) / S.massa; for (let i = pianeti.length - 1; i >= 0; i--) { if (pianeti[i].a < 0.05) { pianeti.splice(i, 1); continue; } pianeti[i].a *= k; pianeti[i].pos = pianeti[i].pos.map((v) => v * k); } pianeti.forEach((p, i) => { p.id = i; }); }
   // il clima di ogni pianeta, dalla luce della sua stella (una nana bianca è fioca: 1/1000 del Sole)
   const viva = S.stato === 'in vita' || S.stato === 'gigante rossa', Lw = (viva ? stellaVera(S.massa).L : S.stato === 'nana bianca' ? 1e-3 : 0) * LSOLE;
   for (const p of pianeti) {
-    const rho = { roccioso: 5500, gassoso: 1300, ghiacciato: 1700 }[p.tipo], massaKg = (4 / 3) * Math.PI * p.raggioM ** 3 * rho;
+    const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
     // la ROTAZIONE viene dalla formazione (gli urti che l'hanno messo a girare: un giorno di qualche ora,
     // l'asse inclinato a caso, di solito poco); le maree della stella la frenano finché il pianeta le mostra
@@ -215,8 +207,10 @@ export const sistema = memo((n, gid, sid) => {
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
     p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
-    p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.01; // quasi tutta l'acqua resta nel mantello; un centesimo in superficie
+    p.interno.acquaKg = massaKg * (p.composizione.acqua ?? 0) * 0.04; // quasi tutta l'acqua resta nel mantello; in superficie pochi centesimi (sulla Terra: gli oceani)
     p.clima = clima({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: p.composizione.acqua ?? (p.tipo === 'ghiacciato' ? p.composizione.ghiaccio : 0) });
+    // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
+    p.lune = lune(p, { eta, Z: S.Z ?? 1 }, hash('lune', n, gid, sid, p.id));
   }
   return { stella: { ...S, r: viva ? 0.012 + 0.006 * Math.cbrt(S.massa) : 0.004 }, pianeti };
 });
