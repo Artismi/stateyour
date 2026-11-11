@@ -385,7 +385,12 @@ export function climaEAria(dati, { Z } = {}) {
   // («dati.gas»: i gas che non condensano e non reagiscono, dati da chi chiama come pressioni in Pa ({ N2: 7.8e4, O2: 2.1e4 })
   // al posto dell'inventario del pianeta: serve a provare le leggi su un mondo vero con la sua aria vera. L'acqua (satura
   // sopra un mare, o al più quella data) e la CO2 sopra un mare (Urey, ciclo, termostato) restano calcolate qui)
-  const ariaData = (T, stato, co2 = 0) => { const p = { ...dati.gas }; for (const f in dati.inerti || {}) if (dati.inerti[f] > 0) p[f] = (p[f] || 0) + dati.inerti[f];
+  const ariaData = (T, stato, co2 = 0) => { let p = { ...dati.gas };
+    // (gli inerti arrivano come peso della loro colonna, in Pa; la pressione parziale va con le moli: un gas più pesante
+    // della media preme, a pari peso, di meno)
+    if (dati.inerti) { let P0 = 0, m = 0; for (const f in p) { P0 += p[f]; m += p[f] * (MOLECOLE[f]?.massa ?? 29); } m = P0 > 0 ? m / P0 : 29; const n = {}; let N = 0, P1 = P0;
+      for (const f in p) { n[f] = p[f] / m; N += n[f]; } for (const f in dati.inerti) if (dati.inerti[f] > 0 && MOLECOLE[f]) { const x = dati.inerti[f] / MOLECOLE[f].massa; n[f] = (n[f] || 0) + x; N += x; P1 += dati.inerti[f]; }
+      p = {}; for (const f in n) p[f] = (n[f] / N) * P1; }
     if (stato === 'liquida') { p.H2O = pressioneVapore(T); p.CO2 = Math.min(p.CO2 ?? Infinity, Math.max(pressioneCO2Urey(T), co2)); } else for (const f in p) p[f] = Math.min(p[f], pressioneVapore(T, f));
     let pressione = 0; for (const f in p) pressione += p[f];
     return { gas: Object.fromEntries(Object.entries(p).filter(([, v]) => v > 0).map(([f, v]) => [f, v / pressione]).sort((a, b) => b[1] - a[1])), riducente: false, potere: 0, pressione, pO2: (p.O2 || 0) / 1e5, ferro: null, fuliggine: 0 }; };

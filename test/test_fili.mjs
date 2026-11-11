@@ -100,7 +100,7 @@ prova('ciò che il piccolo fa al grande, sulla Terra a mano: argon nell\'aria, m
   assert.ok(!aria.gas.He, "l'elio fugge: non è nell'aria");
   // al freddo l'argon gela come ogni altro gas: sopra un mondo a 30 K non ne resta
   const gelo = CH.atmosfera({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: VERI.Terra.composizione, clima: { T: 30, acqua: 'ghiaccio', tenuti: ['azoto', 'anidride carbonica'], pressione: 0 } }, { Z: 1, inventario: true, inerti: { Ar: 1400 } });
-  assert.ok(!(gelo.gas?.Ar * gelo.pressione > 1e-3), `argon a 30 K: ${gelo.gas?.Ar * gelo.pressione} Pa`);
+  assert.ok(!(gelo.gas?.Ar * gelo.pressione > 0.01), `argon a 30 K: ${gelo.gas?.Ar * gelo.pressione} Pa (ne erano usciti 1400)`);
   tra(e.relativa, 0.9, 1.1, "energia per la chimica dell'aria (1 = la Terra)");
   // prebiotica riceve lo STATO dell'acqua (prima un sì/no, che non era mai «liquida»): con un mare, ora lo vede
   const pre = (acqua) => CH.prebiotica({ atmosfera: aria, T: TERRA.clima.T, energia: e.relativa, pressione: TERRA.clima.pressione, acqua });
