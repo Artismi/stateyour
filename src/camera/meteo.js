@@ -50,6 +50,10 @@
 //     l'incognita dichiarata), la LUCE RIMANDATA (1 − g)τ/(2 + (1 − g)τ) con g = 0,85 (due flussi), e l'INFRAROSSO
 //     trattenuto 1 − exp(−130·acqua) (Stephens 1978, non riletto) per quanto la cima è più fredda del suolo (la cima è
 //     nello strato alto dove la convezione arriva fin lì). Così una nuvola senz'acqua (un mondo gelido) non riflette.
+//     NUBI BASSE che non piovono (strati): copertura 5,7·LTS − 55,73 per cento, con LTS la differenza di temperatura
+//     potenziale tra l'aria a 0,7 della pressione e la superficie (Klein e Hartmann 1993: EMPIRICA e terrestre, letta
+//     nelle note, non riletta alla fonte); tengono l'acqua che l'evaporazione di sotto dà nel tempo di Kessler; non
+//     ci sono dove la convezione sfonda. Si sommano alle altre dove quelle lasciano cielo libero.
 //     «riflessoNuvole» (luce rimandata, già per la copertura) è ciò che il clima usa; «serraNuvole» è solo misurata: la
 //     serra del clima è tarata con le nuvole dentro. Restano fuori le nubi basse che non piovono (strato limite);
 //   · la neve: tutta sotto 0 °C, niente sopra +2 °C;
@@ -208,7 +212,7 @@ function motore(W, H, par, forz) {
   const acc = { n: 0, u1: new Float64Array(NP), v1: new Float64Array(NP), u2: new Float64Array(NP), v2: new Float64Array(NP), th1: new Float64Array(NP), th2: new Float64Array(NP), piove: new Float64Array(NP), evapora: new Float64Array(NP), nuvole: new Float64Array(NP), umidita: new Float64Array(NP), calore: new Float64Array(NP), sale: new Float64Array(NP), riflesso: new Float64Array(NP), acquaNube: new Float64Array(NP), serra: new Float64Array(NP), scorre: new Float64Array(NP), vapore: new Float64Array(NP) };
   const { t1Eq, t2Eq, wSat, kE, bagnato, cd } = forz, tSuolo = forz.tSuolo ?? new Float64Array(NP).fill(1e9), attrito = 2 / par.hs, kRad = dt / tauRad, kSuolo = (dt * 2 * PARAMETRI.ce) / par.hs, kPioggia = 1 - Math.exp(-dt / PARAMETRI.tempoPioggia), u0 = PARAMETRI.umiditaNuvole, { w1, w2, capStrato } = par, latente = par.L / (capStrato * w2);
   const raffica2 = PARAMETRI.raffica ** 2, secchio = PARAMETRI.secchio, { piove: aPiove, evapora: aEvapora, umidita: aUmidita, vapore: aVapore, calore: aCalore, th1: aTh1, th2: aTh2, sale: aSale, nuvole: aNuvole, riflesso: aRiflesso, acquaNube: aAcquaNube, serra: aSerra, scorre: aScorre, u1: aU1, v1: aV1, u2: aU2, v2: aV2 } = acc;
-  const pX = nuovo(), pY = nuovo(), iCal1 = 1 / (par.cp * w1), rc = PARAMETRI.umiditaPioggia, sal1 = 1 + par.kappa, sal2 = 1 - par.kappa / 3, iCal = 1 / (par.cp * w2);
+  const pX = nuovo(), pY = nuovo(), iCal1 = 1 / (par.cp * w1), rc = PARAMETRI.umiditaPioggia, sal1 = 1 + par.kappa, sal2 = 1 - par.kappa / 3, iCal = 1 / (par.cp * w2), kLts = w2 / Math.pow(0.7, par.kappa); // (da θ dello strato basso a θ a 0,7 della pressione)
   let passi = 0;
   // una temperatura portata dal vento del suo strato (la parte che si può estrapolare nel tempo)
   const porta = (th, u, v, D, T0, Ta, Tb, c0, c1, c2, out) => {
@@ -259,8 +263,13 @@ function motore(W, H, par, forz) {
             // LE NUVOLE: quanta parte del cielo coprono (dall'umidità), e quanta acqua tengono: quella che la condensazione
             // dà loro nel tempo che la pioggia impiega a formarsi (Kessler); da lì lo spessore ottico, quanta luce rimandano
             // (due flussi) e quanta ne assorbono nell'infrarosso; la loro cima è nello strato alto dove la convezione arriva fin lì, se no in quello basso
-            if (rh > u0) { const c = 1 - Math.sqrt((1 - rh) / (1 - u0)), lwp = pv / (Math.max(c, 0.05) * K_AUTO), g1 = ((1 - ASIMMETRIA) * 1.5 * lwp) / (RHO_ACQUA * PARAMETRI.raggioGocce), q = (profonda ? a1 * w1 : a2 * w2) / tSuolo[p], q2 = q * q;
-              aNuvole[p] += c; aRiflesso[p] += (c * g1) / (2 + g1); aAcquaNube[p] += c * lwp; if (q < 1) aSerra[p] += c * (1 - Math.exp(-ASSORBE_IR * lwp)) * (1 - q2 * q2); } }
+            { const c = rh > u0 ? 1 - Math.sqrt((1 - rh) / (1 - u0)) : 0, lwp = pv / (Math.max(c, 0.05) * K_AUTO), g1 = ((1 - ASIMMETRIA) * 1.5 * lwp) / (RHO_ACQUA * PARAMETRI.raggioGocce), ts = tSuolo[p], q = (profonda ? a1 * w1 : a2 * w2) / ts, q2 = q * q;
+              // le NUBI BASSE che non piovono (strati sopra un'aria bassa stabile): la loro copertura cresce con quanto lo
+              // strato basso è più «caldo» della superficie (Klein e Hartmann 1993: 5,7·LTS − 55,73 per cento); tengono
+              // l'acqua che l'evaporazione di sotto dà loro nel tempo di Kessler; dove la convezione sfonda non ci sono
+              const cb = profonda || !(ev > 0) ? 0 : Math.max(0, Math.min(1, 0.057 * (a2 * kLts - ts) - 0.5573)) * (1 - c), lb = ev / K_AUTO, gb = ((1 - ASIMMETRIA) * 1.5 * lb) / (RHO_ACQUA * PARAMETRI.raggioGocce), qb = (a2 * w2) / ts, qb2 = qb * qb;
+              aNuvole[p] += c + cb; aRiflesso[p] += (c * g1) / (2 + g1) + (cb * gb) / (2 + gb); aAcquaNube[p] += c * lwp + cb * lb;
+              if (q < 1) aSerra[p] += c * (1 - Math.exp(-ASSORBE_IR * lwp)) * (1 - q2 * q2); if (qb < 1) aSerra[p] += cb * (1 - Math.exp(-ASSORBE_IR * lb)) * (1 - qb2 * qb2); } }
         } }
       orlo(th1); orlo(th2); }
     // (3) IL VENTO: Coriolis e vorticità, energia cinetica, scambio verticale, viscosità (Adams-Bashforth), poi la
