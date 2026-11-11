@@ -25,6 +25,7 @@ import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percor
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
+import { scriviBolla, leggiBolla, viaDi as viaDellaBolla, passoSensato, scalaDi } from '../tre/bolla.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 import { cellaMateria, luogoDaAria } from './materia.js';
@@ -333,8 +334,9 @@ function montaAtomi() {
 // così il pannello, il percorso e il ritorno alla mappa piatta restano giusti. In fondo, a pochi metri dal suolo,
 // avvicinandosi ancora si passa al livello 5 (la roccia o l'acqua di quel punto: rocciaDi, montaAtomi).
 let telaMondo = null, mondo3d = null, universo3d = null, barraMondo = null, senzaMondo3D = false, cursoreMondo = null, orologioMondo = 0, bottoneMondo = null;
+const CHIAVE_BOLLA = 'stateyour.bolla3d';
 const ANNO_S = 31557600, VELOCITA_MONDO = [1, 60, 600, 3600, 21600, 86400, 604800, 2592000, ANNO_S, 100 * ANNO_S, 1e4 * ANNO_S, 1e6 * ANNO_S, 1e8 * ANNO_S];
-const diceTempo = (v) => (v === 1 ? 'tempo vero' : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < ANNO_S ? `${Math.round(v / 86400)} giorni al secondo` : v === ANNO_S ? 'un anno al secondo' : v < 1e6 * ANNO_S ? `${(v / ANNO_S).toLocaleString('it-IT')} anni al secondo` : `${(v / ANNO_S / 1e6).toLocaleString('it-IT')} milioni di anni al secondo`);
+const diceTempo = (v) => (v === 1 ? 'tempo vero' : v < 60 ? `${v.toLocaleString('it-IT', { maximumSignificantDigits: 2 })} secondi al secondo` : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < ANNO_S ? `${Math.round(v / 86400)} giorni al secondo` : v === ANNO_S ? 'un anno al secondo' : v < 1e6 * ANNO_S ? `${(v / ANNO_S).toLocaleString('it-IT')} anni al secondo` : `${(v / ANNO_S / 1e6).toLocaleString('it-IT')} milioni di anni al secondo`);
 function smontaMondo() {
   clearInterval(orologioMondo); orologioMondo = 0;
   if (mondo3d) { try { universo3d?.libera(); mondo3d.libera(); } catch { /* già perso */ } }
@@ -356,7 +358,9 @@ function rigaMondo() {
   if (!mondo3d || !universo3d) return; seguiMondo();
   const solido = !!mondo3d.camera.corpo?.quota, d = solido ? mondo3d.dove() : null, pi = universo3d.sistema()?.vero(), gradi = (lon, lat) => `${Math.abs((lat * 180) / Math.PI).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs((lon * 180) / Math.PI).toFixed(2)}° ${lon >= 0 ? 'E' : 'O'}`;
   const lungo = (x) => (x >= 9.46e14 ? `${(x / 9.461e15).toLocaleString('it-IT', { maximumFractionDigits: x > 9.46e17 ? 0 : 2 })} anni luce` : x >= 1.5e10 ? `${(x / 1.496e11).toFixed(2)} UA` : fmtLunghezza(x));
-  let testo = universo3d.percorso().join(' › ') + ' · ' + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(mondo3d.stato.vicinoM || 0)} dalla cosa più vicina`);
+  // LA BOLLA (INTRECCIO.md, regola 11): lo stato di questa vista è lei; la si tiene scritta, per ripartire da lì
+  const bolla = universo3d.bolla(); try { if (universo3d.pronto()) localStorage.setItem(CHIAVE_BOLLA, scriviBolla(bolla)); } catch { /* senza memoria: pazienza */ }
+  let testo = universo3d.percorso().join(' › ') + ` · ${scalaDi(bolla.grandezza).nome}: un volume largo ${lungo(bolla.grandezza)}` + ' · ' + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(mondo3d.stato.vicinoM || 0)} dalla cosa più vicina`);
   const q = d && cursoreMondo ? mondo3d.sotto(cursoreMondo[0], cursoreMondo[1]) : null, i = q && pi ? pi.info(q.lon, q.lat) : null;
   if (i) testo += ` · sotto il cursore (${gradi(q.lon, q.lat)}, a ${lungo(q.distanza)}): ${i.acqua ? `acqua profonda ${fmtLunghezza(i.profondita)}` : `terra a quota ${Math.round(i.quota)} m`}`;
   if (d && d.quota < 12) testo += ' · avvicinati ancora: si entra nella materia di questo punto';
@@ -374,7 +378,11 @@ function montaMondo() {
     telaMondo = document.createElement('canvas'); telaMondo.tabIndex = 0; telaMondo.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;outline:none;touch-action:none'; tela.parentNode.insertBefore(telaMondo, tela.nextSibling);
     mondo3d = creaNucleo(telaMondo, { alPassaggio: () => seguiMondo() });
     const L = camMappa.livello, via = { ...camMappa.via }, R = L >= 3 ? sistemaDi(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta]?.raggioM : 0;
-    universo3d = creaUniverso(mondo3d, { via, livello: ['cosmo', 'galassia', 'sistema', 'pianeta', 'pianeta'][L], superficie: (v) => superficieDi(v) });
+    // se l'ultima bolla tenuta è proprio in questo luogo (stesso cosmo, galassia, stella, pianeta fin dove la mappa arriva), si
+    // riparte da lei: stesso punto, stessa grandezza, stesso istante (così anche tornando su dalla materia o dalla mappa piatta)
+    let tenuta = null; try { tenuta = L === 4 ? null : leggiBolla(localStorage.getItem(CHIAVE_BOLLA)); } catch { tenuta = null; }
+    if (tenuta) { const vb = viaDellaBolla(tenuta), chiavi = ['cosmo', 'galassia', 'stella', 'pianeta'].slice(0, Math.min(L, 3) + 1); if (!tenuta.posizione || vb.luna != null || chiavi.some((k) => vb[k] !== via[k]) || (L < 3 && vb[['galassia', 'stella', 'pianeta'][L]] != null)) tenuta = null; }
+    universo3d = creaUniverso(mondo3d, { via, livello: ['cosmo', 'galassia', 'sistema', 'pianeta', 'pianeta'][L], bolla: tenuta, superficie: (v) => superficieDi(v) });
     // sulla superficie (livello 4): sopra lo stesso punto della mappa, alla quota da cui si vede la stessa larghezza
     if (L === 4 && R) { const lon = camMappa.cx * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - camMappa.cy * 2 * Math.PI, quota = Math.max(30, Math.min(2 * R, ((tela.height * 2 * Math.PI * R) / camMappa.z) / (2 * Math.tan(0.375)))); let giri = 0;
       const posa = setInterval(() => { if (!mondo3d || ++giri > 200) return clearInterval(posa); if (universo3d.pronto() && mondo3d.camera.corpo?.punto) { clearInterval(posa); mondo3d.vai({ lon, lat, quota, direzione: 0, alza: quota > 0.05 * R ? -1.5 : -0.5 }); } }, 100); }
@@ -384,9 +392,9 @@ function montaMondo() {
     telaMondo.addEventListener('wheel', (e) => { if (e.deltaY < 0 && mondo3d?.camera.corpo?.punto && mondo3d.quota() < 6) { e.stopImmediatePropagation(); e.preventDefault(); scendiNellaMateria(); } }, { capture: true, passive: false });
     // il tempo del mondo: più lento, pausa, più veloce, e quanto vale; e il ritorno alla mappa piatta
     barraMondo = document.createElement('div'); barraMondo.style.cssText = 'position:absolute;left:12px;top:12px;z-index:3;font:inherit;display:flex;gap:4px;align-items:center;padding:3px 7px;border:1px solid #555;border-radius:4px;background:rgba(20,20,24,0.8);color:#eee';
-    barraMondo.innerHTML = '<button data-t="-1" title="il tempo più lento (,)">◀◀</button><button data-t="0" title="pausa (p)">❚❚</button><button data-t="1" title="il tempo più veloce (.)">▶▶</button><span style="min-width:11em"></span><button data-t="piatta" title="la mappa piatta di prima (con le regioni in cui entrare)">▦ mappa piatta</button>';
+    barraMondo.innerHTML = '<button data-t="-1" title="il tempo più lento (,)">◀◀</button><button data-t="0" title="pausa (p)">❚❚</button><button data-t="1" title="il tempo più veloce (.)">▶▶</button><span style="min-width:11em"></span><button data-t="passo" title="il passo del tempo che ha senso a questa grandezza (ore per un pianeta, milioni di anni per una galassia)">≈</button><button data-t="piatta" title="la mappa piatta di prima (con le regioni in cui entrare)">▦ mappa piatta</button>';
     const tempoMondo = (su) => { const T = mondo3d.tempo; if (su === 0) T.pausa = !T.pausa; else { const k = VELOCITA_MONDO.findIndex((v) => v >= T.velocita); T.velocita = VELOCITA_MONDO[Math.max(0, Math.min(VELOCITA_MONDO.length - 1, (k < 0 ? VELOCITA_MONDO.length - 1 : k) + su))]; } rigaMondo(); };
-    for (const b of barraMondo.querySelectorAll('button')) { b.style.cssText = 'font:inherit;padding:1px 7px;border:1px solid #666;border-radius:3px;background:#222;color:#eee;cursor:pointer'; b.onclick = () => { if (b.dataset.t === 'piatta') { seguiMondo(); senzaMondo3D = 'scelta'; smontaMondo(); montaMondo(); disegna(); dove(); } else tempoMondo(+b.dataset.t); }; }
+    for (const b of barraMondo.querySelectorAll('button')) { b.style.cssText = 'font:inherit;padding:1px 7px;border:1px solid #666;border-radius:3px;background:#222;color:#eee;cursor:pointer'; b.onclick = () => { if (b.dataset.t === 'passo') { mondo3d.tempo.velocita = passoSensato(universo3d.bolla().grandezza); mondo3d.tempo.pausa = false; rigaMondo(); } else if (b.dataset.t === 'piatta') { seguiMondo(); senzaMondo3D = 'scelta'; smontaMondo(); montaMondo(); disegna(); dove(); } else tempoMondo(+b.dataset.t); }; }
     telaMondo.addEventListener('keydown', (e) => { if (e.key === ',') tempoMondo(-1); else if (e.key === '.') tempoMondo(1); else if (e.key === 'p') tempoMondo(0); });
     tela.parentNode.insertBefore(barraMondo, telaMondo.nextSibling);
     orologioMondo = setInterval(rigaMondo, 400); rigaMondo();
@@ -1724,7 +1732,7 @@ adattaPattern(); aggiornaVista();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
 window.__camera = {
-  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; },
+  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; },
   entra, carica, seleziona: (s) => { sel = s; disegna(); mostraPannello(); }, sonda: (s) => { sonda = s; disegna(); },
   vai: (v) => { vista = v; aggiornaVista(); }, tempo: (t) => { tempo = t; aggiornaTempo(); disegna(); },
 };

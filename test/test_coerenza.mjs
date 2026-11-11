@@ -43,6 +43,7 @@ const ordina = (xs) => xs.filter(Number.isFinite).sort((a, b) => a - b);
 const quantile = (xs, p) => { const v = ordina(xs); return v.length ? v[Math.min(v.length - 1, Math.floor(p * v.length))] : NaN; };
 const mediana = (xs) => quantile(xs, 0.5), massimo = (xs) => quantile(xs, 1), minimo = (xs) => quantile(xs, 0);
 const tra = (x, a, b, che) => assert.ok(x >= a && x <= b, `${che}: ${x} (atteso tra ${a} e ${b})`);
+const mediaDi = (v) => { let t = 0; for (let i = 0; i < v.length; i++) t += v[i]; return t / v.length; };
 const sfera = (R) => (4 / 3) * Math.PI * R ** 3;
 const foto = (x) => JSON.stringify(x, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : ArrayBuffer.isView(v) ? Array.from(v) : v));
 const semeDi = (...a) => (CO.semeEvento ? CO.semeEvento(...a) : CO.hash(...a));
@@ -571,8 +572,10 @@ prova('la temperatura ha una fonte sola: clima() è il bilancio per fasce, e la 
 
 { // ciò che la mappa ha in più: dove sono le terre, e i venti e le nuvole veri di meteo.js
   const conVenti = SUPERFICI.filter((s) => s.cl.meteo), dT = conVenti.map((s) => s.cl.Tglobale - s.p.clima.T), dMappa = SUPERFICI.map((s) => s.senzAria.Tglobale - s.p.clima.T);
-  nota(3, 'con i venti e le nuvole veri (meteo.js, secondo giro sulla mappa) la temperatura media si scosta da quella di clima(): le nuvole non sono quelle attese (0,63 dove c\'è mare) e il calore portato non è 0,6·√p. Lo stato dell\'acqua e l\'aria restano quelli di clima(); il pannello mostra solo la temperatura della mappa',
-    { casi: dT.filter((d) => Math.abs(d) > 6).length, su: conVenti.length, tipico: `con i venti − clima(): ${dT.map((d) => `${num(d)} K`).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; senza i venti la mappa si scosta al più di ${num(massimo(dMappa.map(Math.abs)))} K`, dove: 'geologia.js climaSuperficie() (meteo.nuvole, meteo.diffusivita) contro leggi.js nuvoleAttese(), trasportoCalore()' });
+  // (gravità 2 da quando i giri con l'aria sono tre: un mare che per clima() è liquido può uscire dalla mappa gelato)
+  const gelati = conVenti.filter((s) => s.p.clima.acqua === 'liquida' && s.cl.Tglobale < 260), nuv = conVenti.filter((s) => s.p.clima.mare > 0.5).map((s) => s.cl.meteo.nuvoleMedie ?? mediaDi(s.cl.meteo.nuvole));
+  nota(2, 'con i venti e le nuvole veri (meteo.js, fino a tre giri sulla mappa) la temperatura media si scosta da quella di clima(): le nuvole non sono quelle attese (0,63 dove c\'è mare; meteo.js sui mondi coperti d\'acqua ne fa di più) e il calore portato non è 0,6·√p. Lo stato dell\'acqua e l\'aria restano quelli di clima(): dove la mappa gela un mare che clima() dice liquido i due si contraddicono',
+    { casi: dT.filter((d) => Math.abs(d) > 6).length, su: conVenti.length, tipico: `con i venti − clima(): ${dT.map((d) => `${num(d)} K`).join(', ')}; mari «liquidi» per clima() e sotto 260 K sulla mappa: ${gelati.length} (${gelati.map((s) => `${s.nome}: ${num(s.cl.Tglobale)} K`).join('; ') || 'nessuno'}); nuvole sui mondi con mare: ${nuv.map((x) => num(x, 2)).join(', ')}`, massimo: `${num(massimo(dT.map(Math.abs)))} K; senza i venti la mappa si scosta al più di ${num(massimo(dMappa.map(Math.abs)))} K`, dove: 'geologia.js climaSuperficie() (meteo.nuvole, meteo.diffusivita) contro leggi.js nuvoleAttese(), trasportoCalore()' });
 }
 
 // =====================================================================================================

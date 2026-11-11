@@ -19,6 +19,8 @@ import { creaPunti } from './luci.js';
 import { creaSistema } from './sistema.js';
 import { scenaCosmo, scenaGalassia } from '../camera/spazio3d.js';
 import { sorgente } from '../camera/eventi.js';
+import { ramiCosmo } from '../camera/cosmo.js';
+import { bollaDi, viaDi } from './bolla.js';
 
 const ANNO = 3.156e7, LUCE = 1e20; // (le luminosità passano alla scheda in unità di 10²⁰ W: una galassia vale 10¹⁷)
 const lineare = (c) => (c / 255) ** 2.2;
@@ -147,7 +149,11 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
 // ---------- tutti i livelli insieme
 // via = { cosmo, galassia, stella, pianeta } (quanto basta per il livello da cui si parte); livello: 'cosmo' | 'galassia'
 // | 'sistema' | 'pianeta'. → { cosmo, galassia(), sistema(), dove() (in parole), libera() }
-export function creaUniverso(N, { via, livello = 'pianeta', superficie = () => null, opzioni = {} } = {}) {
+// Lo stato di tutto questo è UNA BOLLA (bolla.js; INTRECCIO.md, regola 11): un luogo, una grandezza, un istante, un moto.
+// Si può partire da una bolla qualsiasi (`bolla`, al posto di via + livello), leggerla in ogni momento (`bolla()`) e
+// andarci (`vaiAllaBolla(b)`): ciò che in quel volume c'è si prepara da sé, in secondo piano, come quando ci si arriva volando.
+export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaIniziale = null, superficie = () => null, opzioni = {} } = {}) {
+  if (bollaIniziale) { via = viaDi(bollaIniziale); if (via.cosmo == null) via.cosmo = 1; N.tempo.t = bollaIniziale.t || 0; }
   N.opzioni.attaccoDaSe = true;
   const punti = creaPunti(N), cosmo = creaCosmo(N, punti, { cosmo: via.cosmo, opzioni: opzioni.cosmo });
   let G = null, Sis = null;
@@ -180,10 +186,35 @@ export function creaUniverso(N, { via, livello = 'pianeta', superficie = () => n
     if (livello === 'sistema' || via.pianeta == null) { const lontano = Math.max(...Sis.Sis.pianeti.map((p) => p.aM || 0), 1e11); return guardaDa(Sis.nodo, 2.4 * lontano, 0.5, 0.8); }
     const c = Sis.pianeta(via.pianeta); N.attacca(c, { distanza: 3.2 * c.raggio, lat: 0.25 });
   }
-  let partito = false; const aspetta = { nome: 'partenza', aggiorna() { if (!partito && (assiSistema || livello === 'cosmo' || livello === 'galassia')) { partito = parti() !== false; } } };
+  // andare a una bolla: l'istante, poi il luogo (si apre ciò che serve lungo il percorso), poi chi guarda. Se manca ancora
+  // qualcosa per aprirla (gli assi dei sistemi, che arrivano un attimo dopo) si riprova al fotogramma seguente.
+  function applica(b) {
+    const v = viaDi(b), cam = N.camera; if (v.cosmo != null && v.cosmo !== via.cosmo) return true; // un altro cosmo: non è di questo universo (chi chiama ne crea uno nuovo)
+    N.tempo.t = b.t || 0; if (b.moto) { if (isFinite(b.moto.tempo)) N.tempo.velocita = b.moto.tempo; N.tempo.pausa = !!b.moto.pausa; }
+    let corpo = cosmo.radice, tipo = 'cosmo';
+    if (v.galassia != null) { apriGalassia(v.galassia); corpo = G.nodo; tipo = 'galassia';
+      if (v.stella != null) { if (!assiSistema) return false; apriSistema(v.stella);
+        if (Sis) { corpo = Sis.nodo; tipo = 'sistema'; if (b.indirizzo.percorso.includes('astro')) corpo = Sis.stella;
+          const p = v.pianeta != null ? Sis.pianeta(v.pianeta) : null; if (p) { corpo = p; tipo = 'corpo';
+            if (v.luna != null) { const l = Sis.corpi.find((x) => { const q = Sis.scheda(x); return q && q.c.cosa === 'luna' && q.c.pianeta === v.pianeta && q.c.id === v.luna; }); if (l) corpo = l; } } } } }
+    if (b.posizione && b.assi) { cam.corpo = corpo; cam.solidale = !!(b.moto && b.moto.solidale) && !!corpo.assetto; cam.pos = b.posizione.slice(); cam.assi = b.assi.slice(); cam.perno = null; }
+    else { // solo il luogo (e magari la grandezza): lo si guarda intero, o da tanto lontano quanto la grandezza chiede
+      const d = b.grandezza > 0 ? b.grandezza / (2 * Math.tan((cam.fov || 0.75) / 2)) : 0;
+      if (tipo === 'corpo' || corpo === (Sis && Sis.stella)) N.attacca(corpo, { distanza: corpo.raggio + (d || 2.2 * corpo.raggio), lat: 0.25 });
+      else if (tipo === 'sistema') guardaDa(corpo, d || 2.4 * Math.max(...Sis.Sis.pianeti.map((q) => q.aM || 0), 1e11), 0.5, 0.8);
+      else if (tipo === 'galassia') guardaDa(corpo, d || 2.6 * G.raggio, 0.55, 0.7);
+      else { const sc = cosmo.scena(), P = sc.punti.pos, k = (d || 0.15 * cosmo.lato()) / Math.hypot(0.12, 0.05, 0.09); cam.corpo = cosmo.radice; cam.solidale = false; cam.pos = [P[0] + 0.12 * k, P[1] + 0.05 * k, P[2] + 0.09 * k]; cam.assi = N.assiDa(V.norma([-0.12, -0.05, -0.09]), [0, 0, 1]); cam.perno = null; } }
+    N.cambia(); return true;
+  }
+  let partito = false, daAprire = bollaIniziale; const aspetta = { nome: 'partenza', aggiorna() {
+    if (daAprire) { if (applica(daAprire) !== false) { daAprire = null; partito = true; } return; }
+    if (!partito && (assiSistema || livello === 'cosmo' || livello === 'galassia')) { partito = parti() !== false; } } };
   N.camera.corpo = cosmo.radice; N.strati.unshift(aspetta);
   return {
-    cosmo, galassia: () => G, sistema: () => Sis, guardaDa, pronto: () => partito, apriGalassia, apriSistema,
+    cosmo, galassia: () => G, sistema: () => Sis, guardaDa, pronto: () => partito && !daAprire, apriGalassia, apriSistema,
+    // LA BOLLA di adesso (un oggetto che si scrive con scriviBolla), e andare a un'altra
+    bolla: () => bollaDi(N, ramiCosmo(via.cosmo)),
+    vaiAllaBolla(b) { daAprire = b; N.tempo.t = b.t || 0; N.cambia(); },
     // a che cosa è attaccata la camera, come «via» della mappa: { cosmo, galassia, stella, pianeta } fin dove si è dentro
     viaOra() { const v = { cosmo: via.cosmo }; let c = N.camera.corpo, inG = false, inS = false; for (let x = c; x; x = x.genitore) { if (G && x === G.nodo) inG = true; if (Sis && x === Sis.nodo) inS = true; }
       if (inG) v.galassia = G.via.galassia; if (inS) { v.stella = Sis.via.stella; const s = Sis.scheda(c); if (s && s.c.cosa === 'pianeta') v.pianeta = s.c.id; else if (s && s.c.cosa === 'luna') v.pianeta = s.c.pianeta; } return v; },

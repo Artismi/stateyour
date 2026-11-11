@@ -29,6 +29,7 @@
 import { creaNucleo } from '../src/tre/nucleo.js';
 import { creaPianeta } from '../src/tre/pianeta.js';
 import { creaUniverso } from '../src/tre/universo.js';
+import { bollaDi, leggiBolla, scriviBolla, viaDi, scalaDi } from '../src/tre/bolla.js';
 import { sistema, indirizzoDi, numeroDi } from '../src/camera/cosmo.js';
 import { superficieDi } from '../src/camera/mappa.js';
 
@@ -40,8 +41,10 @@ if (par.has('nudo')) document.body.classList.add('nudo');
 // (senza niente: un pianeta roccioso col mare, l'aria, una luna — g2 s838 p0, n. 1120897 con i dati del novembre 2026; con
 // anelli, crateri e una luna, senz'aria: ?g=5&s=2197&p=0. Se i dati cambiano e a quell'indirizzo non c'è più un pianeta di roccia,
 // si prende il primo che si trova lì vicino: la pagina non resta vuota.)
-const a = par.has('n') ? indirizzoDi(+par.get('n')) : { cosmo: 1, galassia: +(par.get('g') ?? 2), stella: +(par.get('s') ?? 838), pianeta: +(par.get('p') ?? 0) };
-const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }; let Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta]; const livello = par.get('livello');
+// ?bolla=<testo di scriviBolla>: si riparte da quella bolla (luogo, grandezza, istante, moto), qualunque sia
+const bolla0 = par.has('bolla') ? leggiBolla(par.get('bolla')) : null, vb = bolla0 ? viaDi(bolla0) : null;
+const a = vb ? { cosmo: vb.cosmo ?? 1, galassia: vb.galassia ?? 2, stella: vb.stella ?? 838, pianeta: vb.pianeta ?? 0 } : par.has('n') ? indirizzoDi(+par.get('n')) : { cosmo: 1, galassia: +(par.get('g') ?? 2), stella: +(par.get('s') ?? 838), pianeta: +(par.get('p') ?? 0) };
+const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }; let Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta]; const livello = bolla0 ? 'bolla' : par.get('livello');
 for (let k = 0; k < 400 && !(P && P.tipo !== 'gassoso' && P.interno); k++) { via.pianeta++; if (via.pianeta >= Sis.pianeti.length) { via.stella++; via.pianeta = 0; Sis = sistema(via.cosmo, via.galassia, via.stella); } P = Sis.pianeti[via.pianeta]; }
 const fermo = par.has('fermo'); let sporco = 3;
 const num = (k, d) => (par.has(k) ? +par.get(k) : d);
@@ -52,7 +55,7 @@ if (!livello) {
   soloPianeta = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => superficieDi(via), opzioni: opz });
   N.attacca(soloPianeta.corpo, { distanza: num('dist', 3.2) * P.raggioM, lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 15) * Math.PI / 180 });
   if (par.has('quota')) N.vai({ lon: num('lon', 0) * Math.PI / 180, lat: num('lat', 0) * Math.PI / 180, quota: num('quota', 1000), direzione: num('dir', 0) * Math.PI / 180, alza: num('alza', -20) * Math.PI / 180 });
-} else universo = creaUniverso(N, { via, livello, superficie: (v) => superficieDi(v), opzioni: { sistema: { pianeta: opz } } });
+} else universo = creaUniverso(N, { via, livello, bolla: bolla0, superficie: (v) => superficieDi(v), opzioni: { sistema: { pianeta: opz } } });
 // il pianeta vero che c'è adesso (quello da solo, o quello a cui ci si è avvicinati nell'universo)
 const pianeta = () => soloPianeta || universo?.sistema()?.vero() || null;
 N.tempo.velocita = num('velocita', 1); N.tempo.pausa = par.has('pausa');
@@ -83,12 +86,14 @@ function passo(ms) {
     $('tempo').textContent = N.tempo.pausa ? 'in pausa' : dice(N.tempo.velocita);
     $('dati').textContent = `${fps.toFixed(1)} fotogrammi/s · CPU ${(cpu / Math.max(1, contati)).toFixed(2)} ms\n${s.pezze} pezze · ${(s.triangoli / 1000).toFixed(0)} mila triangoli · ${s.tessere} tessere (${s.memoriaMB.toFixed(0)} MB), ${s.inAttesa} in arrivo\n${Math.abs(N.tempo.t) < 3 * ANNO ? `giorno ${(N.tempo.t / P.giorno).toFixed(2)}` : `${(N.tempo.t / ANNO).toLocaleString('it-IT', { maximumFractionDigits: 0 })} anni da oggi`}${s.onde ? ` · onde ${s.onde.H.toFixed(1)} m ogni ${s.onde.T.toFixed(1)} s, vento ${s.onde.vento.toFixed(0)} m/s` : ''}`;
     const q = d && cursore ? N.sotto(cursore[0], cursore[1]) : null, i = q && pianeta() ? pianeta().info(q.lon, q.lat) : null;
-    $('dove').textContent = (universo ? universo.percorso().join(' › ') + ' · ' : '') + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(N.stato.vicinoM || 0)} dalla cosa più vicina`) + (i ? ` · sotto il cursore, a ${lungo(q.distanza)}: ${gradi(q.lon, q.lat)}, ${i.acqua ? `acqua profonda ${lungo(i.profondita)}` : `terra a quota ${i.quota.toFixed(0)} m`}` : '');
+    const bo = bollaDi(N); $('dove').textContent = (universo ? universo.percorso().join(' › ') + ' · ' : '') + `${scalaDi(bo.grandezza).nome}, un volume largo ${lungo(bo.grandezza)} · ` + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(N.stato.vicinoM || 0)} dalla cosa più vicina`) + (i ? ` · sotto il cursore, a ${lungo(q.distanza)}: ${gradi(q.lon, q.lat)}, ${i.acqua ? `acqua profonda ${lungo(i.profondita)}` : `terra a quota ${i.quota.toFixed(0)} m`}` : '');
     contati = 0; cpu = 0; daQuando = ms;
   }
 }
 // per le prove automatiche
 window.prova = { N, P, via, universo, get pianeta() { return pianeta(); }, disegnati: 0,
+  // la bolla di adesso, scritta (la si ridà alla pagina con ?bolla=…), e andare a una bolla scritta
+  bolla: () => scriviBolla(universo ? universo.bolla() : bollaDi(N)), vaiAllaBolla: (testo) => universo && universo.vaiAllaBolla(leggiBolla(testo)),
   // aspetta che tutto ciò che si è chiesto sia arrivato (ridisegnando e aspettando ogni volta la scheda), poi un ultimo fotogramma
   async quieto(massimoMs = 120000) { const t0 = performance.now(); let calmi = 0; const gl = N.gl, px = new Uint8Array(4); while (performance.now() - t0 < massimoMs) { N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); calmi = calmo() ? calmi + 1 : 0; if (calmi >= 3) break; await new Promise((r) => setTimeout(r, 120)); } N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return { ...statistiche(), ms: performance.now() - t0, cpuMs: N.statistiche().cpuMs, dove: N.camera.corpo?.quota ? N.dove() : { quota: N.stato.vicinoM || 0 } }; },
   // un punto di costa: terra con acqua vicino (per le prove della discesa)
