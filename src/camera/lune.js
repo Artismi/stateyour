@@ -25,8 +25,8 @@
 import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
-import { forzanteMareale } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
-import { storia } from './storia.js'; // lo stato interno di una luna di roccia è la sua storia (le stesse equazioni dei pianeti)
+import { forzanteMareale, motoMedio, dissipazione, dissipazioneGuscio, rigiditaComplessa, viscositaGhiaccio, MAREE } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
+import { storia, tabellaStoria } from './storia.js'; // lo stato interno di una luna di roccia è la sua storia (le stesse equazioni dei pianeti)
 
 const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
 const sfera = (R) => (4 / 3) * Math.PI * R ** 3;
@@ -127,8 +127,7 @@ const potenzaMareale = (P, L, kq) => forzanteMareale({ Mospite: P.massaKg, raggi
 // «calda/fredda» né il k₂/Q fisso di Io: il ramo caldo è dove il calore che esce uguaglia quello di marea.
 //   · Dove nemmeno la dissipazione più grande possibile (−Im k₂ = 3/4) darebbe un centesimo del calore radiogenico, la
 //     marea non cambia lo stato del corpo: si risparmia la storia e resta il k₂/Q elastico da fredda (k2QFreddo).
-//   · LE LUNE GHIACCIATE NON SONO ANCORA QUI: serve il corpo a strati (guscio, oceano, roccia); per loro restano il
-//     guscio a sola conduzione e i due valori di k₂/Q di prima (MATERIALI.ghiaccio).
+//   · LE LUNE GHIACCIATE: internoGhiacciato, più sotto (guscio di ghiaccio, oceano, interno di roccia).
 const memoInterni = new Map();
 const mareaConta = (P, L, eta) => 0.75 * forzanteMareale({ Mospite: P.massaKg, raggioM: L.raggioM, aM: L.aM, eccentricita: L.eccentricita ?? 0 }) > 0.01 * caloreDellaRoccia(eta) * L.massaKg;
 function internoDiRoccia(P, L, eta) {
@@ -137,13 +136,84 @@ function internoDiRoccia(P, L, eta) {
   memoInterni.set(chiave, s); if (memoInterni.size > 3000) memoInterni.delete(memoInterni.keys().next().value);
   return s;
 }
+// ---------- LE LUNE GHIACCIATE NELLA STORIA: guscio di ghiaccio / oceano / interno di roccia
+// Lo spessore d del guscio segue il bilancio d'energia nel tempo (il calore latente del ghiaccio che gela o fonde alla base):
+//     ρ·L·4π(R−d)²·dd/dt = (calore che esce dalla superficie) − (calore dalla roccia) − (marea dissipata nel guscio)
+//   · ESCE per conduzione, 567·ln(T_f/T_s)/d (la conducibilità del ghiaccio 567/T: la legge che c'era già qui), oppure —
+//     se porta di più — per convezione sotto un coperchio fermo: la STESSA legge di storia.js (Foley 2019: c₁·k·ΔT/d·
+//     θ^(−4/3)·Ra^(1/3)) con il ghiaccio (viscosità di maree.js al punto di fusione; α, κ, L in MAREE.ghiaccio [R]).
+//     Non c'è una soglia: comanda il modo che porta più calore;
+//   · DAL BASSO: l'interno di roccia è un piccolo pianeta sotto l'oceano: radioattività + la sua marea (la sua storia,
+//     storia.js, se la marea nella roccia può contare; se no il solo calore radiogenico di oggi, come prima);
+//   · NEL GUSCIO: la membrana di maree.js, con la rigidità complessa del ghiaccio (Andrade) mediata sul profilo di
+//     temperatura del guscio (freddo in cima; sotto il coperchio, se convette, tutto al punto di fusione);
+//   · il punto di fusione cala con la pressione alla base (−0,074 K/MPa, fino a 209 MPa) e con l'ANTIGELO (sali,
+//     ammoniaca): un ramo aperto, { antigelo: K } (0 di norma; fino a ~97 K con l'eutettico dell'ammoniaca);
+//   · si parte dall'acqua (d = 0) se l'energia di accrescimento, 3GM/5R per chilo, basta a scaldare e fondere il ghiaccio
+//     dalla temperatura di superficie; se no dal ghiaccio pieno. L'oceano c'è se d < spessore dello strato d'acqua: può
+//     gelare del tutto, o non formarsi mai, o riaprirsi: lo decide il bilancio.
+// → { guscio (m), oceano (m), strato (m), Tacqua (K), convette, flussoFondo (W/m² sul fondo dell'oceano), idrotermale (W: il
+//     calore che la roccia cede all'acqua), calore: { roccia, mareaRoccia, mareaGuscio, esce } (W), k2, h2, imK2 (di tutto il
+//     corpo: (marea nel guscio + nella roccia)/forzante), storia: [{ t, guscio }] }
+// LIMITI (dichiarati): niente ghiacci d'alta pressione sotto l'oceano (per Ganimede, Titano e Callisto l'oceano arriva qui
+// fino alla roccia: è troppo profondo); l'eccentricità è quella di oggi per tutta la storia; guscio spesso oltre il 10%
+// del raggio: la membrana è fuori dal suo campo (lo dice «sottile»); senza oceano il corpo risponde come ghiaccio omogeneo.
+const memoGhiaccio = new Map();
+export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
+  const Gh = MAREE.ghiaccio, D = dentro(L), Ts = tSuperficie(P, true), R = L.raggioM, M = L.massaKg, antigelo = rami.antigelo ?? 0, eta0 = rami.viscositaGhiaccio ?? Gh.eta0;
+  const chiave = `${M}|${R}|${L.aM}|${L.eccentricita ?? 0}|${L.obliquita ?? 0}|${D.fg}|${P.massaKg}|${Ts}|${eta}|${antigelo}|${eta0}`; let v = memoGhiaccio.get(chiave); if (v) return v;
+  const g = (COSTANTI.G * M) / (R * R), strato = D.strato, Rr = R - strato, Mr = M * (1 - D.fg), A = 4 * Math.PI * R * R;
+  const orbita = { Mospite: P.massaKg, aM: L.aM, eccentricita: L.eccentricita ?? 0, obliquita: L.obliquita ?? 0 }, f = forzanteMareale({ ...orbita, raggioM: R }), fr = forzanteMareale({ ...orbita, raggioM: Rr }), omega = motoMedio(P.massaKg, L.aM);
+  // la roccia sotto: la sua storia se la marea può contarvi, se no il calore radiogenico
+  let tab = null;
+  if (Mr > 0 && Rr > 1e4 && 0.75 * fr > 0.01 * caloreDellaRoccia(eta) * Mr) tab = tabellaStoria({ tipo: 'roccioso', massaKg: Mr, raggioM: Rr, composizione: { acqua: 0 }, marea: orbita }, { Tsuperficie: Gh.Tfusione, finoA: eta });
+  const daTab = (col, t) => { const tt = tab.t; let i = 0, j = tt.length - 1; while (j - i > 1) { const m = (i + j) >> 1; if (tt[m] <= t) i = m; else j = m; } const u = Math.min(1, Math.max(0, (t - tt[i]) / (tt[j] - tt[i] || 1))); return tab[col][i] + u * (tab[col][j] - tab[col][i]); };
+  const Qroccia = (t) => (tab ? daTab('Qconv', t) + daTab('Qfuso', t) : caloreDellaRoccia(t) * Mr);
+  // il guscio a uno spessore d: punto di fusione alla base, calore che esce, marea
+  // (Tb: la temperatura alla base; è il punto di fusione finché sotto c'è acqua; in un corpo gelato del tutto è più bassa)
+  const guscioA = (d, Tb = null) => {
+    const Tfus = Gh.Tfusione + Gh.pendenzaFusione * Math.min(Gh.pressioneMassima, Gh.densita * g * d) - antigelo, Tf = Tb ?? Tfus, dT = Math.max(1, Tf - Ts), kf = 567 / Tf;
+    const cond = (567 * Math.log(Math.max(1.0001, Tf / Ts))) / d, teta = (Gh.E * dT) / (R_GAS_ * Tf * Tf), Ra = (Gh.densita * g * Gh.alfa * dT * d ** 3) / (Gh.diffusivita * viscositaGhiaccio(Tf, { eta0, Tfusione: Tfus }));
+    const conv = ((0.5 * kf * dT) / d) * Math.pow(teta, -4 / 3) * Math.cbrt(Ra), convette = conv > cond, esce = Math.max(cond, conv), coperchio = convette ? (d * cond) / conv : d;
+    // la rigidità complessa media nello spessore: il coperchio che conduce (T = T_s·(T_f/T_s)^(z/coperchio)) e, sotto, il ghiaccio al punto di fusione
+    let mr = 0, mi = 0; const N = 8; for (let k = 0; k < N; k++) { const T = Ts * Math.pow(Tf / Ts, (k + 0.5) / N), m = rigiditaComplessa(Gh.rigidita, viscositaGhiaccio(T, { eta0, Tfusione: Tfus }), omega); mr += m[0] / N; mi += m[1] / N; }
+    if (convette) { const m = rigiditaComplessa(Gh.rigidita, viscositaGhiaccio(Tf, { eta0, Tfusione: Tfus }), omega), w = coperchio / d; mr = w * mr + (1 - w) * m[0]; mi = w * mi + (1 - w) * m[1]; }
+    return { Tf, Tfus, cond, conv, convette, esce, coperchio, mu: [mr, mi] };
+  };
+  const mareaA = (d, gu) => { // W nel guscio (membrana se c'è l'oceano; senza, il corpo di ghiaccio omogeneo con la viscosità della base)
+    if (!(f > 0)) return { W: 0, k2: 0, h2: 0 };
+    if (d < strato) { const m = dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: d, rigidita: gu.mu }); return { W: f * m.imK2, k2: m.k2Reale, h2: m.h2[0] }; }
+    const m = dissipazione({ massaKg: M, raggioM: R, rigidita: Gh.rigidita, viscosita: viscositaGhiaccio(gu.Tf, { eta0, Tfusione: gu.Tfus }) }, omega); return { W: f * m.imK2, k2: m.k2Reale, h2: 0 };
+  };
+  // da dove si parte: l'energia di accrescimento fonde il ghiaccio?
+  const fuso = (0.6 * COSTANTI.G * M) / R > 2000 * Math.max(0, Gh.Tfusione - Ts) + Gh.latente; let d = fuso ? Math.min(strato, 100) : strato;
+  const N = 40, t0 = Math.min(1e7, 0.5 * eta), tempi = Array.from({ length: N + 1 }, (_, k) => t0 * Math.pow(eta / t0, k / N)), traccia = [];
+  for (let k = 1; k <= N; k++) {
+    let resta = (tempi[k] - tempi[k - 1]) * ANNO; const Qr = Qroccia(tempi[k]);
+    for (let passo = 0; passo < 80 && resta > 0; passo++) {
+      const gu = guscioA(d), mr = mareaA(d, gu), rate = (gu.esce * A - Qr - mr.W) / (Gh.densita * Gh.latente * 4 * Math.PI * Math.max(Rr, R - d) ** 2); // m/s
+      if ((d >= strato && rate >= 0) || (d <= 1 && rate <= 0)) break; // gelato del tutto (o tutto acqua) e il bilancio lo tiene lì
+      const dt = Math.min(resta, (0.15 * Math.max(d, 50)) / Math.max(1e-30, Math.abs(rate))); d = Math.min(strato, Math.max(1, d + rate * dt)); resta -= dt;
+    }
+    traccia.push({ t: tempi[k], guscio: d });
+  }
+  const Qr = Qroccia(eta), mareaRoccia = tab ? daTab('Qmarea', eta) : 0, oceano = d < strato - 1 ? strato - d : 0; let gu = guscioA(d), mg = mareaA(d, gu);
+  if (!oceano) { // gelato fino alla roccia: la base non è al punto di fusione; la sua temperatura è quella a cui il ghiaccio porta fuori
+    // esattamente il calore che riceve (roccia + la sua marea, che dipende da quella temperatura): si cerca dimezzando
+    let lo = Ts + 0.5, hi = gu.Tfus; for (let k = 0; k < 30; k++) { const Tm = 0.5 * (lo + hi), gm = guscioA(d, Tm); if (gm.esce * A - Qr - mareaA(d, gm).W > 0) hi = Tm; else lo = Tm; }
+    gu = guscioA(d, 0.5 * (lo + hi)); mg = mareaA(d, gu); }
+  v = { guscio: d, oceano, strato, Tacqua: oceano > 0 ? gu.Tf : null, Tbase: gu.Tf, convette: gu.convette, coperchio: gu.coperchio, sottile: d / R, flussoFondo: Rr > 0 ? Qr / (4 * Math.PI * Rr * Rr) : 0, idrotermale: oceano > 0 ? Qr : 0,
+    calore: { roccia: Qr, mareaRoccia, mareaGuscio: mg.W, esce: gu.esce * A }, k2: mg.k2, h2: mg.h2, imK2: f > 0 ? (mg.W + mareaRoccia) / f : 0, storia: traccia };
+  memoGhiaccio.set(chiave, v); if (memoGhiaccio.size > 3000) memoGhiaccio.delete(memoGhiaccio.keys().next().value);
+  return v;
+}
+const R_GAS_ = 8.314;
 export function k2QLuna(P, L, eta = ETA) {
   if (!dentro(L).ghiacciata) { // roccia: dalla storia del corpo (la parte del volume che dissipa è già dentro)
     if (!mareaConta(P, L, eta)) return k2QFreddo(L);
     const s = internoDiRoccia(P, L, eta), f = forzanteMareale({ Mospite: P.massaKg, raggioM: L.raggioM, aM: L.aM, eccentricita: L.eccentricita ?? 0 }); return f > 0 ? s.Q.marea / f : 0;
   }
-  const kc = dentro(L).mat.k2Qcaldo, qc = potenzaMareale(P, L, kc) / (4 * Math.PI * L.raggioM ** 2);
-  return fusoDentro(guscio(P, L, qc + caloreRadioattivo(L, eta))) ? kc : k2QFreddo(L);
+  return internoGhiacciato(P, L, eta).imK2; // ghiaccio: guscio (membrana) + roccia sotto, dallo stato della sua storia
 }
 export function caloreMareale(P, L, eta = ETA) {
   return potenzaMareale(P, L, k2QLuna(P, L, eta)) / (4 * Math.PI * L.raggioM ** 2);
@@ -159,8 +229,10 @@ export function stato(P, L, eta = ETA) {
   // Q_conv: il regime di Io); «attiva» se la marea scalda più della radioattività o il coperchio è più sottile di 200 km
   // (la soglia di prima, RIMASTA); se no «fredda e ferma»
   if (!dentro(L).ghiacciata && mareaConta(P, L, eta)) { const x = internoDiRoccia(P, L, eta); return x.Q.fuso > x.Q.conv ? 'vulcanica' : x.Q.marea > x.Q.rad || x.crosta.coperchio < 2e5 ? 'geologicamente attiva' : 'fredda e ferma'; }
+  // ghiaccio: dalla sua storia. C'è un oceano se lo spessore dell'acqua liquida è più di zero; senza oceano è «attiva» se
+  // il ghiaccio convette, se no «fredda e ferma»
+  if (dentro(L).ghiacciata) { const x = internoGhiacciato(P, L, eta); return x.oceano > 0 ? 'oceano sotto il ghiaccio' : x.convette ? 'geologicamente attiva' : 'fredda e ferma'; }
   const s = guscio(P, L, caloreMareale(P, L, eta) + caloreRadioattivo(L, eta));
-  if (s.ghiacciata) return s.d < s.strato ? 'oceano sotto il ghiaccio' : s.Tbase > 0.75 * s.mat.fusione ? 'geologicamente attiva' : 'fredda e ferma';
   return s.d < 1e4 ? 'vulcanica' : s.d < 2e5 ? 'geologicamente attiva' : 'fredda e ferma';
 }
 
@@ -275,8 +347,7 @@ function regolari(P, amb, c) {
     L.legami = legami.filter(([x, y]) => x === i || y === i).map(([x, y, nome]) => [x === i ? y : x, nome]);
     if (forzata) {
       const tetto = Math.max(...legami.filter(([x, y]) => x === i || y === i).map(([x]) => fornita(corpi[x])));
-      if (dentro(L).ghiacciata) { L.eccentricita = 1; L.eccentricita = Math.min(0.02, forzata, Math.sqrt(tetto / potenzaMareale(P, L, dentro(L).mat.k2Qcaldo))); }
-      else { // roccia: il calore all'equilibrio viene dalla storia del corpo; se supera ciò che il pianeta può cedere, l'eccentricità
+      { // il calore all'equilibrio viene dalla storia del corpo (roccia o ghiaccio); se supera ciò che il pianeta può cedere, l'eccentricità
         // scende (un passo solo, come se il calore andasse con e²: all'equilibrio non è esatto, ed è dichiarato)
         L.eccentricita = Math.min(0.02, forzata); const Q = potenzaMareale(P, L, k2QLuna(P, L, amb.eta)); if (Q > tetto) L.eccentricita *= Math.sqrt(tetto / Q); }
     } else L.eccentricita = eccentricitaResidua(P, L, amb.eta);

@@ -26,8 +26,17 @@
 // liquido non fa attrito): il ramo caldo (Io) è il punto dove il calore che esce uguaglia quello di marea, non uno stato scelto.
 //   Ghiaccio: η = η₀·exp[A·(T_f/T − 1)], η₀ = 10¹⁴ Pa·s al punto di fusione (10¹³–10¹⁵: APERTO, dipende dalla grana),
 //   A = E/(R·T_f) con E = 59,4 kJ/mol (Goldsby e Kohlstedt 2001 [R: le energie di attivazione non sono confermate nelle note]).
-// CHE COSA MANCA (dichiarato): il corpo a strati (un guscio di ghiaccio staccato dal fondo da un oceano si deforma molto
-// di più di un corpo omogeneo: per le lune ghiacciate lune.js usa ancora il suo vecchio k₂/Q «caldo»); la marea
+// IL GUSCIO SOPRA UN OCEANO (dissipazioneGuscio): la via scelta è la MEMBRANA di Beuthe 2015 («Tidal Love numbers of membrane
+// worlds», arXiv:1504.04574 [V, letto: eq. 71, 75, tabella 5, e h₂° = 5/(5 − 3ξ) del mantello rigido]). Un guscio sottile
+// che galleggia su un oceano risponde come una molla: Λ = [8(1+ν)/(5+ν)]·(μ̄/(ρ·g·R))·(d/R), con μ̄ la media nello spessore
+// della rigidità (complessa) del ghiaccio; all'ordine principale k₂ + 1 = (1 + Λ)·h₂, e con l'interno sotto l'oceano
+// rigido la gravità del rigonfiamento dà k₂ = (3ξ/5)·h₂ (ξ = densità dell'oceano / densità media): quindi
+// h₂ = 1/(1 + Λ − 3ξ/5) [D da V]. Tutto l'attrito è nel guscio: Ė = −Im(k₂)·forzante. LIMITI (dichiarati): guscio più
+// sottile del 5–10% del raggio (entro l'1% sotto il 5% [V]); l'interno sotto l'oceano non si deforma (la roccia di Europa
+// va bene; i ghiacci d'alta pressione di Ganimede e Titano e un oceano più denso alzerebbero k₂: Titano misura 0,6);
+// si trascurano le correzioni di densità del guscio e la marea dinamica dell'oceano.
+// CHE COSA MANCA (dichiarato): le matrici di propagazione per un corpo a molti strati (lo strato molle sotto la crosta
+// rigida di Io non viene dalla membrana: lì sotto non c'è un liquido); la marea
 // dell'oceano (mare.js la calcola bacino per bacino e non torna qui); i corpi non sincroni (la marea di rotazione: la
 // frequenza è 2·(Ω − n), la legge di k₂* è la stessa: si può chiedere con la frequenza giusta, ma la potenza qui sotto
 // è quella del corpo sincrono); la dipendenza di ζ dalla frequenza.
@@ -47,7 +56,9 @@ export const MAREE = Object.freeze({
   // la roccia del mantello: viscosità cinematica (m²/s) ed energia di attivazione (J/mol) di ThermInt [V]; rigidità da fredda (Pa)
   roccia: Object.freeze({ nuRif: 6e7, Enu: 3e5, rigidita: 6.5e10, densita: 3300 }),
   costa: Object.freeze({ B: 2.5, fiStar: 0.8, delta: 6, gamma: 6, xi: 5e-4 }), // la viscosità con il fuso (forma di Costa, ThermInt [V])
-  ghiaccio: Object.freeze({ eta0: 1e14, intervalloEta0: Object.freeze([1e13, 1e15]), E: 59400, Tfusione: 273, rigidita: 4e9, densita: 930 }),
+  ghiaccio: Object.freeze({ eta0: 1e14, intervalloEta0: Object.freeze([1e13, 1e15]), E: 59400, Tfusione: 273, rigidita: 4e9, densita: 930,
+    poisson: 0.33, latente: 3.34e5, alfa: 1.6e-4, diffusivita: 1.2e-6, // [R] (valori d'uso dei modelli di Europa: non riletti su una fonte)
+    pendenzaFusione: -7.4e-8, pressioneMassima: 2.09e8 }), // (K/Pa; Pa) il ghiaccio I fonde più in basso sotto pressione, fino a 209 MPa (251 K) [R]
 });
 
 // ---------- attrezzi
@@ -103,3 +114,14 @@ export function forzanteMareale({ Mospite, raggioM, aM, eccentricita = 0, obliqu
 export const potenzaMareale = (orbita, imK2, parteDelVolume = 1) => forzanteMareale(orbita) * imK2 * parteDelVolume;
 // il moto medio (rad/s): la frequenza della marea di un corpo sincrono
 export const motoMedio = (Mospite, aM) => Math.sqrt((G * Mospite) / aM ** 3);
+
+// ---------- IL GUSCIO DI GHIACCIO SOPRA UN OCEANO: la membrana (Beuthe 2015)
+// la rigidità complessa μ* = 1/J* → [reale, immaginaria] (Pa)
+export function rigiditaComplessa(rigidita, viscosita, omega, opz = {}) { const [jr, ji] = cedevolezza(rigidita, viscosita, omega, opz), j2 = jr * jr + ji * ji; return [jr / j2, -ji / j2]; }
+// corpo: { massaKg, raggioM, spessore (m, del guscio), rigidita: [re, im] (la media nello spessore, Pa), densitaOceano, poisson }
+// → { h2: [re, im], k2: [re, im], k2Reale, imK2 (= −Im k₂), Lambda: [re, im], fluido: { h2, k2 } (senza guscio), sottile (d/R) }
+export function dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: d, rigidita, densitaOceano = 1000, poisson = MAREE.ghiaccio.poisson }) {
+  const rhoB = M / ((4 / 3) * PI * R ** 3), g = (G * M) / (R * R), xi = Math.min(1, densitaOceano / rhoB), c = ((8 * (1 + poisson)) / (5 + poisson) / (densitaOceano * g * R)) * (d / R);
+  const lr = c * rigidita[0], li = c * rigidita[1], ar = 1 + lr - 0.6 * xi, den = ar * ar + li * li, hr = ar / den, hi = -li / den;
+  return { h2: [hr, hi], k2: [0.6 * xi * hr, 0.6 * xi * hi], k2Reale: 0.6 * xi * hr, imK2: -0.6 * xi * hi, Lambda: [lr, li], fluido: { h2: 1 / (1 - 0.6 * xi), k2: (0.6 * xi) / (1 - 0.6 * xi) }, sottile: d / R };
+}
