@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: il buco nero come si vede (src/tre/buconero.js)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #e8e4da; font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
+  #tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+  #barra { position: absolute; left: 10px; top: 10px; max-width: 470px; background: rgba(12, 12, 14, 0.72); border: 1px solid #333; border-radius: 6px; padding: 8px 10px; }
+  #barra button { background: #1d1d22; color: #e8e4da; border: 1px solid #444; border-radius: 4px; padding: 3px 8px; margin: 0 3px 4px 0; cursor: pointer; font: inherit; }
+  #dati { white-space: pre-wrap; color: #b8b4aa; margin-top: 4px; font: 11px/1.4 ui-monospace, monospace; }
+  body.nudo #barra { display: none; }
+</style>
+</head>
+<body>
+<canvas id="tela" tabindex="0"></canvas>
+<div id="barra">
+  <div id="nome">il buco nero</div>
+  <div><button id="pausa">❚❚</button><button id="gira">la camera orbita</button><button id="disco">disco</button><button id="luce">esposizione</button></div>
+  <div id="dati"></div>
+  <div style="color:#8a867c;margin-top:4px">trascina o tasto destro: gira attorno · rotella: avvicinati · W A S D: vola</div>
+</div>
+<script type="module">
+// Parametri (tutti facoltativi):
+//   ?g=0            la galassia del cosmo 1 il cui buco centrale si guarda (massa e accrescimento da galassie.js)
+//   ?resto=40       invece: il resto di una stella di tante M☉ (stelle.fine); senza compagna non accresce
+//   ?edd=0.1        UNA CONDIZIONE SCELTA DA CHI GUARDA, non del modello: «se accrescesse a questa frazione di Eddington»
+//                   (nel cosmo 1, oggi, nessun buco centrale supera l'1%, sotto cui il disco sottile non vale: senza ?edd
+//                   il disco si disegna solo se il modello lo dà)
+//   ?dist=40        distanza della camera in r_g; ?alto=12 gradi sopra il piano del disco; ?giro=0 gradi attorno all'asse
+//   ?cielo=modello | caso | bianco    le stelle del campione di quella galassia viste dal suo centro (spazio3d.js) /
+//                   stelle a caso dalla fonte degli eventi (NON è il modello) / un cielo uniforme (per misurare l'ombra)
+//   ?luce=disco | cielo    su che cosa si regola l'esposizione;  ?orbita=6 gradi al secondo della camera;
+//   ?velocita=30    r_g/c di tempo del mondo per secondo;  ?t=0 istante (in r_g/c);  ?pausa  ?nudo  ?densita=1
+//   ?beta=0.3       la camera si muove (di traverso, nel verso del disco) a questa frazione di c rispetto a chi sta fermo lì
+//   ?modo=scena    il buco deforma ciò che un altro strato ha disegnato (un reticolo di prova): la via per universo.js
+//   ?grana=1.5&macchie=12   le macchie calde (LIBERE: vedi buconero.js); ?esterno=30 raggio esterno del disco (r_g, LIBERO)
+import { creaNucleo, V } from '../nucleo.js';
+import { creaBucoNero, cieloDa } from '../buconero.js';
+import * as R from '../../camera/relativita.js';
+import { COSTANTI, MSOLE, ANNO, LSOLE } from '../../camera/leggi.js';
+import { sorgente } from '../../camera/eventi.js';
+
+const $ = (id) => document.getElementById(id), par = new URLSearchParams(location.search), num = (k, d) => (par.has(k) ? +par.get(k) : d);
+if (par.has('nudo')) document.body.classList.add('nudo');
+const n = (x, c = 3) => (!Number.isFinite(x) ? String(x) : x !== 0 && (Math.abs(x) >= 1e5 || Math.abs(x) < 1e-2) ? x.toExponential(c - 1).replace('.', ',').replace('e+', 'e') : String(+x.toPrecision(c)).replace('.', ','));
+const note = [];
+
+// ---------- quale buco nero: dal modello
+let buco = null, nome = '', galassia = null; const g = num('g', 0);
+try {
+  if (par.has('resto')) { const ST = await import('../../camera/stelle.js'), f = ST.fine(num('resto', 40)); buco = R.bucoDaResto(f); nome = `il resto di una stella di ${num('resto', 40)} M☉ (stelle.fine)`; if (!buco) throw new Error(`una stella di ${num('resto', 40)} M☉ nel modello non lascia un buco nero ma una ${f.tipo}`); }
+  else { const CO = await import('../../camera/cosmo.js'); galassia = CO.galassia(1, g); buco = R.bucoCentrale(galassia.forma); nome = `il buco centrale della galassia ${g} del cosmo 1 (galassie.js)`; }
+} catch (e) { note.push('il modello non si è aperto (' + e.message + '): un buco di 10⁸ M☉ di riserva'); buco = R.bucoNero({ massaKg: 1e8 * MSOLE }); nome = 'un buco nero di 10⁸ M☉ (di riserva: NON dal modello)'; }
+const M = buco.massaKg, rg = buco.raggioGravitazionale, tg = rg / COSTANTI.c;
+// l'accrescimento: quello del modello; o la condizione scelta con ?edd
+let mdot = buco.frazioneEddington >= 0.01 ? buco.frazioneEddington * buco.accrescimentoEddington : 0, scelto = false;
+if (par.has('edd')) { mdot = num('edd', 0.1) * buco.accrescimentoEddington; scelto = true; }
+if (par.get('disco') === '0') mdot = 0;
+
+// ---------- il cielo
+function cieloModello() { // le stelle del campione della galassia, viste dal centro: ognuna un punto con la sua luce, più la luce di quelle che rappresenta sparsa attorno (la nebbia)
+  return import('../../camera/spazio3d.js').then((S3) => { const sc = S3.scenaGalassia(1, g, 0), P = sc.punti, sorg = [], lin = (c) => Math.pow(c / 255, 2.2), largo = Math.sqrt((4 * Math.PI) / P.n);
+    for (let i = 0; i < P.n; i++) { if (!P.esiste[i] || !(P.luminosita[i] > 0)) continue; const x = P.pos[3 * i], y = P.pos[3 * i + 1], z = P.pos[3 * i + 2], d = Math.hypot(x, y, z); if (!(d > 0)) continue;
+      const F = P.luminosita[i] / (4 * Math.PI * d * d), col = [lin(P.colore[3 * i]), lin(P.colore[3 * i + 1]), lin(P.colore[3 * i + 2])], dir = [x / d, y / d, z / d], peso = typeof P.peso === 'number' ? P.peso : P.peso[i];
+      sorg.push({ dir, flusso: F, colore: col }); if (peso > 1) sorg.push({ dir, flusso: F * (peso - 1), colore: col, largo }); }
+    return cieloDa(sorg, { w: num('cieloW', 2048), h: num('cieloW', 2048) / 2 }); });
+}
+function cieloCaso() { // NON il modello: 6000 direzioni uniformi, flussi con i conteggi euclidei N(>S) ∝ S^(−3/2), tre tinte
+  const c = sorgente('prova/buconero/cielo'), sorg = [], tinte = [[1, 0.85, 0.7], [1, 1, 1], [0.75, 0.85, 1]];
+  for (let i = 0; i < 6000; i++) { const z = 2 * c(`s ${i}/z`) - 1, f = 2 * Math.PI * c(`s ${i}/f`), q = Math.sqrt(1 - z * z); sorg.push({ dir: [q * Math.cos(f), q * Math.sin(f), z], flusso: 1e-9 * Math.pow(1 - 0.999 * c(`s ${i}/s`), -2 / 3), colore: tinte[Math.floor(3 * c(`s ${i}/t`))] }); }
+  // una fascia (per vedere la deformazione): macchie larghe lungo l'equatore
+  for (let i = 0; i < 240; i++) { const f = (2 * Math.PI * i) / 240, z = 0.08 * (2 * c(`b ${i}/z`) - 1); sorg.push({ dir: V.norma([Math.cos(f), Math.sin(f), z]), flusso: 4e-8, colore: [1, 0.9, 0.8], largo: 0.05 }); }
+  return cieloDa(sorg, { w: 2048, h: 1024 });
+}
+let cielo = null, qualeCielo = par.get('cielo') || 'modello';
+if (qualeCielo === 'bianco') { const w = 8, h = 4; cielo = { w, h, dati: new Float32Array(4 * w * h).fill(1), unita: 1 }; }
+else if (qualeCielo === 'modello' && galassia) { try { cielo = await cieloModello(); } catch (e) { note.push('il cielo del modello non si è aperto (' + e.message + ')'); } }
+if (!cielo) { cielo = cieloCaso(); qualeCielo = 'caso'; note.push('cielo: stelle a caso dalla fonte degli eventi, NON il cielo del modello'); }
+
+// ---------- il nucleo e lo strato
+const N = creaNucleo($('tela'), { densita: num('densita', 0), conserva: true, lontano: 1e6 * rg });
+const dist = num('dist', 40), alto = (num('alto', 12) * Math.PI) / 180, giro0 = (num('giro', 0) * Math.PI) / 180, beta = num('beta', 0);
+// ?modo=scena: la via che serve dentro universo.js. Un altro strato disegna il fondo (qui un RETICOLO DI PROVA sulla sfera
+// del cielo, 10° di passo: non è il modello) e il buco nero deforma l'immagine già disegnata (`dopo`)
+const inScena = par.get('modo') === 'scena';
+if (inScena) { const prg = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform mat3 u_assi; uniform vec2 u_tan;
+  void main() { vec3 d = normalize(u_assi * vec3((v_uv * 2.0 - 1.0) * u_tan, -1.0)); float lon = atan(d.y, d.x), lat = asin(d.z), k = 18.0 / 3.14159265;
+    float a = abs(fract(lon * k) - 0.5), b = abs(fract(lat * k) - 0.5), riga = max(smoothstep(0.46, 0.5, a), smoothstep(0.46, 0.5, b));
+    o = vec4(mix(vec3(0.02, 0.03, 0.06), vec3(0.5 + 0.5 * sin(lon), 0.6, 0.5 + 0.5 * d.z), riga), 1.0); }`);
+  N.aggiungi({ nome: 'reticolo di prova', disegna(S, passata) { if (passata !== 'fondo') return; const gl = N.gl, a = S.assi; gl.useProgram(prg.p); gl.uniformMatrix3fv(prg.u.u_assi, false, new Float32Array([a[0], a[3], a[6], a[1], a[4], a[7], a[2], a[5], a[8]])); gl.uniform2f(prg.u.u_tan, S.tanX, S.tanY); S.schermo(); } }); }
+const strato = creaBucoNero(N, { massaKg: M, accrescimento: mdot, cielo: inScena ? null : cielo, modo: inScena ? 'scena' : 'cielo', radice: par.has('resto') ? 'prova/resto' : `cosmo 1/galassia ${g}/buco`, raggioEsterno: num('esterno', 30), grana: num('grana', 1.5), macchie: num('macchie', 12),
+  luce: qualeCielo === 'bianco' ? Math.PI : inScena && !(mdot > 0) ? 1 : par.get('luce') || (mdot > 0 ? 'disco' : 'cielo'),
+  // chi guarda si muove di traverso, nel verso in cui gira il disco: β·(ẑ × r̂)
+  betaCamera: beta > 0 ? (S) => { const p = N.camera.pos, t = V.norma(V.vett([0, 0, 1], p)); return [beta * t[0], beta * t[1], beta * t[2]]; } : null });
+// la camera: a `dist` r_g, `alto` gradi sopra il piano del disco (il piano xy: l'asse è z)
+function metti(giro) { const c = N.camera, d = [Math.cos(alto) * Math.cos(giro), Math.cos(alto) * Math.sin(giro), Math.sin(alto)]; c.corpo = strato.corpo; c.solidale = false; c.pos = V.per(d, dist * rg); c.assi = N.assiDa(V.per(d, -1), [0, 0, 1]); c.perno = null; }
+metti(giro0);
+N.tempo.t = num('t', 0) * tg; N.tempo.velocita = num('velocita', 30) * tg; N.tempo.pausa = par.has('pausa');
+let orbita = (num('orbita', 0) * Math.PI) / 180;
+$('pausa').onclick = () => { N.tempo.pausa = !N.tempo.pausa; };
+$('gira').onclick = () => { orbita = orbita ? 0 : (6 * Math.PI) / 180; };
+$('disco').onclick = () => { const u = new URL(location.href); if (mdot > 0) u.searchParams.set('disco', '0'); else { u.searchParams.delete('disco'); if (!u.searchParams.has('edd')) u.searchParams.set('edd', '0.1'); } location.href = u; };
+$('luce').onclick = () => { strato.opzioni.luce = strato.opzioni.luce === 'disco' ? 'cielo' : 'disco'; };
+addEventListener('resize', () => N.ridimensiona());
+
+const d0 = strato.disco;
+$('nome').textContent = nome;
+const fisso = `massa ${n(M / MSOLE)} M☉ · r_g = ${n(rg)} m (${n(tg)} s di luce) · orizzonte ${n(buco.orizzonte)} m · ombra √27 r_g = ${n(buco.ombra)} m\n` +
+  `T di Hawking ${n(buco.hawking.temperatura)} K [derivata, mai osservata] · Eddington ${n(buco.eddington / LSOLE)} L☉\n` +
+  (d0 ? `disco sottile (Novikov–Thorne, a* = 0): ${scelto ? 'CONDIZIONE SCELTA (?edd): ' : 'dal modello: '}${n(mdot / buco.accrescimentoEddington)} di Eddington = ${n((mdot * ANNO) / MSOLE)} M☉/anno\n  T massima ${n(d0.Tmax)} K a ${n(d0.rTmax / rg)} r_g; al bordo (${strato.opzioni.raggioEsterno} r_g, LIBERO) ${n(d0.temperatura(strato.opzioni.raggioEsterno * rg))} K; luminosità ${n(d0.luminosita / LSOLE)} L☉\n  macchie calde: ${strato.opzioni.macchie}, grana ${strato.opzioni.grana} (LIBERE: fanno vedere la rotazione di Keplero, non sono la turbolenza vera)\n`
+    : `niente disco: nel modello accresce al ${n(buco.frazioneEddington)} di Eddington${buco.frazioneEddington < 0.01 ? ' (sotto l\'1% il disco sottile non vale)' : ''}\n`) +
+  `cielo: ${qualeCielo === 'modello' ? 'le stelle del campione della galassia viste dal centro (spazio3d.js)' : qualeCielo === 'bianco' ? 'uniforme (misura dell\'ombra)' : 'A CASO, non del modello'}` + (note.length ? '\n' + note.join('\n') : '');
+
+let contati = 0, daQuando = performance.now(), fps = 0, ultimo = 0;
+function passo(ms) {
+  requestAnimationFrame(passo);
+  if (orbita && ultimo) { const Mg = V.giro([0, 0, 1], (orbita * Math.min(0.1, (ms - ultimo) / 1000))), c = N.camera; c.pos = V.mv(Mg, c.pos); c.assi = V.mm(Mg, c.assi); } ultimo = ms;
+  N.fotogramma(ms); contati++;
+  if (ms - daQuando > 500) { fps = (contati * 1000) / (ms - daQuando); contati = 0; daQuando = ms; const ro = strato.stato.distanza, A = Math.sqrt(Math.max(0, 1 - 2 / ro));
+    $('dati').textContent = fisso + `\nchi guarda: fermo a ${n(ro)} r_g${beta > 0 ? `, più ${beta} c di traverso` : ''} · il suo orologio va a dτ/dt = ${n(A * Math.sqrt(1 - beta * beta), 5)} del tempo di lontano · raggio dell'ombra ${n((R.ombraDaVicino(M, ro * rg) * 180) / Math.PI)}°\n` +
+      `t = ${n(N.tempo.t / tg, 5)} r_g/c${N.tempo.pausa ? ' (in pausa)' : ''} · ${fps.toFixed(1)} fotogrammi/s · ${N.tela.width}×${N.tela.height}`; }
+}
+// per le prove automatiche
+window.prova = { N, strato, buco, rg, tg, note, metti,
+  // millisecondi per fotogramma, con la scheda costretta a finire (si rilegge un punto)
+  misura(quanti = 5) { const gl = N.gl, b = new Uint8Array(4); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); const t0 = performance.now(); for (let i = 0; i < quanti; i++) { N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); } return { msPerFotogramma: (performance.now() - t0) / quanti, larghezza: N.tela.width, altezza: N.tela.height }; },
+  // il raggio dell'ombra misurato sullo schermo (con ?cielo=bianco&disco=0): dai punti neri → radianti
+  ombra() { const gl = N.gl, W = N.tela.width, H = N.tela.height, px = new Uint8Array(4 * W * H); N.fotogramma(); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); let neri = 0, sx = 0, sy = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (px[4 * (j * W + i)] < 100) { neri++; sx += i; sy += j; }
+    // l'area dell'ombra sul piano dell'immagine (un cerchio di raggio angolare ψ centrato sull'asse si proietta in un cerchio di raggio tan ψ)
+    const S = N.stato, raggioPixel = Math.sqrt(neri / Math.PI); return { neri, centro: [sx / neri, sy / neri], raggioPixel, psi: Math.atan(raggioPixel / S.fuoco), atteso: R.ombraDaVicino(M, strato.stato.distanza * rg) }; },
+  pronta: true };
+requestAnimationFrame(passo);
+</script>
+</body>
+</html>

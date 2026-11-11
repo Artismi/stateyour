@@ -318,36 +318,39 @@ function fasiIn(a, onda, zf, nM3) {
   const n = nM3 / 1e6, kcm = K.kB * 1e6, c = a.curva, W = a.peso(onda) * zf, M = Z.molecolare, I = Z.ionizzato;
   // la pressione termica: dove due fasi possono coesistere il gas si regola da sé attorno alla media geometrica dei due
   // estremi (Wolfire et al. 2003; Ostriker, McKee & Leroy 2010) [R: è il loro risultato, qui preso come chiusura];
-  // nei bracci e in altezza segue la densità
-  const Pth = (c.dueFasi ? c.P2 : 1.1 * n * 8000) * (c.dueFasi ? onda * zf : 1);
-  // molecolare: quanta parte in massa (Blitz & Rosolowsky), e che volume occupa alla densità di una nube tipica
-  const Rm = Math.pow(W / (M.P0 * kcm), M.esponente), fMol = Rm / (1 + Rm), nube = a.nube;
-  let nMol = fMol * n; const vMol = Math.min(0.5, nMol / (nube.nH / 1e6));
-  // caldo: i resti di supernova non ancora dissolti; alla pressione del resto (H, He ed elettroni: 2,3 particelle per H)
-  let vCaldo = a.caldo.volume; const Tc = Math.max(a.caldo.T, 1e5); let nCaldo = Pth / (2.3 * Tc);
+  // nei bracci e in altezza segue la densità. Dove il gas è troppo rado per stare a quella pressione resta solo tiepido, e
+  // la pressione è quella che la sua densità gli dà (cercata qui sotto)
+  const P0 = c.dueFasi ? c.P2 * onda * zf : 0;
+  // molecolare: quanta parte in massa (Blitz & Rosolowsky), e che volume occupa alla densità della nube tipica dell'anello
+  const Rm = Math.pow(W / (M.P0 * kcm), M.esponente), fMol = Rm / (1 + Rm), nube = a.nube, nMol = fMol * n, vMol = Math.min(0.5, nMol / (nube.nH / 1e6));
+  // caldo: i resti di supernova non ancora dissolti, alla pressione del resto (H, He ed elettroni: 2,3 particelle per H).
   // ionizzato tiepido: i fotoni ionizzanti che sfuggono alle nubi di nascita, spesi in ricombinazioni su una colonna alta
-  // `altezza` (misurata): volume = fotoni / (2·α_B·n_e·n_p·H) [D dal bilancio]
-  const nIon = Pth / (2.2 * I.T), aB = Z.alfaB[0] * Math.pow(I.T / 1e4, Z.alfaB[1]);
-  let vIon = (1 - vMol - vCaldo) * -Math.expm1(-(I.sfugge * a.ionizzanti * 1e-4) / (2 * aB * 1.1 * nIon * nIon * I.altezza * KPC * 100)); // (dove i fotoni basterebbero per più del volume che c'è, il resto esce dalla galassia)
-  // ciò che resta è atomico: se non basta (in alto, dove il gas è poco) si tolgono prima lo ionizzato poi il caldo
-  let nAt = n - nMol - vCaldo * nCaldo - vIon * nIon;
-  if (nAt < 0) { vIon = Math.max(0, Math.min(vIon, (n - nMol - vCaldo * nCaldo) / nIon)); nAt = n - nMol - vCaldo * nCaldo - vIon * nIon; }
-  if (nAt < 0) { nCaldo = Math.max(0, (n - nMol) / Math.max(vCaldo, 1e-9)); nAt = 0; }
-  const spazio = Math.max(1e-9, 1 - vMol - vCaldo - vIon); let fr = null, ti = null, vF = 0, vT = 0;
-  if (nAt > 0) {
-    if (c.dueFasi && Pth >= c.Pmin && Pth <= c.Pmax) { fr = c.freddo(Pth); ti = c.tiepido(Pth); vF = (nAt - spazio * ti.n) / (fr.n - ti.n); if (vF <= 0) { vF = 0; fr = null; ti = c.tiepidoA(nAt / spazio); vT = spazio; } else if (vF >= spazio) { vF = spazio; vT = 0; fr = { ...fr, n: nAt / spazio }; ti = null; } else vT = spazio - vF; }
-    else if (c.dueFasi && Pth > c.Pmax) { fr = c.freddo(Pth); vF = Math.min(spazio, nAt / fr.n); fr = { ...fr, n: nAt / vF }; const resto = spazio - vF; if (resto > 0) { nCaldo = (nCaldo * vCaldo) / (vCaldo + resto); vCaldo += resto; } } // sopra il massimo il tiepido non esiste: il vuoto lasciato lo riempie il gas caldo
-    else { ti = c.tiepidoA(nAt / spazio); vT = spazio; }
-  } else { nCaldo = (nCaldo * vCaldo) / (vCaldo + spazio); vCaldo += spazio; }
+  // `altezza` (misurata): volume = fotoni / (2·α_B·n_e·n_p·H) [D dal bilancio]; le regioni si sovrappongono a caso, e
+  // dove i fotoni basterebbero per più del volume che c'è il resto esce dalla galassia
+  const Tc = Math.max(a.caldo.T, 1e5), aB = Z.alfaB[0] * Math.pow(I.T / 1e4, Z.alfaB[1]), spazio0 = 1 - vMol - a.caldo.volume, fot = (I.sfugge * a.ionizzanti * 1e-4) / (2 * aB * 1.1 * I.altezza * KPC * 100);
+  const alla = (P) => { const nCaldo = P / (2.3 * Tc), nIon = P / (2.2 * I.T), vIon = spazio0 * -Math.expm1(-fot / (nIon * nIon)); return { P, nCaldo, nIon, vIon, nAt: n - nMol - a.caldo.volume * nCaldo - vIon * nIon, spazio: spazio0 - vIon }; };
+  let s = null, fr = null, ti = null, vF = 0, vT = 0, vCaldo = a.caldo.volume;
+  if (c.dueFasi && P0 > c.Pmax) { // sopra il massimo il tiepido non esiste: tutto l'atomico è freddo, e il vuoto che lascia lo riempie il gas caldo
+    s = alla(P0); if (s.nAt > 0) { fr = c.freddo(P0); vF = Math.min(s.spazio, s.nAt / fr.n); fr = { ...fr, n: s.nAt / vF }; const resto = s.spazio - vF; s.nCaldo = (s.nCaldo * vCaldo) / (vCaldo + resto); vCaldo += resto; } else s = null;
+  } else if (c.dueFasi && P0 >= c.Pmin) {
+    s = alla(P0); const t = c.tiepido(P0), f = c.freddo(P0), v = (s.nAt - s.spazio * t.n) / (f.n - t.n);
+    if (v > 0 && v < s.spazio) { fr = f; ti = t; vF = v; vT = s.spazio - v; } else if (v >= s.spazio && s.spazio > 0) { fr = { ...f, n: s.nAt / s.spazio }; vF = s.spazio; } else s = null;
+  }
+  if (!s) { // solo tiepido (neutro e ionizzato alla stessa pressione): la pressione a cui la massa torna [bisezione]
+    const tiep = (P) => (c.dueFasi ? c.tiepido(Math.min(P, c.Pmax)) : c.tiepidoA(P / (1.1 * 8000))), g = (P) => { const q = alla(P); return q.nAt - q.spazio * tiep(P).n; };
+    let lo = Math.log(1e-9), hi = Math.log(c.dueFasi ? c.Pmax : 1e7);
+    if (g(Math.exp(hi)) > 0) { s = alla(Math.exp(hi)); ti = c.tiepidoA(Math.max(1e-12, s.nAt) / Math.max(1e-9, s.spazio)); vT = s.spazio; } // (più denso di quanto il tiepido regga: resta tiepido alla sua densità)
+    else { for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (g(Math.exp(m)) > 0) lo = m; else hi = m; } s = alla(Math.exp(0.5 * (lo + hi))); ti = tiep(s.P); vT = s.spazio; ti = { ...ti, n: vT > 0 ? Math.max(0, s.nAt) / vT : 0 }; }
+  }
   const f = (nome, stato, nn, T, vol, xe) => ({ nome, stato, n: nn * 1e6, T, volume: vol, massa: n > 0 ? (vol * nn) / n : 0, ionizzato: xe });
   const fasi = [
     f('molecolare freddo', 'H₂', vMol > 0 ? nMol / vMol : 0, M.T, vMol, 1e-7),
     f('atomico freddo', 'H I', fr ? fr.n : 0, fr ? fr.T : 0, vF, fr ? fr.xe : 0),
     f('atomico tiepido', 'H I', ti ? ti.n : 0, ti ? ti.T : 0, vT, ti ? ti.xe : 0),
-    f('ionizzato tiepido', 'H II', nIon, I.T, vIon, 1.1),
-    f('caldo', 'H II', nCaldo, Tc, vCaldo, 1.2),
+    f('ionizzato tiepido', 'H II', s.nIon, I.T, s.vIon, 1.1),
+    f('caldo', 'H II', s.nCaldo, Tc, vCaldo, 1.2),
   ];
-  return { fasi, Pth: Pth * kcm, PsuK: Pth, peso: W, fMol, nube };
+  return { fasi, Pth: s.P * kcm, PsuK: s.P, peso: W, fMol, nube };
 }
 
 // IL CONTENUTO DEL MEZZO in un punto di una galassia.

@@ -262,7 +262,7 @@ export function riflette(t, mare, acquaGhiaccio, nuvole, riflesso = null, sotto 
 //     per grado (veri ~2), e a tenere 40 K di contrasto bastano 2 PW: contrasto e trasporto veri insieme non possono
 //     tornare (test_fili lo stampa, con la riprova); la mappa con i venti sta entro un grado dalle fasce (prima 2,7);
 //   · SULLA POPOLAZIONE (test_coerenza): clima() e la mappa con i venti coincidono entro 3 K su tutti i mondi tranne
-//     dove decidono le nuvole (un mare caldo sotto un sole fisso, +37 K: i venti concentrano la pioggia sotto il sole e
+//     dove decidono le nuvole (un mare caldo sotto un sole fisso, +36 K: i venti concentrano la pioggia sotto il sole e
 //     lasciano sgombro il resto del giorno, anche a regime); prima, con 0,6·√p, gli scarti arrivavano a 64 K. Il ghiaccio
 //     del lato notte dei mondi bloccati non coincide (la mappa spiana ancora la superficie con il coefficiente
 //     equivalente, non con quest'aria). Con il vento vero delle arie dense e lente (≈ 1 m/s) le nuvole attese sono più
