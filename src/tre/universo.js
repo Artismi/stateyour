@@ -85,7 +85,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
           const lato = (D[8 * k + 3] * S.fuoco) / Math.sqrt(d2 + 1); if (lato < cap) carico += Math.max(1.5, lato) ** 2; }
         carico *= 30 * 0.785; strato.quanti = Math.max(3000, Math.min(nube.K, Math.round((nube.K * O.frammenti) / Math.max(carico, 1))));
         E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
-        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.25 : 2.2) * angolo)); }
+        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.12 : 2.2) * angolo)); }
     },
     disegna(S, passata) {
       if (passata !== 'velato') return;
