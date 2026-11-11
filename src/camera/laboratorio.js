@@ -20,14 +20,15 @@ import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
-import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
+import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi, FASCIA_MAX } from './cosmo.js';
 import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
-import { cellaMateria } from './materia.js';
+import { cellaMateria, luogoDaAria } from './materia.js';
+import { risalita } from './risalita.js';
 import { sorgente } from './eventi.js';
 
 const $ = (id) => document.getElementById(id);
@@ -276,6 +277,7 @@ function entraRegione(a) {
 // cristallo ha registrato in milioni di anni (modo «memoria») o un evento vero al suo istante. È una finestra come le
 // altre (sezione, osservatore in moto, ricerca, rami). La cella ricorda il luogo, e la camera della mappa per tornarci.
 const celleMateria = new Map(); // (le ultime celle costruite: rientrare nello stesso punto non ricalcola niente)
+const risalite = new Map(); // (che cosa fanno le particelle su un pianeta: una nota, tenuta per gli ultimi pianeti visti)
 function entraMateria(luogo, opzioni = {}) {
   volo = null; let r; const chiave = JSON.stringify([luogo.indirizzo, opzioni, camMappa.via]);
   try { r = celleMateria.get(chiave); if (!r) { r = cellaMateria(luogo, { ...(opzioni.modo === 'memoria' ? { massimo: 110 } : {}), ...opzioni, via: { ...camMappa.via } }, sorgente(luogo.indirizzo, ramiCosmo(camMappa.via.cosmo))); celleMateria.set(chiave, r); if (celleMateria.size > 6) celleMateria.delete(celleMateria.keys().next().value); } r = { ...r, cella: clona(r.cella) }; }
@@ -538,7 +540,7 @@ function disegnaNebbiaRegione(c) {
   const px = 1.2 / vt.s;
   ctx.fillStyle = 'rgba(110,90,200,0.35)';
   for (let i = 0; i < 6000; i++) {
-    const x = caso() * c.larghezza, y = caso() * c.altezza, r = Math.hypot(x - d.centro[0], y - d.centro[1]) / d.R, f = fasciaDi(P, Pl, r) / 0.17 + 0.6 * Pl.densitaAnello(r) / 2;
+    const x = caso() * c.larghezza, y = caso() * c.altezza, r = Math.hypot(x - d.centro[0], y - d.centro[1]) / d.R, f = fasciaDi(P, Pl, r) / FASCIA_MAX + 0.6 * Pl.densitaAnello(r) / 2;
     if (caso() < f) ctx.fillRect(x, y, px, px);
   }
 }
@@ -1123,6 +1125,11 @@ function pannelloCosmo(h) {
         const pre = P.prebiotica, idro = cl.acqua === 'liquida' && P.interno?.vulcani > 0;
         h.push(`<h2>l'aria e i mattoni della vita</h2><p class="nota">${gas ? `L'aria: ${gas}` : "Nessun'aria"}${P.atmosfera.riducente ? ' (ricca di idrogeno: riducente)' : gas ? " (senza idrogeno libero: ossidata)" : ''}. Viene dai gas che la gravità trattiene, all'equilibrio chimico a quella temperatura.${pre ? ` Le reazioni che fanno i mattoni (scariche elettriche e ultravioletto nell'aria, come nel famoso esperimento): ${pre.HCN > 0.1 ? 'rendono molto' : pre.HCN > 1e-3 ? 'rendono poco' : 'non rendono quasi niente'}${P.atmosfera.riducente ? '' : ", perché l'aria è ossidata"}.` : ''} ${idro ? "Sul fondo del mare l'interno caldo alimenta sorgenti idrotermali: un altro posto dove i mattoni si formano e si concentrano." : cl.acqua === 'liquida' ? "C'è acqua liquida, ma l'interno è freddo: niente sorgenti calde." : "Senza acqua liquida i mattoni non hanno dove incontrarsi."}${pre?.autocatalisi ? ' Ci sono le condizioni perché gli zuccheri si moltiplichino da soli (formaldeide, acqua liquida, un minerale basico).' : ''} Nessuna vita: solo le condizioni.</p>`);
       }
+      try {
+        const v = camMappa.via, Gx = galassiaDi(v.cosmo, v.galassia), St = Gx.stelle[v.stella], chiave = `${v.cosmo}|${v.galassia}|${v.stella}|${v.pianeta}`;
+        let ris = risalite.get(chiave); if (!ris) { ris = risalita(luogoDaAria({ P }), { P, stella: St, galassia: Gx, posizione: St.pos }); risalite.set(chiave, ris); if (risalite.size > 8) risalite.delete(risalite.keys().next().value); }
+        h.push(`<h2>che cosa fanno qui le particelle</h2><p class="nota">${ris.breve.join('<br>')}</p>`);
+      } catch { /* il pannello resta com'era */ }
       // PERCHÉ È FATTO COSÌ: la catena delle cause, dall'inizio al suo nucleo
       {
         const v = camMappa.via, Gx = galassiaDi(v.cosmo, v.galassia), St = Gx.stelle[v.stella], Gg = Gx.G, ANNI = 3.156e7;

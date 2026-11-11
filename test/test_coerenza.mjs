@@ -210,9 +210,11 @@ prova('il velo di idrogeno ed elio lasciato dal disco è l\'aria primordiale del
     if (p.clima.tenuti.includes('idrogeno')) { tenuto++; assert.ok(H2 > 0.7 && (p.atmosfera.gas.He || 0) > 0.1, `velo tenuto ma aria di ${foto(p.atmosfera.gas).slice(0, 80)}`); tra(p.clima.pressione / (colonna * p.clima.g), 0.9, 1.001, 'pressione dell\'aria / peso del velo'); }
     else { fuggito++; assert.ok(H2 < 1e-6 && !(p.atmosfera?.gas?.He > 1e-6), 'velo non trattenuto ma ancora lì'); }
   }
-  assert.ok(tenuto >= 3, `${tenuto} veli tenuti, ${fuggito} fuggiti`);
-  // nel campione (dipende dalle stelle) può non esserci nessun velo fuggito: la legge si prova allora su due mondi fatti
-  // apposta, uguali in tutto tranne massa e distanza. Quello pesante e lontano tiene il velo, quello leggero e vicino lo perde
+  // i mondi con un velo sono rari (circa uno su mille, attorno alle stelle piccole): quanti ne capitino nel campione è un
+  // caso, non una legge, e non si chiede un numero minimo. La legge vale per ognuno di quelli che ci sono (qui sopra), e si
+  // prova su due mondi fatti apposta, uguali in tutto tranne massa e distanza: quello pesante e lontano tiene il velo,
+  // quello leggero e vicino lo perde
+  console.log(`      nel campione: ${tenuto} veli tenuti, ${fuggito} fuggiti, su ${SOLIDI.length} mondi solidi`);
   const mondo = (terre, raggi, ua) => CH.climaEAria({ Lw: 3.83e26, aM: ua * 1.496e11, massaKg: terre * 5.97e24, raggioM: raggi * 6.371e6, tipo: 'ghiacciato', acqua: 0.3, acquaKg: 0.3 * terre * 5.97e24,
     anno: 3.156e7 * ua ** 1.5, obliquita: 0.3, bloccato: false, placche: false, composizione: { roccia: 0.5, ferro: 0.15, ghiaccio: 0.34, gas: 0.01 }, involucro: 0.01 }, { Z: 1 });
   const pesante = mondo(8, 2.2, 3), leggero = mondo(0.5, 0.9, 0.3);
@@ -440,13 +442,18 @@ prova('sopra un mare aria e clima sono una coppia sola (stessa temperatura); il 
   console.log(`      ${mari} mari; aria e clima alla stessa temperatura entro ${num(peggio)} K (termostato a parte); ciclo del carbonio acceso su ${cicli} (pianeti con vulcani e mare: ${vulcaniEMare}); prebiotica: ${pre.mare} con acqua liquida (prima 0: riceveva un sì/no), di cui ${pre.HCN} con acido cianidrico oltre un millesimo, ${pre.formaldeide} con formaldeide oltre un millesimo, ${pre.auto} con gli zuccheri che si moltiplicano`);
 });
 { // 5. gli anelli contro il limite di Roche e la temperatura
-  let conAnelli = 0, oltre = 0, caldi = 0;
+  // (di che cosa è fatto l'anello lo dice l'anello: «materiale», ghiaccio o roccia. Prima lo si indovinava dalla temperatura,
+  // e un anello di roccia vicino alla stella — i detriti di un urto — era contato come ghiaccio che sublima)
+  let conAnelli = 0, oltre = 0, caldi = 0; const di = { ghiaccio: 0, roccia: 0 };
   for (const x of PIANETI) {
     const { p } = x, Pl = CO.pianeta(x.n, x.gid, x.sid, p.id); if (!Pl.anello) continue; conAnelli++;
-    const ghiaccio = LG.temperaturaEquilibrio(p.Lw, p.aM, 0.6) < 170; if (!ghiaccio) caldi++;
-    if (Pl.anello[1] > LU.limiteRoche(p, ghiaccio ? LU.MATERIALI.ghiaccio.densita : LU.MATERIALI.roccia.densita) / p.raggioM) oltre++;
+    const materiale = p.anello.materiale; assert.ok(materiale in di, `anello di «${materiale}»`); di[materiale]++;
+    if (materiale === 'ghiaccio' && !(LG.temperaturaEquilibrio(p.Lw, p.aM, 0.6) < 170)) caldi++;
+    if (Pl.anello[1] > LU.limiteRoche(p, LU.MATERIALI[materiale].densita) / p.raggioM) oltre++;
   }
-  prova('gli anelli stanno dentro il limite di Roche del loro materiale (ora vengono da anelli.js, non da una probabilità)', () => { assert.ok(conAnelli > 10, `${conAnelli} pianeti con anelli`); assert.equal(oltre, 0, 'anelli oltre il limite di Roche'); assert.equal(caldi, 0, 'anelli di ghiaccio dove il ghiaccio sublima'); });
+  prova('gli anelli stanno dentro il limite di Roche del loro materiale (ora vengono da anelli.js, non da una probabilità)', () => {
+    console.log(`      ${conAnelli} pianeti con anelli su ${PIANETI.length}: ${di.ghiaccio} di ghiaccio, ${di.roccia} di roccia`);
+    assert.ok(conAnelli > 10, `${conAnelli} pianeti con anelli`); assert.equal(oltre, 0, 'anelli oltre il limite di Roche'); assert.equal(caldi, 0, 'anelli di ghiaccio dove il ghiaccio sublima'); });
   const alTetto = PIANETI.filter(({ p }) => p.schiacciamento >= 0.3).length;
   nota(3, 'lo schiacciamento ai poli usa la formula dei corpi che girano piano (5/4·ω²R³/GM) anche per chi esce da un urto gigante vicino al limite dei fluidi: lì è tagliato a 0,3',
     { casi: alTetto, su: PIANETI.length, dove: 'cosmo.js sistema() «Math.min(0.3, …)» (il giorno ora viene da rotazione.js)' });

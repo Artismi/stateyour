@@ -20,7 +20,7 @@ import { nebbiaPianeta, ACCELERA, fmtGrande } from './nebbia.js';
 import { sorgente } from './eventi.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
-import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
+import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco } from './atomi3d.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
@@ -487,8 +487,9 @@ export function superficieDi(v) {
   const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; const seme = P.origine;
   if (P.tipo === 'gassoso' || !P.interno) return null;
   if (typeof Worker === 'undefined' || typeof document === 'undefined') { // senza fili in secondo piano (le prove): subito
-    const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
-    let acque = null; try { acque = mareDi(P, se, cl, se, `${k}/mare`); } catch { acque = null; }
+    const sf0 = superficiePianeta(k, P, P.interno, seme), cl0 = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl0);
+    let acque = null; try { acque = mareDi(P, se, cl0, se, `${k}/mare`); } catch { acque = null; }
+    let cl = cl0; try { if (acque && acque.esiste) cl = climaConIlMare(k, P, sf0, cl0, acque); } catch { cl = cl0; }
     return tieni(k, { k, P, cl, se, seme, mare: acque });
   }
   if (!inCalcolo.has(k)) {
@@ -581,7 +582,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   let sale = null; if (S.mare?.esiste) { try { const q = luogoMare(S.mare, u * 360 - 180, 90 - v * 180); if (q.tipo === 'piana di sale') sale = q; } catch { sale = null; } }
   const neve = cl.neve > 0 && cl.freddo[ck] > 0.6, continente = !!(t.cont && t.cont[c]), etaP = S.P.interno?.eta ?? 4.5e9;
   let r, nome, larghezzaM, frase;
-  if (neve) { r = fioccoDiNeve({ T: Math.max(238, Math.min(271, T)), umidita: 0.86 + 0.14 * ((seme % 97) / 97), seme }); nome = `un cristallo di neve (${r.forma})`; larghezzaM = 0.004; frase = 'cresciuto dal vapore: la forma a sei viene dal reticolo del ghiaccio, i rami dall\'umidità'; }
+  if (neve) { r = fioccoDiNeve({ T: Math.max(238, Math.min(271, T)), umidita: cl.meteo?.umidita ? Math.max(0.3, Math.min(1, cl.meteo.umidita[ck])) : 0.86 + 0.14 * ((seme % 97) / 97), seme }); nome = `un cristallo di neve (${r.forma})`; larghezzaM = 0.004; frase = 'cresciuto dal vapore: la forma a sei viene dal reticolo del ghiaccio, i rami dall\'umidità'; }
   else if (sale) { r = cristallizza({ raffreddamento: 0.003, minerali: [{ nome: 'salgemma', frazione: 0.85, colore: [240, 236, 228], anisotropia: 0 }, { nome: 'gesso', frazione: 0.15, colore: [236, 230, 218], anisotropia: 0.6 }], seme }); nome = 'crosta di sale'; larghezzaM = 0.02; frase = 'cristalli cresciuti dalla salamoia di una conca dove l\'acqua evapora tutta: salgemma (cubi) e un po\' di gesso'; }
   else if (bagnato) { const e = Math.max(0.05, Math.min(1, Math.log10(1 + (t.flusso[c] || 0)) / 4)); r = sedimento({ energia: e, seme }); nome = e > 0.6 ? 'ghiaia e sabbia grossa' : e > 0.3 ? 'sabbia' : 'limo'; larghezzaM = 0.02 + 0.3 * e; frase = 'granelli portati e depositati dall\'acqua: più corre, più sono grossi e mescolati'; }
   else if (continente) { r = cristallizza({ raffreddamento: 0.003, minerali: conAnisotropia(mat.continente, GRANITO), seme }); nome = 'roccia dei continenti, a cristalli grossi'; larghezzaM = 0.04; frase = 'raffreddata lentamente in profondità: pochi cristalli, cresciuti a lungo'; }

@@ -37,8 +37,12 @@ if (par.has('nudo')) document.body.classList.add('nudo');
 // quale pianeta: ?n=numero dell'universo, oppure ?g=galassia&s=stella&p=pianeta (cosmo 1).
 // ?livello=cosmo | galassia | sistema | pianeta: l'universo intero (tutti i livelli, dal cosmo al suolo), partendo da lì;
 // senza `livello`: il pianeta da solo, con una stella e lune sue (com'era la prima tappa)
-const a = par.has('n') ? indirizzoDi(+par.get('n')) : { cosmo: 1, galassia: +(par.get('g') ?? 2), stella: +(par.get('s') ?? 839), pianeta: +(par.get('p') ?? 5) };
-const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }, Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta], livello = par.get('livello');
+// (senza niente: un pianeta roccioso col mare, l'aria, una luna — g2 s838 p0, n. 1120897 con i dati del novembre 2026; con
+// anelli e una luna, senz'aria: ?g=5&s=2175&p=0. Se i dati cambiano e a quell'indirizzo non c'è più un pianeta di roccia,
+// si prende il primo che si trova lì vicino: la pagina non resta vuota.)
+const a = par.has('n') ? indirizzoDi(+par.get('n')) : { cosmo: 1, galassia: +(par.get('g') ?? 2), stella: +(par.get('s') ?? 838), pianeta: +(par.get('p') ?? 0) };
+const via = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }; let Sis = sistema(via.cosmo, via.galassia, via.stella), P = Sis.pianeti[via.pianeta]; const livello = par.get('livello');
+for (let k = 0; k < 400 && !(P && P.tipo !== 'gassoso' && P.interno); k++) { via.pianeta++; if (via.pianeta >= Sis.pianeti.length) { via.stella++; via.pianeta = 0; Sis = sistema(via.cosmo, via.galassia, via.stella); } P = Sis.pianeti[via.pianeta]; }
 const fermo = par.has('fermo'); let sporco = 3;
 const num = (k, d) => (par.has(k) ? +par.get(k) : d);
 const N = creaNucleo($('tela'), { densita: num('densita', 0), esposizione: num('esposizione', 0), alCambio: () => { sporco = 2; }, t0: num('t', 0) });

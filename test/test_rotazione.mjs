@@ -98,7 +98,7 @@ prova('gli urti giganti: il limite dei fluidi che ruotano, il mordi e fuggi, il 
 });
 
 prova('sui pianeti veri del cosmo: nessuno oltre il limite, i vicini alla stella frenati o bloccati; la distribuzione dei giorni', () => {
-  const per = { gas: [], urti: [], embrione: [] }, visti = new Set(); let n = 0, bloccati = 0, risonanti = 0, contro = 0, collegati = 0, gassosiBloccati = 0; const assi = [], frazioni = [];
+  const per = { gas: [], urti: [], embrione: [] }, visti = new Set(); let n = 0, bloccati = 0, risonanti = 0, contro = 0, collegati = 0, gassosiBloccati = 0, fluidiFermi = 0, scartoHut = 1; const assi = [], frazioni = [];
   // (si guarda finché ogni specie di pianeta è rappresentata abbastanza da contare — quanti sistemi servano dipende da che
   // stelle ha la galassia: i giganti di gas sono rari attorno alle stelle povere di metalli —, e comunque almeno 110 numeri)
   const bastano = () => n > 150 && per.gas.length > 10 && per.urti.length > 30 && per.embrione.length > 10 && bloccati > 10;
@@ -110,7 +110,17 @@ prova('sui pianeti veri del cosmo: nessuno oltre il limite, i vicini alla stella
       const r = rotazione(P, Sis, c, { urto, luna }); n++;
       for (const v of [r.giorno, r.obliquita, r.giornoNascita, r.suRottura, r.frenata]) assert.ok(Number.isFinite(v) && v >= 0, `${k}/${P.id}: ${JSON.stringify(r)}`);
       assert.ok(r.suRottura <= IMPATTI.giroLimite + 1e-9 && r.giorno >= r.giornoRottura / IMPATTI.giroLimite * (1 - 1e-9), `oltre il limite: ${JSON.stringify(r)}`);
-      assert.ok(r.obliquita >= 0 && r.obliquita <= 90 && (!r.bloccato || (r.obliquita === 0 && r.giorno === P.anno)));
+      // chi è fermato dalla marea ha l'asse dritto e gira all'equilibrio della marea. Per un corpo solido, agganciato alla
+      // sua forma, è un giro per orbita esatto (giorno = anno). Un corpo fluido (nato dal gas: giganti e mondi con un velo)
+      // non ha una forma a cui agganciarsi e sta sull'equilibrio pseudo-sincrono di Hut (1981), che dipende da e:
+      //   Ω/n = (1 + 15/2·e² + 45/8·e⁴ + 5/16·e⁶) / ((1 + 3·e² + 3/8·e⁴)·(1 − e²)^(3/2)) ≈ 1 + 6·e²
+      // cioè un giorno un po' più corto dell'anno (con e = 0,007: 0,9997 anni). La prova chiedeva giorno === anno per tutti:
+      // era sbagliata per i fluidi su orbite non tonde. «bloccato» vuol dire entro il 2% di un giro per orbita.
+      { const e = P.eccentricita ?? 0, hut = (1 + 7.5 * e ** 2 + 5.625 * e ** 4 + 0.3125 * e ** 6) / ((1 + 3 * e ** 2 + 0.375 * e ** 4) * (1 - e * e) ** 1.5);
+        assert.ok(r.obliquita >= 0 && r.obliquita <= 90, `asse: ${JSON.stringify(r)}`);
+        if (r.bloccato) { assert.equal(r.obliquita, 0); const giri = P.anno / r.giorno;
+          if (r.origine === 'gas') { assert.ok(Math.abs(giri / hut - 1) < 1e-9 && giri >= 1 && giri < 1.02, `fluido fermato dalla marea: ${giri} giri per orbita, Hut ${hut} (e = ${e})`); fluidiFermi++; if (giri > scartoHut) scartoHut = giri; }
+          else assert.equal(r.giorno, P.anno, 'un solido bloccato fa un giro per orbita'); } }
       assert.ok(luna || r.bloccato || r.risonanza || r.giorno >= r.giornoNascita * (1 - 1e-9) || r.retrogrado !== (r.obliquitaNascita > 90), 'la stella frena, non accelera, chi gira più in fretta dell\'orbita');
       per[r.origine].push(ore(r.giorno)); frazioni.push(r.suRottura); if (!r.bloccato) assi.push(r.obliquita);
       if (r.bloccato) { bloccati++; if (P.tipo === 'gassoso') gassosiBloccati++; } if (r.risonanza) risonanti++; if (r.retrogrado) contro++;
@@ -123,7 +133,7 @@ prova('sui pianeti veri del cosmo: nessuno oltre il limite, i vicini alla stella
   const dopoUrti = []; for (let k = 1; k < 6000; k += 53) { const a = indirizzoDi(k), Sis = sistema(a.cosmo, a.galassia, a.stella); for (const P of Sis.pianeti) { if (P.tipo === 'gassoso') continue; const g = giganteDi(P, Sis, sorgente(`cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}/pianeta ${P.id}`)); if (g) dopoUrti.push(g.giroSuRottura); } }
   tra(q(dopoUrti, 0.5), 0.2, IMPATTI.giroLimite, 'giro dopo l\'ultimo urto gigante / rottura (mediana)');
   const riga = (v) => v.length ? `${q(v, 0.05).toFixed(1)} · ${q(v, 0.25).toFixed(1)} · ${q(v, 0.5).toFixed(1)} · ${q(v, 0.75).toFixed(1)} · ${q(v, 0.95).toFixed(0)}` : '—';
-  console.log(`      (${n} pianeti${collegati ? `, ${collegati} già collegati in cosmo.js` : ''}; ${bloccati} bloccati dalla stella [${gassosiBloccati} di gas], ${risonanti} in risonanza, ${contro} al contrario)`);
+  console.log(`      (${n} pianeti${collegati ? `, ${collegati} già collegati in cosmo.js` : ''}; ${bloccati} bloccati dalla stella [${gassosiBloccati} di gas; ${fluidiFermi} nati dal gas, sull'equilibrio di Hut: fino a ${scartoHut.toFixed(4)} giri per orbita], ${risonanti} in risonanza, ${contro} al contrario)`);
   console.log(`      giorno di oggi in ore (5% · 25% · mediana · 75% · 95%): dal gas ${riga(per.gas)}  |  dagli urti ${riga(per.urti)}  |  embrioni soli ${riga(per.embrione)}`);
   console.log(`      giro dopo l'ultimo urto gigante / rottura: ${riga(dopoUrti.map((x) => 100 * x)).replace(/\\.0/g, '')} %  [limite ${100 * IMPATTI.giroLimite}%];  asse dei non bloccati (gradi): ${riga(assi)}`);
 });

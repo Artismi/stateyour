@@ -294,7 +294,9 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     risolvi(diag, noto, m, x); u.fill(0, 0, m); u[0] = g; u[m - 1] = al; risolvi(diag, u, m, z);
     const fatt = (x[0] + (be * x[m - 1]) / g) / (1 + z[0] + (be * z[m - 1]) / g); for (let i = 0; i < m; i++) x[i] -= fatt * z[i];
   };
-  let assorbita = 0, irradiata = 0, pesi = 0; const stagioni = P.bloccato ? null : [0, 1, 2, 3].map(() => new Float32Array(W * H));
+  let assorbita = 0, irradiata = 0, pesi = 0, riprese = 0; const stagioni = P.bloccato ? null : [0, 1, 2, 3].map(() => new Float32Array(W * H));
+  const integra = () => {
+  assorbita = 0; irradiata = 0; pesi = 0; media.fill(0); freddo.fill(0); if (stagioni) for (const q of stagioni) q.fill(0);
   for (let n = 0; n < totale; n++) {
     const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
@@ -318,13 +320,19 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     }
     if (ultimo) { const quarto = stagioni ? stagioni[Math.min(3, Math.floor((4 * (n % passiAnno)) / passiAnno))] : null; for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (quarto) quarto[k] += (4 * nuovo[k]) / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; } }
     T.set(nuovo);
-  }
+  } };
+  // A REGIME il pianeta irradia quanta luce assorbe. Se alla fine il bilancio non chiude entro l'1% il clima sta ancora
+  // cambiando (un mare che sta gelando sotto nuvole più fitte di quelle attese ci mette più delle otto «memorie» contate
+  // sulla temperatura di partenza, perché al freddo irradia meno e risponde più piano): si riprende da dove si è arrivati,
+  // con lo stesso passo, finché chiude (al più quattro volte; quante ne sono servite resta scritto in «riprese»)
+  integra();
+  while (riprese < 4 && assorbita > 0 && Math.abs(irradiata / assorbita - 1) > 0.01) { riprese++; integra(); }
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
   const quotaMedia = quota; // la quota media della cella del clima: la neve in quota si calcola punto per punto
   let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
   const out = { W, H, media, freddo, quota: quotaMedia, mare: sf.mare, Tglobale: gm / a, ghiaccio: gg / a, piove, neve: acquaPerGhiaccio, D,
     // il bilancio dell'ultimo anno, in media sul pianeta (W/m²): la luce assorbita e quella irradiata; a regime sono uguali
-    bilancio: { assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4 },
+    bilancio: { assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4 }, riprese,
     // la temperatura media dei quattro quarti dell'ultimo anno (le stagioni: per meteo.js); un pianeta bloccato non ne ha
     stagioni,
     // quanto in fretta i pendii si consumano: con la pioggia molto, con il solo vento poco, senz'aria quasi niente

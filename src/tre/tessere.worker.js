@@ -29,7 +29,9 @@ function prepara(L, tx, ty) {
   // estende ai punti vicini (quattro giri), perché tra un punto bagnato e uno asciutto la superficie resti piana
   const altLiv = new Float32Array(2 * WB * HB); let liv = new Float32Array(WB * HB).fill(NaN), haAcqua = false, hMin = Infinity, hMax = -Infinity;
   for (let c = 0; c < WB * HB; c++) {
-    if (lago[c] > 0) liv[c] = alt[c] + lago[c]; else if (haMare && alt[c] < mare) liv[c] = mare;
+    // (un lago il cui pelo sta sotto il livello del mare è mare: senza questo, in mezzo al mare — o alla calotta di un
+    // mondo ghiacciato, che copre tutto — si aprirebbero pozzi profondi quanto il fondale)
+    if (lago[c] > 0) liv[c] = alt[c] + lago[c]; if (haMare && alt[c] < mare && !(liv[c] >= mare)) liv[c] = mare;
     if (!isNaN(liv[c])) haAcqua = true;
   }
   if (haAcqua) for (let giro = 0; giro < 4; giro++) { const nuovo = liv.slice();

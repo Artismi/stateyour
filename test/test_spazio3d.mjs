@@ -95,7 +95,15 @@ prova('nel tempo: i pianeti corrono lungo le orbite, i giorni passano; nel passa
   const a = LUOGHI.find((x) => { const S = CO.sistema(x.cosmo, x.galassia, x.stella); return S.pianeti.length >= 3 && S.stella.stato === 'in vita' && S.stella.eta > 1e9; }), Sis = CO.sistema(a.cosmo, a.galassia, a.stella), P = Sis.pianeti[0];
   const st = (t) => S3.statoSistema(a.cosmo, a.galassia, a.stella, t), s0 = st(0), rel = (s, k) => V.meno(s.pianeti[k].pos, s.stella.pos);
   // un quarto d'anno dopo il primo pianeta ha girato di circa 90°; un anno dopo è tornato
-  const q = st(P.anno / 4), ang = Math.acos(V.scalare(V.versore(rel(s0, 0)), V.versore(rel(q, 0)))); tra(gradi(ang), 90 - 115 * P.eccentricita - 1, 90 + 115 * P.eccentricita + 1, 'dopo un quarto d\'anno (gradi)');
+  // (su un'orbita ellittica non sono 90° esatti: l'anomalia vera è ν = M + 2e·sin M + (5/4)e²·sin 2M + …, e tra M e M + 90°
+  // la differenza delle due «equazioni del centro» vale al più 2√2·e + (5/2)·e² radianti, cioè 162·e gradi e non 115·e come
+  // chiedeva questa prova: a M = −45° il pianeta passa dal perielio proprio a metà del quarto d'anno. Il grado in più è il
+  // dondolio del pianeta attorno al baricentro con le sue lune. Più sotto, lo stesso angolo dall'equazione di Keplero.)
+  const q = st(P.anno / 4), ang = Math.acos(V.scalare(V.versore(rel(s0, 0)), V.versore(rel(q, 0)))), ecc = P.eccentricita, centro = gradi(2 * Math.SQRT2 * ecc + 2.5 * ecc * ecc + 4 * ecc ** 3);
+  tra(gradi(ang), 90 - centro - 1, 90 + centro + 1, 'dopo un quarto d\'anno (gradi)');
+  { const el = s0.pianeti[0].elementi, vera = (M) => { const E = anomaliaEccentrica(M, el.e); return 2 * Math.atan2(Math.sqrt(1 + el.e) * Math.sin(E / 2), Math.sqrt(1 - el.e) * Math.cos(E / 2)); };
+    const atteso = vera(el.M0 + Math.PI / 2) - vera(el.M0), giro = Math.atan2(Math.sin(atteso), Math.cos(atteso));
+    tra(gradi(ang) - gradi(Math.abs(giro)), -1, 1, 'dopo un quarto d\'anno: angolo percorso − quello dell\'equazione di Keplero (gradi)'); }
   assert.ok(V.norma(V.meno(rel(st(P.anno), 0), rel(s0, 0))) < 1e-6 * P.aM, 'dopo un anno è tornato');
   // la velocità è la derivata della posizione
   { const h = 10, d = V.per(V.meno(st(h).pianeti[0].pos, st(-h).pianeti[0].pos), 1 / (2 * h)); assert.ok(V.norma(V.meno(d, s0.pianeti[0].vel)) < 1e-6 * V.norma(s0.pianeti[0].vel), 'velocità = derivata della posizione'); }
@@ -240,7 +248,9 @@ prova('le scene per il motore: metri in doppia precisione, luce e magnitudine ve
   assert.ok(girano >= 2);
   // gli stessi corpi come li vuole il motore: ognuno rispetto al suo genitore, in metri; sommati ridanno la scena
   const corpi = S3.corpiSistema(a.cosmo, a.galassia, a.stella); assert.equal(corpi.length, ss.corpi.length);
-  for (const t of [0, 3e6]) { const sT = S3.scenaSistema(a.cosmo, a.galassia, a.stella, t); corpi.forEach((c, i) => { let p = c.posizione(t), g = c.genitore; while (g >= 0) { p = V.somma(p, corpi[g].posizione(t)); g = corpi[g].genitore; } assert.ok(V.norma(V.meno(p, sT.corpi[i].pos)) <= 1e-9 * (V.norma(p) + 1), `il corpo ${c.nome} al tempo ${t}`); if (c.assetto) assert.deepEqual(c.assetto(t, new Array(9)), sT.corpi[i].assetto); assert.equal(c.raggio, sT.corpi[i].raggio); }); }
+  for (const t of [0, 3e6]) { const sT = S3.scenaSistema(a.cosmo, a.galassia, a.stella, t); corpi.forEach((c, i) => { let p = c.posizione(t), g = c.genitore; while (g >= 0) { p = V.somma(p, corpi[g].posizione(t)); g = corpi[g].genitore; } assert.ok(V.norma(V.meno(p, sT.corpi[i].pos)) <= 1e-9 * (V.norma(p) + 1), `il corpo ${c.nome} al tempo ${t}`); if (c.assetto) assert.deepEqual(c.assetto(t, new Array(9)), sT.corpi[i].assetto); if (t === 0) assert.equal(c.raggio, sT.corpi[i].raggio); else tra(c.raggio / sT.corpi[i].raggio, 1 - 1e-9, 1 + 1e-9, `il raggio di ${c.nome} un mese dopo`); }); }
+  // (il raggio è lo stesso al bit solo allo stesso istante: una stella viva in un mese invecchia di 10⁻¹¹ della sua vita, e il
+  // suo raggio cambia di altrettanto — qui 6·10⁻¹⁵; chiedere `===` tra t = 0 e t = 3·10⁶ s era chiedere una stella che non evolve)
   console.log(`      (assetti: ${girano} pianeti che girano, ${agganciate} lune agganciate; ${corpi.length} corpi per il motore, ognuno rispetto al suo genitore)`);
   console.log(`      (tre scene in ${ms.toFixed(0)} ms; cosmo: ${sc.punti.n} galassie, griglia ${sc.campi.densita.n}³; galassia: ${sg.punti.n} stelle; sistema: ${ss.corpi.length} corpi)`);
 });

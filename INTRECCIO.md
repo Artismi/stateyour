@@ -120,3 +120,30 @@ Una finestra è un luogo, una scala, un intervallo di tempo e uno stato di moto 
 c'è lì. Cercare un bel disegno non aggiunge niente al mondo: sceglie un indirizzo.
 - Fatto: finestre di particelle con osservatore in moto; ricerca del disegno a ogni scala della mappa.
 - Manca: la finestra delle particelle dentro la materia (in lavorazione); finestre salvate a ogni scala.
+
+## 11. La bolla: da dove si calcola
+Il punto da cui il resto prende forma non è un numero della biblioteca: è una **bolla di spaziotempo**, cioè un
+istante con un volume di spazio (un luogo, una grandezza, un momento, uno stato di moto). Da lì si calcola ciò che
+sta **attorno** (accanto, sopra e sotto di scala), ciò che c'era **prima** e ciò che viene **dopo**. Non è la bolla a
+creare il mondo e non serve nessuno che guardi: gli universi ci sono tutti. Sono infiniti quelli che contengono
+quella bolla esattamente così, e infiniti altri che non la contengono; fissarla vuol dire soltanto mettersi tra i
+primi. Dentro quella famiglia se ne segue uno, scelto in proporzione al suo peso (regola 5), e resta quello; gli
+altri sono i suoi rami (regola 3).
+- **Attorno.** Verso il grande è la regola 5 (il mondo compatibile), verso il piccolo la regola 4 (il dettaglio
+  condizionato), di lato la continuità: ciò che si calcola accanto deve combaciare al bordo con ciò che c'è già.
+- **Dopo.** Le leggi portate avanti dalla bolla (regola 6). Dove il futuro dipende da eventi non ancora accaduti si
+  apre in rami, ciascuno con il suo peso.
+- **Prima.** Non è la stessa cosa del dopo: il passato è un'inferenza. Tra le storie che portano a quella bolla se ne
+  sceglie una per peso; oltre il tempo in cui le piccole differenze si amplificano (poche settimane per il tempo
+  atmosferico, cento milioni di anni per le orbite) le storie compatibili sono molte e restano una sovrapposizione
+  finché non le si guarda.
+- **Muoversi.** Spostare la bolla nello spazio, nel tempo o nella scala non cambia universo: fa calcolare regioni
+  nuove dello stesso. Cambiare un evento cambia ramo. L'indirizzo della biblioteca è solo un modo di nominare una
+  bolla da cui partire.
+- **In tre dimensioni.** La bolla è ciò che la vista mostra: un volume vero, a un istante vero, visto da un punto
+  in moto. Ogni vista a ogni scala (cosmo, galassia, sistema, pianeta, roccia, atomi, particelle) è la stessa cosa
+  con un'altra grandezza.
+- Fatto: l'indirizzo con luogo, tempo e rami (`intreccio.js`); la finestra delle particelle con chi guarda in moto;
+  lo stato di sistema, galassia e cosmo a un istante qualsiasi (`spazio3d.js`).
+- Manca: partire da una bolla qualunque invece che da un numero; il passato come inferenza pesata; la continuità al
+  bordo tra regioni calcolate in momenti diversi come prova; la vista 3D unica a tutte le scale (in lavorazione).

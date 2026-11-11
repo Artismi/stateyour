@@ -24,7 +24,7 @@
 // è in MOLECOLE[formula].nome. (leggi.js ha una sua piccola MOLECOLE, con le masse dei gas del clima:
 // qui la si legge per sapere quali molecole la gravità trattiene.)
 
-import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI } from './leggi.js';
+import { COSTANTI, R_GAS, MOLECOLE as GAS_DEL_CLIMA, statoAcqua, clima, PARTE_FUORI, ACQUA } from './leggi.js';
 
 // ---------- 1. GLI ELEMENTI (dati misurati)
 // massa atomica (u) · valenza più comune · elettronegatività di Pauling · abbondanza nel Sole, come
@@ -422,7 +422,9 @@ export function climaEAria(dati, { Z } = {}) {
     const g = (T) => { let r = con(T, 0); if (!(r.c.ghiaccio > 0.02) || !(terre0 > 0.005)) return r;
       let lo = 0, hi = 1; for (let k = 0; k < 5; k++) { const m = 0.5 * (lo + hi); r = con(T, m); if (r.c.ghiaccio > m) lo = m; else hi = m; } return r; };
     let sotto = g(273.5); if (!(sotto.d > 0)) return sotto; // (gelato anche con la CO2 che il ciclo lascia al gelo)
-    let sopra = null; for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
+    // (si sale fino al punto critico dell'acqua, 647 K: fin lì sotto abbastanza pressione un mare può esserci. Fermandosi a
+    // 640 K i mari più caldi uscivano con l'aria fatta a 640 K e il clima qualche grado sopra: una coppia non cercata)
+    let sopra = null; for (const T of [280, 290, 300, 315, 335, 360, 390, 430, 480, 540, 600, 640, ACQUA.critica - 0.5]) { const r = g(T); if (r.d <= 0) { sopra = r; break; } sotto = r; if (r.c.acqua.startsWith('vapore')) break; }
     if (!sopra) return sotto; // (più caldo a ogni temperatura: il mare bolle)
     for (let k = 0; k < 9 && sopra.T - sotto.T > 0.3; k++) { const r = g(0.5 * (sotto.T + sopra.T)); if (r.d > 0) sotto = r; else sopra = r; }
     const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra; if (dati.calore > 0) r.c.co2Ciclo = r.co2; return r;

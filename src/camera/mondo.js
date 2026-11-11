@@ -254,7 +254,10 @@ function figlieVere(sp, madre, dx, dy, catalogo, caso) {
       // la massa invariante dell'insieme delle figlie: poco sopra la soglia (così partono strette, in avanti)
       const u = caso(), w = Math.min(soglia * (1 + 3 * u * u), soglia + 0.9 * (Wtot - M - soglia));
       let rinculo = 0, ef = madre.e, pf = 0, q = 0;
-      for (let k = 0; k < 6; k++) { ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf; rinculo = Math.sqrt(M * M + q * q) - M; }
+      // (il rinculo si cerca a giri finché non cambia più: con sei giri fissi restava uno scarto di 10⁻⁹ dell'energia. Poi
+      // le figlie prendono proprio ciò che il nucleo lascia: energia e impulso tornano al bit, non «quasi»)
+      for (let k = 0; k < 60; k++) { ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf; const r = Math.sqrt(M * M + q * q) - M, fermo = Math.abs(r - rinculo) <= 1e-16 * madre.e; rinculo = r; if (fermo) break; }
+      ef = madre.e - rinculo; pf = Math.sqrt(Math.max(0, ef * ef - w * w)); q = pm - pf;
       const bx = (pf / ef) * dx, by = (pf / ef) * dy, fuori = spartisci(w, masse, caso).map((v, i) => ({ specie: nomi[i], ...spinta(v, bx, by) }));
       fuori.push({ specie: sp.bersaglio, e: M + rinculo, x: q * dx, y: q * dy });
       return fuori;

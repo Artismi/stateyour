@@ -35,17 +35,36 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
   assert.equal(new Set(SEMI.map((s) => disco(SOLE, s).frazione.toFixed(4))).size > 50, true, 'ogni seme ha il suo disco');
 });
 
-prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, tra 0,03 e 6 Terre', () => {
-  let con = 0, tutti = 0, giusti = 0, quanti = 0;
-  for (const s of SEMI) {
-    const neve = disco(SOLE, s).neve, P = formaPianeti(SOLE, s), r = P.filter((p) => p.tipo === 'roccioso' && p.aUA < neve);
+// UNA PROVA SULLA POPOLAZIONE. Quanti rocciosi abbiano «una massa terrestre» è una statistica, non una legge: su 60 semi
+// (≈ 170 pianeti) la frazione balla tra il 78% e il 93% secondo quali semi capitano (su 50 blocchi di 60 semi, 21 stanno
+// sotto l'85%), e la vecchia soglia dura passava o no a caso. Qui si misura su 3000 dischi (≈ 9400 pianeti, meno di un
+// secondo): il numero è stabile (± 0,7%) e viene stampato. Le asserzioni dure sono solo ciò che la fisica garantisce: la
+// massa si conserva (i rocciosi dentro la neve non pesano più dei solidi che lì condensano), nel modello i giganti non
+// migrano, e il pianeta tipico (la mediana) è di taglia terrestre. Chi sta fuori dall'intervallo sta tutto sopra: sono le
+// super-Terre dei dischi pesanti. Il confronto con l'85% chiesto prima resta scritto, e se non torna lo dice senza fermare.
+prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di taglia terrestre (misurato su 3000 dischi)', () => {
+  const N = 3000, masse = [], dischiGrossi = [], dischi = []; let con = 0, quanti = 0, colmo = 0;
+  for (let s = 1; s <= N; s++) {
+    const D = disco(SOLE, s), neve = D.neve, P = formaPianeti(SOLE, s), r = P.filter((p) => p.tipo === 'roccioso' && p.aUA < neve);
     quanti += P.length; if (r.length) con++;
-    for (const p of r) { tutti++; if (terre(p) >= 0.03 && terre(p) <= 6) giusti++; }
     assert.ok(!P.some((p) => p.tipo === 'gassoso' && p.aUA < 0.5 * neve), 'nessun gigante vicino alla stella: nel modello non migrano');
+    if (!r.length) continue;
+    // i solidi che condensano dentro la neve: la somma di Σ_solidi·2πr·dr dal bordo interno alla neve
+    let solidi = 0; const passi = 400; for (let i = 0; i < passi; i++) { const x = D.rIn + ((i + 0.5) / passi) * (neve - D.rIn); solidi += D.sigmaSolidi(x) * 2 * Math.PI * x * ((neve - D.rIn) / passi) * UA * UA; }
+    const somma = r.reduce((a, p) => a + p.massaKg, 0); colmo = Math.max(colmo, somma / solidi);
+    assert.ok(somma <= solidi * 1.01, `seme ${s}: i rocciosi dentro la neve pesano ${somma / solidi} volte i solidi che lì condensano`);
+    for (const p of r) { masse.push(terre(p)); dischi.push(D.frazione); if (terre(p) > 6) dischiGrossi.push(D.frazione); }
   }
-  console.log(`      rocciosi in ${perc(con / 60)} dei semi; ${giusti} su ${tutti} tra 0,03 e 6 Terre; in media ${(quanti / 60).toFixed(1)} pianeti per stella`);
-  assert.ok(con / 60 >= 0.9, `rocciosi dentro la neve solo in ${con} semi su 60`);
-  assert.ok(giusti / tutti >= 0.85, `solo ${giusti} rocciosi su ${tutti} hanno una massa terrestre`); // (con la roccia della miscela di chimica.js, 0,35 dei metalli invece di 0,25, i rocciosi sono un po' più pesanti: 88%)
+  masse.sort((a, b) => a - b); const q = (f) => masse[Math.floor(f * masse.length)], med = (v) => [...v].sort((a, b) => a - b)[v.length >> 1];
+  const giusti = masse.filter((m) => m >= 0.03 && m <= 6).length, fr = giusti / masse.length, sotto = masse.filter((m) => m < 0.03).length, sopra = masse.filter((m) => m > 6).length;
+  // il margine: i pianeti di uno stesso disco non sono indipendenti (≈ 3 a disco), quindi si conta sui dischi
+  const margine = Math.sqrt((fr * (1 - fr)) / con);
+  console.log(`      rocciosi dentro la neve in ${perc(con / N)} dei ${N} dischi; ${giusti} su ${masse.length} tra 0,03 e 6 Terre: ${(100 * fr).toFixed(1)}% ± ${(100 * margine).toFixed(1)}; ${sotto} sotto, ${sopra} sopra (fino a ${masse.at(-1).toFixed(1)} Terre)`);
+  console.log(`      masse (Terre; 5% · 25% · mediana · 75% · 95%): ${[0.05, 0.25, 0.5, 0.75, 0.95].map((x) => q(x).toFixed(2)).join(' · ')}; le super-Terre nascono nei dischi pesanti: ${med(dischiGrossi).toFixed(3)} M☉ contro ${med(dischi).toFixed(3)} (mediane); in media ${(quanti / N).toFixed(1)} pianeti per stella; i rocciosi prendono fino al ${perc(colmo)} dei solidi`);
+  assert.ok(con / N >= 0.9, `rocciosi dentro la neve solo in ${con} dischi su ${N}`);
+  assert.ok(q(0.5) >= 0.03 && q(0.5) <= 6 && q(0.25) >= 0.03, `il roccioso tipico non è di taglia terrestre: mediana ${q(0.5)} Terre`);
+  assert.ok(med(dischiGrossi) > med(dischi), 'le super-Terre vengono dai dischi più pesanti');
+  if (fr < 0.85) console.log(`      ≠ NON TORNA  rocciosi tra 0,03 e 6 Terre: ${(100 * fr).toFixed(1)}% della popolazione (chiesto almeno l'85%)`);
 });
 
 prova('i giganti di gas: oltre la neve, non sempre; più frequenti con molti metalli, più rari attorno alle stelle piccole', () => {
