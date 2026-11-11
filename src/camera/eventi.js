@@ -22,7 +22,9 @@
 //     quell'evento. Un ramo cambia quindi i numeri di quell'evento e di nessun altro: le chiavi di ciò che gli sta
 //     accanto, e anche di ciò che gli sta sotto, restano quelle.
 //   · L'ESITO: i 64 bit usciti; c() ne usa i primi 53 (un numero tra 0 e 1 con tutta la precisione di un double),
-//     numero() i primi 32.
+//     numero() i primi 32. Dai bit all'esito si passa solo con operazioni esatte (somme, prodotti, divisioni,
+//     radici): anche la campana, che ha il suo logaritmo e il suo coseno scritti qui sotto. Così lo stesso
+//     indirizzo dà gli stessi bit su qualunque motore.
 // Parametri liberi: nessuno (le costanti di rotazione e 0x1BD11BDA sono quelle di Threefry; il numero di giri, 20,
 // è quello consigliato). Riscontro: i vettori noti di Random123 (test/test_eventi.mjs).
 
@@ -91,6 +93,38 @@ export function chiaveDi(indirizzo) { scendi(0, 0, String(indirizzo)); return [X
 const DUE53 = 1 / 9007199254740992;
 const frazione = () => ((X0 >>> 0) * 2097152 + (X1 >>> 11)) * DUE53;
 
+// ---------- LA CAMPANA, CON SOLE OPERAZIONI ESATTE
+// Lo standard del linguaggio non fissa al bit Math.log, Math.cos e le altre funzioni trascendenti: due motori, o due
+// versioni dello stesso, possono dare un ultimo bit diverso, e in un sistema caotico un bit diventa un altro mondo.
+// Somme, differenze, prodotti, divisioni e radici quadrate invece sono esatte ovunque (IEEE 754). Perciò ogni esito
+// di questa fonte usa solo quelle: il logaritmo e il coseno della campana (Box-Muller) sono scritti qui, con
+// polinomi a ordine fisso. Non sono «arrotondati giusti» all'ultimo bit (sbagliano di qualche 10⁻¹⁶), ma danno gli
+// stessi bit su qualunque macchina. Parametri liberi: nessuno (gli ordini sono quelli a cui il resto è sotto 10⁻¹⁸).
+const LN2 = 0.6931471805599453, RADICE2 = 1.4142135623730951, PI4 = 0.7853981633974483;
+// logaritmo naturale di x > 0: x = m·2^e con m tra 1/√2 e √2 (raddoppi e dimezzamenti: esatti), poi
+// ln m = 2·atanh(z) = 2z·(1 + z²/3 + z⁴/5 + … + z²²/23), z = (m − 1)/(m + 1), |z| < 0,172
+export function logEsatto(x) {
+  if (!(x > 0)) return x === 0 ? -Infinity : NaN; if (x === Infinity) return Infinity;
+  let e = 0; while (x * RADICE2 < 1) { x *= 2; e--; } while (x >= RADICE2) { x /= 2; e++; }
+  const z = (x - 1) / (x + 1), z2 = z * z; let s = 1 / 23; for (let k = 21; k >= 1; k -= 2) s = s * z2 + 1 / k;
+  return 2 * z * s + e * LN2;
+}
+// 1/n! per n da 0 a 19 (prodotti e divisioni: gli stessi bit ovunque)
+const SU_FATTORIALE = (() => { const v = [1]; for (let n = 1, f = 1; n < 20; n++) { f *= n; v.push(1 / f); } return v; })();
+// il coseno di un giro: cosGiro(u) = cos(2π·u), u tra 0 e 1. Il giro si divide in otto spicchi (8u, la sua parte
+// intera e il resto: esatti); in ognuno l'angolo ridotto x sta tra 0 e π/4, e seno e coseno sono le loro serie fino a x¹⁸
+export function cosGiro(u) {
+  const t = (u - Math.floor(u)) * 8, q = Math.floor(t), f = t - q, x = (q & 1 ? 1 - f : f) * PI4, x2 = x * x, F = SU_FATTORIALE;
+  if (q === 0 || q === 3 || q === 4 || q === 7) { // ± cos x
+    const c = ((((((((F[18] * x2 - F[16]) * x2 + F[14]) * x2 - F[12]) * x2 + F[10]) * x2 - F[8]) * x2 + F[6]) * x2 - F[4]) * x2 + F[2]) * -x2 + 1;
+    return q === 0 || q === 7 ? c : -c;
+  }
+  const sn = x * ((((((((F[17] * x2 - F[15]) * x2 + F[13]) * x2 - F[11]) * x2 + F[9]) * x2 - F[7]) * x2 + F[5]) * x2 - F[3]) * x2 + 1); // ± sen x
+  return q === 1 || q === 6 ? sn : -sn;
+}
+// la campana (media 0, scarto 1) da due numeri tra 0 e 1: Box-Muller
+export const campana = (a, b) => Math.sqrt(-2 * logEsatto(a < 1e-12 ? 1e-12 : a)) * cosGiro(b);
+
 // un numero intero (32 bit) da un indirizzo e da un ramo
 // (chi chiede uno dopo l'altro molti eventi dello stesso luogo non ne rifà la chiave: si tiene quella dell'ultimo
 // contenitore visto, cioè dell'indirizzo fino all'ultima «/»)
@@ -133,7 +167,7 @@ function fonte(radice, r0, r1, rami) {
   // le stesse, chieste in fila (vedi contatore)
   c.fila = (indirizzo) => { scendi(r0, r1, String(indirizzo)); return inFila(X0, X1, ramoDi(indirizzo)); };
   // un esito con distribuzione a campana (media 0, scarto 1): le prime due estrazioni dell'evento
-  c.normale = (indirizzo) => { scendi(r0, r1, String(indirizzo)); const k0 = X0, k1 = X1, ramo = ramoDi(indirizzo); tf(0, ramo, k0, k1); const a = frazione(); tf(1, ramo, k0, k1); return Math.sqrt(-2 * Math.log(Math.max(1e-12, a))) * Math.cos(2 * Math.PI * frazione()); };
+  c.normale = (indirizzo) => { scendi(r0, r1, String(indirizzo)); const k0 = X0, k1 = X1, ramo = ramoDi(indirizzo); tf(0, ramo, k0, k1); const a = frazione(); tf(1, ramo, k0, k1); return campana(a, frazione()); };
   // per i moduli che chiedono ancora un «seme»: un intero legato a questo indirizzo e a questo ramo
   c.seme = (indirizzo) => { scendi(r0, r1, String(indirizzo)); tf(0, ramoDi(indirizzo), X0, X1); return (X0 >>> 0) % 2147483646 + 1; };
   return c;
@@ -151,7 +185,7 @@ export function conRegistro(c, registro) {
   d.tra = (indirizzo, a, b) => a + (b - a) * d(indirizzo);
   d.serie = (indirizzo) => { const s = c.serie(indirizzo); return (k = 0) => nota(k ? `${indirizzo}#${k}` : indirizzo, s(k)); };
   d.fila = (indirizzo) => { const s = d.serie(indirizzo); let k = 0; return () => s(k++); };
-  d.normale = (indirizzo) => { const s = d.serie(indirizzo); return Math.sqrt(-2 * Math.log(Math.max(1e-12, s(0)))) * Math.cos(2 * Math.PI * s(1)); };
+  d.normale = (indirizzo) => { const s = d.serie(indirizzo); return campana(s(0), s(1)); };
   d.seme = (indirizzo) => { nota(indirizzo, c(indirizzo)); return c.seme(indirizzo); };
   return d;
 }

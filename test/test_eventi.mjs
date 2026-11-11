@@ -1,11 +1,12 @@
 // test_eventi.mjs — la fonte unica del caso: Threefry-2x32, la chiave dall'indirizzo, i rami, l'ordine che non conta
 import assert from 'node:assert/strict';
-import { threefry2x32, chiaveDi, numero, sorgente, contatore, comeSorgente } from '../src/camera/eventi.js';
+import { threefry2x32, chiaveDi, numero, sorgente, contatore, comeSorgente, logEsatto, cosGiro, campana } from '../src/camera/eventi.js';
+import { readFileSync } from 'node:fs';
 import { casoEvento } from '../src/camera/mondo.js';
 import { semeEvento, hash } from '../src/camera/cosmo.js';
 
 let ok = 0; const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
-const hex = (x) => x.toString(16).padStart(8, '0'), esito53 = (x0, x1) => (x0 * 2 ** 21 + (x1 >>> 11)) / 2 ** 53;
+const hex = (x) => x.toString(16).padStart(8, '0'), esito53 = (x0, x1) => (x0 * 2 ** 21 + (x1 >>> 11)) / 2 ** 53, x0y1 = ([x0, x1]) => esito53(x0, x1);
 
 // I VETTORI NOTI di Random123 (tests/kat_vectors, le righe «threefry2x32»): giri, contatore (2 parole), chiave
 // (2 parole), esito (2 parole). Copiati dal file ufficiale di DEShawResearch/random123.
@@ -147,6 +148,27 @@ prova('gli esiti sono sparsi come devono: media, varianza, coppie vicine, bit; l
   let mr = 0; for (let r = 1; r <= 20000; r++) mr += numero('prova/ramo', r) / 4294967296; assert.ok(Math.abs(mr / 20000 - 0.5) < 4 * Math.sqrt(1 / 12 / 20000));
   let g1 = 0, g2 = 0, g4 = 0; for (let i = 0; i < N; i++) { const g = c.normale(`campana ${i}`); g1 += g; g2 += g * g; g4 += g ** 4; }
   assert.ok(Math.abs(g1 / N) < 4 / Math.sqrt(N) && Math.abs(g2 / N - 1) < 4 * Math.sqrt(2 / N) && Math.abs(g4 / N - 3) < 4 * Math.sqrt(96 / N), `campana: media ${g1 / N}, varianza ${g2 / N}, quarto momento ${g4 / N}`);
+});
+
+// i 64 bit di un numero, scritti in esadecimale: per confrontare «al bit»
+const bit = (x) => { const b = new DataView(new ArrayBuffer(8)); b.setFloat64(0, x); return b.getBigUint64(0).toString(16).padStart(16, '0'); };
+prova('gli esiti si ricavano dai bit con sole operazioni esatte: la campana ha il suo logaritmo e il suo coseno, uguali al bit su ogni motore', () => {
+  // VALORI ATTESI AL BIT (calcolati una volta; non dipendono da Math.log né da Math.cos, che lo standard non fissa all'ultimo bit)
+  const attesi = [[logEsatto(0.3), 'bff34378fcbda720'], [logEsatto(1e-9), 'c034b927f32bffb8'], [logEsatto(7), '3fff2272ae325a56'], [cosGiro(0.1), '3fe9e3779b97f4a8'], [cosGiro(0.37), 'bfe5e7cf55112013'],
+    [cosGiro(0.93), '3fecf457dcdc158d'], [campana(0.25, 0.6), 'bff58dba77ef920f'], [sorgente('prova/campana').normale('uno'), 'bfeeab9b34941a19'], [sorgente('prova/campana').normale('due'), '3ff784b4d5379b01'], [sorgente('prova/campana').normale('età'), 'bfdd3edef5d5ce10']];
+  attesi.forEach(([v, b], i) => assert.equal(bit(v), b, `valore ${i}: ${v}`));
+  assert.equal(bit(sorgente('cosmo 1/galassia 3')('massa')), bit((x0y1(threefry2x32(0, 0, ...chiaveDi('cosmo 1/galassia 3/massa'))))), 'c() sono i primi 53 bit');
+  // sono il logaritmo e il coseno veri, entro qualche 10⁻¹⁶
+  let eL = 0, eC = 0;
+  for (let i = 1; i < 200000; i++) { const x = i / 200000, y = Math.pow(10, -12 * x); eL = Math.max(eL, Math.abs(logEsatto(x) - Math.log(x)) / (Math.abs(Math.log(x)) || 1), Math.abs(logEsatto(y) / Math.log(y) - 1)); eC = Math.max(eC, Math.abs(cosGiro(x) - Math.cos(2 * Math.PI * x))); }
+  for (const x of [5e-324, 1e-300, 1 - 1e-16, 1 + 1e-15, 2, 123456.789, 1e300]) eL = Math.max(eL, Math.abs(logEsatto(x) - Math.log(x)) / Math.abs(Math.log(x)));
+  assert.ok(eL < 1e-15 && eC < 1e-15, `scarto del logaritmo ${eL}, del coseno ${eC}`);
+  assert.equal(logEsatto(1), 0); assert.equal(logEsatto(0), -Infinity); assert.ok(Number.isNaN(logEsatto(-1))); assert.equal(cosGiro(0), 1); assert.equal(cosGiro(0.5), -1); assert.equal(Math.abs(cosGiro(0.25)), 0); assert.equal(cosGiro(1.1), cosGiro(0.1 + 1 - 1));
+  assert.equal(sorgente('prova/campana').normale('uno'), campana(sorgente('prova/campana').serie('uno')(0), sorgente('prova/campana').serie('uno')(1)));
+  // e nel codice della fonte non c'è nessuna funzione che lo standard lasci libera (solo Math.sqrt, Math.floor, Math.min)
+  const codice = readFileSync(new URL('../src/camera/eventi.js', import.meta.url), 'utf8').split('\n').map((r) => r.replace(/\/\/.*$/, '')).join('\n');
+  assert.deepEqual([...new Set(codice.match(/Math\.\w+/g))].sort(), ['Math.floor', 'Math.min', 'Math.sqrt']);
+  console.log(`      (scarto massimo dal logaritmo e dal coseno del motore: ${eL.toExponential(1)} e ${eC.toExponential(1)})`);
 });
 
 prova('le particelle (mondo.js) e il cosmo (cosmo.js) leggono dalla stessa fonte', () => {
