@@ -233,7 +233,7 @@ prova('CO2 + H2 su solfuri di ferro e nichel: gli acidi organici piccoli; senza 
   // l'equilibrio conserva il carbonio e lo stato di ossidazione
   const eq = M.equilibrioRete(r); let C = 0; for (const s in eq) if (s !== 'O') C += (M.conta(s).C || 0) * eq[s]; tra(C, 0.00999, 0.01001, 'il carbonio si conserva (mol/L)');
   console.log('      all\'equilibrio: ' + Object.entries(eq).filter(([s]) => s !== 'O').sort((a, b) => b[1] - a[1]).slice(0, 6).map(([s, c]) => `${s} ${c.toExponential(1)}`).join(', ') + ' mol/L'); assert.ok(eq[k('CC(=O)O')] > 1e-6 || eq[k('C')] > 1e-6, 'all\'equilibrio il carbonio ridotto c\'è');
-  const st = M.stazionarie(r); if (!st.converge) console.log('      (le concentrazioni stazionarie con le sorgenti fisse non convergono in 300 giri: le reazioni più lente hanno tempi di milioni di anni)');
+  const st = M.stazionarie(r); assert.ok(st.converge, 'le concentrazioni stazionarie (sorgenti fisse, ricambio in trent\'anni) convergono'); console.log('      a regime, con CO2 e H2 tenuti a 0,01 mol/L: ' + Object.entries(st.c).filter(([x]) => x !== 'O' && !(x in r.partenza)).sort((p, q) => q[1] - p[1]).slice(0, 4).map(([x, c]) => `${x} ${c.toExponential(1)}`).join(', ') + ' mol/L');
 });
 prova('il raccordo: l\'equilibrio dei gas con queste energie ridà quello di chimica.js; la rete di un luogo; che cosa chiede una molecola', () => {
   let peggio = 0, dove = '';
@@ -306,6 +306,21 @@ prova('una rete con un autocatalizzatore chirale rompe la simmetria da uno sbila
   const senza = ee(0, eps, 300), con = ee(10, eps, 300), opposto = ee(10, -eps, 300); console.log(`      sbilancio iniziale ${(100 * eps).toFixed(3)}% (un evento): senza antagonismo resta ${(100 * senza).toFixed(3)}%; con L + D → spenti arriva a ${(100 * con).toFixed(1)}%; l'evento opposto dà ${(100 * opposto).toFixed(1)}%`);
   tra(Math.abs(senza), 0, 3 * Math.abs(eps) + 1e-9, 'senza antagonismo lo sbilancio non cresce'); assert.ok(Math.abs(con) > 0.95 && Math.sign(con) === Math.sign(eps) && Math.sign(opposto) === -Math.sign(con), 'con l\'antagonismo vince la mano che era in vantaggio');
   assert.equal(ee(10, 0, 300), 0, 'da una parità esatta non nasce niente: serve l\'evento');
+});
+
+prova('la rete senza il limite delle molecole piccole: reagisce chi c\'è (peptide + peptide); due scatole con una barriera', () => {
+  const cond = { pH: 7, T: 360, attivitaAcqua: 0.01 }, G2 = k(GLYGLY), G4 = k('NCC(=O)NCC(=O)NCC(=O)NCC(=O)O');
+  const r = M.rete({ [GLY]: 1 }, cond, { profondita: 3, atomiMassimi: 18, soglia: 1e-6, tempo: 3e9 }), tra2 = (x) => x.reagenti.length === 2 && x.reagenti[0] === G2 && x.reagenti[1] === G2 && x.prodotti.includes(G4);
+  console.log(`      glicina 1 mol/L in una pozza quasi asciutta a 87 °C, soglia 10⁻⁶ mol/L: ${r.specie.size} specie, ${r.reazioni.length} reazioni, ${r.tempoMs} ms; sopra la soglia ${r.presenti.length} specie; dopo cent'anni: Gly-Gly ${r.concentrazioni[G2].toExponential(1)}, dichetopiperazina ${(r.concentrazioni[k('O=C1CNC(=O)CN1')] || 0).toExponential(1)}, Gly4 ${(r.concentrazioni[G4] || 0).toExponential(1)} mol/L`);
+  assert.ok(r.reazioni.some(tra2), 'Gly-Gly + Gly-Gly → Gly4 + H2O è nella rete'); assert.ok(r.ha('O=C1CNC(=O)CN1') && r.ha('NCC(=O)NCC(=O)NCC(=O)O'));
+  const r0 = M.rete({ [GLY]: 1 }, cond, { profondita: 3, atomiMassimi: 18 }); assert.ok(!r0.reazioni.some(tra2), 'senza la soglia (solo con le molecole piccole) quel passo non c\'era');
+  if ((r.concentrazioni[k('O=C1CNC(=O)CN1')] || 0) > 10 * r.concentrazioni[G2]) console.log('      (la dichetopiperazina, l\'anello di due glicine, si prende quasi tutto: è il pozzo vero dei dipeptidi che si asciugano)');
+  // un camino alcalino con idrogeno e solfuri, e il mare acido con la CO2: passa ciò che si scioglie nell'olio (Overton)
+  const rc = M.rete({ 'O=C=O': 0.01, '[HH]': 0.01 }, { pH: 9, T: 373.15, minerali: ['solfuro di ferro e nichel'] }, { profondita: 5, atomiMassimi: 5 }), camino = { condizioni: { pH: 10, T: 373.15, minerali: ['solfuro di ferro e nichel'] }, tenute: { '[HH]': 0.01 } };
+  const due = M.scatole(rc, { camino, mare: { condizioni: { pH: 6, T: 298.15, minerali: [] }, tenute: { [k('O=C=O')]: 0.01 } } }), solo = M.scatole(rc, { camino }), F = k('OC=O');
+  console.log(`      camino (pH 10, 100 °C, H2, solfuri) | mare (pH 6, CO2): formiato nel camino ${due.camino[F].toExponential(1)} mol/L, nel mare ${due.mare[F].toExponential(1)}; idrogeno passato nel mare ${due.mare['[HH]'].toExponential(1)}; il camino da solo, senza la CO2 del mare: ${solo.camino[F].toExponential(1)}; a regime: ${due.converge}`);
+  assert.ok(due.converge && due.camino[F] > 1e-4 && solo.camino[F] === 0 && due.camino[F] > 100 * due.mare[F], 'il formiato nasce dove le due cose si incontrano, e resta dal lato del camino (è carico: non passa)');
+  let C = 0; const chiuso = M.evolvi(rc.reazioni, { [k('O=C=O')]: 0.01, '[HH]': 0.02 }, 1e12); for (const x in chiuso.c) if (x !== 'O') C += (M.conta(x).C || 0) * chiuso.c[x]; tra(C, 0.0099999, 0.0100001, 'la cinetica conserva il carbonio');
 });
 
 console.log(`\n${ok} prove superate; ${nonTorna} cose che non tornano con la realtà (stampate sopra).`);

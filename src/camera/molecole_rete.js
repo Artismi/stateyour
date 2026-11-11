@@ -114,19 +114,21 @@ export function evolvi(reazioni, c0, tempo, { fisse = [], passi = 160, attivita 
   const c = new Map(Object.entries(c0)); for (const x of reazioni) for (const k of [...x.reagenti, ...x.prodotti]) if (!c.has(k)) c.set(k, 0);
   const ferme = new Set(fisse), libera = (k) => !ferme.has(k) && attivita[k] == null, a = (k) => attivita[k] ?? c.get(k), r = 1.18, fin = (v) => (v > 1e60 ? 1e60 : v > 0 ? v : 0);
   const rz = reazioni.map((x) => ({ re: x.reagenti, pr: x.prodotti, k: fin(x.k), ki: fin(x.kInversa ?? 0) })).filter((x) => x.k > 0 || x.ki > 0);
-  let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 0; const prima = new Map(); let peggio = '';
-  const dtMax = ricambio > 0 ? 0.2 / ricambio : Infinity; // (con il ricambio il passo non supera un quinto del tempo di rinnovo: poi si va avanti a passi uguali fino a regime)
-  for (let n = 0; n < passi; n++, dt = Math.min(dt * r, dtMax)) {
+  const dtMax = ricambio > 0 ? 0.2 / ricambio : Infinity; // (con il ricambio il passo non supera un quinto del tempo di rinnovo)
+  const fai = (dt) => {
     for (const x of rz) { let av = x.k, ind = x.ki, den = 0, maxAv = Infinity, maxInd = Infinity; for (const k of x.re) av *= a(k); for (const k of x.pr) ind *= a(k); if (!(av > 0) && !(ind > 0)) continue;
       for (const k of x.re) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += av / ck; maxAv = Math.min(maxAv, ck); }
       for (const k of x.pr) if (libera(k)) { const ck = c.get(k); if (ck > 0) den += ind / ck; maxInd = Math.min(maxInd, ck); }
       let xi = (dt * (av - ind)) / (1 + dt * den); if (xi > 0) { if (maxAv !== Infinity) xi = Math.min(xi, 0.5 * maxAv); } else if (maxInd !== Infinity) xi = Math.max(xi, -0.5 * maxInd); if (!xi || !isFinite(xi)) continue;
       for (const k of x.re) if (libera(k)) c.set(k, c.get(k) - xi); for (const k of x.pr) if (libera(k)) c.set(k, c.get(k) + xi); }
     // (ricambio: il luogo si rinnova, ogni specie che non è una sorgente esce con questo ritmo, 1/s)
-    if (ricambio > 0) for (const [k, v] of c) if (libera(k) && v > 0) c.set(k, v / (1 + dt * ricambio));
-    // (fermo: nell'ultimo decimo dei passi nessuna specie sopra 10⁻¹² mol/L cambia più dell'1% a passo)
-    if (n >= passi * 0.9) { for (const [k, v] of c) { const p = prima.get(k); if (p != null && Math.max(v, p) > 1e-12) { const d = Math.abs(v - p) / Math.max(v, p); if (d > cambia) { cambia = d; peggio = k; } } } } if (n >= passi * 0.9 - 1) for (const [k, v] of c) prima.set(k, v); }
-  return { c: Object.fromEntries(c), converge: cambia < 1e-2, cambia, peggio };
+    if (ricambio > 0) for (const [k, v] of c) if (libera(k) && v > 0) c.set(k, v / (1 + dt * ricambio)); };
+  const prima = new Map(), scarto = () => { let d = 0; for (const [k, v] of c) { const p = prima.get(k); if (p != null && Math.max(v, p) > 1e-12) d = Math.max(d, Math.abs(v - p) / Math.max(v, p)); prima.set(k, v); } return d; };
+  let dt = (tempo * (r - 1)) / Math.pow(r, passi), cambia = 1;
+  for (let n = 0; n < passi; n++, dt = Math.min(dt * r, dtMax)) { fai(dt); if (n >= passi - 3) cambia = scarto(); }
+  // con il ricambio si va avanti a passi uguali finché niente sopra 10⁻¹² mol/L cambia più di un millesimo a passo (o fino a 1500 passi)
+  if (ricambio > 0) for (let n = 0; n < 1500 && cambia > 1e-3; n++) { fai(dtMax); cambia = scarto(); }
+  return { c: Object.fromEntries(c), converge: cambia < (ricambio > 0 ? 1e-3 : 1e-2), cambia };
 }
 // le concentrazioni stazionarie con le sorgenti tenute fisse (un luogo aperto: ciò che arriva dall'aria o dal camino
 // resta alla sua concentrazione) e tutto il resto esce con il ritmo del ricambio (di suo 10⁻⁹ 1/s: il luogo si rinnova in

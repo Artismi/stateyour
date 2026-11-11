@@ -51,6 +51,7 @@ export const RIFERIMENTI = [
 // molecola biatomica nel vapore [ricordati: servono solo alla regola di riserva, il cui errore è più grande del loro]
 const OMO = { H: 436, Li: 105, Be: 208, B: 293, C: 346, N: 167, O: 142, F: 155, Na: 72, Mg: 129, Al: 186, Si: 222, P: 201, S: 266, Cl: 240, K: 49, Ca: 105, Sc: 163, Ti: 118, V: 269, Cr: 152, Mn: 61, Fe: 118, Co: 167, Ni: 204, Cu: 201, Zn: 22, Ga: 106, Ge: 188, As: 146, Se: 172, Br: 190, Mo: 436 };
 const OMO_MULTIPLI = { C: [614, 839], N: [418, 945.36], O: [498.36, 0], S: [425, 0], P: [310, 490], Si: [310, 0] };
+const FOSFORO = { 'gO:YY': -34.0, 'gO:CY': 9.4, 'gO:Yc': -19.2 };
 // lo stato di riferimento di questi elementi È la molecola biatomica: il suo legame vale due volte l'entalpia dell'atomo
 const BIATOMICI = { 'H-H': 1, 'N#N': 7, 'O=O': 8, 'F-F': 9, 'Cl-Cl': 17 };
 
@@ -74,8 +75,10 @@ export function termini(x) {
   // le coppie di vicini sullo stesso atomo. Le classi del vicino: C carbonio saturo, c carbonio insaturo legato con un
   // legame semplice a un centro insaturo (coniugazione), X azoto o ossigeno, Y altro eteroatomo, d =C, D =O/=N/=S, t legame triplo (negli anelli aromatici: come nella forma di Kekulé)
   const insaturo = (j) => m.atomi[j].ar || m.vic[j].some((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o >= 2);
+  // (un carbonio con il suo C=O legato a un ossigeno che dall'altra parte ha fosforo o zolfo: un'anidride mista, come l'acetil-fosfato)
+  const acile = (j) => m.vic[j].some((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o === 2 && !m.legami[v.k].ar && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 16));
   m.atomi.forEach((a, k) => { const cl = [], centroPi = insaturo(k);
-    for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t !== 'c') continue; const C = m.atomi[v.j].Z === 6; const o = l.ar ? (doppio.has(v.k) ? 2 : 1) : l.o; cl.push(o === 3 ? 't' : o === 2 ? (C ? 'd' : 'D') : C ? (centroPi && insaturo(v.j) ? 'c' : 'C') : m.atomi[v.j].Z === 7 || m.atomi[v.j].Z === 8 ? 'X' : 'Y'); }
+    for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t !== 'c') continue; const C = m.atomi[v.j].Z === 6; const o = l.ar ? (doppio.has(v.k) ? 2 : 1) : l.o; cl.push(o === 3 ? 't' : o === 2 ? (C ? 'd' : 'D') : C ? ((centroPi && insaturo(v.j)) || (a.Z !== 6 && acile(v.j) && m.vic[k].some((w) => m.atomi[w.j].Z === 15 || m.atomi[w.j].Z === 16)) ? 'c' : 'C') : m.atomi[v.j].Z === 7 || m.atomi[v.j].Z === 8 ? 'X' : 'Y'); }
     for (let i = 0; i < cl.length; i++) for (let j = i + 1; j < cl.length; j++) { piu(`g${a.Z === 6 ? (centroPi ? 'c' : 'C') : SIMBOLI[a.Z]}:${[cl[i], cl[j]].sort().join('')}`); }
     // (l'effetto anomerico non si somma oltre: tre ossigeni sullo stesso carbonio saturo valgono due coppie, non tre)
     const nX = cl.filter((c) => c === 'X').length; if (a.Z === 6 && !centroPi && nX >= 3) piu('gC:XX', nX - 1 - (nX * (nX - 1)) / 2); });
@@ -110,6 +113,11 @@ export function termochimica({ escludi = null } = {}) {
     for (let i = 0; i < K; i++) { if (!riga[i]) continue; for (let j = 0; j < K; j++) N[i][j] += (riga[i] * riga[j]) / (sigma * sigma); N[i][K] += (riga[i] * y) / (sigma * sigma); } }
   for (let i = 0; i < K; i++) { N[i][i] += 1 / (sigmaP[i] * sigmaP[i]); N[i][K] += p0[i] / (sigmaP[i] * sigmaP[i]); }
   const x = risolvi(N), valori = Object.fromEntries(nomi.map((k, i) => [k, x[i]]));
+  // IL FOSFORO IN ACQUA. Per i legami del fosforo non ci sono entalpie in fase gas tra i riferimenti: i tre termini che
+  // decidono quanto costa un legame P–O–P, P–O–C e P–O–C(=O) rispetto a P–OH e C–OH sono TARATI su tre energie di idrolisi
+  // misurate a pH 7 (kJ/mol; Alberty 2003; Jencks 1976 [ricordati]): pirofosfato −19,2, un fosfomonoestere −9, acetil-fosfato −43.
+  // (ATP → ADP + Pi, −30,5, e i fosfodiesteri NON sono usati: sono la verifica, nelle prove.)
+  Object.assign(valori, FOSFORO);
   const out = { valori, riserva: Object.fromEntries(nomi.map((k, i) => [k, p0[i]])), riferimenti: righe.length };
   if (!escludi) TERMINI = out;
   return out;
@@ -397,8 +405,10 @@ export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attiv
   const mono = m.atomi.length === 1 && !m.atomi[0].h && m.atomi[0].q !== 0;
   if (acqua && m.atomi.length === 1 && m.atomi[0].Z === 1 && m.atomi[0].q === 1) return { H: 0, S: 0, G: -R * T * LN10 * pH, fase: 'acqua', stima: 'convenzione: H⁺(aq) = 0', carica: 1, Hf298: 0, S298: 0 };
   // un complesso di uno ione metallico in acqua: lo ione e i suoi leganti presi separati, più l'energia di ogni legame dativo (regola di logK)
-  if (acqua && m.legami.some((l) => l.t === 'd' && atomo(m.atomi[l.b].Z).metallo)) { const g = grezzo(m); let dG = 0; g.legami = g.legami.filter((l) => { if (l.t !== 'd') return true; dG += -R * T * LN10 * logKComplesso(m.atomi[l.b].Z, m.atomi[l.b].q, m.atomi[l.a].Z, m.atomi[l.a].q); return false; });
-    const pezzi = componentiDi(molecola(g)).map((c) => energia(c, { T, P, solvente, pH, attivitaAcqua, misure })); return { H: pezzi.reduce((s, e) => s + e.H, 0) + dG, S: pezzi.reduce((s, e) => s + e.S, 0), G: pezzi.reduce((s, e) => s + e.G, 0) + dG, fase: 'acqua', stima: 'complesso: regola di log K', carica: caricaDi(m), Hf298: NaN, S298: NaN }; }
+  // (vale anche per i legami ionici con un metallo: i gruppi ferro-zolfo, [Fe+3]~[S-2]: ione e solfuro presi separati, più log K per legame)
+  const met = (k) => atomo(m.atomi[k].Z).metallo && m.atomi[k].q > 0, legato = (l) => (l.t === 'd' && met(l.b)) || (l.t === 'i' && (met(l.a) !== met(l.b)));
+  if (acqua && m.legami.some(legato)) { const g = grezzo(m); let dG = 0; g.legami = m.legami.map((l, i) => ({ l, g: g.legami[i] })).filter(({ l }) => { if (!legato(l)) return true; const [M_, D] = met(l.b) ? [l.b, l.a] : [l.a, l.b]; dG += -R * T * LN10 * logKComplesso(m.atomi[M_].Z, m.atomi[M_].q, m.atomi[D].Z, m.atomi[D].q); return false; }).map(({ g: gg }) => gg);
+    const pezzi = componentiDi(molecola(g)).map((c) => energia(c, { T, P, solvente, pH, attivitaAcqua, misure, forzaIonica })); return { H: pezzi.reduce((s, e) => s + e.H, 0) + dG, S: pezzi.reduce((s, e) => s + e.S, 0), G: pezzi.reduce((s, e) => s + e.G, 0) + dG, legame: dG, fase: 'acqua', stima: 'complesso: regola di log K', carica: caricaDi(m), Hf298: NaN, S298: NaN }; }
   const hf = entalpiaGas(m), t298 = termica(m, 298.15, 1e5), tT = T === 298.15 ? t298 : termica(m, T, 1e5);
   const H = hf.H + tT.Htermica - t298.Htermica, S = tT.S;
   if (!acqua) return { H, S: S - 1000 * R * Math.log(P / 1e5), G: H - (T * S) / 1000 + R * T * Math.log(P / 1e5), fase: 'gas', stima: hf.stima, riservati: hf.riservati, Hf298: hf.H, S298: t298.S };

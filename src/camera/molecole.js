@@ -64,6 +64,7 @@ import { forma as forma_, distanza, angolo, diedro, ruota, inerzia, numeroDiSimm
 import { energia as energia_, entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso, risolvi, IONI_MISURATI, statoRedox, debyeHuckel, pKaAllaT, R } from './molecole_energia.js';
 import { reazioni as reazioni_, velocita as velocita_, siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, bilancio, INTRINSECHE, espandiStereo } from './molecole_reazioni.js';
 import { tensione, energiaStereo, campo, forze as forze_, minimizza, passo, insieme, cariche, aggregazione, polimero as polimero_, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa, scena3D as scena3D_ } from './molecole_forze.js';
+import { interazione, catalisiDa, copia, ripiega, superficie, adsorbi, CONCENTRAZIONE_EFFICACE } from './molecole_incontri.js';
 import { evolvi, scatole, rete as rete_, equilibrioRete, stazionarie, autocatalitici as autocatalitici_, raf, anfifiliche } from './molecole_rete.js';
 
 // ---------- l'interfaccia (i nomi chiesti; il resto è esportato più sotto)
@@ -76,7 +77,7 @@ export const velocita = (r, c = {}) => velocita_(r, c.stereo ? { ...c, energiaDi
 export const polimero = polimero_, rete = rete_, autocatalitici = autocatalitici_, scena3D = scena3D_;
 // forze(configurazione): una molecola, una forma, un insieme([...]) o un campo già preparato → energia e forze
 export const forze = (x, opzioni = {}) => forze_(x && x.escl ? x : campo(x, opzioni));
-export { NUMERI_ATOMICI, scatole, stereoisomeri, espandiStereo, tensione, energiaStereo, evolvi, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio,
+export { NUMERI_ATOMICI, interazione, catalisiDa, copia, ripiega, superficie, adsorbi, CONCENTRAZIONE_EFFICACE, scatole, stereoisomeri, espandiStereo, tensione, energiaStereo, evolvi, formula, massa, carica, conta, componenti, chiralita, speculare, isomeri, anelli, distanza, angolo, diedro, ruota, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio,
   entalpiaCon, entalpiaGas, entropiaGas, termica, termochimica, RIFERIMENTI, IDRATAZIONE, idratazione, inOlio, pKaSito, pKaApparenti, sitiAcidoBase, speciazione, alPH, neutra, logKComplesso,
   siti, catalisi, fotolisi, fotoreazioni, fotoni, conservata, IONI_MISURATI, statoRedox, debyeHuckel, pKaAllaT, bilancio, INTRINSECHE, campo, minimizza, passo, insieme, cariche, aggregazione, passoDiCondensazione, diedriPeptide, granaGrossa, energiaGrossa,
   equilibrioRete, stazionarie, raf, anfifiliche };

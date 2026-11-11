@@ -84,7 +84,7 @@ export function siti(x) {
     if (coppieSolitarie(m, k) > 0 && (ETERO.has(a.Z) || a.Z === 15) && a.q <= 0) coppie.push(k);
     if (!a.h) return;
     if (a.Z === 1) donatori.push({ k, tipo: 'H2', p: -30 });
-    else if (ETERO.has(a.Z) && a.q === 0 && coppieSolitarie(m, k) > 0) donatori.push({ k, tipo: 'eteroatomo', p: pKaSito(m, k)?.pKa ?? 16, pb: a.Z === 7 ? (basi().find((b) => b.atomo === k)?.pKa ?? -5) : a.Z === 16 ? -4 : m.vic[k].length ? -2 : 0 });
+    else if (ETERO.has(a.Z) && a.q === 0 && coppieSolitarie(m, k) > 0) donatori.push({ k, tipo: 'eteroatomo', p: pKaSito(m, k)?.pKa ?? 16, pb: a.Z === 7 ? (basi().find((b) => b.atomo === k)?.pKa ?? (a.ar ? Math.max(-5, ...basi().filter((b) => m.atomi[b.atomo].ar && anelli(m).some((r) => r.includes(k) && r.includes(b.atomo))).map((b) => b.pKa)) : -5)) : a.Z === 16 ? -4 : m.vic[k].length ? -2 : 0 }); // (un N–H di un azolo attacca con la coppia dell'altro azoto dell'anello: la sua basicità è quella)
     else if (ALOGENI.has(a.Z)) donatori.push({ k, tipo: 'alogenuro', p: pKaSito(m, k)?.pKa ?? -7 });
     else if (a.Z === 6 && !a.ar) { const p = pKaSito(m, k); if (p && p.pKa < 26) donatori.push({ k, tipo: 'carbonio', p: p.pKa }); }
   });
