@@ -24,8 +24,9 @@
 // più piccolo dei loro sono milioni (li conta la funzione di massa di Press & Schechter 1974 con lo stesso σ(M)):
 // `peso` dice quante galassie vere rappresenta ognuna.
 //
-// COSTI: kmax = 24 → 28 960 onde; costruire il campo vincolato ~40 ms; la griglia 64³ (a richiesta: una trasformata
-// di Fourier) ~150 ms; velocità, maree e assi delle galassie (a richiesta: somma diretta delle onde) ~60 ms.
+// COSTI (misurati): kmax = 24 → 28 888 onde; costruire il campo vincolato ~40–70 ms; la griglia 64³ (a richiesta: una
+// trasformata di Fourier) ~50 ms; velocità delle galassie (a richiesta: somma diretta delle onde) ~100–150 ms; maree e
+// assi ~100–140 ms. In memoria: le onde 1,4 MB, la griglia 1 MB.
 // CHE COSA NON C'È: le onde più corte di L/kmax (50 Mpc: filamenti e vuoti grandi sì, i singoli ammassi no: per
 // quelli servirebbe un campo più fine, condizionato a questo, nella regione che si guarda); le galassie non sono
 // obbligate a stare su un massimo esatto del campo; i moti sono lineari (niente orbite negli ammassi); la carta

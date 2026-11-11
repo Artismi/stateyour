@@ -7,7 +7,8 @@
 //             (preso dal bordo che la tessera ha già: così l'interpolazione ai margini continua nella vicina);
 //             il livello vale −1e5 dove non c'è acqua vicino; attorno a mari e laghi è esteso di qualche punto, così la
 //             riva la decide il terreno punto per punto e non la griglia;
-//   · pend    Float32Array(2 · 256 · 128): la pendenza del terreno verso est e verso nord (m/m), per la luce;
+//   · pend    Float32Array(4 · 256 · 128): la pendenza del terreno verso est e verso nord (m/m), per la luce, e quanto
+//             il punto è incassato rispetto ai vicini (−1 cresta … +1 fondo di valle: riceve meno luce dal cielo);
 //   · terra   Uint8Array(4 · 256 · 128): il colore dei materiali SENZA l'ombra del rilievo che immagineSuperficie
 //             aggiunge per la mappa piatta (qui la luce è quella vera della stella): la si toglie rifacendo lo stesso conto;
 //   · acqua   Uint8Array(4 · 256 · 128) o null: il colore dell'acqua vista da sopra (col fondo dove è bassa e limpida).
@@ -43,9 +44,10 @@ function prepara(L, tx, ty) {
     altLiv[2 * c] = h; altLiv[2 * c + 1] = l; const s = Math.max(h, l); if (s < hMin) hMin = s; if (s > hMax) hMax = s;
   }
   // --- le pendenze (differenze centrali sul terreno col bordo), in metri su metro
-  const pend = new Float32Array(2 * W * H), [, v0, , v1] = sf.rett || [0, 0, 1, 1], passoLat = ((v1 - v0) * Math.PI * B.raggioM) / H;
+  const pend = new Float32Array(4 * W * H), [, v0, , v1] = sf.rett || [0, 0, 1, 1], passoLat = ((v1 - v0) * Math.PI * B.raggioM) / H;
   for (let j = 0; j < H; j++) { const lat = (0.5 - (v0 + ((j + 0.5) / H) * (v1 - v0))) * Math.PI, passoLon = passoLat * Math.max(0.02, Math.cos(lat));
-    for (let i = 0; i < W; i++) { const c = (j + 1) * WB + i + 1, q = 2 * (j * W + i); pend[q] = (altLiv[2 * (c + 1)] - altLiv[2 * (c - 1)]) / (2 * passoLon); pend[q + 1] = (altLiv[2 * (c - WB)] - altLiv[2 * (c + WB)]) / (2 * passoLat); } }
+    for (let i = 0; i < W; i++) { const c = (j + 1) * WB + i + 1, q = 4 * (j * W + i), h = altLiv[2 * c]; pend[q] = (altLiv[2 * (c + 1)] - altLiv[2 * (c - 1)]) / (2 * passoLon); pend[q + 1] = (altLiv[2 * (c - WB)] - altLiv[2 * (c + WB)]) / (2 * passoLat);
+      pend[q + 2] = Math.max(-1, Math.min(1, (0.25 * (altLiv[2 * (c + 1)] + altLiv[2 * (c - 1)] + altLiv[2 * (c - WB)] + altLiv[2 * (c + WB)]) - h) / (0.12 * passoLat))); } }
   // --- il colore delle terre, senza l'ombra della mappa piatta (lo stesso conto di immagineSuperficie, tolto)
   const px = immagineSuperficie(sf, B.T, B.cl), terra = new Uint8Array(4 * W * H), divOmbra = Math.max(6, 900 * Math.pow(0.36, sf.livello || 0)), bagnato = new Uint8Array(W * H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, h = sf.alt[k]; bagnato[k] = (haMare && h < mare) || (sf.lago && sf.lago[k] > 0) ? 1 : 0;

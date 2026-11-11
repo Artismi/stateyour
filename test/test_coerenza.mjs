@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import * as CO from '../src/camera/cosmo.js';
+import { campoCosmo } from '../src/camera/spazio3d.js';
 import * as LG from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
 import * as GA from '../src/camera/galassie.js'; // le galassie come conseguenza: la forma (G.forma) e il catalogo campione // le stelle vengono da qui (struttura), non più dalle curve di leggi.js
@@ -222,14 +223,17 @@ prova('ogni galassia ha meno barioni di quanti ne porta il suo alone (Ωb/Ωm), 
   for (const n of [1, 2]) for (const G of CO.cosmo(n).galassie) { const F = G.forma; assert.ok(F.massaStelle + F.massaGas + F.massaCalda + F.massaFuori <= (COSMO.Ob / COSMO.Om) * F.alone.massa * (1 + 1e-9), `galassia ${n}/${G.id}: più barioni dell'alone`); }
   for (const { Gx } of GALASSIE) tra(Gx.stelle.reduce((a, s) => a + s.massa * s.peso, 0) / Gx.forma.massaStelle, 0.75, 1.3, 'massa × peso del campione / massa in stelle della galassia');
 });
-{ // le galassie contro i barioni del cosmo
+// le galassie contro i barioni del cosmo. Il toro ora ha tre dimensioni (cosmo3d.js) e le galassie segnate sono un
+// campione: ognuna ne rappresenta `peso` vere (la funzione di massa di Press & Schechter sopra l'alone più piccolo).
+// Con quel peso le stelle di tutte le galassie sono la parte dei barioni che si misura: ~6% (Fukugita & Peebles 2004).
+prova('le stelle di tutte le galassie (il campione per il suo peso) sono qualche centesimo dei barioni del toro', () => {
   for (const n of [1]) {
-    const C = CO.cosmo(n), stelle = C.galassie.reduce((a, G) => a + G.forma.massaStelle, 0);
-    const H = (COSMO.H0 * 1000) / 3.086e22, rhoC = (3 * H * H) / (8 * Math.PI * K.G), barioni = (COSMO.Ob * rhoC * CO.TORO_M ** 3) / MSOLE;
-    nota(3, 'il cosmo ha due dimensioni e nessuno spessore: le stelle di tutte le galassie sono una parte minuscola dei barioni del cubo TORO_M³',
-      { casi: 1, su: 1, tipico: `${C.galassie.length} galassie, ${num(stelle)} Msol di stelle contro ${num(barioni)} Msol di barioni: ${num(stelle / barioni)}`, massimo: `con il 6% dei barioni in stelle il toro sarebbe una fetta spessa ${num(stelle / 0.06 / ((COSMO.Ob * rhoC * CO.TORO_M ** 2) / MSOLE) / 3.086e19)} kpc`, dove: 'cosmo.js cosmo() (densità su x, y) e galassie.js (massa in stelle) contro leggi.js COSMO.Ob e TORO_M' });
+    const C = CO.cosmo(n), F = campoCosmo(n), stelle = C.galassie.reduce((a, G) => a + G.forma.massaStelle, 0);
+    const H = (COSMO.H0 * 1000) / 3.086e22, rhoC = (3 * H * H) / (8 * Math.PI * K.G), barioni = (COSMO.Ob * rhoC * CO.TORO_M ** 3) / MSOLE, parte = (stelle * F.peso) / barioni;
+    console.log(`      (${C.galassie.length} galassie segnate, ognuna per ${num(F.peso)} vere: ${num(stelle * F.peso)} Msol di stelle su ${num(barioni)} di barioni: ${num(100 * parte)}%; misurato ~6%. Mancano le galassie sotto ${num(F.massaMinima)} Msol di alone)`);
+    tra(parte, 0.02, 0.15, 'la parte dei barioni che è in stelle');
   }
-}
+});
 
 // =====================================================================================================
 sezione('GLI ELEMENTI');

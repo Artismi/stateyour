@@ -56,12 +56,28 @@ vec3 luceCheArriva(float r, float mu) {
   if (u_atm.w <= 0.0) return vec3(mu > -0.001 || r * sqrt(max(0.0, 1.0 - mu * mu)) > u_atm.x ? 1.0 : 0.0);
   return exp(-(u_betaR * (u_atm.y * spessore(r, mu, u_atm.y)) + vec3(u_betaM.x * 1.1 * u_atm.z * spessore(r, mu, u_atm.z))));
 }`;
+// quanta nuvola c'è in un punto dello strato (0…1): la copertura di meteo.js, col rumore trascinato dal vento per un
+// periodo e poi ricominciato sfumando (due copie sfasate di mezzo periodo)
+const GLSL_NUVOLE = `
+uniform sampler2D u_meteo;
+uniform vec4 u_nuv;      // quota delle nuvole (m), tempo (s), periodo del trascinamento (s), quanto coprono (0: niente nuvole)
+float nuvola(vec3 p, float fine) {
+  vec3 q = normalize(p); float lon = atan(-q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
+  vec4 m = texture(u_meteo, vec2(lon / 6.2831853 + 0.5, 0.5 - lat / 3.1415927));
+  vec3 est = normalize(vec3(-q.z, 0.0, -q.x) + 1e-6), nord = cross(q, est), vento = (est * m.g + nord * m.b) / (u_atm.x + u_nuv.x);
+  float f1 = fract(u_nuv.y / u_nuv.z), f2 = fract(u_nuv.y / u_nuv.z + 0.5);
+  vec3 a = (q - vento * ((f1 - 0.5) * u_nuv.z)) * 36.0, b = (q - vento * ((f2 - 0.5) * u_nuv.z)) * 36.0 + 11.3;
+  float n = (fine > 0.5 ? frattale(a) : frattale3(a)) * (1.0 - abs(1.0 - 2.0 * f1)) + (fine > 0.5 ? frattale(b) : frattale3(b)) * (1.0 - abs(1.0 - 2.0 * f2));
+  float soglia = 1.0 - clamp(m.r * u_nuv.w, 0.0, 1.0) * 1.02;
+  return smoothstep(soglia - 0.06, soglia + 0.16, 0.62 * n + 0.38 * frattale3(q * 5.0 + 4.0));
+}`;
 const GLSL_RUMORE = `
 float caso3(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 float rumore(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(caso3(i), caso3(i + vec3(1, 0, 0)), f.x), mix(caso3(i + vec3(0, 1, 0)), caso3(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(caso3(i + vec3(0, 0, 1)), caso3(i + vec3(1, 0, 1)), f.x), mix(caso3(i + vec3(0, 1, 1)), caso3(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
-float frattale(vec3 p) { return 0.5 * rumore(p) + 0.25 * rumore(p * 2.03 + 7.1) + 0.125 * rumore(p * 4.01 + 3.7) + 0.0625 * rumore(p * 8.05 + 1.3) + 0.0625 * rumore(p * 16.1 + 5.9); }`;
+float frattale3(vec3 p) { return 0.57 * rumore(p) + 0.29 * rumore(p * 2.03 + 7.1) + 0.14 * rumore(p * 4.01 + 3.7); }
+float frattale(vec3 p) { return 0.5 * rumore(p) + 0.25 * rumore(p * 2.03 + 7.1) + 0.125 * rumore(p * 4.01 + 3.7) + 0.0625 * rumore(p * 8.05 + 1.3) + 0.035 * rumore(p * 16.1 + 5.9) + 0.0275 * rumore(p * 33.0 + 2.2); }`;
 
 // ---------- la superficie: una pezza
 const N_ONDE = 16;
@@ -110,7 +126,15 @@ uniform vec3 u_sole, u_luce;   // verso la stella (assi del mondo); il suo color
 uniform vec4 u_espo;           // esposizione; c'è l'immagine dell'acqua; il mare è ghiaccio; luce di notte
 uniform vec4 u_ondaF[${N_ONDE}]; uniform float u_pulsaF[${N_ONDE}]; uniform int u_nOndeF; uniform vec4 u_mare; // tempo, increspatura fine (pendenza quadratica media), schiuma, longitudine × seno della latitudine (X dipende anche dal nord)
 uniform vec3 u_cielo;          // il colore del cielo allo zenit in pieno giorno (per la luce diffusa e i riflessi)
+uniform mat3 u_tondo; uniform vec3 u_centro, u_soleC; // dagli assi del mondo allo spazio in cui il pianeta è tondo; il suo centro rispetto all'occhio; la stella in quello spazio
 ${GLSL_ARIA}
+${GLSL_RUMORE}
+${GLSL_NUVOLE}
+// l'ombra delle nuvole: dove il raggio verso la stella attraversa il loro strato
+float ombraNuvole(vec3 rel) {
+  if (u_nuv.w <= 0.0) return 1.0; vec3 p = u_tondo * (rel - u_centro); float Rn = u_atm.x + u_nuv.x, b = dot(p, u_soleC), c = dot(p, p) - Rn * Rn;
+  if (c > 0.0) return 1.0; return 1.0 - 0.78 * nuvola(p + u_soleC * (-b + sqrt(b * b - c)), 0.0);
+}
 out vec4 o_col;
 vec3 lineare(vec3 c) { return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878); }
 void main() {
@@ -118,6 +142,7 @@ void main() {
   vec3 suM = normalize(u_normali * su), occhio = normalize(-v_rel);
   float muS = dot(suM, u_sole), r = v_dati.z;
   vec3 arriva = u_luce * luceCheArriva(max(r, u_atm.x), muS) * smoothstep(-0.02, 0.03, muS);
+  if (muS > 0.0) arriva *= ombraNuvole(v_rel);
   float giorno = smoothstep(-0.12, 0.25, muS);
   vec3 ambiente = u_cielo * (0.22 * giorno) + vec3(u_espo.w);
   vec3 col;
@@ -136,10 +161,11 @@ void main() {
     float riva = smoothstep(0.6, 0.0, fondo) * 0.5 + u_mare.z * smoothstep(0.35, 1.0, length(pend) * 2.5); // la schiuma: sulla riva e dove le onde sono ripide
     col = mix(col, vec3(0.85) * (arriva * (0.3 + 0.7 * max(muS, 0.0)) + ambiente), clamp(riva, 0.0, 1.0));
   } else { // TERRA (o ghiaccio)
-    vec2 p = texture(u_pend, v_uv).rg;
+    vec3 p = texture(u_pend, v_uv).rgb;
     vec3 n = normalize(u_normali * (su - est * p.x - nord * p.y));
     vec3 base = lineare(texture(u_terra, v_uv).rgb);
-    col = base * (arriva * max(dot(n, u_sole), 0.0) + ambiente * (0.6 + 0.4 * max(dot(n, suM), 0.0)));
+    float cielo = clamp(1.0 - 0.75 * p.z, 0.35, 1.3); // chi sta in fondo a una valle vede meno cielo; una cresta di più
+    col = base * (arriva * max(dot(n, u_sole), 0.0) * (0.7 + 0.3 * cielo) + ambiente * cielo * (0.6 + 0.4 * max(dot(n, suM), 0.0)));
   }
   o_col = vec4(col * u_espo.x, 1.0);${GLSL_PROFONDITA_F}
 }`;
@@ -147,15 +173,15 @@ void main() {
 // ---------- l'aria e le nuvole: una passata sull'immagine intera
 const F_ARIA = (passi) => `
 in vec2 v_uv; out vec4 o_col;
-uniform sampler2D u_col, u_prof, u_meteo;
+uniform sampler2D u_col, u_prof;
 uniform vec3 u_occhio;   // l'occhio rispetto al centro del pianeta, nello spazio in cui il pianeta è tondo (m)
 uniform mat3 u_raggi;    // dagli assi dell'occhio a quello spazio
 uniform vec3 u_soleC;    // verso la stella, in quello spazio
 uniform vec4 u_cam;      // tangenti di metà campo, costante della profondità, esposizione
 uniform vec3 u_E;        // l'irradianza della stella (π × il suo colore)
-uniform vec4 u_nuv;      // quota delle nuvole (m), tempo (s), periodo del trascinamento (s), quanto coprono (0: niente nuvole)
 ${GLSL_ARIA}
 ${GLSL_RUMORE}
+${GLSL_NUVOLE}
 // la luce diffusa lungo un tratto del raggio: restituisce la luce aggiunta e (in tra) quanta ne passa
 vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   float ds = (t1 - t0) / ${passi}.0, odR = 0.0, odM = 0.0; vec3 sR = vec3(0.0), sM = vec3(0.0);
@@ -170,16 +196,6 @@ vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   tra = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM)));
   return u_E * (u_betaR * fR * sR + vec3(u_betaM.x * fM) * sM);
 }
-// quanta nuvola c'è in un punto dello strato (0…1): la copertura di meteo.js, col rumore trascinato dal vento
-float nuvola(vec3 p) {
-  vec3 q = normalize(p); float lon = atan(-q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
-  vec4 m = texture(u_meteo, vec2(lon / 6.2831853 + 0.5, 0.5 - lat / 3.1415927));
-  vec3 est = normalize(vec3(-q.z, 0.0, -q.x) + 1e-6), nord = cross(q, est), vento = (est * m.g + nord * m.b) / (u_atm.x + u_nuv.x);
-  float f1 = fract(u_nuv.y / u_nuv.z), f2 = fract(u_nuv.y / u_nuv.z + 0.5);
-  float n = frattale((q - vento * ((f1 - 0.5) * u_nuv.z)) * 42.0) * (1.0 - abs(1.0 - 2.0 * f1)) + frattale((q - vento * ((f2 - 0.5) * u_nuv.z)) * 42.0 + 11.3) * (1.0 - abs(1.0 - 2.0 * f2));
-  float soglia = 1.0 - clamp(m.r * u_nuv.w, 0.0, 1.0) * 1.05;
-  return smoothstep(soglia - 0.08, soglia + 0.22, n * 0.5 + 0.5 * frattale(q * 6.0 + 4.0));
-}
 void main() {
   vec3 scena = texture(u_col, v_uv).rgb; float prof = texture(u_prof, v_uv).r;
   vec3 de = u_raggi * vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0); float lung = length(de); vec3 d = de / lung, o = u_occhio;
@@ -193,11 +209,11 @@ void main() {
   if (u_nuv.w > 0.0 && dn > 0.0) { float s = sqrt(dn); tn = b - s > 0.0 ? b - s : b + s; if (tn <= t0 || tn >= t1) tn = -1.0; }
   vec3 tra, luce;
   if (tn > 0.0) {
-    vec3 p = o + d * tn; float c = nuvola(p), r = length(p), muS = dot(p, u_soleC) / r;
+    vec3 p = o + d * tn; float c = nuvola(p, 1.0), r = length(p), muS = dot(p, u_soleC) / r;
     vec3 dietro = scena;
     if (c < 0.995 && t1 - tn > 1.0) { vec3 tr2; vec3 l2 = tratto(o, d, tn, t1, tr2); dietro = scena * tr2 + l2 * u_cam.w; }
     if (c > 0.003) {
-      float ombra = nuvola(p + u_soleC * 2500.0); // quanto la nuvola si fa ombra da sé verso la stella
+      float ombra = nuvola(p + u_soleC * 2500.0, 0.0); // quanto la nuvola si fa ombra da sé verso la stella
       vec3 sole = (u_E / 3.14159) * luceCheArriva(r, muS) * smoothstep(-0.05, 0.1, muS);
       vec3 bianco = 0.82 * sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra * c) + 0.25 * (u_E / 3.14159) * u_betaR / max(u_betaR.b, 1e-12) * smoothstep(-0.1, 0.3, muS);
       dietro = mix(dietro, bianco * u_cam.w, clamp(c * 1.15, 0.0, 1.0));
@@ -274,7 +290,7 @@ void main() {
 }`;
 
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {} } = {}) {
-  const gl = N.gl, O = { magliePerPixel: 7, massimoTessere: 110, fili: 0, passiAria: 12, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
+  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.0, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 12, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
@@ -288,7 +304,10 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     posizione: (t, o) => { versoStella(t, o); const d = -(P.aM || 1.5e11); o[0] *= d; o[1] *= d; o[2] *= d; return o; },
     // (se è bloccato mostra alla stella sempre la longitudine 0, come nel clima)
     assetto: (t) => { const a = P.bloccato ? 2 * Math.PI * frazioneAnno(t) - Math.PI / 2 : verso * 2 * Math.PI * ((t / giorno) % 1); return V.mm(inclina, V.giro([0, 1, 0], a)); },
-    quota: (dir) => quotaLungo(dir), colpisci: (o, d) => colpisci(o, d) });
+    quota: (dir) => quotaLungo(dir), colpisci: (o, d) => colpisci(o, d),
+    // la verticale di un punto (la normale dell'ellissoide), la sua longitudine e latitudine sulla carta, e il punto a una quota data
+    verticale: (p) => V.norma([p[0], p[1] / (schiaccia * schiaccia), p[2]]), lonLat: (p) => lonLat(tondo(p)),
+    punto: (lon, lat, h) => { const cl = Math.cos(lat), q = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], [a, l] = leggi(lon, lat), r = R + Math.max(a, l), n = V.norma([q[0], q[1] / schiaccia, q[2]]); return [q[0] * r + n[0] * h, q[1] * r * schiaccia + n[1] * h, q[2] * r + n[2] * h]; } });
   const lune = (O.lune ? P.lune || [] : []).map((L) => {
     const fase0 = via ? (semeEvento('fase luna', via.cosmo, via.galassia, via.stella, via.pianeta, L.id) / 4294967296) * 2 * Math.PI : L.id * 2.4, a = L.aM, e = L.eccentricita || 0;
     const ghiaccio = L.composizione?.ghiaccio ?? 0.3, tinta = [0.18 + 0.5 * ghiaccio, 0.17 + 0.5 * ghiaccio, 0.16 + 0.52 * ghiaccio];
@@ -311,11 +330,11 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   const tessere = new Map(), coda = [], fili = [], base = { pronta: false, k: null };
   let S0 = null, uso = 0, richieste = 0, arrivate = 0, msTessere = 0;
   const chiave = (L, tx, ty) => L * 1e10 + ty * 1e5 + tx;
-  const liscio = { L: -1, alt: N.immagine(2, 2, 'rg32f', new Float32Array([0, -1e5, 0, -1e5, 0, -1e5, 0, -1e5]), { filtro: gl.NEAREST }), pend: N.immagine(1, 1, 'rg16f', new Float32Array([0, 0])), terra: N.immagine(1, 1, 'rgba8', new Uint8Array([...(P.colore || [150, 140, 120]), 255])), acqua: null, hMin: 0, hMax: 0, altLiv: null };
+  const liscio = { L: -1, alt: N.immagine(2, 2, 'rg32f', new Float32Array([0, -1e5, 0, -1e5, 0, -1e5, 0, -1e5]), { filtro: gl.NEAREST }), pend: N.immagine(1, 1, 'rgba16fDaFloat', new Float32Array([0, 0, 0, 0])), terra: N.immagine(1, 1, 'rgba8', new Uint8Array([...(P.colore || [150, 140, 120]), 255])), acqua: null, hMin: 0, hMax: 0, altLiv: null };
   const trasparente = N.immagine(1, 1, 'rgba8', new Uint8Array([0, 0, 0, 0]));
   function avviaFili() {
     S0 = superficie(); if (!S0 || base.pronta) return; base.pronta = true; base.k = S0.k;
-    const quanti = O.fili || Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) - 2));
+    const quanti = O.fili || Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
     for (let i = 0; i < quanti; i++) {
       const w = new Worker(new URL('./tessere.worker.js', import.meta.url), { type: 'module' }), f = { w, libero: true };
       w.onmessage = (e) => { f.libero = true; arrivata(e.data); distribuisci(); };
@@ -342,7 +361,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const t = tessere.get(d.n); if (!t || d.k !== base.k) return; arrivate++;
     if (d.errore) { console.error('mondo3d: tessera non riuscita:', d.errore); tessere.delete(d.n); return; }
     msTessere += d.ms;
-    Object.assign(t, { pronta: true, alt: N.immagine(TWB, THB, 'rg32f', d.altLiv, { filtro: gl.NEAREST }), pend: N.immagine(TW, TH, 'rg16f', d.pend), terra: N.immagine(TW, TH, 'rgba8', d.terra), acqua: d.acqua ? N.immagine(TW, TH, 'rgba8', d.acqua) : null, altLiv: d.altLiv, hMin: d.hMin, hMax: d.hMax, haAcqua: d.haAcqua });
+    Object.assign(t, { pronta: true, alt: N.immagine(TWB, THB, 'rg32f', d.altLiv, { filtro: gl.NEAREST }), pend: N.immagine(TW, TH, 'rgba16fDaFloat', d.pend), terra: N.immagine(TW, TH, 'rgba8', d.terra), acqua: d.acqua ? N.immagine(TW, TH, 'rgba8', d.acqua) : null, altLiv: d.altLiv, hMin: d.hMin, hMax: d.hMax, haAcqua: d.haAcqua });
     if (t.L === 0) { hMinTutto = d.hMin; hMaxTutto = d.hMax; }
     // la memoria è limitata: si buttano quelle che da più tempo nessuno guarda (mai il livello 0)
     if (tessere.size > O.massimoTessere) { const v = [...tessere.values()].filter((x) => x.pronta && x.L > 0 && x.uso < uso - 2).sort((a, b) => a.uso - b.uso); for (const x of v.slice(0, tessere.size - O.massimoTessere)) butta(x); }
@@ -428,9 +447,17 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   // ---------- quali pezze disegnare: si scende nell'albero finché le maglie sono abbastanza piccole sullo schermo
   let lista = [], pezze = 0, triangoli = 0, fotogramma = 0;
   const stato = { A: null, Ap: null, versoC: [0, 0, 0], occhioCorpo: [0, 0, 0], assi: null };
+  // quanto il terreno di una pezza si scosta dal piano tra i suoi angoli (m): 5 × 5 punti letti dalla tessera
+  function ruvido(t, u0, v0, du) {
+    if (!t || !t.altLiv) return 0; const n = 4 ** t.L, A = t.altLiv, x0 = (u0 * n - t.tx) * TW + 1, y0 = (v0 * n - t.ty) * TH + 1, w = du * n * TW, h = du * n * TH, q = new Array(25);
+    for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) { const x = Math.max(0, Math.min(TWB - 1, Math.round(x0 + (w * i) / 4 - 0.5))), y = Math.max(0, Math.min(THB - 1, Math.round(y0 + (h * j) / 4 - 0.5))), k = 2 * (y * TWB + x); q[5 * j + i] = Math.max(A[k], A[k + 1]); }
+    let r = 0; for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) { const a = i / 4, b = j / 4, piano = (q[0] * (1 - a) + q[4] * a) * (1 - b) + (q[20] * (1 - a) + q[24] * a) * b; r = Math.max(r, Math.abs(q[5 * j + i] - piano)); }
+    return r * O.rilievo;
+  }
   function visita(d, ix, iy, S) {
     const n = 2 ** d, du = 1 / n, u0 = ix * du, v0 = iy * du, lon0 = (u0 + du / 2 - 0.5) * 2 * Math.PI, lat0 = (0.5 - (v0 + du / 2)) * Math.PI, dLon = du * 2 * Math.PI, dLat = du * Math.PI;
-    const Lv = Math.min(LMAX, Math.max(0, Math.ceil((d - 3) / 2))), t = base.pronta ? migliore(u0 + du / 2, v0 + du / 2, Lv) : null, hm = t ? ((t.hMin + t.hMax) / 2) * O.rilievo : 0, hd = t ? (t.hMax - t.hMin) * O.rilievo : 0;
+    // la tessera più fine, tra quelle arrivate, che contiene tutta la pezza
+    const t = base.pronta ? migliore(u0 + du / 2, v0 + du / 2, Math.min(LMAX, d >> 1)) : null, hm = t ? ((t.hMin + t.hMax) / 2) * O.rilievo : 0, hd = t ? (t.hMax - t.hMin) * O.rilievo : 0;
     const cl = Math.cos(lat0), c0 = [cl * Math.cos(lon0), Math.sin(lat0), -cl * Math.sin(lon0)];
     // il centro nello spazio del corpo (schiacciato), rispetto all'occhio
     const pc = [c0[0] * (R + hm), c0[1] * (R + hm) * schiaccia, c0[2] * (R + hm)], dx = pc[0] - stato.occhioCorpo[0], dy = pc[1] - stato.occhioCorpo[1], dz = pc[2] - stato.occhioCorpo[2];
@@ -444,10 +471,16 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       const e = V.tv(stato.assiCorpo, [dx, dy, dz]), lx = Math.hypot(1, S.tanX), ly = Math.hypot(1, S.tanY);
       if (e[2] - raggio > 0 || (e[0] + e[2] * S.tanX) / lx > raggio || (-e[0] + e[2] * S.tanX) / lx > raggio || (e[1] + e[2] * S.tanY) / ly > raggio || (-e[1] + e[2] * S.tanY) / ly > raggio) return;
     }
-    const vicino = Math.max(dist - raggio, S.quota * 0.5, 1), maglia = (lato / MY) * S.fuoco / vicino;
-    if (d < DMAX && (maglia > O.magliePerPixel || d < 2)) { for (let q = 0; q < 4; q++) visita(d + 1, 2 * ix + (q & 1), 2 * iy + (q >> 1), S); return; }
-    // la tessera che questa pezza vorrebbe: se manca si chiede la prima che manca scendendo da quella che c'è
-    if (base.pronta) { const La = t ? t.L : -1; if (La < Lv) { const L = La + 1, m = 4 ** L; chiedi(L, Math.min(m - 1, Math.floor((u0 + du / 2) * m)), Math.min(m - 1, Math.floor((v0 + du / 2) * m)), vicino / (1 + L)); } if (t) t.uso = uso; }
+    const vicino = Math.max(dist - raggio, S.quota * 0.5, 1), pxPerMetro = S.fuoco / vicino, maglia = (lato / MY) * pxPerMetro;
+    // il livello di tessera che questa distanza chiede: i suoi punti grandi circa `puntiPerPixel` sullo schermo
+    const Lv = Math.max(0, Math.min(LMAX, Math.ceil(Math.log((R * Math.PI * pxPerMetro) / (TH * O.puntiPerPixel)) / Math.log(4))));
+    // si spezza: se la pezza è più grande della tessera che le serve; se il suo terreno è troppo mosso per le sue maglie;
+    // (sull'acqua) se è abbastanza vicina perché le onde lunghe muovano i vertici
+    let spezza = d < 2 || d < 2 * Lv;
+    if (!spezza && d < DMAX && maglia > 2.5) { const r = ruvido(t, u0, v0, du); spezza = r * 0.06 * pxPerMetro > O.errorePixel || (maglia > O.magliePerPixel * 4) || (r < 0.5 && t && t.haAcqua && maglia > 14 && dist < 6000); }
+    if (spezza && d < DMAX) { for (let q = 0; q < 4; q++) visita(d + 1, 2 * ix + (q & 1), 2 * iy + (q >> 1), S); return; }
+    // se la tessera che servirebbe manca, si chiede la prima che manca scendendo da quella che c'è
+    if (base.pronta) { const La = t ? t.L : -1, Lq = Math.min(Lv, d >> 1); if (La < Lq) { const L = La + 1, m = 4 ** L; chiedi(L, Math.min(m - 1, Math.floor((u0 + du / 2) * m)), Math.min(m - 1, Math.floor((v0 + du / 2) * m)), vicino * (1 + L)); } if (t) t.uso = uso; }
     lista.push({ d, u0, v0, du, lon0, lat0, dLon, dLat, c0, t: t || liscio, dist: vicino });
   }
 
@@ -471,7 +504,8 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       if (passata !== 'solido') return; const P_ = prgSuolo, u = P_.u, A = stato.A; gl.useProgram(P_.p); gl.bindVertexArray(griglia.vao); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
       gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc);
       gl.uniform3fv(u.u_sole, S.versoStella); gl.uniform3fv(u.u_luce, S.coloreStella); gl.uniform3fv(u.u_cielo, cielo);
-      impostaAria(u);
+      impostaAria(u); impostaNuvole(u, S);
+      { const At = V.trasposta(A), M = At.slice(); for (let j = 0; j < 3; j++) M[3 + j] /= schiaccia; gl.uniformMatrix3fv(u.u_tondo, false, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]); gl.uniform3f(u.u_centro, stato.versoC[0], stato.versoC[1], stato.versoC[2]); const sc = V.norma(tondo(V.mv(At, S.versoStella))); gl.uniform3f(u.u_soleC, sc[0], sc[1], sc[2]); }
       let tess = null; const tOnde = S.t % 3600, co = onde, m = ondeQui;
       for (const z of lista) {
         const t = z.t;
@@ -507,6 +541,12 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       gl.disable(gl.CULL_FACE); gl.bindVertexArray(null);
     },
   };
+  // (il rumore delle nuvole è trascinato dal vento per un periodo e poi ricomincia sfumando: il periodo dura almeno sei
+  // secondi di chi guarda, anche quando il tempo corre)
+  function impostaNuvole(u, S) {
+    const periodo = Math.max(6 * 3600, Math.abs(N.tempo.velocita) * 6); S.lega(5, meteoTex || trasparente, u.u_meteo);
+    gl.uniform4f(u.u_nuv, aria ? Math.min(0.7 * aria.H, 9000) : 0, S.t % (periodo * 64), periodo, aria && meteoTex && O.nuvole ? O.nuvole : 0);
+  }
   function impostaAria(u) {
     if (aria) { gl.uniform4f(u.u_atm, R, aria.H, aria.HM, aria.cima); gl.uniform3fv(u.u_betaR, aria.betaR); gl.uniform4f(u.u_betaM, aria.betaM, 0.76, 0, 0); }
     else { gl.uniform4f(u.u_atm, R, 1, 1, 0); gl.uniform3f(u.u_betaR, 0, 0, 0); gl.uniform4f(u.u_betaM, 0, 0, 0, 0); }
@@ -517,16 +557,12 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     nome: 'aria',
     dopo(S, da) {
       if (!aria) return false; if (!prgAria) prgAria = N.programma(N.V_SCHERMO, F_ARIA(O.passiAria)); const u = prgAria.u, A = stato.A, At = V.trasposta(A); gl.useProgram(prgAria.p);
-      S.lega(0, da.col, u.u_col); S.lega(1, da.prof, u.u_prof); S.lega(2, meteoTex || trasparente, u.u_meteo);
+      S.lega(0, da.col, u.u_col); S.lega(1, da.prof, u.u_prof); impostaNuvole(u, S);
       const o = stato.occhioTondo; gl.uniform3f(u.u_occhio, o[0], o[1], o[2]);
       // dagli assi dell'occhio allo spazio tondo del corpo: (1/schiacciamento sull'asse) · Aᵀ · assi
       const M = V.mm(At, S.assi); for (let j = 0; j < 3; j++) M[3 + j] /= schiaccia; gl.uniformMatrix3fv(u.u_raggi, false, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]);
       const s = V.norma(tondo(V.mv(At, S.versoStella))); gl.uniform3f(u.u_soleC, s[0], s[1], s[2]);
       gl.uniform4f(u.u_cam, S.tanX, S.tanY, S.fc, S.esposizione); gl.uniform3f(u.u_E, Math.PI * S.coloreStella[0], Math.PI * S.coloreStella[1], Math.PI * S.coloreStella[2]);
-      // il rumore delle nuvole è trascinato dal vento per un periodo e poi ricomincia sfumando (due copie sfasate): il
-      // periodo dura almeno quattro secondi di chi guarda, anche quando il tempo corre
-      const periodo = Math.max(6 * 3600, Math.abs(N.tempo.velocita) * 6);
-      gl.uniform4f(u.u_nuv, Math.min(0.7 * aria.H, 9000), S.t % (periodo * 64), periodo, meteoTex && O.nuvole ? O.nuvole : 0);
       impostaAria(u); S.schermo(); return true;
     },
   };

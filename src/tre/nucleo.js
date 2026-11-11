@@ -30,7 +30,8 @@
 //   const N = creaNucleo(tela, { alCambio });
 //   const sole = N.corpo({ nome: 'stella', raggio, posizione: (t, o) => …, luce: { colore: [r, g, b] } });
 //   const terra = N.corpo({ nome, genitore: sole, raggio, posizione, assetto, quota: (dir) => raggio del suolo lungo dir,
-//                           colpisci: (o, d) => distanza del suolo lungo il raggio });   // (assi del corpo)
+//                           colpisci: (o, d) => distanza del suolo lungo il raggio,     // (tutto negli assi del corpo)
+//                           verticale: (p) => versore, lonLat: (p) => [lon, lat], punto: (lon, lat, quota) => p });  // se è schiacciato
 //   N.aggiungi(strato);  N.attacca(terra, { distanza: 3 * raggio });  N.avvia();
 //   N.tempo.velocita = 86400;                     // un giorno al secondo
 // Lo stato S che ogni strato riceve: { gl, t, dt, W, H, proj, vista (mondo → occhio, 3×3), fc (per la profondità),
@@ -119,7 +120,7 @@ export function creaNucleo(tela, opzioni = {}) {
   // ---------- i corpi
   const corpi = [];
   function corpo(def) {
-    const c = { nome: '', genitore: null, raggio: 1, posizione: null, assetto: null, quota: null, colpisci: null, luce: null, ...def, profondita: 0 };
+    const c = { nome: '', genitore: null, raggio: 1, posizione: null, assetto: null, quota: null, colpisci: null, verticale: null, luce: null, ...def, profondita: 0 };
     for (let g = c.genitore; g; g = g.genitore) c.profondita++;
     corpi.push(c); return c;
   }
@@ -142,6 +143,8 @@ export function creaNucleo(tela, opzioni = {}) {
   const cam = { corpo: null, solidale: false, pos: [0, 0, 1], assi: V.identita(), fov: O.fov };
   const assettoDi = (c, t) => (c && c.assetto ? c.assetto(t, new Array(9)) : V.identita());
   const quotaSuolo = (c, dirCorpo) => (c.quota ? c.quota(dirCorpo) : c.raggio);
+  // la verticale del luogo (per un corpo schiacciato non è la direzione del centro: il corpo la dà con `verticale`)
+  const suDi = (p) => (cam.corpo && cam.corpo.verticale ? cam.corpo.verticale(p) : V.norma(p));
   // posizione e assi della camera negli assi del corpo che girano, all'istante t (e ritorno)
   function nelCorpo(t) { if (cam.solidale) return { p: cam.pos.slice(), a: cam.assi.slice() }; const A = assettoDi(cam.corpo, t), At = V.trasposta(A); return { p: V.mv(At, cam.pos), a: V.mm(At, cam.assi) }; }
   function dalCorpo(c, t) { if (cam.solidale) { cam.pos = c.p; cam.assi = c.a; } else { const A = assettoDi(cam.corpo, t); cam.pos = V.mv(A, c.p); cam.assi = V.mm(A, c.a); } }
@@ -176,11 +179,11 @@ export function creaNucleo(tela, opzioni = {}) {
   // --- i gesti (tutti lavorano negli assi del corpo e poi riportano la camera nel suo riferimento)
   // avvicinarsi (k < 1) o allontanarsi verso il punto sotto il cursore
   function avvicina(x, y, k) {
-    const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = V.norma(c.p);
+    const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = suDi(c.p);
     let Q; if (isFinite(s)) Q = V.somma(c.p, V.per(d, s)); else { const h = Math.max(V.lungo(c.p) - cam.corpo.raggio, cam.corpo.raggio * 0.05); Q = V.somma(c.p, V.per(d, h)); }
     c.p = V.somma(Q, V.per(V.meno(c.p, Q), k));
     const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (k > 1 && O.alFuori) O.alFuori(); }
-    c.a = V.mm(V.porta(su0, V.norma(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); cambia();
+    c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); cambia();
   }
   // trascinare: il punto afferrato segue il cursore (il corpo gira sotto la mano)
   let presa = null;
@@ -194,38 +197,40 @@ export function creaNucleo(tela, opzioni = {}) {
   }
   // guardarsi attorno: girare la testa (dx) e alzare o abbassare lo sguardo (dy), in radianti
   function guarda(dx, dy) {
-    const c = nelCorpo(tempo.t), su = V.norma(c.p), av = V.per(colonna(c.a, 2), -1), destra = colonna(c.a, 0);
+    const c = nelCorpo(tempo.t), su = suDi(c.p), av = V.per(colonna(c.a, 2), -1), destra = colonna(c.a, 0);
     let a2 = V.mv(V.giro(su, dx), av); const d2 = V.mv(V.giro(su, dx), destra), alza = Math.asin(Math.max(-1, Math.min(1, V.scal(a2, su))));
     a2 = V.mv(V.giro(d2, Math.max(-1.55 - alza, Math.min(1.55 - alza, dy))), a2); c.a = assiDa(a2, su, d2); dalCorpo(c, tempo.t); cambia();
   }
   // orbitare attorno al punto che sta al centro dello schermo
   function orbita(dx, dy) {
     const c = nelCorpo(tempo.t), av = V.per(colonna(c.a, 2), -1), s = tocca(c.p, av), h = Math.max(1, V.lungo(c.p) - quotaSuolo(cam.corpo, V.norma(c.p)));
-    const Q = V.somma(c.p, V.per(av, isFinite(s) ? s : h)), suQ = V.norma(Q), destra = colonna(c.a, 0);
+    const Q = V.somma(c.p, V.per(av, isFinite(s) ? s : h)), suQ = suDi(Q), destra = colonna(c.a, 0);
     let M = V.giro(suQ, dx); const braccio = V.mv(M, V.meno(c.p, Q)), d2 = V.mv(M, destra), el = Math.asin(Math.max(-1, Math.min(1, V.scal(V.norma(braccio), suQ))));
     const M2 = V.giro(d2, -Math.max(0.02 - el, Math.min(1.55 - el, dy))); M = V.mm(M2, M);
-    c.p = V.somma(Q, V.mv(M2, braccio)); c.a = assiDa(V.norma(V.meno(Q, c.p)), V.norma(c.p), V.mv(M2, d2)); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); cambia();
+    c.p = V.somma(Q, V.mv(M2, braccio)); c.a = assiDa(V.norma(V.meno(Q, c.p)), suDi(c.p), V.mv(M2, d2)); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); cambia();
   }
   // volare: avanti, di lato, in su (frazioni della quota al secondo)
   function vola(avanti, lato, su, dt) {
-    const c = nelCorpo(tempo.t), su0 = V.norma(c.p), h = Math.max(2, V.lungo(c.p) - quotaSuolo(cam.corpo, su0)), passo = h * dt;
+    const c = nelCorpo(tempo.t), su0 = suDi(c.p), h = Math.max(2, V.lungo(c.p) - quotaSuolo(cam.corpo, V.norma(c.p))), passo = h * dt;
     const av = V.per(colonna(c.a, 2), -1), de = colonna(c.a, 0);
     c.p = [c.p[0] + (av[0] * avanti + de[0] * lato + su0[0] * su) * passo, c.p[1] + (av[1] * avanti + de[1] * lato + su0[1] * su) * passo, c.p[2] + (av[2] * avanti + de[2] * lato + su0[2] * su) * passo];
     const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (O.alFuori) O.alFuori(); }
-    c.a = V.mm(V.porta(su0, V.norma(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t);
+    c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t);
   }
   // mettersi sopra un punto del corpo: longitudine e latitudine (radianti), quota (m), verso cui si guarda e inclinazione
   function vai({ lon, lat, quota: h = 1000, direzione = 0, alza = -0.4 }) {
-    const c = cam.corpo, cl = Math.cos(lat), su = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], est = [-Math.sin(lon), 0, -Math.cos(lon)], nord = V.vett(su, est);
-    const r = quotaSuolo(c, su) + h, oriz = [nord[0] * Math.cos(direzione) + est[0] * Math.sin(direzione), nord[1] * Math.cos(direzione) + est[1] * Math.sin(direzione), nord[2] * Math.cos(direzione) + est[2] * Math.sin(direzione)];
+    const c = cam.corpo, cl = Math.cos(lat), rad = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], est = [-Math.sin(lon), 0, -Math.cos(lon)];
+    // (su un corpo schiacciato longitudine e latitudine sono quelle della sua carta: il punto e la verticale li dà lui)
+    const p0 = c.punto ? c.punto(lon, lat, h) : V.per(rad, quotaSuolo(c, rad) + h), su = suDi(p0), nord = V.norma(V.vett(su, est));
+    const oriz = [nord[0] * Math.cos(direzione) + est[0] * Math.sin(direzione), nord[1] * Math.cos(direzione) + est[1] * Math.sin(direzione), nord[2] * Math.cos(direzione) + est[2] * Math.sin(direzione)];
     const av = V.norma([oriz[0] * Math.cos(alza) + su[0] * Math.sin(alza), oriz[1] * Math.cos(alza) + su[1] * Math.sin(alza), oriz[2] * Math.cos(alza) + su[2] * Math.sin(alza)]);
-    const k = { p: V.per(su, r), a: assiDa(av, su, V.vett(oriz, su)) }; cam.solidale = !!c.assetto && h < O.quotaSolidale * c.raggio; dalCorpo(k, tempo.t); cambia();
+    const k = { p: p0, a: assiDa(av, su, V.vett(oriz, su)) }; cam.solidale = !!c.assetto && h < O.quotaSolidale * c.raggio; dalCorpo(k, tempo.t); cambia();
   }
   // dove si è: longitudine, latitudine (radianti), quota dal suolo, direzione dello sguardo
-  function dove() { const c = nelCorpo(tempo.t), r = V.lungo(c.p), su = V.per(c.p, 1 / r), av = V.per(colonna(c.a, 2), -1), lon = Math.atan2(-su[2], su[0]), lat = Math.asin(su[1]), est = [-Math.sin(lon), 0, -Math.cos(lon)], nord = V.vett(su, est);
-    return { lon, lat, quota: r - quotaSuolo(cam.corpo, su), distanza: r, direzione: Math.atan2(V.scal(av, est), V.scal(av, nord)), alza: Math.asin(Math.max(-1, Math.min(1, V.scal(av, su)))) }; }
+  function dove() { const c = nelCorpo(tempo.t), r = V.lungo(c.p), rad = V.per(c.p, 1 / r), su = suDi(c.p), av = V.per(colonna(c.a, 2), -1), g = cam.corpo.lonLat ? cam.corpo.lonLat(c.p) : [Math.atan2(-rad[2], rad[0]), Math.asin(rad[1])], lon = g[0], lat = g[1], est = [-Math.sin(lon), 0, -Math.cos(lon)], nord = V.vett(su, est);
+    return { lon, lat, quota: r - quotaSuolo(cam.corpo, rad), distanza: r, direzione: Math.atan2(V.scal(av, est), V.scal(av, nord)), alza: Math.asin(Math.max(-1, Math.min(1, V.scal(av, su)))) }; }
   // che cosa c'è sotto un punto della tela: { lon, lat, distanza } sul corpo a cui si è attaccati, o null
-  function sotto(x, y) { const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d); if (!isFinite(s)) return null; const q = V.norma(V.somma(c.p, V.per(d, s))); return { lon: Math.atan2(-q[2], q[0]), lat: Math.asin(q[1]), distanza: s }; }
+  function sotto(x, y) { const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d); if (!isFinite(s)) return null; const p = V.somma(c.p, V.per(d, s)), q = V.norma(p), g = cam.corpo.lonLat ? cam.corpo.lonLat(p) : [Math.atan2(-q[2], q[0]), Math.asin(q[1])]; return { lon: g[0], lat: g[1], distanza: s }; }
 
   // ---------- gli strati e le immagini su cui si disegna
   const strati = []; let imm = null;
