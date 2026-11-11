@@ -21,7 +21,8 @@ import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi } from './mappa.js';
+import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 import { cellaMateria } from './materia.js';
@@ -287,6 +288,39 @@ function eventoMateria(passo) {
   const c = comp.elementi[0].cella, m = c.materia; if (!m) return;
   const cam = c.indirizzo.camera, prima = camMappa; camMappa = cam ? clona(cam) : camMappa;
   entraMateria(m.luogo, { ...m.opzioni, evento: Math.max(0, (c.indirizzo.evento ?? 0) + passo) }); if (vista !== 'dettaglio') camMappa = prima;
+}
+// ---------- GLI ATOMI IN TRE DIMENSIONI (atomi3d.js), ai livelli più profondi della mappa: le molecole dell'acqua sotto i
+// dieci nanometri, il reticolo del minerale in fondo alla roccia (mappa.js, scenaAtomi, dice se c'è una scena e quale).
+// La vista vuole una tela tutta sua: se ne monta una nuova sopra la mappa (sotto i comandi) e la si toglie quando la
+// condizione cade. Sulla tela montata la rotella è sua: allontanandosi oltre la scena si risale di un passo; avvicinandosi
+// oltre il più vicino possibile, nell'acqua, si arriva all'evento vero. Il bottone entra nella finestra di quel punto.
+// Senza scheda grafica (o se il contesto non nasce) resta l'immagine piatta di mappa.js.
+let telaAtomi = null, vistaAtomi = null, chiaveAtomi = null, bottoneAtomi = null, senzaAtomi3D = false;
+function smontaAtomi() {
+  if (vistaAtomi) { try { vistaAtomi.libera(); } catch { /* già perso */ } }
+  telaAtomi?.remove(); bottoneAtomi?.remove(); telaAtomi = null; vistaAtomi = null; bottoneAtomi = null; chiaveAtomi = null;
+}
+function esciDagliAtomi() {
+  if (camMappa.suAcqua) camMappa.latoAcqua = (camMappa.latoAcqua ?? 1e-8) * 10; else { camMappa.passoRoccia = 2; camMappa.cx = 0.5; camMappa.cy = 0.5; camMappa.z = 8 * Math.min(tela.width, tela.height); }
+  montaAtomi(); disegna(); dove();
+}
+function montaAtomi() {
+  let sc = null; try { sc = vista === 'cosmo' && camMappa && !senzaAtomi3D ? scenaAtomi(camMappa) : null; } catch (err) { console.warn(err); sc = null; }
+  if (!sc) { if (telaAtomi) smontaAtomi(); return; }
+  if (sc.chiave === chiaveAtomi) return; // stesso punto, stessa scala: la scena c'è già
+  smontaAtomi();
+  try {
+    telaAtomi = document.createElement('canvas'); telaAtomi.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'; tela.parentNode.insertBefore(telaAtomi, tela.nextSibling);
+    vistaAtomi = creaVistaAtomi(telaAtomi, { alFuori: esciDagliAtomi });
+    vistaAtomi.suAtomo((a) => { if (!a) { dove(); return; } $('dove').textContent = `${a.nome || a.simbolo || 'un atomo'}${a.simbolo && a.nome ? ` (${a.simbolo})` : ''}${a.parte ? ` · ${typeof a.parte === 'string' ? a.parte : a.parte.nome || ''}` : ''}${a.rappresenta > 1 ? ` · da qui questa sfera ne rappresenta ${a.rappresenta}: avvicinati e tornano gli atomi` : ''}`; });
+    vistaAtomi.carica(sc.crea()); vistaAtomi.avvia(); chiaveAtomi = sc.chiave;
+    // oltre il più vicino possibile (dentro una molecola): sotto le molecole dell'acqua c'è l'evento vero che le attraversa
+    telaAtomi.addEventListener('wheel', (e) => { if (e.deltaY < 0 && camMappa.suAcqua && vistaAtomi && vistaAtomi.camera.dist <= 0.1) { e.stopImmediatePropagation(); e.preventDefault(); camMappa.eventoAcqua = true; camMappa.cx = 0.5; camMappa.cy = 0.5; camMappa.z = Math.min(tela.width, tela.height); montaAtomi(); disegna(); dove(); } }, { capture: true, passive: false });
+    bottoneAtomi = document.createElement('button'); bottoneAtomi.textContent = '▸ entra nella finestra di questo punto'; bottoneAtomi.title = "le particelle dentro questa materia: ciò che il cristallo ha registrato, o il prossimo evento vero nell'acqua";
+    bottoneAtomi.style.cssText = 'position:absolute;left:12px;top:44px;z-index:3;font:inherit;padding:4px 9px;border:1px solid #666;border-radius:4px;background:rgba(20,20,24,0.85);color:#eee;cursor:pointer';
+    bottoneAtomi.onclick = () => { const m = colpisciMappa(camMappa, tela.width / 2, tela.height / 2, tela.width, tela.height)?.materia; if (m) entraMateria(m.luogo, m.opzioni); };
+    tela.parentNode.insertBefore(bottoneAtomi, telaAtomi.nextSibling);
+  } catch (err) { console.warn('la vista degli atomi in 3D non si è potuta montare: resta l\'immagine piatta', err); smontaAtomi(); senzaAtomi3D = true; }
 }
 // la rotella che, oltre un limite, porta alla vista accanto nella catena
 // lo zoom dentro una regione: una bolla di spaziotempo dieci volte più piccola (cosmo.js, cellaDi)
@@ -849,7 +883,7 @@ tela.addEventListener('wheel', (e) => {
     const r = tela.getBoundingClientRect(), dpr = devicePixelRatio || 1;
     const esito = zoomMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, Math.exp(-e.deltaY * 0.0015), tela.width, tela.height);
     if (esito?.entra) { entraRegione(esito.entra); return; }
-    sopraMappa = null; disegna(); dove(); mostraPannello(); if (!animazione) animazione = requestAnimationFrame(anima); return;
+    sopraMappa = null; montaAtomi(); disegna(); dove(); mostraPannello(); if (!animazione) animazione = requestAnimationFrame(anima); return;
   }
   if (vista === 'finestra' || vista === 'dettaglio') {
     e.preventDefault(); rotella += e.deltaY;
@@ -1384,7 +1418,7 @@ function dove() {
   const t = vista === 'pattern'
     ? (!comp.reticolo ? `Il pattern: la finestra ${nomeDi(comp.elementi[0].cella)}, ${ripetiDi(comp.elementi[0].cella).gruppo === 'una' ? 'da sola' : `ripetuta ${GRUPPI[comp.elementi[0].cella.ripeti.gruppo].nome.replace(/^caleidoscopio/, 'nel caleidoscopio')}`}. Clic per guardare la finestra da sola; trascina per muoverti, rotella per lo zoom; 🎲 per un'altra sezione bella.` : `Il pattern «${comp.nome}»: passa sopra un motivo per vedere le sue copie, cliccalo per entrare nella sua fisica.`)
     : strumento !== 'seleziona' ? `Clicca sulla scena dove mettere ${({ sorgente: 'la particella', campo: 'il campo', materia: 'la materia', massa: 'la massa', })[strumento]} (Esc per annullare).`
-    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo; avvicinati al pianeta per scendere sulla sua superficie.' : camMappa.livello === 5 ? `${rocciaDi(camMappa)?.nome || ''}: ${(rocciaDi(camMappa)?.frase || '')}. Clic: entra nella finestra di questo punto (le tracce delle particelle dentro questa materia). Rotella indietro per risalire.` : camMappa.livello === 4 ? 'La superficie: avvicinandoti il terreno si calcola sempre più fine, dai continenti alle valli (fino a celle di una decina di metri). Passa sopra un punto per quota e temperatura; quando lo schermo è largo poche centinaia di chilometri, un clic su un punto apre la finestra sull\'aria che ha sopra: lo sciame di un raggio cosmico.' : ''}`
+    : vista === 'cosmo' ? `${percorso(camMappa).join(' › ')}. Rotella per avvicinarti o allontanarti, trascina per muoverti, clic su una cosa per andarci. ${camMappa.livello === 0 ? 'Lo spazio si richiude su sé stesso: andando sempre dritto si torna qui.' : camMappa.livello === 3 ? 'I quadrati sono le regioni: avvicinati a una per entrare nel suo universo; avvicinati al pianeta per scendere sulla sua superficie.' : camMappa.livello === 5 ? `${rocciaDi(camMappa)?.nome || ''}: ${(rocciaDi(camMappa)?.frase || '')}. ${telaAtomi ? `Atomo per atomo, in tre dimensioni: trascina per ruotare, rotella per avvicinarti (verso il cursore); allontanati oltre la scena per risalire${camMappa.suAcqua ? "; avvicinati fino in fondo per l'evento vero" : ''}. Il bottone in alto entra nella finestra di questo punto.` : 'Clic: entra nella finestra di questo punto (le tracce delle particelle dentro questa materia). Rotella indietro per risalire.'}` : camMappa.livello === 4 ? 'La superficie: avvicinandoti il terreno si calcola sempre più fine, dai continenti alle valli (fino a celle di una decina di metri). Passa sopra un punto per quota e temperatura; quando lo schermo è largo poche centinaia di chilometri, un clic su un punto apre la finestra sull\'aria che ha sopra: lo sciame di un raggio cosmico.' : ''}`
     : vista === 'finestra' ? `La finestra: la sezione ${nomeDi(el().cella)} da sola. Clic sulla finestra per vederne lo spaziotempo; «l'universo» per spostarla o ingrandirla; la barra del tempo sceglie la fetta.`
     : vista === 'spaziotempo' && el()?.cella.finestra ? `Lo spaziotempo della finestra, guardato all'inizio dallo stesso angolo della sezione: è il pattern. Trascina per ruotarlo e vedere le linee d'universo nel blocco (il tempo sale); i punti arancio sono dove entrano i raggi e da dove vengono, le stelle verdi dove una particella si spezza. Tasto A: torna allineato.`
     : vista !== 'pattern' && el()?.cella.finestra && !solo && !aMeta() ? `«${el().nome}»: cerca la sezione. Trascina il bordo della cornice per spostarla, l'angolo per ingrandirla; la barra del tempo e la fetta scelgono quando guardare. Il Pattern mostra la sezione.`
@@ -1407,7 +1441,7 @@ function aggiornaVista() {
   if (inPattern) scegliStrumento('seleziona');
   simula(); aggiornaTempo(); mostraSchede(); dove();
   if (vista === 'spaziotempo') imposta3D();
-  disegna(); mostraPannello();
+  montaAtomi(); disegna(); mostraPannello();
   if (vista === 'cosmo' && !animazione) animazione = requestAnimationFrame(anima);
 }
 function carica(nuova, { tieniImmagine = false } = {}) {
@@ -1604,6 +1638,7 @@ function passo(adesso = performance.now()) {
 }
 
 addEventListener('resize', disegna);
+addEventListener('resize', () => vistaAtomi?.ridimensiona());
 // il lavoro resta: si salva da solo e si ritrova alla prossima apertura
 const CHIAVE = 'stateyour:camera';
 try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.reticolo) comp = s; } catch { /* un salvataggio rotto si ignora */ }

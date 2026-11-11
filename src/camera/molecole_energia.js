@@ -21,7 +21,7 @@
 // Unità: kJ/mol, J/(mol·K), K, Pa.
 
 import { atomo, raggioDiBorn, SIMBOLI, NUMERO } from './molecole_atomi.js';
-import { molecola, chiave, anelli, grezzo, coppieSolitarie, viciniSigma, sommaLegami, carica as caricaDi, conta } from './molecole_grafo.js';
+import { molecola, chiave, anelli, ranghi, grezzo, componenti as componentiDi, coppieSolitarie, viciniSigma, sommaLegami, carica as caricaDi, conta } from './molecole_grafo.js';
 import { forma, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio } from './molecole_forma.js';
 
 export const R = 8.314462618e-3; // kJ/(mol·K)
@@ -35,11 +35,11 @@ export const RIFERIMENTI = [
   ['O', -241.83], ['C', -74.6], ['CC', -84.0], ['CCC', -104.7], ['CCCC', -125.6], ['CC(C)C', -134.2], ['CC(C)(C)C', -167.9], ['CCCCCC', -167.1],
   ['C1CCCCC1', -123.4], ['C1CC1', 53.3], ['C1CCC1', 28.4], ['C1CCCC1', -76.4], ['C=C', 52.47], ['CC=C', 20.41], ['CC=CC', -10.8], ['CC(C)=C', -17.9], ['C=CC=C', 108.8],
   ['C#C', 226.73], ['CC#C', 185.4], ['c1ccccc1', 82.9], ['Cc1ccccc1', 50.1],
-  ['CO', -201.0], ['CCO', -234.8], ['CC(C)O', -272.8], ['CCCO', -256.0], ['COC', -184.1], ['C1CCOC1', -184.2], ['C1CO1', -52.64], ['OCCO', -389.0],
+  ['CO', -201.0], ['CCO', -234.8], ['CC(C)O', -272.8], ['CCCO', -256.0], ['COC', -184.1], ['COCOC', -348.2], ['C1CCOC1', -184.2], ['C1CO1', -52.64], ['OCCO', -389.0],
   ['C=O', -108.6], ['CC=O', -166.2], ['CC(C)=O', -217.1], ['CCC=O', -188.7], ['O=CC=O', -212.0],
   ['OC=O', -378.6], ['CC(=O)O', -433.0], ['COC(C)=O', -410.0], ['O=C=O', -393.51], ['[C-]#[O+]', -110.53],
   ['N', -45.94], ['CN', -22.5], ['CNC', -18.8], ['CN(C)C', -23.7], ['CCN', -47.5],
-  ['C#N', 135.14], ['CC#N', 74.04], ['N#CC#N', 309.07], ['N#CCC#N', 266.3], ['C=N', 69.0],
+  ['C#N', 135.14], ['CC#N', 74.04], ['N#CC#N', 309.07], ['C=N', 69.0],
   ['NC=O', -186.0], ['CC(N)=O', -238.33], ['CNC(C)=O', -248.0], ['NC(N)=O', -235.5], ['C=CC#N', 180.6], ['C=CC=O', -77.6],
   ['S', -20.6], ['CS', -22.9], ['CSC', -37.5], ['CSSC', -24.1], ['O=S=O', -296.81], ['O=S(=O)=O', -395.77], ['CS(C)=O', -150.5], ['O=C=S', -138.41], ['S=C=S', 116.94], ['S=S', 128.6],
   ['Cl', -92.31], ['CCl', -81.9], ['ClC(Cl)(Cl)Cl', -95.7], ['F', -273.3], ['CF', -234.3],
@@ -62,21 +62,28 @@ export function termini(x) {
   const m = molecola(x); if (m._termini) return m._termini;
   const t = {}, piu = (k, n = 1) => { t[k] = (t[k] || 0) + n; }, nomi = m.atomi.map((_, k) => nomeAtomo(m, k));
   m.atomi.forEach((a, k) => { if (a.h) piu(a.Z === 1 ? 'H-H' : `${nomi[k]}-H`, a.h); });
-  // i legami aromatici: tra semplice e doppio, nella proporzione dei doppi legami che il sistema ha davvero (benzene
-  // 3 su 6, naftalene 5 su 11): non dipende da quale forma di Kekulé è scritta
-  const sistema = new Map(), fraz = [];
-  m.legami.forEach((l, k) => { if (!l.ar || sistema.has(k)) return; const q = fraz.length, pila = [k]; let tot = 0, doppi = 0; sistema.set(k, q);
-    while (pila.length) { const u = pila.pop(), lu = m.legami[u]; tot++; if (lu.o === 2) doppi++; for (const at of [lu.a, lu.b]) for (const v of m.vic[at]) if (m.legami[v.k].ar && !sistema.has(v.k)) { sistema.set(v.k, q); pila.push(v.k); } }
-    fraz.push(doppi / tot); });
-  m.legami.forEach((l, k) => { if (l.t === 'i') return; const [p, q] = m.atomi[l.a].Z < m.atomi[l.b].Z || (m.atomi[l.a].Z === m.atomi[l.b].Z && nomi[l.a] <= nomi[l.b]) ? [l.a, l.b] : [l.b, l.a];
-    if (l.t === 'd') piu(`${nomi[l.a]}>${nomi[l.b]}`); else if (l.ar) { const f = fraz[sistema.get(k)]; piu(`${nomi[p]}-${nomi[q]}`, 1 - f); piu(`${nomi[p]}=${nomi[q]}`, f); } else piu(`${nomi[p]}${l.o === 3 ? '#' : l.o === 2 ? '=' : '-'}${nomi[q]}`); });
+  // i legami aromatici: quelli di una forma di Kekulé scelta in un modo che dipende solo dal grafo (gli atomi che
+  // portano un doppio legame si accoppiano in ordine di rango canonico), più un termine per anello aromatico
+  const doppio = new Set(), piAtomi = m.atomi.map((a, k) => a.ar && m.vic[k].some((v) => m.legami[v.k].ar && m.legami[v.k].o === 2));
+  if (piAtomi.some(Boolean)) { const { cls } = ranghi(m), ordine = m.atomi.map((_, k) => k).filter((k) => piAtomi[k]).sort((x, y) => cls[x] - cls[y]), coppia = new Map();
+    const prova = () => { let a = -1, meno = 99; for (const k of ordine) if (!coppia.has(k)) { const lib = m.vic[k].filter((v) => m.legami[v.k].ar && piAtomi[v.j] && !coppia.has(v.j)).length; if (lib < meno) { meno = lib; a = k; } }
+      if (a < 0) return true; for (const v of m.vic[a].filter((w) => m.legami[w.k].ar && piAtomi[w.j] && !coppia.has(w.j)).sort((x, y) => cls[x.j] - cls[y.j])) { coppia.set(a, v.k); coppia.set(v.j, v.k); if (prova()) return true; coppia.delete(a); coppia.delete(v.j); } return false; };
+    if (prova()) for (const k of coppia.values()) doppio.add(k); else m.legami.forEach((l, k) => { if (l.ar && l.o === 2) doppio.add(k); }); }
+  m.legami.forEach((l, k) => { if (l.t === 'i') return; const [p, q] = m.atomi[l.a].Z < m.atomi[l.b].Z || (m.atomi[l.a].Z === m.atomi[l.b].Z && nomi[l.a] <= nomi[l.b]) ? [l.a, l.b] : [l.b, l.a], o = l.ar ? (doppio.has(k) ? 2 : 1) : l.o;
+    piu(l.t === 'd' ? `${nomi[l.a]}>${nomi[l.b]}` : `${nomi[p]}${o === 3 ? '#' : o === 2 ? '=' : '-'}${nomi[q]}`); });
   // le coppie di vicini sullo stesso atomo. Le classi del vicino: C carbonio saturo, c carbonio insaturo legato con un
-  // legame semplice (coniugazione), X eteroatomo, d =C, D =O/=N/=S, t legame triplo, a aromatico
+  // legame semplice a un centro insaturo (coniugazione), X azoto o ossigeno, Y altro eteroatomo, d =C, D =O/=N/=S, t legame triplo (negli anelli aromatici: come nella forma di Kekulé)
   const insaturo = (j) => m.atomi[j].ar || m.vic[j].some((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o >= 2);
-  m.atomi.forEach((a, k) => { const cl = [];
-    for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t !== 'c') continue; const C = m.atomi[v.j].Z === 6; cl.push(l.ar ? 'a' : l.o === 3 ? 't' : l.o === 2 ? (C ? 'd' : 'D') : C ? (insaturo(v.j) ? 'c' : 'C') : 'X'); }
-    for (let i = 0; i < cl.length; i++) for (let j = i + 1; j < cl.length; j++) { if (cl[i] === 'a' && cl[j] === 'a') continue; piu(`g${a.Z === 6 ? 'C' : SIMBOLI[a.Z]}:${[cl[i], cl[j]].sort().join('')}`); } });
-  for (const r of anelli(m)) { if (r.every((k) => m.atomi[k].ar)) piu(`aromatico${r.length}`); else if (r.length <= 5) piu(`anello${r.length}`); }
+  m.atomi.forEach((a, k) => { const cl = [], centroPi = insaturo(k);
+    for (const v of m.vic[k]) { const l = m.legami[v.k]; if (l.t !== 'c') continue; const C = m.atomi[v.j].Z === 6; const o = l.ar ? (doppio.has(v.k) ? 2 : 1) : l.o; cl.push(o === 3 ? 't' : o === 2 ? (C ? 'd' : 'D') : C ? (centroPi && insaturo(v.j) ? 'c' : 'C') : m.atomi[v.j].Z === 7 || m.atomi[v.j].Z === 8 ? 'X' : 'Y'); }
+    for (let i = 0; i < cl.length; i++) for (let j = i + 1; j < cl.length; j++) { piu(`g${a.Z === 6 ? (centroPi ? 'c' : 'C') : SIMBOLI[a.Z]}:${[cl[i], cl[j]].sort().join('')}`); }
+    // (l'effetto anomerico non si somma oltre: tre ossigeni sullo stesso carbonio saturo valgono due coppie, non tre)
+    const nX = cl.filter((c) => c === 'X').length; if (a.Z === 6 && !centroPi && nX >= 3) piu('gC:XX', nX - 1 - (nX * (nX - 1)) / 2); });
+  // (un anello è «aromatico» per l'energia solo se il sestetto è tutto suo: non i lattami come l'uracile, che hanno C=O fuori dall'anello e la risonanza delle ammidi)
+  // la stabilizzazione aromatica cresce con il numero di atomi del sistema (benzene 150, naftalene 255, antracene 351 kJ/mol: 25 per atomo): un termine per atomo
+  const in6 = new Set(), in5 = new Set();
+  for (const r of anelli(m)) { const dentro = new Set(r); if (r.every((k) => m.atomi[k].ar) && !r.some((k) => m.vic[k].some((v) => !dentro.has(v.j) && m.legami[v.k].o === 2 && !m.legami[v.k].ar))) r.forEach((k) => (r.length === 6 ? in6 : in5).add(k)); else if (r.length <= 5) piu(`anello${r.length}`); }
+  if (in6.size) piu('aromatico6', in6.size); const solo5 = [...in5].filter((k) => !in6.has(k)).length; if (solo5) piu('aromatico5', solo5);
   Object.defineProperty(m, '_termini', { value: t, enumerable: false });
   return t;
 }
@@ -131,9 +138,12 @@ function entalpiaIone(m) {
       return { H: entalpiaGas(acido).H + bde + 1318.2 - ea - HF_PROTONE, stima: 'ione: acidità in gas per classe' }; } }
   return null;
 }
+// (per le prove: l'entalpia con un altro insieme di termini, per esempio ricavati senza una molecola)
+export function entalpiaCon(x, tv) { const m = molecola(x), t = termini(m); let H = atomizzazione(m); for (const k in t) H -= (fisso(k) ?? tv[k] ?? riserva(k)) * t[k]; return H; }
 // entalpia di formazione in fase gas a 298 K → { H, stima: 'riferimenti' | 'riserva' (qualche termine dalla regola di Pauling) | 'ione…', riservati: [termini] }
+const canonica = (x) => { const m = molecola(x); return molecola(chiave(m)); };
 export function entalpiaGas(x) {
-  const m = molecola(x); if (m._hf) return m._hf;
+  const m1 = molecola(x); if (m1._hf) return m1._hf; const m = canonica(m1); if (m !== m1) { const r = entalpiaGas(m); Object.defineProperty(m1, '_hf', { value: r, enumerable: false }); return r; }
   let out = null;
   if (m.atomi.some((a) => a.q !== 0) && m.atomi.reduce((s, a) => s + a.q, 0) !== 0) out = entalpiaIone(m);
   if (!out) { const tv = termochimica().valori, t = termini(m), riservati = []; let H = atomizzazione(m);
@@ -147,8 +157,10 @@ export function entalpiaGas(x) {
 
 // ---------- entropia e funzioni termiche (meccanica statistica)
 // i modi di vibrazione (cm⁻¹) e i rotori interni di una molecola, dalla sua forma
-function modi(m) {
-  if (m._modi) return m._modi;
+function modi(m0) {
+  if (m0._modi) return m0._modi;
+  // (la forma si costruisce sulla molecola riletta dalla sua chiave: così l'entropia non dipende dall'ordine in cui gli atomi sono stati scritti)
+  const m = molecola(chiave(m0)); if (m !== m0) { const r = modi(m); Object.defineProperty(m0, '_modi', { value: r, enumerable: false }); return r; }
   const f = forma(m), n = f.n, nu = [], rotori = [];
   const { massa, momenti } = inerzia(f), lineare = n === 2 || (n > 2 && momenti[0] < 1e-3 * momenti[2]);
   const out = { f, n, massa, momenti, lineare, sigma: numeroDiSimmetria(f), nu, rotori, elettronica: 1 };
@@ -216,16 +228,19 @@ export const IDRATAZIONE = [
   ['CC(=O)O', -6.69], ['CCCCC(=O)O', -6.16], ['CCCCCC(=O)O', -6.21], ['COC=O', -2.78], ['COC(C)=O', -3.13], ['CCC(=O)OC', -2.93], ['CCCCCC(=O)OC', -2.49],
   ['N', -4.29], ['CN', -4.55], ['CCN', -4.5], ['CCCN', -4.39], ['CCCCN', -4.24], ['CNC', -4.29], ['CN(C)C', -3.2], ['C1CCNCC1', -5.11], ['C1CCNC1', -5.48], ['C1COCCN1', -7.17], ['Nc1ccccc1', -5.49], ['NN', -9.3],
   ['CC(N)=O', -9.71], ['CNC(C)=O', -10.0], ['NC(=O)c1ccccc1', -11.0], ['CC#N', -3.88], ['c1ccncc1', -4.69], ['CS', -1.2], ['CCS', -1.14], ['CSC', -1.61], ['S', -0.7], ['C[N+](=O)[O-]', -4.02], ['CCl', -0.55],
-  ['O', -6.32], ['[HH]', 2.34], ['N#N', 2.45], ['O=O', 2.03], ['[C-]#[O+]', 2.20], ['O=C=O', 0.11], ['C#N', -3.2], ['C=C', 1.27], ['C#C', 0.0], ['[N]=O', 1.82], ['O=S=O', -2.0],
+  ['[HH]', 2.34], ['N#N', 2.45], ['O=O', 2.03], ['[C-]#[O+]', 2.20], ['O=C=O', 0.11], ['C#N', -3.2], ['C=C', 1.27], ['C#C', 0.0], ['[N]=O', 1.82], ['O=S=O', -2.0],
 ];
 function caratteriAcqua(m) {
-  const c = { costante: 1, carbonio: 0, aromatico: 0, OH: 0, etere: 0, carbonile: 0, NH: 0, ammina: 0, azotoPi: 0, zolfo: 0, coniugato: 0, alogeno: 0, multiplo: 0 };
-  m.atomi.forEach((a, k) => { const doppi = m.vic[k].filter((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o >= 2 && !m.legami[v.k].ar);
+  const c = { costante: 1, carbonio: 0, aromatico: 0, multiplo: 0, OH: 0, etere: 0, carbonile: 0, acile: 0, ammide: 0, NH: 0, ammina: 0, azotoPi: 0, nitrile: 0, zolfo: 0, alogeno: 0, osso: 0, nudo: 0 };
+  m.atomi.forEach((a, k) => { const doppi = m.vic[k].filter((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o >= 2 && !m.legami[v.k].ar), suC = m.vic[k].some((v) => m.atomi[v.j].Z === 6);
     if (a.Z === 6) { if (a.ar) c.aromatico++; else c.carbonio++; if (doppi.some((v) => m.atomi[v.j].Z === 6 && v.j > k)) c.multiplo++;
-      if (doppi.some((v) => m.atomi[v.j].Z === 8) && m.vic[k].some((v) => m.legami[v.k].o === 1 && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 7))) c.coniugato++; }
-    else if (a.Z === 8) { if (a.h) c.OH += a.h; else if (doppi.length || a.q < 0) c.carbonile++; else c.etere++; }
-    else if (a.Z === 7) { c.NH += a.h; if (a.q > 0) return; if (doppi.length || a.ar) { if (coppieSolitarie(m, k) > 0 && !(a.ar && coppieNelAnello(m, k))) c.azotoPi++; } else c.ammina++; }
+      if (doppi.length === 1 && m.legami[doppi[0].k].o === 2 && m.atomi[doppi[0].j].Z === 8) { const N = m.vic[k].some((v) => m.legami[v.k].o === 1 && m.atomi[v.j].Z === 7), O = m.vic[k].some((v) => m.legami[v.k].o === 1 && m.atomi[v.j].Z === 8); if (N) c.ammide++; else if (O) c.acile++; else c.carbonile++; }
+      else if (doppi.some((v) => m.atomi[v.j].Z !== 6 && m.legami[v.k].o === 2)) c.osso++; }
+    else if (a.Z === 8) { if (a.h) c.OH += a.h; else if (!doppi.length && !a.q) c.etere++; else if (!suC) c.osso++; }
+    else if (a.Z === 7) { c.NH += a.h; if (a.q > 0 || !suC) { if (!suC && !a.h) c.osso++; return; } if (doppi.some((v) => m.legami[v.k].o === 3)) c.nitrile++; else if (doppi.length || a.ar) { if (coppieSolitarie(m, k) > 0 && !(a.ar && coppieNelAnello(m, k))) c.azotoPi++; } else c.ammina++; }
     else if (a.Z === 16 || a.Z === 15) c.zolfo++; else if ([9, 17, 35].includes(a.Z)) c.alogeno++; });
+  // (una molecola di due atomi senza idrogeni da dare — H2, N2, O2, CO, NO — è solo una cavità nell'acqua)
+  if (m.atomi.length <= 2 && m.atomi.every((a) => a.Z === 1 || a.h === 0) && !c.zolfo && !c.alogeno) { for (const k in c) c[k] = 0; c.costante = 1; c.nudo = 1; }
   return c;
 }
 let IDRO = null;
@@ -248,6 +263,7 @@ export const inOlio = (x) => 5.0 - 3.2 * molecola(x).atomi.filter((a) => a.Z > 1
 const SIGMA_I = (m, j) => { const a = m.atomi[j], d = m.vic[j].some((v) => m.legami[v.k].o === 2 && !m.legami[v.k].ar), t = m.vic[j].some((v) => m.legami[v.k].o === 3);
   const el = a.Z === 9 ? 0.52 : a.Z === 17 ? 0.47 : a.Z === 35 ? 0.45 : a.Z === 8 ? (d ? 0.72 : 0.28) : a.Z === 7 ? (t ? 1.4 : d ? 0.5 : 0.15) : a.Z === 16 ? 0.26 : a.Z === 15 ? 0.2 : 0; return el + 0.6 * a.q; };
 const RHO = 9.8, SMORZA = 0.4;
+const ossoOS = (m, A) => m.vic[A].filter((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o === 2 && !m.legami[v.k].ar && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 16)).map((v) => v.j);
 const ossoDi = (m, A) => m.vic[A].filter((v) => m.legami[v.k].t === 'c' && ((m.legami[v.k].o === 2 && m.atomi[v.j].Z !== 6) || (m.legami[v.k].o === 1 && m.atomi[v.j].q < 0 && m.atomi[A].q > 0 && m.atomi[v.j].Z === 8))).map((v) => v.j);
 // il pKa dell'idrogeno sull'atomo k (com'è nel grafo): valore di base della classe (DATI: tabelle di pKa in acqua a
 // 25 °C: CRC Handbook; Perrin, Dempsey e Serjeant 1981) + effetto induttivo. → { pKa, classe } o null
@@ -257,7 +273,9 @@ export function pKaSito(m, k) {
   const nC = vic.filter((j) => m.atomi[j].Z === 6).length, piAccanto = (j) => m.atomi[j].ar || m.vic[j].some((v) => m.legami[v.k].t === 'c' && m.legami[v.k].o >= 2 && v.j !== k);
   if (a.Z === 8 && a.q === 0) {
     if (!vic.length) { base = 14.0; classe = 'acqua'; }
-    else { const A = vic[0], ZA = m.atomi[A].Z, osso = ossoDi(m, A); nucleo.add(A); osso.forEach((j) => nucleo.add(j));
+    else { const A = vic[0], ZA = m.atomi[A].Z, osso = ZA === 6 ? ossoOS(m, A) : ossoDi(m, A); nucleo.add(A); osso.forEach((j) => nucleo.add(j));
+      // (ciò che sta sullo stesso centro fa parte della classe: gli altri OH di un ossiacido, l'OH o l'NH2 di un acido carbonico o carbammico)
+      for (const v of m.vic[A]) if (ZA !== 6 || (osso.length && m.atomi[v.j].Z !== 6)) nucleo.add(v.j);
       if (ZA === 6) { if (osso.length) { const sost = viciniSigma(m, A).map((v) => v.j).filter((j) => j !== k && !osso.includes(j)); base = sost.some((j) => m.atomi[j].Z === 6) ? 4.76 : 3.75; classe = 'acido carbossilico'; if (osso.some((j) => m.atomi[j].Z === 16)) base -= 1.4; }
         else if (m.atomi[A].ar) { base = 10.0; classe = 'fenolo'; } else if (piAccanto(A)) { base = 10.5; classe = 'enolo'; } else { base = 16.0; classe = 'alcol'; } }
       else if (ZA === 15) { base = osso.length ? 2.15 : 8; classe = 'acido del fosforo'; } else if (ZA === 16) { base = [11, 1.9, -3][Math.min(2, osso.length)]; classe = 'acido dello zolfo'; }
@@ -268,24 +286,28 @@ export function pKaSito(m, k) {
     if (tri) { base = -10; classe = 'nitrilio'; }
     else if (a.ar) { const r = anelli(m).find((rr) => rr.includes(k) && rr.length === 5); base = r && r.some((j) => j !== k && m.atomi[j].Z === 7) ? 7.0 : 5.2; classe = r ? 'imidazolio' : 'piridinio'; if (r) r.forEach((j) => nucleo.add(j)); }
     else if (dop) { const C = dop.j, altriN = m.vic[C].filter((v) => v.j !== k && m.atomi[v.j].Z === 7 && m.legami[v.k].o === 1); nucleo.add(C); altriN.forEach((v) => nucleo.add(v.j)); base = altriN.length >= 2 ? 13.6 : altriN.length ? 12.4 : 7.0; classe = altriN.length ? 'amidinio' : 'imminio'; }
-    else if (vic.some((j) => m.atomi[j].Z === 6 && ossoDi(m, j).length)) { base = -8; classe = 'ammide protonata sull\'azoto'; }
+    else if (vic.some((j) => m.atomi[j].Z === 6 && ossoOS(m, j).length)) { base = -8; classe = 'ammide protonata sull\'azoto'; }
     else if (vic.some((j) => m.atomi[j].ar)) { base = 4.6; classe = 'anilinio'; } else if (vic.some((j) => m.atomi[j].Z === 7)) { base = 8.1; classe = 'idrazinio'; nucleo.add(vic.find((j) => m.atomi[j].Z === 7)); } else if (vic.some((j) => m.atomi[j].Z === 8)) { base = 6.0; classe = 'idrossilammonio'; nucleo.add(vic.find((j) => m.atomi[j].Z === 8)); }
     else { base = [9.25, 10.64, 10.73, 9.80][Math.min(nC, 3)]; classe = 'ammonio'; } }
-  else if (a.Z === 7 && a.q === 0) { const acili = vic.filter((j) => ossoDi(m, j).length);
+  else if (a.Z === 7 && a.q === 0) { const acili = vic.filter((j) => ossoOS(m, j).length);
     if (a.ar) { const r = anelli(m).find((rr) => rr.includes(k)); const altri = r ? r.filter((j) => j !== k && m.atomi[j].Z === 7).length : 0, acil = vic.filter((j) => m.vic[j].some((v) => m.legami[v.k].o === 2 && m.atomi[v.j].Z === 8)).length; base = acil >= 2 ? 9.5 : acil ? 11.5 : altri ? 14.5 - 2.3 * (anelli(m).filter((rr) => rr.includes(k) || rr.some((j) => r.includes(j))).length - 1) : 17.5; classe = 'NH aromatico'; r?.forEach((j) => nucleo.add(j)); }
-    else if (acili.length) { base = acili.length >= 2 ? 9.6 : 15.1; classe = 'ammide'; acili.forEach((j) => { nucleo.add(j); ossoDi(m, j).forEach((o) => nucleo.add(o)); }); }
+    else if (acili.length) { base = acili.length >= 2 ? 9.6 : 15.1; classe = 'ammide'; acili.forEach((j) => { nucleo.add(j); ossoOS(m, j).forEach((o) => nucleo.add(o)); }); }
     else if (vic.some((j) => m.vic[j].some((v) => m.legami[v.k].o === 3))) { base = 10.3; classe = 'cianammide'; } else { base = 35; classe = 'ammina'; } }
   else if (a.Z === 16 && a.q === 0) { if (!vic.length) { base = 7.0; classe = 'idrogeno solforato'; } else { const A = vic[0]; nucleo.add(A); base = ossoDi(m, A).length ? 3.3 : m.atomi[A].ar ? 6.6 : 10.5; classe = 'tiolo'; } }
-  else if (a.Z === 6 && a.q === 0) { const tripN = m.vic[k].some((v) => m.legami[v.k].o === 3 && m.atomi[v.j].Z === 7), acc = vic.filter((j) => ossoDi(m, j).length || m.vic[j].some((v) => m.legami[v.k].o === 3 && m.atomi[v.j].Z === 7));
+  else if (a.Z === 6 && a.q === 0 && !a.ar) { const tripN = m.vic[k].some((v) => m.legami[v.k].o === 3 && m.atomi[v.j].Z === 7), acc = vic.filter((j) => ossoOS(m, j).length || (m.atomi[j].Z === 7 && m.atomi[j].q > 0 && ossoDi(m, j).length) || m.vic[j].some((v) => m.legami[v.k].o === 3 && m.atomi[v.j].Z === 7));
     if (tripN) { base = 9.21; classe = 'acido cianidrico'; } else if (m.vic[k].some((v) => m.legami[v.k].o === 3)) { base = 25; classe = 'alchino'; }
-    else if (acc.length) { const nitro = acc.some((j) => m.atomi[j].Z === 7), ald = acc.some((j) => m.atomi[j].Z === 6 && m.atomi[j].h > 0 && ossoDi(m, j).length), est = acc.every((j) => m.vic[j].some((v) => m.legami[v.k].o === 1 && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 7)) || m.vic[j].some((v) => m.legami[v.k].o === 3));
-      base = nitro ? 10.2 : (est ? 24.5 : ald ? 16.7 : 19.3) - 9 * (acc.length - 1); classe = 'carbonio α'; acc.forEach((j) => { nucleo.add(j); ossoDi(m, j).forEach((o) => nucleo.add(o)); m.vic[j].forEach((v) => { if (m.legami[v.k].o === 3 || (est && m.legami[v.k].o === 1 && m.atomi[v.j].Z !== 6)) nucleo.add(v.j); }); }); }
+    else if (acc.length) { const nitro = acc.some((j) => m.atomi[j].Z === 7), ald = acc.some((j) => m.atomi[j].Z === 6 && m.atomi[j].h > 0 && ossoOS(m, j).length), est = acc.every((j) => m.vic[j].some((v) => m.legami[v.k].o === 1 && (m.atomi[v.j].Z === 8 || m.atomi[v.j].Z === 7)) || m.vic[j].some((v) => m.legami[v.k].o === 3));
+      base = nitro ? 10.2 : (est ? 24.5 : ald ? 16.7 : 19.3) - 9 * (acc.length - 1); classe = 'carbonio α'; acc.forEach((j) => { nucleo.add(j); ossoDi(m, j).concat(ossoOS(m, j)).forEach((o) => nucleo.add(o)); m.vic[j].forEach((v) => { if (m.legami[v.k].o === 3 || (est && m.legami[v.k].o === 1 && m.atomi[v.j].Z !== 6)) nucleo.add(v.j); }); }); }
     else { base = 50; classe = 'alcano'; } }
+  else if (a.Z === 6) return null;
   else if (a.Z === 9) { base = 3.17; classe = 'HF'; } else if (a.Z === 17) { base = -7; classe = 'HCl'; } else if (a.Z === 35) { base = -9; classe = 'HBr'; } else if (a.Z === 34) { base = 3.9; classe = 'H2Se'; } else if (a.Z === 15) { base = 27; classe = 'fosfina'; } else return null;
   // l'effetto induttivo: gli eteroatomi e le cariche a due o più legami di distanza
-  const dist = new Map([[k, 0]]); let fronte = [k], ind = 0;
+  const dist = new Map([[k, 0]]); let fronte = [k], ind = 0; // (dist: i legami tra k e ogni altro atomo, fino a 5)
   for (let d = 1; d <= 5 && fronte.length; d++) { const poi = []; for (const u of fronte) for (const v of m.vic[u]) { if (dist.has(v.j) || m.legami[v.k].t === 'i') continue; dist.set(v.j, d); poi.push(v.j); if (d >= 2 && !nucleo.has(v.j)) ind += SIGMA_I(m, v.j) * SMORZA ** (d - 2); } fronte = poi; }
-  return { pKa: base - RHO * ind, classe };
+  let pKa = base - (base > 12 ? Math.min(4 / RHO, ind) : ind) * RHO;
+  // un gruppo amminico sull'anello, in orto o in para all'azoto aromatico, gli cede elettroni per risonanza (2- e 4-amminopiridina: pKa 6,86 e 9,17 contro 5,2: dati)
+  if (a.Z === 7 && a.q === 1 && a.ar) for (const [j, d] of dist) { if ((d !== 2 && d !== 4) || !m.atomi[j].ar) continue; for (const v of m.vic[j]) if (m.atomi[v.j].Z === 7 && !m.atomi[v.j].ar && !m.atomi[v.j].q && m.legami[v.k].o === 1) pKa += d === 2 ? 3.2 : 4.3; }
+  return { pKa, classe };
 }
 // la forma neutra di riferimento: gli acidi con il loro idrogeno, le basi senza
 export function neutra(x) {
@@ -328,25 +350,42 @@ export function alPH(x, pH = 7) { const sp = speciazione(x, pH), g = grezzo(sp.n
 export function pKaApparenti(x) { const { siti } = sitiAcidoBase(x); if (!siti.length) return []; const out = []; let prima = speciazione(x, -4).carica;
   for (let pH = -4; pH <= 18; pH += 0.02) { const q = speciazione(x, pH).carica; if (Math.floor(prima + 0.5) !== Math.floor(q + 0.5)) out.push(+pH.toFixed(2)); prima = q; } return out; }
 
+// log K del primo complesso di uno ione metallico con un donatore, in acqua. LEGGE EMPIRICA rozza (ordine di grandezza):
+// una parte elettrostatica, carica dello ione × (½ − carica del donatore) / distanza, e una parte «tenero con tenero»
+// (Pearson 1963) per i metalli con elettroni d verso azoto e zolfo. Tarata a occhio su [ricordati]: Mg²⁺-acetato 0,5-1,3,
+// Fe³⁺-acetato 3,4, Cu²⁺-NH3 4,1, Zn²⁺-NH3 2,4, Mg²⁺-NH3 0,2, tiolati di Zn/Cu/Fe 6-12. PARAMETRI LIBERI: 4,5; 3,5; 6.
+export function logKComplesso(Zmetallo, q, Zdonatore, qDonatore = 0) {
+  const M = atomo(Zmetallo), D = atomo(Zdonatore), r = M.raggioCovalente - 0.65 + D.raggioVdW, tenero = (M.blocco === 'd' ? 1 : 0) * (Zdonatore === 16 ? 6 : Zdonatore === 7 ? 3.5 : 0);
+  return -1.5 + (4.5 * q * (0.5 - qDonatore)) / (r * 2) + tenero * (q >= 2 ? 1 : 0.5);
+}
+
 // ---------- l'energia a T e P, in gas o in acqua
 // l'acqua liquida rispetto al suo vapore a 1 bar: ΔG = RT·ln(p_vapore/1 bar), con Clausius e Clapeyron (ΔH di
 // evaporazione 44,0 kJ/mol a 298 K, 40,65 a 373 K: dati; bolle a 373,15 K)
 const EVAP = (T) => 44.0 - 0.0447 * (T - 298.15);
 export const condensaAcqua = (T) => { const a = 44.0 + 0.0447 * 298.15, b = 0.0447, Tb = 373.15; return T * (a * (1 / Tb - 1 / T) + b * Math.log(Tb / T)) + R * T * Math.log(1.01325); };
+// raggi ionici (Å, coordinazione 6): Shannon 1976, Acta Cryst. A32, 751 [ricordati]; dove mancano: la regola di molecole_atomi.js
+const SHANNON = { Li1: 0.76, Na1: 1.02, K1: 1.38, Be2: 0.45, Mg2: 0.72, Ca2: 1.00, Al3: 0.535, Sc3: 0.745, Ti4: 0.605, Cr3: 0.615, Mn2: 0.83, Fe2: 0.78, Fe3: 0.645, Co2: 0.745, Ni2: 0.69, Cu1: 0.77, Cu2: 0.73, Zn2: 0.74, Ga3: 0.62 };
 const DS_SOLUTO = -0.085; // kJ/mol/K: ciò che un soluto perde entrando in acqua dal gas (regola di Barclay e Butler 1938: dato)
 // energia(molecola, { T, P, solvente: null | 'acqua', pH, attivitaAcqua }) →
 //   { H, S, G (alla T e P date; gas: stato 1 bar corretto a P; in acqua: soluto 1 M, già sommato sugli stati di protonazione a quel pH),
 //     Hf298, S298, stima, in acqua anche: idratazione, carica, protonazione (ΔG degli stati), fase }
-export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attivitaAcqua = 1 } = {}) {
-  const m0 = molecola(x), acqua = solvente === 'acqua', m = acqua ? neutra(m0) : m0;
+export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attivitaAcqua = 1, misure = null } = {}) {
+  // (si lavora sempre sulla molecola riletta dalla sua chiave: stessa molecola → stessi numeri fino all'ultima cifra, comunque sia stata scritta)
+  const m0 = canonica(x), acqua = solvente === 'acqua', m = acqua ? canonica(neutra(m0)) : m0;
+  // (misure: { chiave: [ΔHf, S] } di specie misurate — per esempio gli ioni di mare.js — usate al posto della stima)
+  if (misure) { const d = misure[chiave(m0)]; if (d) return { H: d[0], S: d[1], G: d[0] - (T * d[1]) / 1000, fase: acqua ? 'acqua' : 'gas', stima: 'misurato', carica: caricaDi(m0), Hf298: d[0], S298: d[1] }; }
   const mono = m.atomi.length === 1 && !m.atomi[0].h && m.atomi[0].q !== 0;
   if (acqua && m.atomi.length === 1 && m.atomi[0].Z === 1 && m.atomi[0].q === 1) return { H: 0, S: 0, G: -R * T * LN10 * pH, fase: 'acqua', stima: 'convenzione: H⁺(aq) = 0', carica: 1, Hf298: 0, S298: 0 };
+  // un complesso di uno ione metallico in acqua: lo ione e i suoi leganti presi separati, più l'energia di ogni legame dativo (regola di logK)
+  if (acqua && m.legami.some((l) => l.t === 'd' && atomo(m.atomi[l.b].Z).metallo)) { const g = grezzo(m); let dG = 0; g.legami = g.legami.filter((l) => { if (l.t !== 'd') return true; dG += -R * T * LN10 * logKComplesso(m.atomi[l.b].Z, m.atomi[l.b].q, m.atomi[l.a].Z, m.atomi[l.a].q); return false; });
+    const pezzi = componentiDi(molecola(g)).map((c) => energia(c, { T, P, solvente, pH, attivitaAcqua, misure })); return { H: pezzi.reduce((s, e) => s + e.H, 0) + dG, S: pezzi.reduce((s, e) => s + e.S, 0), G: pezzi.reduce((s, e) => s + e.G, 0) + dG, fase: 'acqua', stima: 'complesso: regola di log K', carica: caricaDi(m), Hf298: NaN, S298: NaN }; }
   const hf = entalpiaGas(m), t298 = termica(m, 298.15, 1e5), tT = T === 298.15 ? t298 : termica(m, T, 1e5);
   const H = hf.H + tT.Htermica - t298.Htermica, S = tT.S;
   if (!acqua) return { H, S: S - 1000 * R * Math.log(P / 1e5), G: H - (T * S) / 1000 + R * T * Math.log(P / 1e5), fase: 'gas', stima: hf.stima, riservati: hf.riservati, Hf298: hf.H, S298: t298.S };
   if (chiave(m) === 'O') { const g = condensaAcqua(T); return { H: H - EVAP(T), S: S - (1000 * (EVAP(T) + g)) / T, G: H - (T * S) / 1000 + g + R * T * Math.log(Math.max(attivitaAcqua, 1e-12)), fase: 'acqua (solvente)', stima: hf.stima, carica: 0, Hf298: hf.H, S298: t298.S }; }
   if (mono) { // ione semplice: Born, nella convenzione H⁺(aq) = 0
-    const a = m.atomi[0], eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), born = (-694.65 * a.q * a.q * (1 - 1 / eps)) / raggioDiBorn(a.Z, a.q);
+    const a = m.atomi[0], eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), born = (-694.65 * a.q * a.q * (1 - 1 / eps)) / (SHANNON[SIMBOLI[a.Z] + a.q] != null ? SHANNON[SIMBOLI[a.Z] + a.q] + (a.q > 0 ? 0.85 : 0.1) : raggioDiBorn(a.Z, a.q));
     // (la scala: ΔG di idratazione assoluta di H⁺ −1056 kJ/mol, Marcus 1991, la stessa su cui sono tarati i raggi di Latimer; S di H⁺ gas 108,9 J/mol/K)
     const G = H - (T * S) / 1000 + born - a.q * (HF_PROTONE - T * 0.1089 - 1056);
     return { H, S, G, fase: 'acqua', stima: 'ione semplice: Born', idratazione: born, carica: a.q, Hf298: hf.H, S298: t298.S }; }

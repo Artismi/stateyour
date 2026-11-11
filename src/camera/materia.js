@@ -48,7 +48,8 @@
 //     La fissione spontanea dell'U-238: 8,45·10⁻¹⁷ all'anno (Holden e Hoffman 2000); l'energia
 //     dei frammenti: 0,1189·Z²/A^(1/3) + 7,3 MeV (Viola, Kwiatkowski e Walker 1985); frammento leggero A = 96 ± 6;
 //   · uranio, torio, potassio, rubidio nelle condriti CI: 8,0 ppb · 29 ppb · 550 ppm · 2,3 ppm (Lodders 2003; Palme e
-//     O'Neill 2014): gli stessi da cui vengono i numeri di leggi.js (ISOTOPI); il potassio è volatile e ne resta un
+//     O'Neill 2014): gli stessi di leggi.js (ISOTOPI, ora sui valori di Dye 2012: i due conti del calore coincidono
+//     entro lo 0,1%; resta l'1,3% sull'U-235, che pesa l'1% del totale); il potassio è volatile e ne resta un
 //     quarto (come in chimica.js), uranio e torio no: perciò nella roccia di un pianeta seguono il potassio con il
 //     rapporto K/U ≈ 17 000 (Terra: 12–14 000). Quanto li concentrano i minerali rispetto al fuso (Bea 1996; Mahood e
 //     Hildreth 1983): zircone U ×100, Th ×25 · apatite ×6, ×4 · monazite ×1000, ×5000 · i minerali comuni 0,001–0,02
@@ -873,8 +874,8 @@ function cellaIstante(luogo, { latoM = null, processo = null, evento = 0, via = 
   if (sorgenti[0].emissione.dal !== 'bordo') cella.finestra.centro = sorgenti[0].pos.map((x) => Math.round(limita(x, 200, 800))); // la finestra guarda dove accade
   if (cella.mezzo.n) cella.scala.fotoniPerLinea = fotoniVeri(m) * cella.mezzo.ogniFotone * u.l; // quanti fotoni veri sta per ogni linea di luce disegnata (a β = 1)
   cella.indirizzo = { ...(via || {}), luogo: luogo.indirizzo || null, materia: m.nome, modo: 'istante', latoM, processo: chi.id, evento, data };
-  const attese = src.attesa(latoM), nome = `${m.nome}, ${fmtLunghezza(latoM)}: ${chi.tipo === 'cosmico' ? chi.id : chi.origine}`;
-  const frasi = [`Un cubo di ${m.nome} largo ${fmtLunghezza(latoM)}${luogo.profonditaM > 0 ? `, ${fmtLunghezza(luogo.profonditaM)} sotto la superficie` : ''}.`, `${frase}.`,
+  const attese = src.attesa(latoM), nome = `${luogo.nome || m.nome}, ${fmtLunghezza(latoM)}: ${chi.tipo === 'cosmico' ? chi.id : chi.origine}`;
+  const frasi = [`Un cubo di ${luogo.nome || m.nome} largo ${fmtLunghezza(latoM)}${luogo.profonditaM > 0 ? `, ${fmtLunghezza(luogo.profonditaM)} sotto la superficie` : ''}.`, `${frase}.`,
     `Quanto è raro: in questo volume ${scelto ? 'un evento così' : 'un evento qualsiasi'} accade ogni ${fmtTempo(1 / ritmo)}; questo è il ${evento + 1}° da quando si comincia a guardare, dopo ${fmtTempo(data)}. Dura ${fmtTempo(tempo * u.tu)}: è tutta l'esposizione.`,
     `Che cos'altro accade qui: ${attese.slice(0, 5).map((a) => a.frase).join('; ')}.`, src.neutrini.frase];
   return { cella, nome, nota: frasi.join(' '), racconto: { titolo: nome, frasi, attese, veri: { ritmo, data, processo: chi.id } } };
@@ -907,7 +908,7 @@ function cellaMemoria(luogo, { latoM = null, esposizione = null, ospite = null, 
   if (vereA > 0) for (let k = 0; k < nA; k++) metti(k, 'α', [alfaG, alfaO], tA);
   if (vereF > 0) for (let k = 0; k < nF; k++) metti(k, 'fissione', [fisG, fisO], tF);
   const tStop = Math.max(percorso('alfa', 8.8, mO).secondi, percorso({ Z: 54, A: 140 }, 70, mO).secondi), tempo = Math.round(Tsparso + limita((1.4 * tStop) / u.tu, 40, 6000));
-  const cella = scheletro(luogo, mO, u, latoM, tempo, c, { specie: cat, sorgenti, mezzo: mezzoMotore(mO, u, latoM, { cherenkov: false }), pellicola: { ...PELLICOLA, w0: 0.15 } });
+  const cella = scheletro(luogo, mO, u, latoM, tempo, c, { specie: cat, sorgenti, mezzo: mezzoMotore(mO, u, latoM, { cherenkov: false }), pellicola: { ...PELLICOLA, w0: 0.07 } }); // (pellicola fine: i frammenti di fissione, venti volte più carichi di una α, lasciano una traccia venti volte più larga)
   // il granello: un altro mezzo (più denso: frena di più), nello stesso posto per tutte le tracce
   if (granello && rGu > 0.5) cella.domini.push({ forma: { tipo: 'cerchio', centro: [LATO / 2, LATO / 2], r: +rGu.toFixed(3) }, K: +(perdita('alfa', 5, mG).alMetro / perdita('alfa', 5, mO).alMetro).toFixed(4) });
   cella.scala.esposizioneAnni = Math.max(tA, tF); cella.scala.sparso = Tsparso; cella.scala.compressione = (Math.max(tA, tF) * ANNO) / (Tsparso * u.tu);
@@ -970,7 +971,10 @@ export function improntaAlSuolo(tracce, cella) {
 // 8. LA MEMORIA DEI MINERALI: aloni pleocroici e tracce fossili (il disegno accumulato)
 // =====================================================================================
 const COLORI_MINERALI = { biotite: [150, 108, 62], apatite: [214, 222, 202], zircone: [206, 192, 168], monazite: [196, 150, 84], quarzo: [226, 222, 214], 'feldspato potassico': [218, 186, 168], plagioclasio: [206, 204, 197] };
-const DOSE_COLORE = 3e13; // (α per cm²) la fluenza che colora la biotite
+// (α per cm²) la fluenza a cui la biotite comincia a colorarsi. Poi il buio cresce come il logaritmo della dose (come una
+// lastra fotografica) fino a saturare mille volte più su: PARAMETRO della resa, scelto perché i gradini degli anelli si
+// leggano anche negli aloni vecchi (dove un annerimento proporzionale alla dose sarebbe tutto nero)
+const DOSE_COLORE = 3e13;
 // l'energia a cui una α frena di più in un mezzo (il picco di Bragg): lì, poco prima di fermarsi, lascia più energia
 function picco(m) { let best = 0.5, s = 0; for (let E = 0.2; E < 3; E *= 1.06) { const f = frenata(particella('alfa'), E, m).elettronica; if (f > s) { s = f; best = E; } } return best; }
 // GLI ALONI attorno a un granello ricco di uranio e torio dentro un minerale che si colora (la biotite). Ogni passo α della
@@ -992,7 +996,7 @@ export function aloni(luogo, { ospite = 'biotite', granello = 'zircone', raggioM
   { const forte = anelli.reduce((x, a) => Math.max(x, a.quante), 0); for (const a of anelli) a.debole = a.quante < 0.2 * forte; }
   // il profilo: la fluenza equivalente (α per cm², pesate con l'energia che lasciano lì) a ogni distanza dal centro
   const Rmax = sorg.reduce((x, s) => Math.max(x, s.R), 0), nr = 400, dr = (Rmax * 1.15 || 1e-6) / nr, r = new Float64Array(nr), F = new Float64Array(nr), osc = new Float64Array(nr), Sref = frenata(pa, 5, mO).elettronica, sfuma = [-0.8, -0.4, 0, 0.4, 0.8];
-  for (let i = 0; i < nr; i++) { r[i] = (i + 0.5) * dr; for (const s of sorg) for (const d of sfuma) { const x = r[i] + (kG - 1) * dentro + d * raggioM; if (x <= 0 || x >= s.R) continue; const E = energiaDopo(pa, s.a.energia, mO, x); if (E > 0) F[i] += ((s.quante / sfuma.length) / (4 * Math.PI * (r[i] * 100) ** 2)) * (frenata(pa, E, mO).elettronica / Sref); } osc[i] = 1 - Math.exp(-F[i] / DOSE_COLORE); }
+  for (let i = 0; i < nr; i++) { r[i] = (i + 0.5) * dr; for (const s of sorg) for (const d of sfuma) { const x = r[i] + (kG - 1) * dentro + d * raggioM; if (x <= 0 || x >= s.R) continue; const E = energiaDopo(pa, s.a.energia, mO, x); if (E > 0) F[i] += ((s.quante / sfuma.length) / (4 * Math.PI * (r[i] * 100) ** 2)) * (frenata(pa, E, mO).elettronica / Sref); } osc[i] = Math.min(1, Math.log10(1 + F[i] / DOSE_COLORE) / 3); }
   const alfa = sorg.reduce((x, s) => x + s.quante, 0); latoM ??= Math.max(2.5 * Rmax, 20e-6);
   let immagine = null;
   if (N > 0) { immagine = new Uint8ClampedArray(N * N * 4); const base = COLORI_MINERALI[ospite] || [200, 190, 170], cg = COLORI_MINERALI[granello] || [200, 200, 200];
@@ -1101,10 +1105,11 @@ function vistaLungo(R, asse = R.asse) {
 }
 // GLI ATOMI di un campione di cristallo largo latoM (pochi nanometri), visti lungo un asse: le posizioni vere della cella
 // ripetuta, ognuna spostata dalla sua agitazione termica (un esito per atomo, dal suo indirizzo: è un'istantanea).
-//   latoM, T (K), asse ('a', 'b', 'c', 'c*'), spessoreM (quanto cristallo in profondità; se manca: un periodo), massimo (atomi)
+//   latoM, T (K), asse ('a', 'b', 'c', 'c*'), spessoreM (quanto cristallo in profondità; se manca: un periodo), massimo (atomi),
+//   fermi (vero: ognuno al suo posto esatto; l'agitazione la mette chi li muove, con le ampiezze di «agitazione»)
 // → { atomi: [{ x, y, z (m; z la profondità), el, raggio (m), colore, occ }], quantiDavvero (nel cubo di lato latoM), agitazione:
 //     { elemento: Å }, periodoM (lungo l'asse), cella, descrizione }
-export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM = null, massimo = 6000 } = {}, caso = null) {
+export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM = null, massimo = 6000, fermi = false } = {}, caso = null) {
   const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), c = (caso || sorgente(`reticolo/${minerale}`)).sotto(`atomi/${minerale}/${latoM.toExponential(2)}/${Math.round(T)}`), L = latoM * 1e10, debye = (MATERIALI[minerale] || {}).debye || 400;
   const { A, B, C } = R.base, ag = {}; for (const q of R.atomi) ag[q.el] ??= agitazione(q.el === 'H' ? 18.015 : ELEMENTI[q.el].A, debye, T); // (l'idrogeno si muove con la sua molecola)
   let spess = (spessoreM ?? V.periodo * 1e-10) * 1e10; const perA3 = R.atomi.reduce((s, q) => s + q.occ, 0) / R.volume; if (perA3 * L * L * spess > massimo) spess = massimo / (perA3 * L * L);
@@ -1115,7 +1120,7 @@ export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM 
   for (let i = -nA; i <= nA; i++) for (let j = -nB; j <= nB; j++) for (let k = -nC; k <= nC; k++) for (let q = 0; q < R.atomi.length; q++) {
     const at = R.atomi[q], p = V.proietta([at.pos[0] + i * A[0] + j * B[0] + k * C[0], at.pos[1] + i * A[1] + j * B[1] + k * C[1], at.pos[2] + i * A[2] + j * B[2] + k * C[2]]);
     if (Math.abs(p[0]) > L / 2 + 1 || Math.abs(p[1]) > L / 2 + 1 || p[2] < -0.01 || p[2] >= spess - 0.01) continue;
-    const id = `${i},${j},${k},${q}`, s = ag[at.el]; if (at.occ < 1 && c(`${id}/c'è`) >= at.occ) continue; // (un posto occupato a metà: c'è o non c'è)
+    const id = `${i},${j},${k},${q}`, s = fermi ? 0 : ag[at.el]; if (at.occ < 1 && c(`${id}/c'è`) >= at.occ) continue; // (un posto occupato a metà: c'è o non c'è)
     const x = p[0] + s * c.normale(`${id}/x`), y = p[1] + s * c.normale(`${id}/y`), z = p[2] + s * c.normale(`${id}/z`);
     if (Math.abs(x) > L / 2 || Math.abs(y) > L / 2) continue;
     out.push({ x: (x + L / 2) * 1e-10, y: (y + L / 2) * 1e-10, z: z * 1e-10, el: at.el, raggio: ATOMI_DISEGNO[at.el][0] * 1e-10, colore: ATOMI_DISEGNO[at.el][1], occ: at.occ });
@@ -1205,8 +1210,8 @@ export function incanalamento(minerale, part = 'protone', energiaMeV = 1, asse =
   let dentro = 0, quanti = 0; for (let jy = 0; jy < N; jy++) for (let ix = 0; ix < N; ix++) { const x = ((ix + 0.5) / N * 2 - 1) * W, y = ((jy + 0.5) / N * 2 - 1) * W; if (Math.hypot(x, y) < 0.5 * psi1) { dentro += mappa[jy * N + ix]; quanti++; } }
   let lo = Infinity, hi = -Infinity; for (const v of mappa) { if (v < lo) lo = v; if (v > hi) hi = v; }
   const immagine = new Uint8ClampedArray(N * N * 4); for (let i = 0; i < N * N; i++) { const v = hi > lo ? (mappa[i] - lo) / (hi - lo) : 0; immagine[i * 4] = 20 + 235 * v; immagine[i * 4 + 1] = 16 + 220 * v * v; immagine[i * 4 + 2] = 30 + 150 * v * v * v; immagine[i * 4 + 3] = 255; }
-  const nomeP = p.nome === 'alfa' ? 'una particella α' : `un ${p.nome}`;
+  const nomeP = p.nome === 'alfa' ? 'una particella α' : p.nome === 'muone+' ? 'un muone positivo' : p.nome === 'muone-' || p.nome === 'muone' ? 'un muone' : `un ${p.nome}`;
   return { minerale, asse: asse || R.asse, periodo: d, psi1, psi1Gradi: psi1 / GRADI, psiTermico: psiT, file: file.map((f) => ({ el: f.el, Z: f.Z, x: f.x, y: f.y, agitazione: f.u })), piani, mappa, immagine, N, campoRad: W, rotazioni, simmetria, punte, profilo: raggi, incanalate: quanti ? dentro / quanti : 0, spessoreM: spess * 1e-10,
-    descrizione: `${nomeP} da ${fmt(energiaMeV)} MeV che entra in un cristallo di ${minerale} (${R.sistema}) lungo ${asse || R.asse}: le file di atomi (uno ogni ${fmt(d, 3)} Å) la guidano se l'angolo è sotto ${fmt(psi1 / GRADI)}° (a ${Math.round(T)} K, con gli atomi che vibrano: ${fmt(psiT / GRADI)}°). Dietro un cristallo di ${fmtLunghezza(spess * 1e-10)} esce una stella a ${punte.length} punte, con simmetria di ordine ${simmetria}: una riga per ogni piano di atomi che contiene l'asse (i più larghi a ${piani.slice(0, 3).map((q) => `${fmt(q.angolo, 2)}°`).join(', ')}).` };
+    descrizione: `${nomeP} da ${energiaMeV >= 1000 ? `${fmt(energiaMeV / 1000)} GeV` : `${fmt(energiaMeV)} MeV`} che entra in un cristallo di ${minerale} (${R.sistema}) lungo ${asse || R.asse}: le file di atomi (uno ogni ${fmt(d, 3)} Å) la guidano se l'angolo è sotto ${fmt(psi1 / GRADI)}° (a ${Math.round(T)} K, con gli atomi che vibrano: ${fmt(psiT / GRADI)}°). Dietro un cristallo di ${fmtLunghezza(spess * 1e-10)} esce una stella a ${punte.length} punte, con simmetria di ordine ${simmetria}: una riga per ogni piano di atomi che contiene l'asse (i più larghi a ${piani.slice(0, 3).map((q) => `${fmt(q.angolo, 2)}°`).join(', ')}).` };
 }
 const mcd = (a, b) => (b ? mcd(b, a % b) : a);

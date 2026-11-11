@@ -74,7 +74,7 @@ export function forma(x, { diedri = [] } = {}) {
     if (sn <= 2) return [per(d[0], -1)];
     if (d.length === 1) { // il riferimento per la torsione: un vicino del vicino (o quello chiesto)
       let e = null, giro = 0; const ch = chiesti.get(`${messi[0]},${k}`);
-      const g = ch && P[ch[0]] ? ch[0] : rif; if (ch && P[ch[0]]) giro = (ch[2] - 180) * RAD;
+      const g = ch && P[ch[0]] ? ch[0] : rif; if (ch && P[ch[0]]) giro = -(ch[2] - 180) * RAD;
       if (g != null && P[g]) { const gv = meno(P[g], P[messi[0]]), pr = scalare(gv, d[0]), pe = meno(gv, per(d[0], pr)); if (lungo(pe) > 1e-6) e = per(unita(pe), -1); }
       if (!e) e = perpendicolare(d[0]);
       const f = vettore(d[0], e), sito = (az) => somma(per(d[0], Math.cos(th)), per(somma(per(e, Math.cos(az + giro)), per(f, Math.sin(az + giro))), Math.sin(th)));
@@ -128,12 +128,14 @@ export function forma(x, { diedri = [] } = {}) {
       if (attaccaAnello(q)) { for (const j of anello[q]) coda.push([j, k]); continue; }
       if (anello[q].filter((j) => P[j]).length === 1) { const st = liberi(k, messiSigma(), rif); mettiAnello(q, k, st.length >= 2 ? unita(per(somma(st[0], st[1]), -1)) : null, true, st.length >= 2 ? unita(vettore(st[0], st[1])) : null); for (const j of anello[q]) if (j !== k) coda.push([j, k]); } }
     const ancora = daMettere.filter((j) => !P[j]), siti = liberi(k, messiSigma(), rif);
+    // (se per questo legame è chiesto un diedro, l'atomo a cui si riferisce prende il primo posto)
+    const chiesto = messi.length === 1 ? chiesti.get(`${messi[0]},${k}`) : null; if (chiesto && ancora.includes(chiesto[1])) { ancora.splice(ancora.indexOf(chiesto[1]), 1); ancora.unshift(chiesto[1]); }
     const chi = ancora.map((j) => ({ j })).concat(Array.from({ length: m.atomi[k].h }, (_, i) => ({ h: indiceH[k] + i })));
     // la chiralità: se i quattro vicini girano dal lato sbagliato, si scambiano due dei nuovi
     const a = m.atomi[k];
     if (a.chir && a.ord && chi.length >= 2 && siti.length >= 2) {
       const dove = new Map(); for (const j of messi) dove.set(j, unita(meno(P[j], P[k]))); chi.forEach((c, i) => { if (siti[i]) dove.set(c.j ?? -1, siti[i]); });
-      const v = a.ord.map((o) => dove.get(o)); if (v.every(Boolean)) { const vol = scalare(vettore(v[1], v[2]), v[3]); if ((vol < 0 ? 1 : -1) !== a.chir) { const t = siti[0]; siti[0] = siti[1]; siti[1] = t; } }
+      const v = a.ord.map((o) => dove.get(o)); if (v.every(Boolean)) { const vol = scalare(vettore(v[1], v[2]), v[3]); if ((vol < 0 ? 1 : -1) !== a.chir) { const [p, q] = chiesto && chi.length >= 3 && siti.length >= 3 ? [1, 2] : [0, 1], t = siti[p]; siti[p] = siti[q]; siti[q] = t; } }
     }
     chi.forEach((c, i) => { const s = siti[i] || perpendicolare([1, 0, 0]);
       if (c.h != null) { P[c.h] = somma(P[k], per(s, distH(k))); return; }

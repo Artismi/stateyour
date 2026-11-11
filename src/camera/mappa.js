@@ -21,7 +21,8 @@ import { sorgente } from './eventi.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
-import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare } from './mare.js';
+import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
+import { conMoto, scenaDaElenco } from './atomi3d.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
 
@@ -62,7 +63,8 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   if (cam.livello === 5) {
     // DENTRO LA ROCCIA si continua a scendere (materia.js), un passo ogni volta che l'immagine riempie nove schermi:
     // 0 la roccia → 1 un suo cristallo con ciò che ha registrato (aloni o tracce di fissione; il passo manca dove niente
-    // tiene memoria) → 2 gli atomi del minerale che si aveva sotto gli occhi → 3 la stella d'incanalamento di quel cristallo
+    // tiene memoria) → 2 la stella d'incanalamento del minerale che si aveva sotto gli occhi (una lamina di qualche
+    // decimo di micron) → 3 i suoi atomi (in tre dimensioni, se la scheda grafica c'è: laboratorio.js, montaAtomi)
     if (!cam.suAcqua) {
       const passo = cam.passoRoccia ?? 0, conMemoria = !!rocciaDi({ ...cam, passoRoccia: 0 })?.memoria?.tipo;
       if (cam.z > 9 * m && passo < 3) { if (!passo) { cam.puntoRoccia = [cam.cx, cam.cy]; cam.mineraleRoccia = rocciaDi(cam)?.mineraleIn?.(cam.cx, cam.cy) ?? null; } cam.passoRoccia = passo === 0 && !conMemoria ? 2 : passo + 1; cam.cx = 0.5; cam.cy = 0.5; cam.z = m; return null; }
@@ -541,7 +543,8 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
 // ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto
 // (crosta continentale o vulcanica, fiume o lago, ghiaccio), e la sua tessitura nasce da come si è formata
 const rocceFatte = new Map();
-export function rocciaDi(cam) {
+export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ciò che si vede in fondo allo zoom, a ogni passo
+
   const S = superficieDi(cam.via); if (!S) return null;
   const u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)), k = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}`;
   if (rocceFatte.has(k)) { const base = rocceFatte.get(k); return cam.passoRoccia > 0 && !cam.suAcqua ? passoRoccia(cam, S, base, k) : base; }
@@ -598,8 +601,8 @@ export function rocciaDi(cam) {
   const memoria = memoriaDelLuogo(luogo, sorgente(luogo.indirizzo, ramiCosmo(cam.via.cosmo)));
   // quale minerale sta in un punto dell'immagine (per scendere dentro QUEL cristallo)
   const mineraleIn = (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
-  const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : 'gli atomi del suo reticolo';
-  const out = { cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${sotto}${memoria.tipo ? ', poi gli atomi' : ''}, e la stella che il cristallo disegna con le particelle`, luogo, memoria, mineraleIn, neve, sale: !!sale };
+  const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : '';
+  const out = { cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
   rocceFatte.set(k, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
   return cam.passoRoccia > 0 ? passoRoccia(cam, S, out, k) : out;
 }
@@ -611,7 +614,7 @@ const numero = (x, d = 2) => (Math.abs(x) >= 1e5 || (x !== 0 && Math.abs(x) < 0.
 // ---------- SOTTO LA ROCCIA (materia.js): il cristallo con ciò che ha registrato, i suoi atomi, la sua stella d'incanalamento.
 // Ogni passo si calcola una volta e resta in memoria (l'incanalamento costa un decimo di secondo).
 function passoRoccia(cam, S, base, k) {
-  const L = base.luogo, passo = cam.passoRoccia, mem = base.memoria;
+  const L = base.luogo, mem = base.memoria, passo = cam.passoRoccia === 1 && !mem.tipo ? 2 : cam.passoRoccia;
   // il minerale in cui si scende: quello che si aveva sotto gli occhi, se la sua cella è nota; se no il più abbondante che lo sia
   const noto = (n) => n && RETICOLI[n], minerale = L.tipo === 'ghiaccio' ? 'ghiaccio d\'acqua' : noto(cam.mineraleRoccia) ? cam.mineraleRoccia : (L.minerali.find((m) => noto(m.nome)) || { nome: 'quarzo' }).nome;
   const kk = `${k}|passo ${passo}|${passo === 1 ? mem.tipo : minerale}`; if (rocceFatte.has(kk)) return rocceFatte.get(kk);
@@ -627,14 +630,14 @@ function passoRoccia(cam, S, base, k) {
     const tf = tracceFossili(L, { minerale: mem.minerale, latoM: 200e-6, N: 256 }, caso), vecchia = tf.tracce.reduce((x, q) => Math.max(x, q.anniFa), 0);
     px = tf.immagine; N = tf.N; larghezzaM = tf.latoM; nome = `tracce di fissione ${/^[aeiou]/.test(mem.minerale) ? `nell'${mem.minerale}` : `nello ${mem.minerale}`}`;
     frase = `la faccia lucidata di un granello di ${mem.minerale} (${numero(tf.uranioPpm)} ppm di uranio): ogni segno è la scia di una fissione spontanea dell'uranio-238, due frammenti schiena contro schiena, ${fmtLunghezza(tf.percorsoM)} in tutto. ${fmtGrande(tf.densita)} tracce per cm² (qui ${tf.quante}${tf.quante > tf.tracce.length ? `, disegnate ${tf.tracce.length}` : ''}) accumulate in ${fmtTempo(tf.anni * 3.156e7)}: ${mem.perche}. La più vecchia di queste ha ${fmtTempo(vecchia * 3.156e7)}. È il metodo con cui si datano le rocce: densità = età × uranio × costante di fissione × percorso`;
-  } else if (passo === 2) {
+  } else if (passo === 3) {
     const a = atomiDelReticolo(minerale, { latoM: 3e-9, T: L.T ?? 288 }, caso); N = 320; px = immagineAtomi(a, N); larghezzaM = a.latoM; liscio = true; nome = `gli atomi ${del(minerale.replace(' d\'acqua', ''))}`;
-    frase = `${a.descrizione}. Le sfere hanno il raggio vero degli ioni (ossigeno rosso, il più grande; silicio chiaro, piccolo, nascosto tra gli ossigeni); le più scure stanno più in profondità. È un'istantanea: un attimo dopo ogni atomo è spostato altrove attorno al suo posto. Avvicinati ancora per la figura che questo reticolo disegna con le particelle`;
+    frase = `${a.descrizione}. Le sfere hanno il raggio vero degli ioni e i colori dei modelli (${Object.keys(a.agitazione).map((e) => ({ O: 'ossigeno rosso', Si: 'silicio chiaro, piccolo, nascosto tra gli ossigeni', Na: 'sodio viola', Cl: 'cloro verde', K: 'potassio viola scuro', Ca: 'calcio verde chiaro', Mg: 'magnesio verde-giallo', Fe: 'ferro arancio', Al: 'alluminio grigio', C: 'carbonio grigio', H: 'idrogeno bianco' })[e] || e).join('; ')}); le più scure stanno più in profondità. È un'istantanea: un attimo dopo ogni atomo è spostato altrove attorno al suo posto. È il fondo dello zoom: un clic entra nella finestra, dove corrono le particelle di questo punto`;
   } else {
     // la particella: una α della radioattività di questa roccia (la più frequente); dove non ce n'è (ghiaccio, sale), un muone cosmico
     const src = sorgentiNaturali(L), alfa = src.processi.filter((q) => q.tipo === 'α').sort((p, q) => q.perKg - p.perKg)[0], E = alfa ? alfa.energia : Math.max(200, src.cosmici.energiaMuoni * 1000);
     const r = incanalamento(minerale, alfa ? 'alfa' : 'muone+', E, null, { T: L.T ?? 288, N: 40, punti: 12 }); px = r.immagine; N = r.N; liscio = true; larghezzaM = 2 * r.campoRad; nome = `la stella d'incanalamento ${del(minerale.replace(' d\'acqua', ''))}`;
-    frase = `${r.descrizione} La particella è ${alfa ? `una α ${del(alfa.nuclide)} di questa stessa roccia (${numero(alfa.perKg)} al secondo per chilo)` : `un muone cosmico da ${numero(E / 1000)} GeV (qui non c'è radioattività che dia α)`}. La figura è in angoli: su uno schermo a un metro dal cristallo sarebbe larga ${fmtLunghezza(2 * r.campoRad)} (la barra). La simmetria la decide il reticolo di questo minerale, non chi guarda`;
+    frase = `${r.descrizione} La particella è ${alfa ? `una α ${del(alfa.nuclide)} di questa stessa roccia (${numero(alfa.perKg)} al secondo per chilo)` : `un muone cosmico da ${numero(E / 1000)} GeV (qui non c'è radioattività che dia α)`}. La figura è in angoli: su uno schermo a un metro dal cristallo sarebbe larga ${fmtLunghezza(2 * r.campoRad)} (la barra). La simmetria la decide il reticolo di questo minerale, non chi guarda. Avvicinati ancora: gli atomi di quel reticolo`;
   }
   const cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
   const out = { cv, nome, larghezzaM, frase, liscio, passo, base, luogo: L, memoria: mem, minerale };
@@ -664,6 +667,24 @@ function eventoNellAcqua(cam, S, k, u, v, profondo) {
     frase: `${r.racconto.frasi[1]} ${r.racconto.frasi[2]} In un nanometro cubo, come quello delle molecole qui sopra, lo stesso evento accade una volta ogni ${nano ? fmtTempo(nano.secondi) : 'tempo lunghissimo'}: per questo lo si guarda alla sua scala (${fmtLunghezza(r.cella.scala.latoM)}: la barra). Verde l'elettrone, azzurra la luce Cherenkov, bianco un muone` };
   rocceFatte.set(ke, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
+}
+// ---------- GLI ATOMI IN TRE DIMENSIONI (atomi3d.js). Ai livelli più profondi la materia non è più un'immagine: chi monta
+// la vista (laboratorio.js) chiede qui se dove si sta guardando c'è una scena di atomi, e quale. Nell'acqua, sotto i dieci
+// nanometri: le molecole e gli ioni veri di quel punto (mare.js, scenaMolecolare: gli stessi conteggi del campione).
+// Nella roccia, all'ultimo passo: tre nanometri del reticolo del minerale che si aveva sotto gli occhi, con l'agitazione
+// termica di Debye-Waller alla temperatura di lì. → null, oppure { chiave, crea() → scena, acqua, che }
+export function scenaAtomi(cam) {
+  if (cam.livello !== 5) return null; const r = rocciaDi(cam), S = superficieDi(cam.via); if (!r || !S) return null;
+  if (cam.suAcqua) {
+    const lato = cam.latoAcqua ?? 1; if (cam.eventoAcqua || lato > 1.0001e-8 || !r.punto) return null; const { u, v, profondo } = r.punto;
+    return { acqua: true, chiave: `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, che: `le molecole e gli ioni di quest'acqua in un cubetto di ${fmtLunghezza(lato)}`,
+      crea: () => conMoto(scenaMolecolare(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))) };
+  }
+  if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo) return null;
+  return { acqua: false, chiave: `${r.luogo.indirizzo}|atomi3d|${r.minerale}`, che: `tre nanometri di ${r.minerale.replace(" d'acqua", '')}`,
+    crea: () => { const a = atomiDelReticolo(r.minerale, { latoM: 3e-9, spessoreM: 3e-9, T: r.luogo.T ?? 288, massimo: 40000, fermi: true }, sorgente(r.luogo.indirizzo, ramiCosmo(cam.via.cosmo))), sc = scenaDaElenco(a.atomi, { unita: 'm', nome: r.nome });
+      // l'agitazione vera di ogni atomo (in metri, come le posizioni): la vista li fa tremare attorno al loro posto
+      sc.atomi.agitazione = Float32Array.from(a.atomi, (q) => (a.agitazione[q.el] || 0) * 1e-10); sc.descrizione = a.descrizione; return sc; } };
 }
 // che cosa si apre con un clic in fondo allo zoom: il luogo e il modo di guardarlo (laboratorio.js, entraMateria)
 function materiaDelPunto(cam) {

@@ -81,7 +81,10 @@ export function massaNascita(u) {
 // Il calore che un chilo di roccia produce (W/kg), dalle quantità misurate nelle condriti di uranio 238 e 235, torio e
 // potassio 40: ognuno si dimezza con il suo tempo (in miliardi di anni). Con l'età cala: a un miliardo di anni era
 // quasi cinque volte quello di oggi (4,5 miliardi), a dieci sarà meno di un terzo.
-export const ISOTOPI = [[0.75e-12, 4.47], [0.03e-12, 0.704], [0.77e-12, 14.0], [1.9e-12, 1.25]];
+// (I numeri: uranio 8,0 ppb, torio 29 ppb, potassio 550 ppm nelle condriti (Lodders 2003), per il calore che ogni chilo di
+// nuclide libera, neutrini esclusi: U-238 95,13 µW · U-235 568,47 µW · Th-232 26,28 µW · K-40 28,47 µW (Dye 2012), con le
+// abbondanze isotopiche 99,274% · 0,7204% · 100% · 0,0117%. Gli stessi nuclidi, contati uno per uno, sono in materia.js.)
+export const ISOTOPI = [[0.7555e-12, 4.468], [0.0328e-12, 0.704], [0.7621e-12, 14.05], [1.832e-12, 1.248]];
 export const caloreDellaRoccia = (etaAnni = 4.5e9) => ISOTOPI.reduce((s, [h, mezza]) => s + h * Math.pow(2, (4.5 - etaAnni / 1e9) / mezza), 0);
 
 // ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.

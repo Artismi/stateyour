@@ -68,8 +68,9 @@ export function leggi(testo) {
 }
 
 // ---------- normalizzazione: da un grafo grezzo { atomi, legami } alla molecola con i suoi campi ricavati
+const LETTE = new Map(); // (memoria delle stringhe già lette: una molecola letta non cambia più)
 export function molecola(x) {
-  if (typeof x === 'string') return leggi(x);
+  if (typeof x === 'string') { let m = LETTE.get(x); if (!m) { m = leggi(x); if (LETTE.size > 50000) LETTE.clear(); LETTE.set(x, m); } return m; }
   if (x && x._molecola) return x;
   let atomi = x.atomi.map((a) => ({ Z: a.Z, q: a.q || 0, h: a.h || 0, r: 0, ar: false, chir: a.chir || 0, ord: a.chir && a.ord ? a.ord.slice() : null }));
   let legami = x.legami.filter((l) => l.a !== l.b).map((l) => ({ a: l.a, b: l.b, o: l.t === 'i' ? 0 : l.o || 1, t: l.t || 'c', ar: false }));
@@ -161,7 +162,7 @@ export function valida(x) {
 // ---------- i ranghi canonici e la chiave
 const segnoPermutazione = (da, a) => { const p = da.map((v) => a.indexOf(v)); let s = 1; for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) if (p[i] > p[j]) s = -s; return s; };
 const codiceLegame = (l, k) => (l.t === 'i' ? 'i' : l.t === 'd' ? (l.a === k ? 'd' : 'e') : l.ar ? 'a' : String(l.o));
-function ranghi(m) {
+export function ranghi(m) {
   if (m._ranghi) return m._ranghi;
   const n = m.atomi.length, inAnello = new Set(anelli(m).flat());
   const denso = (firme) => { const u = [...new Set(firme)].sort(), pos = new Map(u.map((f, i) => [f, i])); return [firme.map((f) => pos.get(f)), u.length]; };
