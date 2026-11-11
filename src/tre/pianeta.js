@@ -104,7 +104,11 @@ vec2 quote(sampler2D u_img, vec2 f) { // interpolazione a mano tra i quattro pun
   return mix(mix(texelFetch(u_img, a, 0).rg, texelFetch(u_img, ivec2(b.x, a.y), 0).rg, w.x), mix(texelFetch(u_img, ivec2(a.x, b.y), 0).rg, texelFetch(u_img, b, 0).rg, w.x), w.y);
 }
 void main() {
-  vec2 g = a_griglia.xy, f = u_tess.xy + g * u_tess.zw, fM = u_tessM.xy + g * u_tessM.zw; vec2 q = quote(u_alt, f);
+  vec2 g = a_griglia.xy;
+  // (l'orlo scende e sporge di un quarto di maglia sotto la pezza vicina: visto dritto dall'alto un orlo che scende soltanto
+  // non copre niente, e tra due pezze — ognuna coi suoi conti — resterebbero forellini)
+  if (a_griglia.z > 0.5) g += (step(vec2(0.9999), g) - step(g, vec2(0.0001))) * vec2(${(0.25 / MX).toFixed(6)}, ${(0.25 / MY).toFixed(6)});
+  vec2 f = u_tess.xy + g * u_tess.zw, fM = u_tessM.xy + g * u_tessM.zw; vec2 q = quote(u_alt, f);
   float dl = (g.x - 0.5) * u_geo.x, df = (0.5 - g.y) * u_geo.y, fi0 = u_geo.z, fi = fi0 + df, R = u_geo.w;
   float cf = cos(fi), s0 = sin(fi0), c0 = cos(fi0), sl2 = sin(0.5 * dl), sf2 = sin(0.5 * df), k = 2.0 * sl2 * sl2;
   // il versore del punto nel riferimento della pezza (est, nord, su), scritto in modo da non perdere cifre vicino al centro
@@ -437,7 +441,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const v = [], idx = [], nx = MX + 1, ny = MY + 1; for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) v.push(i / MX, j / MY, 0);
     for (let j = 0; j < MY; j++) for (let i = 0; i < MX; i++) { const a = j * nx + i; idx.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1); }
     // l'orlo: per ogni lato, i vertici del bordo ripetuti e abbassati
-    const orlo = (lista) => { const da = v.length / 3; for (const [i, j] of lista) v.push(i / MX, j / MY, 1); for (let k = 0; k + 1 < lista.length; k++) { const a = lista[k][1] * nx + lista[k][0], b = lista[k + 1][1] * nx + lista[k + 1][0]; idx.push(a, da + k, b, b, da + k, da + k + 1); } };
+    const orlo = (lista) => { const da = v.length / 3; for (const [i, j] of lista) v.push(i / MX, j / MY, 1); for (let k = 0; k + 1 < lista.length; k++) { const a = lista[k][1] * nx + lista[k][0], b = lista[k + 1][1] * nx + lista[k + 1][0]; idx.push(a, da + k, b, b, da + k, da + k + 1, a, b, da + k, b, da + k + 1, da + k); } }; // (da tutte e due le facce: l'orlo si vede da fuori della pezza, e su due lati su quattro il verso sarebbe quello sbagliato)
     const riga = (n, f) => Array.from({ length: n + 1 }, (_, k) => f(k));
     orlo(riga(MX, (k) => [k, 0])); orlo(riga(MX, (k) => [k, MY])); orlo(riga(MY, (k) => [0, k])); orlo(riga(MY, (k) => [MX, k]));
     const vao = gl.createVertexArray(), bv = gl.createBuffer(), bi = gl.createBuffer(); gl.bindVertexArray(vao);
