@@ -11,11 +11,12 @@
 
 import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metriPerUnita, RAGGIO_SISTEMA, LATO_REGIONE, numeroDi, cosmoBase, ramiCosmo, semeEvento } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
-import { nebbiaPianeta, ACCELERA } from './nebbia.js';
+import { nebbiaPianeta, ACCELERA, fmtGrande } from './nebbia.js';
 import { sorgente } from './eventi.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera } from './geologia.js';
+import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare } from './mare.js';
 import { simulaMondo } from './mondo.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -52,7 +53,13 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   const m = minimo(W, H);
   // LA ROCCIA (livello 5): in fondo alla superficie, avvicinandosi ancora, si guarda di che cosa è fatto quel punto
   if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; return null; }
-  if (cam.livello === 5) { if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; return null; } cam.z = Math.min(cam.z, 12 * m); return null; }
+  if (cam.livello === 5) {
+    // dentro l'acqua si continua a scendere: ogni volta che il campione riempie dieci schermi se ne guarda uno dieci volte più piccolo
+    if (cam.suAcqua && cam.z > 9 * m && (cam.latoAcqua ?? 1) > 2e-9) { cam.latoAcqua = (cam.latoAcqua ?? 1) / 10; cam.z /= 10; cam.cx = 0.5 + (cam.cx - 0.5) * 0; cam.cy = 0.5; return null; }
+    if (cam.suAcqua && cam.z < 0.8 * m && (cam.latoAcqua ?? 1) < 0.5) { cam.latoAcqua *= 10; cam.z *= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+    if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.latoAcqua = undefined; return null; }
+    cam.z = Math.min(cam.z, 12 * m); return null;
+  }
   return passaggi(cam, W, H, k > 1);
 }
 // LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
@@ -390,6 +397,7 @@ export function discoPianeta(v, P) {
   const k = JSON.stringify(v); if (dischi.has(k)) return dischi.get(k);
   const S = superficieDi(v); if (!S) return null; // si sta ancora calcolando: intanto il pianeta si vede come da lontano
   const cl = S.cl, sf = S.se, px = immagineSuperficie(sf, P.clima.T, cl), N = 256;
+  if (S.mare?.esiste) coloraMare(S.mare, sf, px); // l'acqua ha il colore di ciò che porta: limpida, torbida alle foci, bassa, gelata, con croste di sale
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   const c = cv.getContext('2d'), im = c.createImageData(N, N), luce = Math.atan2(-P.pos[1], -P.pos[0]), lx = Math.cos(luce), ly = Math.sin(luce);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -417,7 +425,8 @@ export function superficieDi(v) {
   if (P.tipo === 'gassoso' || !P.interno) return null;
   if (typeof Worker === 'undefined' || typeof document === 'undefined') { // senza fili in secondo piano (le prove): subito
     const sf0 = superficiePianeta(k, P, P.interno, seme), cl = climaSuperficie(k, P, sf0), se = erosione(k, sf0, cl);
-    return tieni(k, { k, P, cl, se, seme });
+    let acque = null; try { acque = mareDi(P, se, cl, se, `${k}/mare`); } catch { acque = null; }
+    return tieni(k, { k, P, cl, se, seme, mare: acque });
   }
   if (!inCalcolo.has(k)) {
     if (!operaio) {
@@ -426,7 +435,7 @@ export function superficieDi(v) {
         const d = e.data; inCalcolo.delete(d.k);
         if (d.errore) { console.error('la superficie non si è potuta calcolare:', d.errore); return; }
         const w = JSON.parse(d.k), Pw = sistema(w.cosmo, w.galassia, w.stella).pianeti[w.pianeta];
-        tieni(d.k, { k: d.k, P: Pw, cl: d.cl, se: d.se, seme: Pw.origine }); if (avvisa) avvisa(w);
+        tieni(d.k, { k: d.k, P: Pw, cl: d.cl, se: d.se, seme: Pw.origine, mare: d.mare }); if (avvisa) avvisa(w);
       };
     }
     inCalcolo.add(k); operaio.postMessage({ k, v });
@@ -448,6 +457,7 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
       if (!t) {
         if (nuove >= 1 && L > 0) { tessereInAttesa++; continue; }
         const sf = tessera(S.k, S.se, S.cl, L, tx, ty, S.seme), px = immagineSuperficie(sf, S.P.clima.T, S.cl);
+        if (S.mare?.esiste) coloraMare(S.mare, sf, px);
         const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(sf.W, sf.H) : Object.assign(document.createElement('canvas'), { width: sf.W, height: sf.H });
         cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
         t = { cv, sf }; tessereFatte.set(k, t); if (tessereFatte.size > 60) tessereFatte.delete(tessereFatte.keys().next().value); nuove++;
@@ -469,6 +479,28 @@ export function rocciaDi(cam) {
   let t = S.se; for (let L = 7; L >= 1; L--) { const n = 4 ** L, q = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (q) { t = q.sf; break; } }
   const [u0, v0, u1, v1] = t.rett || [0, 0, 1, 1], i = Math.min(t.W - 1, Math.floor(((u - u0) / (u1 - u0)) * t.W)), j = Math.min(t.H - 1, Math.floor(((v - v0) / (v1 - v0)) * t.H)), c = j * t.W + i;
   const cl = S.cl, ck = Math.min(cl.H - 1, Math.floor(v * cl.H)) * cl.W + Math.min(cl.W - 1, Math.floor(u * cl.W)), T = cl.media[ck], seme = semeEvento('roccia', cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta, Math.floor(u * 1e6), Math.floor(v * 1e6)); // il caso di QUEL punto di QUEL pianeta
+  // SULL'ACQUA: in fondo allo zoom non c'è la roccia ma un campione di quell'acqua (mare.js), con ciò che vi è sciolto
+  // e sospeso proprio lì; avvicinandosi ancora il campione si restringe di dieci in dieci, fino alle molecole
+  const profondo = t.alt[c] < t.mare ? t.mare - t.alt[c] : t.lago && t.lago[c] > 0 ? t.lago[c] : 0;
+  cam.suAcqua = profondo > 0 && !!S.mare?.esiste;
+  if (cam.suAcqua) {
+    const lato = cam.latoAcqua ?? 1, ka = `${k}|acqua|${lato}`; let A = rocceFatte.get(ka);
+    if (!A) {
+      const camp = campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
+      const NA = 192, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
+      // ciò che c'è davvero in questo campione ma a questa scala non si distingue (troppo piccolo: fa da velo), con i numeri veri
+      const velo = (camp.velo || []).slice().sort((p, q) => q.quanteDavvero - p.quanteDavvero).slice(0, 3).map((x) => `${fmtGrande(x.quanteDavvero)} ${x.tipo === x.materiale ? x.tipo : `${x.tipo} di ${x.materiale}`} da ${fmtLunghezza(x.diametroM)}`);
+      const ioni = Object.entries(camp.ioni || {}).map(([f, x]) => [f, x?.nelCampione ?? 0]).filter(([, n]) => n >= 1).sort((p, q) => q[1] - p[1]).slice(0, 3).map(([f, n]) => `${fmtGrande(n)} ${f}`);
+      const dentro = [...velo, ...ioni].length ? ` In questo campione ci sono davvero: ${[...velo, ...ioni].join('; ')}${lato > 1e-7 ? ' (troppo piccoli per vedersi a questa scala: avvicinati ancora)' : ''}.` : '';
+      A = { cv: cvA, camp, acqua: true, N: NA, nome: `acqua (un campione largo ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${camp.descrizione}${dentro}`, quante: camp.quanteDavvero, t0: tempoMappa() };
+      rocceFatte.set(ka, A); if (rocceFatte.size > 12) rocceFatte.delete(rocceFatte.keys().next().value);
+    }
+    // l'acqua si muove: il campione ridisegnato all'istante di adesso (il tempo del campione è rallentato o accelerato
+    // perché l'attraversamento duri qualche secondo di schermo)
+    const tt = (((tempoMappa() - A.t0) / ACCELERA) * (A.camp.tempoAttraversamento || 1)) / 6;
+    A.cv.getContext('2d').putImageData(new ImageData(immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0);
+    return A;
+  }
   const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
   const conAnisotropia = (lista, base) => (lista && lista.length ? lista.map((x) => ({ nome: x.nome, frazione: x.frazione, colore: x.colore, anisotropia: 1.2 })) : base);
   let r, nome, larghezzaM, frase;

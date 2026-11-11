@@ -1014,6 +1014,15 @@ function pannelloCosmo(h) {
         const cv = document.createElement('canvas'); cv.width = sf.W; cv.height = sf.H; cv.getContext('2d').putImageData(new ImageData(px, sf.W, sf.H), 0, 0);
         h.push(`<h2>la superficie</h2><img src="${cv.toDataURL()}" style="width:100%;border-radius:3px;image-rendering:auto" alt="la mappa del pianeta"><p class="nota">${sf.placche > 1 ? `il mantello si è organizzato da solo in circa ${sf.placche} celle: dove sale (pennacchi) la crosta si apre, dove scende (una rete di fosse) si accartoccia in montagne e raccoglie la crosta leggera dei continenti` : 'una crosta sola, senza placche'}; i colori sono quelli dei materiali (basalto scuro, roccia chiara dei continenti, il rosso del ferro ossidato, sedimenti pallidi lungo i fiumi; nessun verde: non c'è vita); ${isFinite(sf.mare) ? 'il mare riempie i punti più bassi con l\'acqua che il pianeta ha' : 'niente mari'}; poi ${sf.passiErosione} passi di erosione: la pioggia (dove il clima la permette) scorre, scava le valli in proporzione alla portata e alla pendenza, riempie le conche dove l'acqua che arriva supera quella che evapora (${sf.celleLago ? 'qui ci sono laghi' : 'qui nessun lago'}); in rosso i vulcani (${sf.vulcani.length}). Nessuno l'ha disegnata: viene dalla massa, dalla composizione e dall'età.</p>`);
       }
+      // IL MARE (mare.js): che cosa c'è sciolto, e perché
+      if (Sx?.mare) {
+        const M = Sx.mare;
+        if (!M.esiste) h.push(`<h2>il mare</h2><p class="nota">${M.motivo || 'Qui non c\'è acqua liquida in superficie.'}</p>`);
+        else {
+          const ioni = Object.entries(M.ioni || {}).map(([f, x]) => [f, typeof x === 'number' ? x : x?.moliPerKg ?? 0]).filter(([, x]) => x > 1e-4).sort((p, q) => q[1] - p[1]).slice(0, 6);
+          h.push(`<h2>il mare</h2><p class="nota">${M.storia || ''}</p><p class="nota">Salinità ${M.salinitaMedia.toFixed(1)} g per kg d'acqua, pH ${M.pH.toFixed(1)}. Sciolti (moli per kg): ${ioni.map(([f, x]) => `${f} ${x.toPrecision(2)}`).join(', ')}.${M.laghi?.length ? ` Laghi: ${M.laghi.length}${M.laghi.some((l) => l.pH > 9) ? ', alcuni di soda' : ''}.` : ''}${M.sorgentiCalde?.length ? ` Sorgenti calde sul fondo: ${M.sorgentiCalde.length}.` : ''} Avvicinati al mare fino in fondo: sotto il terreno più fine c'è un campione di quell'acqua, e dentro, di dieci in dieci, i granelli, i colloidi, gli ioni e le molecole di quel punto.</p>`);
+        }
+      }
       const climaSim = Sx ? Sx.cl : null;
       if (cl.acqua === 'liquida' && climaSim && climaSim.ghiaccio < 0.97) {
         const sf = superficie(camMappa.via);
