@@ -47,12 +47,27 @@ sopra e contate da sotto. Gli eventi del dettaglio hanno indirizzi sotto quello 
   tutto (i fiumi tra tessere).
 
 ## 5. Dal piccolo al grande: il mondo compatibile
-Si può partire da un punto qualsiasi, anche piccolissimo. Il mondo più grande non è libero: è uno di quelli che,
-scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie uno, e resta quello. Per poterlo fare
-ogni livello deve saper dire **che cosa chiede a chi sta sopra** (quali condizioni lo producono) oltre a che cosa
-riceve.
+Si può partire da un punto qualsiasi, anche piccolissimo: un cristallo, una goccia, una macchina fatta di atomi.
+Quel punto è un'**osservazione**, e funziona da condizione: il mondo più grande non è libero, è uno di quelli che,
+scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie uno, e resta quello.
+- **Che cosa chiede.** Ogni livello deve saper dire che cosa chiede a chi sta sopra perché una cosa possa esserci
+  (un fiocco di neve chiede aria sotto zero e vapore; una crosta di sale un bacino chiuso che evapora; una macchina
+  molecolare acqua liquida, i suoi elementi, un gradiente che le dia energia, e alle spalle miliardi di anni di un
+  mondo rimasto abitabile).
+- **Quale si sceglie.** Tra i mondi compatibili non si prende il più strano ma si sceglie in proporzione a quanto
+  sono probabili secondo le leggi: una macchina molecolare ha alle spalle, quasi sempre, una storia di chimica che si
+  copia e si seleziona, non atomi capitati lì per caso (esiste anche quel mondo, ma è rarissimo tra i rarissimi).
+- **Ciò che sta in mezzo.** La storia tra il mondo grande e l'osservazione piccola, finché nessuno la guarda, non è
+  calcolata: è una sovrapposizione delle storie compatibili (regola 3). Si controllano le condizioni necessarie (che
+  nessuna legge la vieti); guardandola, si calcola fin dove le leggi che abbiamo arrivano, e dove non arrivano lo si
+  dice.
+- **Da dove vengono le osservazioni.** Dal mondo stesso, scendendo; oppure da fuori: una fotografia, una struttura
+  misurata nel nostro universo. Queste non sono cose «messe da noi»: sono un punto del nostro mondo, che è uno dei
+  libri della biblioteca; entrano dichiarate come osservazioni, e vale per loro tutto il resto (devono essere
+  compatibili con le leggi e con ciò che sta sopra).
 - Fatto: quasi nulla. Si entra sempre dall'alto (un numero della biblioteca) e si scende.
-- Manca: per ogni livello la funzione inversa («quali madri mi producono»); la ricerca del mondo compatibile.
+- Manca: per ogni livello che cosa chiede a chi sta sopra; la ricerca del mondo compatibile, pesata per
+  probabilità; le osservazioni come ingresso.
 
 ## 6. Il tempo: le cause stanno prima
 Lo stato di una cosa a un istante viene dalla sua storia: le leggi integrate dagli eventi d'origine fino a

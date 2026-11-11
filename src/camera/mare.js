@@ -27,56 +27,61 @@
 //      c'è dentro davvero e come si muove. Col principio di nebbia.js: se le particelle vere sono troppe se ne dà un
 //      campione rappresentativo, e accanto il numero vero.
 //
-// LEGGI EMPIRICHE / DATI (misurati, usati così; i numeri sono in DATI, IONI, TERMO, MINERALI_ROCCIA):
+//   6. L'ASPETTO: il mare visto da sopra a ogni scala (colore dall'ottica vera dell'acqua, di ciò che vi è sospeso e
+//      sciolto, del fondo e della luce di quella stella; le onde di quel vento, le stesse a ogni scala), visto da dentro
+//      (il campione), e atomo per atomo (scenaMolecolare).
+//   7. IL RESTO DEL MONDO: le maree dalle lune vere e dalla stella, le stagioni dal clima, il calore che le correnti
+//      portano (per il clima), le province del mare trovate nei campi, il mare a un momento dell'anno e della marea.
+//
+// NIENTE È TARATO SUL MARE DELLA TERRA. Ogni numero è una conseguenza o un dato misurato in laboratorio o in natura,
+// citato dove sta (DATI, IONI, TERMO qui; ROCCE e MINERALI_ROCCIA in chimica.js §8). La Terra di prova esce a 71 g/kg,
+// il doppio del vero: il confronto, voce per voce, lo stampa test/test_mare.mjs.
+// LEGGI EMPIRICHE / DATI:
 //   · entalpie ed entropie degli ioni e delle specie in acqua a 298 K (CODATA 1989; NBS 1982; Fe²⁺: Parker e
-//     Khodakovskii 1995; gesso e silice: Robie e Hemingway 1995). Con ΔH e S costanti danno a 25 °C: calcite
-//     log K = −8,48 (misurato −8,48), gesso −4,56 (−4,58), salgemma K = 38 (37,6), CO2 0,034 mol/kg/bar (0,034),
-//     pK1 6,35 (6,35), pK2 10,33 (10,33), O2 1,3·10⁻³ (1,3·10⁻³);
-//   · i coefficienti di attività: Debye-Hückel esteso con i parametri di Truesdell e Jones 1974 (quelli di WATEQ e
-//     PHREEQC: raggio efficace å e termine lineare b per ogni ione); la costante dielettrica dell'acqua (Malmberg e
-//     Maryott 1956, come esponenziale in T); la viscosità dell'acqua (formula di Vogel); raggi degli ioni (Shannon
-//     1976), numeri di idratazione (Marcus 1988; Ohtaki e Radnai 1993), coefficienti di diffusione (Li e Gregory 1974);
-//   · la velocità con cui i minerali si sciolgono in laboratorio, e la loro energia di attivazione (Palandri e
-//     Kharaka 2004, USGS OFR 2004-1068, meccanismo neutro);
-//   · la denudazione dei continenti dove piove: 30 m per milione di anni (la stessa legge di geologia.js);
-//   · i coefficienti di fusione parziale (quelli di chimica.js §6, ricopiati qui perché là non sono esportati) e
-//     quanto cloro e zolfo il mantello della Terra ha tenuto rispetto al Sole (Cl 17–30 ppm, S ~250 ppm: McDonough e
-//     Sun 1995);
-//   · il fondo del mare: il calore di una crosta che si raffredda (conduzione: q = k·ΔT/√(π·κ·t)); quanta parte del
-//     calore interno esce con l'acqua calda (10% ad alta temperatura sull'asse delle dorsali, 20% tiepida sui fianchi:
-//     Elderfield e Schultz 1996; Stein e Stein 1994); ciò che i fluidi misurati perdono e prendono (tutto il magnesio;
-//     Von Damm 1995; Wheat e Mottl 2000);
-//   · le argille: capacità di scambio 0,25 eq/kg e preferenze tra ioni (Sayles e Mangelsdorf 1977);
-//   · la soglia a cui un sale nasce da solo in soluzione: teoria classica della nucleazione, con le energie di
-//     superficie misurate (calcite 0,094 J/m², gesso 0,04, salgemma 0,04);
-//   · l'ottica dell'acqua pura (Pope e Fry 1997; Morel 1974) e del fango in sospensione (Babin e altri 2003);
-//   · le creste che frangono: copertura = 3,84·10⁻⁶·U^3,41 (Monahan e O'Muircheartaigh 1980);
-//   · la coagulazione delle argille: regola di Schulze-Hardy (la concentrazione critica cala come z⁻⁶);
-//   · il rimescolamento verticale del mare: 10⁻⁴ m²/s (Munk 1966), e quello orizzontale dei vortici: 1000 m²/s;
-//   · il carbonio rimasto nel mantello (~120 ppm): l'anidride carbonica dei vulcani è l'acido che scioglie le rocce, e a
-//     regime i fiumi non portano più cariche di quante i vulcani ne possano neutralizzare (ciclo carbonati-silicati);
-//   · il ghiaccio marino: conducibilità 2,2 W/m/K, e l'85% del sale lasciato nell'acqua quando cristallizza;
-//   · i fluidi dei camini: pH 3,5 e ferro fino a 6 mmol/kg (Von Damm 1995); l'idrogeno dove l'olivina si idrata (~10 mmol/kg).
-// PARAMETRI LIBERI (non misurati, o misurati solo entro ordini di grandezza; scelti guardando la Terra):
-//   · campo: di quanto i minerali si sciolgono più piano in natura che in laboratorio (misure: da 10 a 1000 volte;
-//     qui 20, perché il sodio dei fiumi terrestri torni) e lo spessore del suolo (1 m);
-//   · sfiato: quanta parte del cloro e dello zolfo del mantello che fonde arriva in superficie e ci resta (0,3 e 0,04:
-//     danno l'inventario terrestre di oceano ed evaporiti);
-//   · sodioCaldo, potassioTiepido, magnesioTiepido: quanto di ciascuno la roccia del fondo trattiene a ogni passaggio;
-//   · chiusi: quanta parte dell'acqua che evapora sui bassi fondali lo fa in bacini chiusi fino al sale (5·10⁻³: i
-//     ~10¹² mol/anno di salgemma dei depositi terrestri); riciclo: ogni quanto i sedimenti tornano in gioco (250 Ma);
-//   · eterogenea: di quanto le particelle sospese abbassano la barriera alla nascita di un cristallo (0,3);
-//   · l'attrito delle correnti (la corrente di bordo è larga una cella della griglia) e lo strato che il vento muove.
+//     Khodakovskii 1995; gesso e silice: Robie e Hemingway 1995). Danno a 25 °C: calcite log K = −8,48 (misurato
+//     −8,48), gesso −4,56 (−4,58), salgemma K = 38 (37,6), CO2 0,034 mol/kg/bar, pK1 6,35, pK2 10,33;
+//   · attività: Debye-Hückel esteso coi parametri di Truesdell e Jones 1974; costante dielettrica (Malmberg e Maryott
+//     1956); viscosità (Vogel); raggi degli ioni (Shannon 1976), gusci (Marcus 1988), diffusione (Li e Gregory 1974);
+//   · le rocce, i vulcani e il ciclo del carbonio: in chimica.js §8 (velocità di dissoluzione nei suoli: White e
+//     Brantley 2003; in laboratorio: Palandri e Kharaka 2004; mantello: McDonough e Sun 1995);
+//   · il cloro: alla nascita, dal pianeta fuso, esce tutto tranne il fuso intrappolato (5%: Elkins-Tanton 2008); poi un
+//     magma che erutta sotto meno di 100 bar ne perde il 35%, e il 90% dello zolfo (Moore e Fabbi 1971; Unni e Schilling
+//     1978); un sesto del magma arriva in superficie (Crisp 1984); un basalto fuso tiene sciolti 1200 ppm di zolfo;
+//   · il fondo: 10% del calore interno esce con acqua calda, 20% con acqua tiepida (Elderfield e Schultz 1996; Stein e
+//     Stein 1994); l'acqua calda lascia tutto il magnesio (Bischoff e Dickson 1975) e riduce 1 mmol/kg di solfato
+//     (Shanks e altri 1981); la tiepida lascia lo 0,3% del magnesio e il 2% del potassio per passaggio (dai flussi
+//     misurati: Elderfield e Schultz 1996; Staudigel 2003); un chilo d'acqua per chilo di roccia;
+//   · le argille: 0,25 eq/kg e preferenze tra ioni (Sayles e Mangelsdorf 1977); porosità dei sedimenti sepolti 20%;
+//   · lo scambio attraverso uno stretto: 0,25·larghezza·profondità·√(g′·profondità) (Armi e Farmer 1986);
+//   · la soglia a cui il calcare nasce da solo nell'acqua di mare: Ω = 20 a 25 °C (Morse e He 1993);
+//   · le onde: JONSWAP (Hasselmann e altri 1973) e Pierson-Moskowitz 1964; le creste che frangono (Monahan e
+//     O'Muircheartaigh 1980); la deriva della superficie al 3% del vento; l'attrito del fondo sulle maree, 0,0025;
+//   · l'ottica: acqua pura (Pope e Fry 1997; Morel 1974), fango (Babin e altri 2003), R = 0,33·b/(a + b) (Gordon 1975);
+//   · il rimescolamento verticale 10⁻⁴ m²/s (Munk 1966), orizzontale 1000 m²/s; ghiaccio marino: 2,2 W/m/K, l'85% del
+//     sale resta nell'acqua, riflette il 60% della luce; coagulazione delle argille (Schulze-Hardy).
+// CONSEGUENZE (prima erano parametri): quanto sodio e potassio la roccia calda trattiene (equilibrio col plagioclasio e
+// col feldspato, dalle tabelle); quanta parte del pianeta lascia sfiatare il magma (le terre e i mari bassi di quella
+// carta, sotto quell'aria); ogni quanto i sedimenti tornano (larghezza dei mari / velocità delle placche di tettonica.js;
+// mai, senza placche); quali mari chiusi arrivano al sale (la loro forma, l'evaporazione, lo stretto); quanto calcare
+// torna coi fiumi (la parte deposta su fondali bassi); l'attrito della deriva (dal 3% del vento).
+// CIÒ CHE RESTA LIBERO O NUMERICO: lo spessore dello strato che il vento rimescola (50 m) e del pennacchio dei fiumi
+// (5 m); l'attrito dei grandi giri (la corrente di bordo è larga una cella); la risonanza delle maree fermata a 5; quanto
+// è stretto DAVVERO lo stretto di un mare chiuso (sotto la griglia: un evento, tra la cella e un trecentesimo); la
+// forma dei vortici che la griglia non risolve (rumore fisso del luogo, taglia dal raggio di Rossby); la parte del
+// calcare in eccesso che resta sospesa (un decimo); le fasi delle onde (eventi del pianeta).
 // SEMPLIFICAZIONI:
 //   · ΔH e S costanti con la temperatura (come chimica.js): bene tra 0 e 100 °C, grossolano a 350 °C;
 //   · le attività reggono fino a qualche mole per chilo (il salgemma satura a 6,6 mol/kg invece di 6,15; il gesso a
 //     0,026 invece di 0,015, perché la coppia CaSO4 di Fuoss è troppo forte); oltre 8 mol/kg di forza ionica si fermano;
-//   · il clima, i continenti e i fiumi di oggi per tutta la storia (come tettonica.js fa con il calore); la massa del
-//     mare costante; il mare ben rimescolato (gli ioni hanno ovunque le stesse proporzioni: cambia la salinità);
-//   · l'aria è data (P.atmosfera, o atmosfera() di chimica.js): il mare non la cambia;
-//   · niente vita: nessuno toglie il calcare, la silice, il solfato come fanno gli organismi; il mare resta
-//     sovrasaturo fin dove la chimica da sola lo permette;
-//   · le correnti sono quelle medie dell'anno, di uno strato solo; niente maree, niente onde, niente vortici;
+//   · il clima, i continenti e i fiumi di oggi per tutta la storia; la massa del mare costante; il mare ben rimescolato
+//     (gli ioni hanno ovunque le stesse proporzioni: cambia la salinità); ciò che la crosta che affonda riporta nel
+//     mantello non è contato;
+//   · l'aria è data (P.atmosfera): il mare non la cambia; ma se la sua CO2 è rimasta all'equilibrio di Urey, qui si usa
+//     quella del ciclo del carbonio calcolato sulle terre vere (stato.carbonioAria dice quale);
+//   · niente vita: nessuno toglie il calcare, la silice, il solfato, l'ossigeno come fanno gli organismi;
+//   · le correnti: uno strato solo, ψ = 0 su tutte le terre (niente corrente attorno a un continente polare), niente
+//     vortici risolti; le maree: risposta bacino per bacino lungo i paralleli, senza propagazione;
+//   · le onde vengono dal vento medio della stagione (niente tempeste): più basse del vero;
 //   · il campione viaggia con la corrente: le velocità delle particelle sono quelle rispetto all'acqua.
 // UNITÀ: mol per kg d'acqua, g/kg, K, m, m/s, Pa; longitudine e latitudine in GRADI (−180…180, −90…90); le griglie hanno
 // le righe da nord a sud come geologia.js. Deterministico: ogni esito incerto viene dalla sorgente degli eventi.
@@ -114,7 +119,7 @@ export const DATI = {
   cristalli: { calcite: [0.094, 3.69e-5], gesso: [0.04, 7.47e-5], salgemma: [0.04, 2.70e-5], 'solfuro di ferro': [0.1, 1.82e-5], ghiaccio: [0.03, 1.96e-5] },
   prefattore: 1e30, // tentativi di nascita per m³ al secondo (teoria classica della nucleazione)
   // --- il moto
-  mescola: 1e-4, strato: 50, attritoEkman: 1 / (3 * 86400), // (m²/s) Munk; (m) lo strato rimescolato dal vento; (1/s)
+  mescola: 1e-4, strato: 50, deriva: 0.03, // (m²/s) Munk 1966; (m) lo strato che il vento rimescola; senza rotazione la superficie va al 3% della velocità del vento (regola misurata)
   cd: 1.3e-3, ce: 1.3e-3, // l'attrito del vento sul mare e l'evaporazione (le formule di massa di meteo.js)
   // --- le particelle (m): sabbia, limo, argilla; densità dei granelli e dei fiocchi (kg/m³)
   taglie: { sabbia: 2e-4, limo: 2e-5, argilla: 2e-6 }, densitaGrani: 2650, densitaFiocchi: 1150, fiocco: 6e-5,
@@ -447,7 +452,8 @@ export function mare(P, sf, cl, se = null, caso = null) {
   // consumano tanta CO2 quanta i vulcani ne emettono (co2DelCiclo di chimica.js: la stessa legge di climaEAria)
   const pCO2Ciclo = co2DelCiclo({ calore: P.interno?.q ?? 0, raggioM: R, massaKg: P.massaKg, composizione: P.composizione, consumo: (p) => cedono(p).cariche });
   const ariaSenzaCiclo = P.clima?.co2Ciclo == null && pCO2Ciclo > 0 && (pCO2Aria <= (3 * pressioneCO2Urey(cl.Tglobale || 288)) / 1e5 || (P.clima?.termostato > 0 && Math.abs(Math.log(pCO2Aria / (P.clima.termostato / 1e5))) < 0.4));
-  const pCO2 = ariaSenzaCiclo ? Math.min(pCO2Ciclo, 100) : pCO2Aria, ceduto = cedono(pCO2), apporto = { Na: ceduto.Na, K: ceduto.K, Ca: ceduto.Ca, Mg: ceduto.Mg, Si: ceduto.Si }, argilla = ceduto.argilla, sabbia = ceduto.sabbia;
+  // (se nemmeno sotto tutta la pressione dell'aria le rocce tengono il passo coi vulcani, la CO2 si accumula: qui ci si ferma alla pressione dell'aria che c'è, e lo si segnala)
+  const nonRegge = ariaSenzaCiclo && pCO2Ciclo > pAria / 1e5, pCO2 = ariaSenzaCiclo ? Math.min(pCO2Ciclo, pAria / 1e5) : pCO2Aria, ceduto = cedono(pCO2), apporto = { Na: ceduto.Na, K: ceduto.K, Ca: ceduto.Ca, Mg: ceduto.Mg, Si: ceduto.Si }, argilla = ceduto.argilla, sabbia = ceduto.sabbia;
   // --- la temperatura media del mare; quanta parte del pianeta lascia sfiatare il magma (terra, o mare meno profondo
   // di ciò che fa 100 bar con l'aria sopra); dove si deposita il calcare (nei mari più caldi della media: quanta parte su fondali bassi, che un giorno torneranno terra)
   let Tmare = 0, aT = 0;
@@ -472,7 +478,7 @@ export function mare(P, sf, cl, se = null, caso = null) {
   const ioni = bs.ioni, eq = bs.eq, salinitaMedia = celleMare ? grammiPerKg(ioni, eq) : 0, moli = ioni.Na + ioni.K + ioni.Mg + ioni.Ca + ioni.Cl + ioni.S + eq.bicarbonato;
   const out = { esiste: true, W, H, raggioM: R, gravita: g, livello, massaMare, areaMare, frazioneMare: areaMare / (4 * Math.PI * R * R), profonditaMedia: areaMare > 0 ? massaMare / 1000 / areaMare : 0,
     salinitaMedia, ioni: nomiIoni(ioni, eq), totali: { ...ioni }, pH: eq.pH, alcalinita: eq.alcalinita, carbonio: eq.carbonio, soglia: bs.soglia, pCO2, pO2,
-    carbonioAria: { pCO2Aria, pCO2Ciclo, usata: ariaSenzaCiclo ? 'ciclo' : 'aria', vulcani: bs.flussi.CO2vulcani, consumo: ceduto.cariche }, pressioneAria: pAria, aria: { ...aria.gas },
+    carbonioAria: { pCO2Aria, pCO2Ciclo, nonRegge, usata: ariaSenzaCiclo ? 'ciclo' : 'aria', vulcani: bs.flussi.CO2vulcani, consumo: ceduto.cariche }, pressioneAria: pAria, aria: { ...aria.gas },
     gas: gasSciolti(aria.gas, pAria, Tmare, eq.I), Tmedia: Tmare, congela: congelamento(moli), bilancio: bs.bilancio, fiume: bs.fiume, fondoDiSale: bs.fondoDiSale, flussi: bs.flussi,
     fine: { W: FW, H: FH, tipo, fondo: fondoF, lago: new Int16Array(FN).fill(-1) }, bagnato, fondo, ghiaccio, vento: { u: vu, v: vv }, radice: c0.radice };
   // l'acqua dei fiumi in equilibrio con l'aria
@@ -597,6 +603,9 @@ export function mare(P, sf, cl, se = null, caso = null) {
   return out;
 }
 
+// l'attrito dello strato di superficie (1/s), tale che senza rotazione la deriva sia il 3% del vento: lo sforzo τ = ρ_aria·C·U²
+// muove uno strato spesso h alla velocità τ/(ρ·r·h) = 0,03·U → r = √(τ·ρ_aria·C)/(0,03·ρ·h) (con l'aria a 1,2 kg/m³)
+const attritoDeriva = (tau) => Math.max(1e-7, Math.sqrt(tau * 1.2 * DATI.cd) / (DATI.deriva * 1025 * DATI.strato));
 // LE CORRENTI SPINTE DAL VENTO. Due pezzi, tutti e due dalla stessa forza (il vento sulla superficie) e dalla rotazione:
 //  · la DERIVA DI EKMAN: lo strato di superficie, spinto dal vento e deviato da Coriolis, va di traverso (a destra del
 //    vento nell'emisfero nord): trasporto = τ/(ρ·(r + i·f)), con un piccolo attrito r che lo tiene finito all'equatore.
@@ -610,10 +619,10 @@ export function mare(P, sf, cl, se = null, caso = null) {
 // Lo spessore che il vento muove (il termoclino) viene dalla scala h = √(f²·w·L/(β·g′)): w la discesa di Ekman, L la
 // larghezza dei bacini, g′ la gravità ridotta dalla differenza di densità tra l'acqua calda e la fredda.
 function correnti({ W, H, R, omega, bagnato, fondo, tx, ty, g, salto, areaMare }) {
-  const N = W * H, dl = (2 * Math.PI) / W, df = Math.PI / H, rho = 1025, mare = new Uint8Array(N), rE = DATI.attritoEkman, dy = R * df;
+  const N = W * H, dl = (2 * Math.PI) / W, df = Math.PI / H, rho = 1025, mare = new Uint8Array(N), dy = R * df;
   const fi = (j) => Math.PI / 2 - (j + 0.5) * df, c = Float64Array.from({ length: H }, (_, j) => Math.cos(fi(j)));
   const Mx = new Float64Array(N), My = new Float64Array(N), psi = new Float64Array(N), F = new Float64Array(N);
-  for (let j = 0; j < H; j++) { const f = 2 * omega * Math.sin(fi(j)); for (let i = 0; i < W; i++) { const k = j * W + i; mare[k] = bagnato[k] >= 0.5 ? 1 : 0; const d = rho * (rE * rE + f * f); Mx[k] = (rE * tx[k] + f * ty[k]) / d; My[k] = (rE * ty[k] - f * tx[k]) / d; } }
+  for (let j = 0; j < H; j++) { const f = 2 * omega * Math.sin(fi(j)); for (let i = 0; i < W; i++) { const k = j * W + i; mare[k] = bagnato[k] >= 0.5 ? 1 : 0; const rE = attritoDeriva(Math.hypot(tx[k], ty[k])), d = rho * (rE * rE + f * f); Mx[k] = (rE * tx[k] + f * ty[k]) / d; My[k] = (rE * ty[k] - f * tx[k]) / d; } }
   for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const k = j * W + i, e = j * W + ((i + 1) % W), w = j * W + ((i + W - 1) % W); F[k] = ((ty[e] - ty[w]) / (2 * dl) - (tx[k - W] * c[j - 1] - tx[k + W] * c[j + 1]) / (2 * df)) / (R * c[j] * rho); }
   const aE = new Float64Array(H), aW = new Float64Array(H), aN = new Float64Array(H), aS = new Float64Array(H), aP = new Float64Array(H);
   for (let j = 1; j < H - 1; j++) { const beta = (2 * omega * c[j]) / R, dx = R * c[j] * dl, r = Math.max(beta * dx, 1e-7), cn = Math.cos(fi(j) + df / 2), cs = Math.cos(fi(j) - df / 2);
@@ -700,7 +709,7 @@ export function dallaTavola(tv, T, f) {
 function sorgentiCalde(P, s, st, bs, { lonDi, latDi, FW, FH, tipo, fondoF, livello, g, pAria }) {
   const q = P.interno?.q ?? 0; if (!(q > 0.02) || !isFinite(livello)) return [];
   const cand = [], placche = bs.vivo === 1;
-  if (placche && s.cont) for (let k = 0; k < FW * FH; k++) { if (tipo[k] !== 1 || s.cont[k]) continue; const sotto = -s.alt[k] - 2500, eta = Math.max(0.05, (Math.max(0, sotto) / 350) ** 2); if (eta < 4) cand.push([eta, k, 'dorsale']); }
+  if (placche && s.cont) for (let k = 0; k < FW * FH; k++) { if (tipo[k] !== 1 || s.cont[k]) continue; const sotto = -s.alt[k] - 2500, eta = s.etaCrosta ? Math.max(0.05, s.etaCrosta[k]) : Math.max(0.05, (Math.max(0, sotto) / 350) ** 2); if (eta < 4) cand.push([eta, k, 'dorsale']); } // (l'età della crosta: quella vera di tettonica.js se la superficie la porta («etaCrosta», milioni di anni), altrimenti letta dalla quota: il fondale sprofonda come la radice dell'età)
   for (const [i, j] of s.vulcani || []) { const k = j * FW + i; if (tipo[k] === 1) cand.push([0.01, k, 'vulcano sommerso']); }
   cand.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const scelte = [], lontano = (k) => scelte.every(([, q2]) => { const di = Math.abs((k % FW) - (q2 % FW)), dj = Math.abs(Math.floor(k / FW) - Math.floor(q2 / FW)); return Math.max(Math.min(di, FW - di), dj) >= 5; });
@@ -754,8 +763,8 @@ function mareeDelMare(P, st, { W, H, co, fondo, righe, tipo, FW, FH, areaF, s, e
 // U^1,5, e d'inverno l'acqua di superficie, raffreddandosi, affonda finché trova acqua della sua temperatura
 // (z = −h·ln((T_inverno − T_fondo)/(T_media − T_fondo)), sul profilo che il termoclino dà).
 function stagioniDelMare(P, cl, m, st, { W, H, co, fondo, righe, g, Tclima, suGriglia, rhoAria, Tm, Tfondo }) {
-  if (!Array.isArray(cl.stagioni) || cl.stagioni.length < 2) return null; const N = W * H, omega = (2 * Math.PI) / (P.giorno || 86400), rE = DATI.attritoEkman, df = Math.PI / H;
-  const ekman = (u, v, k, j) => { const U = Math.hypot(u, v), tx = rhoAria * DATI.cd * U * u, ty = rhoAria * DATI.cd * U * v, f = 2 * omega * Math.sin(Math.PI / 2 - (j + 0.5) * df), d = 1025 * (rE * rE + f * f) * DATI.strato; return [(rE * tx + f * ty) / d, (rE * ty - f * tx) / d]; };
+  if (!Array.isArray(cl.stagioni) || cl.stagioni.length < 2) return null; const N = W * H, omega = (2 * Math.PI) / (P.giorno || 86400), df = Math.PI / H;
+  const ekman = (u, v, k, j) => { const U = Math.hypot(u, v), tx = rhoAria * DATI.cd * U * u, ty = rhoAria * DATI.cd * U * v, rE = attritoDeriva(Math.hypot(tx, ty)), f = 2 * omega * Math.sin(Math.PI / 2 - (j + 0.5) * df), d = 1025 * (rE * rE + f * f) * DATI.strato; return [(rE * tx + f * ty) / d, (rE * ty - f * tx) / d]; };
   return cl.stagioni.map((Ts, q) => { const Tq = suGriglia(Ts), ms = m && m.stagioni ? m.stagioni[q] : null, vu = ms ? suGriglia(ms.u) : st.vento.u, vv = ms ? suGriglia(ms.v) : st.vento.v;
     const T = new Float32Array(N), gh = new Float32Array(N), cu = new Float32Array(N), cv = new Float32Array(N), strato = new Float32Array(N);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!co.mare[k]) continue; const scarto = Tq[k] - Tclima[k]; T[k] = Math.max(st.congela, Tm[k] + scarto); gh[k] = limita((st.congela + 1 - (Tm[k] + scarto)) / 2, 0, 1);

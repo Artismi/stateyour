@@ -840,3 +840,338 @@ export function creaVista3D(tela, opzioni = {}) {
     sulloSchermo: (p) => { matrici(); const q = sulloSchermo(p.map((x) => x * (S ? S.ku : 1))); return q ? [(q[0] / tela.width) * tela.clientWidth, (q[1] / tela.height) * tela.clientHeight] : null; },
   };
 }
+
+// ═════════════════════════════════════ LE SCENE ═════════════════════════════════════
+// Geometrie vere, costruite (non simulate): chi le chiama dà il caso — la sorgente degli eventi di quel luogo — e la
+// stessa radice dà sempre la stessa scena. Tutto in nanometri.
+
+// un generatore svelto di numeri tra 0 e 1 dal seme di un evento (come la nebbia): per le migliaia di tiri di una scena
+function tiri(caso, nome) { let s = (caso || sorgente('atomi3d')).seme(nome); return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const versoreACaso = (r) => { const z = 2 * r() - 1, a = 2 * Math.PI * r(), s = Math.sqrt(1 - z * z); return [s * Math.cos(a), s * Math.sin(a), z]; };
+// una direzione che fa l'angolo dato con d, attorno a d di un azimut dato
+function aLato(d, coseno, azimut) {
+  const a = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], u = norma(vett(d, a)), v = vett(d, u), s = Math.sqrt(1 - coseno * coseno), c = Math.cos(azimut), z = Math.sin(azimut);
+  return [d[0] * coseno + s * (c * u[0] + z * v[0]), d[1] * coseno + s * (c * u[1] + z * v[1]), d[2] * coseno + s * (c * u[2] + z * v[2])];
+}
+// punti ben sparsi su una sfera (per i gusci degli ioni): l'ottaedro per sei, la spirale di Fibonacci per gli altri
+function sullaSfera(n) {
+  if (n === 6) return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const out = []; for (let i = 0; i < n; i++) { const z = 1 - (2 * i + 1) / n, s = Math.sqrt(1 - z * z), a = i * 2.399963; out.push([s * Math.cos(a), s * Math.sin(a), z]); } return out;
+}
+function ruotaACaso(punti, r) { // la stessa rotazione a caso per tutti
+  const w = versoreACaso(r), u = norma(vett(w, Math.abs(w[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), v = vett(w, u), a = 2 * Math.PI * r(), c = Math.cos(a), s = Math.sin(a), U = [0, 1, 2].map((k) => c * u[k] + s * v[k]), V = [0, 1, 2].map((k) => -s * u[k] + c * v[k]);
+  return punti.map((p) => [0, 1, 2].map((k) => p[0] * U[k] + p[1] * V[k] + p[2] * w[k]));
+}
+
+// la molecola d'acqua: O–H 0,9572 Å, angolo 104,52° (misurati nel vapore: Benedict, Gailar e Plyler 1956)
+export const ACQUA = { OH: 0.09572, angolo: (104.52 * Math.PI) / 180, perNm3: 33.428 }; // 33,43 molecole per nm³ a 1 g/cm³
+const cM = Math.cos(ACQUA.angolo / 2), sM = Math.sin(ACQUA.angolo / 2);
+// densità dell'acqua pura (g/cm³), con il massimo a 4 °C (parabola: entro lo 0,3% tra 0 e 60 °C), e di quella salata
+const densitaAcqua = (T, S = 0) => (1 - 6.8e-6 * (T - 277.13) ** 2) * (1 + 7.7e-4 * S);
+
+// gli ioni del mare che la scena sa mettere (raggio ionico; quante molecole d'acqua nel primo guscio; atomi in più se
+// lo ione è fatto di più atomi). Chi ha i numeri veri di un punto (mare.js) passa `ioni: [{ el, quanti | perMolecola }]`.
+export const IONI = {
+  'Na+': { el: 'Na', carica: 1, guscio: 6 }, 'K+': { el: 'K', carica: 1, guscio: 6 }, 'Mg2+': { el: 'Mg', carica: 2, guscio: 6 }, 'Ca2+': { el: 'Ca', carica: 2, guscio: 7 },
+  'Cl-': { el: 'Cl', carica: -1, guscio: 6 }, 'Fe2+': { el: 'Fe', carica: 2, guscio: 6 },
+  'SO4(2-)': { el: 'S', carica: -2, guscio: 10, raggio: 0.24, raggioCentro: 0.105, intorno: { el: 'O', n: 4, d: 0.149, raggio: 0.152 } }, // tetraedro, S–O 1,49 Å
+  'HCO3-': { el: 'C', carica: -1, guscio: 8, raggio: 0.21, raggioCentro: 0.076 * 2, intorno: { el: 'O', n: 3, d: 0.127, raggio: 0.152, piano: true } },
+};
+
+// ACQUA LIQUIDA CON I SUOI IONI. { latoNm | dimNm: [x, y, z], salinita (g/kg), T (K), ioni, origine, ostacoli }
+//   · le molecole: quante ne vuole la densità a quella temperatura e salinità; disordinate ma senza sovrapposizioni
+//     (griglia scossa e poi rilassata: nessun ossigeno a meno di ~2,6 Å da un altro, primo vicino attorno a 2,8 Å);
+//   · gli idrogeni: ogni molecola punta i suoi due O–H verso due ossigeni vicini che possono ancora riceverli (al più
+//     due per ossigeno) e che stanno tra loro a un angolo vicino a 104,5°: una rete di legami a idrogeno plausibile;
+//   · gli ioni: sodio e cloro alla concentrazione data (35 g/kg → uno ione ogni ~90 molecole per specie; oppure
+//     l'elenco `ioni`), ognuno col suo guscio: attorno a un catione le molecole voltano l'ossigeno verso lo ione (Na–O
+//     2,4 Å), attorno a un anione gli porgono un idrogeno (Cl–O 3,2 Å);
+//   · il moto: scena.tempo(t, pos) fa oscillare ogni molecola rigida attorno al suo posto (ampiezze ∝ √T: ~0,25 Å di
+//     spostamento e ~12° di rotazione a 25 °C). È il tremito dentro la gabbia dei vicini, rallentato di ~10¹³ volte;
+//     NON è una dinamica: le molecole non diffondono né si scambiano legami.
+// `ostacoli` = { pos, raggio, carica } sono atomi fermi di qualcos'altro (la faccia di un cristallo): l'acqua li evita e
+// si orienta verso di loro come verso gli ioni.
+export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15, ioni = null, origine = [0, 0, 0], ostacoli = null, moto = true } = {}, caso = null) {
+  caso = caso || sorgente('atomi3d/acqua'); const r = tiri(caso, 'acqua');
+  const L = dimNm || [latoNm, latoNm, latoNm], V = L[0] * L[1] * L[2], rho = densitaAcqua(T, salinita), nAcqua = Math.round(ACQUA.perNm3 * rho * (1 - salinita / 1000) * V);
+  // --- gli ioni: quanti, e dove
+  const specie = ioni ? ioni.map((x) => ({ ...(IONI[x.nome] || {}), ...x })) : (() => { const n = Math.round(salinita * rho * 0.010304 * V); return [{ nome: 'Na+', ...IONI['Na+'], quanti: n }, { nome: 'Cl-', ...IONI['Cl-'], quanti: n }]; })();
+  const centri = []; // gli ioni messi: { p, s (specie), R (raggio dello ione), G (distanza del guscio) }
+  for (let k = 0; k < specie.length; k++) {
+    const s = specie[k], e = ELEMENTI[s.el] || ELEMENTI.Na, R = s.raggio ?? e.ionico ?? e.vdw, G = R + 0.14, quanti = s.quanti ?? Math.round((s.perMolecola || 0) * nAcqua);
+    s.R = R; s.messi = 0;
+    for (let q = 0, prove = 0; q < quanti && prove < quanti * 400; prove++) {
+      const p = [0, 1, 2].map((a) => (L[a] > 2 * (G + 0.2) ? G + 0.15 + r() * (L[a] - 2 * (G + 0.15)) : L[a] / 2));
+      if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + G + 0.12) ** 2)) continue;
+      if (ostacoli && vicinoAOstacoli(ostacoli, origine, p, G + 0.25)) continue;
+      centri.push({ p, s, k, R, G, carica: s.carica }); q++; s.messi++;
+    }
+  }
+  // --- le molecole: prima i gusci degli ioni, poi le altre su una griglia scossa
+  const O = [], guscioDi = []; // ossigeni [x, y, z]; di quale ione è il guscio (−1: libera)
+  const dentro = (p) => p[0] > 0.02 && p[1] > 0.02 && p[2] > 0.02 && p[0] < L[0] - 0.02 && p[1] < L[1] - 0.02 && p[2] < L[2] - 0.02;
+  centri.forEach((c, i) => { for (const d of ruotaACaso(sullaSfera(c.s.guscio || 6), r)) { const p = [c.p[0] + d[0] * c.G, c.p[1] + d[1] * c.G, c.p[2] + d[2] * c.G]; if (dentro(p)) { O.push(p); guscioDi.push(i); } } });
+  const nGusci = O.length, liberi = Math.max(0, nAcqua - nGusci), passo = Math.cbrt(V / (liberi * 1.25 + 1)), n = L.map((l) => Math.max(1, Math.round(l / passo))), candidati = [];
+  for (let z = 0; z < n[2]; z++) for (let y = 0; y < n[1]; y++) for (let x = 0; x < n[0]; x++) {
+    const p = [((x + 0.5 + 0.7 * (r() - 0.5)) * L[0]) / n[0], ((y + 0.5 + 0.7 * (r() - 0.5)) * L[1]) / n[1], ((z + 0.5 + 0.7 * (r() - 0.5)) * L[2]) / n[2]];
+    if (centri.some((c) => (c.p[0] - p[0]) ** 2 + (c.p[1] - p[1]) ** 2 + (c.p[2] - p[2]) ** 2 < (c.G + 0.2) ** 2)) continue;
+    candidati.push(p);
+  }
+  for (let i = candidati.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = candidati[i]; candidati[i] = candidati[j]; candidati[j] = t; }
+  for (let i = 0; i < Math.min(liberi, candidati.length); i++) { O.push(candidati[i]); guscioDi.push(-1); }
+  const nO = O.length;
+  // --- il rilassamento: gli ossigeni liberi si respingono sotto 2,8 Å, stanno fuori dai gusci e dagli ostacoli
+  const lc = 0.36, g = L.map((l) => Math.max(1, Math.ceil(l / lc))), cellaDi = (p) => Math.min(g[0] - 1, Math.max(0, Math.floor(p[0] / lc))) + g[0] * (Math.min(g[1] - 1, Math.max(0, Math.floor(p[1] / lc))) + g[1] * Math.min(g[2] - 1, Math.max(0, Math.floor(p[2] / lc))));
+  const testa = new Int32Array(g[0] * g[1] * g[2]), dopo = new Int32Array(nO);
+  const rifaiCelle = () => { testa.fill(-1); for (let i = 0; i < nO; i++) { const c = cellaDi(O[i]); dopo[i] = testa[c]; testa[c] = i; } };
+  const vicini = (p, f) => { // chiama f(j) per ogni ossigeno nelle cellette attorno a p
+    const cx = Math.min(g[0] - 1, Math.max(0, Math.floor(p[0] / lc))), cy = Math.min(g[1] - 1, Math.max(0, Math.floor(p[1] / lc))), cz = Math.min(g[2] - 1, Math.max(0, Math.floor(p[2] / lc)));
+    for (let z = Math.max(0, cz - 1); z <= Math.min(g[2] - 1, cz + 1); z++) for (let y = Math.max(0, cy - 1); y <= Math.min(g[1] - 1, cy + 1); y++) for (let x = Math.max(0, cx - 1); x <= Math.min(g[0] - 1, cx + 1); x++) for (let j = testa[x + g[0] * (y + g[1] * z)]; j >= 0; j = dopo[j]) f(j);
+  };
+  const ost = ostacoli ? grigliaOstacoli(ostacoli, origine) : null, d0 = 0.282, spinta = new Float32Array(3 * nO);
+  for (let giro = 0; giro < 40; giro++) {
+    rifaiCelle(); spinta.fill(0);
+    for (let i = nGusci; i < nO; i++) {
+      const p = O[i]; let sx = 0, sy = 0, sz = 0;
+      vicini(p, (j) => { if (j === i) return; const q = O[j], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], d2 = dx * dx + dy * dy + dz * dz; if (d2 >= d0 * d0) return; const d = Math.sqrt(d2) || 1e-4, k = ((d0 - d) / d) * (j < nGusci ? 0.9 : 0.45); sx += dx * k; sy += dy * k; sz += dz * k; });
+      for (const c of centri) { const dx = p[0] - c.p[0], dy = p[1] - c.p[1], dz = p[2] - c.p[2], m = c.G + 0.19, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (m - d) / d; sx += dx * k; sy += dy * k; sz += dz * k; } }
+      if (ost) ost.vicini(p, (q, R) => { const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], m = R + 0.14, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m * m) { const d = Math.sqrt(d2) || 1e-4, k = (0.9 * (m - d)) / d; sx += dx * k; sy += dy * k; sz += dz * k; } });
+      spinta[3 * i] = sx; spinta[3 * i + 1] = sy; spinta[3 * i + 2] = sz;
+    }
+    for (let i = nGusci; i < nO; i++) for (let a = 0; a < 3; a++) O[i][a] = Math.min(L[a] - 0.03, Math.max(0.03, O[i][a] + spinta[3 * i + a]));
+  }
+  rifaiCelle();
+  // --- gli idrogeni. Di ogni molecola: i cationi vicini (da cui voltarsi), e a chi può porgere un idrogeno
+  const H = new Float32Array(6 * nO), riceve = new Uint8Array(nO), dona = new Int32Array(2 * nO).fill(-1), ordine = [];
+  for (let i = 0; i < nGusci; i++) ordine.push(i);
+  { const resto = []; for (let i = nGusci; i < nO; i++) resto.push(i); for (let i = resto.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = resto[i]; resto[i] = resto[j]; resto[j] = t; } ordine.push(...resto); }
+  let legamiH = 0;
+  for (const i of ordine) {
+    const p = O[i], via = [0, 0, 0], cand = []; let cationi = 0; // cand: [ux, uy, uz, costo, indice dell'ossigeno o −1]
+    const fermo = (q, R, carica) => { const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d = Math.hypot(dx, dy, dz); if (d > R + 0.14 + 0.07 || d < 1e-6) return; if (carica > 0) { via[0] -= dx / d; via[1] -= dy / d; via[2] -= dz / d; cationi++; } else if (carica < 0) cand.push([dx / d, dy / d, dz / d, -25, -1]); };
+    for (const c of centri) fermo(c.p, c.R, c.carica);
+    if (ost) ost.vicini(p, (q, R, carica) => fermo(q, R, carica));
+    vicini(p, (j) => { if (j === i || dona[2 * j] === i || dona[2 * j + 1] === i) return; const q = O[j], dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d = Math.hypot(dx, dy, dz); if (d < 0.36) cand.push([dx / d, dy / d, dz / d, (riceve[j] >= 2 ? 60 : riceve[j] * 6) + Math.abs(d - 0.28) * 100, j]); });
+    const lontanoDa = cationi ? norma(via) : null;
+    let meglio = 45, a = -1, b = -1;
+    for (let k = 0; k < cand.length; k++) for (let l = k + 1; l < cand.length; l++) {
+      const ck = cand[k], cl = cand[l], coseno = ck[0] * cl[0] + ck[1] * cl[1] + ck[2] * cl[2], ang = Math.acos(Math.max(-1, Math.min(1, coseno)));
+      let costo = (Math.abs(ang - ACQUA.angolo) * 180) / Math.PI + ck[3] + cl[3] + 25;
+      if (lontanoDa) { const bis = norma([ck[0] + cl[0], ck[1] + cl[1], ck[2] + cl[2]]); costo += 60 * (1 - scal(bis, lontanoDa)); }
+      if (costo < meglio) { meglio = costo; a = k; b = l; }
+    }
+    let d1, d2;
+    if (a >= 0) { d1 = cand[a]; d2 = cand[b]; for (const c of [d1, d2]) if (c[4] >= 0) { riceve[c[4]]++; dona[2 * i + (dona[2 * i] < 0 ? 0 : 1)] = c[4]; legamiH++; } else legamiH++; }
+    else {
+      // un solo idrogeno ha dove andare (o nessuno): l'altro si mette a 104,5°, dalla parte opposta ai cationi
+      let uno = null, costo = 30; for (const c of cand) if (c[3] < costo && (!lontanoDa || scal(c, lontanoDa) > -0.2)) { costo = c[3]; uno = c; }
+      if (uno && !(lontanoDa && cationi)) { d1 = uno; d2 = aLato(uno, Math.cos(ACQUA.angolo), 2 * Math.PI * r()); if (uno[4] >= 0) { riceve[uno[4]]++; dona[2 * i] = uno[4]; } legamiH++; }
+      else { const bis = lontanoDa || versoreACaso(r), e = aLato(bis, 0, 2 * Math.PI * r()); d1 = [0, 1, 2].map((k) => cM * bis[k] + sM * e[k]); d2 = [0, 1, 2].map((k) => cM * bis[k] - sM * e[k]); }
+    }
+    // la molecola rigida: la bisettrice tra le due direzioni volute, e l'angolo vero
+    const bis = norma([d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2]]); let e = [d1[0] - d2[0], d1[1] - d2[1], d1[2] - d2[2]]; const k = scal(e, bis); e = norma([e[0] - k * bis[0], e[1] - k * bis[1], e[2] - k * bis[2]]);
+    for (let a3 = 0; a3 < 3; a3++) { H[6 * i + a3] = p[a3] + ACQUA.OH * (cM * bis[a3] + sM * e[a3]); H[6 * i + 3 + a3] = p[a3] + ACQUA.OH * (cM * bis[a3] - sM * e[a3]); }
+  }
+  // --- la scena
+  let nIoni = 0; for (const c of centri) nIoni += 1 + (c.s.intorno ? c.s.intorno.n : 0);
+  const N = 3 * nO + nIoni, pos = new Float32Array(3 * N), raggio = new Float32Array(N), elemento = new Uint8Array(N), agitazione = new Float32Array(N), kT = Math.sqrt(T / 298.15);
+  for (let i = 0; i < nO; i++) {
+    for (let a = 0; a < 3; a++) { pos[9 * i + a] = O[i][a] + origine[a]; pos[9 * i + 3 + a] = H[6 * i + a] + origine[a]; pos[9 * i + 6 + a] = H[6 * i + 3 + a] + origine[a]; }
+    raggio[3 * i] = ELEMENTI.O.vdw; raggio[3 * i + 1] = raggio[3 * i + 2] = ELEMENTI.H.vdw; elemento[3 * i] = 8; elemento[3 * i + 1] = elemento[3 * i + 2] = 1;
+  }
+  const parti = [{ nome: 'acqua', da: 0, a: 3 * nO, colore: [58, 132, 255] }]; let j = 3 * nO;
+  specie.forEach((s, k) => {
+    const da = j, e = ELEMENTI[s.el] || ELEMENTI.Na;
+    for (const c of centri) if (c.k === k) {
+      for (let a = 0; a < 3; a++) pos[3 * j + a] = c.p[a] + origine[a]; raggio[j] = s.raggioCentro ?? c.R; elemento[j] = e.Z; agitazione[j] = 0.02 * kT; j++;
+      if (s.intorno) { const I = s.intorno, dir = s.intorno.piano ? [0, 1, 2].map((q) => [Math.cos((q * 2 * Math.PI) / 3), Math.sin((q * 2 * Math.PI) / 3), 0]) : I.n === 4 ? [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(norma) : sullaSfera(I.n);
+        for (const d of ruotaACaso(dir, r)) { for (let a = 0; a < 3; a++) pos[3 * j + a] = c.p[a] + d[a] * I.d + origine[a]; raggio[j] = I.raggio; elemento[j] = (ELEMENTI[I.el] || ELEMENTI.O).Z; agitazione[j] = 0.02 * kT; j++; } }
+    }
+    parti.push({ nome: s.nome || e.simbolo, da, a: j, colore: s.colore || e.colore, carica: s.carica, quanti: s.messi });
+  });
+  const scena = { nome: 'acqua', unita: 'nm', colora: 'elemento', atomi: { pos, raggio, elemento, agitazione }, scatola: L.slice(), origine: origine.slice(), parti, etichette: [],
+    molecole: nO, legamiIdrogeno: legamiH, T, salinita, ioni: specie.map((s) => ({ nome: s.nome, quanti: s.messi })),
+    descrizione: `acqua a ${Math.round(T - 273.15)} °C, ${salinita} g/kg di sale: ${nO} molecole in ${L.map((x) => +x.toFixed(2)).join(' × ')} nm (${(nO / V).toFixed(1)} per nm³), ${specie.map((s) => `${s.messi} ${s.nome}`).join(', ')}` };
+  // etichette: uno ione per specie, col suo guscio
+  for (const p of parti.slice(1)) if (p.a > p.da) scena.etichette.push({ testo: `${p.nome} col suo guscio d'acqua`, pos: [pos[3 * p.da], pos[3 * p.da + 1], pos[3 * p.da + 2]] });
+  if (moto) scena.tempo = motoAcqua(pos, nO, kT, caso);
+  return scena;
+}
+// il tremito dell'acqua: ogni molecola, rigida, oscilla attorno al suo posto e al suo orientamento (somma di due seni
+// con fasi sue); gli ioni li muove la vista (agitazione). Riscrive solo i primi 9·nO numeri.
+function motoAcqua(pos0, nO, kT, caso) {
+  const r = tiri(caso, 'moto'), fasi = new Float32Array(12 * nO), base = pos0.slice(0, 9 * nO); for (let i = 0; i < fasi.length; i++) fasi[i] = r() * 6.2832;
+  const aT = 0.025 * kT, aR = 0.21 * kT; // 0,25 Å e 12° a 25 °C
+  return (t, pos) => {
+    for (let i = 0; i < nO; i++) {
+      const f = 12 * i, b = 9 * i, w1 = 5 + (i % 7) * 0.45, w2 = 8.3 + (i % 5) * 0.6;
+      const tx = aT * (Math.sin(w1 * t + fasi[f]) + 0.6 * Math.sin(w2 * t + fasi[f + 3])), ty = aT * (Math.sin(w1 * 1.13 * t + fasi[f + 1]) + 0.6 * Math.sin(w2 * 0.9 * t + fasi[f + 4])), tz = aT * (Math.sin(w1 * 0.89 * t + fasi[f + 2]) + 0.6 * Math.sin(w2 * 1.1 * t + fasi[f + 5]));
+      const rx = aR * Math.sin(w2 * 1.3 * t + fasi[f + 6]), ry = aR * Math.sin(w2 * 1.55 * t + fasi[f + 7]), rz = aR * Math.sin(w2 * 1.21 * t + fasi[f + 8]);
+      // rotazione attorno al baricentro (in pratica l'ossigeno): formula di Rodrigues con il vettore di rotazione (rx, ry, rz)
+      const th = Math.hypot(rx, ry, rz) || 1e-9, kx = rx / th, ky = ry / th, kz = rz / th, c = Math.cos(th), s = Math.sin(th), ox = base[b], oy = base[b + 1], oz = base[b + 2];
+      pos[b] = ox + tx; pos[b + 1] = oy + ty; pos[b + 2] = oz + tz;
+      for (let h = 3; h <= 6; h += 3) {
+        const vx = base[b + h] - ox, vy = base[b + h + 1] - oy, vz = base[b + h + 2] - oz, kv = (kx * vx + ky * vy + kz * vz) * (1 - c);
+        pos[b + h] = ox + tx + vx * c + (ky * vz - kz * vy) * s + kx * kv; pos[b + h + 1] = oy + ty + vy * c + (kz * vx - kx * vz) * s + ky * kv; pos[b + h + 2] = oz + tz + vz * c + (kx * vy - ky * vx) * s + kz * kv;
+      }
+    }
+    return true;
+  };
+}
+// gli ostacoli in una griglia, per trovarne i vicini in fretta (posizioni riferite all'origine dell'acqua)
+function grigliaOstacoli(ost, origine) {
+  const n = ost.raggio.length, lc = 0.5, m = new Map(), chiave = (x, y, z) => `${x},${y},${z}`;
+  for (let i = 0; i < n; i++) { const k = chiave(Math.floor((ost.pos[3 * i] - origine[0]) / lc), Math.floor((ost.pos[3 * i + 1] - origine[1]) / lc), Math.floor((ost.pos[3 * i + 2] - origine[2]) / lc)); (m.get(k) || m.set(k, []).get(k)).push(i); }
+  return { vicini(p, f) { const cx = Math.floor(p[0] / lc), cy = Math.floor(p[1] / lc), cz = Math.floor(p[2] / lc); for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) { const l = m.get(chiave(x, y, z)); if (l) for (const i of l) f([ost.pos[3 * i] - origine[0], ost.pos[3 * i + 1] - origine[1], ost.pos[3 * i + 2] - origine[2]], ost.raggio[i], ost.carica ? ost.carica[i] : 0); } } };
+}
+function vicinoAOstacoli(ost, origine, p, d) { const n = ost.raggio.length; for (let i = 0; i < n; i++) if ((ost.pos[3 * i] - origine[0] - p[0]) ** 2 + (ost.pos[3 * i + 1] - origine[1] - p[1]) ** 2 + (ost.pos[3 * i + 2] - origine[2] - p[2]) ** 2 < (d + ost.raggio[i]) ** 2) return true; return false; }
+
+// ---------- I RETICOLI. Una cella elementare è { a, b, c: i tre vettori (nm), base: [{ el, uvw, carica, raggio }] }:
+// lo stesso formato che può arrivare da fuori (`reticolo` in scenaCristallo). L'asse y è quello «in alto»: la faccia che
+// si bagna è quella di sopra. I raggi: ionici dove il legame è ionico, e dichiarati negli altri casi.
+const R3 = Math.sqrt(3) / 2;
+export const RETICOLI = {
+  // salgemma NaCl: cubico a facce centrate, passo 5,640 Å (a 25 °C); raggi ionici (Na⁺ 1,02 + Cl⁻ 1,81 = 2,83 ≈ a/2: si toccano)
+  salgemma: (() => { const a = 0.5640, f = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]];
+    return { nome: 'salgemma', formula: 'NaCl', a: [a, 0, 0], b: [0, a, 0], c: [0, 0, a], base: [...f.map((u) => ({ el: 'Na', uvw: u, carica: 1, raggio: 0.102 })), ...f.map((u) => ({ el: 'Cl', uvw: [u[0] + 0.5, u[1], u[2]], carica: -1, raggio: 0.181 }))], agitazione: { Na: 0.0145, Cl: 0.0135 } }; })(), // spostamento quadratico medio a 295 K (fattori B ≈ 1,6 e 1,4 Å²)
+  // ghiaccio Ih: esagonale, a = 4,518 Å, c = 7,356 Å (a 250 K); ossigeni in (1/3, 2/3, z) con z = 0,0625; gli idrogeni,
+  // uno per legame e due per ossigeno (regole di Bernal e Fowler), li mette scenaCristallo
+  ghiaccio: (() => { const a = 0.4518, c = 0.7356, z = 0.0625;
+    return { nome: 'ghiaccio', formula: 'H2O', a: [a, 0, 0], b: [-a / 2, 0, a * R3], c: [0, c, 0], base: [[1 / 3, 2 / 3, z], [2 / 3, 1 / 3, z + 0.5], [2 / 3, 1 / 3, 1 - z], [1 / 3, 2 / 3, 0.5 - z]].map((u) => ({ el: 'O', uvw: u, carica: -0.8, raggio: 0.152 })), ghiaccio: true, agitazione: { O: 0.02, H: 0.025 } }; })(),
+  // quarzo α: trigonale (P3₂21), a = 4,913 Å, c = 5,405 Å; Si in (0,4697, 0, 0), O in (0,4135, 0,2669, 0,1191) (Levien,
+  // Prewitt e Weidner 1980); ossigeno col raggio ionico (1,35 Å), silicio col covalente (1,11 Å) perché si veda tra gli ossigeni
+  quarzo: (() => { const a = 0.4913, c = 0.5405, u = 0.4697, [x, y, z] = [0.4135, 0.2669, 0.1191], m = (v) => v.map((q) => ((q % 1) + 1) % 1);
+    const Si = [[u, 0, 0], [0, u, 2 / 3], [-u, -u, 1 / 3]], Ox = [[x, y, z], [-y, x - y, z + 2 / 3], [-x + y, -x, z + 1 / 3], [y, x, -z], [x - y, -y, -z + 1 / 3], [-x, -x + y, -z + 2 / 3]];
+    return { nome: 'quarzo', formula: 'SiO2', a: [a, 0, 0], b: [-a / 2, 0, a * R3], c: [0, c, 0], base: [...Si.map((v) => ({ el: 'Si', uvw: m(v), carica: 2.4, raggio: 0.111 })), ...Ox.map((v) => ({ el: 'O', uvw: m(v), carica: -1.2, raggio: 0.135 }))], agitazione: { Si: 0.007, O: 0.0105 } }; })(),
+};
+// riempie il blocco [0, dim] con la cella ripetuta → { pos: [], el: [], raggio: [], carica: [] }
+function riempi(ret, dim) {
+  const { a, b, c } = ret, det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+  const inv = [[(b[1] * c[2] - b[2] * c[1]) / det, (a[2] * c[1] - a[1] * c[2]) / det, (a[1] * b[2] - a[2] * b[1]) / det], [(b[2] * c[0] - b[0] * c[2]) / det, (a[0] * c[2] - a[2] * c[0]) / det, (a[2] * b[0] - a[0] * b[2]) / det], [(b[0] * c[1] - b[1] * c[0]) / det, (a[1] * c[0] - a[0] * c[1]) / det, (a[0] * b[1] - a[1] * b[0]) / det]];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let q = 0; q < 8; q++) { const p = [q & 1 ? dim[0] : 0, q & 2 ? dim[1] : 0, q & 4 ? dim[2] : 0]; for (let k = 0; k < 3; k++) { const f = inv[k][0] * p[0] + inv[k][1] * p[1] + inv[k][2] * p[2]; if (f < lo[k]) lo[k] = f; if (f > hi[k]) hi[k] = f; } }
+  const pos = [], el = [], raggio = [], carica = [], e = 1e-4;
+  for (let i = Math.floor(lo[0]) - 1; i <= Math.ceil(hi[0]); i++) for (let j = Math.floor(lo[1]) - 1; j <= Math.ceil(hi[1]); j++) for (let k = Math.floor(lo[2]) - 1; k <= Math.ceil(hi[2]); k++) for (const at of ret.base) {
+    const u = at.uvw[0] + i, v = at.uvw[1] + j, w = at.uvw[2] + k, x = u * a[0] + v * b[0] + w * c[0], y = u * a[1] + v * b[1] + w * c[1], z = u * a[2] + v * b[2] + w * c[2];
+    if (x < -e || y < -e || z < -e || x > dim[0] + e || y > dim[1] + e || z > dim[2] + e) continue;
+    const E = ELEMENTI[at.el] || ELEMENTI.C; pos.push(x, y, z); el.push(E.Z); raggio.push(at.raggio ?? E.ionico ?? E.vdw); carica.push(at.carica || 0);
+  }
+  return { pos, el, raggio, carica };
+}
+// gli idrogeni del ghiaccio: uno su ogni legame tra ossigeni vicini (2,76 Å), due vicino a ogni ossigeno; chi sta in
+// superficie e ha meno di quattro vicini tiene gli idrogeni che avanzano rivolti dove il vicino manca
+function idrogeniGhiaccio(pos, r) {
+  const n = pos.length / 3, lc = 0.3, m = new Map(), ch = (x, y, z) => (x + 512) + 1024 * ((y + 512) + 1024 * (z + 512)), vic = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) { const k = ch(Math.floor(pos[3 * i] / lc), Math.floor(pos[3 * i + 1] / lc), Math.floor(pos[3 * i + 2] / lc)); (m.get(k) || m.set(k, []).get(k)).push(i); }
+  const legami = []; // [i, j, verso]: verso 0 → l'idrogeno è di i
+  for (let i = 0; i < n; i++) { const cx = Math.floor(pos[3 * i] / lc), cy = Math.floor(pos[3 * i + 1] / lc), cz = Math.floor(pos[3 * i + 2] / lc);
+    for (let z = cz - 1; z <= cz + 1; z++) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) for (const j of m.get(ch(x, y, z)) || []) if (j > i && (pos[3 * i] - pos[3 * j]) ** 2 + (pos[3 * i + 1] - pos[3 * j + 1]) ** 2 + (pos[3 * i + 2] - pos[3 * j + 2]) ** 2 < 0.3 * 0.3) { vic[i].push(legami.length); vic[j].push(legami.length); legami.push([i, j, r() < 0.5 ? 0 : 1]); } }
+  const dati = new Int32Array(n); for (const [i, j, v] of legami) dati[v ? j : i]++;
+  const donatore = (l) => (legami[l][2] ? legami[l][1] : legami[l][0]);
+  // si girano i legami finché ogni ossigeno ne dà al più due e ne riceve al più due
+  for (let giro = 0, fatto = false; giro < 400 && !fatto; giro++) { fatto = true;
+    for (let i = 0; i < n; i++) { const b = vic[i].length;
+      while (dati[i] > 2) { fatto = false; const miei = vic[i].filter((l) => donatore(l) === i), l = miei[Math.floor(r() * miei.length)], altro = legami[l][0] === i ? legami[l][1] : legami[l][0]; legami[l][2] ^= 1; dati[i]--; dati[altro]++; }
+      while (b - dati[i] > 2) { fatto = false; const suoi = vic[i].filter((l) => donatore(l) !== i), l = suoi[Math.floor(r() * suoi.length)], altro = legami[l][0] === i ? legami[l][1] : legami[l][0]; legami[l][2] ^= 1; dati[i]++; dati[altro]--; }
+    } }
+  const H = [], OH = 0.0985, di = Array.from({ length: n }, () => []); // di[i]: le posizioni dei suoi idrogeni
+  for (let i = 0; i < n; i++) {
+    const dir = vic[i].map((l) => { const j = legami[l][0] === i ? legami[l][1] : legami[l][0]; return norma([pos[3 * j] - pos[3 * i], pos[3 * j + 1] - pos[3 * i + 1], pos[3 * j + 2] - pos[3 * i + 2]]); });
+    const mie = vic[i].map((l, k) => (donatore(l) === i ? dir[k] : null)).filter(Boolean);
+    // le direzioni del tetraedro rimaste libere
+    let libere = [];
+    if (dir.length === 3) libere = [norma([-dir[0][0] - dir[1][0] - dir[2][0], -dir[0][1] - dir[1][1] - dir[2][1], -dir[0][2] - dir[1][2] - dir[2][2]])];
+    else if (dir.length === 2) { const bis = norma([-dir[0][0] - dir[1][0], -dir[0][1] - dir[1][1], -dir[0][2] - dir[1][2]]), p = norma(vett(dir[0], dir[1])), c = Math.cos(0.9553), s = Math.sin(0.9553); libere = [[0, 1, 2].map((k) => c * bis[k] + s * p[k]), [0, 1, 2].map((k) => c * bis[k] - s * p[k])]; }
+    else if (dir.length === 1) { const az = 2 * Math.PI * r(); libere = [0, 1, 2].map((q) => aLato(dir[0], -1 / 3, az + (q * 2 * Math.PI) / 3)); }
+    else if (dir.length === 0) { const d = versoreACaso(r); libere = [d, aLato(d, -1 / 3, 2 * Math.PI * r())]; }
+    for (let k = libere.length - 1; k > 0; k--) { const j = Math.floor(r() * (k + 1)), t = libere[k]; libere[k] = libere[j]; libere[j] = t; }
+    for (const d of [...mie, ...libere].slice(0, 2)) { H.push(pos[3 * i] + OH * d[0], pos[3 * i + 1] + OH * d[1], pos[3 * i + 2] + OH * d[2]); di[i].push(H.length / 3 - 1); }
+  }
+  return { H, di };
+}
+
+// UN CRISTALLO, e se si vuole la sua faccia bagnata. { minerale: 'salgemma' | 'ghiaccio' | 'quarzo' | reticolo: {…},
+//   dimNm: [x, y, z] | latoNm, T, acqua: { spessoreNm, salinita, T, ioni } }
+// Il blocco è tagliato netto lungo le facce della scatola (la faccia di sopra è (100) per il salgemma, il piano basale
+// per ghiaccio e quarzo): NON è ricostruita né rivestita (nel quarzo vero la faccia bagnata si copre di gruppi Si–OH).
+// Con `acqua`, sopra il blocco c'è uno strato dell'acqua di scenaAcqua, che vede gli atomi della faccia come ostacoli
+// e come ioni: l'ossigeno verso i cationi, un idrogeno verso gli anioni.
+export function scenaCristallo({ minerale = 'salgemma', reticolo = null, latoNm = 10, dimNm = null, T = 298.15, acqua = null } = {}, caso = null) {
+  caso = caso || sorgente(`atomi3d/cristallo/${minerale}`); const r = tiri(caso, 'cristallo'), ret = reticolo || RETICOLI[minerale]; if (!ret) throw new Error(`atomi3d: non conosco il reticolo di «${minerale}»`);
+  const dim = dimNm || [latoNm, latoNm, latoNm], B = riempi(ret, dim); let nC = B.el.length;
+  const ag = ret.agitazione || {}, kT = Math.sqrt(T / 298.15), parti = [];
+  let molecoleGhiaccio = null;
+  if (ret.ghiaccio) { // gli idrogeni, e gli atomi riordinati molecola per molecola (O, H, H)
+    const { H, di } = idrogeniGhiaccio(B.pos, r), n = nC, p2 = [], e2 = [], r2 = [], c2 = [];
+    for (let i = 0; i < n; i++) { p2.push(B.pos[3 * i], B.pos[3 * i + 1], B.pos[3 * i + 2]); e2.push(8); r2.push(B.raggio[i]); c2.push(-0.8); for (const h of di[i]) { p2.push(H[3 * h], H[3 * h + 1], H[3 * h + 2]); e2.push(1); r2.push(ELEMENTI.H.vdw); c2.push(0.4); } }
+    B.pos = p2; B.el = e2; B.raggio = r2; B.carica = c2; nC = e2.length; molecoleGhiaccio = n;
+  }
+  let W = null, alto = 0;
+  if (acqua) {
+    for (let i = 0; i < nC; i++) if (B.pos[3 * i + 1] > alto) alto = B.pos[3 * i + 1];
+    // gli atomi della faccia (l'ultimo nanometro scarso) sono gli ostacoli dell'acqua
+    const op = [], or = [], oc = []; for (let i = 0; i < nC; i++) if (B.pos[3 * i + 1] > alto - 0.7 && B.el[i] !== 1) { op.push(B.pos[3 * i], B.pos[3 * i + 1], B.pos[3 * i + 2]); or.push(B.raggio[i]); oc.push(B.carica[i]); }
+    W = scenaAcqua({ dimNm: [dim[0], acqua.spessoreNm ?? 4, dim[2]], salinita: acqua.salinita ?? 35, T: acqua.T ?? T, ioni: acqua.ioni || null, origine: [0, alto + 0.02, 0], ostacoli: { pos: op, raggio: or, carica: oc }, moto: acqua.moto !== false }, caso.sotto('acqua'));
+  }
+  const nW = W ? W.atomi.raggio.length : 0, N = nC + nW, pos = new Float32Array(3 * N), raggio = new Float32Array(N), elemento = new Uint8Array(N), agitazione = new Float32Array(N);
+  pos.set(B.pos); raggio.set(B.raggio); elemento.set(B.el);
+  for (let i = 0; i < nC; i++) agitazione[i] = (ag[ELEMENTI[B.el[i]].simbolo] || 0.012) * kT;
+  parti.push({ nome: ret.nome || minerale, da: 0, a: nC, colore: [255, 208, 0] });
+  if (W) { pos.set(W.atomi.pos, 3 * nC); raggio.set(W.atomi.raggio, nC); elemento.set(W.atomi.elemento, nC); agitazione.set(W.atomi.agitazione, nC); for (const p of W.parti) parti.push({ ...p, da: p.da + nC, a: p.a + nC }); }
+  const scatola = [dim[0], W ? alto + 0.02 + W.scatola[1] : dim[1], dim[2]], conta = {}; for (let i = 0; i < nC; i++) { const s = ELEMENTI[B.el[i]].simbolo; conta[s] = (conta[s] || 0) + 1; }
+  const scena = { nome: ret.nome || minerale, unita: 'nm', colora: 'elemento', atomi: { pos, raggio, elemento, agitazione }, scatola, parti, etichette: [], T, reticolo: ret, atomiCristallo: nC, composizione: conta, molecoleGhiaccio,
+    descrizione: `${ret.nome || minerale} (${ret.formula || ''}): ${nC} atomi in ${dim.map((x) => +x.toFixed(2)).join(' × ')} nm${W ? `; sopra, ${W.descrizione}` : ''}` };
+  scena.etichette.push({ testo: `${ret.nome || minerale}: ${Object.entries(conta).map(([s, n]) => `${n} ${s}`).join(', ')}`, pos: [dim[0] * 0.8, (W ? alto : dim[1]) * 0.55, dim[2]] });
+  if (W) {
+    scena.etichette.push({ testo: 'la faccia bagnata', pos: [dim[0] * 0.3, alto + 0.15, dim[2]] }, { testo: `acqua: ${W.molecole} molecole`, pos: [dim[0] * 0.7, alto + W.scatola[1] * 0.6, dim[2]] });
+    if (W.tempo) { const moto = W.tempo, parte = new Float32Array(W.atomi.pos); scena.tempo = (t, p) => { moto(t, parte); p.set(parte.subarray(0, 9 * W.molecole), 3 * nC); return true; }; }
+    scena.acqua = { molecole: W.molecole, ioni: W.ioni, da: nC };
+  }
+  return scena;
+}
+
+// LA PROVA DI CARICO: un doppio strato di molecole anfifiliche SCHEMATICHE (una testa di una dozzina di atomi, due
+// code di sedici gruppi CH₂ ciascuna, 0,64 nm² per molecola come un fosfolipide), una colonna di subunità impilate a
+// elica che lo attraversa e ioni sparsi attorno. Non è una struttura vera (nessuna vita è «messa lì»): serve a misurare
+// quanti atomi regge la vista e a vedere se parti di colori diversi si leggono. { atomi: quanti, colonna: true }
+export function scenaDoppioStrato({ atomi = 200000, colonna = true, ioni = true } = {}, caso = null) {
+  caso = caso || sorgente('atomi3d/carico'); const r = tiri(caso, 'strato');
+  const perLipide = 44, perSub = 620, nSub = colonna ? Math.round(Math.min(0.22 * atomi, 30000 + 0.04 * atomi) / perSub) : 0, nIoni = ioni ? Math.round(atomi * 0.012) : 0;
+  const nLip = Math.max(2, Math.floor((atomi - nSub * perSub - nIoni) / perLipide)), passo = Math.sqrt(0.64 / R3), perLato = Math.sqrt(nLip / 2), lato = perLato * Math.sqrt(0.64);
+  const nx = Math.max(1, Math.round(lato / passo)), nz = Math.max(1, Math.ceil(nLip / 2 / nx)), LX = nx * passo, LZ = nz * passo * R3, raggioColonna = 4.2, cxC = LX / 2, czC = LZ / 2;
+  const P = [], Rg = [], El = [], Pa = []; // posizioni, raggi, elementi, parte
+  const metti = (x, y, z, rr, el, parte) => { P.push(x, y, z); Rg.push(rr); El.push(el); Pa.push(parte); };
+  const onda = (x, z) => 0.9 * Math.sin((x / LX) * 2 * Math.PI * 1.5) * Math.cos((z / LZ) * 2 * Math.PI) + 0.4 * Math.sin((x / LX + z / LZ) * 2 * Math.PI * 3); // la membrana ondeggia un poco
+  let lip = 0;
+  for (let foglio = 0; foglio < 2; foglio++) for (let j = 0; j < nz; j++) for (let i = 0; i < nx && lip < nLip; i++) {
+    const x = (i + 0.5 * (j & 1) + 0.25 * (r() - 0.5)) * passo, z = (j + 0.25 * (r() - 0.5)) * passo * R3;
+    if (colonna && (x - cxC) ** 2 + (z - czC) ** 2 < (raggioColonna + 0.3) ** 2) continue;
+    lip++;
+    const verso = foglio ? -1 : 1, y0 = onda(x, z), az = 2 * Math.PI * r(), ca = Math.cos(az), sa = Math.sin(az), incl = [0.12 * (r() - 0.5), 0.12 * (r() - 0.5)];
+    // le due code: sedici gruppi CH₂ a zig-zag (1,27 Å di salita ciascuno), dal centro verso la testa
+    for (let coda = 0; coda < 2; coda++) { const ox = (coda ? 0.24 : -0.24) * ca, oz = (coda ? 0.24 : -0.24) * sa;
+      for (let k = 0; k < 16; k++) { const h = 0.12 + k * 0.127, zz = (k & 1 ? 0.045 : -0.045); metti(x + ox + incl[0] * h + zz * sa, y0 + verso * h, z + oz + incl[1] * h - zz * ca, 0.2, 6, 1); } }
+    // la testa: fosforo, quattro ossigeni, azoto e qualche carbonio, in un grumo
+    const hy = 0.12 + 16 * 0.127 + 0.22, T = [[0, 0, 0, 0.18, 15], [0.15, 0.05, 0, 0.152, 8], [-0.15, 0.05, 0, 0.152, 8], [0, 0.06, 0.15, 0.152, 8], [0, -0.14, -0.05, 0.152, 8], [0.1, 0.3, 0.1, 0.155, 7], [0.22, 0.38, 0.02, 0.17, 6], [0, 0.42, 0.2, 0.17, 6], [0.05, 0.2, -0.1, 0.17, 6], [-0.22, -0.2, 0.05, 0.17, 6], [0.2, -0.22, 0.02, 0.17, 6], [-0.05, -0.3, 0.2, 0.152, 8]];
+    for (const [a, b, c, rr, el] of T) metti(x + a * ca - c * sa + incl[0] * hy, y0 + verso * (hy + b), z + a * sa + c * ca + incl[1] * hy, rr, el, 0);
+  }
+  // la colonna: subunità (grumi di atomi fitti) impilate a elica, undici per giro, di due colori alternati
+  if (colonna) for (let s = 0; s < nSub; s++) {
+    const ang = (s / 11) * 2 * Math.PI, y = -9 + s * (5.2 / 11), cx = cxC + (raggioColonna - 1.3) * Math.cos(ang), cz = czC + (raggioColonna - 1.3) * Math.sin(ang), parte = 2 + (s & 1);
+    for (let k = 0, prove = 0; k < perSub && prove < perSub * 20; prove++) { // un ellissoide riempito a griglia scossa
+      const u = versoreACaso(r), q = Math.cbrt(r()), px = u[0] * q * 1.5, py = u[1] * q * 2.6, pz = u[2] * q * 1.5;
+      metti(cx + px * Math.cos(ang) - pz * Math.sin(ang), y + py, cz + px * Math.sin(ang) + pz * Math.cos(ang), k % 5 === 0 ? 0.152 : 0.17, k % 5 === 0 ? 8 : k % 7 === 0 ? 7 : 6, parte); k++;
+    }
+  }
+  // gli ioni sparsi sopra e sotto
+  const alto = colonna ? Math.max(8, -9 + nSub * (5.2 / 11) + 2) : 8;
+  for (let k = 0; k < nIoni; k++) { const sopra = r() < 0.6, y = sopra ? 3.6 + r() * (alto - 3.6) : -3.6 - r() * 6; metti(r() * LX, y, r() * LZ, 0.19, k & 1 ? 11 : 17, 4); }
+  const N = Rg.length, scena = { nome: 'prova di carico', unita: 'nm', colora: 'parte', atomi: { pos: Float32Array.from(P), raggio: Float32Array.from(Rg), elemento: Uint8Array.from(El), parte: Uint16Array.from(Pa) }, scatola: [LX, alto + 12, LZ],
+    parti: [{ nome: 'teste delle molecole anfifiliche', colore: [236, 38, 143] }, { nome: 'code idrofobe', colore: [255, 208, 0] }, { nome: 'colonna: subunità A', colore: [0, 196, 200] }, { nome: 'colonna: subunità B', colore: [70, 200, 60] }, { nome: 'ioni', colore: [245, 245, 245] }],
+    agitazione: { C: 0.02, O: 0.02, N: 0.02, P: 0.02, Na: 0.03, Cl: 0.03 }, etichette: [], lipidi: lip, subunita: nSub,
+    descrizione: `prova di carico (schematica): ${N} atomi — ${lip} molecole anfifiliche in doppio strato ${LX.toFixed(0)} × ${LZ.toFixed(0)} nm, ${nSub} subunità impilate, ${nIoni} ioni` };
+  scena.etichette.push({ testo: 'doppio strato (schematico)', pos: [LX * 0.82, 2.6, LZ * 0.8] });
+  if (colonna) scena.etichette.push({ testo: `colonna: ${nSub} subunità impilate`, pos: [cxC + raggioColonna, alto - 6, czC] });
+  if (nIoni) scena.etichette.push({ testo: 'ioni', pos: [P[3 * (N - 1)], P[3 * (N - 1) + 1], P[3 * (N - 1) + 2]] });
+  return scena;
+}
