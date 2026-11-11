@@ -31,8 +31,8 @@ Una voce può avere due specie (es. «a, e»): conta nella prima.
 | LG1 | `leggi.js:15` `COSMO` | H0, Ωm, ΩΛ, Ωb, σ8, ns dati come numeri | a (misurati, dichiarati) | A (età, galassie, cosmo3d) | sono i sei numeri di ΛCDM: nessuna teoria li ricava; restano «misurati». `cosmo.js` non usa σ8 e ns (vedi CS1) |
 | LG2 | `leggi.js:28` `massaMassimaNeutroni` | 1,55 × Chandrasekhar | b | M (stelle.fine, galassie) | dovrebbe uscire da TOV + equazione di stato nucleare |
 | LG3 | `leggi.js:38` `raggioNeutroni` | coefficiente 4,0 «che tiene conto delle forze nucleari» | a | B | TOV; legata a LG2 |
-| LG4 | `leggi.js:44` `stella()` | L(M) a quattro tratti, R(M) a due, vita = 10% dell'idrogeno | b, f | M | doppione di `stelle.js stella()`; la usano ancora `mare.js` (import `stella as stellaDi`) e `risalita.js` (`stellaDiMassa`): **due fonti per L, R, T** |
-| LG5 | `leggi.js:55` `fine()` | resto: 0,48 + 0,08·M sotto 8 M☉; nucleo 1,2 + 0,04(M−8) | b, e, f | M | doppione di `stelle.js fine()`; soglia netta a 8 M☉ |
+| LG4 | `leggi.js:44` `stella()` | L(M) a quattro tratti, R(M) a due, vita = 10% dell'idrogeno | b, f | M | doppione di `stelle.js stella()`; la usano ancora `mare.js:549` (`stellaDi`, per la temperatura della luce se manca `P.Tstella`) e `risalita.js:226` (`stellaDiMassa`): **due fonti per T della stella** |
+| LG5 | `leggi.js:55` `fine()` | resto: 0,48 + 0,08·M sotto 8 M☉; nucleo 1,2 + 0,04(M−8) | b, e, f | M | doppione di `stelle.js fine()` (nessun modulo la importa più: codice morto); soglia netta a 8 M☉ |
 | LG6 | `leggi.js:71` `massaNascita` | IMF di Kroupa a due pendenze, 0,08–100 M☉ | b (dichiarata) | A (galassie: rese, supernove, colori; catalogo) | manca il livello «nube che si frammenta» (H3); la scienza non la ricava dai principi |
 | LG7 | `leggi.js:85` `ISOTOPI` | U, Th, K delle condriti CI per tutti i pianeti di tutte le stelle | b, f | A (interno.q, lune, materia, risalita) | dovrebbe scalare con la storia chimica della galassia (r-process ≠ Z); oggi solo `√Z` in `geologia.js:38` |
 | LG8 | `leggi.js:94` `trattiene` | parametro di Jeans > 25, esosfera = 3×T | a, e | A (aria di ogni pianeta, risalita) | fuga idrodinamica e limitata dall'energia (XUV) assenti; `risalita.js` usa 4× (ECCESSO_ESOSFERA): due numeri per la stessa cosa |
@@ -420,15 +420,15 @@ prima ↔ dopo), e che cosa c'è già che gli fa da appiglio.
 | I1 | `galassie.js:66–68` | Λ(T, Z): frenamento 2,4·10⁻²⁷√T, elio 5·10⁻²³(T/10⁵)^−1,5, metalli 1,6·10⁻¹⁹ Z/√T «a memoria» | quante stelle fa ogni alone | da sostituire con tabella |
 | I2 | `stelle.js:61` `elioBucoNero: 7` | confine NS/BH «citato a memoria» | resti, rese, sorgenti di raggi | Fryer 2012 [V] nel rapporto precedente |
 | I3 | `lune.js` μ = 2·10⁻⁴ (Canup–Ward) | massa delle lune regolari | lune, anelli | [R] nel rapporto precedente |
-| I4 | `disco.js` `tempoCrescita` 1,2·10⁵, `tempoInvolucro` 10⁹·M⁻³, Chambers b, c | crescita, giganti, urti | nessuna marca di verifica nel codice |
-| I5 | `tettonica.js` profondità–età 2500 + 350√t; `crostaAttesa` | quote degli oceani | senza fonte citata |
-| I6 | `risalita.js` 25 voci [R]: ricombinazione degli ioni, mobilità, circuito globale, 10⁹ J per fulmine, UV solare < 200 nm, tabella di Miller–Urey 1959, Ar-40, He, vento solare e Ṁ ∝ t^−2,33, sputtering, Q medio, diffusione galattica 3·10²⁸, Gehrels 2003, Lyapunov dei corpi piccoli | tutto `risalita` (non ancora collegato) | marcati nel file |
+| I4 | `disco.js` | `tempoCrescita` 1,2·10⁵ anni, `tempoInvolucro` 10⁹·M⁻³, coefficienti b e c di Chambers | crescita, giganti, urti | nessuna marca di verifica nel codice |
+| I5 | `tettonica.js` | profondità–età 2500 + 350√t; `crostaAttesa` | quote degli oceani | senza fonte citata |
+| I6 | `risalita.js` | 25 voci [R]: ricombinazione degli ioni, mobilità, circuito globale, 10⁹ J per fulmine, UV solare < 200 nm, tabella di Miller–Urey 1959, Ar-40, He, vento solare e Ṁ ∝ t^−2,33, sputtering, Q medio, diffusione galattica 3·10²⁸, Gehrels 2003, Lyapunov dei corpi piccoli | tutto `risalita` (non ancora collegato) | marcati nel file |
 | I7 | `molecole_energia.js:51, 118, 131, 270, 351, 375, 387, 390`; `molecole_reazioni.js:44` | energie di dissociazione, idrolisi dei fosfati (Alberty, Jencks), ΔG di trasferimento, entalpie di ionizzazione, log K dei complessi «tarata a occhio», raggi di Shannon | pKa con T, ATP, complessi dei metalli | marcati nel file |
 | I8 | `materia.js:61–62` | ricottura della biotite ~150 °C, aloni ~300 °C «incerta» | memoria dei minerali | dichiarato |
-| I9 | `meteo.js` `stabilitaSecca 0,8` (Marte 0,55, Venere 0,8–0,9) | climi secchi | senza fonte |
-| I10 | `geologia.js` 3·10⁻⁵ m/anno, «30 m per milione di anni»; `chimica.ROCCE.denudazione` | crateri visibili, sali | senza fonte nel codice |
-| I11 | `anelli.js` potenziale del grano 5 V; n(s) ∝ s⁻³ | pioggia dell'anello | senza fonte puntuale |
-| I12 | rapporto precedente: oceano (Munk, Sverdrup), migrazione di tipo I, Cortial, Tout 1996, K di Kanagawa, tassi di occorrenza dei giganti | tutte le adozioni 5, 7, 9 | [R] là: riprese in «Come farlo emergere.md» |
+| I9 | `meteo.js` | `stabilitaSecca 0,8` (Marte 0,55, Venere 0,8–0,9) | climi secchi | senza fonte |
+| I10 | `geologia.js`, `chimica.js` | 3·10⁻⁵ m/anno, «30 m per milione di anni»; `ROCCE.denudazione` | crateri visibili, sali | senza fonte nel codice |
+| I11 | `anelli.js` | potenziale del grano 5 V; n(s) ∝ s⁻³ | pioggia dell'anello | senza fonte puntuale |
+| I12 | rapporto precedente | oceano (Munk, Sverdrup), migrazione di tipo I, Cortial, Tout 1996, K di Kanagawa, tassi di occorrenza dei giganti | tutte le adozioni 5, 7, 9 | [R] là: riprese in «Come farlo emergere.md» |
 
 ## 16. Fermo nel tempo e piatto: il quadro (specie g)
 
