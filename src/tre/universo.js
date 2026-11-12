@@ -26,6 +26,7 @@ import { bucoNelMondo } from './sistema.js';
 import { sorgente } from '../camera/eventi.js';
 import { ramiCosmo, cosmo as cosmoDi, galassia as galassiaDi } from '../camera/cosmo.js';
 import { bollaDi, viaDi, conoBolla } from './bolla.js';
+import { creaSplatRete, creaSplatNebulose } from './splat.js'; // (N.vista.splat: accanto ai volumi, per confrontare)
 
 const ANNO = 3.156e7, LUCE = 1e20; // (le luminosità passano alla scheda in unità di 10²⁰ W: una galassia vale 10¹⁷)
 const lineare = (c) => (c / 255) ** 2.2;
@@ -82,7 +83,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
   // e dei dischetti del mezzo, che restano solo come ripiego (`volume: false`, o se il calcolo non riesce).
   const volume = O.volume === false ? null : creaVolumeGalassia(N, { cosmo: via.cosmo, galassia: via.galassia, opzioni: O.volume || {} });
   const mezzo = O.mezzo === false || volume ? null : creaMezzo(N, { scena: () => sc, raggioM: Rg, opzioni: O.mezzo || {} });
-  const omega = sc.campi.bracci.velocitaAngolare || 0, rel = [0, 0, 0], eG = [0, 0, 0], eGr = [0, 0, 0]; let spenta = -1, prgChiaro = null;
+  const omega = sc.campi.bracci.velocitaAngolare || 0, rel = [0, 0, 0], eG = [0, 0, 0], eGr = [0, 0, 0]; let spenta = -1, prgChiaro = null, splat = null; // (splat: le nebulose e le nubi di vuoto.js come splat, splat.js)
   const strato = {
     nome: `galassia ${via.galassia}`, nodo,
     aggiorna(S) {
@@ -101,6 +102,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         if (conPolvere) { volume.trasparenza(eG, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], giroV, _tr); luceV[4 * i] = luce[4 * i] * _tr[0]; luceV[4 * i + 1] = luce[4 * i + 1] * _tr[1]; luceV[4 * i + 2] = luce[4 * i + 2] * _tr[2]; luceV[4 * i + 3] = luce[4 * i + 3]; }
         if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia }); } }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
+      if (N.vista.splat) { if (!splat) strato.splat = splat = creaSplatNebulose(N, { cosmo: via.cosmo, galassia: via.galassia, nodo, volume, frazione: O.diffusa, giro: () => (volume && volume.pronto() ? omega * (N.tempo.t - volume.stato.meta.t) : 0) }); splat.aggiorna(S, eG); }
       stelle.metti(pos, conPolvere ? luceV : luce, n);
       // la luce che l'occhio chiede tra le stelle: che la più brillante in cielo valga qualche unità al suo centro
       // la luce che l'occhio chiede: quella diffusa della galassia (contata su un batuffolo ogni trenta). Da dentro riempie il
@@ -130,6 +132,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         gl.useProgram(prgChiaro.p); gl.uniform3f(prgChiaro.u.u_c, strato.chiarore[0] * k, strato.chiarore[1] * k, strato.chiarore[2] * k); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); S.schermo(); gl.disable(gl.BLEND); }
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
+      if (N.vista.splat && splat) splat.disegna(S); // (prima delle stelle: la loro polvere la contano già, lungo la loro colonna)
       const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
       // ciò che sta tra le stelle (mezzo.js): le nubi oscure tolgono luce a ciò che è già disegnato, le nebulose aggiungono la loro
       if (mezzo) mezzo.disegna(S, rel, q);
@@ -138,7 +141,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
     posStella: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; o[0] = P[3 * i]; o[1] = P[3 * i + 1]; o[2] = P[3 * i + 2]; return o; },
     spegni(i) { if (spenta >= 0) { const L = sc.punti.esiste[spenta] ? 1 : 0; luce[4 * spenta + 3] = L; } spenta = i; if (i >= 0) luce[4 * i + 3] = 0; },
     scena: () => sc, raggio: Rg,
-    bucoNero, mezzo, volume, libera() { N.togli(strato); if (mezzo) mezzo.libera(); if (volume) volume.libera(); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
+    bucoNero, mezzo, volume, libera() { N.togli(strato); if (splat) splat.libera(); if (mezzo) mezzo.libera(); if (volume) volume.libera(); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
   };
   const tScena0 = tScena; N.aggiungi(strato); return strato;
 }
@@ -169,8 +172,9 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     stato.cono = N.vista.cono; stato.occhio = occhio.slice(); stato.t = t; stato.msCono = performance.now() - t0; stato.zMassimo = zM; luci();
   }
   // la nebbia: la luce di tutte le galassie che il campione rappresenta, e la sua tinta (la media di quelle del campione)
+  let reteDati = null, reteSplat = null; // (reteSplat: la ragnatela come splat, splat.js, con la stessa luce del volume)
   const rete = (() => { if (!O.rete) return null; let L = 0; const tinta = [0, 0, 0], P = sc.punti; for (let i = 0; i < n; i++) { if (!P.esiste[i]) continue; L += P.luminosita[i]; for (let k = 0; k < 3; k++) tinta[k] += P.luminosita[i] * lineare(P.colore[3 * i + k]); }
-    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; try { return creaVolumeRete(N, { cosmo, luce: L * peso * (1 - O.puntiLuce), tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
+    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; reteDati = { cosmo, luce: L * peso * (1 - O.puntiLuce), tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala }; try { return creaVolumeRete(N, { ...reteDati, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
   // LUNGO IL CONO: a distanza comovente χ, quando è partita la luce (s da oggi), lo spostamento z, la crescita D di
   // allora. Dipende solo dall'istante: una tabella di 33 punti fino a metà diagonale del toro, rifatta quando la scena
   // si rifà (relativita.js `conoPassato` costa un integrale per punto; tra i punti si interpola).
@@ -199,12 +203,13 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.metti(pos, luce, n);
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
       if (rete) { const a = sc.riferimento.fattoreDiScala; lungoIlCono(0, tScena);
-        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); strato.reteE = E; if (E > 0) S.proponiLuce(E); }
+        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); strato.reteE = E; if (E > 0) S.proponiLuce(E);
+        if (N.vista.splat) { if (!reteSplat) strato.reteSplat = reteSplat = creaSplatRete(N, { ...reteDati, corpo: radice, opzioni: opzioni.splat }); reteSplat.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); } }
     },
     disegna(S, passata) {
       // (con l'occhio chiuso quattrocento volte più di quanto la nebbia chiede — dentro una galassia, vicino a una stella —
       // la nebbia varrebbe un decimillesimo: non la si cammina nemmeno)
-      if (passata === 'fondo' && rete && !(S.E0 > 400 * (strato.reteE || 0))) rete.disegna(S, O.rete);
+      if (passata === 'fondo' && rete && !(S.E0 > 400 * (strato.reteE || 0))) { if (N.vista.splat && reteSplat && reteSplat.pronto()) reteSplat.disegna(S); else rete.disegna(S, O.rete); }
       if (passata !== 'velato') return;
       // (da lontano — oltre un ventesimo del lato — ogni punto porta anche una piccola parte della luce di quelle che rappresenta)
       gal.disegna(S, LUCE, 1.5, [1 + O.puntiLuce * peso, 0.002 * lato, 0.05 * lato]);
@@ -212,7 +217,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     // dove sta la galassia i (l'immagine più vicina all'occhio), nel riferimento del cosmo
     posGalassia: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; for (let k = 0; k < 3; k++) { const x = P[3 * i + k] - occhio[k]; o[k] = P[3 * i + k] - Math.round(x / lato) * lato; } return o; },
     nascondi(i, si) { if (si) nascosta.add(i); else nascosta.delete(i); luci(); }, scena: () => sc, lato: () => lato,
-    libera() { N.togli(strato); gal.libera(); if (rete) rete.libera(); },
+    libera() { N.togli(strato); gal.libera(); if (rete) rete.libera(); if (reteSplat) reteSplat.libera(); },
   };
   guarda([0, 0, 0], tScena); stato.t = NaN;
   N.aggiungi(strato); return strato;

@@ -22,9 +22,10 @@ import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
-import { conMoto, scenaDaElenco } from './atomi3d.js';
+import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
+import { campoGrani, granoGhiaccio, popolazioneTracce } from './grani.js';
 
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const minimo = (W, H) => Math.min(W, H);
@@ -595,8 +596,16 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   else if (continente) { r = cristallizza({ raffreddamento: 0.003, minerali: conAnisotropia(mat.continente, GRANITO), seme }); nome = 'roccia dei continenti, a cristalli grossi'; larghezzaM = 0.04; frase = 'raffreddata lentamente in profondità: pochi cristalli, cresciuti a lungo'; }
   else { r = cristallizza({ raffreddamento: 0.15, minerali: conAnisotropia(mat.basalto, BASALTO), seme }); nome = 'basalto, a cristalli minuti'; larghezzaM = 0.004; frase = 'lava raffreddata in fretta in superficie: tanti cristalli piccoli'; }
   const N = r.N || Math.round(Math.sqrt(immagineRoccia(r).length / 4)), px = immagineRoccia(r);
+  // (il cristallo di neve sta SOPRA la neve: dove non c'è ghiaccio la sua immagine è trasparente, non cielo)
+  if (neve) for (let q = 0; q < N * N; q++) px[4 * q + 3] = Math.round(255 * Math.min(1, 1.5 * r.copertura[q]));
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
   cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
+  // LA ROCCIA ATTORNO (grani.js): l'immagine è un campione dell'aggregato; attorno continua lo stesso aggregato, con la
+  // stessa legge e la taglia dei grani che questa simulazione ha dato (in celle × la larghezza della cella)
+  const cellaM = larghezzaM / N; let specCampo;
+  if (neve) { const D0 = Math.max(2 * (r.raggio || N / 4) * cellaM, cellaM), g = granoGhiaccio(T, 1, D0); specCampo = { modo: 'tassellatura', granoM: g.D, minerali: [{ nome: "ghiaccio d'acqua", frazione: 1, colore: [212, 228, 244], anisotropia: 0 }], legge: `neve: grani di ${fmtLunghezza(g.D)} (il cristallo che si posa, ${fmtLunghezza(D0)}, cresciuto un anno con la legge di Gow: K = ${(g.K * 1e6).toExponential(1)} mm²/anno a ${Math.round(T - 273.15)} °C)` }; }
+  else if (r.tipo === 'sedimento') { const n = [0, 0, 0]; for (const q of r.specie) n[q]++; const t = n[0] + n[1] + n[2] || 1; specCampo = { modo: 'impacchettamento', granoM: Math.max(cellaM, r.granaMedia * cellaM), selezione: r.selezione, minerali: [[206, 198, 182], [210, 166, 142], [96, 90, 86]].map((colore, k) => ({ nome: ['quarzo', 'feldspato', 'frammenti di roccia'][k], frazione: n[k] / t, colore })), legge: `granelli di ${fmtLunghezza(r.granaMedia * cellaM)} (selezione ${r.selezione.toFixed(2)} φ), alla rinfusa` }; }
+  else if (r.tipo === 'cristalli' && r.nGrani > 0) specCampo = { modo: 'tassellatura', granoM: Math.max(cellaM, r.granoMedio * cellaM), cristallino: r.cristallino, minerali: r.minerali, polarizzata: true, legge: `cristalli di ${fmtLunghezza(r.granoMedio * cellaM)} (Johnson-Mehl)${r.vetro > 0.01 ? `, ${Math.round(100 * r.vetro)}% vetro` : ''}` };
   // IL LUOGO PER LE PARTICELLE (materia.js): i minerali veri di quel punto, la sua temperatura, la quota, l'età della sua
   // roccia (i continenti hanno l'età del pianeta; il fondo degli oceani quella della sua crosta, dalla tettonica; sotto un
   // coperchio con vulcani la lava rifà la superficie ogni 1,1 miliardi di anni: le stesse regole di geologia.js)
@@ -608,9 +617,15 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   else luogo = luogoDaRoccia({ S, continente, etaRoccia, ...base });
   const memoria = memoriaDelLuogo(luogo, sorgente(luogo.indirizzo, ramiCosmo(cam.via.cosmo)));
   // quale minerale sta in un punto dell'immagine (per scendere dentro QUEL cristallo)
-  const mineraleIn = (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
+  // IL GRANO DEL PUNTO. Per la roccia (cristalli, granelli) ciò che si vede è il campo dei grani (grani.js), con la stessa
+  // legge della simulazione e la sua taglia, che continua in ogni direzione e resta nitido a ogni ingrandimento: il
+  // campione del punto è il grano che sta lì, e si scende dentro il suo minerale. Il cristallo di neve invece è un oggetto
+  // posato sopra la neve: resta la sua immagine, sopra i grani.
+  const campo = specCampo ? campoGrani(specCampo, sorgente(luogo.indirizzo, ramiCosmo(cam.via.cosmo))) : null, alPosto = !!campo && !neve;
+  if (alPosto) { const x = campo.granoIn(larghezzaM / 2, larghezzaM / 2); if (x) nome = `${nome}: il grano del punto è ${x.minerale}`; }
+  const mineraleIn = alPosto ? (x, y) => campo.granoIn(x * larghezzaM, y * larghezzaM)?.minerale ?? null : (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
   const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : '';
-  const out = { cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
+  const out = { specCampo, campo, alPosto, cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
   rocceFatte.set(k, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
   return cam.passoRoccia > 0 ? passoRoccia(cam, S, out, k) : out;
 }
@@ -628,18 +643,58 @@ function pezzo(ctx, cv, ox, oy, zz, W, H, liscio) {
 // livello sotto alla sua grandezza vera, nel punto che si guarda (prima un quadratino col bordo, poi l'immagine che compare)
 function disegnaRoccia(ctx, W, H, cam, dpr) {
   const r0 = rocciaDi(cam); if (!r0) return;
-  if (cam.suAcqua) { pezzo(ctx, r0.cv, W / 2 - cam.cx * cam.z, H / 2 - cam.cy * cam.z, cam.z, W, H, r0.liscio); return; }
+  // L'ACQUA È PIENA: il campione continua oltre i suoi lati con le condizioni periodiche (come nelle simulazioni di un
+  // liquido: ciò che esce da un lato rientra dall'altro); il campione del punto è quello al centro
+  // (il campione è una sezione verticale che prende la superficie: si ripete solo di lato; sopra continua l'aria della sua
+  // prima riga, sotto l'acqua della sua ultima)
+  if (cam.suAcqua) {
+    const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z, zz = cam.z, N = r0.cv.width; if (!(zz > 2)) return;
+    const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz); if (i1 - i0 > 40) return;
+    for (let i = i0; i <= i1; i++) {
+      const x = ox + i * zz; pezzo(ctx, r0.cv, x, oy, zz, W, H, r0.liscio); ctx.imageSmoothingEnabled = !!r0.liscio;
+      if (oy > 0) ctx.drawImage(r0.cv, 0, 0, N, 1, x, 0, zz, oy);
+      if (oy + zz < H) ctx.drawImage(r0.cv, 0, N - 1, N, 1, x, oy + zz, zz, H - oy - zz);
+      ctx.imageSmoothingEnabled = true;
+    }
+    return;
+  }
   const seq = sequenzaRoccia(cam), i = Math.max(0, seq.indexOf(cam.passoRoccia ?? 0)), m = minimo(W, H), lato = (p) => latoPasso(cam, p), img = (p) => rocciaDi({ ...cam, passoRoccia: p });
   const pos = []; pos[i] = { ox: W / 2 - cam.cx * cam.z, oy: H / 2 - cam.cy * cam.z, zz: cam.z };
   for (let j = i - 1; j >= 0; j--) { const a = cam.ancore?.[seq[j]] || [0.5, 0.5], f = pos[j + 1], zz = (f.zz * lato(seq[j])) / lato(seq[j + 1]); pos[j] = { ox: f.ox + f.zz * 0.5 - zz * a[0], oy: f.oy + f.zz * 0.5 - zz * a[1], zz }; }
   const copre = (q) => q.ox <= 0 && q.oy <= 0 && q.ox + q.zz >= W && q.oy + q.zz >= H;
   let j0 = 0; for (let j = i; j >= 0; j--) if (copre(pos[j])) { j0 = j; break; }
-  for (let j = j0; j <= i; j++) { const r = img(seq[j]); if (r) pezzo(ctx, r.cv, pos[j].ox, pos[j].oy, pos[j].zz, W, H, r.liscio); }
+  // attorno al campione, la roccia continua: i grani della stessa legge (grani.js), alla scala di adesso. Il campione del
+  // punto (l'immagine di rocce.js) ci sta sopra, al centro, senza cornice
+  const alPosto = !!img(0)?.alPosto;
+  if (j0 === 0 && (alPosto || !copre(pos[0]))) { const g = campoDelPunto(cam); if (g) { try { cam.nebbiaGrani = g.campo.dipingi(ctx, { W, H, ox: pos[0].ox, oy: pos[0].oy, k: pos[0].zz / g.L0 }); } catch (err) { console.warn(err); } } }
+  else cam.nebbiaGrani = null;
+  for (let j = j0; j <= i; j++) { const r = img(seq[j]); if (!r || (seq[j] === 0 && alPosto)) continue; if (r.passo === 3 || r.passo === 4) periodico(ctx, r.cv, pos[j].ox, pos[j].oy, pos[j].zz, W, H, r.liscio); else pezzo(ctx, r.cv, pos[j].ox, pos[j].oy, pos[j].zz, W, H, r.liscio); }
   const b = cam.ancore?.[seq[i]]; if (i + 1 >= seq.length || !b) return;
   const Lc = lato(seq[i + 1]), zz = (cam.z * Lc) / lato(seq[i]); if (!(zz >= 3 * dpr)) return;
   const cx = pos[i].ox + b[0] * pos[i].zz, cy = pos[i].oy + b[1] * pos[i].zz, a = Math.max(0, Math.min(1, Math.log(zz / (0.02 * m)) / Math.log(5)));
   if (a > 0) { const r = img(seq[i + 1]); if (r) { ctx.globalAlpha = a; pezzo(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); ctx.globalAlpha = 1; } }
-  if (a < 1) { ctx.strokeStyle = `rgba(255,215,150,${0.9 * (1 - a)})`; ctx.lineWidth = dpr; ctx.strokeRect(cx - zz / 2, cy - zz / 2, zz, zz); }
+}
+// un campione che si ripete oltre i suoi lati (condizioni periodiche): si disegnano solo le copie che toccano lo schermo
+function periodico(ctx, cv, ox, oy, zz, W, H, liscio) {
+  if (!(zz > 2)) return; const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz), j0 = Math.floor(-oy / zz), j1 = Math.floor((H - oy) / zz);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 400) return;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(ctx, cv, ox + i * zz, oy + j * zz, zz, W, H, liscio);
+}
+// I GRANI ATTORNO AL PUNTO (grani.js): l'aggregato di cui il campione è un pezzo, con lo zero nell'angolo del campione e
+// i metri come unità. → { campo, L0 } o null (nell'acqua: niente grani)
+export function campoDelPunto(cam) {
+  const b = rocciaDi({ ...cam, passoRoccia: 0 }); if (!b || b.acqua || !b.campo) return null;
+  return { campo: b.campo, L0: b.larghezzaM, legge: b.specCampo.legge };
+}
+// LE TRACCE DI TUTTI GLI EVENTI che la materia di quel punto ricorda (o che accadono adesso), nel minerale in cui si
+// guarda (grani.js, popolazioneTracce). → la popolazione o null
+const popolazioni = new Map();
+export function popolazioneDelPunto(cam) {
+  const mt = materiaDelPunto(cam); if (!mt) return null; const r = rocciaDi(cam), b = r?.base || r;
+  const minerale = mt.luogo.tipo === 'roccia' ? (r?.passo === 1 ? b.memoria?.minerale : null) || cam.mineraleRoccia || b?.mineraleIn?.(0.5, 0.5) || r?.minerale || null : null;
+  const k = `${mt.luogo.indirizzo}|${minerale}`; if (popolazioni.has(k)) return popolazioni.get(k);
+  let P = null; try { P = popolazioneTracce(mt.luogo, { minerale }, sorgente(mt.luogo.indirizzo, ramiCosmo(cam.via.cosmo))); } catch (err) { console.warn(err); }
+  popolazioni.set(k, P); if (popolazioni.size > 8) popolazioni.delete(popolazioni.keys().next().value); return P;
 }
 // LA FINESTRA DELLE PARTICELLE AL SUO POSTO NELLA SCALA (INTRECCIO.md, regola 10: una finestra è un luogo e una scala): la
 // cella di quel punto (la stessa in cui si entra con un clic) e le sue tracce, disegnate su fondo trasparente, larghe
@@ -734,11 +789,13 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
   if (cam.suAcqua) {
     const lato = cam.latoAcqua ?? 1; if (cam.eventoAcqua || lato > 1.0001e-8 || !r.punto || cam.z < 0.85 * m) return null; const { u, v, profondo } = r.punto;
     return { acqua: true, chiave: `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, che: `le molecole e gli ioni di quest'acqua in un cubetto di ${fmtLunghezza(lato)}`,
-      crea: () => conMoto(scenaMolecolare(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))) };
+      // (l'acqua attorno: le copie periodiche del cubetto, otto attorno a quello del punto, nel piano che si guarda)
+      crea: () => periodica(conMoto(scenaMolecolare(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]) };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
   return { acqua: false, chiave: `${r.luogo.indirizzo}|atomi3d|${r.minerale}`, che: `tre nanometri di ${r.minerale.replace(" d'acqua", '')}`,
-    crea: () => { const a = atomiDelReticolo(r.minerale, { latoM: 3e-9, spessoreM: 3e-9, T: r.luogo.T ?? 288, massimo: 40000, fermi: true }, sorgente(r.luogo.indirizzo, ramiCosmo(cam.via.cosmo))), sc = scenaDaElenco(a.atomi, { unita: 'm', nome: r.nome });
+    // (il reticolo continua oltre lo schermo: una fetta nove volte più larga dei tre nanometri che si guardano, atomi veri)
+    crea: () => { const a = atomiDelReticolo(r.minerale, { latoM: 9e-9, spessoreM: 3e-9, T: r.luogo.T ?? 288, massimo: 120000, fermi: true }, sorgente(r.luogo.indirizzo, ramiCosmo(cam.via.cosmo))), sc = scenaDaElenco(a.atomi, { unita: 'm', nome: r.nome });
       // l'agitazione vera di ogni atomo (in metri, come le posizioni): la vista li fa tremare attorno al loro posto
       sc.atomi.agitazione = Float32Array.from(a.atomi, (q) => (a.agitazione[q.el] || 0) * 1e-10); sc.descrizione = a.descrizione; return sc; } };
 }

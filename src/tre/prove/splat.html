@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: gli splat fisici (src/tre/splat.js)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #e8e4da; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
+  #tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  #barra { position: absolute; left: 10px; top: 10px; max-width: 520px; background: rgba(12, 12, 14, 0.72); border: 1px solid #333; border-radius: 6px; padding: 8px 10px; }
+  #dati { white-space: pre-wrap; color: #b8b4aa; font: 11px/1.4 ui-monospace, monospace; }
+  body.nudo #barra { display: none; }
+</style>
+</head>
+<body>
+<canvas id="tela" tabindex="0"></canvas>
+<div id="barra"><div id="nome">gli splat fisici</div><div id="dati"></div></div>
+<script type="module">
+// Parametri:
+//   ?vista=rete | filamento | nebulosa | galassia     dove si guarda (la ragnatela da fuori, da dentro un filamento,
+//                 una nebulosa da vicino, la galassia con le sue nubi)
+//   ?splat=0|1    l'interruttore N.vista.splat (0: i volumi di sempre, per confrontare)
+//   ?pixel=1.5    la finezza della gerarchia (si apre un nodo più largo di tanti pixel); ?massimo  ?riduzione
+//   ?celle=64 ?fine=64  gli elementi della ragnatela a grana grossa e nella regione fine (0: senza);
+//   ?g=2  la galassia;  ?quale=riflessione | H II   la nebulosa;  ?nudo   ?densita=1
+// window.prova: { pronta, N, universo, costo(k), convergenza(), stato() }
+import { creaNucleo, V } from '../nucleo.js';
+import { creaUniverso } from '../universo.js';
+import { creaSplatRete } from '../splat.js';
+
+const $ = (id) => document.getElementById(id), par = new URLSearchParams(location.search), num = (k, d) => (par.has(k) ? +par.get(k) : d);
+if (par.has('nudo')) document.body.classList.add('nudo');
+const vista = par.get('vista') || 'rete', conSplat = par.get('splat') !== '0', g = num('g', 2), PC = 3.0857e16;
+const N = creaNucleo($('tela'), { densita: num('densita', 1), conserva: true });
+N.vista.splat = conSplat ? { pixel: num('pixel', 1.5), massimo: num('massimo', 150000), riduzione: num('riduzione', 2) } : false;
+const universo = creaUniverso(N, { via: { cosmo: 1, galassia: vista === 'rete' || vista === 'filamento' ? null : g }, livello: vista === 'rete' || vista === 'filamento' ? 'cosmo' : 'galassia', opzioni: { cosmo: { splat: { ...(par.has('fine') ? { celleFine: num('fine', 64) } : {}), ...(par.has('celle') ? { celle: num('celle', 64) } : {}) } } } });
+let corre = true; const giro = () => { if (corre) N.fotogramma(); requestAnimationFrame(giro); }; requestAnimationFrame(giro);
+const aspetta = (f, ms = 240000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto')); else setTimeout(p, 200); }; p(); });
+const note = [];
+
+// gli autovalori e gli autovettori di una 3×3 simmetrica (Jacobi)
+function autovettori(c) { let a = [[c[0], c[3], c[4]], [c[3], c[1], c[5]], [c[4], c[5], c[2]]], v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let it = 0; it < 30; it++) { let p = 0, q = 1; for (const [i, j] of [[0, 1], [0, 2], [1, 2]]) if (Math.abs(a[i][j]) > Math.abs(a[p][q])) { p = i; q = j; } if (Math.abs(a[p][q]) < 1e-30) break;
+    const th = 0.5 * Math.atan2(2 * a[p][q], a[q][q] - a[p][p]), cs = Math.cos(th), sn = Math.sin(th), J = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]; J[p][p] = cs; J[q][q] = cs; J[p][q] = sn; J[q][p] = -sn;
+    const mm = (A, B) => A.map((r, i) => B[0].map((_, j) => r.reduce((s, _, k) => s + A[i][k] * B[k][j], 0))), Jt = J[0].map((_, i) => J.map((r) => r[i])); a = mm(Jt, mm(a, J)); v = mm(v, J); }
+  return [0, 1, 2].map((i) => ({ l: a[i][i], v: [v[0][i], v[1][i], v[2][i]] })).sort((x, y) => y.l - x.l); }
+
+async function prepara() {
+  await aspetta(() => universo.pronto());
+  const cos = universo.cosmo;
+  if (vista === 'rete') { await aspetta(() => cos.rete && cos.rete.pronto() && (!conSplat || (cos.reteSplat && cos.reteSplat.pronto() && (num('fine', 64) === 0 || cos.reteSplat.stato.fine)))); }
+  if (vista === 'filamento') {
+    // un filamento: tra gli elementi della grana grossa, il più luminoso fra quelli con due assi crollati e uno lungo
+    // (lo cerca sempre con gli splat del modello, anche quando poi si guarda senza: lo stesso posto)
+    N.vista.splat = N.vista.splat || { pixel: 1.5 }; await aspetta(() => cos.reteSplat && cos.reteSplat.pronto());
+    const T = cos.reteSplat.strato.insiemi()[0].albero, nf = T.foglie, off = T.pos.length / 3 - nf; let meglio = null;
+    for (let i = off; i < off + nf; i++) { const L = T.emis[3 * i]; if (meglio && L < meglio.L) continue; const e = autovettori(Array.from(T.cov.slice(6 * i, 6 * i + 6))); if (e[1].l < 0.06 * e[0].l) meglio = { L, i, e }; }
+    const sc = cos.scena(), a = sc.riferimento.fattoreDiScala, toroM = cos.lato() / a, p = [0, 1, 2].map((k) => T.pos[3 * meglio.i + k] * toroM * a), asse = meglio.e[0].v, su = meglio.e[2].v;
+    const cam = N.camera; cam.corpo = cos.radice; cam.solidale = false; cam.pos = p; cam.assi = N.assiDa(asse, su); cam.perno = null;
+    note.push(`filamento: elemento ${meglio.i - off}, assi σ = ${meglio.e.map((x) => (Math.sqrt(x.l) * toroM / 3.0857e22).toFixed(2)).join(' / ')} Mpc (comoventi), dentro, lungo l'asse lungo`);
+    if (!conSplat) N.vista.splat = false; await aspetta(() => cos.rete.stato.fine && (!conSplat || cos.reteSplat.stato.fine), 300000); }
+  if (vista === 'nebulosa' || vista === 'galassia') {
+    await aspetta(() => universo.galassia() && universo.galassia().volume && universo.galassia().volume.stato.nebulose > 0);
+    const G = universo.galassia(); if (!conSplat) { N.vista.splat = { pixel: 1.5 }; } await aspetta(() => G.splat && G.splat.pronto());
+    if (vista === 'nebulosa') { const quale = par.get('quale') || 'riflessione', O = G.splat.stato.oggetti.filter((o) => o.cosa.includes(quale)), Rg = G.raggio;
+      // la più grande, a mezza strada dal centro (si guarda da fuori, a quattro raggi, di traverso al piano)
+      O.sort((x, y) => y.raggio - x.raggio); const o = O.find((x) => Math.hypot(x.pos[0], x.pos[1]) > 0.2 * Rg) || O[0];
+      const q = N.quadro(G.nodo, N.tempo.t), dir = V.norma([0.6, -0.5, 0.35]), p = V.somma(o.pos, V.per(dir, 4 * o.raggio)), cam = N.camera;
+      cam.corpo = G.nodo; cam.solidale = false; cam.pos = V.mv(q, p); cam.assi = N.assiDa(V.mv(q, V.per(dir, -1)), V.mv(q, [0, 0, 1])); cam.perno = null; N.cambia();
+      note.push(`${o.cosa} ${o.id}: R = ${(o.raggio / PC).toFixed(2)} pc a ${(Math.hypot(o.pos[0], o.pos[1]) / 3.0857e19).toFixed(2)} kpc dal centro${o.tau != null ? `, τ_V = ${o.tau.toFixed(3)}` : ''}; la camera a 4 R`);
+      window.prova.oggetto = o; await new Promise((r) => setTimeout(r, 400)); await aspetta(() => G.splat.stato.richieste >= 2 && G.splat.pronto() && !G.splat._inCorso, 120000); }
+    if (!conSplat) N.vista.splat = false; }
+  await new Promise((r) => setTimeout(r, 1500));
+  corre = false; N.fotogramma(); N.fotogramma(); // (poi si disegna solo a richiesta: con SwiftShader un fotogramma costa secondi)
+  window.prova.pronta = true;
+}
+// il costo: k fotogrammi uno dopo l'altro, aspettando che la scheda (qui SwiftShader) abbia finito
+function costo(k = 8) { const gl = N.gl, px = new Uint8Array(4), t = []; for (let i = 0; i < k; i++) { const t0 = performance.now(); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); t.push(performance.now() - t0); } t.sort((a, b) => a - b); return { mediana: t[k >> 1], minimo: t[0], cpu: N.statistiche().cpuMs, splat: stato() }; }
+function stato() { const c = universo.cosmo, G = universo.galassia(), s = {}; if (c.reteSplat) s.rete = { ...c.reteSplat.stato.strato, ms: c.reteSplat.stato.ms, msFine: c.reteSplat.stato.msFine, fine: c.reteSplat.stato.fine };
+  if (G && G.splat) s.nebulose = { ...G.splat.stato.strato, oggetti: G.splat.stato.oggetti.length, msLavoratore: G.splat.stato.ms }; s.E0 = N.stato.E0; return s; }
+// LA CONVERGENZA (regola 14): stessa materia, splat sempre più fini. (1) la gerarchia: `pixel` 64 → 1 sullo stesso albero;
+// (2) le foglie: 16³, 32³, 64³ elementi con lo stesso campo (dettaglio fisso: le onde fino a 280 Mpc), luce con la massa.
+// Si misura sull'immagine dei soli splat (canali lineari, unità del nucleo): ‖a − b‖₁/‖b‖₁, a piena risoluzione dell'immagine
+// e mediata su blocchi di 8×8 (la forma, senza la grana).
+function differenza(a, b, blocco = 1) { const w = Math.floor(a.w / blocco), h = Math.floor(a.h / blocco); let s = 0, t = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let p = 0, q = 0; for (let j = 0; j < blocco; j++) for (let i = 0; i < blocco; i++) { const o = 4 * ((y * blocco + j) * a.w + x * blocco + i); p += a.dati[o] + a.dati[o + 1] + a.dati[o + 2]; q += b.dati[o] + b.dati[o + 1] + b.dati[o + 2]; } s += Math.abs(p - q); t += Math.abs(q); }
+  return s / (t || 1); }
+const somma = (a) => { let s = 0; for (let o = 0; o < a.dati.length; o += 4) s += a.dati[o] + a.dati[o + 1] + a.dati[o + 2]; return s; };
+async function convergenza(soloGerarchia = false) {
+  corre = false; const c = universo.cosmo, out = { gerarchia: [], foglie: [] }, foto = () => { N.fotogramma(); N.fotogramma(); };
+  // (1)
+  const imm = []; for (const p of [64, 32, 16, 8, 4, 2, 1]) { N.vista.splat = { pixel: p, massimo: 2e6, riduzione: 2 }; foto(); const im = c.reteSplat.immagine(); imm.push({ p, im: { ...im, dati: im.dati.slice() }, n: c.reteSplat.stato.strato.disegnati }); }
+  for (let i = 1; i < imm.length; i++) out.gerarchia.push({ da: imm[i - 1].p, a: imm[i].p, splat: imm[i].n, diff: +differenza(imm[i - 1].im, imm[i].im).toFixed(4), diff8: +differenza(imm[i - 1].im, imm[i].im, 8).toFixed(4), flusso: +(somma(imm[i - 1].im) / somma(imm[i].im)).toFixed(4) });
+  if (soloGerarchia) { corre = false; return out; }
+  // (2): tre ragnatele a splat con 16³, 32³, 64³ elementi, stesso campo; disegnate con la stessa vista
+  const sc = c.scena(), a = sc.riferimento.fattoreDiScala, toroM = c.lato() / a, dett = 280 * 3.0857e22, prove = [16, 32, 64].map((n) => creaSplatRete(N, { cosmo: 1, luce: 1e46, tinta: [1, 1, 1], toroM, corpo: c.radice, opzioni: { celle: n, celleFine: 0, dettaglio: dett, aloni: false } }));
+  N.vista.splat = { pixel: 1, massimo: 2e6, riduzione: 2 }; const cono = () => 1, chiMax = 0.87 * toroM;
+  const passo = (S) => { const e = S.versoCorpo(c.radice).map((v) => -v / a); for (const r of prove) r.aggiorna(S, e, a, sc.campi.densita.crescita, cono, chiMax); };
+  const strato = { nome: 'prova convergenza', aggiorna: passo, disegna: (S, p) => { if (p === 'fondo') for (const r of prove) if (r.pronto()) r.disegna(S); } }; N.aggiungi(strato);
+  const t0 = performance.now(); while (!prove.every((r) => r.pronto()) && performance.now() - t0 < 300000) { N.fotogramma(); await new Promise((r) => setTimeout(r, 500)); }
+  foto(); const ii = prove.map((r) => { const im = r.immagine(); return { ...im, dati: im.dati.slice() }; });
+  for (let i = 1; i < 3; i++) out.foglie.push({ da: [16, 32, 64][i - 1], a: [16, 32, 64][i], diff: +differenza(ii[i - 1], ii[i]).toFixed(4), diff8: +differenza(ii[i - 1], ii[i], 8).toFixed(4), flusso: +(somma(ii[i - 1]) / somma(ii[i])).toFixed(4) });
+  N.togli(strato); for (const r of prove) r.libera(); N.vista.splat = { pixel: num('pixel', 1.5), massimo: num('massimo', 150000), riduzione: num('riduzione', 2) }; return out;
+}
+window.prova = { pronta: false, N, universo, costo, stato, convergenza, note, disegna: (k = 1, opz = null) => { if (opz) N.vista.splat = opz; for (let i = 0; i < k; i++) N.fotogramma(); return stato(); } };
+setInterval(() => { const s = stato(); $('dati').textContent = [`vista: ${vista} · splat: ${conSplat ? 'sì' : 'no'}`, ...note, JSON.stringify(s, (k, v) => (typeof v === 'number' ? +v.toPrecision(3) : v))].join('\n'); }, 500);
+prepara().catch((e) => { note.push('errore: ' + e.message); window.prova.errore = e.message; });
+</script>
+</body>
+</html>

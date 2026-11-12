@@ -21,7 +21,7 @@ import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi, FASCIA_MAX } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi, finestraDelPunto } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
@@ -1953,7 +1953,7 @@ quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannell
 //     schermo si è già dentro (scendiNellaMateria), allo stesso posto e alla stessa grandezza.
 // Il punto è quello sotto la camera (nello spazio, guardando giù) o la roccia in cui si è; si ricalcola al più ogni 300 ms.
 const telaSopra = document.createElement('canvas'); telaSopra.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2'; tela.parentNode.appendChild(telaSopra);
-let sopraCalcolo = { t: 0, mpp: 0 }, vociSopraOra = [];
+let sopraCalcolo = { t: 0, mpp: 0, P: null }, vociSopraOra = [], nebbiaOra = null;
 function camDelPunto() { // → { cam, verticale, chiave } o null
   if (vista !== 'cosmo' || vistaAtomi || telaQuanti) return null;
   if (mondo3d && universo3d && mondo3d.camera.corpo?.punto) { const d = mondo3d.dove(), v = universo3d.viaOra(); if (v.pianeta == null || !(d.quota < 600) || !(d.quota > 0)) return null; return { cam: camRoccia(d, v), verticale: Math.max(0, Math.min(1, (-(d.alza ?? 0) - 1.2) / 0.3)), chiave: `${JSON.stringify(v)}|${d.lon.toFixed(7)}|${d.lat.toFixed(7)}`, spazio: true }; }
@@ -1974,21 +1974,33 @@ function disegnaSopra() {
   const ora = performance.now(), cambiata = !(sopraCalcolo.mpp > 0) || Math.abs(Math.log(mpp / sopraCalcolo.mpp)) > 0.3;
   let voci = vociSopraOra; const m = Math.min(W, H);
   if (ora - sopraCalcolo.t > 300 || cambiata) {
-    sopraCalcolo.t = ora; sopraCalcolo.mpp = mpp; let P = null; try { P = camDelPunto(); } catch { P = null; }
+    sopraCalcolo.t = ora; sopraCalcolo.mpp = mpp; let P = null; try { P = camDelPunto(); } catch { P = null; } sopraCalcolo.P = P;
     voci = []; const dentro = (L) => L / mpp > 2 && L / mpp < 60 * Math.max(W, H);
     if (P) try {
-      if (P.spazio) { const r = rocciaDi(P.cam); if (r && dentro(r.larghezzaM)) voci.push({ L: r.larghezzaM, cv: r.cv, liscio: r.liscio, peso: P.verticale, nome: r.nome, bordo: true }); }
+      if (P.spazio) { const r = rocciaDi(P.cam); if (r && !r.alPosto && dentro(r.larghezzaM)) voci.push({ L: r.larghezzaM, cv: r.cv, liscio: r.liscio, peso: P.verticale, nome: r.nome, bordo: true }); }
       const f0 = finestraDelPunto(P.cam); if (f0 && dentro(f0.latoM) && f0.latoM / mpp > m / 40) { const f = finestraDelPunto(P.cam, { tracce: true }); voci.push({ L: f.latoM, cv: f.cv, liscio: true, peso: P.spazio ? Math.max(0.35, P.verticale) : 1, nome: `le particelle: ${f.che} (una finestra larga ${fmtLunghezza(f.latoM)})`, tracce: true }); }
     } catch (err) { console.warn(err); }
   }
   vociSopraOra = voci;
   const [qx, qy] = [W / 2, H / 2];
+  // LO SCHERMO PIENO (grani.js): attorno al punto, la materia continua. Nello spazio, guardando giù da vicino, i grani
+  // della roccia di quel punto (quando sono grandi almeno un pixel: prima, il suolo in 3D ne è la media); ovunque, le
+  // tracce di tutti gli eventi che quella materia ricorda (o che accadono adesso), quante lo schermo ne può mostrare.
+  // Il punto sta al centro dello schermo; la sua finestra e il suo campione ci stanno sopra, senza cornice.
+  const Pp = sopraCalcolo.P, kpx = dpr / mpp; let neb = { grani: null, tracce: null };
+  if (Pp) try {
+    if (Pp.spazio && Pp.verticale > 0) { const g = campoDelPunto(Pp.cam); if (g) { const gpx = g.campo.granoM * kpx; if (gpx >= 0.7 * dpr) neb.grani = g.campo.dipingi(c, { W: cv.width, H: cv.height, ox: qx * dpr - (g.L0 / 2) * kpx, oy: qy * dpr - (g.L0 / 2) * kpx, k: kpx, alfa: Pp.verticale * Math.min(1, Math.log(gpx / (0.7 * dpr)) / Math.log(3)) }); } }
+    else if (camMappa?.livello === 5 && camMappa.nebbiaGrani) neb.grani = camMappa.nebbiaGrani;
+    // (dentro il campione delle tracce fossili le tracce ci sono già: lì non si aggiungono)
+    const pop = popolazioneDelPunto(Pp.cam), rq = !Pp.spazio ? rocciaDi(camMappa) : null, mezza = rq?.passo === 1 ? rq.larghezzaM / 2 : 0;
+    if (pop) neb.tracce = pop.dipingi(c, { W: cv.width, H: cv.height, ox: qx * dpr, oy: qy * dpr, k: kpx, dpr, alfa: Pp.spazio ? Pp.verticale : 1, escludi: mezza ? { x0: -mezza, y0: -mezza, x1: mezza, y1: mezza } : null });
+  } catch (err) { console.warn(err); }
+  nebbiaOra = neb;
   for (const v of voci) {
     const sz = v.L / mpp, entra = Math.max(0, Math.min(1, Math.log(sz / (0.02 * m)) / Math.log(5))), esce = v.tracce ? Math.max(0, Math.min(1, Math.log((40 * Math.max(W, H)) / sz) / Math.log(5))) : 1, a = v.peso * Math.min(entra, esce);
     const x = qx - sz / 2, y = qy - sz / 2;
     if (a > 0 && v.cv) { c.globalAlpha = a; c.imageSmoothingEnabled = !!v.liscio; const N = v.cv.width, k = (sz * dpr) / N, x0 = Math.max(0, Math.floor((-x * dpr) / k)), y0 = Math.max(0, Math.floor((-y * dpr) / k)), x1 = Math.min(N, Math.ceil(((W - x) * dpr) / k)), y1 = Math.min(N, Math.ceil(((H - y) * dpr) / k)); if (x1 > x0 && y1 > y0) c.drawImage(v.cv, x0, y0, x1 - x0, y1 - y0, x * dpr + x0 * k, y * dpr + y0 * k, (x1 - x0) * k, (y1 - y0) * k); c.globalAlpha = 1; c.imageSmoothingEnabled = true; }
-    if (v.peso > 0 && sz < 1.2 * m) { c.strokeStyle = v.tracce ? `rgba(150,220,255,${0.75 * v.peso})` : `rgba(255,215,150,${0.6 * v.peso * (1 - entra)})`; c.lineWidth = dpr; c.strokeRect(x * dpr, y * dpr, sz * dpr, sz * dpr); }
-    if (v.tracce && v.peso > 0 && sz > 0.04 * m && sz < 3 * m) { c.font = `${11 * dpr}px ui-monospace, monospace`; c.fillStyle = `rgba(170,225,255,${0.9 * v.peso})`; c.fillText(v.nome, Math.max(8, x) * dpr, Math.max(16, y - 5) * dpr); }
+    // (né cornici né scritte sullo schermo: ciò che è, lo dice la barra)
   }
 }
 // LA BARRA DI SCALA VERA, sempre visibile, in una riga: un tratto di lunghezza tonda (1, 2, 5 × 10ⁿ metri) e che cosa si guarda
@@ -2012,7 +2024,11 @@ function barraDiScala(mpp) {
   if (!(mpp > 0)) { if (barraPrima !== '') { barraScala.innerHTML = ''; barraPrima = ''; } return; }
   const ora = performance.now(); if (ora - barraOra < 200 && Math.abs(Math.log(mpp / barraMpp)) < 0.02) return; barraOra = ora; barraMpp = mpp; // (il testo al più cinque volte al secondo)
   const voluto = 120 * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e, px = passo / mpp;
-  const sopra = vociSopraOra.find((v) => v.tracce && v.L / mpp > 0.05 * Math.min(tela.clientWidth, tela.clientHeight)), testo = `${fmtLunghezza(passo)} · lo schermo è largo ${fmtLunghezza(mpp * tela.clientWidth)} · ${cosaSiGuarda()}${sopra ? ` · con ${sopra.nome.replace(/^le particelle: /, 'le particelle di questo punto: ')}` : ''}`;
+  let sopra = vociSopraOra.find((v) => v.tracce && v.L / mpp > 0.05 * Math.min(tela.clientWidth, tela.clientHeight)), testo = `${fmtLunghezza(passo)} · lo schermo è largo ${fmtLunghezza(mpp * tela.clientWidth)} · ${cosaSiGuarda()}${sopra ? ` · con ${sopra.nome.replace(/^le particelle: /, 'le particelle di questo punto: ')}` : ''}`;
+  // la nebbia: quanti grani e quante tracce ci sono davvero nello schermo, e quante se ne vedono
+  const nb = nebbiaOra, gr = nb?.grani, tr = nb?.tracce, conta = (x) => (x >= 1e5 ? fmtGrande(x) : Math.round(x).toLocaleString('it-IT'));
+  const nebbia = `${gr && gr.vere >= 1 ? ` · ${conta(gr.vere)} grani${gr.disegnati ? '' : ' (più piccoli di un pixel: se ne vede la media)'}` : ''}${tr && tr.vere >= 0.01 ? ` · tracce: ${tr.vere >= 1 ? conta(tr.vere) : tr.vere.toPrecision(1)} vere qui, ${tr.disegnate} disegnate` : ''}`;
+  testo += nebbia;
   const k = `${px.toFixed(1)}|${testo}`; if (k === barraPrima) return; barraPrima = k;
   barraScala.innerHTML = `<i style="width:${px.toFixed(1)}px"></i><span></span>`; barraScala.querySelector('span').textContent = testo;
 }

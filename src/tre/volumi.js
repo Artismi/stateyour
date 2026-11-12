@@ -92,14 +92,14 @@ const lega3d = (gl, unita, t, u) => { gl.activeTexture(gl.TEXTURE0 + unita); gl.
 // ---------- la galassia: { cosmo, galassia } → { pronto(), disegna(S, occhio (in Rg, nel riferimento della galassia), quadro, giro), stato }
 export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
   const gl = N.gl, O = { nf: 160, nr: 96, nz: 48, estinzione: 1, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, ms: 0, nebulose: 0, errore: null, meta: null };
-  let prg = null, vol = null, filo = null, copia = null; const u9 = new Float32Array(9);
+  let prg = null, vol = null, senza = null, filo = null, copia = null; const u9 = new Float32Array(9); // (senza: il volume senza nebulose e nubi, per N.vista.splat che le disegna a parte)
   try { filo = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
     filo.onmessage = (e) => { const d = e.data; if (d.errore) { stato.errore = d.errore; console.error('il volume della galassia non si è potuto calcolare:', d.errore); return; }
-      if (vol) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); copia = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz }; stato.meta = { Rmax: d.Rmax, zmax: d.zmax, raggioM: d.raggioM, luce: d.luce, t: d.t }; stato.pronto = true; stato.ms = d.ms; stato.nebulose = d.nebulose; N.cambia(); };
+      if (vol && vol !== senza) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); if (!d.nebulose) { if (senza) gl.deleteTexture(senza); senza = vol; } copia = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz }; stato.meta = { Rmax: d.Rmax, zmax: d.zmax, raggioM: d.raggioM, luce: d.luce, t: d.t }; stato.pronto = true; stato.ms = d.ms; stato.nebulose = d.nebulose; N.cambia(); };
     filo.onerror = (e) => { stato.errore = e.message; };
     filo.postMessage({ tipo: 'galassia', n: 1, cosmo, galassia, t: N.tempo.t, nf: O.nf, nr: O.nr, nz: O.nz });
   } catch (e) { stato.errore = String(e); }
-  return { stato, pronto: () => stato.pronto,
+  return { stato, pronto: () => stato.pronto, dati: () => copia, // (dati: la griglia sulla CPU, per gli splat di splat.js che stanno dentro il volume)
     // quanta luce passa da un punto all'altro della galassia (m, nel suo riferimento; `giro`: l'angolo dei bracci): la
     // stessa polvere del volume, sommata lungo il segmento (24 tratti, la cella più vicina) → [rosso, verde, blu]
     trasparenza(a, b, giro, out = [1, 1, 1]) {
@@ -110,13 +110,13 @@ export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
     // occhio: [x, y, z] nel riferimento della galassia (m); quadro: i suoi assi nel mondo (3×3 per righe); giro: di quanto sono girati i bracci (rad)
     disegna(S, occhio, quadro, giro, frazione = 1) {
       if (!vol) return; if (!prg) prg = N.programma(V_Q, F_GALASSIA); const u = prg.u, m = stato.meta, Rg = m.raggioM;
-      telo.apri(S); gl.useProgram(prg.p); lega3d(gl, 0, vol, u.u_vol); gl.uniform3f(u.u_occhio, occhio[0] / Rg, occhio[1] / Rg, occhio[2] / Rg);
+      telo.apri(S); gl.useProgram(prg.p); lega3d(gl, 0, N.vista.splat && senza ? senza : vol, u.u_vol); gl.uniform3f(u.u_occhio, occhio[0] / Rg, occhio[1] / Rg, occhio[2] / Rg);
       // dagli assi dell'occhio a quelli della galassia: quadroᵀ·assi (per colonne, come vuole WebGL)
       const A = S.assi; for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = quadro[r] * A[c] + quadro[3 + r] * A[3 + c] + quadro[6 + r] * A[6 + c];
       gl.uniformMatrix3fv(u.u_raggi, false, u9); gl.uniform4f(u.u_cam, S.tanX, S.tanY, Math.min(PASSI_MAX, (N.vista.passi && N.vista.passi.galassia) || 64), giro);
       gl.uniform4f(u.u_k, (m.luce * frazione) / (4 * Rg * Rg * S.E0), m.Rmax, m.zmax, O.estinzione); S.schermo(); telo.chiudi(S);
     },
-    libera() { if (filo) filo.terminate(); if (vol) gl.deleteTexture(vol); telo.libera(); if (prg) gl.deleteProgram(prg.p); } };
+    libera() { if (filo) filo.terminate(); if (vol) gl.deleteTexture(vol); if (senza && senza !== vol) gl.deleteTexture(senza); telo.libera(); if (prg) gl.deleteProgram(prg.p); } };
 }
 
 // ---------- la ragnatela: { cosmo, luce (W di tutta la nebbia), tinta, toroM } → { aggiorna(occhioCom, D), disegna(S, …), stato }

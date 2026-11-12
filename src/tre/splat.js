@@ -49,12 +49,16 @@
 // al più), `riduzione` (l'immagine dei soli emettitori). `pixel` è la finezza della divisione: la prova di convergenza
 // (prove/splat.html) misura quanto cambia l'immagine dimezzandolo.
 // Che cosa NON c'è: diffusione multipla; ombra per sorgenti che si muovono rispetto all'insieme (la stella del nucleo
-// illumina senza ombra); l'ordine tra gli splat e i volumi del fondo (vedi universo.js).
+// illumina senza ombra). Con i volumi del fondo (la galassia di volumi.js) l'ordine è approssimato: chi emette è estinto
+// dalla polvere del volume davanti a lui, chi assorbe non toglie la luce del volume che gli sta davanti (la si rimette:
+// `davanti`, con la tinta media del volume); ma il volume dietro e davanti è una colonna sola per oggetto.
+// SCELTE DI CALCOLO (non del mondo, regola 14): `pixel`, `riduzione`, `massimo`; il taglio della campana a 3,3σ; lo
+// jacobiano limitato a 1,3 volte il campo (3DGS); al più 24 splat «da dentro» per chi estingue (per chi emette: tutti).
 import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F } from './nucleo.js';
 import { occhio } from '../camera/vuoto_mezzo.js';
 
 const PI = Math.PI, RT = 3.3, ET = Math.exp(-0.5 * RT * RT), PIX2 = 1 / 12; // il taglio della campana (σ); la varianza di un pixel quadrato
-const MAX_VICINI = 16, H_PLANCK = 6.62607e-34, C_LUCE = 2.99792458e8, K_B = 1.380649e-23;
+const MAX_VICINI = 24, H_PLANCK = 6.62607e-34, C_LUCE = 2.99792458e8, K_B = 1.380649e-23;
 
 // =====================================================================================================
 // IL COLORE DAL RIVELATORE: spettri → canali lineari (curve CIE dell'occhio, poi la matrice sRGB)
@@ -186,12 +190,13 @@ const V_SPLAT = `
 in vec4 a0, a1, a2, a3;   // a0: centro (assi dell'occhio, unità); a1: Σxx Σyy Σzz Σxy; a2: Σxz Σyz k.r k.g; a3: k.b s.r s.g s.b
 uniform vec4 u_cam;       // f (pixel dell'immagine), larghezza, altezza, 0
 uniform float u_fc;
-out vec2 v_d; out vec3 v_con; out float v_norm, v_r2, v_w; out vec3 v_k, v_s;
+out vec2 v_d; out vec3 v_con; out float v_norm, v_r2, v_w, v_dav; out vec3 v_k, v_s;
 void main() {
   vec3 p = a0.xyz; float z = -p.z, f = u_cam.x;
   if (z <= 1e-30) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   mat3 S = mat3(a1.x, a1.w, a2.x, a1.w, a1.y, a2.y, a2.x, a2.y, a1.z);
-  vec3 j1 = vec3(f / z, 0.0, f * p.x / (z * z)), j2 = vec3(0.0, f / z, f * p.y / (z * z)), s1 = S * j1, s2 = S * j2;
+  vec2 tl = 1.3 * 0.5 * u_cam.yz / f, tq = clamp(p.xy / z, -tl, tl); // (lo jacobiano preso al più a 1,3 volte il campo: come 3DGS)
+  vec3 j1 = vec3(f / z, 0.0, f * tq.x / z), j2 = vec3(0.0, f / z, f * tq.y / z), s1 = S * j1, s2 = S * j2;
   float a = dot(j1, s1) + ${PIX2}, b = dot(j1, s2), c = dot(j2, s2) + ${PIX2}, det = max(a * c - b * b, 1e-12);
   float m = 0.5 * (a + c), dd = sqrt(max(0.0, m * m - det)), l1 = m + dd, l2 = max(m - dd, ${PIX2});
   vec2 e1 = abs(b) > 1e-9 * l1 ? normalize(vec2(b, l1 - a)) : (a >= c ? vec2(1.0, 0.0) : vec2(0.0, 1.0)), e2 = vec2(-e1.y, e1.x);
@@ -199,20 +204,20 @@ void main() {
   vec2 k = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0, off = k.x * e1 * min(lim, ${RT} * sqrt(l1)) + k.y * e2 * min(lim, ${RT} * sqrt(l2));
   vec2 pix = vec2(f * p.x / z, f * p.y / z) + off;
   v_d = off; v_con = vec3(c, -b, a) / det; v_norm = 1.0 / (6.2831853 * sqrt(det) * ((1.0 - ${ET}) - ${ET} * ${(RT * RT) / 2}));
-  v_r2 = dot(p, p); v_k = vec3(a2.z, a2.w, a3.x); v_s = a3.yzw;
+  v_r2 = dot(p, p); v_k = vec3(a2.z, a2.w, a3.x); v_s = a3.yzw; v_dav = a0.w;
   gl_Position = vec4(pix / (0.5 * u_cam.yz) * z, 0.0, z);
   ${GLSL_PROFONDITA_V}
 }`;
 const F_SPLAT = `
-in vec2 v_d; in vec3 v_con; in float v_norm, v_r2, v_w; in vec3 v_k, v_s; out vec4 o_col;
-uniform vec4 u_cam; uniform float u_fc;
+in vec2 v_d; in vec3 v_con; in float v_norm, v_r2, v_w, v_dav; in vec3 v_k, v_s; out vec4 o_col;
+uniform vec4 u_cam; uniform float u_fc; uniform vec3 u_tdav; // (la tinta della luce davanti: quella media del volume, verde = 1)
 ${GLSL_USCITA}
 void main() {
   float q = v_con.x * v_d.x * v_d.x + 2.0 * v_con.y * v_d.x * v_d.y + v_con.z * v_d.y * v_d.y; if (q > ${RT * RT}) discard;
   float g = (exp(-0.5 * q) - ${ET}) * v_norm;                              // la parte del flusso in questo pixel
   vec3 r = vec3((gl_FragCoord.xy - 0.5 * u_cam.yz) / u_cam.x, -1.0); float c3 = pow(inversesqrt(dot(r, r)), 3.0); // cos³θ: l'angolo solido del pixel
   float fac = g * u_cam.x * u_cam.x / (v_r2 * c3);
-  o_col = uscita(v_k * fac, v_s * fac);
+  o_col = uscita(v_k * fac + v_dav * u_tdav * v_s * fac, v_s * fac); // (v_dav: la luce del volume che sta DAVANTI allo splat; l'estinzione non deve toglierla: la si rimette, E·(1−e^−τ)/τ con E = I_davanti·τ)
   ${GLSL_PROFONDITA_F}
 }`;
 // da dentro: la somma lungo il raggio in forma chiusa, per i (al più ${MAX_VICINI}) splat che contengono l'occhio
@@ -227,10 +232,24 @@ void main() {
   vec3 d = normalize(vec3((v_uv - 0.5) * u_cam.yz / u_cam.x, -1.0)), E = vec3(0.0), tau = vec3(0.0);
   for (int i = 0; i < ${MAX_VICINI}; i++) { if (i >= u_n) break;
     mat3 Si = mat3(u_i1[i].x, u_i1[i].w, u_i2[i].x, u_i1[i].w, u_i1[i].y, u_i2[i].y, u_i2[i].x, u_i2[i].y, u_i1[i].z); vec3 m = u_c[i].xyz, Sd = Si * d;
-    float A = dot(d, Sd), B = dot(m, Sd), C = dot(m, Si * m), I = exp(-0.5 * (C - B * B / A)) * sqrt(3.14159265 / (2.0 * A)) * erfc_(-B / sqrt(2.0 * A)) * u_i2[i].z;
-    E += u_k[i].xyz * I; tau += u_s[i].xyz * I; }
+    float A = dot(d, Sd), B = dot(m, Sd), C = dot(m, Si * m), I = exp(-0.5 * max(0.0, C - B * B / A)) * sqrt(3.14159265 / (2.0 * A)) * erfc_(-B / sqrt(2.0 * A)) * u_i2[i].z;
+    if (A > 0.0 && I < 1e30) { E += u_k[i].xyz * I; tau += u_s[i].xyz * I; } }
   o_col = uscita(E, tau);
 }`;
+
+// (per chi solo emette: tutti gli splat che attraversano il piano dell'occhio, a istanze, su un'immagine ancora più piccola —
+// sono vicini e larghi: la loro immagine è liscia —; la stessa forma chiusa)
+const V_VICINI_I = `
+in vec4 a0, a1, a2, a3;
+out vec2 v_uv; flat out vec3 v_c, v_k; flat out mat3 v_Si; flat out float v_nm;
+void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+  mat3 S = mat3(a1.x, a1.w, a2.x, a1.w, a1.y, a2.y, a2.x, a2.y, a1.z); float dt = determinant(S); v_Si = inverse(S); v_nm = dt > 0.0 ? 1.0 / (15.7496099 * sqrt(dt)) : 0.0; v_c = a0.xyz; v_k = vec3(a2.z, a2.w, a3.x); }`;
+const F_VICINI_I = `
+in vec2 v_uv; flat in vec3 v_c, v_k; flat in mat3 v_Si; flat in float v_nm; out vec4 o_col; uniform vec4 u_cam;
+float erfcp(float x) { float t = 1.0 / (1.0 + 0.3275911 * x); return t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * exp(-x * x); }
+void main() { vec3 d = normalize(vec3((v_uv - 0.5) * u_cam.yz / u_cam.x, -1.0)), Sd = v_Si * d; float A = dot(d, Sd), B = dot(v_c, Sd), C = dot(v_c, v_Si * v_c), x = -B / sqrt(2.0 * A);
+  float I = exp(-0.5 * max(0.0, C - B * B / A)) * sqrt(3.14159265 / (2.0 * A)) * (x >= 0.0 ? erfcp(x) : 2.0 - erfcp(-x)) * v_nm; // (C − B²/A ≥ 0: Cauchy–Schwarz; in singola precisione la differenza può uscire negativa)
+  o_col = vec4(A > 0.0 && I < 1e30 ? v_k * I : vec3(0.0), 0.0); }`;
 
 // N.vista.splat: true | { pixel, massimo, riduzione }
 export const costoSplat = (N) => { const c = N.vista.splat && typeof N.vista.splat === 'object' ? N.vista.splat : {}; return { pixel: c.pixel ?? 1.5, massimo: c.massimo ?? 150000, riduzione: c.riduzione ?? N.vista.riduzione ?? 2 }; };
@@ -239,14 +258,14 @@ export const costoSplat = (N) => { const c = N.vista.splat && typeof N.vista.spl
 // ordinati da dietro in avanti, in 'velato', sull'immagine intera, dietro ai solidi)
 export function creaSplat(N, { modo = 'mezzo' } = {}) {
   const gl = N.gl, stato = { disegnati: 0, vicini: 0, visitati: 0, ms: 0, passate: 0, canali: false }; let insiemi = [];
-  let prg = null, prgV = null, prgC = null, vao = null, buf = null, cap = 0, dati = new Float32Array(16 * 4096), chiavi = new Float32Array(4096), ordine = new Uint32Array(4096), appoggio = new Float32Array(0), n = 0;
+  let prg = null, prgV = null, prgC = null, prgI = null, vaoI = null, bufI = null, capI = 0, nI = 0, datiI = new Float32Array(0), imgV = null, telV = null, vw = 0, vh = 0, vao = null, buf = null, vaos = [], bufs = [], caps = [0, 0], giro = 0, dati = new Float32Array(16 * 4096), chiavi = new Float32Array(4096), ordine = new Uint32Array(4096), appoggio = new Float32Array(0), n = 0;
   let img = null, tel = null, tw = 0, th = 0; const vic = [];
   const u4 = (k) => new Float32Array(4 * MAX_VICINI), U = { c: u4(), i1: u4(), i2: u4(), k: u4(), s: u4() };
-  function spazio(m) { if (m * 16 <= dati.length) return; const nd = new Float32Array(Math.max(m, 2 * dati.length / 16) * 16); nd.set(dati); dati = nd; chiavi = new Float32Array(nd.length / 16); }
+  function spazio(m) { if (m * 16 <= dati.length) return; const nd = new Float32Array(Math.max(m, 2 * dati.length / 16) * 16), nc = new Float32Array(nd.length / 16); nd.set(dati); nc.set(chiavi); dati = nd; chiavi = nc; }
   // ---- il taglio: dall'alto, si apre un nodo se sullo schermo è più largo di `pixel` (1σ), se contiene l'occhio, finché ci sta
   function taglia(S, ins, C, E0) {
     const T = ins.albero; if (!T) return; const sc = ins.scala, P = ins.periodo || 0, A = S.assi, q = N.quadro(ins.corpo, S.t) || V.identita(), rel = S.versoCorpo(ins.corpo, [0, 0, 0]);
-    const e = V.per(V.tv(q, rel), -1 / sc), M = V.mm(V.trasposta(A), q), f = S.fuoco, tX = S.tanX * 1.02, tY = S.tanY * 1.02, lontano = ins.lontano || Infinity;
+    const e = V.per(V.tv(q, rel), -1 / sc), M = V.mm(V.trasposta(A), q), o6 = [0, 0, 0, 0, 0, 0], Pp = T.pos, f = S.fuoco, tX = S.tanX * 1.02, tY = S.tanY * 1.02, lontano = ins.lontano || Infinity;
     const k4 = 1 / (4 * E0 * sc * sc), s2 = 1 / (sc * sc);
     let coda = [], prossima = [];
     // le radici, con le immagini del toro che servono (entro `lontano`)
@@ -256,7 +275,7 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
     let fatti = 0;
     while (coda.length) {
       for (let u = 0; u < coda.length; u += 4) { const j = coda[u], ox = coda[u + 1], oy = coda[u + 2], oz = coda[u + 3]; stato.visitati++;
-        const dx = T.pos[3 * j] + ox - e[0], dy = T.pos[3 * j + 1] + oy - e[1], dz = T.pos[3 * j + 2] + oz - e[2], d2 = dx * dx + dy * dy + dz * dz, sg = Math.sqrt(T.traccia[j]), R = RT * sg, d = Math.sqrt(d2);
+        const dx = Pp[3 * j] + ox - e[0], dy = Pp[3 * j + 1] + oy - e[1], dz = Pp[3 * j + 2] + oz - e[2], d2 = dx * dx + dy * dy + dz * dz, sg = Math.sqrt(T.traccia[j]), R = RT * sg, d = Math.sqrt(d2);
         const ex = M[0] * dx + M[1] * dy + M[2] * dz, ey = M[3] * dx + M[4] * dy + M[5] * dz, ez = M[6] * dx + M[7] * dy + M[8] * dz, prof = -ez;
         if (prof + R <= 0 || d - R > lontano) continue;
         if (Math.abs(ex) > tX * Math.max(0, prof) + 1.5 * R || Math.abs(ey) > tY * Math.max(0, prof) + 1.5 * R) continue;
@@ -269,16 +288,22 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
           if (Ls > 0) { const sv = V.per(V.tv(q, V.per(S.versoStella, S.distanzaStella)), 1 / sc), rx = dx - sv[0], ry = dy - sv[1], rz = dz - sv[2], r = Math.hypot(rx, ry, rz), Fq = Ls / (4 * PI * (r * sc) ** 2), cs = -(rx * dx + ry * dy + rz * dz) / (r * d), w = 4 * PI * faseHG(T.g[j], cs);
             L0 += Fq * cs0[0] * T.dif[3 * j] * w; L1 += Fq * cs0[1] * T.dif[3 * j + 1] * w; L2 += Fq * cs0[2] * T.dif[3 * j + 2] * w; } }
         const cono = ins.luce ? ins.luce(d) : 1; if (!(cono > 0) && !(T.est[3 * j] > 0)) continue;
+        // dentro un volume disegnato a parte (la galassia): la sua polvere davanti toglie luce a chi emette, e la sua luce davanti non va estinta
+        let dav = 0; if (ins.davanti) { const r = ins.davanti(e, Pp[3 * j] + ox, Pp[3 * j + 1] + oy, Pp[3 * j + 2] + oz, E0); L0 *= r[0]; L1 *= r[1]; L2 *= r[2]; dav = r[3]; }
         const kk = k4 * cono, c6 = 6 * j, cv = T.cov;
         // Σ negli assi dell'occhio: M·Σ·Mᵀ
-        const xx = cv[c6], yy = cv[c6 + 1], zz = cv[c6 + 2], xy = cv[c6 + 3], xz = cv[c6 + 4], yz = cv[c6 + 5], o = [0, 0, 0, 0, 0, 0];
-        const rM = (r) => { const a = M[3 * r], b = M[3 * r + 1], c = M[3 * r + 2]; return [a * xx + b * xy + c * xz, a * xy + b * yy + c * yz, a * xz + b * yz + c * zz]; }, t0 = rM(0), t1 = rM(1), t2 = rM(2), per = (t, s) => t[0] * M[3 * s] + t[1] * M[3 * s + 1] + t[2] * M[3 * s + 2];
-        o[0] = per(t0, 0); o[1] = per(t1, 1); o[2] = per(t2, 2); o[3] = per(t0, 1); o[4] = per(t0, 2); o[5] = per(t1, 2);
-        if (dentro) { // l'occhio dentro la campana (a meno di 3,3σ di Mahalanobis): la somma lungo il raggio, a parte
+        const xx = cv[c6], yy = cv[c6 + 1], zz = cv[c6 + 2], xy = cv[c6 + 3], xz = cv[c6 + 4], yz = cv[c6 + 5], o = o6;
+        const a0 = M[0] * xx + M[1] * xy + M[2] * xz, a1 = M[0] * xy + M[1] * yy + M[2] * yz, a2 = M[0] * xz + M[1] * yz + M[2] * zz; // riga 0 di M·Σ
+        const b0 = M[3] * xx + M[4] * xy + M[5] * xz, b1 = M[3] * xy + M[4] * yy + M[5] * yz, b2 = M[3] * xz + M[4] * yz + M[5] * zz; // riga 1
+        const c0 = M[6] * xx + M[7] * xy + M[8] * xz, c1 = M[6] * xy + M[7] * yy + M[8] * yz, c2 = M[6] * xz + M[7] * yz + M[8] * zz; // riga 2
+        o[0] = a0 * M[0] + a1 * M[1] + a2 * M[2]; o[1] = b0 * M[3] + b1 * M[4] + b2 * M[5]; o[2] = c0 * M[6] + c1 * M[7] + c2 * M[8]; o[3] = a0 * M[3] + a1 * M[4] + a2 * M[5]; o[4] = a0 * M[6] + a1 * M[7] + a2 * M[8]; o[5] = b0 * M[6] + b1 * M[7] + b2 * M[8];
+        // la campana attraversa il piano dell'occhio (o lo contiene): la proiezione affine non vale più (lo jacobiano
+        // esplode vicino al piano: aghi radiali che non ci sono); la somma lungo il raggio, a parte, in forma chiusa
+        if (prof < RT * Math.sqrt(o[2])) {
           const [a, b, c, dd, ee, ff] = o, i00 = b * c - ff * ff, i01 = ee * ff - dd * c, i02 = dd * ff - b * ee, det = a * i00 + dd * i01 + ee * i02;
           if (det > 0) { const i11 = a * c - ee * ee, i12 = dd * ee - a * ff, i22 = a * b - dd * dd, m2 = (ex * (i00 * ex + i01 * ey + i02 * ez) + ey * (i01 * ex + i11 * ey + i12 * ez) + ez * (i02 * ex + i12 * ey + i22 * ez)) / det;
-            if (m2 < RT * RT) { vic.push({ m2, c: [ex, ey, ez], i: [i00 / det, i11 / det, i22 / det, i01 / det, i02 / det, i12 / det, 1 / ((2 * PI) ** 1.5 * Math.sqrt(det))], k: [L0 * kk, L1 * kk, L2 * kk], s: [T.est[3 * j] * s2, T.est[3 * j + 1] * s2, T.est[3 * j + 2] * s2] }); continue; } } }
-        spazio(n + 1); const p = 16 * n; dati[p] = ex; dati[p + 1] = ey; dati[p + 2] = ez; dati[p + 3] = 0; dati[p + 4] = o[0]; dati[p + 5] = o[1]; dati[p + 6] = o[2]; dati[p + 7] = o[3]; dati[p + 8] = o[4]; dati[p + 9] = o[5];
+            vic.push({ m2, d, prof, riga: [ex, ey, ez, dav, o[0], o[1], o[2], o[3], o[4], o[5], L0 * kk, L1 * kk, L2 * kk, T.est[3 * j] * s2, T.est[3 * j + 1] * s2, T.est[3 * j + 2] * s2], c: [ex, ey, ez], i: [i00 / det, i11 / det, i22 / det, i01 / det, i02 / det, i12 / det, 1 / ((2 * PI) ** 1.5 * Math.sqrt(det))], k: [L0 * kk, L1 * kk, L2 * kk], s: [T.est[3 * j] * s2, T.est[3 * j + 1] * s2, T.est[3 * j + 2] * s2] }); continue; } }
+        spazio(n + 1); const p = 16 * n; dati[p] = ex; dati[p + 1] = ey; dati[p + 2] = ez; dati[p + 3] = dav; dati[p + 4] = o[0]; dati[p + 5] = o[1]; dati[p + 6] = o[2]; dati[p + 7] = o[3]; dati[p + 8] = o[4]; dati[p + 9] = o[5];
         dati[p + 10] = L0 * kk; dati[p + 11] = L1 * kk; dati[p + 12] = L2 * kk; dati[p + 13] = T.est[3 * j] * s2; dati[p + 14] = T.est[3 * j + 1] * s2; dati[p + 15] = T.est[3 * j + 2] * s2;
         if (dati[p + 13] !== dati[p + 14] || dati[p + 14] !== dati[p + 15]) stato.canali = true;
         chiavi[n] = d; n++; fatti++; }
@@ -292,16 +317,18 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
     if (appoggio.length < 16 * n) appoggio = new Float32Array(dati.length); for (let i = 0; i < n; i++) appoggio.set(dati.subarray(16 * ordine[i], 16 * ordine[i] + 16), 16 * i); const x = dati; dati = appoggio; appoggio = x;
   }
   function prepara() {
-    prg = N.programma(V_SPLAT, F_SPLAT); prgV = N.programma(V_Q, F_VICINI); prgC = N.programma(V_Q, F_COPIA);
-    vao = gl.createVertexArray(); buf = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    for (let a = 0; a < 4; a++) { const l = gl.getAttribLocation(prg.p, 'a' + a); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 4, gl.FLOAT, false, 64, 16 * a); gl.vertexAttribDivisor(l, 1); }
+    prg = N.programma(V_SPLAT, F_SPLAT); prgV = N.programma(V_Q, F_VICINI); prgC = N.programma(V_Q, F_COPIA); prgI = N.programma(V_VICINI_I, F_VICINI_I);
+    vaoI = gl.createVertexArray(); bufI = gl.createBuffer(); gl.bindVertexArray(vaoI); gl.bindBuffer(gl.ARRAY_BUFFER, bufI);
+    for (let a = 0; a < 4; a++) { const l = gl.getAttribLocation(prgI.p, 'a' + a); if (l < 0) continue; gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 4, gl.FLOAT, false, 64, 16 * a); gl.vertexAttribDivisor(l, 1); }
+    for (let b = 0; b < 2; b++) { const v = gl.createVertexArray(), u = gl.createBuffer(); gl.bindVertexArray(v); gl.bindBuffer(gl.ARRAY_BUFFER, u); vaos.push(v); bufs.push(u);
+      for (let a = 0; a < 4; a++) { const l = gl.getAttribLocation(prg.p, 'a' + a); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 4, gl.FLOAT, false, 64, 16 * a); gl.vertexAttribDivisor(l, 1); } }
     gl.bindVertexArray(null);
   }
   function passate(S, w, h, f, vicini) {
     const canali = modo === 'mezzo' ? (stato.canali ? [2, 3, 4] : [1]) : [0]; stato.passate = canali.length;
     for (const m of canali) {
       if (m >= 2) gl.colorMask(m === 2, m === 3, m === 4, false);
-      if (n) { gl.useProgram(prg.p); gl.uniform4f(prg.u.u_cam, f, w, h, 0); gl.uniform1f(prg.u.u_fc, S.fc); gl.uniform1i(prg.u.u_modo, m); gl.bindVertexArray(vao); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n); gl.bindVertexArray(null); }
+      if (n) { gl.useProgram(prg.p); gl.uniform4f(prg.u.u_cam, f, w, h, 0); gl.uniform1f(prg.u.u_fc, S.fc); gl.uniform1i(prg.u.u_modo, m); const td = L.tintaDavanti || [1, 1, 1]; gl.uniform3f(prg.u.u_tdav, td[0], td[1], td[2]); gl.bindVertexArray(vao); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n); gl.bindVertexArray(null); }
       if (vicini) { gl.disable(gl.DEPTH_TEST); gl.useProgram(prgV.p); gl.uniform4f(prgV.u.u_cam, f, w, h, 0); gl.uniform1i(prgV.u.u_n, vicini); gl.uniform1i(prgV.u.u_modo, m);
         gl.uniform4fv(prgV.u.u_c, U.c); gl.uniform4fv(prgV.u.u_i1, U.i1); gl.uniform4fv(prgV.u.u_i2, U.i2); gl.uniform4fv(prgV.u.u_k, U.k); gl.uniform4fv(prgV.u.u_s, U.s); S.schermo(); if (modo === 'mezzo') gl.enable(gl.DEPTH_TEST); }
     }
@@ -316,11 +343,19 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
     aggiorna(S) {
       const t0 = performance.now(), C = costoSplat(N); n = 0; vic.length = 0; stato.visitati = 0; stato.canali = false;
       for (const ins of insiemi) taglia(S, ins, C, S.E0);
-      if (modo === 'mezzo' && n > 1) ordina();
+      // i più vicini (in σ) alla somma in forma chiusa; gli altri che stanno davanti si proiettano lo stesso (lo jacobiano
+      // è limitato come in 3DGS), quelli col centro dietro l'occhio si perdono (contati)
+      let persi = 0; nI = 0;
+      if (modo === 'emissione') { if (datiI.length < 16 * vic.length) datiI = new Float32Array(32 * vic.length); for (const v of vic) datiI.set(v.riga, 16 * nI++); vic.length = 0; }
       vic.sort((a, b) => a.m2 - b.m2); const nv = Math.min(MAX_VICINI, vic.length);
       for (let i = 0; i < nv; i++) { const v = vic[i]; U.c.set([...v.c, 0], 4 * i); U.i1.set([v.i[0], v.i[1], v.i[2], v.i[3]], 4 * i); U.i2.set([v.i[4], v.i[5], v.i[6], 0], 4 * i); U.k.set([...v.k, 0], 4 * i); U.s.set([...v.s, 0], 4 * i); if (v.s[0] !== v.s[1] || v.s[1] !== v.s[2]) stato.canali = true; }
-      stato.vicini = nv; stato.persiVicini = vic.length - nv; stato.disegnati = n;
-      if (!prg) prepara(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); if (16 * n > cap) { cap = Math.max(16 * n, 2 * cap); gl.bufferData(gl.ARRAY_BUFFER, cap * 4, gl.DYNAMIC_DRAW); } if (n) gl.bufferSubData(gl.ARRAY_BUFFER, 0, dati, 0, 16 * n);
+      for (let i = nv; i < vic.length; i++) { const v = vic[i]; if (v.prof <= 0) { persi++; continue; } spazio(n + 1); dati.set(v.riga, 16 * n); chiavi[n] = v.d; n++; }
+      if (modo === 'mezzo' && n > 1) ordina();
+      stato.vicini = nv + nI; stato.persiVicini = persi; stato.disegnati = n;
+      stato.msTaglio = performance.now() - t0;
+      // (due memorie a turno: riscrivere quella che la scheda sta ancora leggendo la farebbe aspettare)
+      if (!prg) prepara(); giro ^= 1; vao = vaos[giro]; buf = bufs[giro]; gl.bindBuffer(gl.ARRAY_BUFFER, buf); if (16 * n > caps[giro]) { caps[giro] = Math.max(16 * n, 2 * caps[giro]); gl.bufferData(gl.ARRAY_BUFFER, caps[giro] * 4, gl.DYNAMIC_DRAW); } if (n) gl.bufferSubData(gl.ARRAY_BUFFER, 0, dati, 0, 16 * n);
+      if (nI) { gl.bindBuffer(gl.ARRAY_BUFFER, bufI); if (16 * nI > capI) { capI = 2 * 16 * nI; gl.bufferData(gl.ARRAY_BUFFER, capI * 4, gl.DYNAMIC_DRAW); } gl.bufferSubData(gl.ARRAY_BUFFER, 0, datiI, 0, 16 * nI); }
       stato.ms = performance.now() - t0;
     },
     disegna(S) {
@@ -329,7 +364,10 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
         const r = Math.max(1, costoSplat(N).riduzione), w = Math.max(8, Math.ceil(S.W / r)), h = Math.max(8, Math.ceil(S.H / r));
         if (w !== tw || h !== th) { if (img) { gl.deleteTexture(img); gl.deleteFramebuffer(tel); } tw = w; th = h; img = N.immagine(w, h, 'rgba16f', null); tel = N.telaio(img, null); }
         const prima = gl.getParameter(gl.FRAMEBUFFER_BINDING), dt = gl.isEnabled(gl.DEPTH_TEST); gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.DEPTH_TEST);
-        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); passate(S, w, h, (S.fuoco * h) / S.H, stato.vicini);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); passate(S, w, h, (S.fuoco * h) / S.H, 0);
+        if (nI) { const w2 = Math.max(8, Math.ceil(w / 4)), h2 = Math.max(8, Math.ceil(h / 4)); if (w2 !== vw || h2 !== vh) { if (imgV) { gl.deleteTexture(imgV); gl.deleteFramebuffer(telV); } vw = w2; vh = h2; imgV = N.immagine(vw, vh, 'rgba16f', null); telV = N.telaio(imgV, null); }
+          gl.bindFramebuffer(gl.FRAMEBUFFER, telV); gl.viewport(0, 0, vw, vh); gl.clear(gl.COLOR_BUFFER_BIT); gl.useProgram(prgI.p); gl.uniform4f(prgI.u.u_cam, (S.fuoco * vh) / S.H, vw, vh, 0); gl.bindVertexArray(vaoI); gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, nI); gl.bindVertexArray(null);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.viewport(0, 0, w, h); gl.useProgram(prgC.p); N.lega(0, imgV, prgC.u.u_img); S.schermo(); }
         gl.bindFramebuffer(gl.FRAMEBUFFER, prima); gl.viewport(0, 0, S.W, S.H); gl.useProgram(prgC.p); N.lega(0, img, prgC.u.u_img); S.schermo(); gl.disable(gl.BLEND); if (dt) gl.enable(gl.DEPTH_TEST);
         return; }
       // 'mezzo': sull'immagine intera, da dietro in avanti, dietro ai solidi (la profondità logaritmica del nucleo)
@@ -337,7 +375,7 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
     },
     // l'immagine dei soli emettitori dell'ultimo fotogramma (canali lineari, unità del nucleo): per la prova di convergenza
     immagine() { if (!tel) return null; const prima = gl.getParameter(gl.FRAMEBUFFER_BINDING), d = new Float32Array(4 * tw * th); gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.readPixels(0, 0, tw, th, gl.RGBA, gl.FLOAT, d); gl.bindFramebuffer(gl.FRAMEBUFFER, prima); return { w: tw, h: th, dati: d }; },
-    libera() { if (prg) { gl.deleteProgram(prg.p); gl.deleteProgram(prgV.p); gl.deleteProgram(prgC.p); gl.deleteBuffer(buf); gl.deleteVertexArray(vao); } if (img) { gl.deleteTexture(img); gl.deleteFramebuffer(tel); } },
+    libera() { if (prg) { gl.deleteProgram(prg.p); gl.deleteProgram(prgV.p); gl.deleteProgram(prgC.p); gl.deleteProgram(prgI.p); gl.deleteBuffer(bufI); gl.deleteVertexArray(vaoI); for (const b of bufs) gl.deleteBuffer(b); for (const v of vaos) gl.deleteVertexArray(v); } if (img) { gl.deleteTexture(img); gl.deleteFramebuffer(tel); } if (imgV) { gl.deleteTexture(imgV); gl.deleteFramebuffer(telV); } },
   };
   return L;
 }
@@ -347,3 +385,83 @@ export function alberoDa(m) {
   return T;
 }
 export const alberoPerFilo = (T) => ({ pos: T.pos.buffer, cov: T.cov.buffer, w: T.w.buffer, massa: T.massa.buffer, emis: T.emis.buffer, est: T.est.buffer, dif: T.dif.buffer, g: T.g.buffer, P: T.P.buffer, dir: T.dir.buffer, figlio: T.figlio.buffer, nfigli: T.nfigli.buffer, traccia: T.traccia.buffer, radici: T.radici, foglie: T.foglie, livelli: T.livelli });
+
+// =====================================================================================================
+// I PRIMI DUE USI (dietro N.vista.splat: universo.js li monta accanto ai volumi, per confrontare)
+// =====================================================================================================
+const filo = () => new Worker(new URL('./splat.worker.js', import.meta.url), { type: 'module' });
+
+// LA RAGNATELA: ogni elemento di materia è l'ellissoide di Zel'dovich con la luce delle galassie attese in lui
+// (splat.worker.js). Tutto il toro a grana grossa (con le sue copie entro la strada che il volume cammina), più una
+// regione fine attorno a chi guarda, come volumi.js; la grossa senza gli elementi della fine (la loro massa è là).
+// L'esposizione è quella che il volume propone (universo.js chiama ancora rete.aggiorna): stessa luce, stessa unità.
+export function creaSplatRete(N, { cosmo, luce, tinta = [1, 1, 1], toroM, corpo, opzioni = {} } = {}) {
+  const O = { celle: 64, celleFine: 64, latoFine: 0.2, kmaxFine: 72, dettaglio: null, aloni: true, ...opzioni }, L = creaSplat(N, { modo: 'emissione' }), stato = { pronto: false, fine: false, ms: 0, msFine: 0, errore: null, meta: null, strato: L.stato };
+  let w = null, grossa = null, fine = null, inCorso = 0, n = 0, Dchiesta = NaN, chiesta = null; const insG = { corpo, periodo: 1, immagini: true }, insF = { corpo, periodo: 1, immagini: false };
+  const chiave = (r) => (r ? r.centro.map((v) => v.toPrecision(9)).join(',') + '/' + r.lato : '');
+  const monta = () => { const lista = []; if (grossa) { insG.albero = grossa.T; lista.push(insG); } if (fine && grossa && grossa.esclusa === chiave(fine.meta.regione)) { insF.albero = fine.T; lista.push(insF); } L.metti(lista); };
+  const chiedi = (m) => { inCorso++; w.postMessage({ cosmo, t: N.tempo.t, luce, tinta, ...m, n: ++n }); };
+  try { w = filo();
+    w.onmessage = (e) => { const d = e.data; inCorso--; if (d.errore) { stato.errore = d.errore; console.error('la ragnatela a splat non si è potuta calcolare:', d.errore); return; }
+      const T = alberoDa(d.albero);
+      if (d.meta.regione) { fine = { T, meta: d.meta }; stato.fine = true; stato.msFine = d.meta.ms; inCorso++; w.postMessage({ tipo: 'escludi', n: ++n, escludi: { centro: d.meta.regione.centro.map((v) => v / toroM), lato: d.meta.regione.lato / toroM }, chiave: chiave(d.meta.regione) }); }
+      else { grossa = { T, meta: d.meta, esclusa: d.meta.escluso ? (fine ? chiave(fine.meta.regione) : '') : '' }; stato.pronto = true; stato.ms = d.meta.ms; stato.meta = d.meta; }
+      monta(); N.cambia(); };
+    w.onerror = (e) => { stato.errore = e.message; };
+  } catch (e) { stato.errore = String(e); }
+  return { stato, strato: L, pronto: () => stato.pronto, opzioni: O,
+    // occhio: comovente (m); a; D: la crescita di adesso; cono(χ) → (a_e/a_o)² (0: non si vede); chiMax: fin dove (m comoventi)
+    aggiorna(S, occhio, a, D, cono, chiMax) {
+      if (!w || stato.errore) return; insG.scala = insF.scala = toroM * a; insG.lontano = chiMax / toroM; insG.luce = insF.luce = (d) => cono(d * toroM);
+      if (!inCorso && !(Math.abs(D - Dchiesta) < 0.02 * D)) { Dchiesta = D; chiesta = null; fine = null; chiedi({ tipo: 'ragnatela', regione: null, celle: O.celle, D, dettaglio: O.dettaglio, aloni: O.aloni }); }
+      else if (!inCorso && stato.pronto && O.celleFine > 0) { const lato = O.latoFine * toroM; let lontano = Infinity; if (chiesta) { lontano = 0; for (let k = 0; k < 3; k++) { let x = occhio[k] - chiesta[k]; x -= Math.round(x / toroM) * toroM; lontano = Math.max(lontano, Math.abs(x)); } }
+        if (lontano > lato / 5) { chiesta = occhio.slice(); chiedi({ tipo: 'ragnatela', regione: { centro: occhio.slice(), lato }, celle: O.celleFine, kmax: O.kmaxFine, D, aloni: O.aloni }); } }
+      L.aggiorna(S);
+    },
+    disegna(S) { L.disegna(S); }, immagine: () => L.immagine(),
+    libera() { if (w) w.terminate(); L.libera(); } };
+}
+
+// LE NEBULOSE E LE NUBI di una galassia (vuoto.js, attraverso scenaGalassia().vuoto): splat che emettono con le loro
+// righe, polvere che diffonde la luce della sua stella con la sua ombra, nubi oscure che estinguono; ordinati in
+// profondità tra loro. Si richiedono di nuovo quando chi guarda si è spostato di un terzo della distanza dall'oggetto
+// più vicino (avvicinandosi i cubetti si fanno più fini: regola 8), o il tempo di un milione di anni.
+export function creaSplatNebulose(N, { cosmo, galassia, nodo, volume = null, frazione = 1, giro = () => 0 } = {}) {
+  // il volume della galassia (volumi.js) tra l'occhio e lo splat: trasparenza per canale (la sua polvere) e la luce che
+  // nasce davanti (la sua emissione, estinta come nel volume), sommate con gli stessi passi del volume (uniformi in
+  // asinh(z/h) attraverso il piano). → [T_r, T_g, T_b, luce davanti (unità del nucleo, canale verde)]
+  const PCm = 3.0857e16, out4 = [1, 1, 1, 0];
+  // (in memoria per il fotogramma, su celle larghe un cinquantesimo della distanza: i cubetti di un oggetto ne condividono la colonna)
+  const memo = new Map(); let memoE0 = NaN, memoOcchio = '';
+  const davanti = (e, x, y, z, E0) => { const ko = e.join(','); if (E0 !== memoE0 || ko !== memoOcchio || memo.size > 2e5) { memo.clear(); memoE0 = E0; memoOcchio = ko; }
+    const cs = Math.max(1e-3, 0.02 * Math.hypot(x - e[0], y - e[1], z - e[2])), chiave = `${Math.round(x / cs)},${Math.round(y / cs)},${Math.round(z / cs)},${Math.round(Math.log2(cs))}`, v = memo.get(chiave); if (v) return v;
+    const r = colonna(e, x, y, z, E0).slice(); memo.set(chiave, r); return r; };
+  const colonna = (e, x, y, z, E0) => { const c = volume && volume.pronto() && volume.dati && volume.dati(); out4[0] = out4[1] = out4[2] = 1; out4[3] = 0; if (!c) return out4;
+    if (!L.tintaDavanti || L._tintaDi !== c) { let r = 0, g = 0, b2 = 0; for (let q = 0; q < c.dati.length; q += 4) { r += c.dati[q]; g += c.dati[q + 1]; b2 += c.dati[q + 2]; } L.tintaDavanti = [r / (g || 1), 1, b2 / (g || 1)]; L._tintaDi = c; }
+    const m = volume.stato.meta, Rg = m.raggioM, k = PCm / Rg, o = [e[0] * k, e[1] * k, e[2] * k], b = [x * k, y * k, z * k], d = [b[0] - o[0], b[1] - o[1], b[2] - o[2]], h = 0.03 * m.zmax, u0 = Math.asinh(o[2] / h), u1 = Math.asinh(b[2] / h), piano = Math.abs(u1 - u0) < 0.5 || Math.abs(d[2]) < 1e-9, n = 48, g0 = giro();
+    let prima = 0, C = 0; const T = [1, 1, 1], A = [0.79, 1, 1.31];
+    for (let i = 0; i < n; i++) { const f = (i + 1) / n, t = piano ? f : (h * Math.sinh(u0 + (u1 - u0) * f) - o[2]) / d[2], ds = (t - prima) * Math.hypot(d[0], d[1], d[2]), tm = prima + 0.5 * (t - prima); prima = t;
+      const px = o[0] + d[0] * tm, py = o[1] + d[1] * tm, pz = o[2] + d[2] * tm, R = Math.hypot(px, py); if (R >= m.Rmax || Math.abs(pz) >= m.zmax || !(ds > 0)) continue;
+      let fi = (Math.atan2(py, px) - g0) / (2 * Math.PI); fi -= Math.floor(fi); const jf = Math.min(c.nf - 1, Math.floor(fi * c.nf)), jr = Math.min(c.nr - 1, Math.floor((R / m.Rmax) * c.nr)), sz = Math.sign(pz) * Math.sqrt(Math.abs(pz) / m.zmax), jz = Math.min(c.nz - 1, Math.floor(((sz + 1) / 2) * c.nz)), q = 4 * ((jz * c.nr + jr) * c.nf + jf);
+      C += T[1] * c.dati[q + 1] * ds; for (let a = 0; a < 3; a++) T[a] *= Math.exp(-0.921 * c.dati[q + 3] * ds * A[a]); }
+    out4[0] = T[0]; out4[1] = T[1]; out4[2] = T[2]; out4[3] = (C * m.luce * frazione) / (4 * Rg * Rg * E0); return out4; };
+  const L = creaSplat(N, { modo: 'mezzo' }), PC = 3.0857e16, stato = { pronto: false, ms: 0, oggetti: [], errore: null, richieste: 0, strato: L.stato };
+  let w = null, inCorso = false, chiesto = null, tChiesto = NaN, vicino = Infinity;
+  try { w = filo();
+    w.onmessage = (e) => { const d = e.data; inCorso = false; if (d.errore) { stato.errore = d.errore; console.error('le nebulose a splat non si sono potute calcolare:', d.errore); return; }
+      L.metti([d.emettitori && { albero: alberoDa(d.emettitori), corpo: nodo, scala: PC, davanti }, d.mezzo && { albero: alberoDa(d.mezzo), corpo: nodo, scala: PC, davanti }]);
+      stato.oggetti = d.oggetti; stato.ms = d.meta.ms; stato.pronto = true; vicino = Infinity; for (const o of d.oggetti) vicino = Math.min(vicino, Math.max(o.raggio, Math.hypot(o.pos[0] - chiesto[0], o.pos[1] - chiesto[1], o.pos[2] - chiesto[2]))); N.cambia(); };
+    w.onerror = (e) => { stato.errore = e.message; };
+  } catch (e) { stato.errore = String(e); }
+  return { stato, strato: L, pronto: () => stato.pronto,
+    // occhio: [x, y, z] nel riferimento della galassia (m)
+    aggiorna(S, occhio) {
+      if (!w || stato.errore) return;
+      const spostato = chiesto ? Math.hypot(occhio[0] - chiesto[0], occhio[1] - chiesto[1], occhio[2] - chiesto[2]) : Infinity;
+      if (!inCorso && (!chiesto || spostato > vicino / 3 || Math.abs(S.t - tChiesto) > 1e6 * 3.156e7)) { inCorso = true; chiesto = occhio.slice(); tChiesto = S.t; stato.richieste++; const C = costoSplat(N);
+        w.postMessage({ tipo: 'nebulose', n: stato.richieste, cosmo, galassia, t: S.t, occhio: chiesto, fuoco: S.fuoco, pixel: C.pixel, regioneKpc: (N.vista.splat && N.vista.splat.regioneKpc) || 1 }); }
+      L.aggiorna(S);
+    },
+    disegna(S) { L.disegna(S); },
+    libera() { if (w) w.terminate(); L.libera(); } };
+}

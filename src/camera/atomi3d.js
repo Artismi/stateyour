@@ -1237,6 +1237,33 @@ export function conMoto(scena, { T = scena.T || (scena.agitazione && scena.agita
   };
   return { ...scena, agitazione: null, atomi: { ...A, gruppo: A.gruppo || gruppo, agitazione }, tempo, molecoleMosse: nMol };
 }
+// LE CONDIZIONI PERIODICHE: un campione di liquido (o di cristallo) non sta nel vuoto. Come nelle simulazioni di un
+// liquido, ciò che esce da un lato della scatola rientra dall'altro: lo spazio attorno è pieno di copie della scatola
+// (ripeti: quante su ogni asse, dispari; la copia del punto sta al centro, le altre attorno). Il moto è lo stesso in ogni
+// copia (è la stessa materia: ciò che fa una molecola vicino al lato lo fa anche la sua immagine). Chi guarda non vede
+// mai più di quanto lo schermo regga: le copie lontane passano per la nebbia della vista (sferette che ne rappresentano
+// molte). Restituisce una scena nuova; scatola: [lx, ly, lz] del campione (se manca: quella della scena).
+export function periodica(scena, ripeti = [3, 3, 1], scatola = null) {
+  const A = scena.atomi, N = Math.floor(A.pos.length / 3), box = scatola || scena.scatola, R = ripeti.map((n) => Math.max(1, n | 0)), copie = R[0] * R[1] * R[2];
+  if (copie === 1 || !N || !box) return scena;
+  const spost = []; for (let k = 0; k < R[2]; k++) for (let j = 0; j < R[1]; j++) for (let i = 0; i < R[0]; i++) spost.push([(i - (R[0] - 1) / 2) * box[0], (j - (R[1] - 1) / 2) * box[1], (k - (R[2] - 1) / 2) * box[2]]);
+  // (la copia del punto, quella senza spostamento, resta la prima: i suoi atomi hanno gli stessi indici di prima)
+  const zero = spost.findIndex((d) => !d[0] && !d[1] && !d[2]); if (zero > 0) [spost[0], spost[zero]] = [spost[zero], spost[0]];
+  const pos = new Float32Array(3 * N * copie), rip = (a, n) => { if (!a) return a; const o = new a.constructor(a.length * copie); for (let c = 0; c < copie; c++) o.set(a, c * a.length); return o; };
+  const sposta = (src, dst) => { for (let c = 0; c < copie; c++) { const d = spost[c], b = 3 * N * c; for (let i = 0; i < 3 * N; i += 3) { dst[b + i] = src[i] + d[0]; dst[b + i + 1] = src[i + 1] + d[1]; dst[b + i + 2] = src[i + 2] + d[2]; } } };
+  sposta(A.pos, pos);
+  let parte = A.parte; if (!parte && scena.parti?.length && scena.parti[0].da != null) { parte = new Uint16Array(N).fill(65535); scena.parti.forEach((p, k) => parte.fill(k, Math.max(0, p.da), Math.min(N, p.a))); }
+  let gruppo = null; if (A.gruppo) { let g = 0; for (let i = 0; i < N; i++) if (A.gruppo[i] > g) g = A.gruppo[i]; gruppo = new Uint32Array(N * copie); for (let c = 0; c < copie; c++) for (let i = 0; i < N; i++) gruppo[c * N + i] = A.gruppo[i] + c * (g + 1); }
+  const lega = (L) => { if (!L || !L.length) return L; const o = new Uint32Array(L.length * copie); for (let c = 0; c < copie; c++) for (let q = 0; q < L.length; q++) o[c * L.length + q] = L[q] + c * N; return o; };
+  let pos2 = null; if (A.pos2) { pos2 = new Float32Array(pos.length); sposta(A.pos2, pos2); }
+  const atomi = { ...A, pos, raggio: rip(A.raggio), elemento: rip(A.elemento), colore: rip(A.colore), parte: rip(parte), gruppo, agitazione: rip(A.agitazione), pos2 };
+  for (const k in atomi) if (atomi[k] == null) delete atomi[k];
+  const parti = (scena.parti || []).map((p) => { const q = { ...p }; delete q.da; delete q.a; return q; });
+  let tempo = scena.tempo;
+  if (typeof tempo === 'function') { const t0 = tempo, mio = Float32Array.from(A.pos); tempo = (t, P) => { const v = t0(t, mio); if (v === false) return false; sposta(mio, P); return true; }; }
+  else if (tempo && tempo.fotogrammi) tempo = { ...tempo, fotogrammi: tempo.fotogrammi.map((f) => { const o = new Float32Array(pos.length); sposta(f, o); return o; }) };
+  return { ...scena, atomi, legami: lega(scena.legami), legamiH: lega(scena.legamiH), parti, tempo, scatola: [box[0] * R[0], box[1] * R[1], box[2] * R[2]], periodica: { ripeti: R, scatola: box, copie } };
+}
 // Un elenco di atomi come oggetti ({ x, y, z, el: simbolo o numero atomico, raggio, colore }: per esempio quello di
 // materia.js `atomi(minerale, …)`, che è in metri) messo nel formato della scena.
 export function scenaDaElenco(elenco, { unita = 'm', nome = '', scatola = null } = {}) {
