@@ -239,3 +239,15 @@ per poi cucirli (al bordo non combacerebbero), si condiziona lo stesso mondo a t
   delle bolle sono scelti prima del peso cosmico, non insieme; manca la legge che vieta due aloni a meno del loro
   raggio; la prova che al bordo tutto combacia; mille bolle con un batterio (serve il contenuto «vivo», che nessun
   modulo sa ancora giudicare).
+
+## 13. Ciò che è uguale è lo stesso
+Due rami a cui si arriva per strade diverse, ma che a una scala data sono uguali in tutto ciò che a quella scala esiste,
+non sono due universi: sono lo stesso (l'identità degli indiscernibili, Leibniz). La biblioteca allora non è un albero
+che si ramifica soltanto, ma una rete in cui alcune strade si richiudono: un futuro di un ramo può essere il passato di
+un altro. L'uguaglianza è sempre a una grana (le storie a grana grossa, Gell-Mann e Hartle): sotto quella grana i due
+rami possono differire, e restano lo stesso finché nessuno guarda più fine. Una storia, per esistere, è coerente con sé
+stessa; dove una richiesta non lo è, la coerenza la dà un altro ramo, non una correzione (Deutsch 1991).
+- Fatto: la coerenza per rami (una bolla che contraddice ciò che c'è porta in un altro ramo: il «pianeta parallelo»).
+- Manca: l'impronta del contenuto di uno stato a una grana data, oltre all'indirizzo del suo percorso, per riconoscere
+  due rami uguali come uno solo; le domande che ne seguono (a che grana, con che costo, e che cosa succede ai pesi dei
+  rami quando due strade portano allo stesso stato).
