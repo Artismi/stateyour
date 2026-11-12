@@ -251,3 +251,20 @@ stessa; dove una richiesta non lo è, la coerenza la dà un altro ramo, non una 
 - Manca: l'impronta del contenuto di uno stato a una grana data, oltre all'indirizzo del suo percorso, per riconoscere
   due rami uguali come uno solo; le domande che ne seguono (a che grana, con che costo, e che cosa succede ai pesi dei
   rami quando due strade portano allo stesso stato).
+
+## 14. Anche l'immagine emerge: la resa è trasporto di luce
+Ciò che si vede non si dipinge: si calcola. L'immagine è la soluzione dell'equazione del trasporto della luce (Kajiya
+1986; Chandrasekhar per il trasferimento radiativo) attraverso la materia del modello: la luce nasce dove il modello la
+fa nascere (stelle, gas caldo, righe, fluorescenza), viene assorbita, diffusa e riflessa con le proprietà ottiche dei
+materiali del modello, e arriva a un rivelatore. Anche il rivelatore è fisica: l'occhio (curve CIE, adattamento al buio,
+abbagliamento) o uno strumento dichiarato (dove non c'è luce visibile, come sotto l'atomo o dentro un orizzonte, si
+mostra ciò che misurerebbe uno strumento, e lo si dice).
+Maglie, volumi, splat, campioni sono solo il modo di dividere lo spazio per fare il conto, come la griglia di
+un'equazione: sono leciti se ogni loro parametro viene dal modello e se, rendendoli più fini, l'immagine converge.
+Un colore, una luce, un'esposizione o una forma scelti a mano sono difetti, come le soglie di comodo (regola 7):
+dichiarati, e da togliere.
+- Fatto: il buco nero (geodetiche vere, colore del disco dal corpo nero), l'aria (diffusione multipla da pressione e gas),
+  la galassia e la ragnatela come volumi con emissione e assorbimento, la polvere che arrossa, le nebulose dalle loro righe,
+  la luce zodiacale dalla funzione di fase dei grani, la scala quantistica come accumulo di misure.
+- Manca: l'elenco di ogni scelta a mano rimasta nel motore (fattori di luce, esposizioni fisse, rumori, forme delle
+  nuvole) misurato come la mappa delle grandezze; la prova di convergenza di ogni discretizzazione.
