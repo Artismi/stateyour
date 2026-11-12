@@ -33,7 +33,7 @@ const par = new URLSearchParams(location.search), num = (k, d) => (par.has(k) ? 
 if (par.has('nudo')) document.body.classList.add('nudo');
 const N = creaNucleo(document.getElementById('tela'), { conserva: true });
 const lab = N.corpo({ nome: 'laboratorio', raggio: 1e-9 });
-let atomo, ambiente, nota, dist = num('dist', caso === 'nucleo' ? 20 : caso === 'acqua' ? 9 : caso === 'idrogeno' ? 15 : 40), unita = caso === 'nucleo' ? 1e-15 : AU.a0;
+let atomo, ambiente, nota, dist = num('dist', caso === 'nucleo' ? 20 : caso === 'acqua' ? 11 : caso === 'idrogeno' ? 15 : 40), unita = caso === 'nucleo' ? 1e-15 : AU.a0;
 const VUOTO = { fotoni: 300 }; // il fascio nel vuoto, tra pareti a temperatura ambiente
 N.tempo.velocita = num('velocita', caso === 'battimenti' ? 2e-16 : 1e-15);
 if (caso === 'idrogeno') { atomo = { Z: 1, indirizzo: 'prova/fascio/atomo 1', pos: [0, 0, 0] }; ambiente = VUOTO; nota = 'idrogeno, stato fondamentale, nel vuoto'; }
@@ -45,7 +45,10 @@ else {
   atomo = atomoDaScena(sc, iO); ambiente = { n: 3.343e28, massaKg: 18.015 * 1.66054e-27, T: 298.15, raggioM: 1.4e-10 }; nota = `l'ossigeno ${iO} dell'acqua del modello (atomi3d.scenaAcqua), con i suoi due idrogeni`;
 }
 const q = creaQuanti(N, { atomo, luogo: lab, scala: 1e-9, sigma: num('sigma', 0.25), ambiente, periodo: N.tempo.velocita / 150 });
-N.attacca(q.corpo, { distanza: dist * unita, lat: num('alto', 0.35), lon: num('giro', 0.4) });
+// per l'acqua la camera guarda la molecola di fronte (lungo la normale al suo piano), se non si dice altro
+let lat = num('alto', 0.35), lon = num('giro', 0.4);
+if ((caso === 'acqua' || caso === 'nucleo') && !par.has('alto') && atomo.molecola && atomo.molecola.length === 3) { const [, a, b] = atomo.molecola, nn = [a.pos[1] * b.pos[2] - a.pos[2] * b.pos[1], a.pos[2] * b.pos[0] - a.pos[0] * b.pos[2], a.pos[0] * b.pos[1] - a.pos[1] * b.pos[0]], l = Math.hypot(...nn); lat = Math.asin(nn[1] / l); lon = Math.atan2(-nn[2] / l, nn[0] / l); }
+N.attacca(q.corpo, { distanza: dist * unita, lat, lon });
 if (par.has('misure')) { N.tempo.t = q.stato.t0 + num('misure', 0) * q.stato.periodo + q.stato.periodo * 0.5; N.tempo.pausa = true; }
 if (par.has('pausa')) N.tempo.pausa = true;
 N.avvia();

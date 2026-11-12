@@ -73,8 +73,9 @@ export function creaQuanti(N, opzioni = {}) {
   const tau = O.periodo || Math.max(1e-30, Math.abs(N.tempo.velocita || 1) / 150), t0 = O.t0, K = O.memoria;
   // ---------- la decoerenza (camera/quanti.js `decoerenza`): Δx tra le parti della preparazione, l'atomo grande quanto il suo raggio
   let deco = null;
-  if (A.preparazione && A.preparazione.length > 1) {
-    const [p1, p2] = A.preparazione, dx = Math.abs(p1.l - p2.l) === 1 ? (2 * Q.dipoloRadiale(p1.n, p1.l, p2.n, p2.l, A.Z)) / Math.sqrt(3) : Math.abs(Q.rMedio(p1.n, p1.l, A.Z) - Q.rMedio(p2.n, p2.l, A.Z));
+  const conPeso = (A.preparazione || []).filter((t) => (Array.isArray(t.c) ? Math.hypot(t.c[0], t.c[1]) : Math.abs(t.c)) > 0);
+  if (conPeso.length > 1) {
+    const [p1, p2] = conPeso, dx = Math.abs(p1.l - p2.l) === 1 ? (2 * Q.dipoloRadiale(p1.n, p1.l, p2.n, p2.l, A.Z)) / Math.sqrt(3) : Math.abs(Q.rMedio(p1.n, p1.l, A.Z) - Q.rMedio(p2.n, p2.l, A.Z));
     deco = Q.decoerenza({ ambiente: O.ambiente || { fotoni: 2.7255 }, raggioM: Math.max(Q.rMedio(p1.n, p1.l, A.Z), Q.rMedio(p2.n, p2.l, A.Z)) * AU.a0, separazioneM: dx * AU.a0 });
     A.tempoDecoerenza = deco.tempo;
   }
@@ -169,7 +170,7 @@ export function creaQuanti(N, opzioni = {}) {
     sopra() {
       if (!riga) return; const n = stato.misure, vicino = stato.nucleoVisibile;
       let decoTesto = 'stato stazionario: niente che interferisca';
-      if (deco) decoTesto = deco.tempo > (info && info.periodoBattimento || 0) * 4 ? `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): sovrapposizione che interferisce (~${fmt(deco.tempo / info.periodoBattimento)} battimenti)` : `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): già un insieme di esiti, non interferisce`;
+      if (deco && info && info.periodoBattimento) decoTesto = deco.tempo > (info && info.periodoBattimento || 0) * 4 ? `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): sovrapposizione che interferisce (~${fmt(deco.tempo / info.periodoBattimento)} battimenti)` : `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): già un insieme di esiti, non interferisce`;
       riga.textContent = errore ? `quanti: ${errore.split('\n')[0]}` : vicino
         ? `Non è luce: ogni punto è un nucleone o un quark dove una misura lo troverebbe · istantanea ${jNow}, Z = ${nuc.Z}, A = ${nuc.A} · colore = carica (blu n, verde +, magenta −)`
         : `Non è luce: ogni punto è una misura (un evento) di un rivelatore di posizione, nel verde del suo fosforo · ${n} misure, σ = ${fmt(O.sigma)} a₀ · ${decoTesto}`;

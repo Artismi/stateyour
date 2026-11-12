@@ -167,7 +167,7 @@ export function sovrapposizione(termini, Z = 1, { indirizzo = 'sovrapposizione',
       for (let k = 0; k < 100000; k++) { let u = rnd() * sa, q = A[0]; for (const x of A) { u -= x.a; if (u <= 0) { q = x; break; } } const p = q.o.campiona(rnd), [re, im] = psiT(p[0], p[1], p[2], t); let mix = 0; for (const x of A) mix += x.a * x.o.psi(p[0], p[1], p[2]) ** 2; if (rnd() * sa * mix <= re * re + im * im) return p; }
       return [0, 0, 0]; },
   };
-  const batt = eccitati.length ? (2 * PI) / Math.abs(eccitati[0].o.E - fondo.o.E) * AU.t : Infinity;
+  const vivi = T.filter((t) => t.w > 0), batt = vivi.length > 1 ? (2 * PI) / Math.abs(vivi[1].o.E - vivi[0].o.E) * AU.t : null; // (i battimenti ci sono solo se almeno due stati hanno peso)
   return { tipo: 'sovrapposizione', Z, componenti: [comp], elettroni: 1, estensione: comp.estensione, periodoBattimento: batt, ritmoEmissione: G, tSalto, tempoDecoerenza, nucleo: { Z, A: numeroDiMassa(Z) } };
 }
 
