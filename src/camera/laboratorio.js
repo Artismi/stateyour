@@ -504,8 +504,9 @@ const tanMondo = () => mondo3d?.stato?.tanY || Math.tan(0.375);
 // mettersi sopra un punto a una quota: `vai` del nucleo conta la quota dal punto del corpo (corpo.punto), `dove` dal suolo
 // (quotaSuolo); se i due non combaciano (il rilievo che arriva dopo, in secondo piano) si corregge dello scarto misurato qui
 let quotaVoluta = null; // (l'ultima quota chiesta: se il suolo si alza sotto la camera dopo che ci si è posati, la si rimette lì)
-function vaiSopra(o) {
-  quotaVoluta = o.quota; const M = mondo3d, c = M.camera.corpo, d = M.dove(); let h = o.quota;
+let oraVaiSopra = 0;
+function vaiSopra(o, { correzione = false } = {}) {
+  quotaVoluta = o.quota; if (!correzione) oraVaiSopra = performance.now(); const M = mondo3d, c = M.camera.corpo, d = M.dove(); let h = o.quota;
   try { if (c.punto && isFinite(d.quota)) { const p = c.punto(d.lon, d.lat, d.quota), scarto = d.distanza - Math.hypot(p[0], p[1], p[2]); if (isFinite(scarto)) h += scarto; } } catch { /* senza carta: la quota com'è */ }
   M.vai({ ...o, quota: h });
 }
@@ -1960,6 +1961,9 @@ function disegnaSopra() {
   const dpr = devicePixelRatio || 1, W = tela.clientWidth, H = tela.clientHeight, cv = telaSopra; if (!W || !H) return;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+  // (appena posati, il rilievo che arriva in secondo piano può alzare o abbassare il suolo sotto la camera: per tre secondi
+  // dopo l'ultima quota chiesta la si rimette lì, così la grandezza a schermo non salta)
+  if (mondo3d && mondoPosato && quotaVoluta > 0 && quotaVoluta < 3000 && performance.now() - oraVaiSopra < 3000 && mondo3d.camera.corpo?.punto) { try { const d = mondo3d.dove(); if (isFinite(d.quota) && Math.abs(Math.log(Math.max(d.quota, 1e-4) / quotaVoluta)) > 0.15) vaiSopra({ lon: d.lon, lat: d.lat, quota: quotaVoluta, direzione: d.direzione, alza: d.alza }, { correzione: true }); } catch { /* il mondo a metà */ } }
   const mpp = scalaASchermo(); mppASchermo = mpp; barraDiScala(mpp); if (!(mpp > 0) || (passaggio && passaggio.t0 == null)) { if (!(mpp > 0)) vociSopraOra = []; return; }
   // (ciò che c'è e dove lo si chiede si ricalcola al più ogni 300 ms, o quando la scala è cambiata di più di un terzo; ogni
   // fotogramma si ridisegna soltanto, alla grandezza di adesso)
