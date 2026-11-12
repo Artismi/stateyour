@@ -15,13 +15,13 @@ import { simulaMondo, dentro, raggio, gittata, forze, LEGGI, accesoA, leggeA, ca
 import { universo } from './biblioteca.js';
 import { segmentiSezione, inclinata, VISTA_SOPRA } from './sezione.js';
 import { GRUPPI, RIPETI_BASE, motivo } from './pattern.js';
-import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo, semeEvento, motiDi } from './cosmo.js';
+import { numeroDi, REGIONI, PIANETI_MAX, STELLE, cosmo as cosmoDi, cellaDi, descriviIndirizzo, cosmoBase, ramiCosmo, cosmoRamo, semeEvento, motiDi, metriPerUnita } from './cosmo.js';
 import { fmtLunghezza } from './unita.js';
 import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi, FASCIA_MAX } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi, finestraDelPunto } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
@@ -304,17 +304,23 @@ function eventoMateria(passo) {
 // scala (un fattore 4): è la dissolvenza. Se ci si ferma a metà, sfuma da sola dopo un paio di secondi.
 let passaggio = null, telaPassaggio = null, puntoRotella = null, oraRotella = 0;
 const RAGGIO_DISSOLVENZA = Math.log(4);
-// la grandezza di ciò che si guarda, per pixel (in proporzione: conta solo il rapporto dentro la stessa vista); null: non si sa
+// LA GRANDEZZA VERA di ciò che si guarda: metri per pixel (della pagina), al centro dello schermo, in ogni vista; null dove la
+// vista non ha una scala in metri (un universo della biblioteca, che è fatto di unità sue)
 function misura() {
+  const dpr = devicePixelRatio || 1, H = tela.clientHeight || 1;
   try {
     if (vista === 'cosmo') {
-      if (mondo3d && universo3d) { const g = universo3d.bolla().grandezza; return g > 0 ? g : null; }
-      if (vistaAtomi) { const c = vistaAtomi.camera; return c.dist * Math.tan((c.fov || 0.6) / 2) * 1e-9; }
-      if (camMappa?.livello === 5) { const r = rocciaDi(camMappa); return r ? r.larghezzaM / camMappa.z : null; }
+      if (vistaQuanti) { const g = vistaQuanti.grandezza?.() ?? vistaQuanti.scala?.(); if (g > 0) return g / H; }
+      if (vistaAtomi) { const c = vistaAtomi.camera; return (2 * c.dist * Math.tan((c.fov || 0.6) / 2) * 1e-9) / H; } // (la camera degli atomi conta in nanometri)
+      if (mondo3d && universo3d) { const g = universo3d.bolla().grandezza; return g > 0 ? g / H : null; }
+      if (camMappa?.livello === 5) { if (camMappa.suAcqua) return ((camMappa.latoAcqua ?? 1) / camMappa.z) * dpr; const r = rocciaDi(camMappa); return r ? (r.larghezzaM / camMappa.z) * dpr : null; } // (l'acqua: il lato del campione, senza ridisegnarlo)
+      if (camMappa) return (metriPerUnita(camMappa.livello, camMappa.via) / camMappa.z) * dpr;
       return null;
     }
-    if (vista === 'pattern') return 1 / pat.z;
-    if (vista === 'finestra' || vista === 'dettaglio') return Math.exp(-lente);
+    const c = (vista === 'pattern' ? comp.elementi[0] : el())?.cella, u = c?.scala?.latoM && c.larghezza ? c.scala.latoM / c.larghezza : null; if (!u) return null; // (metri per unità della cella)
+    if (vista === 'dettaglio') { adattaElemento(); return u / (vt.s / vt.dpr) / Math.exp(lente); }
+    if (vista === 'finestra') return (u * c.finestra.lato) / latoFinestraCss() / Math.exp(lente);
+    if (vista === 'pattern') return u / pat.z;
   } catch { /* una vista a metà montaggio */ }
   return null;
 }
@@ -406,32 +412,59 @@ function rotellaMateria(e) {
 // Senza scheda grafica (o se il contesto non nasce) resta l'immagine piatta di mappa.js.
 let telaAtomi = null, vistaAtomi = null, chiaveAtomi = null, bottoneAtomi = null, senzaAtomi3D = false;
 function smontaAtomi() {
+  smontaQuanti();
   if (vistaAtomi) { try { vistaAtomi.libera(); } catch { /* già perso */ } }
   telaAtomi?.remove(); bottoneAtomi?.remove(); telaAtomi = null; vistaAtomi = null; bottoneAtomi = null; chiaveAtomi = null;
 }
+// allontanandosi oltre la scena degli atomi si torna all'immagine piatta, alla stessa grandezza a schermo (z dalla grandezza vera)
 function esciDagliAtomi() {
-  const img = istantanea();
-  if (camMappa.suAcqua) camMappa.latoAcqua = (camMappa.latoAcqua ?? 1e-8) * 10; else { camMappa.passoRoccia = 2; camMappa.cx = 0.5; camMappa.cy = 0.5; camMappa.z = 8 * Math.min(tela.width, tela.height); }
-  montaAtomi(); montaMondo(); disegna(); dove(); avviaPassaggio(img);
+  const img = istantanea(), mpp = misura(), r = rocciaDi(camMappa), dpr = devicePixelRatio || 1;
+  if (r && mpp > 0) { camMappa.z = (r.larghezzaM * dpr) / mpp; camMappa.cx = 0.5; camMappa.cy = 0.5; }
+  smontaAtomi(); senzaAtomiFino = camMappa.z; montaMondo(); disegna(); dove(); avviaPassaggio(img);
 }
+// (dopo esserne usciti, gli atomi in 3D tornano solo riavvicinandosi: non alla stessa grandezza da cui si è usciti)
+let senzaAtomiFino = 0;
 function montaAtomi() {
-  let sc = null; try { sc = vista === 'cosmo' && camMappa && !senzaAtomi3D ? scenaAtomi(camMappa) : null; } catch (err) { console.warn(err); sc = null; }
+  const mm = Math.min(tela.width, tela.height); if (senzaAtomiFino && !(camMappa?.z > senzaAtomiFino * 1.05)) { if (!telaAtomi) return; } else senzaAtomiFino = 0;
+  let sc = null; try { sc = vista === 'cosmo' && camMappa && !senzaAtomi3D ? scenaAtomi(camMappa, telaAtomi ? 0 : mm) : null; } catch (err) { console.warn(err); sc = null; }
   if (!sc) { if (telaAtomi) smontaAtomi(); return; }
   if (sc.chiave === chiaveAtomi) return; // stesso punto, stessa scala: la scena c'è già
-  smontaAtomi();
+  const mppPrima = misura(); smontaAtomi();
   try {
     telaAtomi = document.createElement('canvas'); telaAtomi.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'; tela.parentNode.insertBefore(telaAtomi, tela.nextSibling);
     vistaAtomi = creaVistaAtomi(telaAtomi, { alFuori: esciDagliAtomi, conserva: true });
-    vistaAtomi.suAtomo((a) => { if (!a) { dove(); return; } $('dove').textContent = `${a.nome || a.simbolo || 'un atomo'}${a.simbolo && a.nome ? ` (${a.simbolo})` : ''}${a.parte ? ` · ${typeof a.parte === 'string' ? a.parte : a.parte.nome || ''}` : ''}${a.rappresenta > 1 ? ` · da qui questa sfera ne rappresenta ${a.rappresenta}: avvicinati e tornano gli atomi` : ''}`; });
+    vistaAtomi.suAtomo((a) => { if (!a) { dove(); return; } ultimoAtomo = a; $('dove').textContent = `${a.nome || a.simbolo || 'un atomo'}${a.simbolo && a.nome ? ` (${a.simbolo})` : ''}${a.parte ? ` · ${typeof a.parte === 'string' ? a.parte : a.parte.nome || ''}` : ''}${a.rappresenta > 1 ? ` · da qui questa sfera ne rappresenta ${a.rappresenta}: avvicinati e tornano gli atomi` : ''}`; });
     vistaAtomi.carica(sc.crea()); vistaAtomi.avvia(); chiaveAtomi = sc.chiave;
-    // oltre il più vicino possibile (dentro una molecola): sotto le molecole dell'acqua c'è l'evento vero che le attraversa
+    // la camera degli atomi parte alla grandezza a cui si era (niente salto): lo schermo alto quanto era alto un attimo prima
+    { const c = vistaAtomi.camera; if (mppPrima > 0) c.dist = (mppPrima * tela.clientHeight) / (2 * Math.tan((c.fov || 0.6) / 2)) * 1e9; }
+    // oltre il più vicino possibile (dentro l'atomo): la scala quantistica, alla sua grandezza (montaQuanti)
     telaAtomi.addEventListener('wheel', (e) => {
       if (!(e.deltaY < 0 && vistaAtomi && vistaAtomi.camera.dist <= 0.1)) return;
-      e.stopImmediatePropagation(); e.preventDefault();
-      if (camMappa.suAcqua) { const img = istantanea(); camMappa.eventoAcqua = true; camMappa.cx = 0.5; camMappa.cy = 0.5; camMappa.z = Math.min(tela.width, tela.height); montaAtomi(); disegna(); dove(); avviaPassaggio(img); return; }
-      const m = colpisciMappa(camMappa, tela.width / 2, tela.height / 2, tela.width, tela.height)?.materia; if (m) entraTracce(m);
+      e.stopImmediatePropagation(); e.preventDefault(); montaQuanti();
     }, { capture: true, passive: false });
   } catch (err) { console.warn('la vista degli atomi in 3D non si è potuta montare: resta l\'immagine piatta', err); smontaAtomi(); senzaAtomi3D = true; }
+}
+// ---------- SOTTO GLI ATOMI: LA SCALA QUANTISTICA (src/tre/quanti.js, creaQuanti(N, { atomo, luogo, scala }): un altro
+// modulo). Si monta sopra gli atomi, alla grandezza a cui si è arrivati (scala: l'altezza dello schermo, in metri), con
+// l'atomo che si aveva sotto gli occhi e il luogo di quella materia. Se il modulo non c'è ancora lo si dice, e si resta qui.
+let telaQuanti = null, vistaQuanti = null, nucleoQuanti = null, ultimoAtomo = null, quantiAssenti = false;
+function smontaQuanti() {
+  try { vistaQuanti?.libera?.(); nucleoQuanti?.libera?.(); } catch { /* già perso */ }
+  telaQuanti?.remove(); telaQuanti = null; vistaQuanti = null; nucleoQuanti = null;
+}
+async function montaQuanti() {
+  if (telaQuanti || quantiAssenti) { if (quantiAssenti) $('dove').textContent = 'Sotto gli atomi: la scala quantistica (src/tre/quanti.js) non è ancora scritta. Qui finisce, per ora, la scala.'; return; }
+  const scala = (misura() || 0) * tela.clientHeight, r = camMappa ? rocciaDi(camMappa) : null;
+  let mod; try { mod = await import('../tre/quanti.js'); } catch { quantiAssenti = true; return montaQuanti(); }
+  if (!vistaAtomi || telaQuanti || typeof mod.creaQuanti !== 'function') return;
+  try {
+    telaQuanti = document.createElement('canvas'); telaQuanti.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;outline:none'; (telaAtomi || tela).parentNode.insertBefore(telaQuanti, (telaAtomi || tela).nextSibling);
+    nucleoQuanti = creaNucleo(telaQuanti, { conserva: true });
+    vistaQuanti = mod.creaQuanti(nucleoQuanti, { atomo: ultimoAtomo, luogo: r?.luogo || r?.base?.luogo || null, scala, alFuori: () => { const img = istantanea(); smontaQuanti(); disegna(); dove(); avviaPassaggio(img); } });
+    nucleoQuanti.avvia?.();
+    // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi
+    telaQuanti.addEventListener('wheel', (e) => { const g = vistaQuanti?.grandezza?.() ?? vistaQuanti?.scala?.(); if (e.deltaY > 0 && (!(g > 0) || g >= scala)) { e.stopImmediatePropagation(); e.preventDefault(); const img = istantanea(); smontaQuanti(); disegna(); dove(); avviaPassaggio(img); } }, { capture: true, passive: false });
+  } catch (err) { console.warn('la scala quantistica non si è potuta montare', err); smontaQuanti(); quantiAssenti = true; }
 }
 // ---------- IL MONDO IN TRE DIMENSIONI (src/tre): nella vista «il cosmo», dal cosmo fino al suolo, lo spazio in cui ci si
 // muove prende il posto della mappa piatta (che resta: senza WebGL2, e a richiesta col bottone «mappa piatta»). Una tela
@@ -1102,7 +1135,9 @@ tela.addEventListener('wheel', (e) => {
     e.preventDefault(); volo = null;
     const r = tela.getBoundingClientRect(), dpr = devicePixelRatio || 1, k = Math.exp(-e.deltaY * 0.0015), m = Math.min(tela.width, tela.height);
     // nella roccia (livello 5): ogni cambio di passo (cristallo, lamina, atomi; acqua dieci volte più piccola) è una dissolvenza
-    const in5 = camMappa?.livello === 5, chiave = (c) => `${c.livello}|${c.passoRoccia}|${c.latoAcqua}|${c.eventoAcqua}`, prima = in5 ? chiave(camMappa) : null, img = in5 ? istantanea() : null;
+    // (dentro la roccia i passi sono una scala sola, disegnati uno dentro l'altro: niente dissolvenza; nell'acqua il campione
+    // dieci volte più piccolo è un'immagine nuova alla stessa grandezza: dissolvenza)
+    const in5 = camMappa?.livello === 5, chiave = (c) => `${c.livello}|${c.suAcqua ? c.latoAcqua : ''}`, prima = in5 ? chiave(camMappa) : null, img = in5 ? istantanea() : null;
     if (in5) {
       const R = rocciaDi(camMappa);
       // in cima (la roccia intera, o il campione d'acqua più grande): si torna nello spazio sopra lo stesso punto, guardando giù,
@@ -1112,9 +1147,8 @@ tela.addEventListener('wheel', (e) => {
         camMappa = { livello: 4, via: { ...camMappa.via }, cx: camMappa.roccia.cx, cy: camMappa.roccia.cy, z: 5.5e6, quota3d: q };
         sopraMappa = null; smontaAtomi(); montaMondo(); disegna(); dove(); mostraPannello(); avviaPassaggio(img, { pronto: () => mondoPosato }); return;
       }
-      // in fondo (gli atomi del cristallo, l'evento vero nell'acqua): avvicinandosi ancora, le tracce delle particelle di quel punto
-      const fondo = camMappa.suAcqua ? camMappa.eventoAcqua : camMappa.passoRoccia === 3;
-      if (k > 1 && fondo && camMappa.z >= 11.5 * m) { const mt = colpisciMappa(camMappa, tela.width / 2, tela.height / 2, tela.width, tela.height)?.materia; if (mt) { entraTracce(mt); return; } }
+      // (in fondo, gli atomi: in tre dimensioni li monta montaAtomi quando il loro campione riempie lo schermo; le tracce delle
+      // particelle non stanno in fondo ma alla loro scala, sovrapposte a ciò che c'è lì: disegnaSopra)
     }
     const esito = zoomMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, k, tela.width, tela.height);
     if (esito?.entra) { entraRegione(esito.entra); return; }
@@ -1894,7 +1928,77 @@ adattaPattern(); aggiornaVista();
 apriCosmo();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
+// ---------- CIÒ CHE C'È A OGNI SCALA, SOVRAPPOSTO: una tela sopra tutte le viste, che non prende la mano. A ogni grandezza ci si
+// mette ciò che il modello ha a quella grandezza nel punto che si guarda, alla sua grandezza vera, centrato:
+//   · LA FINESTRA DELLE PARTICELLE di quel punto (regola 10: è un luogo e una scala): le tracce, larghe quanto la cella
+//     (le tracce di un muone nel ghiaccio ~30 cm sopra il suolo; le α attorno al granello tra il cristallo e la lamina);
+//     scendendo la si attraversa: compare piccola, riempie lo schermo, si allarga oltre. Un clic nella roccia ci entra.
+//   · nello spazio a pochi metri dal suolo, LA ROCCIA (o l'acqua) di quel punto, alla sua grandezza: quando riempie lo
+//     schermo si è già dentro (scendiNellaMateria), allo stesso posto e alla stessa grandezza.
+// Il punto è quello sotto la camera (nello spazio, guardando giù) o la roccia in cui si è; si ricalcola al più ogni 300 ms.
+const telaSopra = document.createElement('canvas'); telaSopra.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2'; tela.parentNode.appendChild(telaSopra);
+let sopraCalcolo = { t: 0, mpp: 0 }, vociSopraOra = [];
+function camDelPunto() { // → { cam, verticale, chiave } o null
+  if (vista !== 'cosmo' || vistaAtomi || telaQuanti) return null;
+  if (mondo3d && universo3d && mondo3d.camera.corpo?.punto) { const d = mondo3d.dove(), v = universo3d.viaOra(); if (v.pianeta == null || !(d.quota < 600) || !(d.quota > 0)) return null; return { cam: camRoccia(d, v), verticale: Math.max(0, Math.min(1, (-(d.alza ?? 0) - 1.2) / 0.3)), chiave: `${JSON.stringify(v)}|${d.lon.toFixed(7)}|${d.lat.toFixed(7)}`, spazio: true }; }
+  if (camMappa?.livello === 5) return { cam: camMappa, verticale: 1, chiave: `5|${JSON.stringify(camMappa.via)}|${camMappa.roccia?.cx}|${camMappa.roccia?.cy}|${camMappa.mineraleRoccia}`, spazio: false };
+  return null;
+}
+function disegnaSopra() {
+  requestAnimationFrame(disegnaSopra);
+  const dpr = devicePixelRatio || 1, W = tela.clientWidth, H = tela.clientHeight, cv = telaSopra; if (!W || !H) return;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+  const mpp = misura(); barraDiScala(mpp); if (!(mpp > 0)) { vociSopraOra = []; return; }
+  // (ciò che c'è e dove lo si chiede si ricalcola al più ogni 300 ms, o quando la scala è cambiata di più di un terzo; ogni
+  // fotogramma si ridisegna soltanto, alla grandezza di adesso)
+  const ora = performance.now(), cambiata = !(sopraCalcolo.mpp > 0) || Math.abs(Math.log(mpp / sopraCalcolo.mpp)) > 0.3;
+  let voci = vociSopraOra; const m = Math.min(W, H);
+  if (ora - sopraCalcolo.t > 300 || cambiata) {
+    sopraCalcolo.t = ora; sopraCalcolo.mpp = mpp; let P = null; try { P = camDelPunto(); } catch { P = null; }
+    voci = []; const dentro = (L) => L / mpp > 2 && L / mpp < 60 * Math.max(W, H);
+    if (P) try {
+      if (P.spazio) { const r = rocciaDi(P.cam); if (r && dentro(r.larghezzaM)) voci.push({ L: r.larghezzaM, cv: r.cv, liscio: r.liscio, peso: P.verticale, nome: r.nome, bordo: true }); }
+      const f0 = finestraDelPunto(P.cam); if (f0 && dentro(f0.latoM) && f0.latoM / mpp > m / 40) { const f = finestraDelPunto(P.cam, { tracce: true }); voci.push({ L: f.latoM, cv: f.cv, liscio: true, peso: P.spazio ? Math.max(0.35, P.verticale) : 1, nome: `le particelle: ${f.che} (una finestra larga ${fmtLunghezza(f.latoM)})`, tracce: true }); }
+    } catch (err) { console.warn(err); }
+  }
+  vociSopraOra = voci;
+  const [qx, qy] = [W / 2, H / 2];
+  for (const v of voci) {
+    const sz = v.L / mpp, entra = Math.max(0, Math.min(1, Math.log(sz / (0.02 * m)) / Math.log(5))), esce = v.tracce ? Math.max(0, Math.min(1, Math.log((40 * Math.max(W, H)) / sz) / Math.log(5))) : 1, a = v.peso * Math.min(entra, esce);
+    const x = qx - sz / 2, y = qy - sz / 2;
+    if (a > 0 && v.cv) { c.globalAlpha = a; c.imageSmoothingEnabled = !!v.liscio; const N = v.cv.width, k = (sz * dpr) / N, x0 = Math.max(0, Math.floor((-x * dpr) / k)), y0 = Math.max(0, Math.floor((-y * dpr) / k)), x1 = Math.min(N, Math.ceil(((W - x) * dpr) / k)), y1 = Math.min(N, Math.ceil(((H - y) * dpr) / k)); if (x1 > x0 && y1 > y0) c.drawImage(v.cv, x0, y0, x1 - x0, y1 - y0, x * dpr + x0 * k, y * dpr + y0 * k, (x1 - x0) * k, (y1 - y0) * k); c.globalAlpha = 1; c.imageSmoothingEnabled = true; }
+    if (v.peso > 0 && sz < 1.2 * m) { c.strokeStyle = v.tracce ? `rgba(150,220,255,${0.75 * v.peso})` : `rgba(255,215,150,${0.6 * v.peso * (1 - entra)})`; c.lineWidth = dpr; c.strokeRect(x * dpr, y * dpr, sz * dpr, sz * dpr); }
+    if (v.tracce && v.peso > 0 && sz > 0.04 * m && sz < 3 * m) { c.font = `${11 * dpr}px ui-monospace, monospace`; c.fillStyle = `rgba(170,225,255,${0.9 * v.peso})`; c.fillText(v.nome, Math.max(8, x) * dpr, Math.max(16, y - 5) * dpr); }
+  }
+}
+// LA BARRA DI SCALA VERA, sempre visibile, in una riga: un tratto di lunghezza tonda (1, 2, 5 × 10ⁿ metri) e che cosa si guarda
+const barraScala = document.getElementById('barraScala');
+let barraPrima = '', barraOra = 0, barraMpp = 1;
+function cosaSiGuarda() {
+  try {
+    if (vista === 'cosmo') {
+      if (telaQuanti) return 'la scala quantistica';
+      if (vistaAtomi) return chiaveAtomi && camMappa ? scenaAtomi(camMappa)?.che || 'gli atomi' : 'gli atomi';
+      if (mondo3d && universo3d) return scalaDi(universo3d.bolla().grandezza).nome;
+      if (camMappa?.livello === 5) return rocciaDi(camMappa)?.nome || 'la roccia';
+      return percorso(camMappa).slice(-1)[0] || '';
+    }
+    return comp?.nome || '';
+  } catch { return ''; }
+}
+function barraDiScala(mpp) {
+  if (!barraScala) return;
+  if (!(mpp > 0)) { if (barraPrima !== '') { barraScala.innerHTML = ''; barraPrima = ''; } return; }
+  const ora = performance.now(); if (ora - barraOra < 200 && Math.abs(Math.log(mpp / barraMpp)) < 0.02) return; barraOra = ora; barraMpp = mpp; // (il testo al più cinque volte al secondo)
+  const voluto = 120 * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e, px = passo / mpp;
+  const sopra = vociSopraOra.find((v) => v.tracce && v.L / mpp > 0.05 * Math.min(tela.clientWidth, tela.clientHeight)), testo = `${fmtLunghezza(passo)} · lo schermo è largo ${fmtLunghezza(mpp * tela.clientWidth)} · ${cosaSiGuarda()}${sopra ? ` · con ${sopra.nome.replace(/^le particelle: /, 'le particelle di questo punto: ')}` : ''}`;
+  const k = `${px.toFixed(1)}|${testo}`; if (k === barraPrima) return; barraPrima = k;
+  barraScala.innerHTML = `<i style="width:${px.toFixed(1)}px"></i><span></span>`; barraScala.querySelector('span').textContent = testo;
+}
+requestAnimationFrame(disegnaSopra);
 window.__camera = {
+  mpp: () => misura(), cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; },
   get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; },
   entra, carica, seleziona: (s) => { sel = s; disegna(); mostraPannello(); }, sonda: (s) => { sonda = s; disegna(); },
   vai: (v) => { vista = v; aggiornaVista(); }, tempo: (t) => { tempo = t; aggiornaTempo(); disegna(); },

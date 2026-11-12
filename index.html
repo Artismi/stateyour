@@ -82,6 +82,10 @@
   .sotto .nota { margin: 0; }
   .stato { font-size: 12px; padding: 6px 12px; border-top: 1px solid var(--riga); display: flex; gap: 14px; align-items: baseline; height: 6.4em; flex: none; overflow-y: auto; } /* (alta sempre uguale: la tela non cambia grandezza quando cambia il testo, e lo zoom resta continuo) */
   #dove { color: var(--inchiostro); }
+  /* la barra di scala vera: una riga sola, sempre, in ogni vista (laboratorio.js, barraDiScala) */
+  .barra-scala { position: absolute; left: 12px; bottom: 10px; z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); font: 12px ui-monospace, monospace; color: #f3efe6; text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; }
+  .barra-scala i { display: block; height: 6px; border: 1.5px solid #f3efe6; border-top: none; box-shadow: 0 1px 2px #000; flex: none; }
+  .barra-scala span { overflow: hidden; text-overflow: ellipsis; }
   #misure { color: var(--grigio); margin-left: auto; }
   #errore { color: #b8412b; }
 
@@ -164,6 +168,7 @@
   <section class="scena">
     <div class="tele">
       <canvas id="tela"></canvas><canvas id="tela3d" hidden></canvas>
+      <div id="barraScala" class="barra-scala" title="la grandezza vera di ciò che si guarda"></div>
       <div class="sopra"><div id="forze" class="forze"></div><div id="spiegaForza"></div></div>
       <div class="aggiungi">
         <span class="titolo">aggiungi</span>
