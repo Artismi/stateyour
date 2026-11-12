@@ -351,7 +351,7 @@ export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0, fiumi = 
   // tra celle vicine, l'ingorgo e la tenuta, lo spostamento, il bilancio di ogni cella)
   if (!st.passa) { st.m ??= new Float64Array(N).fill(hM); st.x ??= new Float64Array(N); st.im ??= Float64Array.from(st.m, (v) => 1 / v); st.hb = new Float64Array(N).fill(L.base(Number.isFinite(st.mare) ? st.mare : 0, 0));
     for (const nome of ['dh', 'dw', 'dq', 'vten', 'vin', 'vout', 'numM', 'numX', 'entra', 'esce', 'sete']) st[nome] ??= new Float64Array(N);
-    st.tira = new Float64Array(N).fill(1); st.passa = new Float64Array(N).fill(1); st.tiene = new Uint8Array(2 * N); st.piena = Uint8Array.from(st.h, (v, k) => (v > 0 && v * st.im[k] >= 1 ? 1 : 0)); st.FF = new Float64Array(2 * N); st.geo = vicine(W, H);
+    st.tira = new Float64Array(N).fill(1); st.passa = new Float64Array(N).fill(1); st.tiene = new Uint8Array(2 * N); st.piena = Uint8Array.from(st.h, (v, k) => (v > 0 && v * st.im[k] >= 1 ? 1 : 0)); st.asciutta = Uint8Array.from(st.h, (v, k) => (v > 0 && v >= st.hb[k] ? 1 : 0)); st.FF = new Float64Array(2 * N); st.geo = vicine(W, H);
     if (st.cop) { st.dc ??= new Float64Array(N); st.via ??= new Float64Array(N); } st.verso = false; st.xMax ??= 1; }
   scambi(st, ca); ingorgo(st, ca, L); sposta(st, ca, L, kappa, cede); bilancio(st, ca, L, dtMa, apporto, fiumi);
   return st;
@@ -458,7 +458,7 @@ function sposta(st, ca, L, kappa, cede) {
     } }
 }
 function bilancio(st, ca, L, dtMa, apporto, fiumi) {
-  const { W, H, h, a, sub, m, x, im, hb, dh, dw, dq, tira, vten, piena, vin, vout, numM, numX, entra, esce, passa, sete } = st, N = W * H, { Q } = ca;
+  const { W, H, h, a, sub, m, x, im, hb, dh, dw, dq, tira, vten, piena, vin, vout, numM, numX, entra, esce, passa, sete, asciutta } = st, N = W * H, vE = st.geo.v[0], mW = st.geo.m[0];
   const mare = Number.isFinite(st.mare) ? st.mare : 0 /* (senza mare: lo zero delle quote, come prima) */, hM = C.hMargine, h0 = L.base(mare, 0), mMin = Math.min(hM, L.basalto), spegne = Math.exp((-dtMa * 1e6) / L.tau); let xMax = 0;
   const X0 = 0.05, dHb = (L.base(mare, X0) - h0) / X0; // (lo spessore di base di una colonna poco calda: in linea retta fino a x = X0; oltre, la formula intera)
   const cop = st.cop || null, copMax = st.copMax ?? Infinity, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null;
@@ -469,7 +469,7 @@ function bilancio(st, ca, L, dtMa, apporto, fiumi) {
   for (let k = 0; k < N; k++) {
     const hv = h[k]; let imk = im[k], w0 = 1 - hv * imk; if (w0 < 0) w0 = 0;
     let q = w0 * a[k] + dq[k]; if (q < 0) q = 0; const w1 = w0 + dw[k], s0 = sub[k], nuova = apporto * s0 * s0;
-    const posa = deposito * sete[k]; let hn = hv + dh[k] + nuova + posa, e = 0, hbk = h0; if (hn < VELO) { if (hn > 0) fango += hn; hn = 0; } // (un velo più sottile di VELO non è crosta: va col fango dei fiumi, e si posa sulle coste)
+    let posa = 0, hn = hv + dh[k] + nuova, e = 0, hbk = h0; if (hn < VELO) { if (hn > 0) fango += hn; hn = 0; } // (un velo più sottile di VELO non è crosta: va col fango dei fiumi, e si posa sulle coste)
     if (hv > 0 || hn > 0) {
       // QUANTO LA CROSTA È STRETTA O STIRATA in questo passo (G, metri di spessore): lo spessore per la differenza tra la
       // velocità con cui la crosta è entrata davvero e quella con cui è uscita (dopo l'ingorgo e la tenuta). G > 0: si
@@ -491,8 +491,16 @@ function bilancio(st, ca, L, dtMa, apporto, fiumi) {
       if (!(hn > 0)) mk = hM; if (mk !== m[k]) { m[k] = mk; imk = 1 / mk; im[k] = imk; }
     }
     hb[k] = hbk;
+    // IL SEDIMENTO DEI FIUMI SI POSA ALLA FOCE (un bilancio di massa, senza frazioni): alla cella sommersa che tocca la terra
+    // tocca una parte del fango in viaggio in proporzione al tratto di costa (sete: quanti dei suoi quattro lati danno su
+    // una cella asciutta); ne prende quanto ce ne sta fino al pelo del mare (lo spazio di accomodamento: hb − h, che la
+    // subsidenza termica riapre da sé perché hb sale quando x si spegne), e ciò che avanza resta in viaggio: al passo dopo
+    // trova il fronte del delta una cella più avanti. (Prima andava alle celle vicine ai continenti in proporzione a quanto
+    // erano fonde: i fondali accanto alle coste se lo prendevano quasi tutto e le piattaforme restavano affamate.)
+    { const vuole = deposito * sete[k]; if (vuole > 0) { const spazio = hbk - hn; posa = spazio <= 0 ? 0 : vuole < spazio ? vuole : spazio; hn += posa; fango += vuole - posa; } }
     // i FIUMI: ciò che sporge dal mare è terra emersa, e l'acqua la porta via…
-    if (hn > hbk) { e = fiumi * (hn - hbk); hn -= e; fango += e; sete[k] = 0; } else { const s = Q[k] * (hbk - hn); sete[k] = s; sete2 += s; } // …fino alle coste, dove si deposita
+    if (hn > hbk) { e = fiumi * (hn - hbk); hn -= e; fango += e; sete[k] = 0; asciutta[k] = 1; }
+    else { let w = asciutta[vE[k]] + asciutta[mW[k]]; if (k >= W) w += asciutta[k - W]; if (k < N - W) w += asciutta[k + W]; sete[k] = w; sete2 += w; asciutta[k] = hn > 0 && hn >= hbk - 1e-3 ? 1 : 0; } // …fino alle coste
     h[k] = hn; totale += hn; piena[k] = hn > 0 && hn * imk >= 1 ? 1 : 0;
     if (cop) { // il bilancio della copertura: quella che c'era e che è arrivata, più ciò che si è posato, meno ciò che è stato tolto
       let c = cop[k] + dc[k] + posa - via[k] - e; if (c > hn) c = hn; if (c > copMax) c = copMax; if (!(c > 0)) c = 0; cop[k] = c;
