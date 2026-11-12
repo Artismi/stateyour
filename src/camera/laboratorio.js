@@ -304,6 +304,10 @@ function eventoMateria(passo) {
 // scala (un fattore 4): è la dissolvenza. Se ci si ferma a metà, sfuma da sola dopo un paio di secondi.
 let passaggio = null, telaPassaggio = null, puntoRotella = null, oraRotella = 0;
 const RAGGIO_DISSOLVENZA = Math.log(4);
+// la grandezza di ciò che c'è davvero a schermo: mentre la vista nuova si prepara (il mondo che si posa sopra il punto) a
+// schermo c'è ancora l'istantanea di prima, ferma alla sua grandezza
+let mppASchermo = null;
+function scalaASchermo() { const P = passaggio; if (P && P.t0 == null && P.mppImg > 0) return P.mppImg; return misura(); }
 // LA GRANDEZZA VERA di ciò che si guarda: metri per pixel (della pagina), al centro dello schermo, in ogni vista; null dove la
 // vista non ha una scala in metri (un universo della biblioteca, che è fatto di unità sue)
 function misura() {
@@ -340,7 +344,7 @@ function istantanea() {
 function avviaPassaggio(img, { pronto = null } = {}) {
   if (!img) return;
   if (!telaPassaggio) { telaPassaggio = document.createElement('canvas'); telaPassaggio.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none'; tela3d.parentNode.insertBefore(telaPassaggio, tela3d.nextSibling); }
-  const corre = !!passaggio; passaggio = { img, m0: null, t0: null, inizio: performance.now(), pronto, centro: puntoRotella ? puntoRotella.slice() : null };
+  const corre = !!passaggio; passaggio = { img, m0: null, t0: null, inizio: performance.now(), pronto, centro: puntoRotella ? puntoRotella.slice() : null, mppImg: mppASchermo };
   if (!corre) requestAnimationFrame(disegnaPassaggio);
 }
 function disegnaPassaggio() {
@@ -1956,7 +1960,7 @@ function disegnaSopra() {
   const dpr = devicePixelRatio || 1, W = tela.clientWidth, H = tela.clientHeight, cv = telaSopra; if (!W || !H) return;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
-  const mpp = misura(); barraDiScala(mpp); if (!(mpp > 0)) { vociSopraOra = []; return; }
+  const mpp = scalaASchermo(); mppASchermo = mpp; barraDiScala(mpp); if (!(mpp > 0) || (passaggio && passaggio.t0 == null)) { if (!(mpp > 0)) vociSopraOra = []; return; }
   // (ciò che c'è e dove lo si chiede si ricalcola al più ogni 300 ms, o quando la scala è cambiata di più di un terzo; ogni
   // fotogramma si ridisegna soltanto, alla grandezza di adesso)
   const ora = performance.now(), cambiata = !(sopraCalcolo.mpp > 0) || Math.abs(Math.log(mpp / sopraCalcolo.mpp)) > 0.3;
@@ -2006,7 +2010,7 @@ function barraDiScala(mpp) {
 }
 requestAnimationFrame(disegnaSopra);
 window.__camera = {
-  mpp: () => misura(), cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; },
+  mpp: () => scalaASchermo(), roccia: (c) => rocciaDi(c), get passaggio() { return !!passaggio; }, cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; },
   get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; },
   entra, carica, seleziona: (s) => { sel = s; disegna(); mostraPannello(); }, sonda: (s) => { sonda = s; disegna(); },
   vai: (v) => { vista = v; aggiornaVista(); }, tempo: (t) => { tempo = t; aggiornaTempo(); disegna(); },
