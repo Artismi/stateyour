@@ -436,11 +436,11 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       if (!aTerra) return null; const pz = [d[0] * fine, r + d[1] * fine, d[2] * fine]; for (let c = 0; c < 3; c++) Te[c] = Math.exp(-od[c]); return [Te, (pz[0] * s[0] + pz[1] * s[1] + pz[2] * s[2]) / R]; };
     const D64 = dirs(64), D256 = dirs(256).filter((d) => d[1] > 0);
     for (let ih = 0; ih < NM; ih++) for (let im = 0; im < NM; im++) {
-      const r = R + cima * (ih / (NM - 1)) ** 2, mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], L2 = [0, 0, 0], fm = [0, 0, 0];
+      const r = R + Math.max(1, cima * (ih / (NM - 1)) ** 2), mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], L2 = [0, 0, 0], fm = [0, 0, 0];
       for (const d of D64) {
         const suolo = marcia(r, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) { const sc = betaR[c] * rR + betaM * rM; L2[c] += (Te[c] * sc * Ts[c] * ds) / (4 * Math.PI); fm[c] += Te[c] * sc * ds; } });
         if (suolo && suolo[1] > 0) { sole(R, suolo[1], Ts); for (let c = 0; c < 3; c++) L2[c] += (suolo[0][c] * Ts[c] * suolo[1] * albedo) / Math.PI; } }
-      for (let c = 0; c < 3; c++) ms[4 * (ih * NM + im) + c] = L2[c] / 64 / Math.max(0.05, 1 - fm[c] / 64);
+      for (let c = 0; c < 3; c++) { const v = L2[c] / 64 / Math.max(0.05, 1 - fm[c] / 64); ms[4 * (ih * NM + im) + c] = Number.isFinite(v) ? v : 0; }
       ms[4 * (ih * NM + im) + 3] = 1; }
     const psi = (rp, mus, c) => { const x = Math.max(0, Math.min(NM - 1.001, (mus * 0.5 + 0.5) * (NM - 1))), y = Math.max(0, Math.min(NM - 1.001, Math.sqrt(Math.max(0, Math.min(1, (rp - R) / cima))) * (NM - 1))), i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, q = (jj, ii) => ms[4 * (jj * NM + ii) + c];
       return (q(j, i) * (1 - u) + q(j, i + 1) * u) * (1 - v) + (q(j + 1, i) * (1 - u) + q(j + 1, i + 1) * u) * v; };

@@ -61,6 +61,18 @@ function orizzonti(sup, GW, GH, ox, oy, giro, passoLat, v0, v1) {
   return { o1, o2, cielo };
 }
 
+// LO ZERO DELLE QUOTE. Le quote di geologia.js non sono contate dal raggio del pianeta (P.raggioM, il raggio del corpo
+// in nucleo.js): su un mondo d'acqua il livello del mare sta a migliaia di km sopra il loro zero (misurato: +1 711 km su
+// g34 s60 p6, +4 709 km su un altro), e il suolo disegnato stava migliaia di km sopra il corpo (la camera posata col
+// raggio del corpo finiva sotto il suolo appena arrivava la prima tessera). Qui le quote che vanno alla scheda e a
+// `pianeta.info` / `corpo.punto` sono contate dalla superficie media (terra o acqua, pesata per l'area) del livello 0, che
+// è il raggio del corpo: prima e dopo l'arrivo delle tessere il suolo resta dov'è (a meno del rilievo vero).
+function zeroDi(se) {
+  const { W: w, H: h, alt, lago } = se, mare = Number.isFinite(se.mare) ? se.mare : -Infinity; let s = 0, a = 0;
+  for (let j = 0; j < h; j++) { const c = Math.cos((0.5 - (j + 0.5) / h) * Math.PI); for (let i = 0; i < w; i++) { const k = j * w + i; let z = Math.max(alt[k], mare); if (lago && lago[k] > 0) z = Math.max(z, alt[k] + lago[k]); s += c * z; a += c; } }
+  return a > 0 ? s / a : 0;
+}
+
 function prepara(L, tx, ty) {
   const sf = tessera(B.k, B.se, B.cl, L, tx, ty, B.seme), mare = sf.mare, haMare = isFinite(mare), liquido = !!(B.mare && B.mare.esiste);
   // --- quote e laghi col bordo di un punto: dal bordo largo della tessera, o (livello 0) richiudendo in longitudine
@@ -85,7 +97,7 @@ function prepara(L, tx, ty) {
   const gelato = haMare && !liquido;
   for (let c = 0; c < WB * HB; c++) {
     let h = alt[c], l = isNaN(liv[c]) ? -1e5 : liv[c]; if (gelato && l > h) { h = l; } if (gelato) l = -1e5;
-    altLiv[2 * c] = h; altLiv[2 * c + 1] = l; const s = Math.max(h, l); if (s < hMin) hMin = s; if (s > hMax) hMax = s;
+    h -= B.zero; if (l > -9e4) l -= B.zero; altLiv[2 * c] = h; altLiv[2 * c + 1] = l; const s = Math.max(h, l); if (s < hMin) hMin = s; if (s > hMax) hMax = s;
   }
   // --- le pendenze (differenze centrali sul terreno col bordo), in metri su metro
   const pend = new Float32Array(4 * W * H), [, v0, , v1] = sf.rett || [0, 0, 1, 1], passoLat = ((v1 - v0) * Math.PI * B.raggioM) / H;
@@ -152,7 +164,7 @@ function prepara(L, tx, ty) {
 
 self.onmessage = (e) => {
   const d = e.data;
-  if (d.tipo === 'base') { B = d; return; }
+  if (d.tipo === 'base') { B = d; B.zero = zeroDi(d.se); return; }
   if (d.tipo !== 'tessera' || !B) return;
   try { const t0 = performance.now(), r = prepara(d.L, d.tx, d.ty);
     self.postMessage({ n: d.n, k: B.k, L: d.L, tx: d.tx, ty: d.ty, ...r, ms: performance.now() - t0 }, [r.altLiv.buffer, r.pend.buffer, r.terra.buffer, r.oriz1.buffer, r.oriz2.buffer, ...(r.acqua ? [r.acqua.buffer] : [])]);
