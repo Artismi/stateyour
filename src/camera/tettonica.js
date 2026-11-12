@@ -42,9 +42,11 @@
 //     fiumi portano alle coste ciò che sporge dal mare (lo riducono a 1/e in 130 milioni di anni);
 //   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
 // CHE COSA NON TORNA O MANCA (misurato su 8 Terre di prova, 2026-11: test_erosione, test_tettonica): le terre emerse sono
-// il 19–22% (vero 29) e la crosta continentale sommersa il 15% (vero 11): gli scudi stanno al livello del mare e una
-// parte sotto, perché il sedimento dei fiumi va alle celle in proporzione a quanto sono fonde (i fondali accanto alle
-// coste se lo prendono, le piattaforme restano affamate); così la moda dei fondali cade sulle piattaforme. Un rift è
+// il 24% qui e il 20% dopo erosione() (vero 29); la crosta continentale sommersa è l'11% (vero 11) da quando il sedimento
+// dei fiumi si posa alla foce fino al pelo del mare (prima, in proporzione a quanto le celle erano fonde, era il 15%).
+// La fascia 0–250 m sotto il mare (il 5% della superficie, come sulla Terra) batte ogni fascia abissale: la legge dei
+// fondali, √età fino a 6000 m, sparge gli abissi su 3500 m invece di raccoglierli attorno a 4500. Il fine sospeso e le
+// torbide che vanno ai fondali non ci sono: tutto il sedimento resta sul fronte dei delta. Un rift è
 // largo una cella (150 km): i margini stirati a più celle non si formano (0,4% della superficie). Il mantello
 // litosferico ispessito sotto le catene non si tiene (x ≥ 0), e manca il calore radioattivo della crosta: la crosta
 // fonde solo oltre ~55–60 km, le radici delle catene vecchie restano finché l'erosione le toglie. I veli più sottili
@@ -531,6 +533,11 @@ function raffina(src, W, H) {
 // di oggi: 7,177·10⁹ km³ su 210,4·10⁶ km² (Cogley 1984, nella tabella di Taylor e McLennan 1995 [V, 2026-11]), cioè
 // 14,07 km di spessore medio su tutta la Terra: 0,370 della superficie a 38 km. (Prima era «un terzo»: 0,338, il 9% in
 // meno; quel terzo è la parte EMERSA più le piattaforme, non il volume.)
+// È UNA TARATURA SULLA TERRA, e lo era anche «un terzo della superficie»: la quantità di crosta continentale di un
+// pianeta qui non è ricavata. Per ricavarla serve la crescita della crosta dalla fusione agli archi lungo la storia
+// termica (storia.js: quanto mantello fonde sopra le fosse, quanta parte del fuso si separa in crosta leggera e quanta
+// ne torna giù con i sedimenti che affondano e con le radici che si staccano), integrata nel tempo con la velocità
+// delle placche di ogni epoca. Finché manca, ogni pianeta a placche ha la crosta della Terra alla sua età.
 const CROSTA_TERRA = { volume: 7.177e18, eta: 4.5e9, superficie: 4 * Math.PI * 6.371e6 ** 2, tempo: 4e9 }; // (m³, anni, m², anni)
 export const crostaAttesa = (t) => ((CROSTA_TERRA.volume / (CROSTA_TERRA.superficie * C.hMisura)) * (1 - Math.exp(-Math.max(0, t) / CROSTA_TERRA.tempo))) / (1 - Math.exp(-CROSTA_TERRA.eta / CROSTA_TERRA.tempo));
 
