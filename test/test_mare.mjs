@@ -151,7 +151,21 @@ prova('le correnti: i grandi giri, con la corrente più forte sul bordo ovest de
 prova('l\'acqua risale all\'equatore e scende nei giri dei tropici; quella densa, fredda e salata, riempie il fondo', () => {
   const anno = 3.156e7; tra(fascia(T.risalita, 0, 3) * anno, 10, 2000, 'risalita all\'equatore (m/anno; misurata ~300)');
   assert.ok(fascia(T.risalita, 18, 32) < 0, `ai tropici l\'acqua scende: ${fascia(T.risalita, 18, 32) * anno} m/anno`);
-  const pr = T.profondo; assert.ok(pr.T < fascia(T.temperatura, 0, 30) - 5, 'l\'acqua del fondo è fredda'); attesa(pr.dove.every((d) => Math.abs(d.lat) > 50), '(11/12) e si forma alle alte latitudini');
+  // (LA LEGGE è che il fondo lo riempie l'acqua più DENSA che si forma in superficie: fredda, oppure più calda ma tanto più
+  // salata da pesare di più. Che vinca il freddo dipende dal mondo: dal salto di temperatura tra tropici e poli (qui 10 K,
+  // sulla Terra vera 25) contro lo scarto di salinità dei giri dei tropici, che cresce con la salinità media (qui 50–65
+  // g/kg, fino al doppio del vero). «Il fondo è freddo» era un'asserzione dura scritta sui continenti di prima (8 Terre su 8,
+  // semi 11–18, mare a 37–55 g/kg, poli a 4–5 °C); con i continenti di adesso (meno fango ai mari, il cloro resta in mare:
+  // 50–65 g/kg; poli a 5–9 °C) vale su 4 Terre su 8, e su questa no: il fondo nasce a 30° di latitudine, a 14 °C e 68
+  // g/kg. Perciò: dura resta la legge — il fondo pesa almeno quanto il 2% più freddo del mare, e se non è freddo è più
+  // salato di quello —, e «è freddo» diventa un'attesa stampata, come «si forma alle alte latitudini»)
+  const pr = T.profondo, tropici = fascia(T.temperatura, 0, 30);
+  { const celle = []; let aM = 0; for (let j = 0; j < H; j++) { const w = Math.cos((latJ(j) * Math.PI) / 180); for (let i = 0; i < W; i++) if (eMare(j * W + i)) { celle.push([T.temperatura[j * W + i], T.salinita[j * W + i], w]); aM += w; } }
+    celle.sort((a, b) => a[0] - b[0]); let a = 0, tF = 0, sF = 0; for (const [t, sal, w] of celle) { if (a > 0.02 * aM) break; a += w; tF += t * w; sF += sal * w; } tF /= a; sF /= a;
+    assert.ok(pr.densita >= densita(tF, sF), `il fondo (${n3(pr.T - 273.15)} °C, ${n3(pr.salinita)} g/kg) pesa almeno quanto l'acqua più fredda del mare (${n3(tF - 273.15)} °C, ${n3(sF)} g/kg)`);
+    assert.ok(pr.T < tropici - 5 || pr.salinita > sF, `un fondo che non è freddo (${n3(pr.T - 273.15)} °C) è più salato dell'acqua fredda (${n3(pr.salinita)} contro ${n3(sF)} g/kg)`); }
+  attesa(pr.T < tropici - 5, `(4/8) l'acqua del fondo è fredda: qui ${n3(pr.T - 273.15)} °C e ${n3(pr.salinita)} g/kg, contro ${n3(tropici - 273.15)} °C in superficie tra i tropici`); attesa(pr.dove.every((d) => Math.abs(d.lat) > 50), '(11/12) e si forma alle alte latitudini');
+  confronta('temperatura del fondo (°C; misurata 1–3)', pr.T - 273.15, -2, 5);
   assert.ok(pr.densita >= densita(fascia(T.temperatura, 0, 30), fascia(T.salinita, 0, 30)), 'è la più densa'); tra(pr.tempoGiroAnni, 50, 5000, 'tempo del giro profondo (anni; misurato ~1000)');
   assert.ok(fascia(T.temperatura, 0, 20) > fascia(T.temperatura, 60, 90) + 8, 'mare caldo ai tropici, freddo ai poli');
   console.log(`      risalita all'equatore ${n3(fascia(T.risalita, 0, 3) * anno)} m/anno, discesa ai tropici ${n3(fascia(T.risalita, 18, 32) * anno)}; fondo a ${n3(pr.T - 273.15)} °C e ${n3(pr.salinita)} g/kg, nato a ${pr.dove.map((d) => d.lat.toFixed(0) + '°').join(', ')}; il giro profondo dura ${n3(pr.tempoGiroAnni)} anni`);
