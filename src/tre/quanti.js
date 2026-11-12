@@ -45,7 +45,7 @@ const FOSFORO = [0.25, 1.0, 0.18], COL = [FOSFORO, FOSFORO, [0.32, 0.42, 0.95], 
 const V_PUNTI = `
 in vec4 a_p; in vec2 a_q;        // posizione (unità dello strato) e k; tipo (0 e⁻, 1 p, 2 n, 3 u, 4 d) e luce propria
 uniform mat4 u_proj; uniform mat3 u_vista, u_quadro; uniform vec3 u_centro;
-uniform float u_k, u_kmin, u_esposizione, u_fuoco, u_luce, u_massimo; uniform vec4 u_sig; uniform float u_sigE;
+uniform float u_k, u_kmin, u_esposizione, u_fuoco, u_luce, u_massimo, u_passato; uniform vec4 u_sig; uniform float u_sigE;
 out vec3 v_col; out float v_luce;
 void main() {
   float eta = u_k - a_p.w; int tipo = int(a_q.x + 0.5);
@@ -56,7 +56,8 @@ void main() {
   float vero = 2.5 * sg * u_fuoco / max(1e-9, -e.z), s = clamp(vero, 1.5, u_massimo);
   gl_PointSize = s;
   v_col = tipo == 0 ? vec3(${COL[0]}) : tipo == 1 ? vec3(${COL[1]}) : tipo == 2 ? vec3(${COL[2]}) : tipo == 3 ? vec3(${COL[3]}) : vec3(${COL[4]});
-  v_luce = u_luce * a_q.y * exp(-max(0.0, eta) / u_esposizione) / max(2.25, vero * vero);
+  float f = eta < 0.5 ? 1.0 : u_passato * exp(-eta / u_esposizione), k = tipo >= 3 ? (sg / u_sig.x) * (sg / u_sig.x) : 1.0;
+  v_luce = u_luce * a_q.y * f * k / max(2.25, vero * vero);
 }`;
 const F_PUNTI = `in vec3 v_col; in float v_luce; out vec4 o; void main() { vec2 d = gl_PointCoord * 2.0 - 1.0; float r2 = dot(d, d); if (r2 > 1.0) discard; o = vec4(v_col * v_luce * 3.2 * exp(-4.5 * r2), 0.0); }`;
 const V_SCIE = `in vec4 a_p; uniform mat4 u_proj; uniform mat3 u_vista, u_quadro; uniform vec3 u_centro; out float v_luce;
@@ -102,9 +103,9 @@ export function creaQuanti(N, opzioni = {}) {
   let sigmaUsata = O.sigma;
   function chiedi(kNow) {
     if (!info || inAttesa || kNow < 0) return;
-    if (O.sigma !== sigmaUsata) { sigmaUsata = O.sigma; haLo = -1; haHi = -2; generazione++; impulsi.clear(); } // (un altro strumento: le misure si rifanno)
-    const lo = Math.max(0, kNow - K + 1);
-    if (haHi > kNow || haHi < lo - 1) { haLo = -1; haHi = -2; generazione++; } // (salto nel tempo)
+    const lo = Math.max(0, kNow - K + 1), svuota = () => { haLo = -1; haHi = -2; generazione++; impulsi.clear(); for (let s = 0; s < K; s++) dati[4 * s + 3] = -1e30; sporco = true; };
+    if (O.sigma !== sigmaUsata) { sigmaUsata = O.sigma; svuota(); } // (un altro strumento: le misure si rifanno)
+    if (haHi > kNow || (haHi >= 0 && haHi < lo - 1)) svuota(); // (salto nel tempo)
     const da = Math.max(lo, haHi + 1); if (da > kNow) return;
     const pezzo = info.tipo === 'molecola' ? 1500 : 4000, a = Math.min(kNow, da + pezzo - 1);
     // gli impulsi solo per le ultime misure (quelle che hanno la scia)
@@ -153,14 +154,14 @@ export function creaQuanti(N, opzioni = {}) {
       if (stato.misure > 0) {
         usa(prg, AU.a0); const rPx = Math.max(6, ((info ? Math.min(info.estensione, 40) : 4) * 0.35 * AU.a0 / d) * S.fuoco), area = Math.PI * rPx * rPx;
         gl.uniform1f(prg.u.u_k, stato.kNow); gl.uniform1f(prg.u.u_kmin, kmin); gl.uniform1f(prg.u.u_esposizione, esposizione); gl.uniform1f(prg.u.u_fuoco, S.fuoco); gl.uniform1f(prg.u.u_massimo, 96);
-        gl.uniform1f(prg.u.u_luce, (1.2 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
+        gl.uniform1f(prg.u.u_luce, (1.2 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_passato, 1); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
         gl.bindVertexArray(vao); gl.drawArrays(gl.POINTS, 0, K);
         if (nScie) { usa(prgS, AU.a0); gl.bindVertexArray(vaoS); gl.drawArrays(gl.LINES, 0, 2 * nScie); }
       }
       // il nucleo (in fm): l'istantanea di adesso piena, le precedenti che si spengono
       if (stato.nucleoVisibile) {
-        usa(prg, 1e-15); gl.uniform1f(prg.u.u_k, jNow); gl.uniform1f(prg.u.u_kmin, Math.max(0, jNow - KN + 1)); gl.uniform1f(prg.u.u_esposizione, KN / 4); gl.uniform1f(prg.u.u_fuoco, S.fuoco); gl.uniform1f(prg.u.u_massimo, 256);
-        gl.uniform1f(prg.u.u_luce, 40); gl.uniform1f(prg.u.u_sigE, O.sigma); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0); // (σ del nucleone: la sua carica, r ≈ 0,84 fm/√3; dei quark: la risoluzione dello strumento)
+        usa(prg, 1e-15); gl.uniform1f(prg.u.u_k, jNow); gl.uniform1f(prg.u.u_kmin, Math.max(0, jNow - KN + 1)); gl.uniform1f(prg.u.u_esposizione, KN / 2); gl.uniform1f(prg.u.u_fuoco, S.fuoco); gl.uniform1f(prg.u.u_massimo, 256);
+        const vn = (2.5 * 0.5 * S.fuoco) / Math.max(1e-6, d / 1e-15); gl.uniform1f(prg.u.u_luce, 0.25 * Math.max(2.25, vn * vn)); gl.uniform1f(prg.u.u_passato, 0.03); gl.uniform1f(prg.u.u_sigE, O.sigma); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0); // (σ del nucleone: la sua carica, r ≈ 0,84 fm/√3; dei quark: la risoluzione dello strumento)
         gl.bindVertexArray(vaoN); gl.drawArrays(gl.POINTS, 0, KN * perIst);
       }
       gl.bindVertexArray(null); gl.enable(gl.DEPTH_TEST); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: sotto l'atomo, come lo vede uno strumento (src/tre/quanti.js)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #e8e4da; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
+  #tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  #barra { position: absolute; left: 10px; top: 10px; max-width: 520px; background: rgba(12, 12, 14, 0.72); border: 1px solid #333; border-radius: 6px; padding: 6px 9px; font: 11px/1.4 ui-monospace, monospace; color: #b8b4aa; white-space: pre-wrap; }
+  body.nudo #barra { display: none; }
+</style>
+</head>
+<body>
+<canvas id="tela" tabindex="0"></canvas>
+<div id="barra"></div>
+<script type="module">
+// Parametri:
+//   ?caso=idrogeno | 2p | battimenti | acqua | nucleo
+//     idrogeno    un atomo di idrogeno nel suo stato fondamentale, in un fascio nel vuoto (come nell'esperimento di Stodolna)
+//     2p          lo stesso, PREPARATO nel 2p_z (una scelta di chi guarda, come il laser dell'esperimento): decade in 1,6 ns
+//     battimenti  1s + 2p_z: la nuvola oscilla ogni 0,405 fs (il tempo va a 2·10⁻¹⁶ s per secondo)
+//     acqua       l'ossigeno della molecola d'acqua più vicina al centro di una scena del modello (atomi3d.scenaAcqua)
+//     nucleo      lo stesso ossigeno, a 20 fm dal suo nucleo
+//   ?misure=20000  porta il tempo a tante misure dall'accensione dello strumento (e ferma)
+//   ?sigma=0.25 (a₀) la finestra dello strumento;  ?dist (a₀; per il nucleo in fm);  ?velocita (s di mondo per s);  ?nudo
+import { creaNucleo } from '../nucleo.js';
+import { creaQuanti } from '../quanti.js';
+import { atomoDaScena, AU } from '../../camera/quanti.js';
+import { scenaAcqua } from '../../camera/atomi3d.js';
+import { sorgente } from '../../camera/eventi.js';
+
+const par = new URLSearchParams(location.search), num = (k, d) => (par.has(k) ? +par.get(k) : d), caso = par.get('caso') || 'idrogeno';
+if (par.has('nudo')) document.body.classList.add('nudo');
+const N = creaNucleo(document.getElementById('tela'), { conserva: true });
+const lab = N.corpo({ nome: 'laboratorio', raggio: 1e-9 });
+let atomo, ambiente, nota, dist = num('dist', caso === 'nucleo' ? 20 : caso === 'acqua' ? 7 : caso === 'idrogeno' ? 9 : 26), unita = caso === 'nucleo' ? 1e-15 : AU.a0;
+const VUOTO = { fotoni: 300 }; // il fascio nel vuoto, tra pareti a temperatura ambiente
+N.tempo.velocita = num('velocita', caso === 'battimenti' ? 2e-16 : 1e-15);
+if (caso === 'idrogeno') { atomo = { Z: 1, indirizzo: 'prova/fascio/atomo 1', pos: [0, 0, 0] }; ambiente = VUOTO; nota = 'idrogeno, stato fondamentale, nel vuoto'; }
+else if (caso === '2p') { atomo = { Z: 1, indirizzo: 'prova/fascio/atomo 2', pos: [0, 0, 0], preparazione: [{ n: 1, l: 0, m: 0, c: 0 }, { n: 2, l: 1, m: 0, c: 1 }] }; ambiente = VUOTO; nota = 'idrogeno PREPARATO nel 2p_z (scelta di chi guarda)'; }
+else if (caso === 'battimenti') { atomo = { Z: 1, indirizzo: 'prova/fascio/atomo 3', pos: [0, 0, 0], preparazione: [{ n: 1, l: 0, m: 0, c: 1 }, { n: 2, l: 1, m: 0, c: 1 }] }; ambiente = VUOTO; nota = 'idrogeno PREPARATO in 1s + 2p_z (scelta di chi guarda)'; }
+else {
+  const sc = scenaAcqua({ latoNm: 1.2, moto: false }, sorgente('prova/quanti/acqua')), L = sc.scatola; let iO = 0, dm = Infinity;
+  for (let i = 0; i < sc.atomi.elemento.length; i++) if (sc.atomi.elemento[i] === 8) { const d = Math.hypot(sc.atomi.pos[3 * i] - L[0] / 2, sc.atomi.pos[3 * i + 1] - L[1] / 2, sc.atomi.pos[3 * i + 2] - L[2] / 2); if (d < dm) { dm = d; iO = i; } }
+  atomo = atomoDaScena(sc, iO); ambiente = { n: 3.343e28, massaKg: 18.015 * 1.66054e-27, T: 298.15, raggioM: 1.4e-10 }; nota = `l'ossigeno ${iO} dell'acqua del modello (atomi3d.scenaAcqua), con i suoi due idrogeni`;
+}
+const q = creaQuanti(N, { atomo, luogo: lab, scala: 1e-9, sigma: num('sigma', 0.25), ambiente, periodo: N.tempo.velocita / 150 });
+N.attacca(q.corpo, { distanza: dist * unita, lat: num('alto', 0.35), lon: num('giro', 0.4) });
+if (par.has('misure')) { N.tempo.t = q.stato.t0 + num('misure', 0) * q.stato.periodo + q.stato.periodo * 0.5; N.tempo.pausa = true; }
+if (par.has('pausa')) N.tempo.pausa = true;
+N.avvia();
+window.__prova = { N, q };
+const barra = document.getElementById('barra');
+setInterval(() => { const i = q.stato.info(); barra.textContent = `${nota}\n${i ? `stato: ${i.tipo}, ${i.elettroni} elettroni${i.energia ? `, E = ${i.energia.toFixed(5)} hartree (Hartree-Fock STO-3G)` : ''}` : 'stato: in calcolo…'}\nmisure mostrate: ${q.stato.misure} (una ogni ${q.stato.periodo.toExponential(2)} s di mondo) · distanza ${(q.stato.distanza / unita).toFixed(2)} ${unita === AU.a0 ? 'a₀' : 'fm'}${q.stato.nucleoVisibile ? ` · nucleo Z = ${q.nucleo.Z}, A = ${q.nucleo.A}, ${q.nucleo.forma}` : ''}`; }, 250);
+</script>
+</body>
+</html>
