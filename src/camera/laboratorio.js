@@ -295,9 +295,13 @@ function eventoMateria(passo) {
   const cam = c.indirizzo.camera, prima = camMappa; camMappa = cam ? clona(cam) : camMappa;
   entraMateria(m.luogo, { ...m.opzioni, evento: Math.max(0, (c.indirizzo.evento ?? 0) + passo) }); if (vista !== 'dettaglio') camMappa = prima;
 }
-// ---------- LO ZOOM CONTINUO: una vista sola, che cambia grandezza. Dal cosmo al suolo è lo spazio in tre dimensioni (src/tre);
-// sotto il suolo la roccia o l'acqua di quel punto e i suoi atomi (livello 5 della mappa); in fondo le tracce delle particelle
-// in quel punto (la cella di materia.js) e il pattern della sua finestra. Si passa dall'una all'altra solo con la rotella.
+// ---------- LO ZOOM CONTINUO: UNA SCALA SOLA, dall'universo al nucleo, misurata in metri per pixel (misura) e detta sempre
+// dalla barra di scala. Dal cosmo al suolo è lo spazio in tre dimensioni (src/tre); sotto, la roccia o l'acqua di quel punto
+// con i suoi livelli uno dentro l'altro, ognuno alla sua grandezza vera (mappa.js: cristallo, lamina, reticolo); poi gli atomi
+// in tre dimensioni e sotto la scala quantistica (src/tre/quanti.js). La finestra delle particelle di quel punto non sta in
+// fondo: sta alla sua scala (30 cm per un muone nel ghiaccio), sovrapposta a ciò che c'è lì (disegnaSopra); ci si entra con
+// un clic (la cella, la finestra, il pattern: anche lì la rotella è una lente che tiene la grandezza vera).
+// Si passa dall'una all'altra solo con la rotella, e a ogni passaggio la grandezza a schermo resta quella.
 // Dove due viste si danno il cambio: (1) la nuova parte alla stessa grandezza a schermo, centrata sullo stesso punto, quando
 // le due guardano la stessa cosa (il suolo dall'alto e la roccia; la cornice della cella e la finestra; la finestra e il
 // pattern); (2) la vista di prima resta sopra come un'istantanea che segue lo zoom della nuova e sfuma su un intervallo di
