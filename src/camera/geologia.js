@@ -399,7 +399,11 @@ export function climaConIlMare(chiave, P, sf, cl, mare) {
 //    le terre: il fondo del mare resta quello della tettonica, salvo dove si posa sedimento: lì il fondo cede sotto il
 //    peso di (ρ_sedimento − ρ_acqua)/(ρ_mantello − ρ_acqua) = 0,74 dello spessore posato.
 //  · L'ACQUA SI CONSERVA: il volume del mare resta quello di partenza; il sedimento che riempie le coste sposta acqua, e
-//    il livello del mare (out.mare) sale di quanto serve.
+//    il livello del mare (out.mare) sale di quanto serve. (Sulle Terre di prova sale di 23–27 m, e annega le piane costiere
+//    che i fiumi tengono al loro livello di base: 4 punti di terre emerse su 24, tutte da 0,1 a 25 m sotto il mare nuovo;
+//    misurate sul mare di partenza le terre crescono. È il doppio conto del sedimento: negli stessi T anni la tettonica ne ha
+//    già posato in mare ~1,9·10¹⁷ m³, che alzano il fondo di ~110 m e stanno già nel suo mare. Tenere fermo il mare toglie
+//    l'annegamento ma perde l'1% dell'acqua: PROVATO E NON TENUTO. La via giusta è partire senza il sedimento di quei T anni.)
 //  · QUANTO DURA: quanto è durata la geografia di oggi, cioè l'età media dei fondali (etaCrosta, da tettonica.js: sulla Terra
 //    ~60–100 milioni di anni); senza placche, 100 milioni di anni (manca un orologio migliore). Una tessera, che aggiunge
 //    il dettaglio a una scala più piccola, dura in proporzione al lato delle sue celle (un gradino risale un fiume in un

@@ -90,8 +90,8 @@ export function indirizzoDi(numero, rami = null) {
   const gslot = n % GALASSIE_MAX; n = Math.floor(n / GALASSIE_MAX);
   const cosmoN = cosmoCon(n + 1, rami);
   const C = cosmo(cosmoN), galassia = gslot % C.galassie.length;
-  let st = stella, S = sistema(cosmoN, galassia, st);
-  while (!S.pianeti.length) { st = (st + 1) % STELLE; S = sistema(cosmoN, galassia, st); }
+  let st = stella, S = sistemaPigro(cosmoN, galassia, st); // (qui si contano i pianeti: l'aria e gli anelli non servono)
+  while (!S.pianeti.length) { st = (st + 1) % STELLE; S = sistemaPigro(cosmoN, galassia, st); }
   return { cosmo: cosmoN, galassia, stella: st, pianeta: slot % S.pianeti.length, regione };
 }
 export function numeroDi(a) {
@@ -156,7 +156,7 @@ export const metriPerUnita = (livello, via) => {
   if (livello === 0) return TORO_M;
   if (livello === 1) return cosmo(via.cosmo).galassie[via.galassia].forma.unitaM;
   if (livello === 2) return LATO_SISTEMA_M;
-  const R = sistema(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
+  const R = sistemaPigro(via.cosmo, via.galassia, via.stella).pianeti[via.pianeta].raggioM;
   return livello === 4 ? 2 * Math.PI * R : R; // sulla superficie l'unità è il giro dell'equatore
 };
 
@@ -169,7 +169,33 @@ export const raggioSistema = (n, gid) => LATO_SISTEMA_M / cosmo(n).galassie[gid]
 // memoria): il magma (kg/anno) e il mantello che fonde per farlo. Così i vulcani del ciclo del carbonio (chimica.js)
 // sono quelli della storia, non una seconda stima dal calore
 const magmaDi = (p, S) => { if (p.tipo === 'gassoso' || !(p.interno.vulcani > 0)) return {}; const f = storia(p, S.eta, { stella: S }).fuso; return f && f.kgAnno > 0 && f.frazione > 0 ? { magma: f.kgAnno, fusoMantello: f.kgAnno / f.frazione } : {}; };
-export const sistema = memo((n, gid, sid) => {
+// ---------- (PRESTAZIONI) «SI CALCOLA SOLO CIÒ CHE SI GUARDA», anche dentro un sistema
+// Il clima e l'aria di un pianeta (chimica.js climaEAria: tre quarti del costo di un sistema) e ciò che ne discende NON si
+// calcolano più quando il sistema viene fatto: sono PIGRI. Due gruppi per pianeta, ognuno calcolato tutto insieme la prima
+// volta che se ne legge (o scrive) un campo qualunque, con gli stessi conti di prima sugli stessi numeri:
+//   · L'ARIA:   clima, atmosfera, prebiotica, magnetopausa, energiaChimica
+//   · L'ANELLO: anello, anelli (anelli.js legge il clima del pianeta — temperatura, pressione, gas tenuti, e sui rocciosi
+//               lo stato dell'acqua —: chiedere l'anello fa calcolare l'aria, se l'anello ha materia)
+// Sono proprietà come le altre (enumerabili, nello stesso posto tra le chiavi, scrivibili); dopo la prima lettura sono
+// dati qualunque. Il risultato non dipende da quando né in che ordine le si legge: i dati dell'aria (giorno, asse, calore
+// dell'interno, magma, gas radiogenici) sono fotografati qui, nel momento in cui prima la si calcolava.
+// CIÒ CHE NON PUÒ ASPETTARE (il grafo delle letture dentro sistema(), misurato):
+//   urto, giro, interno, lune  non leggono l'aria — TRANNE la luna nata dall'urto di un roccioso: quanto si allontana
+//   dipende dal k₂/Q del pianeta, cioè dallo stato dell'acqua (lune.js k2QPianeta): lì l'aria si calcola subito, e poi,
+//   se la luna ha cambiato il giorno, si rifà (pigra) con il giorno nuovo. È l'unico ciclo vero: aria → luna → giorno → aria.
+// DUE PORTE, lo stesso sistema (la stessa memoria, gli stessi oggetti):
+//   sistemaPigro(n, gid, sid)  niente aria e niente anelli finché qualcuno non li legge: per chi ELENCA i sistemi
+//   sistema(n, gid, sid)       come sempre; in più prepara ciò che un anello può chiedere — l'anello di ogni pianeta, e
+//                              l'aria di ogni roccioso (dove ciò che anelli.js legge dipende dai suoi eventi) —, così chi poi
+//                              chiama anelli() su un pianeta non paga mai un clima. Resta pigra l'aria dei pianeti senza
+//                              materia per un anello.
+const DA_PREPARARE = new WeakMap();
+export function sistema(n, gid, sid) {
+  const Sis = sistemaPigro(n, gid, sid), prepara = DA_PREPARARE.get(Sis);
+  if (prepara) { prepara(); DA_PREPARARE.delete(Sis); }
+  return Sis;
+}
+export const sistemaPigro = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
   // I PIANETI NASCONO DAL DISCO della stella giovane (disco.js): la sua massa e i suoi metalli fanno il
   // disco; oltre la linea della neve anche il ghiaccio è solido; gli embrioni crescono, si scontrano e si
@@ -198,6 +224,7 @@ export const sistema = memo((n, gid, sid) => {
   // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
   // stella, il disco e gli altri pianeti
   const Sis = { stella: { ...S, r: oggiStella.R / (30 * UA) } /* il raggio vero, nelle unità del sistema */, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
+  const daPreparare = [];
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
     // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
@@ -238,51 +265,85 @@ export const sistema = memo((n, gid, sid) => {
     // vera per la chimica —: se temperatura, ossidazione e mare sono gli stessi (confronto esatto) vale la lista già fatta)
     let fatti = null;
     const mineraliDi = (T, ossidato, acqua) => { if (!(fatti && fatti.T === T && fatti.ossidato === ossidato && fatti.acqua === acqua)) fatti = { T, ossidato, acqua, lista: minerali({ composizione: p.composizione, T, ossidato, acqua }) }; return fatti.lista; };
-    const ariaDelPianeta = () => {
-      const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
-        calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
-      p.clima = r.clima; p.clima.giro = { obliquita: p.obliquita, bloccato: p.bloccato, giorno: p.giorno }; // (con quale asse e quale giorno è stato calcolato: il giorno entra nel calore che l'aria porta, leggi.js)
+    // L'ARIA, PIGRA (vedi in cima a sistema()). «fotoAria»: i dati di climaEAria com'è il pianeta adesso; «ariaCon»: il conto
+    // di sempre — clima e aria insieme, poi i mattoni della vita con la sola luce —, senza toccare il pianeta
+    // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
+    const aAria = p.a * 30 * UA, Zs = { Z: S.Z ?? 1 };
+    const fotoAria = () => ({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
+      calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti });
+    const ariaCon = (dati) => {
+      const r = climaEAria(dati, Zs), cl = r.clima; cl.giro = { obliquita: dati.obliquita, bloccato: dati.bloccato, giorno: dati.giorno }; // (con quale asse e quale giorno è stato calcolato: il giorno entra nel calore che l'aria porta, leggi.js)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
       // aminoacidi e zuccheri (scariche e ultravioletto)
-      try {
-        p.atmosfera = r.atmosfera;
-        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica?.relativa ?? Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua, // (lo stato dell'acqua, non un sì/no: prebiotica lo confronta con «liquida»)
-          minerali: mineraliDi(p.clima.T, !p.atmosfera.riducente, p.clima.acqua === 'liquida') });
-      } catch { p.atmosfera = null; p.prebiotica = null; }
+      let atm, pre;
+      try { atm = r.atmosfera; pre = prebiotica({ atmosfera: atm, T: cl.T, energia: Lw / (4 * Math.PI * aAria ** 2) / 1361, pressione: cl.pressione, acqua: cl.acqua, // (lo stato dell'acqua, non un sì/no: prebiotica lo confronta con «liquida»)
+        minerali: mineraliDi(cl.T, !atm.riducente, cl.acqua === 'liquida') }); } catch { atm = null; pre = null; }
+      return { clima: cl, atmosfera: atm, prebiotica: pre };
     };
-    ariaDelPianeta();
+    const dato = (k, v) => Object.defineProperty(p, k, { value: v, writable: true, enumerable: true, configurable: true });
+    const valore = (k) => { const d = Object.getOwnPropertyDescriptor(p, k); return d && 'value' in d ? d.value : undefined; };
+    const pigro = (k, risolvi) => Object.defineProperty(p, k, { enumerable: true, configurable: true, get: () => { risolvi(); return valore(k); }, set: (v) => { risolvi(); dato(k, v); } });
+    let datiAria = fotoAria(), aria = null; // (l'aria con quei dati, quando è stata calcolata)
+    const posaAria = () => { if (!aria) aria = ariaCon(datiAria); dato('clima', aria.clima); dato('atmosfera', aria.atmosfera); dato('prebiotica', aria.prebiotica); };
+    // PRIMA DELLE LUNE: chi legge l'aria adesso (la luna dell'urto di un roccioso) la fa calcolare con il giro di adesso
+    let chiedeAria = posaAria; const leggeAria = () => chiedeAria();
+    pigro('clima', leggeAria); pigro('atmosfera', leggeAria); pigro('prebiotica', leggeAria);
     // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
     p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, casoLune(n, gid, sid, p.id));
     // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
     { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
       // la dinamo sente il giorno (geologia.interno: il numero di Rossby): con il giorno di oggi il campo si rifà
       const oggi = interno(p, S); Object.assign(p.interno, { B0: oggi.B0, ...(oggi.rossby != null ? { rossby: oggi.rossby, dipolo: oggi.dipolo } : {}) }); p.B0 = oggi.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8))); } }
-    // (il clima è stato calcolato prima delle lune, che lo leggono: se la luna dell'urto ha poi cambiato l'asse o il blocco, si rifà)
-    if (p.clima.giro.obliquita !== p.obliquita || p.clima.giro.bloccato !== p.bloccato || p.clima.giro.giorno !== p.giorno) ariaDelPianeta();
+    // (se la luna dell'urto ha cambiato l'asse, il blocco o il giorno, l'aria di oggi è quella con il giro nuovo: i dati si
+    // rifotografano, e ciò che era stato calcolato per le lune non vale più)
+    if (datiAria.obliquita !== p.obliquita || datiAria.bloccato !== p.bloccato || datiAria.giorno !== p.giorno) { datiAria = fotoAria(); aria = null; }
+    // DA QUI L'ARIA È QUELLA DI OGGI, e con lei CIÒ CHE IL PICCOLO FA AL GRANDE (risalita.js), con il campo, il giorno e l'aria
+    // di oggi: il vento della stella ferma la magnetosfera a p.magnetopausa raggi (oltre, niente fascia: attorno a una stella
+    // morta non c'è vento che la fermi); l'energia vera per la chimica dell'aria (ultravioletto sotto 200 nm, fulmini,
+    // aurore, raggi cosmici: 1 = la Terra) al posto della sola luce. Tutto insieme, alla prima lettura di uno dei cinque campi
+    let statoAria = 0; // 0: da fare, 1: in corso, 2: fatta
+    const risolviAria = () => {
+      if (statoAria) return; statoAria = 1;
+      try {
+        posaAria();
+        try {
+          const qui = luogoDaAria({ P: p }), dalPiccolo = { P: p, stella: { T: S.T > 0 ? S.T : undefined, eta: S.eta, massa: S.massa } }, vento = viva ? ventoStellare(qui, dalPiccolo) : null;
+          dato('magnetopausa', vento ? vento.magnetopausa : Infinity);
+          if (p.atmosfera) {
+            dato('energiaChimica', energiaPerLaChimica(qui, dalPiccolo));
+            dato('prebiotica', prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica.relativa, pressione: p.clima.pressione, acqua: p.clima.acqua,
+              minerali: mineraliDi(p.clima.T, !p.atmosfera.riducente, p.clima.acqua === 'liquida') }));
+          }
+        } catch { /* restano l'aria e la chimica di prima */ }
+        // (ciò che non è stato scritto — l'aria non c'è, o un conto è fallito — non c'è, come prima)
+        for (const k of ['magnetopausa', 'energiaChimica']) if (valore(k) === undefined && Object.getOwnPropertyDescriptor(p, k)?.get) delete p[k];
+        statoAria = 2;
+      } finally { if (statoAria === 1) statoAria = 0; }
+    };
+    chiedeAria = risolviAria;
+    pigro('clima', leggeAria); pigro('atmosfera', leggeAria); pigro('prebiotica', leggeAria); // (di nuovo pigri, anche se le lune li avevano letti: la prima lettura fa tutto il gruppo)
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
     // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
-    // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere
-    p.anello = anelli(p, p.lune, { massa: S.massa, massaNascita: S.massaNascita, eta: eta - (S.morta ?? 0), morta: S.morta, Z: S.Z ?? 1 }, sorgente(`anelli/${cosmoBase(n)}/${gid}/${sid}/${p.id}`, ramiCosmo(n)));
-    p.anelli = !!p.anello;
-    // CIÒ CHE IL PICCOLO FA AL GRANDE (risalita.js), con il campo, il giorno e l'aria di oggi: il vento della stella ferma la
-    // magnetosfera a p.magnetopausa raggi (oltre, niente fascia: attorno a una stella morta non c'è vento che la fermi);
-    // l'energia vera per la chimica dell'aria (ultravioletto sotto 200 nm, fulmini, aurore, raggi cosmici: 1 = la Terra)
-    // al posto della sola luce
-    try {
-      const qui = luogoDaAria({ P: p }), dalPiccolo = { P: p, stella: { T: S.T > 0 ? S.T : undefined, eta: S.eta, massa: S.massa } }, vento = viva ? ventoStellare(qui, dalPiccolo) : null;
-      p.magnetopausa = vento ? vento.magnetopausa : Infinity;
-      if (p.atmosfera) {
-        p.energiaChimica = energiaPerLaChimica(qui, dalPiccolo);
-        p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica.relativa, pressione: p.clima.pressione, acqua: p.clima.acqua,
-          minerali: mineraliDi(p.clima.T, !p.atmosfera.riducente, p.clima.acqua === 'liquida') });
-      }
-    } catch { /* restano l'aria e la chimica di prima */ }
+    // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere.
+    // PIGRI anche loro (anello e anelli insieme): leggono l'aria del pianeta, se c'è materia per un anello
+    let statoAnello = 0;
+    const risolviAnello = () => {
+      if (statoAnello) return; statoAnello = 1;
+      try { const A = anelli(p, p.lune, { massa: S.massa, massaNascita: S.massaNascita, eta: eta - (S.morta ?? 0), morta: S.morta, Z: S.Z ?? 1 }, sorgente(`anelli/${cosmoBase(n)}/${gid}/${sid}/${p.id}`, ramiCosmo(n)));
+        dato('anello', A); dato('anelli', !!A); statoAnello = 2;
+      } finally { if (statoAnello === 1) statoAnello = 0; }
+    };
+    pigro('anello', risolviAnello); pigro('anelli', risolviAnello);
+    pigro('magnetopausa', leggeAria); pigro('energiaChimica', leggeAria);
+    // (ciò che sistema() prepara e sistemaPigro() lascia stare: l'anello, e sui rocciosi l'aria)
+    daPreparare.push(() => { void p.anello; if (p.tipo === 'roccioso') void p.clima; });
     // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti
     Object.defineProperty(p, 'impatti', { configurable: true, enumerable: false, get() { const v = storiaImpatti(p, Sis, casoP); Object.defineProperty(p, 'impatti', { value: v, enumerable: false }); return v; } });
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
     // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
     p.origine = hash(semeEvento('mantello', n, gid, sid, p.id), Math.round(Math.log(p.massaKg) * 1e6));
   }
+  DA_PREPARARE.set(Sis, () => { for (const f of daPreparare) f(); });
   return Sis;
 });
 

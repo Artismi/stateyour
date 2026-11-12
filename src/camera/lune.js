@@ -87,7 +87,9 @@ export function k2QFreddo(L) {
 // per i pianeti: la Terra dissipa molto perché ha gli oceani (k₂ 0,3, Q circa 30 in media sulla sua
 // storia; oggi 12), un pianeta asciutto meno (Marte: Q circa 100); un gigante di gas pochissimo
 // (Giove: k₂/Q ≈ 10⁻⁵, misurato dal moto di Io)
-export const k2QPianeta = (P) => (P.tipo === 'gassoso' || P.tipo === 'ghiacciato' ? 1e-5 : 0.3 / (P.clima?.acqua === 'liquida' ? 30 : 100));
+// (i due valori di un pianeta di roccia, con il mare e senza: chi vuole sapere se una cosa dipende dall'acqua li prova tutti e due)
+const k2QRoccia = (mare) => 0.3 / (mare ? 30 : 100);
+export const k2QPianeta = (P) => (P.tipo === 'gassoso' || P.tipo === 'ghiacciato' ? 1e-5 : k2QRoccia(P.clima?.acqua === 'liquida'));
 
 // ---------- il calore
 // il calore della radioattività nella roccia (W per kg di roccia), che cala con l'età: uranio 238 e
@@ -269,8 +271,10 @@ export function tempoBlocco(P, L, giornoIniziale = GIORNO_GIOVANE) {
 // l'ALLONTANAMENTO: il pianeta gira più in fretta di quanto la luna orbita, il suo rigonfiamento
 // sta un po' avanti e tira la luna in avanti: l'orbita si allarga, da/dt = 3·(k₂/Q)·(m/M)·R⁵·√(GM)·a^(-11/2).
 // Integrata: a^(13/2) cresce in modo lineare nel tempo (velocissima all'inizio, poi sempre più lenta)
-export function orbitaDopoLeMaree(P, massaLuna, a0, anni = ETA) {
-  const k = (39 / 2) * k2QPianeta(P) * (massaLuna / P.massaKg) * P.raggioM ** 5 * Math.sqrt(COSTANTI.G * (P.massaKg + massaLuna));
+export function orbitaDopoLeMaree(P, massaLuna, a0, anni = ETA) { return orbitaCon(k2QPianeta(P), P, massaLuna, a0, anni); }
+// (la stessa, con il k₂/Q del pianeta dato da chi chiama)
+function orbitaCon(k2Q, P, massaLuna, a0, anni) {
+  const k = (39 / 2) * k2Q * (massaLuna / P.massaKg) * P.raggioM ** 5 * Math.sqrt(COSTANTI.G * (P.massaKg + massaLuna));
   return Math.pow(Math.pow(a0, 6.5) + k * anni * ANNO, 2 / 13);
 }
 // la CIRCOLARIZZAZIONE: l'attrito nella luna consuma l'eccentricità in un tempo
@@ -290,7 +294,18 @@ function eccentricitaResidua(P, L, eta) {
 // che la si legge viene calcolata — con gli stessi conti di prima, sugli stessi numeri — e da lì è un numero qualunque.
 // Perché il risultato non dipenda da QUANDO lo si legge, il conto lavora su una copia di ciò che legge del pianeta e della
 // luna, presa nel momento in cui lune() la costruisce (il pianeta, dopo, può cambiare: cosmo.js gli rifà il clima).
-const fotoPianeta = (P) => ({ tipo: P.tipo, massaKg: P.massaKg, raggioM: P.raggioM, aM: P.aM, Mstella: P.Mstella, Lw: P.Lw, clima: P.clima ? { acqua: P.clima.acqua } : P.clima });
+// (del clima serve solo lo stato dell'acqua, e solo a k2QPianeta, cioè solo se il pianeta non è di gas né di ghiaccio. Se il
+// clima del pianeta è PIGRO e nessuno l'ha ancora letto (cosmo.js sistema()), non lo si fa calcolare per fotografarlo: lo si
+// leggerà quando servirà. È lo stesso valore: un clima ancora pigro, dopo lune(), non cambia più — cambia solo se una luna
+// da urto frena il pianeta, e quella luna il clima lo ha già letto (daUrto), quindi qui è già un dato e lo si fotografa.)
+const fotoPianeta = (P) => {
+  const f = { tipo: P.tipo, massaKg: P.massaKg, raggioM: P.raggioM, aM: P.aM, Mstella: P.Mstella, Lw: P.Lw, clima: undefined };
+  if (P.tipo === 'gassoso' || P.tipo === 'ghiacciato') return f;
+  const d = Object.getOwnPropertyDescriptor(P, 'clima');
+  if (d && d.get) Object.defineProperty(f, 'clima', { enumerable: true, configurable: true, get: () => { const c = P.clima, v = c ? { acqua: c.acqua } : c; Object.defineProperty(f, 'clima', { value: v, writable: true, enumerable: true, configurable: true }); return v; } });
+  else f.clima = P.clima ? { acqua: P.clima.acqua } : P.clima;
+  return f;
+};
 // (ciò che della luna leggono k2QLuna, eccentricitaResidua, caloreMareale e stato)
 const fotoLuna = (L, eccentricita) => ({ massaKg: L.massaKg, raggioM: L.raggioM, densita: L.densita, aM: L.aM, eccentricita, composizione: L.composizione ? { ...L.composizione } : L.composizione, retrograda: L.retrograda });
 function pigra(L, nome, calcola) {
@@ -413,9 +428,8 @@ function daUrto(P, amb, c, urto) {
   // nasce dai detriti (roccia del mantello, quasi senza ferro) appena fuori dal limite di Roche...
   const m = urto?.luna ? urto.luna.massaKg : muSorte * M, comp = { roccia: 0.98, ferro: 0.02 }, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0));
   // ...e le maree la allontanano per tutto il tempo che hanno avuto (da/dt ∝ a^(-11/2))
-  let a = orbitaDopoLeMaree(P, m, a0, anni);
   const I = 0.33 * M * P.raggioM ** 2, wMax = Math.sqrt((G * M) / P.raggioM ** 3), Lorb = (x) => m * Math.sqrt(G * M * x);
-  let giorno = P.giorno || 24 * 3600, wPrima;
+  let a, giorno = P.giorno || 24 * 3600, wPrima;
   if (urto?.luna) {
     // il momento angolare si conserva: quello che la luna guadagna allontanandosi lo perde la rotazione del pianeta.
     // Si parte dal giorno che l'urto ha lasciato e si va avanti: il giorno di oggi ne discende. La luna si allontana
@@ -424,19 +438,31 @@ function daUrto(P, amb, c, urto) {
     wPrima = Math.min(wMax, (2 * Math.PI) / urto.giornoDopo);
     const avanzo = (x) => wPrima - (Lorb(x) - Lorb(a0)) / I - Math.sqrt((G * (M + m)) / x ** 3);
     if (avanzo(a0) <= 0) return [];
-    if (avanzo(a) < 0) { let lo = a0, hi = a; for (let giro = 0; giro < 60; giro++) { const x = 0.5 * (lo + hi); if (avanzo(x) > 0) lo = x; else hi = x; } a = lo; }
-    giorno = (2 * Math.PI) / (wPrima - (Lorb(a) - Lorb(a0)) / I);
+    // la luna si PERDE se: il pianeta è bloccato dalla stella (gira piano: la marea la tira giù invece che su,
+    // e ricade: Mercurio e Venere non hanno lune), se orbita più in fretta di quanto il pianeta gira, o se
+    // arriva oltre 0,4 raggi di Hill, dove la stella la porta via (pianeti vicini alla stella)
+    if (P.bloccato) return [];
+    // (PRESTAZIONI, stessi risultati: quanto la luna si allontana dipende dal k₂/Q del pianeta, cioè dal suo mare, cioè dal
+    // suo CLIMA — che in cosmo.js è pigro e costa. Il k₂/Q ha due soli valori: se la luna si perde con tutti e due, si
+    // perde, e il clima non serve; se no lo si chiede, e il conto è quello di sempre, con quel valore.)
+    const esito = (k2Q) => {
+      let x = orbitaCon(k2Q, P, m, a0, anni);
+      if (avanzo(x) < 0) { let lo = a0, hi = x; for (let giro = 0; giro < 60; giro++) { const y = 0.5 * (lo + hi); if (avanzo(y) > 0) lo = y; else hi = y; } x = lo; }
+      const g = (2 * Math.PI) / (wPrima - (Lorb(x) - Lorb(a0)) / I);
+      return periodoOrbita(P, x, m) < g * (1 - 1e-6) || x > 0.4 * amb.RH ? null : { a: x, giorno: g };
+    };
+    if (!esito(k2QRoccia(true)) && !esito(k2QRoccia(false))) return [];
+    const r = esito(k2QPianeta(P)); if (!r) return [];
+    a = r.a; giorno = r.giorno;
   } else {
+    a = orbitaDopoLeMaree(P, m, a0, anni);
     // (ripiego) dal giorno di oggi si risale al giorno di allora (per la Terra viene 5 ore, come si stima); se servisse
     // un pianeta che girava più in fretta di quanto può stare insieme, la luna si ferma prima
     const wOggi = (2 * Math.PI) / giorno;
     if (wOggi + (Lorb(a) - Lorb(a0)) / I > wMax) a = Math.max(a0, ((Lorb(a0) + I * (wMax - wOggi)) / m) ** 2 / (G * M));
     wPrima = Math.min(wMax, wOggi + (Lorb(a) - Lorb(a0)) / I);
+    if (P.bloccato || periodoOrbita(P, a, m) < giorno || a > 0.4 * amb.RH) return [];
   }
-  // la luna si PERDE se: il pianeta è bloccato dalla stella (gira piano: la marea la tira giù invece che su,
-  // e ricade: Mercurio e Venere non hanno lune), se orbita più in fretta di quanto il pianeta gira, o se
-  // arriva oltre 0,4 raggi di Hill, dove la stella la porta via (pianeti vicini alla stella)
-  if (P.bloccato || periodoOrbita(P, a, m) < giorno * (urto?.luna ? 1 - 1e-6 : 1) || a > 0.4 * amb.RH) return [];
   const L = corpoLuna('urto', m, a, 0, comp, 'urto/luna');
   L.giornoInizialePianeta = (2 * Math.PI) / wPrima;
   if (urto?.luna) L.giornoPianeta = giorno; // il giorno del pianeta oggi, dopo che la luna l'ha frenato

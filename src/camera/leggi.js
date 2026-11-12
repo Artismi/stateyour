@@ -501,6 +501,25 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   // lento): si va avanti per altri anni, finché il bilancio torna. (Il passo lento non si allunga oltre: un passo
   // molto più lungo della memoria di una fascia la porterebbe da sola al suo equilibrio, prima che i vicini contino.)
   let assorbita = 0, irradiata = 0, pesi = 0, ghiaccio = 0, ventoMedio = 0, scambioMedio = 0, giri = 0; const dtAdesso = dtLento, somma = { FT: 0, GG: 0 };
+  // UN PIANETA BLOCCATO SENZA NIENTE CHE PORTI IL CALORE (senz'aria, e senza una diffusione data): non ci sono stagioni né
+  // vicini, e il pianeta è lì da miliardi di anni: ogni fascia è al suo bilancio fermo, luce assorbita = luce irradiata (con
+  // il minimo di 3 K). Integrarlo nel tempo a partire da caldo dava, sulla faccia buia, la temperatura a cui era arrivata
+  // raffreddandosi quando l'integrazione finiva (128 K su un sasso dove il bilancio dice 3): un resto della partenza, non
+  // fisica (con 0,02 W/m² arrivano lì cent'anni per grado). Qui lo stesso passo della legge con il tempo lungo quanto si vuole
+  // (C/dt → 0: è il metodo di Newton sul bilancio), da caldo, fascia per fascia, finché non si muove più
+  if (bloccato && !su && !(fisso && D > 0)) {
+    let ass = 0, irr = 0, w = 0, gh = 0;
+    for (let j = 0; j < H; j++) {
+      let t = T[j];
+      for (let k = 0; k < 200; k++) { const entra = sole[j] * (1 - albedo(t, sole[j], vento[j])), esce = (sigma * t * t * t * t) / serra, dT = frenaPasso(t, ((entra - esce) * t) / (4 * esce)), nt = Math.max(3, t + dT); if (Math.abs(nt - t) < 1e-9 * t) { t = nt; break; } t = nt; }
+      const entra = sole[j] * (1 - albedo(t, sole[j], vento[j])), esce = Math.max(entra, (sigma * t * t * t * t) / serra); // (al minimo di 3 K il buio irradia quanto riceve: niente)
+      media[j] = t; ass += cosLat[j] * entra; irr += cosLat[j] * (t > 3 ? (sigma * t * t * t * t) / serra : entra); w += cosLat[j]; gh += cosLat[j] * (mare * gelo(t, gM) + (1 - mare) * gelo(t, gT));
+      void esce;
+    }
+    let Tm = 0; for (let j = 0; j < H; j++) Tm += media[j] * cosLat[j]; Tm /= w;
+    return { T: Tm, ghiaccio: gh / w, assorbita: ass / w, irradiata: irr / w, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media),
+      giri: 1, D: fisso ? D : 0, vento: ARIA.raffica, scambio: 0, trasporto: { lat: misuraDelTrasporto(lat, media, calore, raggioM).lat, flusso: new Array(H - 1).fill(0), massimo: 0, latitudine: 0, calore: Array.from(calore), aria: Array.from(media) } };
+  }
   for (let giro = 0; giro < 8; giro++) {
   giri++; somma.FT = 0; somma.GG = 0; assorbita = 0; irradiata = 0; pesi = 0; ghiaccio = 0; ventoMedio = 0; scambioMedio = 0; media.fill(0); calore.fill(0); ariaMedia.fill(0);
   for (let n = 0; n < totale; n++) {
