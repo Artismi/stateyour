@@ -164,7 +164,9 @@ export function creaNucleo(tela, opzioni = {}) {
   const tempo = { t: O.t0 || 0, velocita: 1, pausa: false, ritmo: 1 };
   // LO STATO DELLA VISTA. `cono`: ciò che si vede è il passato — ogni cosa lontana è disegnata dov'era quando è partita
   // la luce che arriva adesso (t − distanza/c); false: la sezione «adesso», tutto allo stesso istante (per confrontare).
-  const vista = { cono: O.cono !== false }, C_LUCE = 299792458;
+  // `passi`: quanti campioni per raggio nei volumi attraversati dallo sguardo (volumi.js); `riduzione`: di quanto è più
+  // piccola, per lato, l'immagine su cui li si disegna. Sono la qualità (e il costo): si possono cambiare in ogni momento.
+  const vista = { cono: O.cono !== false, passi: { galassia: 64, ragnatela: 56 }, riduzione: 2 }, C_LUCE = 299792458;
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)

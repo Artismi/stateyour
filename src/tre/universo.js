@@ -19,8 +19,8 @@ import { creaPunti } from './luci.js';
 import { creaSistema } from './sistema.js';
 import { scenaCosmo, scenaGalassia, statoCosmo } from '../camera/spazio3d.js';
 import { galassiaAlTempo } from '../camera/galassie.js';
-import { creaRete } from './rete.js';
 import { creaMezzo } from './mezzo.js';
+import { creaVolumeGalassia, creaVolumeRete } from './volumi.js';
 import { bucoCentrale } from '../camera/relativita.js';
 import { bucoNelMondo } from './sistema.js';
 import { sorgente } from '../camera/eventi.js';
@@ -77,7 +77,11 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
     for (let k = 0; k < K; k++) { const f = (Ltot * w[k]) / somma; d[8 * k + 4] *= f; d[8 * k + 5] *= f; d[8 * k + 6] *= f; }
     const o = punti.nube(d, K); o.dati = d; o.K = K; return o;
   })();
-  const mezzo = O.mezzo === false ? null : creaMezzo(N, { scena: () => sc, raggioM: Rg, opzioni: O.mezzo || {} });
+  // IL VOLUME (volumi.js): la galassia come densità attraversata dallo sguardo — luce delle stelle, polvere che la toglie,
+  // nebulose dentro lo stesso volume. Quando è pronto (lo calcola un filo in secondo piano) prende il posto dei batuffoli
+  // e dei dischetti del mezzo, che restano solo come ripiego (`volume: false`, o se il calcolo non riesce).
+  const volume = O.volume === false ? null : creaVolumeGalassia(N, { cosmo: via.cosmo, galassia: via.galassia, opzioni: O.volume || {} });
+  const mezzo = O.mezzo === false || volume ? null : creaMezzo(N, { scena: () => sc, raggioM: Rg, opzioni: O.mezzo || {} });
   const omega = sc.campi.bracci.velocitaAngolare || 0, rel = [0, 0, 0], eG = [0, 0, 0], eGr = [0, 0, 0]; let spenta = -1, prgChiaro = null;
   const strato = {
     nome: `galassia ${via.galassia}`, nodo,
@@ -112,17 +116,18 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         for (const b of strato.buchi) if (b && b.stato.attivo && Math.abs(strato.chiarore[1] - (b._cieloDato || 0)) > 0.1 * (b._cieloDato || 0)) { b._cieloDato = strato.chiarore[1]; const c = strato.chiarore, d = new Float32Array(32); for (let q = 0; q < 8; q++) d.set([c[0], c[1], c[2], 1], 4 * q); b.mettiCielo(b._cieloDato > 0 ? { w: 4, h: 2, dati: d, unita: 1 } : null); }
         carico *= 30 * 0.785; strato.quanti = Math.max(3000, Math.min(nube.K, Math.round((nube.K * O.frammenti) / Math.max(carico, 1))));
         E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
-        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.12 : 1.0) * angolo)); }
+        if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.07 : 0.3) * angolo)); }
     },
     // (i buchi neri a cui dare il cielo: quello del centro, e quello del sistema aperto se è un buco nero)
     chiarore: [0, 0, 0], buchi: new Set(bucoNero ? [bucoNero] : []),
     disegna(S, passata) {
+      if (passata === 'fondo' && volume && volume.pronto()) { volume.disegna(S, eG, N.quadro(nodo, S.t), omega * (S.t - volume.stato.meta.t), O.diffusa); return; }
       if (passata === 'fondo' && strato.chiarore[1] > 0) { // il chiarore di chi sta dentro la luce diffusa (W/m²/sr → rispetto al foglio bianco: π/E0)
         if (!prgChiaro) prgChiaro = N.programma(N.V_SCHERMO, 'uniform vec3 u_c; out vec4 o_col; void main() { o_col = vec4(u_c, 0.0); }'); const k = Math.PI / S.E0, gl = N.gl;
         gl.useProgram(prgChiaro.p); gl.uniform3f(prgChiaro.u.u_c, strato.chiarore[0] * k, strato.chiarore[1] * k, strato.chiarore[2] * k); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); S.schermo(); gl.disable(gl.BLEND); }
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
-      const peso = sc.punti.peso; nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
+      const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
       // ciò che sta tra le stelle (mezzo.js): le nubi oscure tolgono luce a ciò che è già disegnato, le nebulose aggiungono la loro
       if (mezzo) mezzo.disegna(S, rel, q);
     },
@@ -130,7 +135,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
     posStella: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; o[0] = P[3 * i]; o[1] = P[3 * i + 1]; o[2] = P[3 * i + 2]; return o; },
     spegni(i) { if (spenta >= 0) { const L = sc.punti.esiste[spenta] ? 1 : 0; luce[4 * spenta + 3] = L; } spenta = i; if (i >= 0) luce[4 * i + 3] = 0; },
     scena: () => sc, raggio: Rg,
-    bucoNero, mezzo, libera() { N.togli(strato); if (mezzo) mezzo.libera(); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
+    bucoNero, mezzo, volume, libera() { N.togli(strato); if (mezzo) mezzo.libera(); if (volume) volume.libera(); if (bucoNero) { N.togli(bucoNero); } stelle.libera(); nube.libera(); N.togliCorpo(nodo); },
   };
   const tScena0 = tScena; N.aggiungi(strato); return strato;
 }
@@ -162,7 +167,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   }
   // la nebbia: la luce di tutte le galassie che il campione rappresenta, e la sua tinta (la media di quelle del campione)
   const rete = (() => { if (!O.rete) return null; let L = 0; const tinta = [0, 0, 0], P = sc.punti; for (let i = 0; i < n; i++) { if (!P.esiste[i]) continue; L += P.luminosita[i]; for (let k = 0; k < 3; k++) tinta[k] += P.luminosita[i] * lineare(P.colore[3 * i + k]); }
-    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; try { return creaRete(N, { cosmo, luce: L * peso * (1 - O.puntiLuce), tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
+    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; try { return creaVolumeRete(N, { cosmo, luce: L * peso * (1 - O.puntiLuce), tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
   // LUNGO IL CONO: a distanza comovente χ, quando è partita la luce (s da oggi), lo spostamento z, la crescita D di
   // allora. Dipende solo dall'istante: una tabella di 33 punti fino a metà diagonale del toro, rifatta quando la scena
   // si rifà (relativita.js `conoPassato` costa un integrale per punto; tra i punti si interpola).
@@ -191,7 +196,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.metti(pos, luce, n);
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
       if (rete) { const a = sc.riferimento.fattoreDiScala; lungoIlCono(0, tScena);
-        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, (chi) => { const c = lungoIlCono(chi, tScena); return [c.visibile ? c.D : 0, c.visibile ? 1 / (1 + c.z) ** 2 : 0]; }, chiMax); if (E > 0) S.proponiLuce(E); }
+        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); if (E > 0) S.proponiLuce(E); }
     },
     disegna(S, passata) {
       if (passata === 'fondo' && rete) rete.disegna(S, O.rete);

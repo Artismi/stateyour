@@ -155,13 +155,67 @@ function celleToccate(forma, Cn, centro, raggio, tG) {
 const riga = (nome, W) => ({ nome, nm: Z.righe[nome], W });
 const HNU = (nm) => (H_PLANCK * K.c) / (nm * 1e-9);
 const ABB_O = 10 ** (ST.DATI.metalli[2][2] - 12);
-// una nebulosa di gas ionizzato da una stella (Q0, Q2: fotoni al secondo sopra 13,6 e 35,1 eV): Hα e Hβ dalle
-// ricombinazioni (ogni fotone ionizzante ne paga una: caso B); [O III] 500,7 nm dagli urti degli elettroni con l'O⁺⁺, che
-// c'è nella parte del volume dove arrivano i fotoni sopra 35,1 eV (come la zona dell'elio di Strömgren) [D]
-function righeNebulosa(Q0, Q2, Zr, Te, limiteHalfa = Infinity) {
-  const Ha = Math.min(Q0 * Z.HalfaPerFotone * HNU(Z.righe.Halfa), limiteHalfa), ric = Ha / (Z.HalfaPerFotone * HNU(Z.righe.Halfa)); // ricombinazioni al secondo
-  const aB = Z.alfaB[0] * Math.pow(Te / 1e4, Z.alfaB[1]), o = Z.OIII5007, q = ((8.629e-6 * o.omega) / (o.g * Math.sqrt(Te))) * Math.exp(-o.E / Te), y = Math.min(1, (O.elio * Q2) / Math.max(Q0, 1e-300));
-  return [riga('Halfa', Ha), riga('Hbeta', Ha / Z.balmer), riga('OIII', (ric / aB) * ABB_O * Zr * (1 - LEGGI.polvere) * y * q * o.ramo * HNU(Z.righe.OIII))];
+// UNA NEBULOSA DI GAS IONIZZATO DA UNA STELLA: che cosa emette, e a che temperatura sta. Tre conti, tutti [D] con dati atomici [R]:
+//   1. Hα e Hβ dalle ricombinazioni (ogni fotone ionizzante assorbito ne paga una: caso B).
+//   2. DOVE C'È O⁺⁺. L'ossigeno è due volte ionizzato dove l'elio è ionizzato (zona di Strömgren dell'elio: la parte
+//      min(1, 9,5·Q₁/Q₀) del volume) E dove i fotoni sopra 35,1 eV vincono la ricombinazione: O⁺⁺/O⁺ = Q₂·σ/(4πr²·n_e·α) =
+//      (r₁/r)². La media sul volume della parte O⁺⁺/(O⁺+O⁺⁺) è 3u²·(1 − u·atan(1/u)), u = r₁/R. (Attorno a una stella di
+//      39000 K in gas denso viene ~0,9, come nella nebulosa di Orione; nel gas rado, dove la sfera è grande, molto meno.)
+//      Allo stesso modo, con i fotoni sopra 54,9 eV e dentro la zona dell'elio ionizzato due volte, la parte salita a O³⁺
+//      (solo attorno alle stelle delle planetarie): lì la riga verde manca.
+//   3. LA TEMPERATURA NON È DATA: è quella a cui il gas perde quanto riceve (il «termostato» delle nebulose). Riceve
+//      l'energia che avanza a ogni fotoionizzazione, ⟨hν⟩ − 13,6 eV (dallo spettro della stella: tutti i fotoni se la
+//      nebulosa li assorbe tutti; pesati con la sezione d'urto ∝ ν⁻³ se è sottile, come un guscio di planetaria); perde
+//      per ricombinazione, frenamento, e soprattutto per le righe eccitate dagli urti: [O III] 500,7 nm e [O II], [N II]
+//      nel visibile, e le righe nell'infrarosso di O⁺⁺, N⁺, N⁺⁺, Ne⁺, Ne⁺⁺, S⁺⁺, S³⁺ (52, 88, 122, 205, 57, 12,8, 15,6, 18,7, 33,5, 10,5 µm);
+//      sopra i 15000 K anche per C III] e C IV nell'ultravioletto e per Lyα eccitata dagli urti nel poco idrogeno neutro.
+//      Più metalli → più righe → gas più FREDDO → la riga verde, che vuole 29000 K di salto, si spegne: per questo le
+//      regioni H II ricche di metalli sono rosse di Hα, e [O III] è forte attorno alle stelle calde con pochi metalli.
+// Abbondanze: O, N, Ne, S di stelle.js (DATI.metalli) per i metalli dell'anello; dell'ossigeno la parte fuori dai grani
+// (LEGGI.polvere, come nel mezzo); azoto, neon e zolfo non stanno nei grani. SEMPLIFICAZIONI: righe nel limite di bassa
+// densità (le infrarosse si spengono sopra ~10³ atomi/cm³: nelle regioni compatte il gas vero è un po' più caldo); lo zolfo
+// è tutto S⁺⁺ dove c'è O⁺ e tutto S³⁺ dove c'è O⁺⁺, il carbonio C⁺⁺ dove c'è O⁺⁺ e C³⁺ dove c'è O³⁺; mancano Ar e l'elio
+// (gas un po' più caldo del vero), e le righe di N, Ne, S dove c'è O³⁺; stelle come corpi neri.
+export const NEBULA = Object.freeze({
+  ricombinazione: 0.7, frenamento: 1.85e-27, // [R] energia persa per ricombinazione in unità di kT (β_B/α_B) e frenamento 1,42·10⁻²⁷·g·√T erg·cm³/s con g = 1,3 (Osterbrock & Ferland 2006, § 3.2–3.4)
+  // righe: [E/k (K), forza d'urto Ω, peso statistico del livello di partenza]. [R] Osterbrock & Ferland 2006, tab. 3.3–3.7 e 3.12–3.13
+  tre: { O: [[555, 2.34, 2]], C: [[92900, 8.88, 2]] }, // dove c'è O³⁺ (stelle oltre ~80000 K): [O IV] 25,9 µm; C IV 154,9 nm
+  due: { O: [[29169, 2.29, 9], [62100, 0.29, 9], [163, 0.55, 1], [441, 0.27, 1]], N: [[251, 1.45, 2]], Ne: [[925, 0.77, 5]], S: [[1369, 8.5, 2]], C: [[75400, 1.05, 1]] }, // dove c'è O⁺⁺: [O III] 500,7+495,9 nm, 436,3 nm, 88 e 52 µm; [N III] 57 µm; [Ne III] 15,6 µm; [S IV] 10,5 µm; C III] 190,9 nm
+  una: { O: [[38600, 1.34, 4]], N: [[22000, 2.64, 9], [70, 0.41, 1], [188, 0.27, 1]], Ne: [[1123, 0.28, 4]], S: [[16290, 6.95, 9], [430, 3.98, 1], [1199, 1.31, 1]] }, // dove c'è O⁺: [O II] 372,7 nm; [N II] 658,4 nm, 205 e 122 µm; [Ne II] 12,8 µm; [S III] 953+907 nm, 33,5 e 18,7 µm
+  // fotoionizzazione alla soglia (m²) e ricombinazione totale, radiativa + dielettronica (m³/s a 10⁴ K, esponente): [R], incerte di un fattore 2
+  Opiu: { eV: 35.12, sigma: 7.3e-22, alfa: [3.7e-18, -0.65], elio: 24.587, zonaElio: 9.5 }, // O⁺ → O⁺⁺, dentro la zona dell'elio ionizzato una volta: (n_H/n_He)·(α_B(H)/α_B(He)) = 10·2,59/2,73 (Osterbrock & Ferland 2006, § 2.4)
+  Opp: { eV: 54.93, sigma: 3.6e-22, alfa: [1.0e-17, -0.65], elio: 54.42, zonaElio: 1.9 }, // O⁺⁺ → O³⁺, dentro la zona dell'elio ionizzato due volte: 10·α_B(H)/α_B(He⁺), con α_B(He⁺, T) = 2·α_B(H, T/4) [D]
+  neutro: 3, // lo spessore ottico, alla soglia dell'idrogeno, di una nebulosa che assorbe tutti i suoi fotoni: qualche unità. Da qui la parte di idrogeno rimasta neutra, 3/(n·σ·R), che raffredda con Lyα quando il gas supera i 15000 K (ORDINE DI GRANDEZZA)
+});
+const ABBONDANZA = (i) => 10 ** (ST.DATI.metalli[i][2] - 12); // per atomo di H nel Sole: C = 0, N = 1, O = 2, Ne = 3, S = 6
+// la parte del volume di una nebulosa (raggio R in m, densità n in H per m³) dove uno ione è salito di un gradino: sta
+// dentro la zona dell'elio che lascia passare quei fotoni, e lì lo ione superiore su quello inferiore vale (r₁/r)² [D]
+function parteIonizzata(Q0, st, ione, n, R, Te) {
+  const Q = fotoniSopra(st.Lw, st.T, ione.eV); if (!(Q > 0) || !(Q0 > 0)) return 0; const yHe = Math.min(1, (ione.zonaElio * fotoniSopra(st.Lw, st.T, ione.elio)) / Q0), RHe = R * Math.cbrt(yHe);
+  const r1 = Math.sqrt((Q * ione.sigma) / (PI4 * 1.1 * n * ione.alfa[0] * Math.pow(Te / 1e4, ione.alfa[1]))), u = r1 / Math.max(RHe, 1e-300);
+  return yHe * (u > 30 ? 1 - 0.6 / (u * u) : 3 * u * u * (1 - u * Math.atan(1 / u)));
+}
+// la temperatura di equilibrio (K) di una nebulosa attorno a una stella a Tstella, con metalli Zr; y: la parte di
+// ossigeno che è O⁺⁺; y3: la parte che è O³⁺ (il resto è O⁺); neutro: la parte di idrogeno rimasta neutra
+export function temperaturaNebulosa(Tstella, Zr, y, sottile = false, { y3 = 0, neutro = 0 } = {}) {
+  const kT = K.kB * Tstella, x0 = (Z.ionizzazioni.H * K.e) / kT; let medio;
+  if (sottile) { let s = 0; for (let n = 1; n < 40; n++) { const e = dentroMezzo.expint1(n * x0); s += e; if (e < 1e-12) break; } medio = (kT * -Math.log(-Math.expm1(-x0))) / s; } // ∫dx/(eˣ−1) / ∫dx/(x(eˣ−1))
+  else medio = (kT * dentroMezzo.planck3(x0)) / dentroMezzo.planck2(x0);
+  const gas = 1 - LEGGI.polvere, avanza = Math.max(0, medio - Z.ionizzazioni.H * K.e) * 1e7, kErg = K.kB * 1e7, ab = { C: ABBONDANZA(0) * Zr * gas, O: ABBONDANZA(2) * Zr * gas, N: ABBONDANZA(1) * Zr, Ne: ABBONDANZA(3) * Zr, S: ABBONDANZA(6) * Zr };
+  const righe = (zona, T) => { let s = 0; for (const el in zona) for (const [E, om, g] of zona[el]) s += (ab[el] * om * kErg * E * Math.exp(-E / T)) / g; return s; };
+  const sbilancio = (T) => { const aB = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]); return aB * NEBULA.ricombinazione * kErg * T + NEBULA.frenamento * Math.sqrt(T) + (8.629e-6 / Math.sqrt(T)) * (y3 * righe(NEBULA.tre, T) + y * righe(NEBULA.due, T) + Math.max(0, 1 - y - y3) * righe(NEBULA.una, T))
+    + (neutro * Z.lyAlfa[0] * Math.exp(-Z.lyAlfa[1] / T)) / (1 + Math.sqrt(T / 1e5)) - aB * avanza; };
+  let lo = 500, hi = 1e5; for (let k = 0; k < 40; k++) { const m = Math.sqrt(lo * hi); if (sbilancio(m) < 0) lo = m; else hi = m; }
+  return Math.sqrt(lo * hi);
+}
+// → { righe: [Hα, Hβ, [O III]] in watt, Te, y (parte di O⁺⁺), y3 (di O³⁺) }. st: { Lw, T } della stella; n, raggio: densità
+// e raggio della nebulosa; limiteHalfa: se il gas è meno di quanto la stella potrebbe ionizzare (i gusci delle planetarie)
+function righeNebulosa({ st, Zr, n, raggio, limiteHalfa = Infinity }) {
+  const Q0 = fotoniSopra(st.Lw, st.T, Z.ionizzazioni.H), pieno = Q0 * Z.HalfaPerFotone * HNU(Z.righe.Halfa), Ha = Math.min(pieno, limiteHalfa), sottile = limiteHalfa < pieno, ric = Ha / (Z.HalfaPerFotone * HNU(Z.righe.Halfa)); // ricombinazioni al secondo
+  const neutro = Math.min(1, NEBULA.neutro / (n * ST.dentro.SIGMA_K * raggio)) * (sottile ? limiteHalfa / pieno : 1); // (la sezione d'urto dell'idrogeno alla soglia: quella di stelle.js; un guscio sottile è ancora più ionizzato)
+  let Te = Z.ionizzato.T, y = 0, y3 = 0; for (let giro = 0; giro < 3; giro++) { const alto = parteIonizzata(Q0, st, NEBULA.Opiu, n, raggio, Te); y3 = Math.min(alto, parteIonizzata(Q0, st, NEBULA.Opp, n, raggio, Te)); y = alto - y3; Te = temperaturaNebulosa(st.T, Zr, y, sottile, { y3, neutro }); }
+  const aB = Z.alfaB[0] * Math.pow(Te / 1e4, Z.alfaB[1]), o = Z.OIII5007, q = ((8.629e-6 * o.omega) / (o.g * Math.sqrt(Te))) * Math.exp(-o.E / Te);
+  return { righe: [riga('Halfa', Ha), riga('Hbeta', Ha / Z.balmer), riga('OIII', (ric / aB) * ABB_O * Zr * (1 - LEGGI.polvere) * y * q * o.ramo * HNU(Z.righe.OIII))], Te, y, y3, sottile, Q0 };
 }
 const emette = (righe, continuo = null) => { const c = coloreVero(righe, continuo); return { righe, continuo, colore: c.rgb, visibile: righe.reduce((s, r) => s + r.W, 0) + (continuo?.W || 0) }; };
 
@@ -180,16 +234,21 @@ function stellaCalda(R, i, fr, o, tAnni) {
 }
 function regioneHII(R, i, fr, o, tAnni) {
   const st = stellaCalda(R, i, fr, o, tAnni); if (!st) return null;
-  const I = Z.ionizzazioni, Te = Z.ionizzato.T, Q0 = fotoniSopra(st.Lw, st.T, I.H), Q2 = fotoniSopra(st.Lw, st.T, I.Opiu), aB = Z.alfaB[0] * 1e-6 * Math.pow(Te / 1e4, Z.alfaB[1]);
-  const stromgren = (n) => Math.cbrt((3 * Q0) / (PI4 * aB * 1.1 * n * n)), nDiffuso = Math.max(1e3, R.a.nMedio), fuori = stromgren(nDiffuso), nellaNube = st.eta < LARSON.vita;
-  let raggio = fuori, n = nDiffuso, stato = 'nel gas diffuso';
-  if (nellaNube) { // ancora nella nube madre: la sfera di Strömgren a quella densità, che poi si allarga spinta dalla pressione
-    // del gas ionizzato: R = R_S·(1 + 7·c·t/4R_S)^(4/7) (Spitzer 1978) [R], finché non sbuca nel gas diffuso
-    const r0 = stromgren(R.a.nube.nH), cII = Math.sqrt((2.2 * K.kB * Te) / dentroMezzo.MASSA_PER_H), r = r0 * Math.pow(1 + (7 * cII * st.eta * ANNO) / (4 * r0), 4 / 7);
-    if (r < fuori) { raggio = r; n = R.a.nube.nH * Math.pow(r0 / r, 1.5); stato = r > 1.5 * r0 ? 'si allarga nella nube madre' : 'compatta, nella nube madre'; }
-  }
-  return { tipo: 'regione H II', raggio, nH: n, T: Te, stato, stella: { massa: st.m, eta: st.eta, vita: st.vita, T: st.T, L: st.Lw, raggio: st.raggioStella }, ionizzanti: Q0, massaIonizzataKg: (PI4 / 3) * raggio ** 3 * n * dentroMezzo.MASSA_PER_H,
-    emette: emette(righeNebulosa(Q0, Q2, R.a.Z, Te)) };
+  const Q0 = fotoniSopra(st.Lw, st.T, Z.ionizzazioni.H), nDiffuso = Math.max(1e3, R.a.nMedio), nellaNube = st.eta < LARSON.vita;
+  const forma = (Te) => { // il raggio e la densità, con il gas ionizzato a Te
+    const aB = Z.alfaB[0] * 1e-6 * Math.pow(Te / 1e4, Z.alfaB[1]), stromgren = (n) => Math.cbrt((3 * Q0) / (PI4 * aB * 1.1 * n * n)), fuori = stromgren(nDiffuso);
+    if (nellaNube) { // ancora nella nube madre: la sfera di Strömgren a quella densità, che poi si allarga spinta dalla pressione
+      // del gas ionizzato: R = R_S·(1 + 7·c·t/4R_S)^(4/7) (Spitzer 1978) [R], finché non sbuca nel gas diffuso
+      const r0 = stromgren(R.a.nube.nH), cII = Math.sqrt((2.2 * K.kB * Te) / dentroMezzo.MASSA_PER_H), r = r0 * Math.pow(1 + (7 * cII * st.eta * ANNO) / (4 * r0), 4 / 7);
+      if (r < fuori) return { raggio: r, n: R.a.nube.nH * Math.pow(r0 / r, 1.5), stato: r > 1.5 * r0 ? 'si allarga nella nube madre' : 'compatta, nella nube madre' };
+    }
+    return { raggio: fuori, n: nDiffuso, stato: 'nel gas diffuso' };
+  };
+  // la temperatura del gas dipende (poco) da quanto è grande la nebulosa, e il raggio (poco) dalla temperatura: due giri
+  let F = forma(Z.ionizzato.T), N = null; for (let giro = 0; giro < 2; giro++) { N = righeNebulosa({ st, Zr: R.a.Z, n: F.n, raggio: F.raggio }); F = forma(N.Te); }
+  N = righeNebulosa({ st, Zr: R.a.Z, n: F.n, raggio: F.raggio });
+  return { tipo: 'regione H II', raggio: F.raggio, nH: F.n, T: N.Te, ossigenoDueVolte: N.y, stato: F.stato, stella: { massa: st.m, eta: st.eta, vita: st.vita, T: st.T, L: st.Lw, raggio: st.raggioStella }, ionizzanti: Q0, massaIonizzataKg: (PI4 / 3) * F.raggio ** 3 * F.n * dentroMezzo.MASSA_PER_H,
+    emette: emette(N.righe) };
 }
 function riflessione(R, i, fr, o, tAnni) {
   const st = stellaCalda(R, i, fr, o, tAnni); if (!st || st.eta > LARSON.vita) return null;
@@ -203,10 +262,11 @@ function planetaria(R, o, eta) {
   // chi era: una delle stelle che muoiono oggi in quell'anello (in proporzione a quante ne muoiono di ogni massa)
   const P = popolazione(), i = Math.min(P.N - 1, Math.max(0, Math.round(cdfInversa(R.pn.cum, o('chi') * R.pn.ritmo) * P.N - 0.5))), m0 = P.m[i], mNana = R.S.resto[i], M = O.mestel;
   const raggio = O.planetaria.velocita * eta * ANNO, Rn = ST.fine(m0, 1e-4, { Z: R.a.Z }).raggio, Lw = LSOLE * Math.pow((M[0] * Math.pow(mNana, M[1])) / Math.max(eta, 1e4), M[2]), T = Math.min(M[3], Math.pow(Lw / (PI4 * Rn * Rn * K.sigma), 0.25));
-  const I = Z.ionizzazioni, Te = 1e4, Q0 = fotoniSopra(Lw, T, I.H), Q2 = fotoniSopra(Lw, T, I.Opiu), n = O.planetaria.guscio / dentroMezzo.MASSA_PER_H / ((PI4 / 3) * raggio ** 3);
+  const Q0 = fotoniSopra(Lw, T, Z.ionizzazioni.H), n = O.planetaria.guscio / dentroMezzo.MASSA_PER_H / ((PI4 / 3) * raggio ** 3);
   // il guscio è poco: se la stella lo ionizza tutto, Hα è limitata dalla massa (ricombinazioni = α_B·n_e·n_p·V), non dai fotoni
-  const tutta = Z.alfaB[0] * 1e-6 * 1.1 * n * n * (PI4 / 3) * raggio ** 3 * Z.HalfaPerFotone * HNU(Z.righe.Halfa);
-  return { tipo: 'nebulosa planetaria', raggio, nH: n, T: Te, eta, velocita: O.planetaria.velocita, stella: { massaNascita: m0, massa: mNana, T, L: Lw, stato: 'nana bianca appena nata' }, ionizzanti: Q0, emette: emette(righeNebulosa(Q0, Q2, R.a.Z, Te, tutta)) };
+  // (la ricombinazione a 10⁴ K: la temperatura vera del guscio esce dal bilancio, qui sotto, tra 10 e 13 mila K)
+  const tutta = Z.alfaB[0] * 1e-6 * 1.1 * n * n * (PI4 / 3) * raggio ** 3 * Z.HalfaPerFotone * HNU(Z.righe.Halfa), N = righeNebulosa({ st: { Lw, T }, Zr: R.a.Z, n, raggio, limiteHalfa: tutta });
+  return { tipo: 'nebulosa planetaria', raggio, nH: n, T: N.Te, ossigenoDueVolte: N.y, ossigenoTreVolte: N.y3, eta, velocita: O.planetaria.velocita, stella: { massaNascita: m0, massa: mNana, T, L: Lw, stato: 'nana bianca appena nata' }, ionizzanti: Q0, emette: emette(N.righe) };
 }
 // un resto di supernova di età `eta` (anni) nel gas di densità n: le fasi di vuoto_mezzo.js e ciò che emette
 export function schedaResto({ n, eta, ia, espulsaKg, Zr = 1, resto = null }) {
@@ -294,4 +354,4 @@ export function densitaOggetti(forma, r) {
   const Cn = censimento(forma); let k = 0; while (k < ANELLI - 1 && forma.anelli.bordo[k + 1] < r) k++; const R = Cn.anello(k), V = (R.a.area / KPC ** 2) * 2 * LEGGI.spessoreGas, Vs = (R.a.area / KPC ** 2) * 2 * R.z0;
   return { 'nube molecolare': R.nubi.totale / V, 'nube molecolare gigante': (R.nubi.K > 0 ? R.nubi.sopra(1e5 * MSOLE) : 0) / V, 'regione H II': R.hii[R.S.iSN] / V, 'nebulosa a riflessione': R.rifl[R.iRif] / V, 'nebulosa planetaria': (R.pn.ritmo * R.pn.durata) / Vs, 'resto di supernova': (R.sn.collasso * R.sn.durata) / V + (R.sn.Ia * R.sn.durata) / Vs };
 }
-export const dentroOggetti = { stelleDi, pesoCella, postoIn, celleToccate, righeNebulosa, cdfIn, cdfInversa, TIPI };
+export const dentroOggetti = { stelleDi, pesoCella, postoIn, celleToccate, righeNebulosa, parteIonizzata, cdfIn, cdfInversa, TIPI };

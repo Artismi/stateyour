@@ -48,13 +48,15 @@ prova('la polvere: le taglie di MRN fissano grani ed estinzione; più metalli, p
   riscontro('polvere', 'grani in un m³ dove c\'è 1 atomo/cm³', p.graniPerH * 1e6, [1e-4, 1e-3], { fonte: 'ordine di grandezza dai libri' });
 });
 
-prova('i raggi cosmici: UNA fonte con materia.js (la copia, frenata come là, ridà energiaDeiPrimari a ogni soglia)', () => {
-  // il campo di forza di materia.js sulla copia: J(E) = fuori(E + Φ)·E(E + 2m)/((E + Φ)(E + Φ + 2m)); poi lo stesso integrale (trapezi in logaritmo, 80 passi)
-  const c = V.COPIA_MATERIA, frenato = (E) => (V.dentroMezzo.fuoriCopia(E + c.phi) * (E * (E + 2 * c.mP))) / ((E + c.phi) * (E + c.phi + 2 * c.mP));
+prova('i raggi cosmici: UNA fonte con materia.js (lo spettro è il suo; frenato dal vento del Sole ridà energiaDeiPrimari)', () => {
+  assert.strictEqual(V.spettroCosmici, MAT.spettroInterstellare, 'nessuna copia: la funzione è quella di materia.js'); assert.ok(!('COPIA_MATERIA' in V));
+  // che `spettroInterstellare` sia davvero lo spettro da cui materia.js fa i suoi primari: frenato con il suo campo di forza (Φ = 0,55 GV,
+  // m_p = 0,93827 GeV: [V] letti in materia.js) e integrato come là (trapezi in logaritmo, 80 passi) deve ridare energiaDeiPrimari a ogni soglia
+  const c = { phi: 0.55, mP: 0.93827 }, frenato = (E) => (MAT.spettroInterstellare(E + c.phi) * (E * (E + 2 * c.mP))) / ((E + c.phi) * (E + c.phi + 2 * c.mP));
   const integra = (f, a, b, n = 80) => { const h = Math.log(b / a) / n; let s = 0; for (let i = 0; i <= n; i++) { const x = a * Math.exp(i * h); s += (i === 0 || i === n ? 0.5 : 1) * f(x) * x; } return s * h; };
   for (const soglia of [0, 1, 3, 10, 30]) { const a = Math.max(Math.sqrt(soglia * soglia + c.mP * c.mP) - c.mP, 0.02), mio = Math.PI * integra(frenato, a, 1e6), suo = MAT.energiaDeiPrimari(soglia).numero, mioE = Math.PI * integra((E) => E * frenato(E), a, 1e6), suoE = MAT.energiaDeiPrimari(soglia).flusso;
     tra(mio / suo, 1 - 1e-9, 1 + 1e-9, `numero di primari sopra ${soglia} GV`); tra(mioE / suoE, 1 - 1e-9, 1 + 1e-9, `energia dei primari sopra ${soglia} GV`); }
-  console.log(`      (lo spettro viene ${V.spettroDaMateria() ? 'da materia.js (spettroInterstellare)' : 'dalla COPIA dichiarata: materia.js non esporta ancora `fuori`'})`);
+  tra(V.dentroMezzo.MP_GEV / c.mP, 0.999, 1.001, 'la massa del protone dalle costanti di leggi.js');
   const s = V.raggiCosmiciIn(null), B = Math.sqrt(2 * 4e-7 * Math.PI * s.energia);
   assert.equal(s.relativo, 1); assert.ok(V.raggiCosmiciIn(VL).relativo === MAT.cieloRelativo({ ritmoSN: VL.ritmoSN.totale, forma: VL }).relativo, 'il cielo relativo è quello di materia.js');
   riscontro('raggi cosmici', 'densità di energia vicino al Sole (eV/cm³)', s.energia / EV / 1e6, [0.83, 1.8], { entro: 1.3, fonte: 'Voyager 1 (Cummings et al. 2016): 0,83; Webber 1998: 1,8' });
@@ -190,16 +192,33 @@ prova('che cosa emettono: Hα e Hβ nel rapporto di ricombinazione, [O III] solo
   // [O III]/Hβ cresce con la temperatura della stella
   const ord = hii.slice().sort((a, b) => a.stella.T - b.stella.T), q = (o) => riga(o, 'OIII') / riga(o, 'Hbeta'); assert.ok(q(ord[ord.length - 1]) > q(ord[0]) && q(ord[0]) < 0.3, `[O III]/Hβ da ${q(ord[0]).toExponential(1)} (${ord[0].stella.T.toFixed(0)} K) a ${q(ord[ord.length - 1]).toFixed(2)} (${ord[ord.length - 1].stella.T.toFixed(0)} K)`);
   // la sfera di Strömgren nel gas diffuso: R³ = 3Q/(4π·α_B·n_e·n_p)
-  for (const o of hii.filter((x) => x.stato === 'nel gas diffuso').slice(0, 10)) { const aB = 2.59e-19 * Math.pow(0.8, -0.7); tra(o.raggio / Math.cbrt((3 * o.ionizzanti) / (4 * Math.PI * aB * 1.1 * o.nH ** 2)), 0.999, 1.001, 'Strömgren'); }
+  for (const o of hii.filter((x) => x.stato === 'nel gas diffuso').slice(0, 10)) { const aB = 2.59e-19 * Math.pow(o.T / 1e4, -0.7); tra(o.raggio / Math.cbrt((3 * o.ionizzanti) / (4 * Math.PI * aB * 1.1 * o.nH ** 2)), 0.999, 1.001, 'Strömgren'); }
+  // IL TERMOSTATO: la temperatura del gas non è data, esce dal bilancio; più metalli → più freddo → meno [O III] (a parità di stella)
+  { const Tz = [0.2, 0.5, 1, 2, 4].map((z) => V.temperaturaNebulosa(40000, z, 0.8)); for (let i = 1; i < Tz.length; i++) assert.ok(Tz[i] < Tz[i - 1], `T_e cala con i metalli: ${Tz.map((x) => x.toFixed(0))}`); assert.ok(V.temperaturaNebulosa(50000, 1, 0.8) > V.temperaturaNebulosa(35000, 1, 0.8), 'una stella più calda scalda di più');
+    const s = ST.stella(40, { Z: 1 }), Lw = s.L * LSOLE, Q = [13.598].map((e) => V.fotoniSopra(Lw, s.T, e)), neb = (Zr, n) => { const R = Math.cbrt((3 * Q[0]) / (4 * Math.PI * 3.03e-19 * 1.1 * n * n)), N = V.dentroOggetti.righeNebulosa({ st: { Lw, T: s.T }, Zr, n, raggio: R }); return { ...N, q: N.righe[2].W / N.righe[1].W, colore: V.coloreVero(N.righe).rgb }; };
+    const povera = neb(0.3, 1e8), solare = neb(1, 1e8), ricca = neb(3, 1e8), rada = neb(1, 1e6); assert.ok(povera.q > solare.q && solare.q > 10 * ricca.q, `[O III]/Hβ attorno alla stessa stella di 40 M☉: ${povera.q.toFixed(2)} (Z = 0,3), ${solare.q.toFixed(2)} (1), ${ricca.q.toFixed(3)} (3)`);
+    assert.ok(solare.y > rada.y && solare.y > 0.5, `O⁺⁺ riempie di più una nebulosa densa (${solare.y.toFixed(2)}) che una rada (${rada.y.toFixed(2)})`); assert.ok(ricca.colore[0] === 255 && ricca.colore[2] > ricca.colore[1], `con tanti metalli la regione H II è rosa di Hα: ${ricca.colore}`);
+    // l'energia torna: le righe di O III nel visibile non portano via più di quanto la stella dà al gas (⟨hν⟩ − 13,6 eV a fotone)
+    const kT = K.kB * s.T, x0 = (13.598 * EV) / kT, avanza = Q[0] * ((kT * V.dentroMezzo.planck3(x0)) / V.dentroMezzo.planck2(x0) - 13.598 * EV); for (const N of [povera, solare, ricca, rada]) assert.ok(N.righe[2].W / 0.745 < avanza, '[O III] non supera il riscaldamento');
+    riscontro('oggetti', 'T del gas di una regione H II a metalli solari, stella di 40 M☉ (K)', solare.Te, [7500, 8500], { entro: 1.15, fonte: 'Shaver et al. 1983: T_e ≈ 7600 K all\'abbondanza solare di ossigeno' });
+    riscontro('oggetti', '[O III] 500,7/Hβ, stessa nebulosa (nube di 100 atomi/cm³)', solare.q, [0.3, 3], { entro: 1.3, fonte: 'regioni H II a metalli solari (Orione ~3: Baldwin et al. 1991)' });
+    riscontro('oggetti', '  la stessa con un terzo dei metalli', povera.q, [3, 7], { entro: 1.3, fonte: '30 Doradus e simili: ~5 (Kennicutt et al. 2000)' }); }
   // i colori: una regione H II con poca [O III] è rosa (rosso > blu > verde); una planetaria è verde-azzurra; una nebulosa a riflessione è più blu della sua stella
   const fredda = ord[0].emette.colore; assert.ok(fredda[0] === 255 && fredda[2] > fredda[1], `H II di una stella «fredda»: ${fredda}`);
-  for (const o of pn) { const c = o.emette.colore; assert.ok(c[1] === 255 && c[0] < 120, `planetaria: ${c}`); assert.ok(o.raggio <= V.OGGETTI.planetaria.raggio * 1.0001 && o.eta < 2.2e4); tra(q(o), 2, 20, '[O III]/Hβ di una planetaria'); }
+  for (const o of pn) { const c = o.emette.colore; assert.ok(c[1] === 255 && c[0] < 120, `planetaria: ${c}`); assert.ok(o.raggio <= V.OGGETTI.planetaria.raggio * 1.0001 && o.eta < 2.2e4); assert.ok(q(o) > 1 && o.T > 5000 && o.T < 3e4 && o.ossigenoDueVolte + o.ossigenoTreVolte <= 1 + 1e-9, `planetaria: [O III]/Hβ ${q(o)}, T_e ${o.T}`); }
   for (const o of rif) { const c = o.emette.colore, s = V.coloreVero([], { T: o.stella.T, W: 1 }).rgb; assert.ok(c[2] === 255 && c[0] / c[2] < s[0] / s[2], `riflessione ${c} contro stella ${s}`); assert.ok(o.stella.T < hii[0].stella.T + 3e4); }
   for (const o of nubi) { assert.equal(o.emette.colore, null); assert.ok(o.estinzione > 1 && o.oscura, 'una nube molecolare è una nebulosa oscura'); tra(o.viriale, 0.5, 3, 'le nubi di Larson sono vicine all\'equilibrio viriale'); assert.ok(o.quanteJeans > 1, 'contengono più masse di Jeans: possono fare stelle'); }
   for (const o of snr) { assert.ok(['libera', 'Sedov–Taylor', 'radiativa'].includes(o.fase)); if (o.fase === 'radiativa') assert.ok(riga(o, 'Halfa') > 0 && (o.T > 1e5) === (riga(o, 'OIII') > 0)); else assert.ok(o.raggiX >= 0 && o.emette.colore === null); }
   const rosse = V.coloreVero([{ nm: 656.28, W: 1 }]).rgb, verdi = V.coloreVero([{ nm: 500.68, W: 1 }]).rgb; assert.ok(rosse[0] === 255 && rosse[1] < 30 && rosse[2] < rosse[0] / 2, `Hα è rossa: ${rosse}`); assert.ok(verdi[1] === 255 && verdi[0] < 60 && verdi[2] > 100, `[O III] è verde-azzurra: ${verdi}`); // (656 nm sta fuori dal triangolo sRGB: riportarla dentro verso il grigio le dà un filo di blu)
   const sole = V.coloreVero([], { T: 5772, W: 1 }).rgb; assert.ok(Math.min(...sole) > 200, `il Sole è quasi bianco: ${sole}`);
   riscontro('oggetti', '[O III]/Hβ mediano delle nebulose planetarie', mediana(pn.map(q)), [5, 15], { fonte: 'tipico delle planetarie (Osterbrock & Ferland 2006)' });
+  riscontro('oggetti', '  il più alto tra le planetarie (le più giovani e dense)', Math.max(...pn.map(q)), [10, 20], { entro: 1.3, fonte: 'le planetarie di eccitazione più alta: 15–20' });
+  riscontro('oggetti', 'T_e mediana delle nebulose planetarie (K)', mediana(pn.map((o) => o.T)), [10000, 13000], { entro: 1.2, fonte: 'Osterbrock & Ferland 2006: 10–15 mila K' });
+  { const tutte = V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 0.6 }, 0, { caso: CASO, massimo: 1e9, tipi: ['regione H II'] }).oggetti, calde = tutte.filter((o) => o.stella.T > 33000), rosa = tutte.filter((o) => o.emette.colore[0] === 255 && o.emette.colore[2] > o.emette.colore[1]).length / tutte.length;
+    assert.ok(tutte.length > 200 && rosa > 0.5, `regioni H II rosa (di Hα) in 600 pc attorno al Sole: ${(100 * rosa).toFixed(0)}% di ${tutte.length}`); for (const o of tutte) assert.ok(o.T > 500 && o.T < 3e4 && o.ossigenoDueVolte >= 0 && o.ossigenoDueVolte <= 1);
+    console.log(`      (tutte le ${tutte.length} regioni H II entro 600 pc dal Sole: ${(100 * rosa).toFixed(0)}% rosa; T_e mediana ${mediana(tutte.map((o) => o.T)).toFixed(0)} K; attorno alle ${calde.length} stelle sopra 33000 K [O III]/Hβ mediano ${mediana(calde.map(q)).toFixed(2)}, massimo ${Math.max(...calde.map(q)).toFixed(2)})`);
+    riscontro('oggetti', '[O III]/Hβ mediano delle regioni H II attorno a stelle O (> 33000 K), vicino al Sole', mediana(calde.map(q)), [0.3, 3], { entro: 1.3, fonte: 'regioni H II galattiche a metalli solari' });
+    riscontro('oggetti', 'T_e mediana delle regioni H II vicino al Sole (K)', mediana(tutte.map((o) => o.T)), [7000, 8500], { entro: 1.15, fonte: 'Shaver et al. 1983; Quireza et al. 2006' }); }
   riscontro('oggetti', 'densità media di una nube gigante (H per cm³)', V.nubeDi(1e5 * MSOLE, 1).nH / 1e6, [100, 300], { fonte: 'Solomon et al. 1987' });
   riscontro('oggetti', 'A_V attraverso una nube', V.nubeDi(1e5 * MSOLE, 1).AV, [7, 9], { fonte: 'Solomon et al. 1987: 170 M☉/pc²' });
 });
@@ -219,6 +238,20 @@ prova('nel tempo: un resto cresce restando se stesso; le planetarie durano poco 
   riscontro('oggetti', 'stelle che muoiono all\'anno lasciando una nana bianca', TOT.mortiPerAnno, [0.8, 1.2], { entro: 3, fonte: 'una all\'anno (Iben & Renzini 1983)' });
   riscontro('oggetti', 'resti di supernova più giovani di 60 mila anni', TOT.restiRadio, [1000, 3000], { entro: 3, fonte: '~300 noti in radio (Green 2019), stimati 1000–3000' });
   riscontro('oggetti', 'stelle nate nelle nubi con l\'1% per caduta libera (M☉/anno)', TOT.stelleNasconoNelleNubi, VL.storia.sfr[VL.storia.sfr.length - 1], { entro: 3, fonte: 'seconda via: le nascite di galassie.js oggi' });
+});
+
+prova('la nebbia non taglia il disco esterno: le regioni H II e le nubi mostrate da lontano stanno ai raggi di tutte le altre', () => {
+  const Cn = V.censimento(VL), tutto = { centro: [0, 0, 0], raggio: 100 }, N = V.oggettiIn(VL, tutto, 0, { caso: CASO, massimo: 400, tipi: ['regione H II', 'nube molecolare'] });
+  for (const [tipo, attese] of [['regione H II', (A) => A.hii[A.S.iSN]], ['nube molecolare', (A) => A.nubi.totale]]) { const o = N.oggetti.filter((x) => x.tipo === tipo), tot = Cn.anelli.reduce((s, A) => s + attese(A), 0), taglio = N.nebbia[tipo].soglia; assert.ok(taglio < 0.01, 'c\'è la nebbia');
+    // anello per anello: i mostrati sono la stessa parte (taglio) degli attesi, entro Poisson
+    for (const A of Cn.anelli) { const att = attese(A) * taglio, n = o.filter((x) => x.anello === A.k).length; assert.ok(Math.abs(n - att) < 5 * Math.sqrt(att) + 2, `${tipo}, anello ${A.k} (${VL.anelli.r[A.k].toFixed(1)} kpc): ${n} mostrati contro ${att.toFixed(1)} attesi`); }
+    const rr = o.map((x) => Math.hypot(x.pos[0], x.pos[1])).sort((a, b) => a - b), ultimo = Math.max(...Cn.anelli.filter((A) => attese(A) * taglio > 3).map((A) => A.b1)); assert.ok(rr[rr.length - 1] > 0.7 * ultimo, `${tipo}: la più lontana mostrata sta a ${rr[rr.length - 1].toFixed(1)} kpc (ce ne sono fino a ${ultimo.toFixed(1)})`);
+    assert.ok(tot > 0 && Math.abs(o.length - tot * taglio) < 5 * Math.sqrt(tot * taglio)); }
+  // dove sono, per chilometro di raggio (dN/dR), e fin dove arrivano: dal censimento (tutte, non un campione)
+  const perKpc = Cn.anelli.map((A) => A.hii[A.S.iSN] / (A.b1 - A.b0)), kMax = perKpc.indexOf(Math.max(...perKpc)), totH = Cn.anelli.reduce((s, A) => s + A.hii[A.S.iSN], 0); let cum = 0, r99 = 0; for (const A of Cn.anelli) { const n = A.hii[A.S.iSN]; if (cum + n >= 0.99 * totH && !r99) r99 = Math.sqrt(A.b0 ** 2 + ((0.99 * totH - cum) / n) * (A.b1 ** 2 - A.b0 ** 2)); cum += n; }
+  const viste = N.oggetti.filter((x) => x.tipo === 'regione H II').map((x) => Math.hypot(x.pos[0], x.pos[1])); console.log(`      (regioni H II per kpc di raggio: ${Cn.anelli.filter((A) => A.hii[A.S.iSN] > 0).map((A) => `${VL.anelli.r[A.k].toFixed(0)} kpc: ${num(perKpc[A.k], 2)}`).join(' · ')}; le 400 mostrate: mediana ${mediana(viste).toFixed(1)} kpc, massimo ${Math.max(...viste).toFixed(1)} kpc)`);
+  riscontro('oggetti', 'raggio a cui le regioni H II sono di più, per kpc (kpc)', VL.anelli.r[kMax], [4, 6], { entro: 1.3, fonte: 'Via Lattea: picco a 4–6 kpc (Paladini et al. 2004; Anderson et al. 2014)' });
+  riscontro('oggetti', 'raggio entro cui sta il 99% delle regioni H II (kpc)', r99, 15, { entro: 1.3, fonte: 'Via Lattea: coda fino a ~15 kpc (Anderson et al. 2014: qualcuna fino a 19)' });
 });
 
 prova('sette galassie: gli oggetti seguono il gas e le stelle (nessuna nube senza gas, nessuna regione H II senza nascite)', () => {

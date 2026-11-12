@@ -116,28 +116,34 @@ veloce solo le medie.
 La stessa grandezza si calcola in un posto solo; chiunque altro la legge da lì. Tra livelli passano solo due cose:
 verso il basso le **condizioni** in un punto, verso l'alto i **flussi** e le medie.
 - Fatto: temperatura, acqua, età, massa, calore interno, blocco mareale (`test_coerenza`). **Il grafo delle grandezze**
-  (`src/camera/grandezze.js`): 81 grandezze, dalla galassia ai mattoni della vita, dichiarate come dato (nome, unità,
+  (`src/camera/grandezze.js`): 88 grandezze, dalla galassia ai mattoni della vita, dichiarate come dato (nome, unità,
   livello, la fonte unica, da che cosa dipendono, dove si leggono in un pianeta vero di `sistema()`), con i fili con cui
   il programma chiama ogni fonte scritti in un posto solo; i cicli (clima e aria, ghiaccio e albedo) e le soglie del
   codice sono dichiarati uno per uno. `test_grandezze` lo confronta con il codice su alcune centinaia di pianeti presi
-  dalla fonte unica degli eventi, e fallisce solo se il grafo non sta in piedi: 39 grandezze su 46, ricalcolate dalla
-  loro fonte, coincidono ovunque entro 10⁻⁹; 10 copie su 12 e 17 «seconde vie» su 19 danno lo stesso numero; ogni
-  ingresso è fatto variare a passi dell'1% e i salti sono divisi tra soglie fisiche (13 toccate) e di comodo (12); 212
+  dalla fonte unica degli eventi, e fallisce solo se il grafo non sta in piedi: 48 grandezze su 48, ricalcolate dalla
+  loro fonte, coincidono ovunque entro 10⁻⁹; 14 copie su 15 e 17 «seconde vie» su 17 danno lo stesso numero; ogni
+  ingresso è fatto variare a passi dell'1% e i salti sono divisi tra soglie fisiche (14 toccate) e di comodo (13); 268
   dipendenze sono ricavate dalla misura invece che scritte a mano; ciò che una cosa vista in basso impone in alto si
   calcola per intervalli (`impone`; `chiedeDalBasso` parte da `chiede` di `bolle.js`): 129 deduzioni su 129 contengono
-  il vero. Tutto ciò che non torna sta in `reports/Mappa delle grandezze.md`, che la prova riscrive (`--rapporto`).
-- Manca: le 14 incoerenze che `test_coerenza` stampa; il calore che il mare riporta al clima; l'aria e il mare come un
-  solo serbatoio di carbonio. E ciò che `test_grandezze` stampa: 14 doppioni (l'aria tenuta non è esattamente quella
-  della sua temperatura: `Taria` e la memoria a passi di 5 K di `climaEAria`; la CO₂ del ciclo è quella di un giro
-  intermedio; luce, temperatura e raggio della stella hanno due formule (viva o morta), e il disco usa la luce a metà
-  della vita; `mare.js` ha una sua ebollizione); 12 soglie di comodo (i tre tipi di pianeta, il taglio di Jeans, il nome del regime della crosta,
-  l'interruttore «vulcani > 0», il ghiaccio contato a fasce…) e 15 salti che nessuna soglia dichiarata spiega (il
-  calore interno di `storia.js`, `co2DelCiclo`, il calore portato dall'aria); 9 fili staccati (i metalli della stella
-  non arrivano all'aria dei pianeti solidi; il vento della stella non toglie aria; la temperatura del clima non torna
-  all'interno); 2 letture non dichiarate; 179 numeri e 25 formule riscritti a mano dove esiste una fonte (G, il gelo,
-  `G·M/R²`, i valori «della Terra» di riserva). La superficie (mare, pioggia, erosione) è nel grafo ma fuori dal
-  campione; gli archi che passano da una storia (disco, galassia) sono controllati solo per correlazione; il grafo non
-  ha ancora il tempo.
+  il vero. Sanati dopo la prima misura: la luce della stella è una grandezza sola letta a tempi diversi dalla stessa
+  `stelle.stella` (oggi per il clima, al tempo del disco per la linea della neve), e viva o morta ha una via sola
+  (`stelle.stellaOggi`); l'aria che resta scritta è quella della sua temperatura (la memoria degli equilibri non cambia
+  più il risultato); il ciclo del carbonio lascia scritto il suo punto fisso (ghiaccio del clima e del ciclo coincidono
+  entro un millesimo); il ghiaccio si conta con la curva dell'albedo; i giganti hanno un livello di riferimento
+  dichiarato; la gravità di superficie ha una funzione. Tutto ciò che non torna sta in `reports/Mappa delle
+  grandezze.md`, che la prova riscrive (`--rapporto`).
+- Manca: le incoerenze che `test_coerenza` stampa; il calore che il mare riporta al clima; l'aria e il mare come un
+  solo serbatoio di carbonio. E ciò che `test_grandezze` stampa: la temperatura del clima e quella a cui è stata fatta
+  l'aria distano più di un grado in 142 mondi su 624 (il termostato fa l'aria a 275 K per costruzione; la ricerca a giri
+  non sempre si ferma); 6 doppioni dichiarati tra moduli (la neve delle lune, il raffreddamento della nana bianca
+  riscritto in `galassie.js`, quattro dati della Via Lattea e delle supernove in `risalita.js`); 13 soglie di comodo (i
+  tre tipi di pianeta, il taglio di Jeans, il nome del regime della crosta, l'interruttore «vulcani > 0»…) e 25 salti
+  che nessuna soglia dichiarata spiega (18 nella storia termica dell'interno; il coefficiente del calore portato, che è
+  un rapporto mal condizionato dove il pianeta è quasi isotermo); il vento della stella non toglie aria; la temperatura
+  del clima non torna all'interno; il tempo cosmico di `galassie.js` non conta la radiazione; 184 numeri e 25 formule
+  riscritti a mano dove esiste una fonte. La superficie (mare, pioggia, erosione) è nel grafo ma fuori dal campione; gli
+  archi che passano da una storia (disco, galassia) sono controllati solo per correlazione; il grafo non ha ancora il
+  tempo.
 
 ## 8. Si calcola solo ciò che si guarda
 E alla scala a cui si guarda. Ciò che non è guardato resta una funzione.

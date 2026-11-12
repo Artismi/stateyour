@@ -98,19 +98,14 @@ export function polvere(Zr = 1) {
 // =====================================================================================================
 // 3. I RAGGI COSMICI: lo spettro fuori dal vento di una stella. UNA FONTE: materia.js
 // =====================================================================================================
-// materia.js tiene lo spettro interstellare in una funzione privata (`fuori`: Burger et al. 2000, Usoskin et al. 2005) e
-// ne esporta solo l'integrale già frenato dal vento del Sole (energiaDeiPrimari). Qui si legge `MAT.spettroInterstellare`
-// se materia.js lo esporta (riga d'innesto: `export const spettroInterstellare = fuori;`); finché non c'è si usa la COPIA
-// qui sotto, DICHIARATA come doppione provvisorio: test_vuoto.mjs la frena con lo stesso campo di forza e la confronta con
-// energiaDeiPrimari a più soglie (deve coincidere: è la stessa funzione dove materia.js la lascia leggere).
-export const COPIA_MATERIA = Object.freeze({ mP: 0.93827, phi: 0.55, norma: 1.3 * 1.9e4, p1: -2.78, k: 0.4866, p2: -2.51 }); // [V su materia.js, riga «const fuori»]
-const fuoriCopia = (E) => { const c = COPIA_MATERIA, P = Math.sqrt(E * (E + 2 * c.mP)); return (c.norma * Math.pow(P, c.p1)) / (1 + c.k * Math.pow(P, c.p2)); };
+// Lo spettro interstellare (Burger et al. 2000, Usoskin et al. 2005) è quello di materia.js (`spettroInterstellare`: lo
+// stesso che, frenato dal vento del Sole, dà energiaDeiPrimari e i muoni al suolo). Qui non c'è nessuna copia.
 // nucleoni per (m²·s·sr·GeV) all'energia cinetica E (GeV per nucleone), vicino al Sole fuori dall'eliosfera
-export const spettroCosmici = (E) => (MAT.spettroInterstellare || fuoriCopia)(E);
-export const spettroDaMateria = () => !!MAT.spettroInterstellare;
+export const spettroCosmici = MAT.spettroInterstellare;
+const MP_GEV = (K.mp * K.c ** 2) / EV / 1e9; // la massa del protone in GeV, dalle costanti di leggi.js (0,938) [D]
 const A0_BOHR = K.hbar / (K.me * K.c * ST.ALFA), BETHE0 = PI4 * A0_BOHR ** 2 * ST.ALFA ** 2; // 4π·a₀²·α² (m²) [D dalle costanti]
 // la sezione d'urto di ionizzazione dell'idrogeno per un nucleone di energia cinetica E (GeV): Bethe
-const sezioneIonizzazione = (E) => { const g = 1 + E / COPIA_MATERIA.mP, b2 = 1 - 1 / (g * g); return (BETHE0 / b2) * (Z.bethe.M2 * (Math.log(b2 * g * g) - b2) + Z.bethe.C); };
+const sezioneIonizzazione = (E) => { const g = 1 + E / MP_GEV, b2 = 1 - 1 / (g * g); return (BETHE0 / b2) * (Z.bethe.M2 * (Math.log(b2 * g * g) - b2) + Z.bethe.C); };
 let COSMICI0 = null;
 // → per il cielo del Sole (relativo = 1): densità (per m³), energia (J/m³), ionizzazione primaria ζ (per atomo di H e per
 //   secondo), flusso (per m²·s da tutte le direzioni); i conti sono integrali dello spettro [D]
@@ -118,7 +113,7 @@ function cosmiciBase() {
   if (COSMICI0) return COSMICI0;
   const a = Z.taglioCosmici, b = 1e6, n = 400, h = Math.log(b / a) / n; let num = 0, ene = 0, zeta = 0, flusso = 0;
   for (let i = 0; i <= n; i++) {
-    const E = a * Math.exp(i * h), w = (i === 0 || i === n ? 0.5 : 1) * E * h, J = spettroCosmici(E), g = 1 + E / COPIA_MATERIA.mP, v = K.c * Math.sqrt(1 - 1 / (g * g));
+    const E = a * Math.exp(i * h), w = (i === 0 || i === n ? 0.5 : 1) * E * h, J = spettroCosmici(E), g = 1 + E / MP_GEV, v = K.c * Math.sqrt(1 - 1 / (g * g));
     num += (w * PI4 * J) / v; ene += (w * PI4 * J * E) / v; zeta += w * PI4 * J * sezioneIonizzazione(E); flusso += w * PI4 * J;
   }
   return (COSMICI0 = { numero: num, energia: ene * 1e9 * EV, ionizzazione: zeta, flusso });
@@ -127,7 +122,7 @@ function cosmiciBase() {
 // superficie del disco, rispetto alla Via Lattea). Uniformi nella galassia (SEMPLIFICAZIONE di materia.js, ereditata)
 export function raggiCosmiciIn(forma) {
   const rel = forma ? MAT.cieloRelativo({ ritmoSN: forma.ritmoSN.totale, forma }).relativo : 1, b = cosmiciBase();
-  return { relativo: rel, numero: b.numero * rel, energia: b.energia * rel, ionizzazione: b.ionizzazione * rel, flusso: b.flusso * rel, spettro: (E) => rel * spettroCosmici(E), daMateria: spettroDaMateria() };
+  return { relativo: rel, numero: b.numero * rel, energia: b.energia * rel, ionizzazione: b.ionizzazione * rel, flusso: b.flusso * rel, spettro: (E) => rel * spettroCosmici(E) };
 }
 
 // =====================================================================================================
@@ -430,4 +425,4 @@ export function coloreVero(righe = [], continuo = null) {
   const mx = Math.max(...rgb, 1e-300); return { rgb: rgb.map((v) => Math.round(255 * gamma(Math.max(0, v) / mx))), luminanza: Y };
 }
 
-export const dentroMezzo = { planck2, planck3, qEstinzione, sezionePerH, cosmiciBase, sezioneIonizzazione, fuoriCopia, curvaTermica, quadriVolume, E2, expint1, luceNelloStrato, resaDellePopolazioni, fasiIn, MASSA_PER_H, MU_IONIZZATO, A_MRN, POLVERE_SU_GAS };
+export const dentroMezzo = { planck2, planck3, qEstinzione, sezionePerH, cosmiciBase, sezioneIonizzazione, MP_GEV, curvaTermica, quadriVolume, E2, expint1, luceNelloStrato, resaDellePopolazioni, fasiIn, MASSA_PER_H, MU_IONIZZATO, A_MRN, POLVERE_SU_GAS };

@@ -58,9 +58,7 @@
 //   di dieci anni per le comete; il grano di 100 µm per la polvere zodiacale. Nessuno è stato regolato guardando un riscontro.
 //
 // DOPPIONI (regola 7) — da sistemare a monte, qui solo segnalati (vedi anche il rapporto delle prove):
-//   · lo spettro interstellare dei raggi cosmici è PRIVATO in materia.js (`fuori`): qui c'è una copia dichiarata
-//     (vuoto_mezzo.js COPIA_MATERIA), usata solo finché materia.js non esporta `spettroInterstellare`; la prova la
-//     confronta con energiaDeiPrimari;
+//   · (risolto: lo spettro interstellare dei raggi cosmici ora si legge da materia.js, `spettroInterstellare`: nessuna copia qui)
 //   · risalita.js DATI: COSMICI_GALASSIA (1 eV/cm³, scritto), SN_VIA_LATTEA (0,02/anno), VITA_RESTO (3·10⁴ anni),
 //     SPESSORE_DISCO (100 pc), RAGGIO_VIA_LATTEA (15 kpc): le stesse grandezze che qui escono da materia.js e galassie.js;
 //     materia.js cieloRelativo ripete 0,02 e 15 kpc;

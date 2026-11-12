@@ -3,7 +3,7 @@
 > «In molti casi una formula dipende da variabili che dipendono da altre formule; tutto può partire dal basso o
 > dall'alto ma deve essere collegato, calcolato in modo continuo, correlato.»
 
-Questo documento è **generato**: il grafo sta in `src/camera/grandezze.js` (un elenco di oggetti che un programma può leggere), le misure le fa `test/test_grandezze.mjs` su un campione di pianeti veri del programma, e `node test/test_grandezze.mjs --rapporto` riscrive queste pagine. Ultima misura: 2026-11-11 23:50 UTC, in 121 secondi.
+Questo documento è **generato**: il grafo sta in `src/camera/grandezze.js` (un elenco di oggetti che un programma può leggere), le misure le fa `test/test_grandezze.mjs` su un campione di pianeti veri del programma, e `node test/test_grandezze.mjs --rapporto` riscrive queste pagine. Ultima misura: 2026-11-11 23:58 UTC, in 102 secondi.
 
 Il lavoro non cambia la fisica dei moduli: **dichiara** (chi dipende da chi, da quale fonte), **misura** (se è vero) e **riferisce** (ciò che non torna, con i numeri e il punto del codice).
 
@@ -111,7 +111,7 @@ Ogni riga è una grandezza: come si chiama nel grafo, che cos'è, da quale funzi
 | **aria.N2** | la parte di azoto nell'aria (in volume) | 1 | 13 | `chimica.js:303 atmosfera` | clima.temperatura, acqua.stato, aria.gasTenuti, pianeta.acqua; *e, misurato:* pianeta.massa, pianeta.raggio, pianeta.involucro, stella.eta, stella.luminosita, orbita.distanza | `P.atmosfera.gas.N2` |
 | **aria.riducente** | l'aria cede idrogeno (riducente) o lo prende (ossidante) | sì/no | 14 | `chimica.js:303 atmosfera` | aria.H2, aria.CH4, aria.CO2, aria.H2O, aria.gasTenuti; *e, misurato:* pianeta.massa, pianeta.acqua, clima.temperatura, acqua.stato | `P.atmosfera.riducente` |
 | **aria.serra** | lo spessore ottico dell'aria per l'infrarosso (τ) | 1 | 13 | `chimica.js:395 serra` | aria.CO2 ↑, aria.H2O ↑, aria.CH4 ↑, aria.H2, aria.N2, aria.pressione ↑, pianeta.gravita ↓, clima.temperatura | `P.clima.tau` |
-| **aria.co2Ciclo** | la CO₂ a cui le rocce ne prendono quanta i vulcani ne danno | Pa | 13 | `chimica.js:728 co2DelCiclo` | clima.temperatura ↓, interno.magma ↑, interno.vulcani, acqua.mare ↑, acqua.ghiaccio ↑, interno.tettonica; *e, misurato:* pianeta.raggio, pianeta.massa, pianeta.ferro | `P.clima.co2Ciclo` |
+| **aria.co2Ciclo** | la CO₂ a cui le rocce ne prendono quanta i vulcani ne danno | Pa | 13 | `chimica.js:736 co2DelCiclo` | clima.temperatura ↓, interno.magma ↑, interno.vulcani, acqua.mare ↑, acqua.ghiaccio ↑, interno.tettonica; *e, misurato:* pianeta.raggio, pianeta.massa, pianeta.ferro | `P.clima.co2Ciclo` |
 | **aria.vaporeSaturo** | la pressione del vapore d'acqua sopra il mare o il ghiaccio | Pa | 14 | `leggi.js:115 vaporeSaturo` | clima.temperatura ↑ | — (il programma non la tiene: chi la vuole la ricalcola) |
 
 ### Il clima: temperatura, albedo, nuvole
@@ -142,9 +142,9 @@ Ogni riga è una grandezza: come si chiama nel grafo, che cos'è, da quale funzi
 |---|---|---|---|---|---|---|
 | **spazio.magnetopausa** | fin dove il campo ferma il vento della stella (raggi del pianeta) | raggi | 14 | `risalita.js:502 ventoStellare` | interno.campo ↑, stella.vento ↓, orbita.distanza ↑; *e, misurato:* stella.raggio, stella.eta | `P.magnetopausa` |
 | **vita.energia** | l'energia che arriva alla chimica dell'aria (la Terra = 1) | Terra | 14 | `risalita.js:546 energiaPerLaChimica` | stella.luminosita ↑, orbita.distanza ↓, stella.temperatura ↑, interno.campo, aria.pressione, stella.vento; *e, misurato:* pianeta.gravita, pianeta.raggio, stella.eta, acqua.mare, acqua.stato, clima.assorbita, stella.raggio | `P.energiaChimica.relativa` |
-| **vita.HCN** | quanto rende lì la reazione che fa acido cianidrico | 1 | 15 | `chimica.js:637 prebiotica` | vita.energia ↑, aria.H2, aria.CH4, aria.CO2, aria.N2, aria.H2O | `P.prebiotica.HCN` |
-| **vita.formaldeide** | quanto rende lì la reazione che fa formaldeide (zuccheri) | 1 | 15 | `chimica.js:637 prebiotica` | vita.energia ↑, aria.H2, aria.CH4, aria.CO2, aria.N2, aria.H2O | `P.prebiotica.formaldeide` |
-| **vita.autocatalisi** | gli zuccheri si copiano da soli (formosio) | sì/no | 16 | `chimica.js:637 prebiotica` | vita.formaldeide, acqua.stato; *e, misurato:* vita.energia | `P.prebiotica.autocatalisi` |
+| **vita.HCN** | quanto rende lì la reazione che fa acido cianidrico | 1 | 15 | `chimica.js:645 prebiotica` | vita.energia ↑, aria.H2, aria.CH4, aria.CO2, aria.N2, aria.H2O | `P.prebiotica.HCN` |
+| **vita.formaldeide** | quanto rende lì la reazione che fa formaldeide (zuccheri) | 1 | 15 | `chimica.js:645 prebiotica` | vita.energia ↑, aria.H2, aria.CH4, aria.CO2, aria.N2, aria.H2O | `P.prebiotica.formaldeide` |
+| **vita.autocatalisi** | gli zuccheri si copiano da soli (formosio) | sì/no | 16 | `chimica.js:645 prebiotica` | vita.formaldeide, acqua.stato; *e, misurato:* vita.energia | `P.prebiotica.autocatalisi` |
 | **vita.radiceMassima** | l'età più antica che l'albero della vita può avere | Ma | 14 | `albero_vita.js:99 radiceMassima` | acqua.stato, stella.eta ↑ | — (il programma non la tiene: chi la vuole la ricalcola) |
 
 ### La superficie: pioggia, erosione, mare (dichiarate, fuori dal campione)
@@ -215,9 +215,9 @@ Ogni ingresso è stato fatto variare lungo il suo intervallo fisico, a passi del
 | 6 | **interno.argon** a 0 | l'argon resta tutto o fugge tutto: lo stesso taglio di Jeans a 25, rifatto in risalita.js | 4 | orbita.distanza→interno.argon: 0 → 0,4277 (100%) | `risalita.js:463` | come per i gas tenuti: il flusso di fuga integrato sull'età |
 | 7 | **pianeta.involucro** a 0,01 | con più dell'1% di gas il giro del pianeta è «dato dal gas», sotto «dagli urti»: giorno e asse saltano | 3 | pianeta.involucro→pianeta.bloccato: true → false (cambia categoria) | `rotazione.js:59` | sommare i due momenti angolari (gas e urti) pesati, invece di sceglierne uno |
 | 8 | **acqua.mare** a 0,02 | le nuvole attese ci sono solo se il mare copre più del 2% | 3 | pianeta.involucro→acqua.mare: 1 → 0 (100%) | `leggi.js:197` | far crescere le nuvole con l'evaporazione vera (mare × pressione di vapore), senza soglia |
-| 9 | **vita.formaldeide** a 0,01 | la soglia del formosio (gli zuccheri si copiano) è un numero scelto | 2 | vita.formaldeide→vita.autocatalisi: false → true (cambia categoria) | `chimica.js:636` | la rete di reazioni vera (molecole_rete.js) al posto della soglia |
-| 10 | **aria.co2Ciclo** a 1,00e7 | oltre cento bar di CO₂ il conto del ciclo si ferma | 2 | pianeta.raggio→aria.co2Ciclo: 2,322e-4 → 1,000e7 (100%) | `chimica.js:732` | cercare l'equilibrio anche oltre |
-| 11 | **aria.H2** a 0,01 | con più dell'1% di idrogeno l'idrogeno «non manca mai» per la formaldeide; e l'aria è «riducente» solo se ne cede più dell'1% | 1 | aria.H2→vita.formaldeide: 0 → 2,144e-4 (100%) | `chimica.js:639` | contare l'idrogeno libero come gli altri ingredienti |
+| 9 | **vita.formaldeide** a 0,01 | la soglia del formosio (gli zuccheri si copiano) è un numero scelto | 2 | vita.formaldeide→vita.autocatalisi: false → true (cambia categoria) | `chimica.js:644` | la rete di reazioni vera (molecole_rete.js) al posto della soglia |
+| 10 | **aria.co2Ciclo** a 1,00e7 | oltre cento bar di CO₂ il conto del ciclo si ferma | 2 | pianeta.raggio→aria.co2Ciclo: 2,324e-4 → 1,000e7 (100%) | `chimica.js:741` | cercare l'equilibrio anche oltre |
+| 11 | **aria.H2** a 0,01 | con più dell'1% di idrogeno l'idrogeno «non manca mai» per la formaldeide; e l'aria è «riducente» solo se ne cede più dell'1% | 1 | aria.H2→vita.formaldeide: 0 → 2,144e-4 (100%) | `chimica.js:647` | contare l'idrogeno libero come gli altri ingredienti |
 | 12 | **interno.vulcani** a 0 | il ciclo del carbonio si accende solo se interno() conta almeno un vulcano: prima di quello il calore dell'interno non entra nel clima | 1 | interno.vulcani→aria.co2Ciclo: 0 → 1,000e7 (100%) | `cosmo.js:239` | passare a climaEAria il calore (o la massa che fonde) così com'è |
 | 13 | **aria.pressione** a 10000 | le nuvole attese ci sono solo sopra 0,1 bar | 1 | aria.pressione→clima.nuvole: 0 → 0,675 (100%) | `leggi.js:197` | una legge continua della pressione (quanta acqua l'aria regge) |
 
@@ -237,8 +237,8 @@ Qui il grafo non sa dire perché l'uscita salta: o è una soglia del codice che 
 | 6 | **pianeta.acqua→aria.H2O** | 100% | 3 su 10 | tra 2,164e-4 e 2,164e-4: 0 → 1,651e-5 (cosmo 2/galassia 60/stella 2398/pianeta 0) | `chimica.js:303` |
 | 7 | **interno.mantello→interno.mobilita** | 100% | 9 su 10 | tra 1236 e 1236: 0 → 0,01777 (cosmo 2/galassia 46/stella 2327/pianeta 3) | `storia.js:417` |
 | 8 | **pianeta.raggio→aria.CO2 (chiuso)** | 100% | 1 su 3 | tra 4,499e7 e 4,503e7: 0 → 0,01179 (cosmo 2/galassia 60/stella 2398/pianeta 8) | `chimica.js:433` |
-| 9 | **pianeta.ferro→aria.co2Ciclo** | 100% | 2 su 10 | tra 0,6852 e 0,6852: 2,858e5 → 0,00504 (cosmo 1/galassia 40/stella 79/pianeta 7) | `chimica.js:728` |
-| 10 | **pianeta.massa→aria.co2Ciclo** | 100% | 2 su 10 | tra 5,127e23 e 5,127e23: 2,322e-4 → 5503 (cosmo 2/galassia 46/stella 1649/pianeta 1) | `chimica.js:728` |
+| 9 | **pianeta.ferro→aria.co2Ciclo** | 100% | 2 su 10 | tra 0,6852 e 0,6852: 2,857e5 → 0,005041 (cosmo 1/galassia 40/stella 79/pianeta 7) | `chimica.js:736` |
+| 10 | **pianeta.massa→aria.co2Ciclo** | 100% | 2 su 10 | tra 5,127e23 e 5,127e23: 2,324e-4 → 5495 (cosmo 2/galassia 46/stella 1649/pianeta 1) | `chimica.js:736` |
 | 11 | **interno.mantello→interno.magma** | 92% | 5 su 10 | tra 1628 e 1628: 1,192e10 → 9,924e8 (cosmo 2/galassia 60/stella 2398/pianeta 8) | `storia.js:417` |
 | 12 | **interno.mobilita→interno.magma** | 92% | 5 su 10 | tra 0,6301 e 0,6286: 1,192e10 → 9,924e8 (cosmo 2/galassia 60/stella 2398/pianeta 8) | `storia.js:417` |
 | 13 | **pianeta.massa→interno.calore** | 91% | 5 su 10 | tra 1,274e23 e 1,274e23: 2,945e-4 → 2,461e-5 (cosmo 2/galassia 46/stella 2327/pianeta 3) | `geologia.js:27` |
@@ -295,7 +295,7 @@ Più del 30% in un passo dell'1%, ma stringendo il passo il salto si scioglie: l
 | **orbita.distanza→interno.magma** | 100% | tra 1,807e10 e 1,821e10: 5,353e12 → 0 |
 | **pianeta.acqua→interno.magma** | 100% | tra 0,01843 e 0,01853: 1,067e10 → 0 |
 | **stella.eta→interno.magma** | 100% | tra 1,538e8 e 1,548e8: 1,322e11 → 0 |
-| **acqua.mare→aria.co2Ciclo** | 100% | tra 0,9453 e 0,9531: 0,00504 → 3,665 |
+| **acqua.mare→aria.co2Ciclo** | 100% | tra 0,9453 e 0,9531: 0,005041 → 3,657 |
 | **orbita.distanza→pianeta.giorno** | 100% | tra 5,274e10 e 5,316e10: 1,896e9 → 7,317e6 |
 | **stella.luminosita→interno.magma** | 97% | tra 1,288e27 e 1,298e27: 4,049e7 → 1,414e9 |
 | **stella.massa→pianeta.giorno** | 95% | tra 0,1914 e 0,1932: 1,844e7 → 3,378e8 |
@@ -305,7 +305,7 @@ Più del 30% in un passo dell'1%, ma stringendo il passo il salto si scioglie: l
 | **stella.eta→pianeta.obliquita** | 83% | tra 1,135e8 e 1,142e8: 0,5428 → 0,0936 |
 | **pianeta.massa→pianeta.obliquita** | 79% | tra 4,677e26 e 4,706e26: 0,03903 → 0,4329 |
 | **stella.luminosita→marea.potenza** | 78% | tra 4,936e24 e 4,975e24: 2,427e8 → 1,121e9 |
-| **acqua.ghiaccio→aria.co2Ciclo** | 77% | tra 0,2109 e 0,2188: 2,317e6 → 1,000e7 |
+| **acqua.ghiaccio→aria.co2Ciclo** | 77% | tra 0,2109 e 0,2188: 2,315e6 → 1,000e7 |
 | **stella.massa→marea.potenza** | 76% | tra 5,195 e 5,242: 7,168e12 → 2,937e13 |
 | **pianeta.ferro→interno.rossby** | 73% | tra 0,3812 e 0,3866: 0,04028 → 0,01072 |
 | **orbita.distanza→interno.calore** | 69% | tra 5,549e9 e 5,593e9: 0,032 → 0,00983 |
@@ -371,10 +371,10 @@ Cercati nel codice di 60 moduli di `src/camera` (commenti esclusi; il modulo dov
 
 | numero | che cos'è | la sua fonte | quante volte | in quanti moduli | dove (file:prima riga ×volte) |
 |---|---|---|---|---|---|
-| **gelo** | il punto di fusione del ghiaccio (273,15 K; comprende le righe dove serve solo a convertire i gradi Celsius) | leggi.js statoAcqua (273,15 K: non ha ancora un nome) | 35 | 15 | mare.js:153 ×8, materia.js:791 ×5, mappa.js:180 ×3, molecole.js:222 ×3, bolle.js:316 ×2, chimica.js:487 ×2, laboratorio.js:1120 ×2, molecole_energia.js:372 ×2, … |
+| **gelo** | il punto di fusione del ghiaccio (273,15 K; comprende le righe dove serve solo a convertire i gradi Celsius) | leggi.js statoAcqua (273,15 K: non ha ancora un nome) | 35 | 15 | mare.js:153 ×8, materia.js:791 ×5, mappa.js:180 ×3, molecole.js:222 ×3, bolle.js:316 ×2, chimica.js:495 ×2, laboratorio.js:1120 ×2, molecole_energia.js:372 ×2, … |
 | **T Terra** | la temperatura della Terra come valore di riserva | grafo: clima.temperatura (P.clima.T) | 33 | 9 | materia.js:195 ×13, chimica.js:333 ×5, mare.js:183 ×4, mappa.js:635 ×3, risalita.js:227 ×3, bolle.js:304 ×2, geologia.js:238, leggi.js:449, … |
 | **età Terra** | l'età del Sistema Solare come valore di riserva | grafo: stella.eta (S.eta) | 29 | 14 | storia.js:386 ×7, geologia.js:32 ×4, mare.js:303 ×3, vuoto_sistema.js:99 ×3, disco.js:112 ×2, impatti.js:173 ×2, anelli.js:142, leggi.js:76, … |
-| **anno** | i secondi di un anno | leggi.js ANNO | 15 | 9 | mappa.js:180 ×6, chimica.js:704 ×2, impatti.js:110, laboratorio.js:1143, molecole.js:230, molecole_pozzi.js:40, rotazione.js:53, storia.js:130, … |
+| **anno** | i secondi di un anno | leggi.js ANNO | 15 | 9 | mappa.js:180 ×6, chimica.js:712 ×2, impatti.js:110, laboratorio.js:1143, molecole.js:230, molecole_pozzi.js:40, rotazione.js:53, storia.js:130, … |
 | **R⊕** | il raggio della Terra | disco.js RTERRA | 12 | 8 | materia.js:482 ×4, risalita.js:224 ×2, cosmo.js:314, fluidi.js:22, geologia.js:453, impatti.js:653, storia.js:180, tettonica.js:402 |
 | **g Terra** | la gravità della Terra come valore di riserva | grafo: pianeta.gravita (P.clima.g) | 9 | 4 | materia.js:499 ×4, mare.js:254 ×2, risalita.js:224 ×2, mappa.js:183 |
 | **giorno Terra** | il giorno della Terra come valore di riserva | grafo: pianeta.giorno (P.giorno) | 8 | 3 | mare.js:523 ×4, risalita.js:250 ×3, leggi.js:290 |
@@ -389,7 +389,7 @@ Cercati nel codice di 60 moduli di `src/camera` (commenti esclusi; il modulo dov
 | **kB** | la costante di Boltzmann | leggi.js COSTANTI.kB | 2 | 2 | materia.js:1105, molecole_energia.js:28 |
 | **c** | la velocità della luce | leggi.js COSTANTI.c | 2 | 2 | mappa.js:340, unita.js:9 |
 | **S Terra** | la luce del Sole alla Terra | grafo: orbita.flusso | 2 | 2 | cosmo.js:245, impatti.js:132 |
-| **1 bar** | la pressione della Terra come valore di riserva | grafo: aria.pressione (P.clima.pressione) | 2 | 2 | chimica.js:643, molecole.js:187 |
+| **1 bar** | la pressione della Terra come valore di riserva | grafo: aria.pressione (P.clima.pressione) | 2 | 2 | chimica.js:651, molecole.js:187 |
 | **σ** | la costante di Stefan-Boltzmann | leggi.js COSTANTI.sigma | 1 | 1 | geologia.js:227 |
 
 | formula riscritta | grandezza del grafo | la sua fonte | quante volte | dove |

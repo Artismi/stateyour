@@ -736,7 +736,8 @@ export function vulcani({ calore, raggioM, composizione, magma: dato = null, fus
 export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null, magma = null, fuso = null } = {}) {
   const v = vulcani({ calore, raggioM, composizione, magma, fuso }), fonte = emissione ?? v.CO2; if (!(fonte > 0)) return 0;
   const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre);
-  const prende = consumo || ((p) => massa * (continenti * rilascio(v.rocce.granito, T, p).cariche + (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche));
+  // (la roccia che pesa zero non si consuma nemmeno nel conto: con le placche è tutto granito, senza è tutto basalto)
+  const prende = consumo || ((p) => massa * ((continenti > 0 ? continenti * rilascio(v.rocce.granito, T, p).cariche : 0) + (continenti < 1 ? (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche : 0)));
   if (prende(100) < fonte) return 100; // nemmeno sotto cento bar le rocce tengono il passo: la CO2 si accumula (qui ci si ferma)
   // il pavimento è l'equilibrio di Urey a quella temperatura: lì la reazione è ferma, la roccia non può prenderne altra
   // (è lo stesso tetto che atmosfera() mette alla CO2 sopra un mare: una grandezza, una legge)

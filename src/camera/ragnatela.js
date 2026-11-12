@@ -119,9 +119,9 @@ const PI2 = 2 * Math.PI, KPC = 3.0857e19, MPC = 3.0857e22, GA = 1e9 * ANNO, C_LU
 export const CLASSI = ['vuoto', 'foglio', 'filamento', 'nodo']; // per numero di autovalori sopra la soglia
 // i dati misurati di questo modulo (vedi l'intestazione per le fonti e le marche)
 export const DATI = {
-  T0: 2.7255, // K [V] Fixsen 2009
+  T0: COSMO.Tcmb, // K [V] Fixsen 2009
   tauReionizzazione: 0.054, // [V] Planck 2018 VI
-  Neff: 3.046, // [R] Mangano et al. 2005
+  Neff: COSMO.Neff, // [R] Mangano et al. 2005
   alfa: 7.2973525693e-3, // [R] CODATA 2018
   duePhotoni: 8.2246, // s⁻¹ [R] Goldman 1989
   zeta3: 1.2020569031595942, // ζ(3) (matematica)
