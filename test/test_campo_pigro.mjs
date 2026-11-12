@@ -162,6 +162,22 @@ prova('la teoria del campo vincolato: su 80 cosmi, media e varianza accanto ai v
   console.log(`      (a 27 Mpc da un vincolo: media ${num(m)} (teoria ${num(at.media)}), scarto ${num(s)} (teoria ${num(Math.sqrt(at.varianza))}; libero ${num(Math.sqrt(at.libera))}))`);
 });
 
+prova('vincola: Hoffman–Ribak nelle celle (densità, pendenza, marea, cielo), esatto e locale; grigliaFFT è il campo nel punto', () => {
+  const C = P.campoPigro('prova/pigro/celle', { lato0: 1199 * 1024 }), R = 25 * MPC, p = punto('celle', 2e3 * MPC), F = P.cieloPigro(C, { posizione: p }, { ellMax: 8 });
+  const V = [{ posizione: p, scala: R, valore: 0.5 }, { tipo: 'pendenza', posizione: p, scala: R, direzione: [0, 0, 1], valore: 0 }, { tipo: 'marea', posizione: [p[0] + 40 * MPC, p[1], p[2]], scala: R, i: 0, j: 1, valore: 0.1 }, { tipo: 'cielo', cielo: F.cielo, direzione: versore('celle'), doppler: true, valore: 3e-5 }];
+  const [K, t] = ms(() => C.vincola(V)); costa('vincola: quattro grandezze di tipo diverso', t); assert.ok(K.esiste && K.gradi === 4);
+  for (const v of V) assert.ok(Math.abs(K.misura(v) - v.valore) < 1e-12 * Math.max(1e-5, Math.abs(v.valore)) + 1e-17, `${v.tipo ?? 'densita'}: ${K.misura(v)} contro ${v.valore}`);
+  for (const v of V) { const a = K.attesa(v); assert.ok(a.varianza < 1e-9 * a.libera && Math.abs(a.media - v.valore) < 1e-9 * (Math.abs(v.valore) + Math.sqrt(a.libera))); }
+  assert.ok(Math.abs(K.delta(p, { scala: R }) - 0.5) < 1e-12 && Math.abs(K.in(p, { scala: R }).marea[0] + K.in(p, { scala: R }).marea[1] + K.in(p, { scala: R }).marea[2] - K.in(p, { scala: R }).delta) < 1e-12);
+  const lontano = [p[0] + 2e4 * MPC, p[1], p[2]]; assert.ok(Math.abs(K.delta(lontano, { livello: 16 }) - C.delta(lontano, { livello: 16 })) < 1e-3 * Math.sqrt(C.varianza({ livello: 16 }))); // (a 20 Gpc cambiano solo le celle dei livelli più grossi, che il cielo a 14 Gpc tocca: quasi niente)
+  const lib = K.liberta(); tra(lib.varianzaLibera, 0.99, 1, 'la parte delle celle toccate che resta libera');
+  // la griglia per convoluzione: nodi sul reticolo del livello 16, con la marea
+  const s = C.latoDi(16) * MPC, o = [Math.round(p[0] / s) * s, Math.round(p[1] / s) * s, Math.round(p[2] / s) * s], [G, tg] = ms(() => K.grigliaFFT(o, 16, 16, { livello: 16, marea: true })); costa('grigliaFFT 16³ con la marea (sei componenti)', tg); let e = 0;
+  for (const [i, j, k] of [[0, 0, 0], [3, 9, 14], [15, 15, 2]]) { const w = K.in([o[0] + i * s, o[1] + j * s, o[2] + k * s], { livello: 16 }), q = (k * 16 + j) * 16 + i; e = Math.max(e, Math.abs(G.xy[q] - w.marea[3]), Math.abs(G.delta[q] - w.delta)); }
+  assert.ok(e < 1e-3 * Math.sqrt(C.varianza({ livello: 16 })), `griglia e punto: ${e}`);
+  console.log(`      (4 vincoli di tipo diverso: χ² ${num(K.chi2)}; ${lib.celle} celle toccate, ${(100 * lib.varianzaLibera).toFixed(3)}% libere; griglia contro punto ${num(e)})`);
+});
+
 console.log('\nI COSTI (ms, misurati qui)');
 { // per livello, a caldo: lo stesso punto chiesto due volte
   const p = punto('costo'), o = { livello: J50 }; C0.in(p, o); const n = 200, [, tc] = ms(() => { for (let i = 0; i < n; i++) C0.in([p[0] + i * 1e21, p[1], p[2]], o); }), [, td] = ms(() => { for (let i = 0; i < n; i++) C0.delta([p[0] + i * 1e21, p[1], p[2]], o); });

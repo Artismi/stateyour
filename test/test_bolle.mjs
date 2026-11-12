@@ -25,7 +25,7 @@ prova('la coda del χ² (per il peso): i valori noti', () => {
   tra(probabilitaChi2(1, 1), 0.3172, 0.3174, 'P(χ²₁ > 1)'); tra(probabilitaChi2(3.84, 1), 0.0499, 0.0501, 'P(χ²₁ > 3,84)'); tra(probabilitaChi2(10, 4), 0.0403, 0.0405, 'P(χ²₄ > 10)'); tra(probabilitaChi2(1000, 1000), 0.49, 0.5, 'P(χ²₁₀₀₀ > 1000)'); assert.equal(probabilitaChi2(0, 3), 1);
 });
 
-prova('il campo libero viene dalla fonte unica: un evento per onda; lo spettro è quello vero; un ramo cambia un\'onda sola, e in un cosmo lascia le galassie dove sono', () => {
+prova('il campo libero viene dalla fonte unica: un evento per onda; lo spettro è quello vero; un ramo cambia un\'onda sola; nel cosmo (senza bordo) un ramo cambia una cella sola e lascia le galassie dove sono', () => {
   // lo spettro: ⟨A² + B²⟩ = la potenza di ogni onda, sulle onde lunghe e sulle corte (ogni termine ha media 1 e scarto 1)
   const F = campoLibero('prova/bolle/spettro', { kmax: 24 }), conta = [[0, 0], [0, 0]];
   for (let m = 0; m < F.N; m++) { const q = F.KX[m] ** 2 + F.KY[m] ** 2 + F.KZ[m] ** 2 <= 144 ? 0 : 1; conta[q][0] += (F.A[m] ** 2 + F.B[m] ** 2) / F.PK[m]; conta[q][1]++; }
@@ -33,15 +33,14 @@ prova('il campo libero viene dalla fonte unica: un evento per onda; lo spettro �
   // un ramo su un'onda: cambia quella, e nessun'altra
   const r = 'prova/bolle/ramo', a = campoLibero(r, { kmax: 8 }), b = campoLibero(r, { kmax: 8, rami: { [`${r}/campo/onda 2,-1,3`]: 1 } }); let diverse = 0, quale = -1;
   for (let m = 0; m < a.N; m++) if (a.A[m] !== b.A[m] || a.B[m] !== b.B[m]) { diverse++; quale = m; } assert.equal(diverse, 1); assert.deepEqual([a.KX[quale], a.KY[quale], a.KZ[quale]], [2, -1, 3]);
-  // in un cosmo della biblioteca: lo stesso ramo lascia le galassie dove e come sono viste dall'alto (posto, altezza del
-  // picco: la loro identità), cambia un'onda del campo libero, e il campo passa ancora per tutte
-  const n1 = 1, n2 = CO.cosmoRamo(1, 'cosmo 1/campo/onda 2,-1,3', 1), C1 = CO.cosmo(n1), C2 = CO.cosmo(n2), F1 = campoCosmo(n1), F2 = campoCosmo(n2);
+  // in un cosmo della biblioteca (campo senza bordo: le celle sono gli eventi): il ramo di una cella lascia le galassie dove e
+  // come sono viste dall'alto (posto, altezza del picco: la loro identità), cambia quella cella sola, e il campo passa ancora per tutte
+  const n1 = 1, n2 = CO.cosmoRamo(1, 'cosmo 1/campo/livello 12/cella 1,1,1', 1), C1 = CO.cosmo(n1), C2 = CO.cosmo(n2), F1 = campoCosmo(n1), F2 = campoCosmo(n2);
   assert.deepEqual(C2.galassie.map((g) => [g.pos, g.peso]), C1.galassie.map((g) => [g.pos, g.peso])); assert.deepEqual(F2.pos, F1.pos);
-  let d = 0; for (let m = 0; m < F1.onde.n; m++) if (F1.libere.A[m] !== F2.libere.A[m] || F1.libere.B[m] !== F2.libere.B[m]) d++; assert.equal(d, 1);
-  let peggio = 0; F2.pos.forEach((x, i) => { peggio = Math.max(peggio, Math.abs(F2.densitaLunga(x) - F2.vincoli.valori[i])); }); assert.ok(peggio < 1e-7, `nel ramo le galassie distano dal loro picco ${peggio}`);
-  const v1 = F1.motiGalassie(), v2 = F2.motiGalassie(); let dv = 0; v1.forEach((v, i) => { dv = Math.max(dv, Math.hypot(v[0] - v2[i][0], v[1] - v2[i][1], v[2] - v2[i][2])); });
-  assert.ok(dv > 0 && dv < 50, `il ramo di un'onda sposta le velocità di ${dv} km/s`);
-  console.log(`      (potenza misurata su quella vera: ${num(conta[0][0] / conta[0][1], 4)} sulle ${conta[0][1]} onde lunghe, ${num(conta[1][0] / conta[1][1], 4)} sulle ${conta[1][1]} corte; il ramo di un'onda nel cosmo 1: ${C1.galassie.length} galassie ferme viste dall'alto, velocità spostate al più di ${num(dv)} km/s)`);
+  assert.notEqual(F2.libero.cella(12, 1, 1, 1), F1.libero.cella(12, 1, 1, 1)); for (const [a, b, c] of [[0, 1, 1], [1, 2, 1], [1, 1, 0]]) assert.equal(F2.libero.cella(12, a, b, c), F1.libero.cella(12, a, b, c)); assert.equal(F2.libero.cella(13, 2, 2, 2), F1.libero.cella(13, 2, 2, 2));
+  let peggio = 0; F2.pos.forEach((x, i) => { peggio = Math.max(peggio, Math.abs(F2.densitaLunga(x) - F2.vincoli.valori[i])); }); assert.ok(peggio < 1e-9, `nel ramo le galassie distano dal loro picco ${peggio}`);
+  const v1 = F1.motiGalassie(), v2 = F2.motiGalassie(); let dv = 0; v1.forEach((v, i) => { dv = Math.max(dv, Math.hypot(v[0] - v2[i][0], v[1] - v2[i][1], v[2] - v2[i][2])); }); assert.ok(dv > 0);
+  console.log(`      (potenza misurata su quella vera: ${num(conta[0][0] / conta[0][1], 4)} sulle ${conta[0][1]} onde lunghe, ${num(conta[1][0] / conta[1][1], 4)} sulle ${conta[1][1]} corte; il ramo di una cella di 300 Mpc nel cosmo 1: ${C1.galassie.length} galassie ferme viste dall'alto, velocità spostate al più di ${num(dv)} km/s)`);
 });
 
 prova('passa esattamente per ogni vincolo: uno, quattro e mille vincoli a caso; il peso è quello di un mondo tipico', () => {
@@ -118,17 +117,16 @@ prova('la statistica del campo vincolato su molti indirizzi: media e varianza so
 
 prova('un cosmo della biblioteca: senza bolle è quello di sempre; con quattro bolle le sue galassie restano dove e come sono', () => {
   const n = 1, F0 = campoCosmo(n), t0 = performance.now(), G0 = campoCondizionato(n, []), ms0 = performance.now() - t0; let d = 0;
-  for (let m = 0; m < F0.onde.n; m++) d = Math.max(d, Math.abs(G0.onde.A[m] - F0.onde.A[m]), Math.abs(G0.onde.B[m] - F0.onde.B[m]));
-  assert.ok(d < 1e-8 * G0.sigma && G0.gradi === 0 && G0.chi2 === 0 && G0.probabilita === 1 && G0.fissi === F0.pos.length, `senza bolle le ampiezze differiscono di ${d}`);
+  for (let i = 0; i < 6; i++) { const x = [c(`cosmo/sonda ${i}/x`), c(`cosmo/sonda ${i}/y`), c(`cosmo/sonda ${i}/z`)]; d = Math.max(d, Math.abs(G0.in(x.map((v) => v * L)) - F0.densita(x))); }
+  assert.ok(d === 0 && G0.gradi === 0 && G0.chi2 === 0 && G0.probabilita === 1 && G0.fissi === F0.pos.length, `senza bolle il campo differisce da cosmo3d di ${d}`);
   const V = punti(4, 'cosmo', 20 * MPC).map((p, i) => ({ ...p, valore: [0.3, -0.25, 0.1, 0.4][i] })), t1 = performance.now(), G = campoCondizionato(n, V), ms = performance.now() - t1;
   for (const v of G.vincoli) tra(Math.abs(G.lisciato(v.posizione, v.scala) - v.valore), -1, 1e-11, 'la bolla');
-  // le galassie: il campo filtrato alle onde lunghe vale ancora l'altezza del loro picco
-  let dg = 0; const o = G.onde, t2 = F0.vincoli.taglio ** 2;
-  F0.pos.forEach((x, i) => { let s = 0; for (let m = 0; m < o.n; m++) { if (o.kx[m] ** 2 + o.ky[m] ** 2 + o.kz[m] ** 2 > t2) continue; const th = 2 * Math.PI * (o.kx[m] * x[0] + o.ky[m] * x[1] + o.kz[m] * x[2]); s += 2 * (o.A[m] * Math.cos(th) - o.B[m] * Math.sin(th)); } dg = Math.max(dg, Math.abs(s - F0.vincoli.valori[i])); });
+  // le galassie: il campo lisciato a R_eq vale ancora l'altezza del loro picco
+  let dg = 0; F0.pos.forEach((x, i) => { dg = Math.max(dg, Math.abs(G.lisciato(x.map((v) => v * L), F0.vincoli.scala) - F0.vincoli.valori[i])); });
   assert.ok(dg < 1e-10, `le galassie si spostano dal loro picco di ${dg}`);
   // senza le galassie tra i vincoli, le stesse quattro bolle le sposterebbero
   assert.equal(campoCondizionato(n, V, { galassie: false }).fissi, 0);
-  console.log(`      (cosmo ${n}: ${F0.pos.length} galassie e ${o.n} onde; senza bolle ${num(ms0)} ms, ampiezze uguali a cosmo3d entro ${num(d)}; con 4 bolle ${num(ms)} ms: χ² ${num(G.chi2)} su 4 date le galassie, probabilità ${num(G.probabilita)}, contro ${num(G.chi2Libero)} del cosmo com'era; le galassie restano sul loro picco entro ${num(dg)})`);
+  console.log(`      (cosmo ${n}: ${F0.pos.length} galassie, campo senza bordo; senza bolle ${num(ms0)} ms, uguale a cosmo3d (${num(d)}); con 4 bolle ${num(ms)} ms: χ² ${num(G.chi2)} su 4 date le galassie, probabilità ${num(G.probabilita)}, contro ${num(G.chi2Libero)} del cosmo com'era; le galassie restano sul loro picco entro ${num(dg)})`);
 });
 
 console.log('\nB. le bolle');
@@ -234,7 +232,7 @@ prova('bolle in galassie diverse si incontrano nel campo del cosmo: due a distan
   // ciò che la bolla chiede al cosmo è ciò che galassie.js fa con quel picco: la massa dell'alone della galassia trovata
   for (const q of lontano.cosmo.richieste) { const [, n, g] = /cosmo (\S+)\/galassia (\d+)/.exec(q.galassia), G = CO.cosmo(/^\d+$/.test(n) ? Number(n) : n).galassie[Number(g)]; assert.equal(q.altezza, G.peso); tra(q.massaAlone / G.forma.alone.massa, 1 - 1e-9, 1 + 1e-9, 'la massa chiesta è quella dell\'alone'); assert.ok(/massaAlone/.test(q.legge)); }
   // il peso esatto: per due picchi è (v₁² + v₂² − 2ρ·v₁·v₂)/(σ²·(1 − ρ²)), con ρ la correlazione del campo filtrato a quella distanza
-  const [q1, q2] = lontano.cosmo.richieste, base = campoLibero('prova/bolle/due picchi'), chi2A = (d) => { const p1 = [L / 2 - d / 2, L / 2, L / 2], p2 = [L / 2 + d / 2, L / 2, L / 2], a = campoCondizionato(base, [{ posizione: p1, taglio: q1.taglio, valore: 1 }]).attesa(p2, 0, q1.taglio), rho = a.media, s2 = a.libera; return { rho, chi2: (q1.valore ** 2 + q2.valore ** 2 - 2 * rho * q1.valore * q2.valore) / (s2 * (1 - rho * rho)), lontane: (q1.valore ** 2 + q2.valore ** 2) / s2 }; };
+  const [q1, q2] = lontano.cosmo.richieste, base = campoLibero('prova/bolle/due picchi'), chi2A = (d) => { const p1 = [L / 2 - d / 2, L / 2, L / 2], p2 = [L / 2 + d / 2, L / 2, L / 2], a = campoCondizionato(base, [{ posizione: p1, scala: q1.scala, valore: 1 }]).attesa(p2, q1.scala), rho = a.media, s2 = a.libera; return { rho, chi2: (q1.valore ** 2 + q2.valore ** 2 - 2 * rho * q1.valore * q2.valore) / (s2 * (1 - rho * rho)), lontane: (q1.valore ** 2 + q2.valore ** 2) / s2 }; };
   const righe = [];
   for (const dMpc of [300, 120, 60, 30, 5, 0.5]) { const r = incontra(due, { mondi: MONDI, nelCosmo: { distanza: dMpc * MPC } }), t = chi2A(dMpc * MPC); assert.ok(r.esiste); tra(r.cosmo.chi2 / t.chi2, 1 - 1e-7, 1 + 1e-7, `χ² a ${dMpc} Mpc contro la formula`); tra(r.cosmo.chi2Lontane / t.lontane, 1 - 1e-9, 1 + 1e-9, 'χ² da lontane'); assert.ok(ridiscendiNelCosmo(r).every((x) => x.torna));
     // i mondi delle bolle sono gli stessi a ogni distanza (la domanda è la stessa): cambia solo il cosmo che li contiene
@@ -313,7 +311,7 @@ prova('un vincolo con una forma lineare qualunque: la forma 1 è la densità di 
   console.log(`      (sei punti alti 2,5 scarti a ${num(R / MPC)} Mpc: con le pendenze nulle sono massimi ${massimi} su 6 e la pendenza è ${num(pend)} scarti su 1 Mpc; con la sola altezza ${massimiSolo} su 6 e ${num(pendSolo)}; χ² ${num(F.chi2)} contro ${num(solo.chi2)}; 24 vincoli in ${num(ms)} ms; varianza libera ${(100 * lib.varianzaLibera).toFixed(2)}%)`);
   // (3) le galassie di due bolle chieste come punti fermi del campo (incontra, nelCosmo con massimi)
   const due = [{ contenuto: 'acqua liquida' }, { contenuto: 'anello' }], r = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 300 * MPC, massimi: true } }), r0 = incontra(due, { mondi: MONDI, nelCosmo: { distanza: 300 * MPC } });
-  assert.ok(r.esiste && r.cosmo.gradi === 8 && r0.cosmo.gradi === 2); for (const q of r.cosmo.richieste) for (let dd = 0; dd < 3; dd++) assert.ok(Math.abs(r.cosmo.campo.misura(q.posizione, PENDENZE[dd], 0, q.taglio)) < 1e-9); assert.ok(ridiscendiNelCosmo(r).every((x) => x.torna));
+  assert.ok(r.esiste && r.cosmo.gradi === 8 && r0.cosmo.gradi === 2); for (const q of r.cosmo.richieste) for (let dd = 0; dd < 3; dd++) assert.ok(Math.abs(r.cosmo.campo.misura(q.posizione, PENDENZE[dd], q.scala)) < 1e-9); assert.ok(ridiscendiNelCosmo(r).every((x) => x.torna));
   console.log(`      (due bolle in due galassie a 300 Mpc: χ² ${num(r0.cosmo.chi2)} con le sole altezze, ${num(r.cosmo.chi2)} chiedendole come punti fermi del campo filtrato; ridiscendendo tornano)`);
 });
 

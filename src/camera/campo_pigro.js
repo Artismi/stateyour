@@ -51,28 +51,21 @@
 // punti di tabella per cella, 480 punti nell'integrale in k, blocchi di 8³ celle, il livello più grosso usato di suo
 // (quello sotto cui manca meno di 10⁻⁴ della varianza dello spostamento).
 //
-// CHE COSA CAMBIEREBBE A PASSARE cosmo3d.js A QUESTO CAMPO (non fatto: lo decide l'utente).
-//   RESTA FERMO: tutto ciò che fa l'identità dei mondi. Le galassie stanno sulla carta 2D di cosmo.js (posto x, y; altezza
-//   del picco `peso`; da lì alone, storia, stelle, pianeti: galassie.js e sotto), e la loro profondità z è un evento della
-//   galassia: niente di questo legge le onde di cosmo3d. Restano i numeri della biblioteca e gli indirizzi.
-//   CAMBIA ciò che cosmo3d ricava dal campo: le velocità peculiari delle galassie (motiGalassie, quindi motiRegione e lo
-//   spostamento nel tempo di statoCosmo), gli assi delle galassie (assiGalassie → come è girato ogni sistema nel cosmo), la
-//   griglia della rete in scenaCosmo, i χ² di bolle.js (la correlazione del toro diventa quella senza bordo), e tutto
-//   ragnatela.js (classi, scheletro, cielo: spariscono i cerchi, torna la potenza a ℓ < 73). Gli eventi «…/campo/onda
-//   x,y,z» non servirebbero più: i rami fatti su un'onda perderebbero il loro oggetto.
-//   IL PASSO PIÙ PICCOLO (FATTO, solo verso il basso): non sostituire, COMPLETARE. Il toro tiene le onde tra 1,2 Gpc e 50 Mpc;
-//   a questo campo si chiede solo ciò che al toro manca sotto i 50 Mpc, con `finestra` (F = 1 sopra il taglio, 0 sotto),
-//   `lato0` e `periodo` (le celle si richiudono col toro): è campoCompleto() di ragnatela.js, che non cambia nessun numero
-//   di oggi. Sopra 1,2 Gpc no: un campo periodico in una banda e non nelle altre è da decidere (tenere il toro o sostituire
-//   la banda intera). A SOSTITUIRE ANCHE LA BANDA DEL TORO (misurato su 189 galassie dei cosmi 1–3, rifacendo il campo
-//   libero con gli stessi vincoli delle galassie): 185 assi su 189 cambiano di più di 10° (133 di più di 45°, mediana
-//   58°: l'asse è deciso dal campo libero, non dal picco), e le velocità peculiari (469 km/s di scarto) cambiano di 653
-//   km/s di scarto: sono, in pratica, altre.
-//   LE GRIGLIE: grigliaIn() stende per ogni livello la pezza di celle della regione e somma nodo per nodo (stessi bit di
-//   in()): ~40 µs per nodo e per livello; 32³ nodi con 4 livelli ~5 s. È il costo della somma (905 celle per nodo), non
-//   delle chiavi: per scendere ancora servirebbe la convoluzione con la trasformata di Fourier su un reticolo allineato.
-//   GLI ALONI UNO PER UNO: aloniIn() di ragnatela.js, sul campo completo.
-
+// IL CAMPO DEI COSMI (FATTO, per decisione dell'utente): cosmo3d.js usa questo campo per tutta la banda, senza toro. Le galassie
+//   restano quelle della carta (posto, altezza del picco, quindi alone e tutto ciò che sta sotto: niente mondo cambia
+//   identità); cambiano ciò che il campo dice attorno a loro: velocità e assi. Misurato su 189 galassie dei cosmi 1–3
+//   (prima/dopo): 186 assi cambiano di più di 10° (133 di più di 45°, mediana 62°); lo scarto delle velocità resta lo stesso
+//   (469 → 470 km/s) ma la differenza tra prima e dopo ha scarto 659 km/s: sono altre. Gli eventi «…/campo/onda x,y,z» non
+//   sono più la fonte del cosmo (restano per i campi di onde chiesti apposta); un ramo si fa ora su una cella.
+// I VINCOLI NELLE CELLE (vincola): il campo è lineare nelle celle (δ = G·w, w indipendenti N(0,1)); la realizzazione vincolata
+//   di Hoffman & Ribak è w' = w + Gᵀ·C⁻¹·(c − G·w), C = G·Gᵀ: esatta per questo campo e locale (cambiano solo le celle che un
+//   vincolo tocca). Una grandezza è qualunque forma lineare: densità lisciata, pendenza, marea, un punto del cielo del fondo.
+// LE GRIGLIE (grigliaFFT, alla MUSIC: Hahn & Abel 2011): convoluzione per regione con la trasformata, esatta per i tre livelli
+//   più fini (a meno degli arrotondamenti, 10⁻¹⁶), interpolata (Catmull–Rom, nodi a un quarto di cella) per i più grossi:
+//   ~5·10⁻⁵ dello scarto. Costa ~2,5 s per 32³ solo densità, ~4 s con la marea, ~4 s per 64³ (il lato della FFT è 128 per il
+//   margine del nucleo più largo, 6·4 celle): non è ancora il secondo della scena; il passo successivo sarebbe tenere le
+//   trasformate dei nuclei (sono le stesse per ogni regione).
+// GLI ALONI UNO PER UNO: aloniIn() di ragnatela.js, su questo campo, con l'esclusione che dipende solo dal campo.
 import { COSMO } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U } from './galassie.js';
@@ -114,34 +107,47 @@ function tabelleRadiali(ks, amp, rs) {
 
 // =====================================================================================================
 // IL CAMPO. radice: l'indirizzo («cosmo 7», o qualunque stringa); opz: { rami, raggio (celle), memoria (blocchi per
-// livello), finestra: { chiave, F(k) } una finestra in più sullo spettro (in ampiezza), per completare un altro campo }
+// livello), finestra: { chiave, F(k) } una finestra in più sullo spettro (in ampiezza), lato0 (Mpc: il lato delle celle del
+// livello 0), periodo (Mpc: se dato le celle si richiudono, e il campo è periodico: ogni livello usato deve starci un numero
+// intero di volte), da (un altro campo dello stesso indirizzo: se ne condividono le celle e i nuclei), correzione (le
+// celle cambiate da vincola(): Map livello → Map blocco → Float64Array) }
 // =====================================================================================================
-export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria = PIGRO.memoria, finestra = null, lato0 = LATO0, periodo = null } = {}) {
-  // (lato0: il lato delle celle del livello 0, in Mpc; periodo: se dato (Mpc), le celle si richiudono con quel periodo, e il
-  // campo è periodico esattamente: serve a completare un toro, e allora ogni livello usato deve starci un numero intero di volte)
+// LA FFT 3D complessa sul posto (potenze di 2), con le tavole per N (per grigliaFFT)
+const tavole = new Map();
+function tavola(N) { let T = tavole.get(N); if (T) return T; const rev = new Int32Array(N); for (let i = 0, j = 0; i < N; i++) { rev[i] = j; let b = N >> 1; while (j & b) { j ^= b; b >>= 1; } j |= b; } const c = new Float64Array(N / 2), s = new Float64Array(N / 2); for (let k = 0; k < N / 2; k++) { c[k] = Math.cos((PI2 * k) / N); s[k] = Math.sin((PI2 * k) / N); } T = { rev, c, s, br: new Float64Array(N), bi: new Float64Array(N) }; tavole.set(N, T); return T; }
+function rigaFFT(re, im, o, passo, N, T, segno) { const { rev, c, s, br, bi } = T; for (let i = 0; i < N; i++) { const q = o + rev[i] * passo; br[i] = re[q]; bi[i] = im[q]; }
+  for (let len = 2; len <= N; len <<= 1) { const h = len >> 1, st = N / len; for (let i = 0; i < N; i += len) for (let k = 0; k < h; k++) { const wr = c[k * st], wi = segno * s[k * st], a = i + k, b = a + h, xr = br[b] * wr - bi[b] * wi, xi = br[b] * wi + bi[b] * wr; br[b] = br[a] - xr; bi[b] = bi[a] - xi; br[a] += xr; bi[a] += xi; } }
+  for (let i = 0; i < N; i++) { const q = o + i * passo; re[q] = br[i]; im[q] = bi[i]; } }
+export function fft3(re, im, N, inversa = false) { const T = tavola(N), sg = inversa ? 1 : -1, N2 = N * N;
+  for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) rigaFFT(re, im, z * N2 + y * N, 1, N, T, sg);
+  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) rigaFFT(re, im, z * N2 + x, N, N, T, sg);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) rigaFFT(re, im, y * N + x, N2, N, T, sg);
+  if (inversa) { const f = 1 / (N * N2); for (let i = 0; i < re.length; i++) { re[i] *= f; im[i] *= f; } } }
+// Catmull–Rom: i quattro pesi per t in [0, 1)
+const pesiCR = (t, w) => { const t2 = t * t, t3 = t2 * t; w[0] = 0.5 * (-t3 + 2 * t2 - t); w[1] = 0.5 * (3 * t3 - 5 * t2 + 2); w[2] = 0.5 * (-3 * t3 + 4 * t2 + t); w[3] = 0.5 * (t3 - t2); return w; };
+
+export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria = PIGRO.memoria, finestra = null, lato0 = LATO0, periodo = null, da = null, correzione = null } = {}) {
   const latoDi = (j) => lato0 / 2 ** j, kDi = (j) => Math.PI / (2 * latoDi(j)), finestraLivello = (j, k) => { const u = Math.abs(Math.log2(k / kDi(j))); return u >= 1 ? 0 : Math.cos((Math.PI / 2) * u); };
-  const livelli = new Map(), nuclei = new Map(), NB = PIGRO.blocco, NB3 = NB ** 3, contatori = { celle: 0, blocchi: 0 };
-  const lato = Math.ceil(raggio) * 2 + 2, NG = lato ** 3, gw = new Float64Array(NG), gx = new Float64Array(NG), gy = new Float64Array(NG), gz = new Float64Array(NG), gr = new Float64Array(NG);
+  const I = da ? da._interni : { livelli: new Map(), nuclei: new Map(), utili: new Map(), contatori: { celle: 0, blocchi: 0 } }, { livelli, nuclei, contatori } = I;
+  const NB = PIGRO.blocco, NB3 = NB ** 3;
+  const lato = Math.ceil(raggio) * 2 + 2, NG = lato ** 3, gw = new Float64Array(NG), gx = new Float64Array(NG), gy = new Float64Array(NG), gz = new Float64Array(NG), gr = new Float64Array(NG), gix = new Float64Array(NG), giy = new Float64Array(NG), giz = new Float64Array(NG);
   // ---- le celle di un livello: eventi, tenuti a blocchi (si possono buttare: si rifanno identici)
-  const livello = (j) => { let Lv = livelli.get(j); if (!Lv) { const h = latoDi(j), M = periodo ? Math.round(periodo / h) : 0; if (periodo && (M < 1 || Math.abs(M * h - periodo) > 1e-9 * periodo)) throw new Error(`campoPigro: il livello ${j} (celle di ${h} Mpc) non sta un numero intero di volte nel periodo`); Lv = { j, h, M, fonte: sorgente(`${radice}/campo/livello ${j}`, rami), blocchi: new Map(), denso: null }; livelli.set(j, Lv); } return Lv; };
-  const blocco = (Lv, bx, by, bz) => { const k = `${bx},${by},${bz}`; let B = Lv.blocchi.get(k); if (!B) { if (Lv.blocchi.size >= memoria) Lv.blocchi.delete(Lv.blocchi.keys().next().value); B = new Float64Array(NB3).fill(NaN); Lv.blocchi.set(k, B); contatori.blocchi++; } return B; };
-  // il valore di una cella: l'evento «…/livello j/cella ix,iy,iz» (le sue prime due estrazioni fanno la campana)
-  const cella = (j, ix, iy, iz) => { const Lv = livello(j), g = (i) => (Lv.M ? ((i % Lv.M) + Lv.M) % Lv.M : i), s = Lv.fonte.serie(`cella ${g(ix)},${g(iy)},${g(iz)}`); return campana(s(0), s(1)); };
-  // raccoglie le celle entro il raggio dal punto x (Mpc): valori e distacchi (Mpc); → quante
-  const raccogli = (Lv, x) => { const h = Lv.h, R = raggio * h, R2 = R * R, lo = [0, 0, 0], hi = [0, 0, 0], M = Lv.M, D = Lv.denso; let n = 0;
+  const livello = (j) => { let Lv = livelli.get(j); if (!Lv) { const h = latoDi(j), M = periodo ? Math.round(periodo / h) : 0; if (periodo && (M < 1 || Math.abs(M * h - periodo) > 1e-9 * periodo)) throw new Error(`campoPigro: il livello ${j} (celle di ${h} Mpc) non sta un numero intero di volte nel periodo`); Lv = { j, h, M, fonte: sorgente(`${radice}/campo/livello ${j}`, rami), blocchi: new Map() }; livelli.set(j, Lv); } return Lv; };
+  const blocco = (Lv, k) => { let B = Lv.blocchi.get(k); if (!B) { if (Lv.blocchi.size >= memoria) Lv.blocchi.delete(Lv.blocchi.keys().next().value); B = new Float64Array(NB3).fill(NaN); Lv.blocchi.set(k, B); contatori.blocchi++; } return B; };
+  const giro = (Lv, i) => (Lv.M ? ((i % Lv.M) + Lv.M) % Lv.M : i);
+  // il valore di una cella (indici già richiusi): l'evento «…/livello j/cella ix,iy,iz» più la correzione, se c'è
+  const valore = (Lv, wx, wy, wz) => { const bx = Math.floor(wx / NB), by = Math.floor(wy / NB), bz = Math.floor(wz / NB), k = `${bx},${by},${bz}`, B = blocco(Lv, k), o = ((wz - bz * NB) * NB + wy - by * NB) * NB + wx - bx * NB; let w = B[o]; if (w !== w) { const s = Lv.fonte.serie(`cella ${wx},${wy},${wz}`); w = B[o] = campana(s(0), s(1)); contatori.celle++; } const S = correzione?.get(Lv.j)?.get(k); return S ? w + S[o] : w; };
+  const cella = (j, ix, iy, iz) => { const Lv = livello(j); return valore(Lv, giro(Lv, ix), giro(Lv, iy), giro(Lv, iz)); };
+  // raccoglie le celle entro il raggio dal punto x (Mpc): valori, distacchi (Mpc), indici (richiusi); → quante
+  const raccogli = (Lv, x) => { const h = Lv.h, R = raggio * h, R2 = R * R, lo = [0, 0, 0], hi = [0, 0, 0], M = Lv.M, Sj = correzione?.get(Lv.j); let n = 0;
     for (let d = 0; d < 3; d++) { lo[d] = Math.ceil((x[d] - R) / h - 0.5); hi[d] = Math.floor((x[d] + R) / h - 0.5); }
-    const pezza = D && lo[0] >= D.lo[0] && lo[1] >= D.lo[1] && lo[2] >= D.lo[2] && hi[0] < D.lo[0] + D.n[0] && hi[1] < D.lo[1] + D.n[1] && hi[2] < D.lo[2] + D.n[2];
     for (let iz = lo[2]; iz <= hi[2]; iz++) { const dz = x[2] - (iz + 0.5) * h, wz = M ? ((iz % M) + M) % M : iz, bz = Math.floor(wz / NB), oz = (wz - bz * NB) * NB * NB;
-      for (let iy = lo[1]; iy <= hi[1]; iy++) { const dy = x[1] - (iy + 0.5) * h, q = dz * dz + dy * dy; if (q >= R2) continue; const wy = M ? ((iy % M) + M) % M : iy, by = Math.floor(wy / NB), oy = oz + (wy - by * NB) * NB; let bx = NaN, B = null;
-        const riga = pezza ? ((iz - D.lo[2]) * D.n[1] + iy - D.lo[1]) * D.n[0] - D.lo[0] : 0;
-        for (let ix = lo[0]; ix <= hi[0]; ix++) { const dx = x[0] - (ix + 0.5) * h, r2 = q + dx * dx; if (r2 >= R2) continue; let w;
-          if (pezza) w = D.w[riga + ix];
-          else { const wx = M ? ((ix % M) + M) % M : ix, b = Math.floor(wx / NB); if (b !== bx) { bx = b; B = blocco(Lv, bx, by, bz); } const o = oy + wx - bx * NB; w = B[o]; if (w !== w) { const s = Lv.fonte.serie(`cella ${wx},${wy},${wz}`); w = B[o] = campana(s(0), s(1)); contatori.celle++; } }
-          gw[n] = w; gx[n] = dx; gy[n] = dy; gz[n] = dz; gr[n] = Math.sqrt(r2); n++; } } }
+      for (let iy = lo[1]; iy <= hi[1]; iy++) { const dy = x[1] - (iy + 0.5) * h, q = dz * dz + dy * dy; if (q >= R2) continue; const wy = M ? ((iy % M) + M) % M : iy, by = Math.floor(wy / NB), oy = oz + (wy - by * NB) * NB; let bx = NaN, B = null, S = null;
+        for (let ix = lo[0]; ix <= hi[0]; ix++) { const dx = x[0] - (ix + 0.5) * h, r2 = q + dx * dx; if (r2 >= R2) continue; const wx = M ? ((ix % M) + M) % M : ix, b = Math.floor(wx / NB);
+          if (b !== bx) { bx = b; const k = `${bx},${by},${bz}`; B = blocco(Lv, k); S = Sj ? Sj.get(k) ?? null : null; }
+          const o = oy + wx - bx * NB; let w = B[o]; if (w !== w) { const s = Lv.fonte.serie(`cella ${wx},${wy},${wz}`); w = B[o] = campana(s(0), s(1)); contatori.celle++; } if (S) w += S[o];
+          gw[n] = w; gx[n] = dx; gy[n] = dy; gz[n] = dz; gr[n] = Math.sqrt(r2); gix[n] = wx; giy[n] = wy; giz[n] = wz; n++; } } }
     return n; };
-  // una pezza densa di celle per un livello, attorno a una regione (Mpc): gli stessi eventi, senza passare dai blocchi
-  const stendi = (Lv, a, b) => { const h = Lv.h, R = raggio * h, M = Lv.M, lo = [0, 1, 2].map((d) => Math.ceil((a[d] - R) / h - 0.5)), n = [0, 1, 2].map((d) => Math.floor((b[d] + R) / h - 0.5) - lo[d] + 1), w = new Float64Array(n[0] * n[1] * n[2]), giro = (i) => (M ? ((i % M) + M) % M : i); let q = 0;
-    for (let k = 0; k < n[2]; k++) for (let j = 0; j < n[1]; j++) for (let i = 0; i < n[0]; i++) { const s = Lv.fonte.serie(`cella ${giro(lo[0] + i)},${giro(lo[1] + j)},${giro(lo[2] + k)}`); w[q++] = campana(s(0), s(1)); } contatori.celle += q; Lv.denso = { lo, n, w }; };
   // ---- i nuclei di un livello per un filtro: tabelle radiali troncate, raccordate e rinormalizzate
   const nucleo = (j, filtro = FILTRI.nessuno) => {
     const chiave = `${j}|${filtro.chiave}`; let N = nuclei.get(chiave); if (N) return N;
@@ -155,7 +161,10 @@ export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria
     // la varianza del livello è (1/h³)∫K²d³x: si rinormalizza perché, troncato, la dia esatta
     const norma = Math.sqrt(varianza / ((4 * Math.PI * tenuta) / h ** 3)), coda = 1 - (4 * Math.PI * dentro) / h ** 3 / varianza;
     for (let i = 0; i < nr; i++) { T.f[i] *= norma; T.g[i] *= norma; T.A1[i] *= norma; T.A2[i] *= norma; }
-    N = { j, h, varianza, coda, norma, passo: dr, f: T.f, g: T.g, A1: T.A1, A2: T.A2 }; nuclei.set(chiave, N); return N; };
+    // la derivata di f (per le pendenze), dalle differenze centrate della stessa tabella
+    const fp = new Float64Array(nr); for (let i = 1; i < nr - 1; i++) fp[i] = (T.f[i + 1] - T.f[i - 1]) / (2 * dr);
+    N = { j, h, varianza, coda, norma, passo: dr, f: T.f, g: T.g, A1: T.A1, A2: T.A2, fp }; nuclei.set(chiave, N); return N; };
+  const tab = (t, r, p) => { const u = r / p, q = u | 0; return t[q] + (u - q) * (t[q + 1] - t[q]); };
   // ---- i livelli da sommare: da `da` (se non detto: quello sotto cui manca < 10⁻⁴ della varianza dello spostamento) a `livello`
   const daLivello = (() => { let tot = 0; const v = []; for (let j = 0; j <= 24; j++) { const kj = kDi(j); let s = 0; for (let i = 0; i < 60; i++) { const k = kj * 2 ** (-1 + (i + 0.5) / 30); s += (U.potenza(k) / (k * k)) * finestraLivello(j, k) ** 2 * (Math.LN2 / 30); } v.push(s); tot += s; } let c = 0, j = 0; while (c + v[j] < 1e-4 * tot) c += v[j++]; return j; })();
   const mpc = (punto) => [punto[0] / MPC, punto[1] / MPC, punto[2] / MPC];
@@ -163,7 +172,9 @@ export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria
   // il livello più fine: quello chiesto, o quello oltre cui il filtro non lascia niente (la sua ottava parte sopra kTop)
   const cima = (opz, F) => { const perFiltro = F.kTop ? Math.max(0, Math.ceil(Math.log2((2 * F.kTop) / kDi(0)))) : Infinity, J = Math.min(opz.livello ?? Infinity, perFiltro, PIGRO.livelloMassimo); if (opz.livello == null && !F.kTop) throw new Error('campoPigro: serve il livello (la risoluzione) o una scala di lisciatura'); return J; };
   // i livelli che contano per la densità con quel filtro: quelli con più di 10⁻¹⁰ della varianza (i più grossi non pesano niente)
-  const utili = new Map(), livelliUtili = (opz, F) => { const J = cima(opz, F), soglia = opz.soglia ?? 1e-10, k = `${J}|${F.chiave}|${soglia}`; let L = utili.get(k); if (!L) { const v = []; let tot = 0; for (let j = 0; j <= J; j++) { v.push(nucleo(j, F).varianza); tot += v[j]; } L = []; for (let j = 0; j <= J; j++) if (v[j] > soglia * tot) L.push(j); utili.set(k, L); } return L; };
+  const livelliUtili = (opz, F) => { const J = cima(opz, F), soglia = opz.soglia ?? 1e-10, k = `${J}|${F.chiave}|${soglia}`; let L = I.utili.get(k); if (!L) { const v = []; let tot = 0; for (let j = 0; j <= J; j++) { v.push(nucleo(j, F).varianza); tot += v[j]; } L = []; for (let j = 0; j <= J; j++) if (v[j] > soglia * tot) L.push(j); I.utili.set(k, L); } return L; };
+  // i livelli per marea, spostamento e potenziale: tutti, da `da` (se non detto: daLivello) al più fine
+  const livelliIn = (opz, F) => { const J = cima(opz, F), j0 = Math.min(opz.da ?? daLivello, J), L = []; for (let j = j0; j <= J; j++) L.push(j); return L; };
   // LA DENSITÀ in un punto (m), ai livelli chiesti. opz: { livello: J (il più fine), scala (m: gaussiana) o filtro, soglia (10⁻¹⁰:
   // i livelli che portano meno di questa parte della varianza non si sommano; 0 = tutti quelli che hanno potenza) }
   const delta = (punto, opz = {}) => { const x = mpc(punto), F = filtroDi(opz); let d = 0;
@@ -172,29 +183,109 @@ export function campoPigro(radice, { rami = null, raggio = PIGRO.raggio, memoria
   // TUTTO in un punto: → { delta, marea [xx, yy, zz, xy, xz, yz] (traccia = delta), spostamento [m] (Ψ = −∇φ), velocita [km/s]
   //   (H₀·f·Ψ: il moto lineare di oggi), potenziale (m²: a meno di una costante e di una pendenza, che vengono dai livelli
   //   più grossi di `da`), livelli: [da, a], perLivello (se opz.perLivello: il contributo di ognuno a delta) }
-  const in_ = (punto, opz = {}) => { const x = mpc(punto), F = filtroDi(opz), J = cima(opz, F), j0 = Math.min(opz.da ?? daLivello, J), T = [0, 0, 0, 0, 0, 0], S = [0, 0, 0], per = opz.perLivello ? [] : null; let fi = 0;
-    for (let j = j0; j <= J; j++) { const N = nucleo(j, F); if (N.vuoto) { per?.push(0); continue; } const n = raccogli(livello(j), x), p = N.passo, tg = N.g, t1 = N.A1, t2 = N.A2; let tr = 0;
+  const in_ = (punto, opz = {}) => { const x = mpc(punto), F = filtroDi(opz), L = livelliIn(opz, F), T = [0, 0, 0, 0, 0, 0], S = [0, 0, 0], per = opz.perLivello ? [] : null; let fi = 0;
+    for (const j of L) { const N = nucleo(j, F); if (N.vuoto) { per?.push(0); continue; } const n = raccogli(livello(j), x), p = N.passo, tg = N.g, t1 = N.A1, t2 = N.A2; let tr = 0;
       for (let i = 0; i < n; i++) { const r = gr[i], u = r / p, q = u | 0, f = u - q, w = gw[i], a1 = w * (t1[q] + f * (t1[q + 1] - t1[q])), a2 = r > 0 ? (w * (t2[q] + f * (t2[q + 1] - t2[q]))) / (r * r) : 0, dx = gx[i], dy = gy[i], dz = gz[i];
         fi += w * (tg[q] + f * (tg[q + 1] - tg[q])); S[0] -= a1 * dx; S[1] -= a1 * dy; S[2] -= a1 * dz; T[0] += a1 + a2 * dx * dx; T[1] += a1 + a2 * dy * dy; T[2] += a1 + a2 * dz * dz; T[3] += a2 * dx * dy; T[4] += a2 * dx * dz; T[5] += a2 * dy * dz; tr += 3 * a1 + a2 * r * r; }
       per?.push(tr); }
-    return { delta: T[0] + T[1] + T[2], marea: T, spostamento: S.map((v) => v * MPC), velocita: S.map((v) => v * COSMO.H0 * f0Crescita), potenziale: fi * MPC * MPC, livelli: [j0, J], perLivello: per }; };
+    return { delta: T[0] + T[1] + T[2], marea: T, spostamento: S.map((v) => v * MPC), velocita: S.map((v) => v * COSMO.H0 * f0Crescita), potenziale: fi * MPC * MPC, livelli: [L[0], L[L.length - 1]], perLivello: per }; };
   // la varianza attesa (teoria: ∫dlnk Δ²·F²·Σ_j B_j²) della densità ai livelli e col filtro chiesti; e, per livello, la coda tagliata
   const varianza = (opz = {}) => { const F = filtroDi(opz); let v = 0; for (const j of livelliUtili(opz, F)) v += nucleo(j, F).varianza; return v; };
   const code = (opz = {}) => { const F = filtroDi(opz), out = []; for (const j of livelliUtili(opz, F)) { const N = nucleo(j, F); out.push({ livello: j, latoMpc: N.h, varianza: N.varianza, coda: N.coda ?? 0 }); } return out; };
   // una griglia regolare di densità (n³ punti: origine + (i, j, l)·passo, in metri): gli stessi valori di delta(), punto per punto
   const griglia = (origine, passo, n, opz = {}) => { const out = new Float64Array(n * n * n); for (let l = 0; l < n; l++) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[(l * n + j) * n + i] = delta([origine[0] + i * passo, origine[1] + j * passo, origine[2] + l * passo], opz); return out; };
-  // LA CONVOLUZIONE PER REGIONE: δ e marea (e spostamento) sugli n³ nodi di una griglia regolare (origine, passo in metri).
-  // Per ogni livello si stende una volta la pezza di celle che la regione tocca, poi ogni nodo somma il suo intorno: gli
-  // stessi numeri di in(), bit per bit (stesse celle, stesso ordine), ma ~4 volte più in fretta (niente blocchi né chiavi).
-  // → { n, delta, xx, yy, zz, xy, xz, yz, sx, sy, sz (lo spostamento, m): Float64Array(n³), indice (l·n + j)·n + i }
-  const grigliaIn = (origine, passo, n, opz = {}) => { const F = filtroDi(opz), J = cima(opz, F), j0 = Math.min(opz.da ?? daLivello, J), a = mpc(origine), b = a.map((v) => v + ((n - 1) * passo) / MPC), n3 = n * n * n, out = { n };
-    for (const k of ['delta', 'xx', 'yy', 'zz', 'xy', 'xz', 'yz', 'sx', 'sy', 'sz']) out[k] = new Float64Array(n3);
-    for (let j = j0; j <= J; j++) if (!nucleo(j, F).vuoto) stendi(livello(j), a, b);
-    for (let l = 0, q = 0; l < n; l++) for (let jj = 0; jj < n; jj++) for (let i = 0; i < n; i++, q++) { const w = in_([origine[0] + i * passo, origine[1] + jj * passo, origine[2] + l * passo], opz); out.delta[q] = w.delta; out.xx[q] = w.marea[0]; out.yy[q] = w.marea[1]; out.zz[q] = w.marea[2]; out.xy[q] = w.marea[3]; out.xz[q] = w.marea[4]; out.yz[q] = w.marea[5]; out.sx[q] = w.spostamento[0]; out.sy[q] = w.spostamento[1]; out.sz[q] = w.spostamento[2]; }
-    for (let j = j0; j <= J; j++) if (livelli.has(j)) livelli.get(j).denso = null; return out; };
-  return { radice, rami, raggio, daLivello, latoDi, kDi, grigliaIn, delta, in: in_, varianza, code, griglia, cella, nucleo, livello, raccogli, livelliUtili: (opz = {}) => livelliUtili(opz, filtroDi(opz)), memoriaIn: { gw, gx, gy, gz, gr }, contatori,
+
+  // ---- UNA GRANDEZZA LINEARE del campo (un «vincolo»): parti [{ F, livelli, x (Mpc), guadagno(N, dx, dy, dz, r) }]: il suo valore
+  // è Σ_parti Σ_livelli Σ_celle w·guadagno. v: { tipo: 'densita' (di suo) | 'pendenza' (direzione: versore; ∂δ/∂x in 1/Mpc) |
+  // 'marea' (i, j) | 'cielo' (cielo: ciò che dà filtriCielo, direzione, doppler), posizione (m), scala (m) o filtro, livello }
+  const partiDi = (v) => {
+    if (v.tipo === 'cielo') { const C = v.cielo, n = v.direzione, x = [0, 1, 2].map((d) => C.centro[d] + C.chi * n[d]), out = [{ F: C.W0, livelli: C.livelli, x, guadagno: (N, dx, dy, dz, r) => tab(N.f, r, N.passo) }];
+      if (v.doppler) out.push({ F: C.W1, livelli: C.livelli, x, guadagno: (N, dx, dy, dz, r) => tab(N.A1, r, N.passo) * (n[0] * dx + n[1] * dy + n[2] * dz) }); return out; }
+    const F = filtroDi(v), x = mpc(v.posizione), opz = { livello: v.livello, soglia: v.soglia };
+    if (!v.tipo || v.tipo === 'densita') return [{ F, livelli: livelliUtili(opz, F), x, guadagno: (N, dx, dy, dz, r) => tab(N.f, r, N.passo) }];
+    if (v.tipo === 'pendenza') { const e = v.direzione; return [{ F, livelli: livelliIn(opz, F), x, guadagno: (N, dx, dy, dz, r) => (r > 0 ? (tab(N.fp, r, N.passo) * (e[0] * dx + e[1] * dy + e[2] * dz)) / r : 0) }]; }
+    if (v.tipo === 'marea') { const a = v.i, b = v.j; return [{ F, livelli: livelliIn(opz, F), x, guadagno: (N, dx, dy, dz, r) => { const d = [dx, dy, dz], a1 = tab(N.A1, r, N.passo), a2 = r > 0 ? tab(N.A2, r, N.passo) / (r * r) : 0; return (a === b ? a1 : 0) + a2 * d[a] * d[b]; } }]; }
+    throw new Error(`campoPigro: grandezza sconosciuta (${v.tipo})`); };
+  const misura = (v) => { let s = 0; for (const P of partiDi(v)) for (const j of P.livelli) { const N = nucleo(j, P.F); if (N.vuoto) continue; const n = raccogli(livello(j), P.x); for (let i = 0; i < n; i++) s += gw[i] * P.guadagno(N, gx[i], gy[i], gz[i], gr[i]); } return s; };
+
+  // ---- IL CAMPO VINCOLATO (Hoffman & Ribak 1991, nello spazio delle celle): il campo è lineare nelle celle, δ = G·w, w ~ N(0, 1)
+  // indipendenti. Dati i valori c dei vincoli, la realizzazione vincolata è w' = w + Gᵀ·C⁻¹·(c − G·w), C = G·Gᵀ: ESATTA per questo
+  // campo (con i nuclei troncati com'è), e LOCALE: cambiano solo le celle che un vincolo tocca (entro il raggio dei nuclei, a ogni
+  // livello). χ² = cᵀC⁻¹c sui vincoli dopo i primi `fissi` (che sono dati: le galassie). → un campo con le stesse funzioni, più
+  // { esiste, gradi, chi2, probabilita, logPeso, logDensita, chi2Libero, ridondanti, liberi (G·w), valori, attesa(v) → { media,
+  //   varianza, libera }, liberta() → { celle, gradiFissati, varianzaLibera (sulle celle toccate: 1 − gradi/celle) } }
+  const vincola = (vincoli, { fissi = 0 } = {}) => {
+    if (correzione) throw new Error('vincola: si vincola il campo libero, con tutti i vincoli insieme (i fissi per primi)');
+    const n = vincoli.length, per = new Map();
+    for (let i = 0; i < n; i++) { if (!Number.isFinite(vincoli[i].valore)) throw new Error(`vincola: il vincolo ${i} non ha valore`);
+      for (const P of partiDi(vincoli[i])) for (const j of P.livelli) { const N = nucleo(j, P.F); if (N.vuoto) continue; let L = per.get(j); if (!L) { L = { chiavi: new Map(), w: [], idx: [], voci: [] }; per.set(j, L); }
+        const m = raccogli(livello(j), P.x); for (let c = 0; c < m; c++) { const g = P.guadagno(N, gx[c], gy[c], gz[c], gr[c]); if (g === 0) continue; const k = `${gix[c]},${giy[c]},${giz[c]}`; let q = L.chiavi.get(k);
+          if (q === undefined) { q = L.w.length; L.chiavi.set(k, q); L.w.push(gw[c]); L.idx.push(gix[c], giy[c], giz[c]); L.voci.push([]); } const vo = L.voci[q]; if (vo.length && vo[vo.length - 2] === i) vo[vo.length - 1] += g; else vo.push(i, g); } } }
+    const C = new Float64Array(n * n), d0 = new Float64Array(n); let celle = 0;
+    for (const L of per.values()) { celle += L.w.length; for (let q = 0; q < L.w.length; q++) { const vo = L.voci[q], w = L.w[q]; for (let a = 0; a < vo.length; a += 2) { const ia = vo[a], ga = vo[a + 1]; d0[ia] += ga * w; for (let b = a; b < vo.length; b += 2) { const ib = vo[b]; C[Math.min(ia, ib) * n + Math.max(ia, ib)] += ga * vo[b + 1]; } } } }
+    // Cholesky nell'ordine dato (i fissi per primi), saltando i vincoli che non aggiungono niente (RANGO di bolle.js)
+    const diag = new Float64Array(n), yc = new Float64Array(n), y0 = new Float64Array(n), vivo = new Uint8Array(n), ridondanti = []; let logDet = 0;
+    for (let j = 0; j < n; j++) { const rj = j * n; let s = C[rj + j], ac = vincoli[j].valore, a0 = d0[j]; diag[j] = s; for (let k = 0; k < j; k++) if (vivo[k]) { const l = C[rj + k]; s -= l * l; ac -= l * yc[k]; a0 -= l * y0[k]; }
+      if (!(s > RANGO * diag[j])) { if (Math.abs(ac) > 1e-7 * (Math.abs(vincoli[j].valore) + Math.sqrt(Math.max(diag[j], 1e-300)))) return { esiste: false, incompatibili: [j], perche: `il vincolo ${j} è già deciso da quelli che lo precedono, ma chiede un valore diverso di ${ac.toExponential(2)}` }; ridondanti.push(j); continue; }
+      const l = Math.sqrt(s); vivo[j] = 1; C[rj + j] = l; yc[j] = ac / l; y0[j] = a0 / l; if (j >= fissi) logDet += Math.log(l); for (let i = j + 1; i < n; i++) { const ri = i * n; let t = C[rj + i]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[ri + k] * C[rj + k]; C[ri + j] = t / l; } }
+    const lam = new Float64Array(n); for (let j = n - 1; j >= 0; j--) { if (!vivo[j]) continue; let t = yc[j] - y0[j]; for (let i = j + 1; i < n; i++) if (vivo[i]) t -= C[i * n + j] * lam[i]; lam[j] = t / C[j * n + j]; }
+    let chi2 = 0, chi2Libero = 0, gradi = 0, rango = 0; for (let j = 0; j < n; j++) if (vivo[j]) { rango++; if (j >= fissi) { chi2 += yc[j] * yc[j]; chi2Libero += y0[j] * y0[j]; gradi++; } }
+    // le celle cambiate: Δw = Gᵀλ, messe a blocchi come le celle
+    const cambiate = new Map();
+    for (const [j, L] of per) { const M = new Map(); cambiate.set(j, M); for (let q = 0; q < L.w.length; q++) { const vo = L.voci[q]; let d = 0; for (let a = 0; a < vo.length; a += 2) d += vo[a + 1] * lam[vo[a]]; if (d === 0) continue;
+      const wx = L.idx[3 * q], wy = L.idx[3 * q + 1], wz = L.idx[3 * q + 2], bx = Math.floor(wx / NB), by = Math.floor(wy / NB), bz = Math.floor(wz / NB), k = `${bx},${by},${bz}`; let B = M.get(k); if (!B) { B = new Float64Array(NB3); M.set(k, B); } B[((wz - bz * NB) * NB + wy - by * NB) * NB + wx - bx * NB] += d; } }
+    const V = campoPigro(radice, { rami, raggio, memoria, finestra, lato0, periodo, da: F, correzione: cambiate });
+    // ciò che la teoria dice di una grandezza Q nel campo vincolato: media ξᵀC⁻¹c, varianza ⟨Q²⟩ − ξᵀC⁻¹ξ (ξ_i = Σ_celle g_Q·g_i)
+    const attesa = (v) => { const xi = new Float64Array(n); let libera = 0;
+      for (const P of partiDi(v)) for (const j of P.livelli) { const N = nucleo(j, P.F); if (N.vuoto) continue; const L = per.get(j), m = raccogli(livello(j), P.x); for (let c = 0; c < m; c++) { const g = P.guadagno(N, gx[c], gy[c], gz[c], gr[c]); libera += g * g; if (!L) continue; const q = L.chiavi.get(`${gix[c]},${giy[c]},${giz[c]}`); if (q === undefined) continue; const vo = L.voci[q]; for (let a = 0; a < vo.length; a += 2) xi[vo[a]] += g * vo[a + 1]; } }
+      let media = 0, tolta = 0; for (let j = 0; j < n; j++) { if (!vivo[j]) continue; let t = xi[j]; for (let k = 0; k < j; k++) if (vivo[k]) t -= C[j * n + k] * xi[k]; xi[j] = t / C[j * n + j]; media += xi[j] * yc[j]; tolta += xi[j] * xi[j]; }
+      return { media, varianza: Math.max(0, libera - tolta), libera }; };
+    return Object.assign(V, { esiste: true, gradi, chi2, probabilita: probabilitaChi2(chi2, gradi), logPeso: -chi2 / 2, logDensita: -chi2 / 2 - logDet - (gradi / 2) * Math.log(PI2), chi2Libero, ridondanti, liberi: d0, valori: vincoli.map((v) => v.valore), fissi, attesa, libero: F,
+      liberta: () => ({ celle, gradiFissati: rango, varianzaLibera: 1 - rango / celle }) }); };
+
+  // ---- LA GRIGLIA PER CONVOLUZIONE (alla MUSIC: Hahn & Abel 2011): i nodi stanno a origine + (i, j, l)·s, con s = il lato delle
+  // celle del livello `m` e l'origine un multiplo di s. Per i livelli fini (celle di s, 2s, 4s) è la convoluzione ESATTA delle
+  // celle col nucleo campionato sul reticolo, fatta con la trasformata di Fourier (gli stessi numeri del punto per punto, a
+  // meno degli arrotondamenti: ~10⁻¹⁵); i livelli più grossi si calcolano esatti su nodi a un quarto delle loro celle e si
+  // interpolano (Catmull–Rom: errore ~10⁻³ della loro parte, che è piccola). La risoluzione del campo sulla griglia è al più
+  // quella dei suoi nodi (livello ≤ m). opz: { livello, scala o filtro, marea (true: anche il tensore di marea) }
+  // → { n, passo (m), origine (m), livello, delta: Float64Array(n³) (indice (l·n + j)·n + i), xx, yy, zz, xy, xz, yz (se marea) }
+  const grigliaFFT = (origine, m, n, opz = {}) => {
+    const s = latoDi(m), o = mpc(origine).map((v) => v / s), oi = o.map(Math.round); if (o.some((v, d) => Math.abs(v - oi[d]) > 1e-6 * Math.max(1, Math.abs(v)))) throw new Error('grigliaFFT: l\'origine deve stare sul reticolo delle celle del livello m');
+    const F = filtroDi(opz), J = Math.min(cima(opz, F), m), oL = { ...opz, livello: J }, lista = opz.soloLivelli ?? (opz.marea ? livelliIn(oL, F) : livelliUtili(oL, F)), nomi = opz.marea ? ['xx', 'yy', 'zz', 'xy', 'xz', 'yz'] : ['delta'], n3 = n * n * n, out = { n, passo: s * MPC, origine: [...origine], livello: J };
+    for (const k of nomi) out[k] = new Float64Array(n3);
+    const valoriKern = (N, dx, dy, dz, r, v) => { const f = r > 0 ? 1 / (r * r) : 0; if (!opz.marea) { v[0] = tab(N.f, r, N.passo); return; } const a1 = tab(N.A1, r, N.passo), a2 = r > 0 ? tab(N.A2, r, N.passo) * f : 0; v[0] = a1 + a2 * dx * dx; v[1] = a1 + a2 * dy * dy; v[2] = a1 + a2 * dz * dz; v[3] = a2 * dx * dy; v[4] = a2 * dx * dz; v[5] = a2 * dy * dz; };
+    const fini = lista.filter((j) => m - j <= 2), grossi = lista.filter((j) => m - j > 2);
+    if (fini.length) { const Rm = Math.max(...fini.map((j) => Math.ceil(raggio * 2 ** (m - j)) + 1)); let N = 8; while (N < n + 2 * Rm + 2) N *= 2; if (N > 256) throw new Error('grigliaFFT: griglia troppo grande');
+      const N3 = N ** 3, coppie = Math.ceil(nomi.length / 2), accR = Array.from({ length: coppie }, () => new Float64Array(N3)), accI = Array.from({ length: coppie }, () => new Float64Array(N3)), re = new Float64Array(N3), im = new Float64Array(N3), kr = new Float64Array(N3), ki = new Float64Array(N3), v = [0, 0, 0, 0, 0, 0];
+      for (const j of fini) { const Nk = nucleo(j, F); if (Nk.vuoto) continue; const a = m - j, h = latoDi(j), Lv = livello(j), sh = a === 0 ? 0.5 : 0, R = Math.ceil(raggio * 2 ** a) + 1; re.fill(0); im.fill(0);
+        // le celle: centro in unità di nodo u = (c + ½)·2^a − o; si mettono in p = u − sh + R
+        const c0 = [0, 1, 2].map((d) => Math.ceil(((oi[d] - R) * s) / h - 0.5)), c1 = [0, 1, 2].map((d) => Math.floor(((oi[d] + n - 1 + R) * s) / h - 0.5));
+        for (let cz = c0[2]; cz <= c1[2]; cz++) { const pz = (cz + 0.5) * 2 ** a - oi[2] - sh + Rm; for (let cy = c0[1]; cy <= c1[1]; cy++) { const py = (cy + 0.5) * 2 ** a - oi[1] - sh + Rm; for (let cx = c0[0]; cx <= c1[0]; cx++) { const px = (cx + 0.5) * 2 ** a - oi[0] - sh + Rm; re[(pz * N + py) * N + px] = valore(Lv, giro(Lv, cx), giro(Lv, cy), giro(Lv, cz)); } } }
+        fft3(re, im, N);
+        for (let cp = 0; cp < coppie; cp++) { kr.fill(0); ki.fill(0); const Rk = raggio * h;
+          for (let tz = -R; tz <= R; tz++) { const dz = (tz - sh) * s; if (Math.abs(dz) >= Rk) continue; for (let ty = -R; ty <= R; ty++) { const dy = (ty - sh) * s, q = dz * dz + dy * dy; if (q >= Rk * Rk) continue; for (let tx = -R; tx <= R; tx++) { const dx = (tx - sh) * s, r2 = q + dx * dx; if (r2 >= Rk * Rk) continue; valoriKern(Nk, dx, dy, dz, Math.sqrt(r2), v); const ix = (((tz % N) + N) % N * N + ((ty % N) + N) % N) * N + ((tx % N) + N) % N; kr[ix] = v[2 * cp]; ki[ix] = 2 * cp + 1 < nomi.length ? v[2 * cp + 1] : 0; } } }
+          fft3(kr, ki, N); const AR = accR[cp], AI = accI[cp]; for (let q = 0; q < N3; q++) { AR[q] += re[q] * kr[q] - im[q] * ki[q]; AI[q] += re[q] * ki[q] + im[q] * kr[q]; } } }
+      for (let cp = 0; cp < coppie; cp++) { fft3(accR[cp], accI[cp], N, true); const A = out[nomi[2 * cp]], B = 2 * cp + 1 < nomi.length ? out[nomi[2 * cp + 1]] : null;
+        for (let l = 0, q = 0; l < n; l++) for (let jj = 0; jj < n; jj++) for (let i = 0; i < n; i++, q++) { const ix = ((l + Rm) * N + jj + Rm) * N + i + Rm; A[q] = accR[cp][ix]; if (B) B[q] = accI[cp][ix]; } } }
+    // (ogni livello ha il suo raggio R ≤ Rm in nodi; le celle stanno tutte a + Rm, e l'uscita si legge a + Rm)
+    // i livelli grossi: esatti su nodi a h/4 (con la trasformata se sono tanti, punto per punto se pochi), poi interpolati
+    const w3 = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], v = [0, 0, 0, 0, 0, 0];
+    for (const j of grossi) { const Nk = nucleo(j, F); if (Nk.vuoto) continue; const h = latoDi(j), sg = h / 4, a0 = [0, 1, 2].map((d) => Math.floor((oi[d] * s) / sg) - 1), na = Math.ceil(((n - 1) * s) / sg) + 4, Lv = livello(j); let aux;
+      if (na > 24) { const G = grigliaFFT(a0.map((v) => v * sg * MPC), j + 2, na, { ...opz, soloLivelli: [j] }); aux = nomi.map((k) => G[k]); }
+      else { aux = nomi.map(() => new Float64Array(na ** 3)); for (let l = 0, q = 0; l < na; l++) for (let jj = 0; jj < na; jj++) for (let i = 0; i < na; i++, q++) { const x = [(a0[0] + i) * sg, (a0[1] + jj) * sg, (a0[2] + l) * sg], c = raccogli(Lv, x); const acc = [0, 0, 0, 0, 0, 0];
+        for (let t = 0; t < c; t++) { valoriKern(Nk, gx[t], gy[t], gz[t], gr[t], v); for (let e = 0; e < nomi.length; e++) acc[e] += gw[t] * v[e]; } for (let e = 0; e < nomi.length; e++) aux[e][q] = acc[e]; } }
+      for (let l = 0, q = 0; l < n; l++) { const uz = ((oi[2] + l) * s) / sg - a0[2], kz = Math.floor(uz); pesiCR(uz - kz, w3[2]);
+        for (let jj = 0; jj < n; jj++) { const uy = ((oi[1] + jj) * s) / sg - a0[1], ky = Math.floor(uy); pesiCR(uy - ky, w3[1]);
+          for (let i = 0; i < n; i++, q++) { const ux = ((oi[0] + i) * s) / sg - a0[0], kx = Math.floor(ux); pesiCR(ux - kx, w3[0]);
+            for (let e = 0; e < nomi.length; e++) { const A = aux[e]; let t = 0; for (let c = 0; c < 4; c++) for (let b = 0; b < 4; b++) { const wb = w3[2][c] * w3[1][b], base = ((kz - 1 + c) * na + ky - 1 + b) * na + kx - 1; t += wb * (w3[0][0] * A[base] + w3[0][1] * A[base + 1] + w3[0][2] * A[base + 2] + w3[0][3] * A[base + 3]); } out[nomi[e]][q] += t; } } } } }
+    if (opz.marea) { out.delta = new Float64Array(n3); for (let q = 0; q < n3; q++) out.delta[q] = out.xx[q] + out.yy[q] + out.zz[q]; }
+    return out; };
+
+  const F = { radice, rami, raggio, lato0, daLivello, latoDi, kDi, delta, in: in_, varianza, code, griglia, grigliaFFT, misura, vincola, cella, nucleo, livello, raccogli, livelliUtili: (opz = {}) => livelliUtili(opz, filtroDi(opz)), livelliIn: (opz = {}) => livelliIn(opz, filtroDi(opz)), memoriaIn: { gw, gx, gy, gz, gr }, contatori, _interni: I, vincolato: !!correzione,
     stato: () => { let b = 0; for (const Lv of livelli.values()) b += Lv.blocchi.size; return { livelli: livelli.size, blocchi: b, byte: b * NB3 * 8, celle: contatori.celle, nuclei: nuclei.size }; },
     dimentica: () => { livelli.clear(); }, pigro: true };
+  return F;
 }
 
 // =====================================================================================================
@@ -260,7 +351,7 @@ export function cieloPigro(campo, osservatore = {}, { ellMax = 8, doppler = true
   const leggi = (T, k) => { const u = k / C.dk, i = Math.min(C.n - 1, Math.floor(u)); return T[i] + (u - i) * (T[i + 1] - T[i]); };
   const W0 = { chiave: 'W0', F: (k) => RAGNATELA.phiSuDelta(k) * leggi(C.S0, k) }, W1 = { chiave: '-kW1', F: (k) => -k * RAGNATELA.phiSuDelta(k) * leggi(C.S1, k) };
   // i livelli: fino a quello la cui ottava copre per intero k = (ellMax + 6)/χ (lì Σ_j≤J B_j² = 1 ancora)
-  let J = 0; while (kDi(J) < (ellMax + 6) / chi) J++; if (2 * kDi(J) > C.n * C.dk) throw new Error('cieloPigro: ellMax troppo alto per le tabelle delle sorgenti');
+  let J = 0; while (campo.kDi(J) < (ellMax + 6) / chi) J++; if (2 * campo.kDi(J) > C.n * C.dk) throw new Error('cieloPigro: ellMax troppo alto per le tabelle delle sorgenti');
   const { gw, gx, gy, gz, gr } = campo.memoriaIn;
   const parti = (n) => { const x = [x0[0] + chi * n[0], x0[1] + chi * n[1], x0[2] + chi * n[2]]; let iso = 0, dop = 0;
     for (let j = 0; j <= J; j++) { const N0 = campo.nucleo(j, W0), N1 = doppler ? campo.nucleo(j, W1) : null; if (N0.vuoto) continue; const m = campo.raccogli(campo.livello(j), x), p = N0.passo, t0 = N0.f, t1 = N1 && !N1.vuoto ? N1.A1 : null;
@@ -268,5 +359,9 @@ export function cieloPigro(campo, osservatore = {}, { ellMax = 8, doppler = true
       // dell'ampiezza −k²·(W1/k) = −k·W1: per questo il filtro è «−kW1»)
       for (let i = 0; i < m; i++) { const u = gr[i] / p, q = u | 0, f = u - q; iso += gw[i] * (t0[q] + f * (t0[q + 1] - t0[q])); if (t1) dop += gw[i] * (t1[q] + f * (t1[q + 1] - t1[q])) * (n[0] * gx[i] + n[1] * gy[i] + n[2] * gz[i]); } }
     return { isotropo: iso, doppler: dop }; };
-  return { in: (n) => { const p = parti(n); return p.isotropo + p.doppler; }, parti, livelli: [0, J], raggioM: chi * MPC, ellPiena: kDi(J) * chi, ellBanda: 2 * kDi(J) * chi, z: Ric.zTau1 };
+  const livelli = []; for (let j = 0; j <= J; j++) livelli.push(j);
+  // la varianza attesa del cielo (media sul cielo): ∫dlnk Δ²·Σ_j≤J B_j²·(W0² + W1²/3), con W1 = −(−kW1)/k
+  let v = 0; { const n = 4000, l0 = Math.log(1e-7), dl = (Math.log(2 * campo.kDi(J)) - l0) / n; for (let i = 0; i < n; i++) { const k = Math.exp(l0 + (i + 0.5) * dl); let b = 0; for (let j = 0; j <= J; j++) { const u = Math.abs(Math.log2(k / campo.kDi(j))); if (u < 1) b += Math.cos((Math.PI / 2) * u) ** 2; } v += U.potenza(k) * b * (W0.F(k) ** 2 + (doppler ? (W1.F(k) / k) ** 2 / 3 : 0)) * dl; } }
+  return { in: (n) => { const p = parti(n); return p.isotropo + p.doppler; }, parti, livelli: [0, J], raggioM: chi * MPC, ellPiena: campo.kDi(J) * chi, ellBanda: 2 * campo.kDi(J) * chi, z: Ric.zTau1, scartoAtteso: Math.sqrt(v),
+    cielo: { centro: x0, chi, W0, W1, livelli } }; // (cielo: per i vincoli di campoPigro.vincola, tipo 'cielo')
 }

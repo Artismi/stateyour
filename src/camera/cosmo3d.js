@@ -8,10 +8,12 @@
 //   · UN TORO A TRE DIMENSIONI, lato TORO_M: alle due coordinate di ogni galassia si aggiunge la profondità z (un
 //     evento, uniforme: l'universo non ha un piano preferito);
 //   · IL CAMPO è gaussiano, con lo SPETTRO DI POTENZA VERO della materia (quello di galassie.js: forma BBKS con il
-//     parametro di Sugiyama, normalizzato a σ₈ di leggi.js), fatto di tutte le onde che entrano nel toro fino a un
-//     numero d'onda massimo (kmax giri per lato). Non è un campo qualunque: è una REALIZZAZIONE VINCOLATA (Hoffman &
-//     Ribak 1991), cioè il campo casuale più la correzione minima che lo fa valere, filtrato alle onde lunghe, proprio
-//     l'altezza del picco di ogni galassia nel punto dove sta. Così le galassie stanno dove il campo dice;
+//     parametro di Sugiyama, normalizzato a σ₈ di leggi.js), ed è il CAMPO SENZA BORDO di campo_pigro.js: rumore con
+//     indirizzo livello per livello («radice/campo/livello j/cella x,y,z»), calcolato solo dove si guarda. Il toro non è
+//     più periodico: è la regione in cui stanno le galassie segnate, dentro uno spazio che continua (piatto; una
+//     topologia chiusa, se c'è, starebbe molto oltre l'orizzonte e non si vede). Non è un campo qualunque: è una
+//     REALIZZAZIONE VINCOLATA (Hoffman & Ribak 1991, fatta sulle celle: campo_pigro.js vincola), cioè il campo casuale
+//     più la correzione minima che fa valere al campo lisciato, nel punto di ogni galassia, l'altezza del suo picco;
 //   · I MOTI vengono dalla teoria lineare: la materia cade verso dove ce n'è di più, v_k = i·H·f·δ_k·k/k², con
 //     f = dlnD/dlna (≈ Ωm^0,55) dalla crescita di galassie.js. Con lo spettro vero le velocità sono quelle vere;
 //   · L'ESPANSIONE: le coordinate sul toro sono comoventi; la distanza vera è quella per il fattore di scala a(t) della
@@ -24,17 +26,23 @@
 // più piccolo dei loro sono milioni (li conta la funzione di massa di Press & Schechter 1974 con lo stesso σ(M)):
 // `peso` dice quante galassie vere rappresenta ognuna.
 //
-// COSTI (misurati): kmax = 24 → 28 888 onde; costruire il campo vincolato ~40–70 ms; la griglia 64³ (a richiesta: una
-// trasformata di Fourier) ~50 ms; velocità delle galassie (a richiesta: somma diretta delle onde) ~100–150 ms; maree e
-// assi ~100–140 ms. In memoria: le onde 1,4 MB, la griglia 1 MB.
-// CHE COSA NON C'È: le onde più corte di L/kmax (50 Mpc: filamenti e vuoti grandi sì, i singoli ammassi no: per
-// quelli servirebbe un campo più fine, condizionato a questo, nella regione che si guarda); le galassie non sono
-// obbligate a stare su un massimo esatto del campo; i moti sono lineari (niente orbite negli ammassi); la carta
-// piatta di cosmo.js (la rete disegnata sulla mappa) non è la proiezione di questo campo: è il disegno di prima.
+// IL VINCOLO DELLE GALASSIE: galassie.js legge l'altezza del picco (G.peso) in scarti del campo filtrato alle onde lunghe
+// (taglio netto a `onde` = 9 giri per lato: σ_onde = SIGMA_CAMPO). Su un campo senza bordo il taglio netto non è locale;
+// il vincolo è allora sul campo lisciato con la GAUSSIANA che ha lo stesso scarto (σ(R_eq) = σ_onde: R_eq ricavato qui
+// dallo spettro, 21 Mpc): l'altezza in scarti e il valore peso·σ_onde restano IDENTICI, e con loro la massa degli
+// aloni e tutto ciò che sta sotto. Cambia ciò che il campo dice attorno: velocità e assi (misurato in test_spazio3d).
+// LA RISOLUZIONE: i livelli fino a celle di L/64 (18,7 Mpc): onde da 75 Mpc in su per intero, sfumate fino a 37.
+// COSTI (misurati): il campo vincolato alle galassie ~0,5–1 s; la griglia 64³ (a richiesta: convoluzione per regione
+// con la trasformata, campo_pigro.js grigliaFFT) ~4 s; un punto ~2–6 ms; velocità e assi delle galassie ~0,5 s.
+// CHE COSA NON C'È: le galassie non sono obbligate a stare su un massimo esatto del campo; i moti sono lineari (niente
+// orbite negli ammassi); la carta piatta di cosmo.js (la rete disegnata sulla mappa) non è la proiezione di questo
+// campo; le posizioni della carta sono lette come posizioni di OGGI (aloniIn di ragnatela.js legge invece la materia
+// spostata con Ψ: le due letture differiscono di |Ψ| ≈ 13 Mpc).
 
 import { COSMO } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U, SIGMA_CAMPO } from './galassie.js';
+import { campoPigro } from './campo_pigro.js';
 
 const MPC = 3.0857e22, PI2 = 2 * Math.PI;
 // la trasformata di Fourier (potenze di 2), sul posto, lungo una riga di passo `s` che parte da `o`
@@ -45,6 +53,8 @@ function fft(re, im, n, o, s, inversa) {
     for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < h; k++) { const a = o + (i + k) * s, b = a + h * s, xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr; re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } }
   }
 }
+// (ondeDelToro e ampiezzeLibere NON sono più la fonte del cosmo: restano per i campi di onde su un toro che si chiedono
+// apposta, come seconda via per le prove della teoria: bolle.js campoLibero con kmax, ragnatela.js.)
 // LE ONDE DEL TORO: mezzo spazio (le altre sono le coniugate), |k| ≤ kmax giri per lato, ognuna con la sua potenza
 // vera ⟨|δ_k|²⟩ = Δ²(k)/(4π·k³). La lista è la stessa per chiunque faccia un campo su questo toro (bolle.js).
 export function ondeDelToro(toroM, kmax) {
@@ -67,52 +77,34 @@ export function ampiezzeLibere(radice, rami, O) {
   return { A, B };
 }
 const campi = new WeakMap();
+// lo scarto del campo lisciato con una gaussiana di raggio R (Mpc), dallo spettro di galassie.js (tutte le scale)
+const sigmaGauss = (R) => { let s = 0; const n = 3000, l0 = Math.log(1e-6), dl = (Math.log(30) - l0) / n; for (let i = 0; i < n; i++) { const k = Math.exp(l0 + (i + 0.5) * dl); s += U.potenza(k) * Math.exp(-k * k * R * R) * dl; } return Math.sqrt(s); };
+const raggioEquivalente = (sigma) => { let lo = 1, hi = 1000; for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi); if (sigmaGauss(m) > sigma) lo = m; else hi = m; } return Math.sqrt(lo * hi); };
 // IL COSMO IN 3D. C: cosmo(n) di cosmo.js (le galassie con pos [x, y] e peso); radice e rami: l'indirizzo del cosmo
-// («cosmo 1») e i suoi rami; toroM: il lato. → vedi i campi restituiti in fondo.
-export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, kmax = 24, celle = 64 } = {}) {
+// («cosmo 1») e i suoi rami; toroM: il lato della regione delle galassie. → vedi i campi restituiti in fondo.
+export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, celle = 64, livello = 16 } = {}) {
   let F = campi.get(C); if (F) return F;
-  const L = toroM / MPC;
-  // ---- le onde (ondeDelToro) e le loro ampiezze libere (ampiezzeLibere: un evento per onda)
-  const O = ondeDelToro(toroM, kmax), { N, KX, KY, KZ, PK } = O, { A, B } = ampiezzeLibere(radice, rami, O);
-  const A0 = Float64Array.from(A), B0 = Float64Array.from(B); // il campo LIBERO di questo indirizzo, prima di ogni vincolo (per bolle.js)
+  const L = toroM / MPC, P = campoPigro(radice, { rami, lato0: L * 1024 }), J = livello; // celle del livello j: L·2^(10−j)
   // ---- le galassie: x, y dalla carta; z un evento di ognuna
   const G = C.galassie, ng = G.length, pos = G.map((g) => [g.pos[0], g.pos[1], sorgente(`${radice}/galassia ${g.id}`, rami)('profondità')]);
-  // ---- il vincolo: il campo filtrato alle onde lunghe (|k| ≤ onde) vale peso·σ nel punto di ogni galassia
-  const lunghe = []; for (let i = 0; i < N; i++) if (KX[i] ** 2 + KY[i] ** 2 + KZ[i] ** 2 <= onde * onde) lunghe.push(i);
-  const sigmaOnde = SIGMA_CAMPO(toroM, onde), co = new Float64Array(ng), si = new Float64Array(ng), xi = new Float64Array(ng * ng), resto = new Float64Array(ng); let s2 = 0;
-  for (let i = 0; i < ng; i++) resto[i] = (G[i].peso ?? 0) * sigmaOnde;
-  const valori = Float64Array.from(resto); // ciò che il campo filtrato deve valere in ogni galassia
-  for (const m of lunghe) {
-    s2 += 2 * PK[m];
-    for (let i = 0; i < ng; i++) { const t = PI2 * (KX[m] * pos[i][0] + KY[m] * pos[i][1] + KZ[m] * pos[i][2]); co[i] = Math.cos(t); si[i] = Math.sin(t); resto[i] -= 2 * (A[m] * co[i] - B[m] * si[i]); }
-    for (let i = 0; i < ng; i++) for (let j = i; j < ng; j++) xi[i * ng + j] += 2 * PK[m] * (co[i] * co[j] + si[i] * si[j]);
-  }
-  for (let i = 0; i < ng; i++) { for (let j = 0; j < i; j++) xi[i * ng + j] = xi[j * ng + i]; xi[i * ng + i] *= 1 + 1e-9; }
-  // (si risolve ξ·w = resto: eliminazione di Gauss con il perno più grande)
-  const w = Float64Array.from(resto); { const M = Float64Array.from(xi);
-    for (let p = 0; p < ng; p++) { let b = p; for (let r = p + 1; r < ng; r++) if (Math.abs(M[r * ng + p]) > Math.abs(M[b * ng + p])) b = r; if (b !== p) { for (let q = 0; q < ng; q++) { const t = M[p * ng + q]; M[p * ng + q] = M[b * ng + q]; M[b * ng + q] = t; } const t = w[p]; w[p] = w[b]; w[b] = t; }
-      const d = M[p * ng + p] || 1e-300; for (let r = p + 1; r < ng; r++) { const f = M[r * ng + p] / d; if (f) { for (let q = p; q < ng; q++) M[r * ng + q] -= f * M[p * ng + q]; w[r] -= f * w[p]; } } }
-    for (let p = ng - 1; p >= 0; p--) { let s = w[p]; for (let q = p + 1; q < ng; q++) s -= M[p * ng + q] * w[q]; w[p] = s / (M[p * ng + p] || 1e-300); } }
-  for (const m of lunghe) { let a = 0, b = 0; for (let j = 0; j < ng; j++) { const t = PI2 * (KX[m] * pos[j][0] + KY[m] * pos[j][1] + KZ[m] * pos[j][2]); a += w[j] * Math.cos(t); b -= w[j] * Math.sin(t); } A[m] += PK[m] * a; B[m] += PK[m] * b; }
-  // ---- le grandezze in un punto (coordinate sul toro, 0…1), per somma diretta delle onde
-  const f0 = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99), kV = (COSMO.H0 * f0 * L) / PI2; // km/s per unità di δ·k/k² (k in giri)
-  const somma = (x, quali, fa) => { const n = quali ? quali.length : N; for (let q = 0; q < n; q++) { const m = quali ? quali[q] : q, t = PI2 * (KX[m] * x[0] + KY[m] * x[1] + KZ[m] * x[2]), cs = Math.cos(t), sn = Math.sin(t); fa(m, 2 * (A[m] * cs - B[m] * sn), 2 * (A[m] * sn + B[m] * cs)); } };
-  const densita = (x) => { let d = 0; somma(x, null, (m, re) => { d += re; }); return d; };
-  const densitaLunga = (x) => { let d = 0; somma(x, lunghe, (m, re) => { d += re; }); return d; };
-  const velocita = (x) => { const v = [0, 0, 0]; somma(x, null, (m, re, im) => { const q = (-kV * im) / (KX[m] ** 2 + KY[m] ** 2 + KZ[m] ** 2); v[0] += q * KX[m]; v[1] += q * KY[m]; v[2] += q * KZ[m]; }); return v; };
-  // il tensore di marea (∂²φ/∂x∂x in unità di 4πGρ̄: la sua traccia è δ) e l'hessiano del campo filtrato (per unità di (2π/L)²)
-  const marea = (x) => { const T = [0, 0, 0, 0, 0, 0], H = [0, 0, 0, 0, 0, 0]; somma(x, null, (m, re) => { const a = KX[m], b = KY[m], cz = KZ[m], k2 = a * a + b * b + cz * cz, r = re / k2, h = k2 <= onde * onde ? -re : 0; T[0] += r * a * a; T[1] += r * b * b; T[2] += r * cz * cz; T[3] += r * a * b; T[4] += r * a * cz; T[5] += r * b * cz; if (h) { H[0] += h * a * a; H[1] += h * b * b; H[2] += h * cz * cz; H[3] += h * a * b; H[4] += h * a * cz; H[5] += h * b * cz; } }); return { T, H }; };
+  // ---- il vincolo: il campo lisciato a R_eq vale peso·σ_onde nel punto di ogni galassia
+  const sigmaOnde = SIGMA_CAMPO(toroM, onde), Req = raggioEquivalente(sigmaOnde) * MPC, valori = Float64Array.from(G, (g) => (g.peso ?? 0) * sigmaOnde);
+  const vincoliGalassie = pos.map((x, i) => ({ nome: `galassia ${i}`, posizione: x.map((v) => v * toroM), scala: Req, valore: valori[i] }));
+  const K = P.vincola(vincoliGalassie, { fissi: ng }); if (!K.esiste) throw new Error(`cosmo3d: le galassie di ${radice} non stanno in un campo solo (${K.perche})`);
+  // ---- le grandezze in un punto (coordinate in unità del lato, 0…1 dentro la regione; fuori lo spazio continua)
+  const f0 = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99), m = (x) => [x[0] * toroM, x[1] * toroM, x[2] * toroM];
+  const densita = (x) => K.delta(m(x), { livello: J }), densitaLunga = (x) => K.delta(m(x), { scala: Req }), velocita = (x) => K.in(m(x), { livello: J }).velocita;
+  // il tensore di marea (∂²φ/∂x∂x, ∇²φ = δ: la sua traccia è δ) e l'hessiano del campo lisciato a R_eq (in 1/Mpc²): è la
+  // marea del campo con filtro −k²·e^(−k²R²/2), perché ∂i∂j(∇⁻²∇²δ_R) = ∂i∂jδ_R
+  const filtroH = { chiave: `hess${Req}`, F: (k) => -k * k * Math.exp(-0.5 * k * k * (Req / MPC) ** 2), kTop: (6 * MPC) / Req };
+  const marea = (x) => ({ T: K.in(m(x), { livello: J }).marea, H: K.in(m(x), { filtro: filtroH }).marea });
   // ---- ciò che costa, a richiesta
   let grigliaFatta = null, moti = null, assi = null;
   const griglia = () => {
     if (grigliaFatta) return grigliaFatta;
-    const n = celle, re = new Float64Array(n * n * n), im = new Float64Array(n * n * n), dove = (x, y, z) => ((z + n) % n) * n * n + ((y + n) % n) * n + ((x + n) % n);
-    for (let m = 0; m < N; m++) { if (Math.abs(KX[m]) >= n / 2 || Math.abs(KY[m]) >= n / 2 || KZ[m] >= n / 2) continue; const a = dove(KX[m], KY[m], KZ[m]), b = dove(-KX[m], -KY[m], -KZ[m]); re[a] = A[m]; im[a] = B[m]; re[b] = A[m]; im[b] = -B[m]; }
-    for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) fft(re, im, n, z * n * n + y * n, 1, true);
-    for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) fft(re, im, n, z * n * n + x, n, true);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) fft(re, im, n, y * n + x, n * n, true);
-    let v = 0; const d = new Float32Array(n * n * n); for (let i = 0; i < d.length; i++) { d[i] = re[i]; v += re[i] * re[i]; }
-    return (grigliaFatta = { n, delta: d, sigma: Math.sqrt(v / d.length), latoCellaM: toroM / n }); // delta[z·n² + y·n + x]: la sovradensità lineare di oggi al centro… all'angolo (x/n, y/n, z/n) della cella
+    const n = celle, lv = 10 + Math.round(Math.log2(n)); if (2 ** (lv - 10) !== n) throw new Error('cosmo3d: le celle della griglia sono una potenza di 2');
+    const g = K.grigliaFFT([0, 0, 0], lv, n, { livello: Math.min(J, lv) }); let v = 0; const d = new Float32Array(n * n * n); for (let i = 0; i < d.length; i++) { d[i] = g.delta[i]; v += g.delta[i] ** 2; }
+    return (grigliaFatta = { n, delta: d, sigma: Math.sqrt(v / d.length), latoCellaM: toroM / n }); // delta[z·n² + y·n + x]: la sovradensità lineare di oggi nel punto (x/n, y/n, z/n) della regione
   };
   const motiGalassie = () => moti || (moti = pos.map((x) => velocita(x)));
   const assiGalassie = () => assi || (assi = pos.map((x, i) => {
@@ -135,6 +127,7 @@ export function cosmo3d(C, radice, rami = null, { toroM = 3.7e25, onde = 9, kmax
     const comoventi = pos.map((x, i) => [0, 1, 2].map((d) => x[d] - ((1 - g.D) * V[i][d]) / (COSMO.H0 * f0 * L))); // Zel'dovich: x(t) = x₀ − (1 − D)·Ψ, Ψ = v/(H₀·f₀)
     return { a, z: 1 / a - 1, D: g.D, H: g.H, latoM: a * toroM, comoventi, velocita: V.map((v) => v.map((q) => q * k)) };
   };
-  F = { toroM, latoMpc: L, onde: { n: N, kx: KX, ky: KY, kz: KZ, A, B, potenza: PK, kmax }, libere: { A: A0, B: B0 }, vincoli: { taglio: onde, valori }, sigmaOnde, sigmaLunghe: Math.sqrt(s2), pos, densita, densitaLunga, velocita, marea, griglia, motiGalassie, assiGalassie, alTempo, crescita, f0, vere, peso: vere / ng, massaMinima: mMin, oggiGa: U.tempo(1) };
+  F = { toroM, latoMpc: L, onde: null, libere: null, vincoli: { taglio: onde, scala: Req, valori }, vincoliGalassie, sigmaOnde, sigmaLunghe: Math.sqrt(P.varianza({ scala: Req })), pos, densita, densitaLunga, velocita, marea, griglia, motiGalassie, assiGalassie, alTempo, crescita, f0, vere, peso: vere / ng, massaMinima: mMin, oggiGa: U.tempo(1),
+    campo: K, libero: P, livello: J, scalaVincoli: Req, pigro: true };
   campi.set(C, F); return F;
 }

@@ -5,6 +5,8 @@
 // Qui ci sono due cose, che si provano da sole:
 //
 // A. IL CAMPO DEL COSMO CONDIZIONATO A PIÙ PUNTI (esatto). campoCondizionato(cosmo, vincoli).
+//    (OGGI il campo dei cosmi è quello SENZA BORDO di campo_pigro.js: per un cosmo della biblioteca e per un indirizzo la stessa
+//    legge si fa nelle celle, condizionatoPigro più sotto; ciò che segue sulle onde vale per i campi di onde chiesti con kmax.)
 //    LEGGE: un campo gaussiano condizionato a vincoli lineari è ancora gaussiano, e una sua realizzazione si ottiene
 //    da una libera con una correzione lineare (Hoffman e Ribak 1991, ApJ 380, L5):
 //        δ_c(x) = δ(x) + ξ_i(x)·C⁻¹_ij·(c_j − δ_j)
@@ -108,6 +110,7 @@ import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
 import { TORO_M, STELLE, cosmo as cosmoDi, sistema, numeroDi } from './cosmo.js';
 import { massaAlone } from './galassie.js';
 import { campoCosmo, ANNI_OGGI } from './spazio3d.js';
+import { campoPigro } from './campo_pigro.js';
 import { indirizzo, scrivi } from './intreccio.js';
 import { statoAcqua, ebollizione, ACQUA } from './leggi.js';
 import { minerali } from './chimica.js';
@@ -135,18 +138,23 @@ export const probabilitaChi2 = (chi2, gradi) => (gradi > 0 ? codaGamma(gradi / 2
 // =====================================================================================================
 const liste = new Map();
 const onde = (toroM, kmax) => { const k = `${toroM}|${kmax}`; if (!liste.has(k)) { if (liste.size > 6) liste.delete(liste.keys().next().value); liste.set(k, ondeDelToro(toroM, kmax)); } return liste.get(k); };
-// IL CAMPO LIBERO DI UN INDIRIZZO qualunque: lo stesso di cosmo3d.js (ampiezzeLibere: ogni onda un evento
-// «radice/campo/onda kx,ky,kz»). → { radice, toroM, kmax, N, KX, KY, KZ, PK, A, B, fissi: [] }
-export function campoLibero(radice, { toroM = TORO_M, kmax = 24, rami = null } = {}) {
+// IL CAMPO LIBERO DI UN INDIRIZZO qualunque: lo stesso di cosmo3d.js, il campo SENZA BORDO di campo_pigro.js (eventi
+// «radice/campo/livello j/cella x,y,z»). → { tipo: 'pigro', radice, toroM, campo (campoPigro), livello (la risoluzione dei
+// valori «nel punto»: celle di L/64), fissi: [] }.
+// Con `kmax` è invece un CAMPO DI ONDE SU UN TORO (cosmo3d.js ampiezzeLibere: ogni onda un evento «radice/campo/onda
+// kx,ky,kz»): non è più il campo dei cosmi, resta come seconda via per le prove della teoria (è esatto anche lui, con il
+// suo spettro e la sua periodicità). → { radice, toroM, kmax, N, KX, KY, KZ, PK, A, B, fissi: [] }
+export const LIVELLO_COSMO = 16;
+export function campoLibero(radice, { toroM = TORO_M, kmax = null, rami = null } = {}) {
+  if (kmax == null) return { tipo: 'pigro', radice: String(radice), toroM, campo: campoPigro(String(radice), { rami, lato0: (toroM / 3.0857e22) * 1024 }), livello: LIVELLO_COSMO, fissi: [] };
   if (!(kmax >= 1 && kmax <= 512)) throw new Error(`kmax deve stare tra 1 e 512 (${kmax})`);
   const O = onde(toroM, kmax), { A, B } = ampiezzeLibere(String(radice), rami, O);
   return { radice: String(radice), toroM, kmax, N: O.N, KX: O.KX, KY: O.KY, KZ: O.KZ, PK: O.PK, A, B, fissi: [] };
 }
 // il campo libero e i vincoli già presi di un cosmo della biblioteca (cosmo3d.js): le sue galassie
 function campoDelCosmo(n, { galassie = true } = {}) {
-  const F = campoCosmo(n), o = F.onde;
-  const fissi = galassie ? F.pos.map((x, i) => ({ nome: `galassia ${i}`, x, taglio: F.vincoli.taglio, valore: F.vincoli.valori[i] })) : [];
-  return { radice: `cosmo ${n}`, toroM: F.toroM, kmax: o.kmax, N: o.n, KX: o.kx, KY: o.ky, KZ: o.kz, PK: o.potenza, A: F.libere.A, B: F.libere.B, fissi };
+  const F = campoCosmo(n);
+  return { tipo: 'pigro', radice: `cosmo ${n}`, toroM: F.toroM, campo: F.libero, livello: F.livello, fissi: galassie ? F.vincoliGalassie : [] };
 }
 const eUnCosmo = (c) => typeof c === 'number' || /^\d+(#.*)?$/.test(String(c));
 const frazione = (v) => v - Math.floor(v);
@@ -158,8 +166,35 @@ const confrontaImpronte = (a, b) => { if (!a || !b) return (a ? 1 : 0) - (b ? 1 
 // «È UN MASSIMO» (o un minimo: un punto fermo) del campo lisciato, alto `valore`: l'altezza più tre pendenze nulle.
 // (Un vincolo lineare fissa valori, non segni: che sia un massimo e non una sella lo decide la curvatura, che per un
 // picco alto è quasi sempre negativa; la prova lo misura.) → quattro vincoli per campoCondizionato
-export const PENDENZE = [0, 1, 2].map((d) => (kx, ky, kz, k2, out) => { out[0] = 0; out[1] = d === 0 ? kx : d === 1 ? ky : kz; return out; });
+export const PENDENZE = [0, 1, 2].map((d) => Object.assign((kx, ky, kz, k2, out) => { out[0] = 0; out[1] = d === 0 ? kx : d === 1 ? ky : kz; return out; }, { asse: d })); // (asse: per il campo senza bordo, che non ha onde)
 export const vincoliMassimo = ({ posizione, scala = 0, taglio = null, valore }) => { const base = taglio != null ? { posizione, taglio } : { posizione, scala }; return [{ ...base, valore }, ...PENDENZE.map((forma) => ({ ...base, valore: 0, forma }))]; };
+
+// IL CAMPO CONDIZIONATO SENZA BORDO: la stessa legge, fatta sulle celle (campo_pigro.js vincola: esatta per quel campo e
+// locale). I vincoli: { posizione (m), scala (m, gaussiana; 0 = il valore nel punto alla risoluzione del cosmo), valore } e,
+// in più, { tipo: 'pendenza', direzione } (o una forma di PENDENZE), { tipo: 'marea', i, j }, { tipo: 'cielo', … } (ragnatela.js).
+// Il taglio netto in k non è locale: qui non c'è (chiedeAlCosmo dà la scala della gaussiana che ha lo stesso scarto).
+const ASSI = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const comePigro = (v, livello, i) => {
+  if (v.taglio != null) throw new Error(`vincolo ${i}: il campo senza bordo non ha il taglio netto in k: dare la scala (chiedeAlCosmo la dà)`);
+  if (v.tipo === 'cielo') return { ...v };
+  const p = v.posizione, R = v.scala ?? 0; if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !(R >= 0) || !Number.isFinite(v.valore)) throw new Error(`vincolo ${i}: servono posizione [x, y, z] in metri, scala ≥ 0 e valore`);
+  const tipo = v.tipo ?? (v.forma ? (v.forma.asse != null ? 'pendenza' : null) : 'densita'); if (!tipo) throw new Error(`vincolo ${i}: le forme in k valgono per i campi di onde; qui si dà il tipo (pendenza, marea)`);
+  return { tipo, posizione: [...p], scala: R, livello: R > 0 ? undefined : livello, i: v.i, j: v.j, direzione: v.direzione ?? (v.forma?.asse != null ? ASSI[v.forma.asse] : undefined), valore: v.valore };
+};
+const ordineTipi = { densita: 0, pendenza: 1, marea: 2, cielo: 3 };
+function condizionatoPigro(base, vincoli) {
+  const K0 = base.campo, J = base.livello, nf = base.fissi.length;
+  const dati = vincoli.map((v, i) => ({ ...comePigro(v, J, i), dato: i })).sort((a, b) => { const pa = a.posizione ?? a.direzione, pb = b.posizione ?? b.direzione; return ordineTipi[a.tipo] - ordineTipi[b.tipo] || pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2] || (a.scala ?? 0) - (b.scala ?? 0) || (a.i ?? 0) - (b.i ?? 0) || (a.j ?? 0) - (b.j ?? 0) || (a.direzione?.[0] ?? 0) - (b.direzione?.[0] ?? 0) || (a.direzione?.[1] ?? 0) - (b.direzione?.[1] ?? 0) || (a.direzione?.[2] ?? 0) - (b.direzione?.[2] ?? 0) || a.valore - b.valore || a.dato - b.dato; });
+  const K = K0.vincola([...base.fissi, ...dati], { fissi: nf });
+  if (!K.esiste) { const j = K.incompatibili[0]; return { esiste: false, incompatibili: [j >= nf ? dati[j - nf].dato : -1], perche: `${j >= nf ? `il vincolo ${dati[j - nf].dato}` : `la ${base.fissi[j].nome}`} è già deciso dai vincoli che lo precedono, ma chiede un valore diverso: un campo ha un valore solo in ogni punto` }; }
+  const opz = (R) => (R > 0 ? { scala: R } : { livello: J }), q = (p, R, forma, tipo = null) => ({ ...comePigro({ posizione: p, scala: R, valore: 0, forma: forma ?? undefined, tipo: tipo ?? undefined }, J, 0) });
+  const inP = (p) => K.delta(p, { livello: J });
+  return { esiste: true, tipo: 'pigro', radice: base.radice, toroM: base.toroM, kmax: null, livello: J, sigma: Math.sqrt(K0.varianza({ livello: J })),
+    vincoli: dati.map((v, i) => ({ dato: v.dato, tipo: v.tipo, posizione: v.posizione, scala: v.scala, taglio: null, valore: v.valore, libero: K.liberi[nf + i] })), fissi: nf, ridondanti: K.ridondanti.map((j) => (j < nf ? base.fissi[j].nome : dati[j - nf].dato)),
+    gradi: K.gradi, chi2: K.chi2, probabilita: K.probabilita, logPeso: K.logPeso, logDensita: K.logDensita, chi2Libero: K.chi2Libero, deltaChi2: K.chi2 - K.chi2Libero,
+    in: inP, lisciato: (p, R) => (R > 0 ? K.delta(p, { scala: R }) : inP(p)), filtrato: () => { throw new Error('il campo senza bordo non ha il taglio netto in k: usare lisciato'); }, libero: (p, R = 0) => K0.delta(p, opz(R)), correzione: (p) => inP(p) - K0.delta(p, { livello: J }),
+    misura: (p, forma, R = 0) => K.misura(q(p, R, forma)), misuraLibera: (p, forma, R = 0) => K0.misura(q(p, R, forma)), attesa: (p, R = 0, taglio = null, forma = null) => K.attesa(q(p, R, forma)), liberta: K.liberta, campo: K, pigro: K, onde: null };
+}
 
 // IL CAMPO CONDIZIONATO.
 //   cosmo    un numero di cosmo («3», o con i suoi rami come lo scrive cosmo.js), oppure un indirizzo qualunque
@@ -181,7 +216,8 @@ export const vincoliMassimo = ({ posizione, scala = 0, taglio = null, valore }) 
 //     toro) che i vincoli NON fissano: 1 − Σ_onde (P/2)·|L⁻¹G|²/Σ P }, onde: { A, B, … } }
 //   (con le galassie, χ² e gradi sono quelli delle bolle DATE le galassie: il pezzo in più che le bolle costano)
 export function campoCondizionato(cosmo, vincoli = [], opz = {}) {
-  const base = cosmo && cosmo.A && cosmo.PK ? cosmo : eUnCosmo(cosmo) ? campoDelCosmo(typeof cosmo === 'number' ? cosmo : String(cosmo), opz) : campoLibero(cosmo, opz);
+  const base = cosmo && ((cosmo.A && cosmo.PK) || cosmo.tipo === 'pigro') ? cosmo : eUnCosmo(cosmo) ? campoDelCosmo(typeof cosmo === 'number' ? cosmo : String(cosmo), opz) : campoLibero(cosmo, opz);
+  if (base.tipo === 'pigro') return condizionatoPigro(base.campo.vincolato ? { ...base, campo: base.campo.libero } : base, vincoli);
   const { toroM, N, KX, KY, KZ, PK, A: A0, B: B0, kmax } = base, K2 = kmax * kmax, giri = PI2 / toroM;
   // ---- i vincoli in ordine canonico (così l'ordine in cui arrivano non conta)
   const dati = vincoli.map((v, i) => {
@@ -552,7 +588,7 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
 //     campo filtrato deve valere lì), scarto, massaAlone (M☉), posizione (m: dove sta nel suo cosmo d'origine), perche, legge }
 export function chiedeAlCosmo(dove) {
   const G = cosmoDi(dove.cosmo).galassie[dove.galassia], F = campoCosmo(dove.cosmo), massa = massaAlone(G.peso, { toroM: F.toroM, onde: F.vincoli.taglio });
-  return { galassia: `cosmo ${dove.cosmo}/galassia ${dove.galassia}`, altezza: G.peso, taglio: F.vincoli.taglio, valore: F.vincoli.valori[dove.galassia], scarto: F.sigmaOnde, massaAlone: massa, toroM: F.toroM, posizione: F.pos[dove.galassia].map((x) => x * F.toroM),
+  return { galassia: `cosmo ${dove.cosmo}/galassia ${dove.galassia}`, altezza: G.peso, taglio: F.vincoli.taglio, scala: F.vincoli.scala, valore: F.vincoli.valori[dove.galassia], scarto: F.sigmaOnde, massaAlone: massa, toroM: F.toroM, posizione: F.pos[dove.galassia].map((x) => x * F.toroM),
     perche: `chiede una galassia come ${`cosmo ${dove.cosmo}/galassia ${dove.galassia}`}: un alone di ${cifre(massa)} M☉, che nasce da un picco alto ${cifre(G.peso)} scarti del campo filtrato a ${F.vincoli.taglio} onde per lato`, legge: 'galassie.js massaAlone (l\'altezza del picco → la massa dell\'alone) e cosmo3d.js (il campo filtrato vale quell\'altezza dove sta la galassia)' };
 }
 // IL COSMO DELLE BOLLE: le galassie delle bolle trovate, messe nei posti chiesti, come vincoli sul campo.
@@ -566,10 +602,10 @@ function cosmoDelleBolle(esito, come, c, radice) {
   if (come.biblioteca == null) richieste.forEach((q, i) => { const k = diverse.indexOf(q.galassia), primo = richieste.findIndex((x) => x.galassia === q.galassia);
     q.posizione = come.posizioni ? [...come.posizioni[primo]] : come.distanza != null ? [L / 2 + (k - (diverse.length - 1) / 2) * come.distanza, L / 2, L / 2] : ['x', 'y', 'z'].map((asse) => L * c(`cosmo/dove sta ${q.galassia}/${asse}`)); if (i !== primo) q.posizione = [...richieste[primo].posizione]; });
   // (come.massimi: ogni galassia è un punto fermo del campo filtrato, non solo un valore: tre pendenze nulle in più, regola 12)
-  const vincoli = diverse.flatMap((nome) => { const q = richieste.find((x) => x.galassia === nome); return come.massimi ? vincoliMassimo({ posizione: q.posizione, taglio: q.taglio, valore: q.valore }) : [{ posizione: q.posizione, taglio: q.taglio, valore: q.valore }]; });
+  const vincoli = diverse.flatMap((nome) => { const q = richieste.find((x) => x.galassia === nome); return come.massimi ? vincoliMassimo({ posizione: q.posizione, scala: q.scala, valore: q.valore }) : [{ posizione: q.posizione, scala: q.scala, valore: q.valore }]; });
   const F = come.biblioteca != null ? campoCondizionato(come.biblioteca, vincoli, { galassie: false }) : campoCondizionato(campoLibero(`${radice}/cosmo`), vincoli);
   if (!F.esiste) { const [a, b] = F.incompatibili.map((i) => diverse[come.massimi ? Math.floor(i / 4) : i]); return { esiste: false, richieste, perche: `nel campo del cosmo non c'è posto: ${a ?? 'una galassia'} e ${b ?? 'un\'altra'} sono messe nello stesso punto, ma chiedono picchi di altezza diversa (un campo ha un valore solo in ogni punto)` }; }
-  const libera = F.attesa(vincoli[0].posizione, 0, vincoli[0].taglio).libera, lontane = vincoli.reduce((a, v) => a + (v.valore * v.valore) / libera, 0);
+  const libera = F.attesa(vincoli[0].posizione, vincoli[0].scala).libera, lontane = vincoli.reduce((a, v) => a + (v.valore * v.valore) / libera, 0);
   return { esiste: true, radice: come.biblioteca != null ? `cosmo ${come.biblioteca}` : `${radice}/cosmo`, daBiblioteca: come.biblioteca ?? null, richieste, galassie: diverse, gradi: F.gradi, chi2: F.chi2, probabilita: F.probabilita, logPeso: F.logPeso, logDensita: F.logDensita, chi2Lontane: lontane,
     campo: come.biblioteca != null ? campoCondizionato(come.biblioteca, []) : F };
 }
@@ -578,7 +614,7 @@ function cosmoDelleBolle(esito, come, c, radice) {
 //   chiesto, altezza, massaAlone, massaChiesta, contenuto ('sì' | 'no' | 'forse'), torna (tutto combacia) }]
 export function ridiscendiNelCosmo(r) {
   if (!r.cosmo || !r.cosmo.esiste) throw new Error('questo incontro non ha una parte cosmica');
-  return r.bolle.map((e, i) => { const q = r.cosmo.richieste[i], v = r.cosmo.campo.filtrato(q.posizione, q.taglio), altezza = v / q.scarto, alone = massaAlone(altezza, { toroM: q.toroM, onde: q.taglio }), g = giudica({ luogo: e.luogo, grandezza: e.bolla.grandezza, istante: e.bolla.istante, contenuto: e.bolla.contenuto });
+  return r.bolle.map((e, i) => { const q = r.cosmo.richieste[i], v = q.scala ? r.cosmo.campo.lisciato(q.posizione, q.scala) : r.cosmo.campo.filtrato(q.posizione, q.taglio), altezza = v / q.scarto, alone = massaAlone(altezza, { toroM: q.toroM, onde: q.taglio }), g = giudica({ luogo: e.luogo, grandezza: e.bolla.grandezza, istante: e.bolla.istante, contenuto: e.bolla.contenuto });
     return { luogo: e.luogo, galassia: q.galassia, campo: v, chiesto: q.valore, altezza, massaAlone: alone, massaChiesta: q.massaAlone, contenuto: g.esito, torna: Math.abs(v - q.valore) < 1e-9 * q.scarto && Math.abs(alone / q.massaAlone - 1) < 1e-6 && g.esito === 'sì' }; });
 }
 

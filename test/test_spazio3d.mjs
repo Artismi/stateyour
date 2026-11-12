@@ -175,18 +175,21 @@ prova('le galassie vere nel tempo: le stelle girano, quelle non ancora nate non 
 });
 
 // ---------- il cosmo
-prova('il cosmo in tre dimensioni: lo spettro vero, le galassie dove il campo dice, velocità di qualche centinaio di km/s', () => {
+prova('il cosmo in tre dimensioni (campo senza bordo): lo spettro vero, le galassie dove il campo dice, velocità di qualche centinaio di km/s', () => {
   const C = CO.cosmo(1), t0 = performance.now(), F = S3.campoCosmo(1), ms = performance.now() - t0, U = GA.dentro.U;
-  tra(F.sigmaLunghe / F.sigmaOnde, 0.97, 1.03, 'lo scarto delle onde lunghe: somma delle onde / integrale dello spettro');
+  tra(F.sigmaLunghe / F.sigmaOnde, 1 - 1e-3, 1 + 1e-3, 'lo scarto del campo lisciato a R_eq (somma dei livelli) / quello delle onde lunghe di galassie.js');
   // il vincolo: il campo filtrato vale l'altezza del picco di ogni galassia, lì dove sta (x e y sono quelle della carta)
   C.galassie.forEach((g, i) => { assert.equal(F.pos[i][0], g.pos[0]); assert.equal(F.pos[i][1], g.pos[1]); assert.ok(F.pos[i][2] >= 0 && F.pos[i][2] < 1); assert.ok(Math.abs(F.densitaLunga(F.pos[i]) - g.peso * F.sigmaOnde) < 1e-6, 'il campo nel punto della galassia'); });
-  // la griglia è il campo (la trasformata e la somma diretta danno lo stesso numero) e ha lo scarto dello spettro
-  const tg = performance.now(), g = F.griglia(), msG = performance.now() - tg, n = g.n; for (const [x, y, z] of [[3, 7, 11], [40, 2, 63], [17, 33, 5]]) assert.ok(Math.abs(g.delta[z * n * n + y * n + x] - F.densita([x / n, y / n, z / n])) < 1e-4, 'griglia = somma delle onde');
-  let somma = 0, pot = 0; for (const v of g.delta) somma += v; for (const p of F.onde.potenza) pot += 2 * p; assert.ok(Math.abs(somma / g.delta.length) < 1e-6, 'media nulla'); tra(g.sigma / Math.sqrt(pot), 0.99, 1.01, 'scarto della griglia / dello spettro');
+  // la griglia è il campo (convoluzione per regione: esatta per i livelli fini, interpolata a 10⁻³ della loro parte per i grossi,
+  // campo_pigro.js grigliaFFT: si chiede un millesimo dello scarto) e ha lo scarto dello spettro
+  const tg = performance.now(), g = F.griglia(), msG = performance.now() - tg, n = g.n; for (const [x, y, z] of [[3, 7, 11], [40, 2, 63], [17, 33, 5]]) assert.ok(Math.abs(g.delta[z * n * n + y * n + x] - F.densita([x / n, y / n, z / n])) < 1e-3 * g.sigma, 'griglia = il campo nel punto');
+  // la regione non è più un toro: la sua media non è zero e il suo scarto è un campione (~(1200/40)³ volumi di correlazione: ±0,9%, quattro scarti)
+  let somma = 0; for (const v of g.delta) somma += v; const atteso = Math.sqrt(F.libero.varianza({ livello: F.livello })); assert.ok(Math.abs(somma / g.delta.length) < 0.05, 'media della regione piccola'); tra(g.sigma / atteso, 0.96, 1.04, 'scarto della griglia / dello spettro');
   // lo spettro: le onde lunghe sono DEBOLI (non forti come nella carta piatta): la potenza per ottava cresce con k
   const pk = (k) => U.potenza((2 * Math.PI * k) / F.latoMpc); assert.ok(pk(2) < pk(8) && pk(8) < pk(24), 'Δ²(k) cresce'); tra(pk(24), 0.01, 1, 'Δ² a 50 Mpc di lunghezza d\'onda');
   // la teoria lineare: la divergenza della velocità è −H₀·f·δ
-  for (const x of [[0.21, 0.52, 0.77], F.pos[3]]) { const h = 1e-4, d = [0, 1, 2].reduce((s, q) => { const a = x.slice(), b = x.slice(); a[q] += h; b[q] -= h; return s + (F.velocita(a)[q] - F.velocita(b)[q]) / (2 * h * F.latoMpc); }, 0); assert.ok(Math.abs(d + COSMO.H0 * F.f0 * F.densita(x)) < 1e-3 * COSMO.H0 * (Math.abs(F.densita(x)) + 0.1), 'divergenza'); }
+  // (velocità e densità vengono da nuclei troncati ciascuno per conto suo: test_campo_pigro misura −∇·Ψ − δ = 0,06 scarti; qui quattro volte)
+  for (const x of [[0.21, 0.52, 0.77], F.pos[3]]) { const h = 1e-4, d = [0, 1, 2].reduce((s, q) => { const a = x.slice(), b = x.slice(); a[q] += h; b[q] -= h; return s + (F.velocita(a)[q] - F.velocita(b)[q]) / (2 * h * F.latoMpc); }, 0); assert.ok(Math.abs(d + COSMO.H0 * F.f0 * F.densita(x)) < 0.25 * COSMO.H0 * F.f0 * g.sigma, 'divergenza'); }
   tra(F.f0 / Math.pow(COSMO.Om, 0.55), 0.97, 1.03, 'f = dlnD/dlna ≈ Ωm^0,55');
   const tv = performance.now(), vel = F.motiGalassie().map((v) => Math.hypot(...v)), msV = performance.now() - tv; let q2 = 0; const N = 300, c = sorgente('prova/punti'); for (let i = 0; i < N; i++) { const v = F.velocita([c(`x${i}`), c(`y${i}`), c(`z${i}`)]); q2 += v[0] ** 2 + v[1] ** 2 + v[2] ** 2; }
   tra(mediana(vel), 200, 800, 'velocità propria mediana delle galassie (km/s; il Gruppo Locale: 627)'); tra(Math.sqrt(q2 / N), 300, 800, 'velocità quadratica media della materia (km/s; vera: ~500–600)'); tra(Math.max(...vel), 300, 2500, 'la più veloce');
@@ -197,7 +200,7 @@ prova('il cosmo in tre dimensioni: lo spettro vero, le galassie dove il campo di
   tra(F.vere, 1e5, 1e9, 'aloni veri nel toro pesanti almeno quanto il più piccolo dei segnati'); tra(F.peso * C.galassie.length / F.vere, 1 - 1e-9, 1 + 1e-9, 'peso × campione');
   // un ramo: la profondità di una galassia cambia solo dove sta lei (e il campo che la tiene), non le galassie di cosmo.js
   const n2 = CO.cosmoCon(1, { 'cosmo 1/galassia 5/profondità': 1 }), F2 = S3.campoCosmo(n2); assert.notEqual(F2.pos[5][2], F.pos[5][2]); assert.equal(F2.pos[6][2], F.pos[6][2]); assert.equal(CO.cosmo(n2).galassie[5].forma.massaStelle, C.galassie[5].forma.massaStelle);
-  console.log(`      (${F.onde.n} onde, fino a ${F.onde.kmax} per lato: campo vincolato in ${ms.toFixed(0)} ms, griglia ${n}³ in ${msG.toFixed(0)} ms, moti delle galassie in ${msV.toFixed(0)} ms; scarto del campo ${num(g.sigma)}; velocità: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}, quadratica media della materia ${num(Math.sqrt(q2 / N))}; ogni galassia ne rappresenta ${num(F.peso)})`);
+  console.log(`      (campo senza bordo, celle fino a ${num(F.toroM / 3.0857e22 / 2 ** (F.livello - 10))} Mpc, vincolo a R_eq = ${num(F.scalaVincoli / 3.0857e22)} Mpc: campo vincolato in ${ms.toFixed(0)} ms, griglia ${n}³ in ${msG.toFixed(0)} ms, moti delle galassie in ${msV.toFixed(0)} ms; scarto del campo ${num(g.sigma)}; velocità: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}, quadratica media della materia ${num(Math.sqrt(q2 / N))}; ogni galassia ne rappresenta ${num(F.peso)})`);
 });
 
 prova('l\'espansione: oggi a = 1 a 13,8 miliardi di anni; a metà grandezza l\'universo aveva 5,9 miliardi di anni; nel passato lo stesso cosmo, prima', () => {
