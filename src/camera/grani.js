@@ -166,6 +166,15 @@ export function campoGrani(spec, caso) {
 // «processo/cella ix iy»/k, in celle cubiche larghe quanto la sua traccia più lunga (al più un metro): si guarda la
 // proiezione di uno strato spesso una cella, come nella finestra delle particelle.
 export const PRESENTE_S = 0.1;
+// una spezzata (x0, y0, x1, y1, …) passa per il rettangolo [0, W] × [0, H]? (Liang-Barsky, tratto per tratto)
+function tocca(p, W, H) {
+  for (let i = 2; i < p.length; i += 2) {
+    const x0 = p[i - 2], y0 = p[i - 1], dx = p[i] - x0, dy = p[i + 1] - y0; let a = 0, b = 1, ok = true;
+    for (const [q, r] of [[-dx, x0], [dx, W - x0], [-dy, y0], [dy, H - y0]]) { if (q === 0) { if (r < 0) { ok = false; break; } continue; } const t = r / q; if (q < 0) { if (t > b) { ok = false; break; } if (t > a) a = t; } else { if (t < a) { ok = false; break; } if (t < b) b = t; } }
+    if (ok && a <= b) return true;
+  }
+  return false;
+}
 const DISEGNABILI = (n) => n === 'alfa' || n.startsWith('frammento') || n.startsWith('muone') || n === 'elettrone' || n.startsWith('protone');
 export const COLORE_TRACCIA = (n) => (n === 'alfa' ? '255,190,90' : n.startsWith('frammento') || n === 'rinculo' ? '255,96,96' : n.startsWith('muone') ? '245,245,245' : n === 'elettrone' || n === 'positrone' ? '120,255,160' : n.startsWith('protone') ? '255,240,120' : '255,150,220');
 const ANNO = 3.156e7;
@@ -208,10 +217,11 @@ export function popolazioneTracce(luogo, { minerale = null } = {}, caso) {
         const perCella = Math.max(1, Math.floor(budget / celle)), quota = Math.min(1, budget / celle); let n = 0;
         ctx.globalAlpha = alfa;
         // (si guarda uno strato spesso una cella: di una traccia lunga si vede il pezzo dentro lo strato. Quante sono
-        // davvero quelle che passano per lo schermo: in ogni cella, il conteggio vero per la parte delle disegnate che ci passa)
+        // davvero quelle che passano per lo schermo: in ogni cella se ne provano fino a qualche migliaio, e il conteggio vero
+        // per la parte delle provate che ci passa; se ne disegnano al più quante ne regge lo schermo)
         let stima = 0;
         for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-          const nc = quante(P, i, j), q = Math.min(nc, perCella); if (!q) continue; const sr = P.serie.serie(`cella ${i} ${j}`); if (quota < 1 && sr(63) >= quota) continue; let colpite = 0;
+          const nc = quante(P, i, j), q = Math.min(nc, Math.max(perCella, Math.ceil(6000 / celle))); if (!q) continue; let qui = 0; const sr = P.serie.serie(`cella ${i} ${j}`); if (quota < 1 && sr(63) >= quota) continue; let colpite = 0;
           for (let e = 0; e < q; e++) {
             const b = 64 + 10 * e, x = (i + sr(b)) * c, y = (j + sr(b + 1)) * c;
             if (escludi && x > escludi.x0 && x < escludi.x1 && y > escludi.y0 && y < escludi.y1) continue;
@@ -224,15 +234,14 @@ export function popolazioneTracce(luogo, { minerale = null } = {}, caso) {
               } else pts.push(px + verso * dx * L * k, py + verso * dy * L * k);
               return { pt, pts };
             });
-            let x0b = Infinity, y0b = Infinity, x1b = -Infinity, y1b = -Infinity; for (const l of linee) for (let t = 0; t < l.pts.length; t += 2) { x0b = Math.min(x0b, l.pts[t]); x1b = Math.max(x1b, l.pts[t]); y0b = Math.min(y0b, l.pts[t + 1]); y1b = Math.max(y1b, l.pts[t + 1]); }
-            if (x1b < 0 || y1b < 0 || x0b > W || y0b > H) continue; // non passa per lo schermo
-            colpite++;
+            if (!linee.some((l) => tocca(l.pts, W, H))) continue; // non passa per lo schermo
+            colpite++; if (qui >= perCella) continue; qui++;
             for (const { pt, pts } of linee) {
               ctx.strokeStyle = `rgba(${COLORE_TRACCIA(pt.nome)},${pt.nome === 'elettrone' ? 0.8 : 0.9})`; ctx.lineWidth = Math.max(1, dpr * (pt.nome === 'alfa' || pt.nome.startsWith('frammento') || pt.nome === 'rinculo' ? 1.4 : 1));
               ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let t = 2; t < pts.length; t += 2) ctx.lineTo(pts[t], pts[t + 1]); ctx.stroke();
             }
           }
-          n += colpite; stima += (nc * colpite) / q / quota;
+          n += qui; stima += (nc * colpite) / q / quota;
         }
         vere += stima - nVere;
         ctx.globalAlpha = 1; disegnate += n; voci.push({ id: P.id, vere: stima, disegnate: n, memoria: P.memoria });

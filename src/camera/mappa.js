@@ -648,7 +648,7 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
   // (il campione è una sezione verticale che prende la superficie: si ripete solo di lato; sopra continua l'aria della sua
   // prima riga, sotto l'acqua della sua ultima)
   if (cam.suAcqua) {
-    const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z, zz = cam.z, N = r0.cv.width; if (!(zz > 2)) return;
+    cam.nebbiaGrani = null; const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z, zz = cam.z, N = r0.cv.width; if (!(zz > 2)) return;
     const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz); if (i1 - i0 > 40) return;
     for (let i = i0; i <= i1; i++) {
       const x = ox + i * zz; pezzo(ctx, r0.cv, x, oy, zz, W, H, r0.liscio); ctx.imageSmoothingEnabled = !!r0.liscio;
@@ -672,12 +672,16 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
   const b = cam.ancore?.[seq[i]]; if (i + 1 >= seq.length || !b) return;
   const Lc = lato(seq[i + 1]), zz = (cam.z * Lc) / lato(seq[i]); if (!(zz >= 3 * dpr)) return;
   const cx = pos[i].ox + b[0] * pos[i].zz, cy = pos[i].oy + b[1] * pos[i].zz, a = Math.max(0, Math.min(1, Math.log(zz / (0.02 * m)) / Math.log(5)));
-  if (a > 0) { const r = img(seq[i + 1]); if (r) { ctx.globalAlpha = a; pezzo(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); ctx.globalAlpha = 1; } }
+  // (il reticolo non è un oggetto: è il cristallo stesso, dappertutto. Quando compare, compare su tutto lo schermo, con le
+  // condizioni periodiche, e la sua copia del punto sta al centro)
+  if (a > 0) { const r = img(seq[i + 1]); if (r) { ctx.globalAlpha = a; if (r.passo === 3 || r.passo === 4) periodico(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); else pezzo(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); ctx.globalAlpha = 1; } }
 }
 // un campione che si ripete oltre i suoi lati (condizioni periodiche): si disegnano solo le copie che toccano lo schermo
 function periodico(ctx, cv, ox, oy, zz, W, H, liscio) {
-  if (!(zz > 2)) return; const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz), j0 = Math.floor(-oy / zz), j1 = Math.floor((H - oy) / zz);
-  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 400) return;
+  if (!(zz > 0.5)) return; const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz), j0 = Math.floor(-oy / zz), j1 = Math.floor((H - oy) / zz);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 64 && typeof DOMMatrix !== 'undefined') { // (tante copie: un motivo solo, che si ripete)
+    const N = cv.width, m = ctx.createPattern(cv, 'repeat'); m.setTransform(new DOMMatrix([zz / N, 0, 0, zz / N, ox, oy])); ctx.imageSmoothingEnabled = !!liscio; ctx.fillStyle = m; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingEnabled = true; return;
+  }
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(ctx, cv, ox + i * zz, oy + j * zz, zz, W, H, liscio);
 }
 // I GRANI ATTORNO AL PUNTO (grani.js): l'aggregato di cui il campione è un pezzo, con lo zero nell'angolo del campione e

@@ -1953,7 +1953,7 @@ quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannell
 //     schermo si è già dentro (scendiNellaMateria), allo stesso posto e alla stessa grandezza.
 // Il punto è quello sotto la camera (nello spazio, guardando giù) o la roccia in cui si è; si ricalcola al più ogni 300 ms.
 const telaSopra = document.createElement('canvas'); telaSopra.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2'; tela.parentNode.appendChild(telaSopra);
-let sopraCalcolo = { t: 0, mpp: 0, P: null }, vociSopraOra = [], nebbiaOra = null;
+let sopraCalcolo = { t: 0, mpp: 0, P: null }, vociSopraOra = [], nebbiaOra = null; const tracceSopra = { cv: null, pop: null, mpp: 1, t: 0, mezza: 0, neb: null };
 function camDelPunto() { // → { cam, verticale, chiave } o null
   if (vista !== 'cosmo' || vistaAtomi || telaQuanti) return null;
   if (mondo3d && universo3d && mondo3d.camera.corpo?.punto) { const d = mondo3d.dove(), v = universo3d.viaOra(); if (v.pianeta == null || !(d.quota < 600) || !(d.quota > 0)) return null; return { cam: camRoccia(d, v), verticale: Math.max(0, Math.min(1, (-(d.alza ?? 0) - 1.2) / 0.3)), chiave: `${JSON.stringify(v)}|${d.lon.toFixed(7)}|${d.lat.toFixed(7)}`, spazio: true }; }
@@ -1993,7 +1993,14 @@ function disegnaSopra() {
     else if (camMappa?.livello === 5 && camMappa.nebbiaGrani) neb.grani = camMappa.nebbiaGrani;
     // (dentro il campione delle tracce fossili le tracce ci sono già: lì non si aggiungono)
     const pop = popolazioneDelPunto(Pp.cam), rq = !Pp.spazio ? rocciaDi(camMappa) : null, mezza = rq?.passo === 1 ? rq.larghezzaM / 2 : 0;
-    if (pop) neb.tracce = pop.dipingi(c, { W: cv.width, H: cv.height, ox: qx * dpr, oy: qy * dpr, k: kpx, dpr, alfa: Pp.spazio ? Pp.verticale : 1, escludi: mezza ? { x0: -mezza, y0: -mezza, x1: mezza, y1: mezza } : null });
+    // (le tracce si ricalcolano su una tela a parte al più ogni 250 ms, o quando la scala cambia di più del 4%; in mezzo la
+    // si posa ingrandita attorno al centro)
+    if (pop) {
+      const T = tracceSopra, vecchia = !T.cv || T.pop !== pop || T.cv.width !== cv.width || T.cv.height !== cv.height || Math.abs(Math.log(mpp / T.mpp)) > 0.04 || (ora - T.t > 250 && Math.abs(Math.log(mpp / T.mpp)) > 0.002) || T.mezza !== mezza;
+      if (vecchia) { if (!T.cv || T.cv.width !== cv.width || T.cv.height !== cv.height) { T.cv = document.createElement('canvas'); T.cv.width = cv.width; T.cv.height = cv.height; } const x = T.cv.getContext('2d'); x.clearRect(0, 0, cv.width, cv.height);
+        T.neb = pop.dipingi(x, { W: cv.width, H: cv.height, ox: qx * dpr, oy: qy * dpr, k: kpx, dpr, escludi: mezza ? { x0: -mezza, y0: -mezza, x1: mezza, y1: mezza } : null }); Object.assign(T, { pop, mpp, t: ora, mezza }); }
+      const f = T.mpp / mpp; c.globalAlpha = Pp.spazio ? Pp.verticale : 1; c.drawImage(T.cv, qx * dpr * (1 - f), qy * dpr * (1 - f), cv.width * f, cv.height * f); c.globalAlpha = 1; neb.tracce = T.neb;
+    }
   } catch (err) { console.warn(err); }
   nebbiaOra = neb;
   for (const v of voci) {
