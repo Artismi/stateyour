@@ -87,6 +87,18 @@
 //     urti di oggi sui mondi di roccia dieci volte meno dei veri. (Le STESSE leggi, con la massa vera della fascia degli
 //     asteroidi, danno invece numeri giusti: 440 corpi sopra 100 km, urti distruttivi ogni 4,6 miliardi di anni, 10⁴ kg/s di polvere.)
 //   · la pendenza dell'estinzione: R_V = 3,8 invece di 3,1 (un solo materiale per i grani, ottica approssimata).
+// I COLORI DELLE NEBULOSE, da sapere. `coloreVero` è quello dell'OCCHIO (CIE 1931), che a 501 nm è quattro volte più
+//   sensibile che a 656: una regione H II è rosa finché [O III]/Hβ sta sotto ~0,8, sbiadisce attorno a 1, ed è verde-azzurra
+//   sopra ~1,5 (così si vede Orione al telescopio; nelle fotografie è rossa perché i sensori pesano Hα molto più
+//   dell'occhio). Le righe in watt ci sono tutte (`emette.righe`): chi disegna può pesarle come vuole, e lo dica.
+//   Quanto vale [O III]/Hβ non è scelto: esce dalla stella (quanto O⁺⁺), dalla densità e dal termostato del gas
+//   (vuoto_oggetti.js NEBULA): con i metalli del Sole 0,03–5 (mediana 0,9 attorno alle stelle O, T_e 7000–9000 K), quasi
+//   zero con tre volte tanti metalli (gas a 2–3 mila K: lì il limite di bassa densità lo fa troppo freddo, il vero è 4–5 mila).
+// DA DOVE VENGONO LE NEBULOSE NELLE GALASSIE DI cosmo.js: dagli anelli di galassie.js. Dove un anello non fa nascere
+//   stelle (forma.interno.nati = 0) non ci sono regioni H II né nebulose a riflessione, anche se c'è gas e ci sono nubi;
+//   la nebbia NON taglia il disco esterno (tiene la stessa parte di ogni cella: provato). Nelle galassie di cosmo 1 gli
+//   anelli arrivano a 70–140 kpc (5–10 kpc l'uno) e le stelle nascono solo nel primo, con metalli 3–4 volte il Sole:
+//   per questo lì tutte le regioni H II stanno entro 2–4 kpc e sono rosa. È a monte (galassie.js), qui solo segnalato.
 // I COSTI (misurati in test_vuoto.mjs): contenuto() ~10 µs a punto (più ~25 ms la prima volta in ogni anello: la curva
 //   termica); il censimento di una galassia ~0,3 s una volta; oggettiIn ~0,3–0,5 µs per cella toccata e per tipo più
 //   ~5 µs per oggetto: 2 ms in una sfera di 50 pc, ~0,15 s per tutta una galassia come la nostra con la nebbia (55 mila

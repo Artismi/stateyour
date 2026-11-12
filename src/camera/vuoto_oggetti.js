@@ -205,7 +205,7 @@ export function temperaturaNebulosa(Tstella, Zr, y, sottile = false, { y3 = 0, n
   const righe = (zona, T) => { let s = 0; for (const el in zona) for (const [E, om, g] of zona[el]) s += (ab[el] * om * kErg * E * Math.exp(-E / T)) / g; return s; };
   const sbilancio = (T) => { const aB = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]); return aB * NEBULA.ricombinazione * kErg * T + NEBULA.frenamento * Math.sqrt(T) + (8.629e-6 / Math.sqrt(T)) * (y3 * righe(NEBULA.tre, T) + y * righe(NEBULA.due, T) + Math.max(0, 1 - y - y3) * righe(NEBULA.una, T))
     + (neutro * Z.lyAlfa[0] * Math.exp(-Z.lyAlfa[1] / T)) / (1 + Math.sqrt(T / 1e5)) - aB * avanza; };
-  let lo = 500, hi = 1e5; for (let k = 0; k < 40; k++) { const m = Math.sqrt(lo * hi); if (sbilancio(m) < 0) lo = m; else hi = m; }
+  let lo = 500, hi = 1e5; for (let k = 0; k < 27; k++) { const m = Math.sqrt(lo * hi); if (sbilancio(m) < 0) lo = m; else hi = m; } // (a meno di una parte su dieci milioni)
   return Math.sqrt(lo * hi);
 }
 // → { righe: [Hα, Hβ, [O III]] in watt, Te, y (parte di O⁺⁺), y3 (di O³⁺) }. st: { Lw, T } della stella; n, raggio: densità
@@ -213,7 +213,7 @@ export function temperaturaNebulosa(Tstella, Zr, y, sottile = false, { y3 = 0, n
 function righeNebulosa({ st, Zr, n, raggio, limiteHalfa = Infinity }) {
   const Q0 = fotoniSopra(st.Lw, st.T, Z.ionizzazioni.H), pieno = Q0 * Z.HalfaPerFotone * HNU(Z.righe.Halfa), Ha = Math.min(pieno, limiteHalfa), sottile = limiteHalfa < pieno, ric = Ha / (Z.HalfaPerFotone * HNU(Z.righe.Halfa)); // ricombinazioni al secondo
   const neutro = Math.min(1, NEBULA.neutro / (n * ST.dentro.SIGMA_K * raggio)) * (sottile ? limiteHalfa / pieno : 1); // (la sezione d'urto dell'idrogeno alla soglia: quella di stelle.js; un guscio sottile è ancora più ionizzato)
-  let Te = Z.ionizzato.T, y = 0, y3 = 0; for (let giro = 0; giro < 3; giro++) { const alto = parteIonizzata(Q0, st, NEBULA.Opiu, n, raggio, Te); y3 = Math.min(alto, parteIonizzata(Q0, st, NEBULA.Opp, n, raggio, Te)); y = alto - y3; Te = temperaturaNebulosa(st.T, Zr, y, sottile, { y3, neutro }); }
+  let Te = Z.ionizzato.T, y = 0, y3 = 0; for (let giro = 0; giro < 2; giro++) { const alto = parteIonizzata(Q0, st, NEBULA.Opiu, n, raggio, Te); y3 = Math.min(alto, parteIonizzata(Q0, st, NEBULA.Opp, n, raggio, Te)); y = alto - y3; Te = temperaturaNebulosa(st.T, Zr, y, sottile, { y3, neutro }); }
   const aB = Z.alfaB[0] * Math.pow(Te / 1e4, Z.alfaB[1]), o = Z.OIII5007, q = ((8.629e-6 * o.omega) / (o.g * Math.sqrt(Te))) * Math.exp(-o.E / Te);
   return { righe: [riga('Halfa', Ha), riga('Hbeta', Ha / Z.balmer), riga('OIII', (ric / aB) * ABB_O * Zr * (1 - LEGGI.polvere) * y * q * o.ramo * HNU(Z.righe.OIII))], Te, y, y3, sottile, Q0 };
 }
@@ -244,9 +244,9 @@ function regioneHII(R, i, fr, o, tAnni) {
     }
     return { raggio: fuori, n: nDiffuso, stato: 'nel gas diffuso' };
   };
-  // la temperatura del gas dipende (poco) da quanto è grande la nebulosa, e il raggio (poco) dalla temperatura: due giri
-  let F = forma(Z.ionizzato.T), N = null; for (let giro = 0; giro < 2; giro++) { N = righeNebulosa({ st, Zr: R.a.Z, n: F.n, raggio: F.raggio }); F = forma(N.Te); }
-  N = righeNebulosa({ st, Zr: R.a.Z, n: F.n, raggio: F.raggio });
+  // la temperatura del gas dipende (poco) da quanto è grande la nebulosa, e il raggio (poco) dalla temperatura: si
+  // ripete finché le due cose si accordano (due o tre giri)
+  let Te = Z.ionizzato.T, F = null, N = null; for (let giro = 0; giro < 6; giro++) { F = forma(Te); N = righeNebulosa({ st, Zr: R.a.Z, n: F.n, raggio: F.raggio }); if (Math.abs(N.Te / Te - 1) < 1e-5) break; Te = N.Te; }
   return { tipo: 'regione H II', raggio: F.raggio, nH: F.n, T: N.Te, ossigenoDueVolte: N.y, stato: F.stato, stella: { massa: st.m, eta: st.eta, vita: st.vita, T: st.T, L: st.Lw, raggio: st.raggioStella }, ionizzanti: Q0, massaIonizzataKg: (PI4 / 3) * F.raggio ** 3 * F.n * dentroMezzo.MASSA_PER_H,
     emette: emette(N.righe) };
 }
