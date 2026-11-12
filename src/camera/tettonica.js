@@ -522,7 +522,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // LA LITOSFERA DEL PIANETA: dallo stato del mantello (salto di temperatura, dilatazione, densità, crosta di basalto: storia.js,
   // se chi chiama li dà) e dalla gravità; da lei lo spessore neutro, le quote, lo stiramento, il cedimento
   const tm = termico || {}, L = litosfera({ ...(tm.dT > 0 ? { dT: tm.dT } : {}), ...(tm.Ts > 0 ? { Ts: tm.Ts } : {}), ...(tm.alfa > 0 ? { alfa: tm.alfa } : {}), ...(tm.rho > 0 ? { rho0: tm.rho } : {}), ...(tm.basalto > 0 ? { basalto: tm.basalto } : {}), g: gravita });
-  const regge = { fermo: L.hN, massimo: C.hMassimo }, ihN = 1 / L.hN, volume = acquaM3 ?? C.acquaTerra * (raggioM / 6.371e6) ** 2;
+  const reggeP = { fermo: L.hN, massimo: C.hMassimo }, ihN = 1 / L.hN, volume = acquaM3 ?? C.acquaTerra * (raggioM / 6.371e6) ** 2;
   // IL MARE: l'acqua del pianeta (quella di oggi, per tutta la storia) riempie i punti più bassi, e il suo peso li fa
   // affondare (una colonna sotto il mare scende ancora di ρa/(ρa − ρw) volte): la quota s a cui sta, sullo zero della
   // litosfera. Le celle pesano come sulla sfera (coseno della latitudine). Metodo di Newton sul volume (convesso, a tratti lineare)
@@ -548,7 +548,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       for (let j = 0; j < man.Hm; j++) for (let i = 0; i < man.Wm; i++) { let c = 0; if (rm >= 1) { for (let b = 0; b < rm; b++) for (let a = 0; a < rm; a++) c += robusta(st.h[(j * rm + b) * w + i * rm + a], ihN); c /= rm * rm; } else c = robusta(st.h[Math.floor(j * rm) * w + Math.floor(i * rm)], ihN); const k = j * man.Wm + i; caldo[k] += (c - caldo[k]) * lento; m += caldo[k]; }
       m /= coperta.length; for (let i = 0; i < coperta.length; i++) coperta[i] = C.coperta * (caldo[i] - m);
       if (avanza) man.passo(dtM, coperta);
-      ca = campoDaPotenziale(man.su(w, hh, uL), w, hh, c0, ca, regge); velocitaCrosta(st.h, ca, w, hh, R);
+      ca = campoDaPotenziale(man.su(w, hh, uL), w, hh, c0, ca, reggeP); velocitaCrosta(st.h, ca, w, hh, R);
       st.mare = livelloMare(quotaAria(st, ea), w, hh, st.mare); // il mare di adesso: il livello di base di fiumi e pendii
     };
     for (let p = 0; p < n; p++) {
