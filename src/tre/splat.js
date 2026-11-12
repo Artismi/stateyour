@@ -85,10 +85,11 @@ export const faseHG = (g, c) => (1 - g * g) / (4 * PI * Math.pow(Math.max(1e-12,
 // =====================================================================================================
 // LE FOGLIE: gli splat più fini, come li dà un modulo della fisica
 // =====================================================================================================
-// pos (3n, unità dell'insieme), cov (6n: xx yy zz xy xz yz, unità²), massa (kg o quel che si vuole), emis (3n, W),
+// pos (3n, unità dell'insieme), cov (6n: xx yy zz xy xz yz, unità²), massa (kg o quel che si vuole), emis (3n, W: in doppia,
+// la luce di una regione del cosmo supera i 10³⁸ della singola precisione),
 // est (3n, m²), dif (3n, m²), g (n), P (3n, W diffusi: potenza tolta alle sorgenti ferme), dir (3n, direzione della luce
 // diffusa), chiave (3n, facoltativa: dove sta per l'ordine di Morton, es. la posizione lagrangiana)
-export function foglie(n) { return { n, pos: new Float64Array(3 * n), cov: new Float64Array(6 * n), massa: new Float64Array(n), emis: new Float32Array(3 * n), est: new Float32Array(3 * n), dif: new Float32Array(3 * n), g: new Float32Array(n), P: new Float32Array(3 * n), dir: new Float32Array(3 * n), chiave: null }; }
+export function foglie(n) { return { n, pos: new Float64Array(3 * n), cov: new Float64Array(6 * n), massa: new Float64Array(n), emis: new Float64Array(3 * n), est: new Float32Array(3 * n), dif: new Float32Array(3 * n), g: new Float32Array(n), P: new Float64Array(3 * n), dir: new Float32Array(3 * n), chiave: null }; }
 const tre = (x) => (Array.isArray(x) || ArrayBuffer.isView(x) ? [x[0], x[1], x[2]] : [x, x, x]);
 // dalla lista di oggetti della fisica (l'ingresso «leggibile»)
 export function daLista(lista) {
@@ -108,7 +109,7 @@ export function daLista(lista) {
 // LA GERARCHIA: fusione per momenti, otto per otto in ordine di Morton
 // =====================================================================================================
 const allarga = (x) => { x &= 0x3ff; x = (x | (x << 16)) & 0x30000ff; x = (x | (x << 8)) & 0x300f00f; x = (x | (x << 4)) & 0x30c30c3; x = (x | (x << 2)) & 0x9249249; return x; };
-function nodi(n) { return { n, pos: new Float64Array(3 * n), cov: new Float64Array(6 * n), w: new Float64Array(n), massa: new Float64Array(n), emis: new Float32Array(3 * n), est: new Float32Array(3 * n), dif: new Float32Array(3 * n), g: new Float32Array(n), P: new Float32Array(3 * n), dir: new Float32Array(3 * n) }; }
+function nodi(n) { return { n, pos: new Float64Array(3 * n), cov: new Float64Array(6 * n), w: new Float64Array(n), massa: new Float64Array(n), emis: new Float64Array(3 * n), est: new Float32Array(3 * n), dif: new Float32Array(3 * n), g: new Float32Array(n), P: new Float64Array(3 * n), dir: new Float32Array(3 * n) }; }
 const CAMPI = [['pos', 3], ['cov', 6], ['w', 1], ['massa', 1], ['emis', 3], ['est', 3], ['dif', 3], ['g', 1], ['P', 3], ['dir', 3]];
 // peso: 'luce' (emissione + potenza diffusa), 'sezione' (estinzione), 'massa'; se per una foglia vale zero si passa al seguente
 export function albero(F, { peso = 'luce' } = {}) {
@@ -143,8 +144,6 @@ export function albero(F, { peso = 'luce' } = {}) {
   let r = 0; while (r < livelli.length - 1 && livelli[r].n < 64) r++; T.radici = [off[r], off[r] + livelli[r].n];
   return T;
 }
-// le parti di un albero da passare tra fili (trasferibili) e da rimettere insieme
-export const pezziAlbero = (T) => [T.pos.buffer, T.cov.buffer, T.w.buffer, T.massa.buffer, T.emis.buffer, T.est.buffer, T.dif.buffer, T.g.buffer, T.P.buffer, T.dir.buffer, T.figlio.buffer, T.nfigli.buffer, T.traccia.buffer];
 
 // =====================================================================================================
 // L'OMBRA E LA LUCE DIFFUSA da sorgenti ferme rispetto all'insieme (si calcola una volta, nel lavoratore)
@@ -273,8 +272,8 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
         const kk = k4 * cono, c6 = 6 * j, cv = T.cov;
         // Σ negli assi dell'occhio: M·Σ·Mᵀ
         const xx = cv[c6], yy = cv[c6 + 1], zz = cv[c6 + 2], xy = cv[c6 + 3], xz = cv[c6 + 4], yz = cv[c6 + 5], o = [0, 0, 0, 0, 0, 0];
-        for (let r = 0; r < 3; r++) { const a = M[3 * r], b = M[3 * r + 1], c = M[3 * r + 2]; o[3 + r] = 0; const t0 = a * xx + b * xy + c * xz, t1 = a * xy + b * yy + c * yz, t2 = a * xz + b * yz + c * zz; // riga r di M·Σ
-          for (let s = r; s < 3; s++) { const v = t0 * M[3 * s] + t1 * M[3 * s + 1] + t2 * M[3 * s + 2]; if (r === s) o[r] = v; else if (r === 0 && s === 1) o[3] = v; else if (r === 0) o[4] = v; else o[5] = v; } }
+        const rM = (r) => { const a = M[3 * r], b = M[3 * r + 1], c = M[3 * r + 2]; return [a * xx + b * xy + c * xz, a * xy + b * yy + c * yz, a * xz + b * yz + c * zz]; }, t0 = rM(0), t1 = rM(1), t2 = rM(2), per = (t, s) => t[0] * M[3 * s] + t[1] * M[3 * s + 1] + t[2] * M[3 * s + 2];
+        o[0] = per(t0, 0); o[1] = per(t1, 1); o[2] = per(t2, 2); o[3] = per(t0, 1); o[4] = per(t0, 2); o[5] = per(t1, 2);
         if (dentro) { // l'occhio dentro la campana (a meno di 3,3σ di Mahalanobis): la somma lungo il raggio, a parte
           const [a, b, c, dd, ee, ff] = o, i00 = b * c - ff * ff, i01 = ee * ff - dd * c, i02 = dd * ff - b * ee, det = a * i00 + dd * i01 + ee * i02;
           if (det > 0) { const i11 = a * c - ee * ee, i12 = dd * ee - a * ff, i22 = a * b - dd * dd, m2 = (ex * (i00 * ex + i01 * ey + i02 * ez) + ey * (i01 * ex + i11 * ey + i12 * ez) + ez * (i02 * ex + i12 * ey + i22 * ez)) / det;
@@ -344,7 +343,7 @@ export function creaSplat(N, { modo = 'mezzo' } = {}) {
 }
 // rimettere insieme un albero arrivato da un altro filo
 export function alberoDa(m) {
-  const T = { pos: new Float64Array(m.pos), cov: new Float64Array(m.cov), w: new Float64Array(m.w), massa: new Float64Array(m.massa), emis: new Float32Array(m.emis), est: new Float32Array(m.est), dif: new Float32Array(m.dif), g: new Float32Array(m.g), P: new Float32Array(m.P), dir: new Float32Array(m.dir), figlio: new Int32Array(m.figlio), nfigli: new Uint8Array(m.nfigli), traccia: new Float32Array(m.traccia), radici: m.radici, foglie: m.foglie, livelli: m.livelli };
+  const T = { pos: new Float64Array(m.pos), cov: new Float64Array(m.cov), w: new Float64Array(m.w), massa: new Float64Array(m.massa), emis: new Float64Array(m.emis), est: new Float32Array(m.est), dif: new Float32Array(m.dif), g: new Float32Array(m.g), P: new Float64Array(m.P), dir: new Float32Array(m.dir), figlio: new Int32Array(m.figlio), nfigli: new Uint8Array(m.nfigli), traccia: new Float32Array(m.traccia), radici: m.radici, foglie: m.foglie, livelli: m.livelli };
   return T;
 }
 export const alberoPerFilo = (T) => ({ pos: T.pos.buffer, cov: T.cov.buffer, w: T.w.buffer, massa: T.massa.buffer, emis: T.emis.buffer, est: T.est.buffer, dif: T.dif.buffer, g: T.g.buffer, P: T.P.buffer, dir: T.dir.buffer, figlio: T.figlio.buffer, nfigli: T.nfigli.buffer, traccia: T.traccia.buffer, radici: T.radici, foglie: T.foglie, livelli: T.livelli });
