@@ -329,6 +329,19 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // con lo stesso passo, finché chiude (al più quattro volte; quante ne sono servite resta scritto in «riprese»)
   integra();
   while (riprese < 4 && assorbita > 0 && Math.abs(irradiata / assorbita - 1) > 0.01) { riprese++; integra(); }
+  // UN PIANETA BLOCCATO CHE NON PORTA CALORE (D = 0, nessun mare che lo sposti): niente stagioni e niente vicini, ogni cella
+  // è al suo bilancio fermo (minimo 3 K), come nel clima a fasce (leggi.js bilancioPerFasce). L'integrazione da caldo
+  // lasciava la faccia buia alla temperatura a cui si era raffreddata quando finiva: si porta ogni cella al bilancio con lo
+  // stesso passo a tempo lungo quanto si vuole (Newton), partendo da dove l'integrazione è arrivata
+  if (P.bloccato && !(D > 0) && !fonte) {
+    assorbita = 0; irradiata = 0; pesi = 0; freddo.fill(0);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i; let t = T[k];
+      for (let n = 0; n < 200; n++) { const entra = sole[k] * (1 - albedo(k, t, sole[k])), esce = (sigma * t ** 4) / serra, nt = Math.max(3, t + frenaPasso(t, ((entra - esce) * t) / (4 * esce))); if (Math.abs(nt - t) < 1e-6 * t) { t = nt; break; } t = nt; }
+      const entra = sole[k] * (1 - albedo(k, t, sole[k]));
+      T[k] = t; media[k] = t; assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (t > 3 ? (sigma * t ** 4) / serra : entra); pesi += cosLat[j]; if (t < (terra[k] ? 268 : 271)) freddo[k] = acquaPerGhiaccio;
+    }
+  }
   // in montagna fa più freddo (6,5 °C ogni chilometro sopra il mare)
   const quotaMedia = quota; // la quota media della cella del clima: la neve in quota si calcola punto per punto
   let gm = 0, gg = 0, a = 0; for (let j = 0; j < H; j++) { const w = Math.cos(lat(j)); for (let i = 0; i < W; i++) { gm += media[j * W + i] * w; gg += freddo[j * W + i] * w; a += w; } }
