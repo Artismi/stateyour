@@ -196,10 +196,12 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.metti(pos, luce, n);
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
       if (rete) { const a = sc.riferimento.fattoreDiScala; lungoIlCono(0, tScena);
-        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); if (E > 0) S.proponiLuce(E); }
+        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); strato.reteE = E; if (E > 0) S.proponiLuce(E); }
     },
     disegna(S, passata) {
-      if (passata === 'fondo' && rete) rete.disegna(S, O.rete);
+      // (con l'occhio chiuso quattrocento volte più di quanto la nebbia chiede — dentro una galassia, vicino a una stella —
+      // la nebbia varrebbe un decimillesimo: non la si cammina nemmeno)
+      if (passata === 'fondo' && rete && !(S.E0 > 400 * (strato.reteE || 0))) rete.disegna(S, O.rete);
       if (passata !== 'velato') return;
       // (da lontano — oltre un ventesimo del lato — ogni punto porta anche una piccola parte della luce di quelle che rappresenta)
       gal.disegna(S, LUCE, 1.5, [1 + O.puntiLuce * peso, 0.002 * lato, 0.05 * lato]);
