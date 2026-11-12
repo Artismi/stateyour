@@ -234,6 +234,10 @@ export const sistema = memo((n, gid, sid) => {
     let inerti = null;
     try { const gr = gasRadiogenici({ pianeta: { g: gravitaDiSuperficie(massaKg, p.raggioM), raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
       inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
+    // (PRESTAZIONI: i minerali della superficie servono due volte con gli stessi dati — qui sotto e più giù, con l'energia
+    // vera per la chimica —: se temperatura, ossidazione e mare sono gli stessi (confronto esatto) vale la lista già fatta)
+    let fatti = null;
+    const mineraliDi = (T, ossidato, acqua) => { if (!(fatti && fatti.T === T && fatti.ossidato === ossidato && fatti.acqua === acqua)) fatti = { T, ossidato, acqua, lista: minerali({ composizione: p.composizione, T, ossidato, acqua }) }; return fatti.lista; };
     const ariaDelPianeta = () => {
       const r = climaEAria({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
         calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti }, { Z: S.Z ?? 1 }); // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
@@ -243,7 +247,7 @@ export const sistema = memo((n, gid, sid) => {
       try {
         p.atmosfera = r.atmosfera;
         p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica?.relativa ?? Lw / (4 * Math.PI * (p.a * 30 * UA) ** 2) / 1361, pressione: p.clima.pressione, acqua: p.clima.acqua, // (lo stato dell'acqua, non un sì/no: prebiotica lo confronta con «liquida»)
-          minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
+          minerali: mineraliDi(p.clima.T, !p.atmosfera.riducente, p.clima.acqua === 'liquida') });
       } catch { p.atmosfera = null; p.prebiotica = null; }
     };
     ariaDelPianeta();
@@ -270,7 +274,7 @@ export const sistema = memo((n, gid, sid) => {
       if (p.atmosfera) {
         p.energiaChimica = energiaPerLaChimica(qui, dalPiccolo);
         p.prebiotica = prebiotica({ atmosfera: p.atmosfera, T: p.clima.T, energia: p.energiaChimica.relativa, pressione: p.clima.pressione, acqua: p.clima.acqua,
-          minerali: minerali({ composizione: p.composizione, T: p.clima.T, ossidato: !p.atmosfera.riducente, acqua: p.clima.acqua === 'liquida' }) });
+          minerali: mineraliDi(p.clima.T, !p.atmosfera.riducente, p.clima.acqua === 'liquida') });
       }
     } catch { /* restano l'aria e la chimica di prima */ }
     // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti

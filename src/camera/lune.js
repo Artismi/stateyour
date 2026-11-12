@@ -25,7 +25,7 @@
 import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
-import { forzanteMareale, motoMedio, dissipazione, dissipazioneGuscio, rigiditaComplessa, viscositaGhiaccio, MAREE } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
+import { forzanteMareale, motoMedio, dissipazioneIn, coefficienteDelCorpo, dissipazioneGuscio, rigiditaComplessaIn, viscositaGhiaccioA, MAREE } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
 import { storia, tabellaStoria } from './storia.js'; // lo stato interno di una luna di roccia è la sua storia (le stesse equazioni dei pianeti)
 
 const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
@@ -171,20 +171,28 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
   const Qroccia = (t) => (tab ? daTab('Qconv', t) + daTab('Qfuso', t) : caloreDellaRoccia(t) * Mr);
   // il guscio a uno spessore d: punto di fusione alla base, calore che esce, marea
   // (Tb: la temperatura alla base; è il punto di fusione finché sotto c'è acqua; in un corpo gelato del tutto è più bassa)
+  // (PRESTAZIONI, senza cambiare un bit: il guscio a uno spessore non dipende dal tempo, e la storia torna moltissime volte
+  // sullo stesso spessore — un corpo gelato fino alla roccia lo chiede identico a ogni passo —: ciò che si è già calcolato
+  // per quello spessore (chiave ESATTA: lo stesso numero) resta in memoria per la durata di questa storia, con la sua
+  // marea. Nei cicli la rigidità e la viscosità si chiedono a maree.js senza creare oggetti: stesse formule, stesso ordine.)
   const guscioA = (d, Tb = null) => {
     const Tfus = Gh.Tfusione + Gh.pendenzaFusione * Math.min(Gh.pressioneMassima, Gh.densita * g * d) - antigelo, Tf = Tb ?? Tfus, dT = Math.max(1, Tf - Ts), kf = 567 / Tf;
-    const cond = (567 * Math.log(Math.max(1.0001, Tf / Ts))) / d, teta = (Gh.E * dT) / (R_GAS_ * Tf * Tf), Ra = (Gh.densita * g * Gh.alfa * dT * d ** 3) / (Gh.diffusivita * viscositaGhiaccio(Tf, { eta0, Tfusione: Tfus }));
+    const cond = (567 * Math.log(Math.max(1.0001, Tf / Ts))) / d, teta = (Gh.E * dT) / (R_GAS_ * Tf * Tf), Ra = (Gh.densita * g * Gh.alfa * dT * d ** 3) / (Gh.diffusivita * viscositaGhiaccioA(Tf, eta0, Tfus));
     const conv = ((0.5 * kf * dT) / d) * Math.pow(teta, -4 / 3) * Math.cbrt(Ra), convette = conv > cond, esce = Math.max(cond, conv), coperchio = convette ? (d * cond) / conv : d;
     // la rigidità complessa media nello spessore: il coperchio che conduce (T = T_s·(T_f/T_s)^(z/coperchio)) e, sotto, il ghiaccio al punto di fusione
-    let mr = 0, mi = 0; const N = 8; for (let k = 0; k < N; k++) { const T = Ts * Math.pow(Tf / Ts, (k + 0.5) / N), m = rigiditaComplessa(Gh.rigidita, viscositaGhiaccio(T, { eta0, Tfusione: Tfus }), omega); mr += m[0] / N; mi += m[1] / N; }
-    if (convette) { const m = rigiditaComplessa(Gh.rigidita, viscositaGhiaccio(Tf, { eta0, Tfusione: Tfus }), omega), w = coperchio / d; mr = w * mr + (1 - w) * m[0]; mi = w * mi + (1 - w) * m[1]; }
-    return { Tf, Tfus, cond, conv, convette, esce, coperchio, mu: [mr, mi] };
+    let mr = 0, mi = 0; const N = 8; for (let k = 0; k < N; k++) { const T = Ts * Math.pow(Tf / Ts, (k + 0.5) / N), m = rigiditaComplessaIn(Gh.rigidita, viscositaGhiaccioA(T, eta0, Tfus), omega, MU_); mr += m[0] / N; mi += m[1] / N; }
+    if (convette) { const m = rigiditaComplessaIn(Gh.rigidita, viscositaGhiaccioA(Tf, eta0, Tfus), omega, MU_), w = coperchio / d; mr = w * mr + (1 - w) * m[0]; mi = w * mi + (1 - w) * m[1]; }
+    return { Tf, Tfus, cond, conv, convette, esce, coperchio, mu: [mr, mi], marea: null };
   };
-  const mareaA = (d, gu) => { // W nel guscio (membrana se c'è l'oceano; senza, il corpo di ghiaccio omogeneo con la viscosità della base)
+  const gusci = new Map(), guscioDi = (d) => { let gu = gusci.get(d); if (gu === undefined) { gu = guscioA(d); gusci.set(d, gu); } return gu; };
+  let cCorpo = NaN; // (19/(2ρgR) del corpo intero, per quando è gelato del tutto: una volta)
+  const mareaNuova = (d, gu) => { // W nel guscio (membrana se c'è l'oceano; senza, il corpo di ghiaccio omogeneo con la viscosità della base)
     if (!(f > 0)) return { W: 0, k2: 0, h2: 0 };
     if (d < strato) { const m = dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: d, rigidita: gu.mu }); return { W: f * m.imK2, k2: m.k2Reale, h2: m.h2[0] }; }
-    const m = dissipazione({ massaKg: M, raggioM: R, rigidita: Gh.rigidita, viscosita: viscositaGhiaccio(gu.Tf, { eta0, Tfusione: gu.Tfus }) }, omega); return { W: f * m.imK2, k2: m.k2Reale, h2: 0 };
+    if (cCorpo !== cCorpo) cCorpo = coefficienteDelCorpo(M, R);
+    const m = dissipazioneIn(cCorpo, Gh.rigidita, viscositaGhiaccioA(gu.Tf, eta0, gu.Tfus), omega, undefined, DZ_); return { W: f * m.imK2, k2: m.k2Reale, h2: 0 };
   };
+  const mareaA = (d, gu) => gu.marea || (gu.marea = mareaNuova(d, gu)); // (la marea di quel guscio a quello spessore: una volta)
   // da dove si parte: l'energia di accrescimento fonde il ghiaccio?
   const fuso = (0.6 * COSTANTI.G * M) / R > 2000 * Math.max(0, Gh.Tfusione - Ts) + Gh.latente; let d = fuso ? Math.min(strato, 100) : strato;
   const N = 40, t0 = Math.min(1e7, 0.5 * eta), tempi = Array.from({ length: N + 1 }, (_, k) => t0 * Math.pow(eta / t0, k / N)), traccia = [];
@@ -193,7 +201,7 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
     // (il guscio si assesta in migliaia–milioni di anni, molto meno di un passo: quando il bilancio cambia segno si è
     // scavalcato l'equilibrio, e il passo si dimezza fino a fermarcisi sopra)
     for (let passo = 0; passo < 200 && resta > 0 && parte > 1e-4; passo++) {
-      const gu = guscioA(d), mr = mareaA(d, gu), rate = (gu.esce * A - Qr - mr.W) / (Gh.densita * Gh.latente * 4 * Math.PI * Math.max(Rr, R - d) ** 2); // m/s
+      const gu = guscioDi(d), mr = mareaA(d, gu), rate = (gu.esce * A - Qr - mr.W) / (Gh.densita * Gh.latente * 4 * Math.PI * Math.max(Rr, R - d) ** 2); // m/s
       if ((d >= strato && rate >= 0) || (d <= 1 && rate <= 0)) break; // gelato del tutto (o tutto acqua) e il bilancio lo tiene lì
       if (verso && Math.sign(rate) !== verso) parte *= 0.5; verso = Math.sign(rate);
       const dt = Math.min(resta, (parte * Math.max(d, 50)) / Math.max(1e-30, Math.abs(rate))); d = Math.min(strato, Math.max(1, d + rate * dt)); resta -= dt;
@@ -202,8 +210,8 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
   }
   // (il passo si ferma a un decimillesimo dello spessore: un velo d'acqua più sottile di così, sotto un guscio che al suo
   // spessore pieno porterebbe via più calore di quanto ne arriva, è il guscio che ha finito di gelare)
-  if (d > strato * (1 - 2e-4)) { const gp = guscioA(strato); if (gp.esce * A - Qroccia(eta) - mareaA(strato, gp).W >= 0) d = strato; }
-  const Qr = Qroccia(eta), mareaRoccia = tab ? daTab('Qmarea', eta) : 0, oceano = d < strato ? strato - d : 0; let gu = guscioA(d), mg = mareaA(d, gu);
+  if (d > strato * (1 - 2e-4)) { const gp = guscioDi(strato); if (gp.esce * A - Qroccia(eta) - mareaA(strato, gp).W >= 0) d = strato; }
+  const Qr = Qroccia(eta), mareaRoccia = tab ? daTab('Qmarea', eta) : 0, oceano = d < strato ? strato - d : 0; let gu = guscioDi(d), mg = mareaA(d, gu);
   if (!oceano) { // gelato fino alla roccia: la base non è al punto di fusione; la sua temperatura è quella a cui il ghiaccio porta fuori
     // esattamente il calore che riceve (roccia + la sua marea, che dipende da quella temperatura): si cerca dimezzando
     let lo = Ts + 0.5, hi = gu.Tfus; for (let k = 0; k < 30; k++) { const Tm = 0.5 * (lo + hi), gm = guscioA(d, Tm); if (gm.esce * A - Qr - mareaA(d, gm).W > 0) hi = Tm; else lo = Tm; }
@@ -213,7 +221,7 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
   memoGhiaccio.set(chiave, v); if (memoGhiaccio.size > 3000) memoGhiaccio.delete(memoGhiaccio.keys().next().value);
   return v;
 }
-const R_GAS_ = 8.314;
+const R_GAS_ = 8.314, MU_ = [0, 0], DZ_ = { imK2: 0, k2Reale: 0 };
 export function k2QLuna(P, L, eta = ETA) {
   if (!dentro(L).ghiacciata) { // roccia: dalla storia del corpo (la parte del volume che dissipa è già dentro)
     if (!mareaConta(P, L, eta)) return k2QFreddo(L);
@@ -273,6 +281,30 @@ function eccentricitaResidua(P, L, eta) {
   const tau = ((2 / 21) * (L.massaKg / P.massaKg) * (L.aM / L.raggioM) ** 5) / (kq * n);
   const spinta = L.retrograda ? 0 : (19 / 28) * (k2QPianeta(P) / kq) * (L.massaKg / P.massaKg) ** 2 * (P.raggioM / L.raggioM) ** 5;
   return L.eccentricita * Math.exp(-((eta * ANNO) / tau) * Math.max(0, 1 - spinta));
+}
+
+// ---------- (PRESTAZIONI) CIÒ CHE DI UNA LUNA SI CALCOLA SOLO QUANDO QUALCUNO LO LEGGE
+// Tre grandezze di una luna chiedono la sua storia interna (strati, guscio, marea: da 3 a 17 ms): l'eccentricità che le
+// maree le hanno lasciato, il calore di marea e lo stato. Chi costruisce un sistema (cosmo.js) quasi mai le legge: restano
+// PIGRE. Ognuna è una proprietà come le altre (enumerabile, nello stesso posto tra le chiavi, scrivibile): la prima volta
+// che la si legge viene calcolata — con gli stessi conti di prima, sugli stessi numeri — e da lì è un numero qualunque.
+// Perché il risultato non dipenda da QUANDO lo si legge, il conto lavora su una copia di ciò che legge del pianeta e della
+// luna, presa nel momento in cui lune() la costruisce (il pianeta, dopo, può cambiare: cosmo.js gli rifà il clima).
+const fotoPianeta = (P) => ({ tipo: P.tipo, massaKg: P.massaKg, raggioM: P.raggioM, aM: P.aM, Mstella: P.Mstella, Lw: P.Lw, clima: P.clima ? { acqua: P.clima.acqua } : P.clima });
+// (ciò che della luna leggono k2QLuna, eccentricitaResidua, caloreMareale e stato)
+const fotoLuna = (L, eccentricita) => ({ massaKg: L.massaKg, raggioM: L.raggioM, densita: L.densita, aM: L.aM, eccentricita, composizione: L.composizione ? { ...L.composizione } : L.composizione, retrograda: L.retrograda });
+function pigra(L, nome, calcola) {
+  const metti = (v) => { Object.defineProperty(L, nome, { value: v, writable: true, enumerable: true, configurable: true }); return v; };
+  Object.defineProperty(L, nome, { enumerable: true, configurable: true, get: () => metti(calcola()), set: metti });
+}
+// l'eccentricità di oggi, pigra: «calcola» la dà, lavorando sulla copia «foto» della luna (che ha ancora l'eccentricità di
+// partenza); una volta sola: il calore e lo stato la chiedono a lei, non alla proprietà, che qualcuno può avere riscritto, e
+// da quel momento la copia porta l'eccentricità di oggi (è la luna su cui si calcolano calore e stato). «tetto» è un valore
+// che non può superare (le maree la consumano soltanto), e basta a catturati() per decidere quasi sempre senza calcolarla
+const ECCENTRICITA = new WeakMap();
+function eccentricitaPigra(L, tetto, foto, calcola) {
+  let fatta = false, e = NaN; const vera = () => { if (!fatta) { e = calcola(); fatta = true; foto.eccentricita = e; } return e; };
+  ECCENTRICITA.set(L, { tetto, vera, foto }); pigra(L, 'eccentricita', vera);
 }
 
 // la FORMA. Un corpo piccolo resta come gli urti l'hanno lasciato (una patata: tre assi diversi, dal
@@ -343,20 +375,24 @@ function regolari(P, amb, c) {
   // alza sul pianeta le cede, al più, la potenza Γ·n (Γ = 3/2·(k₂/Q)_p·G·m²·R_p⁵/a⁶). Il calore non può
   // superarla a lungo: l'eccentricità forzata si ferma lì (per Io: 1,2·10¹⁴ W; ne emette 0,9·10¹⁴)
   const fornita = (b) => ((1.5 * k2QPianeta(P) * G * b.m ** 2 * P.raggioM ** 5) / b.a ** 6) * Math.sqrt((G * M) / b.a ** 3);
+  const Pf = fotoPianeta(P), eta = amb.eta;
   return corpi.map((b, i) => {
     const L = corpoLuna('disco', b.m, b.a, b.ghiaccio, undefined, `disco/luna ${i}`);
     // l'eccentricità: le maree la cancellano, ma una vicina in risonanza la rigenera a ogni giro
     // (eccentricità FORZATA ≈ 0,75·(m_vicina/M)/δ per la luna interna, 0,43 per l'esterna; δ ≈ 0,004 è lo
     // scarto dalla risonanza esatta, MISURATO su Io ed Europa: dà i millesimi osservati); oltre 0,02 la formula non vale
     const forzata = legami.reduce((e, [x, y]) => e + (x === i ? 0.75 * corpi[y].m : y === i ? 0.43 * corpi[x].m : 0) / M / 0.004, 0);
-    L.eccentricita = c.tra(`disco/luna ${i}/eccentricità`, 0.005, 0.03); // quella lasciata dal disco, piccola perché il gas la smorza
+    const e0 = c.tra(`disco/luna ${i}/eccentricità`, 0.005, 0.03); // quella lasciata dal disco, piccola perché il gas la smorza
+    L.eccentricita = e0;
     L.legami = legami.filter(([x, y]) => x === i || y === i).map(([x, y, nome]) => [x === i ? y : x, nome]);
+    // (l'eccentricità di oggi è PIGRA — vedi eccentricitaPigra —: il conto è quello di sempre, fatto quando la si legge)
     if (forzata) {
       const tetto = Math.max(...legami.filter(([x, y]) => x === i || y === i).map(([x]) => fornita(corpi[x])));
       { // il calore all'equilibrio viene dalla storia del corpo (roccia o ghiaccio); se supera ciò che il pianeta può cedere, l'eccentricità
         // scende (un passo solo, come se il calore andasse con e²: all'equilibrio non è esatto, ed è dichiarato)
-        L.eccentricita = Math.min(0.02, forzata); const Q = potenzaMareale(P, L, k2QLuna(P, L, amb.eta)); if (Q > tetto) L.eccentricita *= Math.sqrt(tetto / Q); }
-    } else L.eccentricita = eccentricitaResidua(P, L, amb.eta);
+        const eF = Math.min(0.02, forzata), Lf = fotoLuna(L, eF);
+        eccentricitaPigra(L, eF, Lf, () => { const Q = potenzaMareale(Pf, Lf, k2QLuna(Pf, Lf, eta)); return Q > tetto ? eF * Math.sqrt(tetto / Q) : eF; }); }
+    } else { const Lf = fotoLuna(L, e0); eccentricitaPigra(L, e0, Lf, () => eccentricitaResidua(Pf, Lf, eta)); }
     return L;
   });
 }
@@ -404,7 +440,7 @@ function daUrto(P, amb, c, urto) {
   const L = corpoLuna('urto', m, a, 0, comp, 'urto/luna');
   L.giornoInizialePianeta = (2 * Math.PI) / wPrima;
   if (urto?.luna) L.giornoPianeta = giorno; // il giorno del pianeta oggi, dopo che la luna l'ha frenato
-  L.eccentricita = e0; L.eccentricita = eccentricitaResidua(P, L, anni); // e0: lasciata dagli ultimi detriti raccolti
+  L.eccentricita = e0; { const Pf = fotoPianeta(P), Lf = fotoLuna(L, e0); eccentricitaPigra(L, e0, Lf, () => eccentricitaResidua(Pf, Lf, anni)); } // e0: lasciata dagli ultimi detriti raccolti (quella di oggi è pigra)
   return [L];
 }
 
@@ -415,7 +451,10 @@ function catturati(P, amb, c, grandi) {
   // uno scambio a tre corpi; per questo i giganti ne hanno e i rocciosi quasi mai. CONTATI nel Sistema
   // Solare: in media 2,5 più grandi di 20 km per ogni gigante, più o meno uguali per tutti (Jewitt e
   // Haghighipour 2007); il loro numero cala come l'inverso del raggio
-  const media = P.tipo === 'roccioso' ? 0.15 : 2.5, roche = limiteRoche(P);
+  const media = P.tipo === 'roccioso' ? 0.15 : 2.5, roche = limiteRoche(P), Pf = fotoPianeta(P);
+  // (l'eccentricità di una luna grande è pigra: se nemmeno con la più grande che può avere — quella da cui le maree sono
+  // partite — arriva fin lì, non serve calcolarla; se no si calcola, e decide lei: il confronto è quello di sempre)
+  const spazzato = (peri) => grandi.some((g) => { const q = ECCENTRICITA.get(g); if (q && !(peri < 1.3 * g.aM * (1 + q.tetto))) return false; return peri < 1.3 * g.aM * (1 + g.eccentricita); });
   let n = 0; for (let p = quante(0), s = Math.exp(-media); p > s && n < 8; p *= quante(n)) n++; // sorteggio di Poisson (le estrazioni dello stesso evento, una dopo l'altra)
   for (let k = 0; k < n; k++) {
     const R = 2e4 * Math.min(10, 1 / (1 - c(`cattura ${k}/raggio`))), fa = c.tra(`cattura ${k}/distanza`, 0.12, 0.5), fg = 0.5 / (1 + (amb.Tstella / NEVE) ** 8), rho = densitaCorpo(1, fg), pro = c(`cattura ${k}/verso`) < 0.5;
@@ -424,9 +463,9 @@ function catturati(P, amb, c, grandi) {
     // (non è sorteggiato: emerge), e l'orbita è molto schiacciata ma senza uscire dalla zona stabile
     const retrograda = fa > 0.33 || !pro, a = fa * amb.RH, e = Math.min(c.tra(`cattura ${k}/eccentricità`, 0.1, 0.45), 0.65 / fa - 1);
     // una luna grande spazza via i piccoli corpi che le passano vicino; e troppo vicino al pianeta non si resta
-    if (a * (1 - e) < 2 * roche || grandi.some((g) => a * (1 - e) < 1.3 * g.aM * (1 + g.eccentricita))) continue;
+    if (a * (1 - e) < 2 * roche || spazzato(a * (1 - e))) continue;
     const L = corpoLuna('cattura', sfera(R) * rho, a, fg, undefined, `cattura ${k}`);
-    L.retrograda = retrograda; L.eccentricita = e; L.eccentricita = eccentricitaResidua(P, L, amb.eta);
+    L.retrograda = retrograda; L.eccentricita = e; { const Lf = fotoLuna(L, e), eta = amb.eta; eccentricitaPigra(L, e, Lf, () => eccentricitaResidua(Pf, Lf, eta)); } // (quella di oggi: pigra)
     fuori.push(L);
   }
   return fuori;
@@ -464,15 +503,23 @@ export function lune(P, stella = {}, seme = 1) {
   const Lgiovane = stellaVera(stella.massaNascita || stella.massa || P.Mstella / MSOLE, { Z: stella.Z ?? 1 }).L;
   const amb = { RH: raggioHill(P), eta: (stella.eta ?? ETA) + (stella.morta ?? 0), Tstella: NEVE * Math.sqrt((2.7 * UA * Math.sqrt(Lgiovane)) / P.aM) };
   const grandi = P.tipo === 'roccioso' ? daUrto(P, amb, c, stella.urto) : regolari(P, amb, c);
-  const tutte = [...grandi, ...catturati(P, amb, c, grandi)].sort((x, y) => x.aM - y.aM);
+  const tutte = [...grandi, ...catturati(P, amb, c, grandi)].sort((x, y) => x.aM - y.aM), Pf = fotoPianeta(P);
   tutte.forEach((L, i) => { L.id = i; });
+  // (le lune a ridosso del limite di Roche sono le sole a cui un anello chiede l'eccentricità — anelli.js: una risonanza di
+  // second'ordine, la più interna a (1/3)^⅔ dell'orbita, che cada dentro l'anello; e l'anello non esce dal limite di Roche
+  // del ghiaccio —: per loro la si calcola subito, come prima, così anelli() non paga mai la storia di una luna)
+  const rocheGhiaccio = limiteRoche(P, MATERIALI.ghiaccio.densita), RISONANZA_INTERNA = Math.pow(1 / 3, 2 / 3);
   for (const L of tutte) {
     L.periodo = periodoOrbita(P, L.aM, L.massaKg);
     L.bloccata = tempoBlocco(P, L) < amb.eta * ANNO;
     L.forma = forma(P, L, L.bloccata, c);
-    L.caloreMareale = caloreMareale(P, L, amb.eta);
-    L.stato = stato(P, L, amb.eta);
+    // (calore di marea e stato: PIGRI, come l'eccentricità da cui dipendono — vedi sopra —; i conti sono caloreMareale() e
+    // stato() di sempre, sulla luna com'è adesso e con l'eccentricità di oggi)
+    { const q = ECCENTRICITA.get(L), eta = amb.eta, foto = () => { q.vera(); return q.foto; }; // (la copia della luna, con l'eccentricità di oggi)
+      pigra(L, 'caloreMareale', () => caloreMareale(Pf, foto(), eta));
+      pigra(L, 'stato', () => stato(Pf, foto(), eta)); }
     L.retrograda = !!L.retrograda;
+    if (!L.retrograda && L.aM * RISONANZA_INTERNA < rocheGhiaccio) void L.eccentricita;
     L.risonanza = L.legami?.length ? L.legami.map(([j, nome]) => `${nome} con la luna ${grandi[j].id}`).join(', ') : null;
     delete L.legami;
   }

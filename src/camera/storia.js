@@ -124,7 +124,7 @@
 
 import { COSTANTI, MSOLE, LSOLE, UA, R_GAS, caloreDellaRoccia, temperaturaEquilibrio, acquaInSuperficie, mareAtteso, LIMITE_VAPORE } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
-import { MAREE, epsilonFuso, dissipazione, forzanteMareale, motoMedio } from './maree.js'; // la marea e la viscosità della roccia: una fonte sola
+import { MAREE, epsilonFuso, dissipazioneIn, coefficienteDelCorpo, forzanteMareale, motoMedio } from './maree.js'; // la marea e la viscosità della roccia: una fonte sola
 import { ROCCE, climaEAria } from './chimica.js'; // il carbonio del mantello e il ciclo del carbonio: una fonte sola (§8)
 
 const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, MU0 = 4e-7 * PI;
@@ -260,19 +260,24 @@ function ambiente(st, sv, t, e = {}) {
   e.vapore = !st.ghiacciato && !!sole && (sole.flusso * (1 - S.albedoNuda)) / 4 > LIMITE_VAPORE; e.Qrad = caloreDellaRoccia(t) * st.Mrad;
   return e;
 }
-function flussi(st, amb, rami, Tm, Tcmb, o) {
+// (PRESTAZIONI, senza cambiare un bit: ciò che non dipende dallo stato si calcola una volta — i logaritmi e la radice cubica
+// delle costanti qui sotto; D³ e il coefficiente 19/(2ρgR) del corpo in «piu» (piuDi) —; la dissipazione di marea riempie
+// due numeri senza creare oggetti (maree.js dissipazioneIn). Le espressioni e il loro ordine sono quelli di prima.)
+const LN_KORENAGA = Math.log(STORIA.korenagaCrit), LN_FERMO = Math.log(STORIA.korenagaCrit) + 0.5 * Math.log(STORIA.RaC), C1_CBRT_RAC = STORIA.c1Fermo * Math.cbrt(STORIA.RaC), DZ = { imK2: 0, k2Reale: 0 };
+const piuDi = (st) => ({ D3: st.D ** 3, cMarea: coefficienteDelCorpo(st.Mi, st.Ri) });
+function flussi(st, piu, amb, rami, Tm, Tcmb, o) {
   const S = STORIA, Tum = Tm * st.eSu, Tlm = Tm * st.eGiu, sole = amb.sole, Ts = amb.Ts;
   const dT = Math.max(1, Tum - Ts), arr = S.nuRif * Math.exp(S.Enu / (R_GAS * Tum)), base = (S.alfa * st.g * dT) / (S.RaC * st.kappaSu);
   // il criterio di Korenaga con la viscosità a un dato fuso → la mobilità; poi lo strato limite e il coperchio
   const teta = (S.Enu * dT) / (R_GAS * Tum * Tum), vapore = amb.vapore, w = vapore ? 0 : st.bagnato;
-  const attrito = S.attritoSecco * (1 - rami.poriAcqua * w), gam = attrito / (S.alfa * dT), lnEta = S.korenagaA * Math.pow(gam, S.korenagaN) * teta, fermo = Math.min(1, S.c1Fermo * Math.cbrt(S.RaC) * Math.pow(teta, -4 / 3));
+  const attrito = S.attritoSecco * (1 - rami.poriAcqua * w), gam = attrito / (S.alfa * dT), lnEta = S.korenagaA * Math.pow(gam, S.korenagaN) * teta, fermo = Math.min(1, C1_CBRT_RAC * Math.pow(teta, -4 / 3));
   let eps = 1, nu = arr, delta = 0, mob = 0, pref = 1, lid = 0, Pbase = 0, Fv = 0, lnCrit = 0, fermoDelTutto = false;
   for (let giro = 0; giro < 3; giro++) { // (il fuso sotto il coperchio dipende dallo spessore del coperchio, che dipende dalla viscosità, che dipende dal fuso)
     nu = arr / eps; delta = Math.cbrt(nu / base);
     // SE IL MANTELLO NON CONVETTE (lo strato limite sarebbe più spesso del mantello: numero di Rayleigh sotto il critico) il
     // calore esce per sola conduzione attraverso tutto il mantello: niente placche, niente risalite che fondono
-    if (delta >= st.D) { fermoDelTutto = true; delta = st.D; mob = 0; pref = 1; lid = st.D; Pbase = st.Ptop + S.rhoSu * st.g * st.D; Fv = 0; lnCrit = Math.log(S.korenagaCrit) + 0.5 * Math.log(S.RaC); break; }
-    lnCrit = Math.log(S.korenagaCrit) + 0.5 * Math.log((S.alfa * st.g * dT * st.D ** 3) / (st.kappaSu * nu));
+    if (delta >= st.D) { fermoDelTutto = true; delta = st.D; mob = 0; pref = 1; lid = st.D; Pbase = st.Ptop + S.rhoSu * st.g * st.D; Fv = 0; lnCrit = LN_FERMO; break; }
+    lnCrit = LN_KORENAGA + 0.5 * Math.log((S.alfa * st.g * dT * piu.D3) / (st.kappaSu * nu));
     mob = 1 / (1 + Math.exp(Math.max(-50, Math.min(50, S.raccordo * (lnEta - lnCrit)))));
     pref = mob + (1 - mob) * fermo; lid = delta / pref; Pbase = st.Ptop + S.rhoSu * st.g * Math.min(lid, st.D);
     const Pd = Pbase, Tsol = poli(S.solidus, Pd); // (il mantello che convette comincia sotto il coperchio: è lì che fonde o no)
@@ -281,7 +286,7 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   }
   const qUM = (S.kSu * dT) / delta, Qconv = st.A * qUM * pref;
   // la risalita che fonde: dall'incontro dell'adiabatica con il solidus fino alla base del coperchio (alla superficie, a placche)
-  const [s0, s1, s2] = S.solidus, bq = s1 - S.adiabaticaSolida, disc = bq * bq + 4 * s2 * (Tum - s0);
+  const s0 = S.solidus[0], s1 = S.solidus[1], s2 = S.solidus[2], bq = s1 - S.adiabaticaSolida, disc = bq * bq + 4 * s2 * (Tum - s0);
   const Pi = Tum <= s0 ? 0 : disc <= 0 ? S.pMaxFusione : Math.min(S.pMaxFusione, (-bq + Math.sqrt(disc)) / (2 * s2));
   // (con le placche — mobilità oltre un mezzo — ci sono dorsali, e lì la risalita arriva in superficie; senza, si ferma
   // alla base del coperchio. Le dorsali ci sono o non ci sono: qui i due regimi non si mescolano)
@@ -290,7 +295,7 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   // Foley 2019 [V]: volume 17,8·π·R·v·(spessore della zona che fonde)·φ, con la velocità sotto il coperchio
   // v = 0,05·(κ/d)·(Ra_i/θ)^(2/3) e la densità del fuso 2800 kg/m³
   const Mfuso = !(fi > 0) ? 0 : mob > 0.5 ? (S.portataFuso * st.kappaSu * st.A * S.rhoSu * fi) / delta
-    : S.rhoFuso * S.foleyFuso * PI * st.Ri * (S.c2Fermo * (st.kappaSu / st.D) * Math.pow(Math.exp(2 * (lnCrit - Math.log(S.korenagaCrit))) / teta, 2 / 3)) * (colonna / (S.rhoSu * st.g)) * fi;
+    : S.rhoFuso * S.foleyFuso * PI * st.Ri * (S.c2Fermo * (st.kappaSu / st.D) * Math.pow(Math.exp(2 * (lnCrit - LN_KORENAGA)) / teta, 2 / 3)) * (colonna / (S.rhoSu * st.g)) * fi;
   const Qfuso = S.erutta * Mfuso * S.cp * dT;
   // il confine nucleo–mantello
   let Qcmb = 0, qcmb = 0;
@@ -299,7 +304,7 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   // IL CALORE DI MAREA dallo stato del mantello: la stessa viscosità (con il suo fuso) che fa la convezione, la rigidità
   // che cala con il fuso; dissipa il mantello (la sua parte del volume). È il ciclo marea → temperatura → viscosità → marea
   let Qmarea = 0, imK2 = 0, k2re = 0;
-  if (st.forzante > 0) { const dz = dissipazione({ massaKg: st.Mi, raggioM: st.Ri, rigidita: MAREE.roccia.rigidita / eps, viscosita: MAREE.roccia.densita * nu }, st.omegaMarea, rami.reologia); imK2 = dz.imK2; k2re = dz.k2Reale; Qmarea = st.forzante * imK2 * st.parteMantello; }
+  if (st.forzante > 0) { const dz = dissipazioneIn(piu.cMarea, MAREE.roccia.rigidita / eps, MAREE.roccia.densita * nu, st.omegaMarea, rami.reologia, DZ); imK2 = dz.imK2; k2re = dz.k2Reale; Qmarea = st.forzante * imK2 * st.parteMantello; }
   const Qrad = amb.Qrad;
   // il calore latente del mantello che gela: una capacità in più finché è in parte fuso
   const capM = st.Mm * (S.cp + (Fv > 0 ? S.latenteMantello * S.fusoPerKelvin : 0));
@@ -311,6 +316,22 @@ function flussi(st, amb, rami, Tm, Tcmb, o) {
   o.Tum = Tum; o.Tlm = Tlm; o.Ts = Ts; o.delta = delta; o.lid = lid; o.mob = mob; o.lnEta = lnEta; o.lnCrit = lnCrit; o.attrito = attrito; o.teta = teta; o.Fv = Fv; o.eps = eps; o.nu = nu;
   o.Qconv = Qconv; o.Qfuso = Qfuso; o.Qcmb = Qcmb; o.Qrad = Qrad; o.Qmarea = Qmarea; o.imK2 = imK2; o.k2re = k2re; o.qcmb = qcmb; o.Mfuso = Mfuso; o.fi = fi; o.colonna = colonna; o.Ric = Ric; o.dRic = o.dr * o.dTc / ANNO_S; // (m/s)
   o.vapore = vapore; o.convette = !fermoDelTutto;
+  o.arr = arr; o.capM = capM; // (per flussiDelNucleo, qui sotto)
+  return o;
+}
+// (PRESTAZIONI) LA STESSA COSA QUANDO È CAMBIATA SOLO LA TEMPERATURA DEL NUCLEO: «a» sono i flussi già calcolati con lo
+// stesso mantello, lo stesso tempo e la stessa struttura (stessa T_m); con un'altra T_cmb cambiano solo il calore che passa
+// dal nucleo al mantello e, per lui, le due derivate. È la colonna del jacobiano rispetto a T_cmb: tutto ciò che viene dal
+// mantello (viscosità, coperchio, fuso, marea) è identico a quello di «a» e non si rifà. Riempie o.dTm e o.dTc (e o.r, o.dr),
+// con le stesse operazioni di flussi() nello stesso ordine: gli stessi bit.
+function flussiDelNucleo(st, a, Tcmb, o) {
+  const S = STORIA; let Qcmb = 0, qcmb = 0;
+  if (st.haNucleo) { const d = Tcmb - a.Tlm, nuGiu = S.saltoViscosita * a.arr,
+     dl = Math.min(st.D, Math.cbrt((S.RaC * nuGiu * st.kappaGiu) / (S.alfa * st.gc * Math.max(1e-6, Math.abs(d))))); qcmb = (S.kGiu * d) / dl; Qcmb = st.Ac * qcmb; }
+  o.dTm = ((a.Qrad + a.Qmarea + Qcmb - a.Qconv - a.Qfuso) / a.capM) * ANNO_S;
+  nucleoInterno(st, Tcmb, o);
+  const Ric = o.r, capC = st.Mc * S.cNucleo * st.ac + (S.latenteFerro + S.gravitazionale) * S.rhoNucleo * 4 * PI * Ric * Ric * -o.dr;
+  o.dTc = st.haNucleo ? (-Qcmb / capC) * ANNO_S : 0;
   return o;
 }
 // la dinamo a uno stato (dai flussi già calcolati): galleggiamento, Reynolds magnetico, momento di dipolo
@@ -328,27 +349,27 @@ function dinamo(st, rami, Tcmb, f) {
 const COLONNE = ['t', 'Tm', 'Tcmb', 'Tum', 'Ts', 'Qconv', 'Qfuso', 'Qcmb', 'Qrad', 'Qmarea', 'Ric', 'dRic', 'mob', 'lid', 'delta', 'Mfuso', 'fi', 'F', 'Fth', 'Fchi', 'M', 'Rem', 'qad', 'qcmb', 'accesa', 'lnEta', 'lnCrit', 'Fv', 'crosta', 'imK2', 'k2re'];
 const T_INIZIO = 1e5; // (anni) da dove parte l'integrazione: prima c'è la formazione (disco.js, impatti.js)
 function integra(voce, finoA) {
-  const { st, sv, rami, tab } = voce, b = {}, gR = 1 + Math.SQRT1_2, fine = voce.fine, tol = 1 / fine; // (K) l'errore ammesso per passo
+  const { st, sv, rami, tab } = voce, piu = voce.piu || (voce.piu = piuDi(st)), b = {}, gR = 1 + Math.SQRT1_2, fine = voce.fine, tol = 1 / fine; // (K) l'errore ammesso per passo
   let a = {}, c = {}, qui = {}, poi = {};
   let { t, Tm, Tc, h, crosta } = voce.stato;
   const scrivi = (f) => { const d = dinamo(st, rami, Tc, f);
     tab.t.push(t); tab.Tm.push(Tm); tab.Tcmb.push(Tc); tab.Tum.push(f.Tum); tab.Ts.push(f.Ts); tab.Qconv.push(f.Qconv); tab.Qfuso.push(f.Qfuso); tab.Qcmb.push(f.Qcmb); tab.Qrad.push(f.Qrad); tab.Qmarea.push(f.Qmarea);
     tab.Ric.push(f.Ric); tab.dRic.push(f.dRic); tab.mob.push(f.mob); tab.lid.push(f.lid); tab.delta.push(f.delta); tab.Mfuso.push(f.Mfuso); tab.fi.push(f.fi); tab.F.push(d.F); tab.Fth.push(d.Fth); tab.Fchi.push(d.Fchi); tab.M.push(d.M); tab.Rem.push(d.Rem);
     tab.qad.push(d.qad); tab.qcmb.push(f.qcmb); tab.accesa.push(d.accesa ? 1 : 0); tab.lnEta.push(f.lnEta); tab.lnCrit.push(f.lnCrit); tab.Fv.push(f.Fv); tab.crosta.push(crosta); tab.imK2.push(f.imK2); tab.k2re.push(f.k2re); };
-  ambiente(st, sv, t, qui); flussi(st, qui, rami, Tm, Tc, a);
+  ambiente(st, sv, t, qui); flussi(st, piu, qui, rami, Tm, Tc, a);
   if (!tab.t.length) scrivi(a);
   let passi = 0;
   while (t < finoA && passi++ < 20000) {
     const f1 = a.dTm, f2 = a.dTc, MfusoPrima = a.Mfuso, lidPrima = a.lid, mobPrima = a.mob; // («a»: i flussi allo stato di adesso, già calcolati)
     const e1 = Math.max(0.05, 1e-5 * Tm), e2 = Math.max(0.05, 1e-5 * Tc);
-    flussi(st, qui, rami, Tm + e1, Tc, b); const j11 = (b.dTm - f1) / e1, j21 = (b.dTc - f2) / e1;
-    flussi(st, qui, rami, Tm, Tc + e2, b); const j12 = (b.dTm - f1) / e2, j22 = (b.dTc - f2) / e2;
+    flussi(st, piu, qui, rami, Tm + e1, Tc, b); const j11 = (b.dTm - f1) / e1, j21 = (b.dTc - f2) / e1;
+    flussiDelNucleo(st, a, Tc + e2, b); const j12 = (b.dTm - f1) / e2, j22 = (b.dTc - f2) / e2;
     for (;;) {
       h = Math.min(h, Math.max(2e4, 0.1 * t) / fine, Math.max(1, finoA - t));
       // (I − γhJ)·k = rhs, due per due
       const m11 = 1 - gR * h * j11, m12 = -gR * h * j12, m21 = -gR * h * j21, m22 = 1 - gR * h * j22, det = m11 * m22 - m12 * m21;
       const k1a = (m22 * f1 - m12 * f2) / det, k1b = (m11 * f2 - m21 * f1) / det;
-      ambiente(st, sv, t + h, poi); flussi(st, poi, rami, Tm + h * k1a, Tc + h * k1b, c);
+      ambiente(st, sv, t + h, poi); flussi(st, piu, poi, rami, Tm + h * k1a, Tc + h * k1b, c);
       const r1 = c.dTm - 2 * k1a, r2 = c.dTc - 2 * k1b, k2a = (m22 * r1 - m12 * r2) / det, k2b = (m11 * r2 - m21 * r1) / det;
       const err = Math.max(Math.abs(0.5 * h * (k1a + k2a)), Math.abs(0.5 * h * (k1b + k2b)));
       if (!(err <= tol) && h > 1) { h *= Math.max(0.2, 0.9 * Math.sqrt(tol / err)); continue; }
@@ -361,7 +382,7 @@ function integra(voce, finoA) {
       h *= err > 0 ? Math.min(3, Math.max(0.3, 0.9 * Math.sqrt(tol / err))) : 3;
       break;
     }
-    { const x = qui; qui = poi; poi = x; } flussi(st, qui, rami, Tm, Tc, a); scrivi(a);
+    { const x = qui; qui = poi; poi = x; } flussi(st, piu, qui, rami, Tm, Tc, a); scrivi(a);
   }
   voce.stato = { t, Tm, Tc, h, crosta }; voce.eventi = null;
 }

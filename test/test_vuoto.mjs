@@ -189,8 +189,10 @@ prova('che cosa emettono: Hα e Hβ nel rapporto di ricombinazione, [O III] solo
   const O = V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 1.2 }, 0, { caso: CASO, catalogo: CAT, massimo: 300 }).oggetti, di = (t) => O.filter((o) => o.tipo === t), riga = (o, n) => o.emette.righe.find((r) => r.nome === n)?.W ?? 0;
   const hii = di('regione H II'), pn = di('nebulosa planetaria'), rif = di('nebulosa a riflessione'), nubi = di('nube molecolare'), snr = di('resto di supernova'); assert.ok(hii.length > 20 && pn.length > 3 && rif.length > 20 && nubi.length > 20 && snr.length > 20, `${hii.length} ${pn.length} ${rif.length} ${nubi.length} ${snr.length}`);
   for (const o of hii) { tra(riga(o, 'Halfa') / riga(o, 'Hbeta'), 2.859, 2.861, 'Hα/Hβ'); const hnu = (6.626e-34 * K.c) / 656.28e-9; tra(riga(o, 'Halfa') / (o.ionizzanti * 0.45 * hnu), 0.999, 1.001, 'un fotone Hα ogni 2,2 fotoni ionizzanti'); assert.ok(o.raggio > 0 && o.nH > 0 && o.stella.T > 1.5e4); }
-  // [O III]/Hβ cresce con la temperatura della stella
-  const ord = hii.slice().sort((a, b) => a.stella.T - b.stella.T), q = (o) => riga(o, 'OIII') / riga(o, 'Hbeta'); assert.ok(q(ord[ord.length - 1]) > q(ord[0]) && q(ord[0]) < 0.3, `[O III]/Hβ da ${q(ord[0]).toExponential(1)} (${ord[0].stella.T.toFixed(0)} K) a ${q(ord[ord.length - 1]).toFixed(2)} (${ord[ord.length - 1].stella.T.toFixed(0)} K)`);
+  // [O III]/Hβ cresce con la temperatura della stella. Si guarda su TUTTE le regioni H II di quel volume, non su quelle che
+  // la nebbia mostra (le più grandi): con gli anelli e le nascite di galassie.js di ora, tra le mostrate attorno al Sole la
+  // stella più fredda ha 33500 K, cioè è una stella O anche lei ([O III]/Hβ 0,5); tra tutte, la più fredda ne ha 25000
+  const ord = V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 1.2 }, 0, { caso: CASO, catalogo: CAT, massimo: 1e9, tipi: ['regione H II'] }).oggetti.sort((a, b) => a.stella.T - b.stella.T), q = (o) => riga(o, 'OIII') / riga(o, 'Hbeta'); assert.ok(q(ord[ord.length - 1]) > q(ord[0]) && q(ord[0]) < 0.3, `[O III]/Hβ da ${q(ord[0]).toExponential(1)} (${ord[0].stella.T.toFixed(0)} K) a ${q(ord[ord.length - 1]).toFixed(2)} (${ord[ord.length - 1].stella.T.toFixed(0)} K)`);
   // la sfera di Strömgren nel gas diffuso: R³ = 3Q/(4π·α_B·n_e·n_p)
   for (const o of hii.filter((x) => x.stato === 'nel gas diffuso').slice(0, 10)) { const aB = 2.59e-19 * Math.pow(o.T / 1e4, -0.7); tra(o.raggio / Math.cbrt((3 * o.ionizzanti) / (4 * Math.PI * aB * 1.1 * o.nH ** 2)), 0.999, 1.001, 'Strömgren'); }
   // IL TERMOSTATO: la temperatura del gas non è data, esce dal bilancio; più metalli → più freddo → meno [O III] (a parità di stella)
@@ -437,7 +439,7 @@ prova('con il mondo vero di cosmo.js (cosmo 1): una galassia con il suo catalogo
 // ---------- i costi (misurati qui, a memorie già calde dove è scritto)
 { const N = 20000, c = sorgente('prova/costi'); let t = performance.now(); for (let i = 0; i < N; i++) V.contenuto(VL, { r: 1 + 15 * c(`r${i % 500}`), z: 0.05, fase: (i % 97) / 97 - 0.5 }); costo('contenuto(), un punto', (performance.now() - t) / N);
   t = performance.now(); const f2 = formaDaAlone({ massa: 1e12, spin: 0.045, fusioni: [] }, sorgente('prova/costi/galassia')); V.contenuto(f2, { r: 8, fase: 0 }); costo('contenuto(), il primo punto di una galassia nuova (la curva termica di un anello)', performance.now() - t);
-  t = performance.now(); V.quantiInTutto(f2); costo('censimento di una galassia nuova (14 anelli: curve termiche, gas molecolare, stelle; una volta)', performance.now() - t);
+  t = performance.now(); V.quantiInTutto(f2); costo(`censimento di una galassia nuova (${ANELLI} anelli: curve termiche, gas molecolare, stelle; una volta)`, performance.now() - t);
   t = performance.now(); const piccola = V.oggettiIn(VL, { centro: [SOLE, 0, 0], raggio: 0.05 }, 0, { caso: CASO }); costo(`oggettiIn, sfera di 50 pc, a censimento fatto (${piccola.oggetti.length} oggetti, ${piccola.celle} celle)`, performance.now() - t);
   t = performance.now(); const tutto = V.oggettiIn(VL, { centro: [0, 0, 0], raggio: 100 }, 0, { caso: CASO, catalogo: CAT }); costo(`oggettiIn, tutta la galassia con la nebbia (${tutto.oggetti.length} oggetti di ${num(Object.values(tutto.nebbia).reduce((s, x) => s + x.veri, 0))}; ${tutto.celle} celle)`, performance.now() - t); }
 

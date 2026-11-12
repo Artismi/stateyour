@@ -13,15 +13,19 @@
 //      stelle. Cadendo conserva il momento angolare e si posa in un DISCO di scala λ·R_vir/√2 (Mo, Mao & White):
 //      il gas di ogni passo porta il momento angolare che l'alone ha guadagnato in quel passo (ΔJ/ΔM, più della
 //      media: viene da più lontano), e si posa più in fuori (il disco cresce dall'interno verso l'esterno).
-//   3. LE STELLE. Anello per anello il gas diventa stelle con la legge di Kennicutt-Schmidt, dove il disco è
-//      instabile (criterio di Toomre); le supernove ne lanciano una parte fuori dall'alone (il vento, pagato con la
-//      loro energia), da dove ricade: presto in un alone grande, quasi mai in uno piccolo.
+//   3. LE STELLE. Anello per anello nasce stelle il gas MOLECOLARE, in circa due miliardi di anni; quanta parte del gas
+//      sia molecolare lo decide la pressione a metà dello strato (il peso del gas nel campo suo e delle stelle): quasi
+//      tutto dove il disco è denso, quasi niente ai bordi, senza soglie. Negli scoppi (gas molto denso) si fa più in
+//      fretta, e torna la pendenza 1,4 di Kennicutt. Le supernove lanciano una parte del gas fuori dall'alone (il
+//      vento, pagato con la loro energia), da dove ricade: presto in un alone grande, quasi mai in uno piccolo.
 //   4. I METALLI. Ogni generazione, morendo (chi e quando: le vite e i resti di stelle.js sulla distribuzione
 //      delle masse di leggi.js), restituisce al gas del suo anello il suo involucro e i metalli nuovi; il gas che
 //      arriva da fuori è povero e diluisce; il vento ne porta via. Z(tempo, raggio) è il BILANCIO di tutto questo,
 //      e ogni stella prende la Z del gas da cui nasce. Il bilancio è chiuso (forma.bilancio) e si controlla.
 //   5. LE FUSIONI. Un compagno entrato nell'alone scende al centro per attrito dinamico; se pesa abbastanza
-//      scompiglia il disco in uno SFEROIDE (il raggio dall'energia che si conserva) e il gas precipita al centro.
+//      scompiglia il disco in uno SFEROIDE (il raggio dall'energia che si conserva) e il gas precipita al centro, dove
+//      brucia in uno scoppio le cui stelle sono dello sferoide anche loro. Se pesa poco il disco resta, e al centro cade
+//      solo il gas che la fusione priva del momento angolare (quello più interno: Hopkins et al.).
 //      Il TIPO esce da qui: ellittica se più di quattro quinti delle stelle stanno nello sferoide, cioè una fusione
 //      grande e tardiva, oppure tante fusioni in un alone grande dove il gas non si raffredda più a rifare il disco;
 //      lenticolare se un disco c'è ma non ha più gas freddo per fare bracci; altrimenti spirale (anche con un grosso
@@ -46,6 +50,13 @@
 // guida, epiciclo, su e giù; nello sferoide la sua orbita); densitaGalassia() la forma continua (stelle, gas, polvere);
 // galassiaAlTempo() com'era a un altro tempo. Le leggi sono dichiarate accanto a quelle funzioni.
 //
+// LA LUCE E IL COLORE (per chi disegna): colorePerTemperatura() e coloreCorpoNero() danno il colore vero di un corpo nero
+// (Planck sulle curve dell'occhio, poi sRGB); popolazione() la luce di una generazione per ogni M☉ nata, passo d'età per
+// passo (luce: in tutto, L☉; luceV: quella che l'occhio vede; tinta: rosso, verde e blu lineari); luceGenerazione(età) e
+// luceNascite(τ) le stesse a un'età qualsiasi e per le stelle più giovani di τ. forma.anelli porta, anello per anello, la
+// luce e il colore del disco (luce, luceV, colore) e la parte delle stelle più giovani della vita di un braccio
+// (luceGiovani, luceVGiovani, coloreGiovani, vitaBraccio): è la luce dei bracci, senza fattori scelti.
+//
 // CHE COSA EMERGE (non è scritto: esce dalla catena): il tipo (spirale / lenticolare / ellittica), la massa in
 // stelle e in gas, la scala del disco e la sua crescita dall'interno, la curva di rotazione, la storia della
 // formazione stellare (presto e in fretta nelle giganti, lenta nelle piccole), Z(t, r) con la relazione
@@ -62,7 +73,14 @@
 //     (MNRAS 383, 93, eq. 5–6); la circolarità delle orbite: 0,5 ± 0,2 (Khochfar & Burkert 2006);
 //   · lo spin: distribuzione log-normale, mediana 0,035 e larghezza 0,5 (Bullock et al. 2001); qui NON è
 //     sorteggiato tutto: metà della varianza è il posto che la marea vera dei vicini ha tra quelle del cosmo;
-//   · il disco: R_d = λ·R_vir/√2 con le correzioni f_c e f_R di Mo, Mao & White 1998 (eq. 23 e 32);
+//   · il disco: R_d = λ′·R_vir/√2·f_R (Mo, Mao & White 1998, MNRAS 295, 319, eq. 28 e 32 [V]). Lo spin di qui è λ′ di
+//     Bullock et al. (J = √2·λ′·M·V·R), che vale λ·f_c^−½ con λ lo spin di Peebles che usano Mo, Mao & White (Bullock et al.
+//     2001, ApJ 555, 240, §2 [V]): la correzione f_c^−½ dell'eq. 28 è quindi già dentro λ′ (prima era applicata due volte, e i
+//     dischi venivano il 12% più piccoli), e in f_R entra λ = λ′·√f_c. Il gas che cade in un passo si distribuisce in raggio
+//     come un disco esponenziale con quella scala;
+//   · GLI ANELLI sono in unità di quella scala (R_d0: quella che avrebbe oggi un disco con lo spin dell'alone): da
+//     0,079·R_d0 a 8·R_d0 (dentro il primo bordo e fuori dall'ultimo sta la stessa parte, lo 0,3%, di un disco
+//     esponenziale), con i bordi in progressione geometrica: ogni anello è largo il 27% del suo raggio;
 //   · il raffreddamento del gas caldo: curva di Sutherland & Dopita 1993, qui raccordata con potenze (a metalli
 //     zero: frenamento 2,4·10⁻²⁷·√T più le righe dell'elio 5·10⁻²³·(T/10⁵)^−1,5 erg cm³/s; i metalli: 1,6·10⁻¹⁹·Z/√T,
 //     McKee & Cowie 1977). È un raccordo fatto a memoria, buono entro un fattore ~1,5 tra 10⁵ e 10⁸ K;
@@ -73,15 +91,28 @@
 //     (M_bn/10⁸)·(f_caldo/0,1)·(V/200)³, resa 0,1). È una legge dei modelli semi-analitici, non una misura;
 //   · il gas lanciato fuori dall'alone ci ricade in 18 Ga·(10¹⁰ M☉/M_alone) (Henriques et al. 2013, MNRAS 431,
 //     3373: anche questa dai modelli semi-analitici): subito in una galassia grande (una fontana), mai in una nana;
-//   · Kennicutt-Schmidt: Σ_SFR = 2,5·10⁻⁴·(Σ_gas/M☉pc⁻²)^1,4 M☉/anno/kpc² (Kennicutt 1998, ApJ 498, 541), sopra la
-//     soglia Σ_crit = 0,69·κ·σ_g/(3,36·G) con σ_g = 6 km/s (Kennicutt 1989; Martin & Kennicutt 2001);
+//   · LE NASCITE: Σ_SFR = ν₀·[1 + (Σ_gas/Σ₀)^q]·f_mol·Σ_gas. Il gas molecolare delle spirali fa stelle a ritmo costante,
+//     ν₀ = 0,525 ± 0,25 per Ga (Leroy et al. 2008, AJ 136, 2782 [V]; Bigiel et al. 2008, AJ 136, 2846: 2 Ga [V]); la parte
+//     molecolare viene dalla pressione, Σ_H2/Σ_HI = (P/P₀)^α con P₀/k_B = 10^4,23 K/cm³ e α = 0,80 (Leroy et al. 2008,
+//     tabella 6, le spirali [V]: l'idea è di Blitz & Rosolowsky 2006, ApJ 650, 933, che con una pressione senza il peso del
+//     gas trovano 10^4,54 e 0,92 [V]) e P = (π/2)·G·Σ_gas·(Σ_gas + Σ★·σ_g/σ★) (Elmegreen 1989 [R]; σ_g = 10 km/s, σ★ la
+//     dispersione verticale delle stelle di cinematica(): è la stessa pressione di vuoto_mezzo.js). Ad alta densità il
+//     fattore [1 + (Σ_gas/Σ₀)^q], Σ₀ = 200 M☉/pc² e q = 0,4, riporta alla pendenza 1,4 di Kennicutt 1998 (Lagos et al.
+//     2011, MNRAS 416, 1566, eq. 9 [V]: numeri scelti da loro). Σ_gas è tutto il gas, elio compreso; le masse sono di
+//     Kroupa (come in Leroy et al.). NIENTE SOGLIA: quella di Kennicutt 1989 (Σ_crit = 0,69·κ·σ_g/3,36G), che prima spegneva
+//     le nascite, non si vede nei dati (Leroy et al. 2008 [V]: «no clear evidence for a Q_gas threshold»); un anello non fa
+//     stelle solo se in un passo non arriva a farne una (una massa media di Kroupa) [D];
 //   · le rese: metalli nuovi di una supernova da collasso m_Z = (0,0118 + 0,00548·m)·m M☉ (Bailin & Harris 2009,
 //     ApJ 695, 1082; Bailin 2018, ApJ 863, 99, app. B: segue le tabelle di Nomoto et al. 2013 fino a 40 M☉);
 //     energia 10⁴⁴ J per supernova; una Ia brucia in metalli tutta la nana bianca (la massa di Chandrasekhar);
 //   · le Ia: ritardi ∝ t^−1,1, in tutto 1,3 ogni 1000 M☉ di stelle nate (Maoz & Graur 2017, ApJ 848, 25), a
 //     partire dalla morte della più grande stella che lascia una nana bianca (da stelle.js);
 //   · le fusioni: «maggiore» se i barioni del compagno sono più di 0,3 di quelli della galassia (Hopkins et al.
-//     2009); il raggio di ciò che resta: Cole et al. 2000 (energia conservata, c = 0,5, f_orb = 1);
+//     2009): tutte le stelle nello sferoide, tutto il gas al centro in uno scoppio che fa stelle dello sferoide (Cole et
+//     al. 2000 [R]); il raggio di ciò che resta: Cole et al. 2000 (energia conservata, c = 0,5, f_orb = 1). «Minore»: al
+//     centro cade solo il gas dentro R_gas = α·F·(1 − f_gas)·f_disco·2μ/(1 + μ)·R_d, con α = 1 e F = 1,2 la media sulle
+//     orbite (Hopkins et al. 2009, ApJ 691, 1168, eq. 7–9 e §5 [V]; dalle simulazioni); per il gas del compagno la stessa
+//     legge vista da lui (2/(1 + μ) al posto di 2μ/(1 + μ)) [D], e ciò che non cade si posa sul disco (Cole et al. 2000);
 //   · il buco nero: M_bn = 0,49·10⁹·(M_sferoide/10¹¹)^1,17 M☉, scarto 0,28 dex (Kormendy & Ho 2013); quanto è
 //     acceso oggi: frazioni di Eddington distribuite come λ^−0,65 (Aird et al. 2012);
 //   · i bracci: m = κ²R/(4πGΣ) (amplificatore di Toomre con X = 2: D'Onghia 2015); tan(passo) = (2/7)·√(4−2Γ)/Γ
@@ -108,9 +139,13 @@
 //     qui dà solo la «prossima fusione»); le fusioni avvenute sono con compagni che non ci sono più, estratti
 //     dalla legge del ritmo; ogni compagno è una galassia fatta con queste stesse leggi (senza fusioni sue);
 //   · la storia dell'alone è quella media della sua massa (niente scarto da alone ad alone, tranne le fusioni);
-//   · 14 anelli e 46 passi di 0,3 miliardi di anni: le stelle massicce muoiono «subito», lo scoppio di una
-//     fusione dura un passo; il gas dell'alone è isotermo, tutto alla stessa Z, e quello che si raffredda ha il
+//   · 20 anelli e 46 passi di 0,3 miliardi di anni: le stelle massicce muoiono «subito», lo scoppio di una
+//     fusione dura un passo (le stelle nate nel passo di una fusione maggiore sono tutte dello sferoide, anche le poche
+//     nate fuori dal centro); il gas dell'alone è isotermo, tutto alla stessa Z, e quello che si raffredda ha il
 //     momento angolare medio di quello che c'è (non quello degli strati interni, che cadono prima);
+//   · lo scoppio di una fusione avviene nell'anello centrale, qualunque sia la sua larghezza (0,079 scale del disco);
+//     il gas del compagno che non cade al centro prende la scala del disco di qui (il suo momento angolare non è seguito);
+//   · la pressione che fa le molecole conta le stelle del disco, non quelle dello sferoide;
 //   · niente migrazione radiale delle stelle, niente flussi radiali del gas; un solo numero Z per tutti i metalli
 //     (ossigeno e ferro insieme), e le giganti asintotiche restituiscono solo i metalli con cui sono nate;
 //   · la curva di rotazione: alone di Navarro-Frenk-White non contratto dai barioni, disco esponenziale sottile
@@ -119,18 +154,34 @@
 //   · la luce è quella di sequenza principale (stelle.js non ha ancora le giganti): serve solo per il colore.
 // CHE COSA NON TORNA (misurato in test/test_galassie.mjs, che stampa il confronto con la Via Lattea e i tipi). Niente
 // qui è tarato sulla Via Lattea, e si vede:
-//   · la Via Lattea della prova (alone 10¹², spin 0,04) fa 3,3·10¹⁰ M☉ di stelle (vera: 5–6) e gira a 189 km/s a 8 kpc
-//     (vera: 220–240): il suo gas caldo resta quasi senza metalli (il vento ne porta su pochi) e si raffredda piano;
+//   · la Via Lattea della prova (alone 10¹², spin 0,04) fa 3,0·10¹⁰ M☉ di stelle (vera: 5–6) e gira a 183 km/s a 8 kpc
+//     (vera: 220–240): il suo gas caldo resta quasi senza metalli (il vento ne porta su pochi) e si raffredda piano. Per
+//     questo ha anche troppo gas rispetto alle stelle (1,2·10¹⁰ M☉: vero 0,7–1,2), e il disco a 8 kpc cresce tardi: lì,
+//     4,6 Ga fa, il gas aveva 0,56 Z☉ (oggi 0,97; il gas vicino al Sole di allora ne aveva 0,7–0,9). Z = 1 allora c'era a
+//     5,2 kpc: senza migrazione delle stelle, il Sole del modello nasce lì (quello vero è nato a 4,4–7,7 kpc: Minchev et
+//     al. 2013). Il resto torna: scala 2,4 kpc, 2,6 M☉/anno, il massimo delle nascite a 5 kpc e il 95% entro 15, il
+//     gradiente dei metalli −0,06 dex/kpc (vero −0,04…−0,07), 2,5 Z☉ al centro;
 //   · gli aloni piccoli fanno troppe stelle: a 10¹¹ M☉ il 10% dell'alone è in stelle (nell'universo vero lo 0,5–1%), a
-//     3·10¹¹ l'11% (vero: 2%); il massimo dell'efficienza cade lì invece che a 10¹². Il vento che esce dalla fisica dei
+//     3·10¹¹ il 10% (vero: 2%); il massimo dell'efficienza cade lì invece che a 10¹². Il vento che esce dalla fisica dei
 //     resti (3% dell'energia) è troppo debole per le galassie piccole; e le rese di stelle.js (sopra 23 M☉ il nucleo
 //     ricade in un buco nero e non restituisce metalli: 0,74 Z☉ per M☉ nata) non ne lascerebbero perdere di più;
+//   · IL GAS CHIUSO SI ARRICCHISCE TROPPO. Dove il gas non riceve altro gas e non ne perde (il centro dopo una fusione
+//     maggiore; i dischi degli aloni grandi, che il buco nero tiene senza rifornimento) i metalli salgono come in una
+//     scatola chiusa, Z = resa·ln(1/frazione di gas): 3,5–5 Z☉ nel gas del centro delle galassie con fusioni (le più
+//     ricche vere: 2–3), e le stelle che nascono oggi nelle ellittiche hanno 3,5 Z☉ (nelle spirali 1,5). Sono poche: il
+//     3% di tutte le stelle ha più di 3 Z☉. Manca un vento che porti via i metalli appena fatti;
+//   · le ellittiche fanno ancora troppe stelle: per massa, un quinto delle spirali (0,007 contro 0,034 per Ga; vere:
+//     meno di un decimo), tutte nell'anello centrale, dal gas restituito dalle stelle nate lì dopo l'ultima fusione;
+//   · la legge di Kennicutt torna sull'intervallo intero (pendenza 1,41 da 3 a 10⁵ M☉/pc²), ma tra i soli scoppi è più
+//     piatta (1,2) e nei dischi di oggi, contando il gas atomico dei bordi, più ripida (1,8; è 1,4 sopra 10 M☉/pc²);
+//   · metà delle stelle di una galassia sta entro 1 kpc dal centro (nelle vere di questa massa entro 3–5): i dischi dei
+//     primi 4 Ga, quando l'alone è piccolo, sono minuscoli, e ogni fusione maggiore porta tutto il gas al centro;
 //   · tutte le galassie fanno le stelle presto (metà entro i primi 4 Ga; la Via Lattea vera a 5): le ellittiche non
 //     si distinguono dalle spirali per l'età delle stelle, ma per quando si sono messe insieme;
-//   · le galassie segnate sono le grandi (aloni da 4·10¹¹ a 2·10¹³ M☉, mediana 1,3·10¹²): metà sono ellittiche (41–49%
+//   · le galassie segnate sono le grandi (aloni da 4·10¹¹ a 2·10¹³ M☉, mediana 1,3·10¹²): metà sono ellittiche (44–53%
 //     nei tre cosmi provati; tra le galassie grandi vere, ellittiche e lenticolari sono circa metà; tra tutte il 10–20%).
-//     Nessuna lenticolare: un disco che resta tiene sempre abbastanza gas per i bracci;
-//   · il gradiente di Z nel disco è poco più di metà del vero (−0,03 contro −0,05 dex/kpc);
+//     Nessuna lenticolare: un disco che resta tiene sempre abbastanza gas per i bracci. Qualche galassia detta «spirale»
+//     ha solo un piccolo disco al centro, nato dopo l'ultima fusione (meno di quattro quinti delle stelle nello sferoide);
 //   · senza fusioni (la Via Lattea della prova) non c'è sferoide e il buco nero resta il germe: 10⁵ invece di 4·10⁶ M☉;
 //   · la legge del raffreddamento è un raccordo: da lei dipende quante stelle fa un alone di 10¹²;
 //   · le pulsar vengono debolissime (il campo delle stelle alla nascita, conservando il flusso, dà 10⁵–10⁹ T ma il
@@ -152,8 +203,11 @@ export const LEGGI = {
   circolarita: [0.5, 0.2],
   maggiore: 0.3, // sopra questo rapporto di barioni la fusione scompiglia il disco
   cole: 0.5, // Cole et al. 2000: l'energia dell'orbita nella fusione, f_orb/c con c = 0,5
-  KS: [2.5e-4, 1.4], // Kennicutt 1998
-  soglia: [0.69, 6, 3.36], // Σ_crit = α·κ·σ_g/(3,36·G), σ_g in km/s
+  KS: [2.5e-4, 1.4], // Kennicutt 1998 (ApJ 498, 541): Σ_SFR = 2,5·10⁻⁴·Σ_gas^1,4 M☉/anno/kpc², la media su un disco intero (idrogeno soltanto, masse di Salpeter). Qui NON è più la legge delle nascite: resta come riscontro (la prova la misura sugli anelli)
+  molecole: [10 ** 4.23, 0.8], // Σ_H2/Σ_HI = (P/P₀)^α: P₀/k_B (K·cm⁻³) e α. [V] Leroy et al. 2008 (AJ 136, 2782), tabella 6, «spirali, insieme»: misurati con la pressione di Elmegreen che si usa qui (con quella senza il peso del gas, Blitz & Rosolowsky 2006 trovano 10^4,54 e 0,92)
+  nascite: [0.525, 200, 0.4], // Σ_SFR = ν₀·[1 + (Σ_gas/Σ₀)^q]·f_mol·Σ_gas. ν₀ (Ga⁻¹): [V] Leroy et al. 2008, il gas molecolare delle spirali fa stelle in 1,9 Ga (5,25 ± 2,5·10⁻¹⁰ per anno; Bigiel et al. 2008: 2 Ga); Σ₀ (M☉/pc²) e q: [V] Lagos et al. 2011 (MNRAS 416, 1566), eq. 9, scelti da loro perché ad alta densità torni la pendenza 1,4 di Kennicutt
+  scoppio: [1, 1.2], // R_gas/R_d = α·F·(1 − f_gas)·f_disco·2μ/(1 + μ): [V] Hopkins et al. 2009 (ApJ 691, 1168), eq. 7–9 e §5: α «∼ 1», F ≈ 1,2 la media sulle orbite
+  soglia: [0.69, 6, 3.36], // Kennicutt 1989: Σ_crit = α·κ·σ_g/(3,36·G). NON è più un interruttore delle nascite (Leroy et al. 2008 non trovano soglie in Q). Resta il secondo numero, 6 km/s: la dispersione del gas freddo, con cui nascono le stelle (cinematica, vuoto_mezzo.js)
   sigmaGas: 10, // (km/s) la dispersione del gas neutro, per il Q dei bracci
   Qstelle: 2, // PARAMETRO LIBERO
   resa: [0.0118, 0.00548], // m_Z = (B + C·m)·m (Bailin & Harris 2009)
@@ -175,7 +229,7 @@ export const LEGGI = {
   corotazione: 1.2, // la corotazione di una barra, in lunghezze della barra (misurato: Aguerri et al. 2003)
   polvere: 0.5, // la parte dei metalli del gas che sta nei grani di polvere (misurato nella Via Lattea: Draine 2011)
 };
-export const ANELLI = 14, PASSI = 46, RESTI = 8;
+export const ANELLI = 20, PASSI = 46, RESTI = 8;
 
 // ---------- le unità: masse solari, kpc, miliardi di anni (Ga), km/s
 const KPC = 3.0857e19, MPC = 1e3 * KPC, GA = 1e9 * ANNO, KMS = (1e3 * GA) / KPC; // 1 km/s in kpc/Ga
@@ -248,16 +302,43 @@ function fuga2(m, r) {
 // il raffreddamento del gas caldo (W·m³, per n_e·n_H): vedi l'intestazione
 const lambda = (T, Z) => 1e-13 * (2.4e-27 * Math.sqrt(T) + 5e-23 * Math.pow(Math.max(T, 1e5) / 1e5, -1.5) + (T < 4e7 ? (1.6e-19 * Z) / Math.sqrt(Math.max(T, 1e5)) : 0));
 const MU_CALDO = 1 / (2 * (1 - YPRIMO) + 0.75 * YPRIMO), T_VIR = (MU_CALDO * COSTANTI.mp * 1e6) / (2 * COSTANTI.kB); // T = T_VIR·V² (K, V in km/s)
+// la pressione a metà dello strato di gas, in unità di P₀: P/P₀ = C_PRESS·Σg·(Σg + Σ★·σg/σ★), con Σ in M☉/kpc² (Elmegreen 1989)
+const C_PRESS = (0.5 * Math.PI * COSTANTI.G * (MSOLE / KPC ** 2) ** 2) / (LEGGI.molecole[0] * 1e6 * COSTANTI.kB);
 const K_COOL = (1.5 * COSTANTI.kB * COSTANTI.mp) / (MU_CALDO * (1 + YPRIMO / (2 * (1 - YPRIMO))) * (1 - YPRIMO) ** 2); // t = K·T/(ρ·Λ)
 
 // ---------- LE POPOLAZIONI DI STELLE: per ogni M☉ nata con la distribuzione di Kroupa, quanto gas torna, quanti
 // metalli nuovi, quante supernove, in funzione del tempo passato (in passi di DT). Le vite e i resti: stelle.js.
 const Z_TAB = [0.02, 0.2, 1, 2.5];
 const tabellaZ = (Z) => (Z < 0.063 ? 0 : Z < 0.45 ? 1 : Z < 1.6 ? 2 : 3);
-export const colorePerTemperatura = (T) => { // da rossa (3000 K) a azzurra (20000 K)
-  const t = stringi(Math.log(T / 3000) / Math.log(20000 / 3000), 0, 1);
-  return [Math.round(255 - 40 * t), Math.round(150 + 90 * t - 20 * t * t), Math.round(90 + 165 * t)];
-};
+// IL COLORE VERO DI UN CORPO NERO (delle stelle, e della luce di una generazione). Lo spettro di Planck [D] pesato con le
+// tre curve di sensibilità dell'occhio (CIE 1931, nell'approssimazione a campane di Wyman, Sloan & Shirley 2013, J. Comput.
+// Graph. Tech. 2, 1 [R]: gli stessi numeri di `occhio` in vuoto_mezzo.js, che sta a valle e non si può leggere da qui), poi
+// da XYZ a rosso, verde e blu LINEARI con la matrice dello standard sRGB (IEC 61966-2-1) [R]. Nessun numero scelto: a
+// 5772 K (il Sole) viene un bianco appena caldo, a 9500 K un bianco azzurro, a 3000 K un arancio.
+const H_PLANCK = 2 * Math.PI * COSTANTI.hbar, campanaCIE = (l, mu, s1, s2) => Math.exp(-0.5 * ((l - mu) / (l < mu ? s1 : s2)) ** 2);
+const occhioCIE = (nm) => [1.056 * campanaCIE(nm, 599.8, 37.9, 31.0) + 0.362 * campanaCIE(nm, 442.0, 16.0, 26.7) - 0.065 * campanaCIE(nm, 501.1, 20.4, 26.2),
+  0.821 * campanaCIE(nm, 568.8, 46.9, 40.5) + 0.286 * campanaCIE(nm, 530.9, 16.3, 31.1), 1.217 * campanaCIE(nm, 437.0, 11.8, 36.0) + 0.681 * campanaCIE(nm, 459.0, 26.0, 13.8)];
+const aLineare = (X, Y, Zc) => [3.2406 * X - 1.5372 * Y - 0.4986 * Zc, -0.9689 * X + 1.8758 * Y + 0.0415 * Zc, 0.0557 * X - 0.204 * Y + 1.057 * Zc];
+// X, Y, Z di un corpo nero per ogni watt che irradia in tutto (σT⁴): la parte della sua luce che l'occhio vede, nei tre
+// canali. Una tabella in ln T (da 800 a 200 000 K), fatta una volta: l'integrale di π·B_λ·x̄ da 360 a 830 nm
+const xyzNero = (() => {
+  const N = 220, L0 = Math.log(800), L1 = Math.log(2e5), tab = new Float64Array(3 * (N + 1)), NL = 94, occhi = Array.from({ length: NL }, (_, i) => occhioCIE(362.5 + 5 * i));
+  for (let j = 0; j <= N; j++) {
+    const T = Math.exp(L0 + ((L1 - L0) * j) / N), x0 = (H_PLANCK * COSTANTI.c) / (COSTANTI.kB * T); let X = 0, Y = 0, Zc = 0;
+    for (let i = 0; i < NL; i++) { const l = (362.5 + 5 * i) * 1e-9, b = (2 * Math.PI * H_PLANCK * COSTANTI.c ** 2 * 5e-9) / (l ** 5 * Math.expm1(x0 / l)) / (COSTANTI.sigma * T ** 4); X += b * occhi[i][0]; Y += b * occhi[i][1]; Zc += b * occhi[i][2]; }
+    tab[3 * j] = Math.log(X); tab[3 * j + 1] = Math.log(Y); tab[3 * j + 2] = Math.log(Zc);
+  }
+  return (T) => { const x = ((stringi(Math.log(T), L0, L1) - L0) / (L1 - L0)) * N, j = Math.min(N - 1, Math.floor(x)), u = x - j; return [0, 1, 2].map((c) => Math.exp(tab[3 * j + c] * (1 - u) + tab[3 * j + 3 + c] * u)); };
+})();
+const Y_SOLE = xyzNero(5772)[1]; // la parte visibile (pesata con la curva dell'occhio) della luce di un corpo nero come il Sole
+// da rosso, verde e blu lineari (anche negativi: un colore fuori dal triangolo sRGB) a un colore che si può mostrare: si
+// stinge verso il grigio di pari luminanza finché entra nel triangolo (come coloreVero di vuoto_mezzo.js), poi il canale più forte a 1
+const nelTriangolo = (rgb) => { const Y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2], m0 = Math.min(rgb[0], rgb[1], rgb[2]), v = m0 < 0 && Y > m0 ? rgb.map((x) => x + (Y - x) * (m0 / (m0 - Y))) : rgb, mx = Math.max(v[0], v[1], v[2], 1e-300); return v.map((x) => Math.max(0, x) / mx); };
+const gammaSRGB = (v) => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055), a255 = (lin) => nelTriangolo(lin).map((v) => Math.round(255 * gammaSRGB(v)));
+// → [rosso, verde, blu] LINEARI, il più forte a 1 (per chi somma luce o la dà a una scheda grafica)
+export const coloreCorpoNero = (T) => nelTriangolo(aLineare(...xyzNero(T)));
+// → [rosso, verde, blu] da 0 a 255, già con la curva dello schermo (per chi lo mostra così com'è: il campo `colore` delle stelle)
+export const colorePerTemperatura = (T) => a255(aLineare(...xyzNero(T)));
 const resaCollasso = (m) => (LEGGI.resa[0] + LEGGI.resa[1] * m) * m;
 let POP = null;
 export function popolazione() {
@@ -285,14 +366,37 @@ export function popolazione() {
       for (let q = 0; q < 12; q++) ia += Ia((L + (q + 0.5) / 12) * DT) / 12;
       cR[L + 1] = r / mm; cP[L + 1] = p / mm; cN[L + 1] = n / mm; cI[L + 1] = ia; // (l'indice è L + 1: cX[0] = 0 è «prima di nascere»)
     }
-    return { Z, vita, reso, sn, cR, cP, cN, cI, tIa, nSN: nSN / mm, uSN };
+    // ciò che una generazione restituisce NEL passo di ritardo L (tra L − 1 e L), per M☉ nata: [gas in tutto, la parte che porta i
+    // metalli di nascita, i metalli nuovi, le supernove da collasso, le Ia]
+    const k5 = new Float64Array(5 * (PASSI + 1));
+    for (let L = 0; L <= PASSI; L++) { const g = cR[L + 1] - cR[L], p = cP[L + 1] - cP[L], ia = cI[L + 1] - cI[L]; k5[5 * L] = g + ia * MCH; k5[5 * L + 1] = g - p; k5[5 * L + 2] = p + ia * MCH; k5[5 * L + 3] = cN[L + 1] - cN[L]; k5[5 * L + 4] = ia; }
+    return { Z, vita, reso, sn, cR, cP, cN, cI, k5, tIa, nSN: nSN / mm, uSN };
   });
-  // la luce e il colore di una generazione (a metà della vita di ogni stella, metalli del Sole): per il colore della galassia
-  const luce = new Float64Array(PASSI + 1), tinta = new Float64Array(3 * (PASSI + 1)), L1 = new Float64Array(N), C1 = [];
-  for (let i = 0; i < N; i++) { const s = ST.stella(m[i], { Z: 1 }); L1[i] = s.L; C1.push(colorePerTemperatura(s.T)); }
-  for (let L = 0; L <= PASSI; L++) for (let i = 0; i < N; i++) { const viva = 1 - stringi(L + 1 - tab[2].vita[i] / DT, 0, 1), l = (w[i] * L1[i] * viva) / mm; luce[L] += l; for (let c = 0; c < 3; c++) tinta[3 * L + c] += l * C1[i][c]; }
-  return (POP = { N, m, w, massaMedia: mm, tab, MCH, luce, tinta });
+  // LA LUCE E IL COLORE DI UNA GENERAZIONE, per ogni M☉ nata (a metà della vita di ogni stella, metalli del Sole; solo la
+  // sequenza principale). Di ogni massa: L1 la luce in tutto (L☉), V1 quella che l'occhio vede (in unità di quella del Sole:
+  // L·Y(T)/Y(5772 K)), C1 la stessa divisa in rosso, verde e blu lineari (si sommano come si somma la luce).
+  // Per passo d'età L (la generazione nata nel passo j, vista nel passo j + L): luce[L], luceV[L], tinta[3L…] (lineari).
+  const luce = new Float64Array(PASSI + 1), luceV = new Float64Array(PASSI + 1), tinta = new Float64Array(3 * (PASSI + 1)), L1 = new Float64Array(N), V1 = new Float64Array(N), C1 = new Float64Array(3 * N), vita1 = tab[2].vita;
+  for (let i = 0; i < N; i++) { const s = ST.stella(m[i], { Z: 1 }), q = xyzNero(s.T), c = aLineare(q[0], q[1], q[2]); L1[i] = (w[i] * s.L) / mm; V1[i] = (L1[i] * q[1]) / Y_SOLE; for (let d = 0; d < 3; d++) C1[3 * i + d] = (L1[i] * c[d]) / Y_SOLE; }
+  for (let L = 0; L <= PASSI; L++) for (let i = 0; i < N; i++) { const viva = 1 - stringi(L + 1 - vita1[i] / DT, 0, 1); luce[L] += L1[i] * viva; luceV[L] += V1[i] * viva; for (let c = 0; c < 3; c++) tinta[3 * L + c] += C1[3 * i + c] * viva; }
+  // la luce di tutte le stelle più giovani di τ dove le nascite vanno a ritmo costante, per ogni M☉/Ga di nascite: ∫₀^τ della
+  // luce di una generazione = Σ L·min(vita, τ). Una tabella in ln τ (da 10⁵ anni all'età dell'universo): [luce, visibile, r, g, b]
+  const NG = 96, G0 = Math.log(1e-4), G1 = Math.log(T0), giovani = new Float64Array(5 * (NG + 1));
+  for (let a = 0; a <= NG; a++) { const tau = Math.exp(G0 + ((G1 - G0) * a) / NG); for (let i = 0; i < N; i++) { const d = Math.min(vita1[i], tau); giovani[5 * a] += L1[i] * d; giovani[5 * a + 1] += V1[i] * d; for (let c = 0; c < 3; c++) giovani[5 * a + 2 + c] += C1[3 * i + c] * d; } }
+  // (fino a τ, canale q: sotto 10⁵ anni cresce in proporzione, perché nessuna stella è ancora morta)
+  const finoA = (tau, q) => { if (!(tau > 0)) return 0; const lt = Math.log(tau); if (lt <= G0) return giovani[q] * (tau / 1e-4); const x = ((Math.min(lt, G1) - G0) / (G1 - G0)) * NG, a = Math.min(NG - 1, Math.floor(x)); return giovani[5 * a + q] + (x - a) * (giovani[5 * a + 5 + q] - giovani[5 * a + q]); };
+  return (POP = { N, m, w, massaMedia: mm, tab, MCH, luce, luceV, tinta, L1, V1, C1, finoA });
 }
+// LA LUCE DI UNA GENERAZIONE di età data (Ga), per ogni M☉ nata: la somma sulle stelle ancora vive (sequenza principale,
+// metalli del Sole) → { luce (L☉/M☉, in tutto), visibile (in unità di quella del Sole), colore: [r, g, b] lineari (il più forte a 1) }
+export function luceGenerazione(etaGa) {
+  const P = popolazione(), v = P.tab[2].vita, c = [0, 0, 0]; let l = 0, y = 0;
+  for (let i = 0; i < P.N; i++) if (v[i] > etaGa) { l += P.L1[i]; y += P.V1[i]; c[0] += P.C1[3 * i]; c[1] += P.C1[3 * i + 1]; c[2] += P.C1[3 * i + 2]; }
+  return { luce: l, visibile: y, colore: nelTriangolo(c) };
+}
+// LA LUCE DELLE STELLE PIÙ GIOVANI DI τ (Ga) dove le nascite vanno a ritmo costante, per ogni M☉/anno di nascite
+// → { luce (L☉), visibile (in unità di quella del Sole), colore: [r, g, b] lineari }. (I bracci: τ = bracci.vita(r).)
+export function luceNascite(tauGa) { const P = popolazione(); return { luce: P.finoA(tauGa, 0) * 1e9, visibile: P.finoA(tauGa, 1) * 1e9, colore: nelTriangolo([P.finoA(tauGa, 2), P.finoA(tauGa, 3), P.finoA(tauGa, 4)]) }; }
 
 // ---------- L'ALONE: dal picco alla massa; la storia; le fusioni; lo spin dalle maree dei vicini
 // La regione del picco ha sovradensità lineare δ = peso·σ_onde. Dentro, una fluttuazione piccola alta `raro` scarti
@@ -408,6 +512,11 @@ export function aloneGalassia(G, vicini = [], caso = sorgente('galassia'), opz =
 }
 
 // ---------- L'EVOLUZIONE: alone → gas → disco → stelle → metalli, su ANELLI anelli e nt passi di DT
+// GLI ANELLI: in unità della scala R_d0 che avrebbe oggi un disco con lo spin dell'alone (Mo, Mao & White). Il bordo esterno
+// a FUORI = 8 scale (oltre resta 9·e⁻⁸ = 0,3% di un disco esponenziale); il primo bordo dove la STESSA parte sta all'interno
+// (1 − (1 + x)·e⁻ˣ = 9·e⁻⁸: x = DENTRO = 0,079); in mezzo i bordi sono in progressione geometrica (ogni anello è largo la
+// stessa frazione del suo raggio: con 20 anelli il 27%), perché i dischi di ogni epoca, piccoli e grandi, siano risolti
+const FUORI = 8, DENTRO = (() => { const f = (1 + FUORI) * Math.exp(-FUORI); let x = Math.sqrt(2 * f); for (let i = 0; i < 30; i++) x -= (1 - (1 + x) * Math.exp(-x) - f) / (x * Math.exp(-x)); return x; })();
 const satelliti = new Map();
 function satellite(Malone, passo) { // un compagno: la stessa fisica, senza fusioni sue, fermata quando entra nell'alone
   const lg = Math.round(Math.log10(Malone) * 5) / 5, k = `${lg}|${passo}`;
@@ -418,24 +527,29 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   const P = popolazione(), NR = ANELLI, M0 = Mh[nt], aN = U.scala(nt * DT), fb = U.fb;
   // la scala del disco in cui si posa gas con momento angolare specifico jg (kpc·km/s): R = jg/(2V), cioè λ·R_vir/√2
   // per il gas che ha lo spin dell'alone, con le correzioni di Mo, Mao & White per la concentrazione e il peso del disco
-  const cadutaDi = (jg, Rv, Vv, c, md) => { const l = stringi(jg / (Math.SQRT2 * Rv * Vv), 0.005, 0.2), fc = 2 / 3 + Math.pow(c / 21.5, 0.7), fR = Math.pow(l / 0.1, -0.06 + 2.71 * md + 0.0047 / l) * (1 - 3 * md + 5.2 * md * md) * (1 - 0.019 * c + 0.00025 * c * c + 0.52 / c); return ((l * Rv) / Math.SQRT2 / Math.sqrt(fc)) * fR; };
+  const cadutaDi = (jg, Rv, Vv, c, md) => { const lB = stringi(jg / (Math.SQRT2 * Rv * Vv), 0.005, 0.2), l = lB * Math.sqrt(2 / 3 + Math.pow(c / 21.5, 0.7)), fR = Math.pow(l / 0.1, -0.06 + 2.71 * md + 0.0047 / l) * (1 - 3 * md + 5.2 * md * md) * (1 - 0.019 * c + 0.00025 * c * c + 0.52 / c); return ((lB * Rv) / Math.SQRT2) * fR; };
   const momento = (M, a) => { const Rv = raggioViriale(M, a); return Math.SQRT2 * spin * M * Rv * Math.sqrt((GK * M) / Rv); }; // il momento angolare dell'alone
   // gli anelli: fino a 8 volte la scala che avrebbe oggi un disco con lo spin medio dell'alone, più fitti al centro
-  const RvN = raggioViriale(M0, aN), Rg = 8 * cadutaDi(momento(M0, aN) / M0, RvN, Math.sqrt((GK * M0) / RvN), concentrazione(M0, aN), 0.05), bordo = Float64Array.from({ length: NR + 1 }, (_, k) => Rg * Math.pow(k / NR, 1.4)), rc = new Float64Array(NR), area = new Float64Array(NR);
-  for (let k = 0; k < NR; k++) { area[k] = Math.PI * (bordo[k + 1] ** 2 - bordo[k] ** 2); rc[k] = ((2 / 3) * (bordo[k + 1] ** 3 - bordo[k] ** 3)) / (bordo[k + 1] ** 2 - bordo[k] ** 2); }
-  const gas = new Float64Array(NR), met = new Float64Array(NR), nati = new Float64Array((nt + 1) * NR), Zn = new Float32Array((nt + 1) * NR), iz = new Uint8Array((nt + 1) * NR);
+  const RvN = raggioViriale(M0, aN), Rd0 = cadutaDi(momento(M0, aN) / M0, RvN, Math.sqrt((GK * M0) / RvN), concentrazione(M0, aN), 0.05), Rg = FUORI * Rd0, Rin = DENTRO * Rd0;
+  const bordo = Float64Array.from({ length: NR + 1 }, (_, k) => (k === 0 ? 0 : Rin * Math.pow(Rg / Rin, (k - 1) / (NR - 1)))), rc = new Float64Array(NR), area = new Float64Array(NR), lrc = new Float64Array(NR);
+  for (let k = 0; k < NR; k++) { area[k] = Math.PI * (bordo[k + 1] ** 2 - bordo[k] ** 2); rc[k] = ((2 / 3) * (bordo[k + 1] ** 3 - bordo[k] ** 3)) / (bordo[k + 1] ** 2 - bordo[k] ** 2); lrc[k] = Math.log(rc[k]); }
+  const gas = new Float64Array(NR), met = new Float64Array(NR), nati = new Float64Array((nt + 1) * NR), Zn = new Float32Array((nt + 1) * NR), iz = new Uint8Array((nt + 1) * NR), Sg = new Float32Array((nt + 1) * NR); // (Sg: il gas, in M☉/kpc², da cui sono nate le stelle di quel passo in quell'anello: per misurare la legge delle nascite)
   // (le stelle portate dalle fusioni: per passo di nascita e per tabella di metalli, perché ognuna continui a vivere con le sue vite)
-  const NE = nt + 1, est = new Float64Array(4 * NE), estZ = new Float64Array(4 * NE), haEst = new Uint8Array(NE), Zt = new Float32Array((nt + 1) * NR), V = new Float64Array(NR), dove = new Float64Array(NR);
+  const NE = nt + 1, est = new Float64Array(4 * NE), estZ = new Float64Array(4 * NE), haEst = new Uint8Array(NE), Zt = new Float32Array((nt + 1) * NR), V2 = new Float64Array(NR), F2 = new Float64Array(NR), dove = new Float64Array(NR);
   const S = { sfr: new Float64Array(nt + 1), gas: new Float64Array(nt + 1), stelle: new Float64Array(nt + 1), caldo: new Float64Array(nt + 1), collasso: new Float64Array(nt + 1), Ia: new Float64Array(nt + 1), freddo: new Uint8Array(nt + 1) };
   const B = { caduto: 0, cadutoZ: 0, vento: 0, ventoZ: 0, prodotti: 0, alCaldo: 0, alCaldoZ: 0, fusioniStelle: 0, fusioniStelleZ: 0, fusioniGas: 0, fusioniGasZ: 0, resi: 0 };
-  const [ksA, ksN] = LEGGI.KS, ESN = LEGGI.energiaSN / MSOLE / 1e6, eSN = P.tab[2].nSN * ESN; // l'energia di una supernova in M☉·(km/s)², e per unità di massa nata in (km/s)²
+  const [, aMol] = LEGGI.molecole, [nu0, S0, qS] = LEGGI.nascite, lS0 = Math.log(S0 * 1e6), S0k = S0 * 1e6, sFreddo = LEGGI.soglia[1], kSigZ = LEGGI.rapportoVerticale * LEGGI.Qstelle * 3.36 * GK, mUna = P.massaMedia, ESN = LEGGI.energiaSN / MSOLE / 1e6, eSN = P.tab[2].nSN * ESN; // l'energia di una supernova in M☉·(km/s)², e per unità di massa nata in (km/s)²
+  // (per il vento: la densità del gas in cm⁻³ è Σ·e^lnGas, non meno di 10⁻³; la parte dell'energia che resta in moto è cResta·n^esponente)
+  const lnGas = Math.log(MSOLE / KPC ** 2 / (2 * LEGGI.spessoreGas * KPC) / (1.4 * COSTANTI.mp) / 1e6), LN_RADO = Math.log(1e-3), cResta = (LEGGI.momentoSN[0] * LEGGI.sigmaGas) / (2 * ESN);
+  // (le stelle nate nel disco, anello per anello; e, passo per passo e per tabella di metalli, tutte le nate qui e i loro metalli)
+  const nd = new Float64Array(NR), natiQ = new Float64Array(4 * NE), natiQZ = new Float64Array(4 * NE), NK = 5 * (nt + 1), K5 = new Float64Array(4 * NK); for (let q = 0; q < 4; q++) K5.set(P.tab[q].k5.subarray(0, NK), q * NK);
   let caldo = 0, caldoZ = 0, caldoJ = 0, fuori = 0, fuoriZ = 0, fuoriJ = 0, sferoideFino = 0, Mdisco = 0, Msfer = 0, Rsfer = 0, Rd = 0.05 * Rg, ultimaMaggiore = 0, Jprima = 0;
   const arrivi = fusioni.filter((f) => f.passoArrivo <= nt), entrate = fusioni.filter((f) => f.passo <= nt);
   // ciò che una generazione di massa m nata al passo i (tabella q) restituisce tra il ritardo L0 e il ritardo L1
   // (zb: i metalli con cui era nata, in frazione di massa). R = [gas, metalli che porta, supernove da collasso, Ia, metalli NUOVI]
   const R = [0, 0, 0, 0, 0];
   const rende = (m, q, L0, L1, zb) => { const T = P.tab[q], ia = m * (T.cI[L1 + 1] - T.cI[L0 + 1]), mia = ia * P.MCH, nuovi = m * (T.cP[L1 + 1] - T.cP[L0 + 1]), g = m * (T.cR[L1 + 1] - T.cR[L0 + 1]); R[0] = g + mia; R[1] = zb * (g - nuovi) + nuovi + mia; R[2] = m * (T.cN[L1 + 1] - T.cN[L0 + 1]); R[3] = ia; R[4] = (nuovi + mia) * (1 - zb); };
-  const metaMassa = () => { let tot = 0, s = 0; for (let k = 0; k < NR; k++) tot += dove[k]; if (!(tot > 0)) return Rd * 1.68; for (let k = 0; k < NR; k++) { if (s + dove[k] >= 0.5 * tot) return bordo[k] + ((0.5 * tot - s) / dove[k]) * (bordo[k + 1] - bordo[k]); s += dove[k]; } return bordo[NR]; };
+  const metaMassa = (dove) => { let tot = 0, s = 0; for (let k = 0; k < NR; k++) tot += dove[k]; if (!(tot > 0)) return Rd * 1.68; for (let k = 0; k < NR; k++) { if (s + dove[k] >= 0.5 * tot) return bordo[k] + ((0.5 * tot - s) / dove[k]) * (bordo[k + 1] - bordo[k]); s += dove[k]; } return bordo[NR]; };
   for (let j = 1; j <= nt; j++) {
     const t = j * DT, a = U.scala(t), Rv = raggioViriale(Mh[j], a), Vv = Math.sqrt((GK * Mh[j]) / Rv), c = concentrazione(Mh[j], a);
     // 1. la materia che entra: liscia, oppure in un compagno (che porta il suo gas caldo all'alone e resta in orbita)
@@ -465,21 +579,38 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
       B.fusioniStelle += ms; B.fusioniStelleZ += msZ; B.fusioniGas += mg; B.fusioniGasZ += s.gasZ * scala;
       const Rs = Math.max(s.raggioMeta * Math.cbrt(scala), 1e-3), unisci = (M1, R1, M2, R2) => (M1 + M2) ** 2 / (M1 * M1 / R1 + M2 * M2 / R2 + (M1 * M2) / (LEGGI.cole * (R1 + R2)));
       if (rb >= LEGGI.maggiore) {
-        // maggiore: tutte le stelle di prima finiscono nello sferoide, e il gas di tutti gli anelli precipita al centro
-        for (let k = 0; k < NR; k++) dove[k] = 0; for (let i = Math.max(1, sferoideFino); i < j; i++) for (let k = 0; k < NR; k++) dove[k] += nati[i * NR + k];
-        const M1 = Mdisco + Msfer, R1 = M1 > 0 ? (Mdisco * metaMassa() + Msfer * Rsfer) / M1 : Rs;
-        Rsfer = M1 > 0 ? unisci(M1, Math.max(R1, 1e-3), Math.max(ms, 1e-9), Rs) : Rs; Msfer += Mdisco + ms; Mdisco = 0; sferoideFino = j; ultimaMaggiore = t; f.tipo = 'maggiore';
+        // MAGGIORE (Cole et al. 2000): il disco è distrutto. Tutte le stelle di prima finiscono nello sferoide; il gas di tutti gli
+        // anelli, e quello del compagno, precipita al centro e lì brucia in uno scoppio, le cui stelle sono dello sferoide anche
+        // loro (lo scoppio dura un passo: sono dello sferoide le nate fino a questo passo compreso, sferoideFino = j + 1)
+        const M1 = Mdisco + Msfer, R1 = M1 > 0 ? (Mdisco * metaMassa(nd) + Msfer * Rsfer) / M1 : Rs;
+        Rsfer = M1 > 0 ? unisci(M1, Math.max(R1, 1e-3), Math.max(ms, 1e-9), Rs) : Rs; Msfer += Mdisco + ms; Mdisco = 0; sferoideFino = j + 1; ultimaMaggiore = t; f.tipo = 'maggiore'; nd.fill(0);
         let g = mg, z = s.gasZ * scala; for (let k = 0; k < NR; k++) { g += gas[k]; z += met[k]; gas[k] = 0; met[k] = 0; } gas[0] = g; met[0] = z;
       } else {
-        Rsfer = Msfer > 0 ? unisci(Msfer, Rsfer, Math.max(ms, 1e-9), Rs) : Rs; Msfer += ms; gas[0] += mg; met[0] += s.gasZ * scala; f.tipo = 'minore';
+        // MINORE: il disco resta. Le stelle del compagno vanno nello sferoide. IL GAS (Hopkins et al. 2009): perde il momento
+        // angolare, e cade al centro, solo quello dentro R_gas = α·F·(1 − f_gas)·f_disco·G(μ)·R_d (f_gas: la parte del disco che è
+        // gas; f_disco: la parte dei barioni che è disco; μ il rapporto dei barioni); il resto resta dov'è. Vale per il disco di
+        // qui, G = 2μ/(1 + μ), e per quello del compagno (un disco esponenziale senza sferoide, che sente un compagno 1/μ:
+        // G = 2/(1 + μ)); il gas del compagno che non cade si posa sul disco di qui, con la sua scala
+        Rsfer = Msfer > 0 ? unisci(Msfer, Rsfer, Math.max(ms, 1e-9), Rs) : Rs; Msfer += ms; f.tipo = 'minore';
+        const [aH, fH] = LEGGI.scoppio, mu = rb, dT = barioni - (Msfer - ms), gT = dT - Mdisco;
+        if (gT > 0) { const Rgas = aH * fH * (1 - gT / dT) * (dT / barioni) * ((2 * mu) / (1 + mu)) * Rd; for (let k = 1; k < NR && bordo[k] < Rgas; k++) { if (!(gas[k] > 0)) continue; const w = Math.min(1, (Rgas * Rgas - bordo[k] ** 2) / (bordo[k + 1] ** 2 - bordo[k] ** 2)), m = w * gas[k], mz = w * met[k]; gas[k] -= m; met[k] -= mz; gas[0] += m; met[0] += mz; } }
+        if (mg > 0) { const x = aH * fH * (1 - mg / (mg + ms)) * (2 / (1 + mu)), giu = 1 - (1 + x) * Math.exp(-x), zc = (s.gasZ * scala) / mg; let prima = 0; gas[0] += mg * giu; met[0] += mg * giu * zc;
+          for (let k = 0; k < NR; k++) { const y = bordo[k + 1] / Rd, Fk = k === NR - 1 ? 1 : 1 - Math.exp(-y) * (1 + y), m = mg * (1 - giu) * (Fk - prima); gas[k] += m; met[k] += m * zc; prima = Fk; } }
       }
     }
     // 3. il gas restituito dalle generazioni passate: agli anelli dov'erano nate, o all'alone caldo se ora sono nello sferoide
     let ncc = 0, nia = 0;
+    // (le somme su tutta la galassia si fanno per passo di nascita e tabella di metalli; anello per anello solo il gas e i suoi
+    // metalli, e solo per le generazioni del disco. Intanto si tiene il conto di ciò che resta in stelle e resti: Mdisco, Msfer)
     for (let i = 1; i < j; i++) {
-      const L = j - i, o = i * NR;
-      for (let k = 0; k < NR; k++) { const m = nati[o + k]; if (m <= 0) continue; rende(m, iz[o + k], L - 1, L, Zn[o + k] * ZSOLE); if (i >= sferoideFino) { gas[k] += R[0]; met[k] += R[1]; } else { caldo += R[0]; caldoZ += R[1]; B.alCaldo += R[0]; B.alCaldoZ += R[1]; } B.prodotti += R[4]; B.resi += R[0]; ncc += R[2]; nia += R[3]; }
-      if (haEst[i]) for (let q = 0; q < 4; q++) { const m = est[q * NE + i]; if (m <= 0) continue; rende(m, q, L - 1, L, estZ[q * NE + i] / m); caldo += R[0]; caldoZ += R[1]; B.alCaldo += R[0]; B.alCaldoZ += R[1]; B.prodotti += R[4]; B.resi += R[0]; nia += R[3]; ncc += R[2]; }
+      const L = j - i, o = i * NR, b = 5 * L; let rG = 0, rZ = 0, eG = 0, eZ = 0;
+      for (let q = 0; q < 4; q++) {
+        const m = natiQ[q * NE + i], a = q * NK + b; if (m > 0) { const mz = natiQZ[q * NE + i]; rG += m * K5[a]; rZ += mz * K5[a + 1] + m * K5[a + 2]; B.prodotti += (m - mz) * K5[a + 2]; ncc += m * K5[a + 3]; nia += m * K5[a + 4]; }
+        if (haEst[i]) { const me = est[q * NE + i]; if (me > 0) { const mz = estZ[q * NE + i]; eG += me * K5[a]; eZ += mz * K5[a + 1] + me * K5[a + 2]; B.prodotti += (me - mz) * K5[a + 2]; ncc += me * K5[a + 3]; nia += me * K5[a + 4]; } }
+      }
+      if (i >= sferoideFino) { Mdisco -= rG; for (let k = 0; k < NR; k++) { const m = nati[o + k]; if (m > 0) { const a = iz[o + k] * NK + b; gas[k] += m * K5[a]; met[k] += m * (Zn[o + k] * ZSOLE * K5[a + 1] + K5[a + 2]); } } } else { eG += rG; eZ += rZ; }
+      if (eG > 0) { Msfer -= eG; caldo += eG; caldoZ += eZ; B.alCaldo += eG; B.alCaldoZ += eZ; }
+      B.resi += i >= sferoideFino ? rG + eG : eG;
     }
     // 4. il raffreddamento: quanto gas caldo cade sul disco in questo passo
     const T = T_VIR * Vv * Vv, rhoV = (caldo / (PI4 * Rv ** 3)) * (MSOLE / KPC ** 3), tcool = rhoV > 0 ? (K_COOL * T) / (rhoV * lambda(T, caldo > 0 ? caldoZ / caldo / ZSOLE : 0)) / GA : Infinity;
@@ -492,58 +623,63 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     }
     if (cade > 0) {
       const zc = caldoZ / caldo, jc = caldoJ / caldo, md = stringi((Mdisco + Msfer) / Mh[j], 0.005, 0.1), Ra = cadutaDi(jc, Rv, Vv, c, md); let prima = 0;
-      for (let k = 0; k < NR; k++) { const y = bordo[k + 1] / Ra, F = k === NR - 1 ? 1 : 1 - Math.exp(-y) * (1 + y); gas[k] += cade * (F - prima); met[k] += cade * zc * (F - prima); prima = F; }
+      for (let k = 0; k < NR && prima < 1; k++) { const y = bordo[k + 1] / Ra, F = k === NR - 1 || y > 40 ? 1 : 1 - Math.exp(-y) * (1 + y); gas[k] += cade * (F - prima); met[k] += cade * zc * (F - prima); prima = F; }
       caldo -= cade; caldoZ -= cade * zc; caldoJ -= cade * jc; B.caduto += cade; B.cadutoZ += cade * zc;
     }
     // 5. la curva di rotazione di adesso, anello per anello
-    let mg = 0, mr = 0; for (let k = 0; k < NR; k++) { mg += gas[k]; mr += gas[k] * rc[k]; dove[k] = 0; }
-    for (let i = Math.max(1, sferoideFino); i < j; i++) for (let k = 0; k < NR; k++) dove[k] += nati[i * NR + k];
-    let ms = 0; for (let k = 0; k < NR; k++) ms += dove[k];
-    { const fr = ms > 0 ? Mdisco / ms : 0; for (let k = 0; k < NR; k++) mr += fr * dove[k] * rc[k]; ms *= fr; } // (delle stelle nate conta ciò che ne resta)
+    let mg = 0, mr = 0, ms = 0; for (let k = 0; k < NR; k++) { mg += gas[k]; mr += gas[k] * rc[k]; ms += nd[k]; }
+    const fr = ms > 0 ? Mdisco / ms : 0; for (let k = 0; k < NR; k++) mr += fr * nd[k] * rc[k]; ms *= fr; // (delle stelle nate conta ciò che ne resta)
     // (la scala del disco esponenziale equivalente: metà del raggio medio di gas e stelle, pesato con la massa)
     if (mg + ms > 0) Rd = Math.max(0.5 * (mr / (mg + ms)), 1e-3);
     const mod = { Mh: Mh[j], c, Rv, Md: mg + Mdisco, Rd, Ms: Msfer, as: Math.max(Rsfer, 1e-3) / 2.414 };
-    for (let k = 0; k < NR; k++) V[k] = velocita(mod, rc[k]);
-    // 6. le stelle: Kennicutt-Schmidt dove il gas supera la soglia di Toomre; il vento
-    let sfr = 0;
+    // (le formule di velocita() e di fuga2(), con il logaritmo dell'alone calcolato una volta sola per anello: V² e la fuga²)
+    const hN = (GK * mod.Mh) / nfw(c), cRv = c / Rv, dK = mod.Md > 0 ? (2 * GK * mod.Md) / Rd : 0, gMd = GK * mod.Md, gMs = GK * mod.Ms;
+    for (let k = 0; k < NR; k++) { const r = rc[k], cx = cRv * r, l1 = Math.log(1 + cx); let v2 = (hN * (l1 - cx / (1 + cx))) / r; if (dK > 0) v2 += dK * FREEMAN(r / (2 * Rd)); if (gMs > 0) v2 += (gMs * r) / (r + mod.as) ** 2; V2[k] = v2; F2[k] = 2 * ((hN * l1) / r + gMd / Math.sqrt(r * r + 4 * Rd * Rd) + gMs / (r + mod.as)); }
+    // 6. le stelle: dal gas molecolare, che è la parte del gas decisa dalla pressione a metà dello strato; il vento
+    let sfr = 0, gasOra = 0;
     for (let k = 0; k < NR; k++) {
       const o = j * NR + k; let formate = 0;
-      if (gas[k] > 0) {
-        const k0 = Math.max(0, k - 1), k1 = Math.min(NR - 1, k + 1), pend = Math.log(V[k1] / V[k0]) / Math.log(rc[k1] / rc[k0]), kappa = (V[k] / rc[k]) * Math.sqrt(2 * Math.max(0.05, 1 + pend));
-        const sig = gas[k] / area[k], crit = (LEGGI.soglia[0] * kappa * LEGGI.soglia[1]) / (LEGGI.soglia[2] * GK);
-        if (sig > crit) {
+      if (gas[k] > mUna) {
+        // la frequenza degli epicicli κ² = 2·(V/r)²·(1 + dlnV/dlnr), e con lei la dispersione verticale delle stelle (come cinematica());
+        // la pressione a metà strato (Elmegreen 1989): il gas nel campo suo e in quello delle stelle. x = P/P₀
+        const r = rc[k], k0 = Math.max(0, k - 1), k1 = Math.min(NR - 1, k + 1), pend = (V2[k1] - V2[k0]) / (2 * V2[k] * (lrc[k1] - lrc[k0])), kappa = Math.sqrt(2 * V2[k] * Math.max(0.05, 1 + pend)) / r;
+        const sig = gas[k] / area[k], sst = (fr * nd[k]) / area[k], pst = (sst * LEGGI.sigmaGas) / Math.max(sFreddo, (kSigZ * sst) / kappa), x = C_PRESS * sig * (sig + pst);
+        // (se nemmeno il ritmo più alto possibile — sotto P₀ e sotto Σ₀ è f_mol < √x e la parentesi < 2 — fa una stella in questo passo, basta così)
+        if (!(x < 1 && sig < S0k && 2 * nu0 * DT * gas[k] * Math.sqrt(x) < mUna)) {
           // il vento: di ogni supernova resta in moto l'energia del suo guscio quando ha rallentato fino alla velocità del gas
           // attorno (½·p·σ_g, con p il momento finale del resto in gas di quella densità); con quella il gas esce dall'alone
-          const nGas = Math.max(1e-3, (sig * MSOLE) / KPC ** 2 / (2 * LEGGI.spessoreGas * KPC) / (1.4 * COSTANTI.mp) / 1e6), resta = (LEGGI.momentoSN[0] * Math.pow(nGas, LEGGI.momentoSN[1]) * LEGGI.sigmaGas) / (2 * ESN);
-          const eta = (resta * 2 * eSN) / fuga2(mod, rc[k]), s6 = sig / 1e6, dopo = Math.max(crit / 1e6, s6 * Math.pow(1 + (ksN - 1) * (1 + eta) * ksA * 1e3 * Math.pow(s6, ksN - 1) * DT, -1 / (ksN - 1))); // (non scende sotto la soglia: lì si ferma)
-          const tolto = (s6 - dopo) * 1e6 * area[k], z = met[k] / gas[k]; formate = tolto / (1 + eta);
-          gas[k] -= tolto; met[k] -= tolto * z; B.vento += tolto - formate; B.ventoZ += (tolto - formate) * z; fuori += tolto - formate; fuoriZ += (tolto - formate) * z; fuoriJ += (tolto - formate) * rc[k] * V[k];
-          nati[o] = formate; Zn[o] = z / ZSOLE; iz[o] = tabellaZ(z / ZSOLE);
-          // ciò che la generazione appena nata restituisce già in questo passo (le stelle massicce)
-          rende(formate, iz[o], -1, 0, z); gas[k] += R[0]; met[k] += R[1]; B.prodotti += R[4]; B.resi += R[0]; ncc += R[2]; nia += R[3];
+          const ls = Math.log(sig), resta = cResta * Math.exp(LEGGI.momentoSN[1] * Math.max(LN_RADO, ls + lnGas)), eta = (resta * 2 * eSN) / F2[k], c1 = (1 + eta) * nu0 * DT;
+          // le nascite: dΣg/dt = −(1 + η)·ν₀·[1 + (Σg/Σ₀)^q]·f_mol·Σg, con f_mol = 1/(1 + (P₀/P)^α). Il ritmo cala col gas: dove in
+          // un passo se ne andrebbe più di un ventesimo, si prende il ritmo a metà passo
+          let pm = Math.exp(aMol * Math.log(x)), kk = c1 * (1 + Math.exp(qS * (ls - lS0))) * (pm / (1 + pm));
+          if (kk > 0.05) { const sm = sig * Math.exp(-0.5 * kk); pm = Math.exp(aMol * Math.log(C_PRESS * sm * (sm + pst))); kk = c1 * (1 + Math.exp(qS * (ls - 0.5 * kk - lS0))) * (pm / (1 + pm)); }
+          const tolto = gas[k] * -Math.expm1(-kk), z = met[k] / gas[k]; formate = tolto / (1 + eta);
+          if (formate < mUna) formate = 0; // (meno di una stella in un passo: niente)
+          else {
+            gas[k] -= tolto; met[k] -= tolto * z; B.vento += tolto - formate; B.ventoZ += (tolto - formate) * z; fuori += tolto - formate; fuoriZ += (tolto - formate) * z; fuoriJ += (tolto - formate) * r * Math.sqrt(V2[k]);
+            nati[o] = formate; Sg[o] = sig; Zn[o] = z / ZSOLE; iz[o] = tabellaZ(z / ZSOLE); if (j >= sferoideFino) nd[k] += formate; natiQ[iz[o] * NE + j] += formate; natiQZ[iz[o] * NE + j] += formate * Zn[o] * ZSOLE;
+            // ciò che la generazione appena nata restituisce già in questo passo (le stelle massicce)
+            rende(formate, iz[o], -1, 0, z); gas[k] += R[0]; met[k] += R[1]; B.prodotti += R[4]; B.resi += R[0]; ncc += R[2]; nia += R[3]; if (j >= sferoideFino) Mdisco += formate - R[0]; else Msfer += formate - R[0];
+          }
         }
       }
-      sfr += formate; Zt[o] = gas[k] > 0 ? met[k] / gas[k] / ZSOLE : 0;
+      sfr += formate; gasOra += gas[k]; Zt[o] = gas[k] > 0 ? met[k] / gas[k] / ZSOLE : 0;
     }
-    // le masse in stelle e resti di adesso (ciò che è nato meno ciò che è tornato al gas)
-    let vd = 0, vs = 0;
-    for (let i = 1; i <= j; i++) { const L = j - i; for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (m > 0) { const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); if (i >= sferoideFino) vd += v; else vs += v; } } if (haEst[i]) for (let q = 0; q < 4; q++) vs += est[q * NE + i] * (1 - P.tab[q].cR[L + 1] - P.tab[q].cI[L + 1] * P.MCH); }
-    Mdisco = vd; Msfer = vs;
-    S.sfr[j] = sfr / DT / 1e9; S.gas[j] = gas.reduce((x, y) => x + y, 0); S.stelle[j] = vd + vs; S.caldo[j] = caldo; S.collasso[j] = ncc / DT / 1e9; S.Ia[j] = nia / DT / 1e9;
+    S.sfr[j] = sfr / DT / 1e9; S.gas[j] = gasOra; S.stelle[j] = Mdisco + Msfer; S.caldo[j] = caldo; S.collasso[j] = ncc / DT / 1e9; S.Ia[j] = nia / DT / 1e9;
   }
   // ---------- com'è oggi
-  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE), natiQ = new Float64Array(4 * NE), natiQZ = new Float64Array(4 * NE); let nateTutte = 0, metStelle = 0;
+  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE); let nateTutte = 0, metStelle = 0;
   for (let i = 1; i <= nt; i++) {
     const L = nt - i; let m1 = 0, z1 = 0;
-    for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (!(m > 0)) continue; const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); m1 += m; z1 += m * Zn[i * NR + k] * ZSOLE; natiQ[iz[i * NR + k] * NE + i] += m; natiQZ[iz[i * NR + k] * NE + i] += m * Zn[i * NR + k] * ZSOLE; metStelle += Zn[i * NR + k] * ZSOLE * v; if (i >= sferoideFino) sigStelle[k] += v / area[k]; }
+    for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (!(m > 0)) continue; const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); m1 += m; z1 += m * Zn[i * NR + k] * ZSOLE; metStelle += Zn[i * NR + k] * ZSOLE * v; if (i >= sferoideFino) sigStelle[k] += v / area[k]; }
     for (let q = 0; q < 4 && haEst[i]; q++) { metStelle += estZ[q * NE + i] * (1 - P.tab[q].cR[L + 1] - P.tab[q].cI[L + 1] * P.MCH); venute[i] += est[q * NE + i]; venuteZ[i] += estZ[q * NE + i]; }
     natiTot[i] = m1; natiZ[i] = m1 > 0 ? z1 / m1 : 0; nateTutte += m1 + venute[i];
   }
   let gasTot = 0, gasZ = 0; for (let k = 0; k < NR; k++) { sigGas[k] = gas[k] / area[k]; gasTot += gas[k]; gasZ += met[k]; dove[k] = sigStelle[k] * area[k] + gas[k]; }
   const aO = U.scala(nt * DT), RvO = raggioViriale(M0, aO), mod = { Mh: M0, c: concentrazione(M0, aO), Rv: RvO, Md: gasTot + Mdisco, Rd, Ms: Msfer, as: Math.max(Rsfer, 1e-3) / 2.414 };
-  const raggioMeta = Mdisco + Msfer > 0 ? ((Mdisco + gasTot) * metaMassa() + Msfer * Rsfer) / (Mdisco + gasTot + Msfer) : Rd;
+  const raggioMeta = Mdisco + Msfer > 0 ? ((Mdisco + gasTot) * metaMassa(dove) + Msfer * Rsfer) / (Mdisco + gasTot + Msfer) : Rd;
   if (compagno) return { natiTot, natiZ, natiQ, natiQZ, gasTot, gasZ, caldo, caldoZ, fuori, fuoriZ, raggioMeta, massaStelle: Mdisco + Msfer };
-  return { M0, spin, nt, Mh, inizio: Mh.inizio, bordo, rc, area, nati, Zn, iz, est: venute, estZ: venuteZ, Zt, S, B, gas, met, sigStelle, sigGas, caldo, caldoZ, fuori, fuoriZ, sferoideFino, ultimaMaggiore, Mdisco, Msfer, Rsfer, mod, gasTot, gasZ, nateTutte, metStelle, fusioni };
+  return { M0, spin, nt, Mh, inizio: Mh.inizio, bordo, rc, area, nati, Sg, Zn, iz, est: venute, estZ: venuteZ, Zt, S, B, gas, met, sigStelle, sigGas, caldo, caldoZ, fuori, fuoriZ, sferoideFino, ultimaMaggiore, Mdisco, Msfer, Rsfer, mod, gasTot, gasZ, nateTutte, metStelle, fusioni };
 }
 
 // ---------- LA FORMA DI UNA GALASSIA, dal suo alone e dai suoi vicini.
@@ -587,9 +723,13 @@ export function formaDaAlone(alone, caso = sorgente('galassia')) {
   // la fase dei bracci anello per anello: dφ/dln r = 1/tan(passo), con il passo che segue il taglio locale
   const fase = new Float64Array(NR); for (let k = 1; k < NR; k++) fase[k] = fase[k - 1] + Math.log(rc[k] / rc[k - 1]) / Math.tan(passoDi(0.5 * (rc[k] + rc[k - 1])));
   // dove sta una stella rispetto al braccio (da −½ a ½ dell'intervallo tra due bracci; 0 è la cresta): le vecchie come la
-  // densità dell'onda, 1 + A·cos; le giovani dove sono nate: la densità del gas, 1 + A_gas·cos, alla 1,4 (Kennicutt-Schmidt)
+  // densità dell'onda, 1 + A·cos; le giovani dove sono nate: la densità del gas, 1 + A_gas·cos, alla potenza con cui le nascite
+  // seguono il gas LÌ. È la pendenza della legge delle nascite a 2,2 scale, d ln Σ_SFR/d ln Σ_gas con le stelle ferme [D]:
+  // 1 + q·u/(1 + u) + α·(1 − f_mol)·(1 + Σg/(Σg + Σ★·σg/σ★)), con u = (Σg/Σ₀)^q (1 dove il gas è tutto molecolare e rado,
+  // 1,4 negli scoppi, fino a 2,6 dove è quasi tutto atomico)
+  const esponente = (() => { if (!(g22 > 0)) return 1; const pst = (s22 * LEGGI.sigmaGas) / Math.max(LEGGI.soglia[1], (LEGGI.rapportoVerticale * LEGGI.Qstelle * 3.36 * GK * s22) / kappa(R22)), pm = Math.pow(C_PRESS * g22 * (g22 + pst), LEGGI.molecole[1]), u = Math.pow(g22 / (LEGGI.nascite[1] * 1e6), LEGGI.nascite[2]); return 1 + (LEGGI.nascite[2] * u) / (1 + u) + (LEGGI.molecole[1] / (1 + pm)) * (1 + g22 / (g22 + pst)); })();
   const NC = 48, ripartizione = (A, n) => { const c = new Float64Array(NC + 1); for (let i = 0; i < NC; i++) c[i + 1] = c[i] + Math.pow(1 + A * Math.cos((2 * Math.PI * (i + 0.5)) / NC - Math.PI), n); for (let i = 0; i <= NC; i++) c[i] /= c[NC]; return c; };
-  const cdf = ripartizione(contrastoGas, LEGGI.KS[1]), cdfVecchie = ripartizione(contrasto, 1);
+  const cdf = ripartizione(contrastoGas, esponente), cdfVecchie = ripartizione(contrasto, 1);
   let vmax = 0, rmax = 0; for (let k = 0; k < NR; k++) { const x = v(rc[k]); if (x > vmax) { vmax = x; rmax = rc[k]; } }
   const massaGas = e.gasTot, instabile = massaDisco > 0 && frazioneSferoide < 0.5 && vmax / Math.sqrt((GK * (massaDisco + massaGas)) / raggioDisco) < LEGGI.barra;
   // la barra arriva fin dove il disco, da solo, fa più di metà della forza
@@ -610,7 +750,18 @@ export function formaDaAlone(alone, caso = sorgente('galassia')) {
   const ritmoSN = { collasso: S.collasso[nt], Ia: S.Ia[nt], totale: S.collasso[nt] + S.Ia[nt] };
   let luce = 0; const tinta = [0, 0, 0];
   for (let i = 1; i <= nt; i++) { let m = e.est[i]; for (let k = 0; k < NR; k++) m += e.nati[i * NR + k]; const L = nt - i; luce += m * P.luce[L]; for (let c = 0; c < 3; c++) tinta[c] += m * P.tinta[3 * L + c]; }
-  const tmax = Math.max(...tinta, 1e-30), colore = tinta.map((x) => Math.round((255 * x) / tmax));
+  const colore = a255(tinta);
+  // LA LUCE DEL DISCO, ANELLO PER ANELLO (per chi lo disegna): quella di tutte le generazioni nate lì e ancora nel disco
+  // (luce, in L☉/kpc²; luceV, quella che l'occhio vede, in unità di quella del Sole per kpc²; colore, da 0 a 255), e la parte
+  // delle stelle più giovani della vita di un braccio a quel raggio (vitaBraccio, Ga), che stanno ancora dove sono nate:
+  // luceGiovani, luceVGiovani, coloreGiovani. Tutto dalle popolazioni (popolazione(): luce, luceV, tinta, finoA) e dalle nascite
+  const luceA = new Float64Array(NR), luceVA = new Float64Array(NR), luceG = new Float64Array(NR), luceVG = new Float64Array(NR), vitaBraccio = new Float64Array(NR), coloreA = [], coloreG = [], i0 = Math.max(1, e.sferoideFino);
+  for (let k = 0; k < NR; k++) {
+    const ca = [0, 0, 0], cg = [0, 0, 0], tau = Math.PI / (omega(rc[k]) * KMS); vitaBraccio[k] = tau;
+    for (let i = i0; i <= nt; i++) { const m = e.nati[i * NR + k]; if (!(m > 0)) continue; const L = nt - i; luceA[k] += m * P.luce[L]; luceVA[k] += m * P.luceV[L]; ca[0] += m * P.tinta[3 * L]; ca[1] += m * P.tinta[3 * L + 1]; ca[2] += m * P.tinta[3 * L + 2]; }
+    for (let i = nt; i >= i0 && (nt - i) * DT < tau; i--) { const m = e.nati[i * NR + k] / DT; if (!(m > 0)) continue; const a0 = (nt - i) * DT, a1 = Math.min(a0 + DT, tau); luceG[k] += m * (P.finoA(a1, 0) - P.finoA(a0, 0)); luceVG[k] += m * (P.finoA(a1, 1) - P.finoA(a0, 1)); for (let c = 0; c < 3; c++) cg[c] += m * (P.finoA(a1, 2 + c) - P.finoA(a0, 2 + c)); }
+    luceA[k] /= area[k]; luceVA[k] /= area[k]; luceG[k] /= area[k]; luceVG[k] /= area[k]; coloreA.push(luceVA[k] > 0 ? a255(ca) : [0, 0, 0]); coloreG.push(luceVG[k] > 0 ? a255(cg) : [0, 0, 0]);
+  }
   // ---- il bilancio (in M☉): ciò che è entrato = ciò che c'è + ciò che è uscito; i metalli fatti = i metalli che ci sono
   const B = e.B;
   const bilancio = {
@@ -628,12 +779,12 @@ export function formaDaAlone(alone, caso = sorgente('galassia')) {
     tipo, classe, massaStelle, massaGas, massaDisco, massaSferoide, frazioneSferoide, massaCalda: e.caldo, massaFuori: e.fuori,
     raggioDisco, raggioSferoide, scalaSferoide: aSfer, unitaKpc, unitaM: unitaKpc * KPC,
     velocita: v(R22), velocitaMassima: vmax, raggioVelocitaMassima: rmax,
-    bracci: { numero, m: mBracci, passo: passoDi(R22), contrasto, contrastoGas, Q, angolo, verso: alone.verso ?? 1, fase, cdf, cdfVecchie, vita: (r) => Math.PI / (omega(r) * KMS) },
+    bracci: { numero, m: mBracci, passo: passoDi(R22), contrasto, contrastoGas, esponente, Q, angolo, verso: alone.verso ?? 1, fase, cdf, cdfVecchie, vita: (r) => Math.PI / (omega(r) * KMS) },
     barra: rBarra > 0 ? { raggio: rBarra, angolo: asse, forza: 0.6 } : null,
     buco, ritmoSN, fusioni: e.fusioni.map((f) => ({ quando: f.quando, rapporto: f.rapporto, arrivo: f.arrivo, avvenuta: f.avvenuta, tipo: f.tipo, rapportoBarioni: f.rapportoBarioni ?? null, massaStelle: f.massaStelle ?? null })),
     ultimaFusioneMaggiore: e.ultimaMaggiore || null, prossimaFusione: alone.prossimaFusione ?? null,
     storia: { dt: DT, t: Float64Array.from({ length: nt + 1 }, (_, j) => j * DT), sfr: S.sfr, gas: S.gas, stelle: S.stelle, caldo: S.caldo, collasso: S.collasso, Ia: S.Ia, freddo: S.freddo, alone: Mh },
-    anelli: { bordo, r: rc, area, sigmaStelle: sigStelle, sigmaGas: sigGas, Z: e.Zt.subarray(nt * NR, (nt + 1) * NR) },
+    anelli: { bordo, r: rc, area, sigmaStelle: sigStelle, sigmaGas: sigGas, Z: e.Zt.subarray(nt * NR, (nt + 1) * NR), luce: luceA, luceV: luceVA, colore: coloreA, luceGiovani: luceG, luceVGiovani: luceVG, coloreGiovani: coloreG, vitaBraccio },
     bilancio, luce, tinta: colore, formazione: formazione * GA, eta: T0,
     // i campi che cosmo(n) mette sulla galassia (gli stessi nomi di oggi)
     perG: { tipo, bracci: numero, angolo, passo: passoDi(R22), schiacciata, attivita, getto, tinta: colore, formazione: formazione * GA },
@@ -757,8 +908,7 @@ export function galassiaAlTempo(forma, tGa) {
   const P = popolazione(), e = forma.interno, NR = ANELLI, S = forma.storia, x = stringi(tGa / DT, 0, e.nt), j = Math.min(e.nt, Math.floor(x)), u = x - j, tra = (A) => (j >= e.nt ? A[e.nt] : A[j] * (1 - u) + A[j + 1] * u);
   let luce = 0; const tinta = [0, 0, 0];
   for (let i = 1; i <= j; i++) { let m = e.est[i]; for (let k = 0; k < NR; k++) m += e.nati[i * NR + k]; const L = j - i; luce += m * P.luce[L]; for (let c = 0; c < 3; c++) tinta[c] += m * P.tinta[3 * L + c]; }
-  const tm = Math.max(...tinta, 1e-30);
-  return { esiste: tGa >= e.inizio, massaStelle: tra(S.stelle), massaGas: tra(S.gas), sfr: tra(S.sfr), massaAlone: tra(S.alone), luce /* L☉ */, tinta: luce > 0 ? tinta.map((v) => Math.round((255 * v) / tm)) : [0, 0, 0] };
+  return { esiste: tGa >= e.inizio, massaStelle: tra(S.stelle), massaGas: tra(S.gas), sfr: tra(S.sfr), massaAlone: tra(S.alone), luce /* L☉ */, tinta: luce > 0 ? a255(tinta) : [0, 0, 0] };
 }
 
 // ---------- IL CATALOGO: `quante` stelle come campione della galassia, più le ultime supernove (vedi l'intestazione)
@@ -856,4 +1006,4 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
 
 // (per le prove e per chi vuole guardare dentro)
 export const COSMOLOGIA = U, SIGMA_CAMPO = (toroM = 3.7e25, onde = 9) => sigmaCampo(toroM, onde);
-export const dentro = { U, T0, DT, KPC, GA, GK, KMS, ZSOLE, raggioViriale, concentrazione, velocita, FREEMAN, lambda, storiaAlone, evolvi, tempoIncontro, maree, campana, resaCollasso };
+export const dentro = { U, T0, DT, KPC, GA, GK, KMS, ZSOLE, raggioViriale, concentrazione, velocita, fuga2, C_PRESS, xyzNero, occhioCIE, aLineare, nelTriangolo, gammaSRGB, FREEMAN, lambda, storiaAlone, evolvi, tempoIncontro, maree, campana, resaCollasso };

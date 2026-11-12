@@ -60,6 +60,10 @@ export const ELEMENTI = Object.fromEntries(Object.entries({ ...TAVOLA, ...TAVOLA
 // (i quindici della miscela dei pianeti; con tracce: true anche i dieci metalli della tecnica, che sono tracce: tutti
 // insieme lo 0,5% della massa dei pesanti, quasi tutto nichel)
 export const abbondanze = (Z = 1, { tracce = false } = {}) => Object.fromEntries(Object.entries(ELEMENTI).filter(([s]) => tracce || s in TAVOLA).map(([s, e]) => [s, e.abbondanza * (s === 'H' || s === 'He' ? 1 : Math.max(0, Z))]));
+// (PRESTAZIONI: per chi dentro questo modulo le LEGGE soltanto — l'aria di ogni pianeta le chiede a ogni giro —: la stessa
+// tabella, calcolata una volta per ogni Z (chiave esatta) e congelata. Chi le vuole per scriverci chiama abbondanze())
+const ABBONDANZE_FISSE = new Map();
+const abbondanzeFisse = (Z = 1) => { let a = ABBONDANZE_FISSE.get(Z); if (!a) { a = Object.freeze(abbondanze(Z)); if (ABBONDANZE_FISSE.size > 256) ABBONDANZE_FISSE.clear(); ABBONDANZE_FISSE.set(Z, a); } return a; };
 
 // ---------- 2. I LEGAMI (calcolati)
 // Pauling: un legame tra atomi diversi è più forte della media (geometrica) dei due legami tra atomi
@@ -200,13 +204,23 @@ export function equilibrio({ T, P = 1e5, elementi = {}, dettagli = false } = {})
   if (iC >= 0) lam[iC] = Math.min(lam[iC], tetto);
   const e = new Float64Array(q), n = new Float64Array(q), r = new Array(m), d = new Array(m), prova = new Array(m);
   const H = el.map(() => new Array(m).fill(0)), G = el.map(() => new Array(m + 1).fill(0)), alTetto = () => iC >= 0 && lam[iC] >= tetto - 1e-12;
-  const psi = (l, s) => { let v = 0; for (let i = 0; i < q; i++) { let x = s - c[i]; for (let j = 0; j < m; j++) x += A[i][j] * l[j]; e[i] = x; v += n[i] = Math.exp(x); } for (let j = 0; j < m; j++) v -= b[j] * l[j]; return v; };
+  // (PRESTAZIONI, senza cambiare un bit: nei cicli qui sotto le righe delle matrici si prendono una volta e lo scambio delle
+  // righe non crea vettori. Una molecola ha due o tre elementi dei cinque–sette in gioco: gli altri coefficienti della sua riga
+  // sono zero, e uno zero per un numero FINITO è zero, che sommato non cambia niente. Dove i numeri sono finiti (lo si
+  // controlla: se no si fa il giro intero di prima) si scorrono solo i coefficienti che ci sono, «NZ», nello stesso ordine.)
+  const NZ = A.map((riga) => { const z = []; for (let j = 0; j < m; j++) if (riga[j]) z.push(j); return z; });
+  const finiti = (v) => { for (let j = 0; j < m; j++) if (v[j] - v[j] !== 0) return false; return true; };
+  const psi = (l, s) => { let v = 0;
+    if (finiti(l)) for (let i = 0; i < q; i++) { const Ai = A[i], z = NZ[i], nz = z.length; let x = s - c[i]; for (let a = 0; a < nz; a++) { const j = z[a]; x += Ai[j] * l[j]; } e[i] = x; v += n[i] = Math.exp(x); }
+    else for (let i = 0; i < q; i++) { const Ai = A[i]; let x = s - c[i]; for (let j = 0; j < m; j++) x += Ai[j] * l[j]; e[i] = x; v += n[i] = Math.exp(x); }
+    for (let j = 0; j < m; j++) v -= b[j] * l[j]; return v; };
   // a volume fissato (s = logaritmo delle moli totali, che fissa il volume a quella pressione): Newton
   const minimizza = (s) => {
     for (let it = 0; it < 400; it++) {
       const v0 = psi(lam, s);
       for (let j = 0; j < m; j++) { r[j] = -b[j]; H[j].fill(0); }
-      for (let i = 0; i < q; i++) for (let j = 0; j < m; j++) { if (!A[i][j]) continue; const w = A[i][j] * n[i]; r[j] += w; for (let k = 0; k < m; k++) H[j][k] += w * A[i][k]; }
+      for (let i = 0; i < q; i++) { const Ai = A[i], ni = n[i], z = NZ[i], nz = z.length; for (let a = 0; a < nz; a++) { const j = z[a], w = Ai[j] * ni, Hj = H[j]; r[j] += w;
+        if (w - w === 0) for (let a2 = 0; a2 < nz; a2++) { const k = z[a2]; Hj[k] += w * Ai[k]; } else for (let k = 0; k < m; k++) Hj[k] += w * Ai[k]; } }
       let scarto = 0, diag = 0; for (let j = 0; j < m; j++) { scarto = Math.max(scarto, (j === iC && alTetto() ? Math.max(0, r[j]) : Math.abs(r[j])) / b[j]); diag = Math.max(diag, H[j][j]); }
       if (scarto < 1e-11) break;
       // il passo di Newton: H·d = −r (eliminazione di Gauss; un velo sulla diagonale se due atomi vanno
@@ -217,15 +231,16 @@ export function equilibrio({ T, P = 1e5, elementi = {}, dettagli = false } = {})
         for (let j = 0; j < m; j++) { for (let k = 0; k < m; k++) G[j][k] = fermo && (j === iC || k === iC) ? +(j === k) : H[j][k] + (j === k ? 1e-13 * diag + 1e-300 : 0); G[j][m] = fermo && j === iC ? 0 : -r[j]; }
         for (let j = 0; j < m; j++) {
           let p = j; for (let k = j + 1; k < m; k++) if (Math.abs(G[k][j]) > Math.abs(G[p][j])) p = k;
-          [G[j], G[p]] = [G[p], G[j]]; const piv = G[j][j] || 1e-300;
-          for (let k = j + 1; k < m; k++) { const f = G[k][j] / piv; if (f) for (let l = j; l <= m; l++) G[k][l] -= f * G[j][l]; }
+          { const riga = G[j]; G[j] = G[p]; G[p] = riga; } const Gj = G[j], piv = Gj[j] || 1e-300;
+          for (let k = j + 1; k < m; k++) { const Gk = G[k], f = Gk[j] / piv; if (f) for (let l = j; l <= m; l++) Gk[l] -= f * Gj[l]; }
         }
-        for (let j = m - 1; j >= 0; j--) { let x = G[j][m]; for (let k = j + 1; k < m; k++) x -= G[j][k] * d[k]; d[j] = x / (G[j][j] || 1e-300); }
+        for (let j = m - 1; j >= 0; j--) { const Gj = G[j]; let x = Gj[m]; for (let k = j + 1; k < m; k++) x -= Gj[k] * d[k]; d[j] = x / (Gj[j] || 1e-300); }
         if (fermo || !alTetto() || d[iC] <= 0) break; fermo = true;
       }
       // quanto lungo: nessuna molecola può superare di colpo gli atomi che ci sono, e il carbonio il tetto
       let t = 1, pend = 0; for (let j = 0; j < m; j++) pend += r[j] * d[j];
-      for (let i = 0; i < q; i++) { let de = 0; for (let j = 0; j < m; j++) de += A[i][j] * d[j]; if (de > 0) t = Math.min(t, (Math.max(e[i], 0) + 1.5 - e[i]) / de); }
+      if (finiti(d)) for (let i = 0; i < q; i++) { const Ai = A[i], z = NZ[i], nz = z.length; let de = 0; for (let a = 0; a < nz; a++) { const j = z[a]; de += Ai[j] * d[j]; } if (de > 0) t = Math.min(t, (Math.max(e[i], 0) + 1.5 - e[i]) / de); }
+      else for (let i = 0; i < q; i++) { const Ai = A[i]; let de = 0; for (let j = 0; j < m; j++) de += Ai[j] * d[j]; if (de > 0) t = Math.min(t, (Math.max(e[i], 0) + 1.5 - e[i]) / de); }
       if (iC >= 0 && !fermo && d[iC] > 0) t = Math.min(t, (tetto - lam[iC]) / d[iC]);
       // e si accorcia finché Ψ scende davvero (la funzione è convessa: prima o poi scende)
       for (let giri = 0; giri < 40; giri++, t /= 2) { for (let j = 0; j < m; j++) prova[j] = lam[j] + t * d[j]; if (psi(prova, s) <= v0 + 1e-4 * t * pend || Math.abs(pend) < 1e-15 * (1 + Math.abs(v0))) break; }
@@ -309,7 +324,7 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
   if (!gigante && (!tenuti.length || !(conInventario || cl.pressione > 0))) return niente; // un sasso nudo, come la Luna
   // un gigante È il suo idrogeno; per gli altri decide la gravità
   const tieneH = gigante || tenuti.includes('idrogeno'), massaMinima = gigante ? 0 : Math.min(...tenuti.map((g) => GAS_DEL_CLIMA[g] ?? Infinity));
-  const z = Z ?? P.Z ?? P.metallicita ?? (comp.pesanti ? comp.pesanti / 0.02 : 1), sole = abbondanze(z), Oacqua = Math.max(0, sole.O - ossigenoNellaRoccia(sole));
+  const z = Z ?? P.Z ?? P.metallicita ?? (comp.pesanti ? comp.pesanti / 0.02 : 1), sole = abbondanzeFisse(z), Oacqua = Math.max(0, sole.O - ossigenoNellaRoccia(sole));
   // L'INVENTARIO di un pianeta solido. I gas arrivano con il ghiaccio (C, N, S in proporzione all'acqua, come nelle
   // comete) e ne esce in superficie la stessa parte che esce dell'acqua (PARTE_FUORI di leggi.js: il resto è nel
   // mantello). In più, se il disco gli ha lasciato un velo di idrogeno ed elio («involucro») e la gravità trattiene
@@ -321,7 +336,7 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
     // acqua W, e i volatili in proporzione, la stessa per ogni metallicità: il ghiaccio è fatto degli
     // stessi atomi pesanti (anche una roccia asciutta ne porta un poco); il carbonio
     // arriva in media come CO (nei ghiacci: CO, CO2, metanolo, composti organici)
-    const W = comp.acqua ?? comp.ghiaccio ?? 0, sol = abbondanze(1), V = Math.max(W, 0.001) / (sol.O - ossigenoNellaRoccia(sol));
+    const W = comp.acqua ?? comp.ghiaccio ?? 0, sol = abbondanzeFisse(1), V = Math.max(W, 0.001) / (sol.O - ossigenoNellaRoccia(sol));
     const C = NEI_GHIACCI.C * sol.C * V, N = NEI_GHIACCI.N * sol.N * V, S = ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, secco = String(cl.acqua || '').startsWith('vapore');
     const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
     // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente)
@@ -341,7 +356,10 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
   // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
   // mare, la CO2 fino all'equilibrio di Urey e niente SO2
   // («co2»: la pressione di CO2 che il termostato del carbonio lascia nell'aria, se supera quella dell'equilibrio: vedi climaEAria)
-  const tetto = (f) => (cl.acqua === 'liquida' && f === 'SO2' ? 0 : Math.min(pressioneVapore(T, f), cl.acqua === 'liquida' && f === 'CO2' ? Math.max(pressioneCO2Urey(T), co2) : Infinity));
+  // (PRESTAZIONI: dentro una stessa aria il tetto di un gas è sempre lo stesso numero — temperatura, mare e CO2 non cambiano —:
+  // si calcola la prima volta che serve)
+  const tettoDi = (f) => (cl.acqua === 'liquida' && f === 'SO2' ? 0 : Math.min(pressioneVapore(T, f), cl.acqua === 'liquida' && f === 'CO2' ? Math.max(pressioneCO2Urey(T), co2) : Infinity));
+  const tetti = {}, tetto = (f) => { let t = tetti[f]; if (t === undefined) t = tetti[f] = tettoDi(f); return t; };
   // chi supererebbe il suo tetto si ferma lì; gli altri si dividono la pressione che resta. Se di altri
   // non ce n'è (tutto è gelato) resta solo un velo di vapori, ciascuno alla sua pressione
   const fermi = new Set(), p = {};
@@ -597,7 +615,7 @@ export function minerali({ composizione = {}, T = 288, ossidato = false, acqua, 
   const w = composizione.acqua ?? composizione.ghiaccio ?? (acqua === true ? 0.02 : 0), stato = typeof acqua === 'string' ? acqua : '';
   const ce = w > 0 && acqua !== false && stato !== 'assente', evaporata = w > 0 && T >= 170 && (acqua === false || stato === 'evaporata' || stato.startsWith('vapore'));
   const o = ossidato === true ? 1 : !ossidato ? 0.4 : Math.min(1, Math.max(0, +ossidato));
-  const fe = composizione.ferro ?? 0.32, sassi = composizione.roccia ?? 1 - fe, sole = abbondanze(1), su = (e) => sole[e] / sole.Si;
+  const fe = composizione.ferro ?? 0.32, sassi = composizione.roccia ?? 1 - fe, sole = abbondanzeFisse(1), su = (e) => sole[e] / sole.Si;
   const mantello = { Si: 1, Mg: composizione.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
   const basalto = fondi(mantello, D_MANTELLO, Math.min(1, Math.max(0.01, fusione))), cont = Math.min(1, Math.max(0, continente ?? (w > 0.005 ? CONTINENTI : 0)));
   const copre = Math.min(0.95, w / (w + 0.01)), ghiaccio = ce && (T < 170 || stato === 'ghiaccio') ? copre : 0, sali = evaporata ? 0.25 * copre : 0;
@@ -686,7 +704,7 @@ export const MINERALI_ROCCIA = Object.freeze({ albite: [-12.56, 69.8, 0.262, -10
   pirosseno: [-11.11, 40.6, 0.217, -6.36, 0.71, 96.1], olivina: [-10.64, 79.0, 0.141, -6.85, 0.47, 67.2], quarzo: [-13.99, 87.7, 0.06, -99, 0, 0] });
 const OSSIDI = { Si: 60.08, Mg: 40.30, Fe: 71.84, Al: 50.98, Ca: 56.08, Na: 30.99, K: 47.10 };
 export function rocceDelPianeta(P = {}) {
-  const comp = P.composizione || {}, fe = comp.ferro ?? 0.32, sassi = comp.roccia ?? 1 - fe, sole = abbondanze(1), su = (e) => sole[e] / sole.Si;
+  const comp = P.composizione || {}, fe = comp.ferro ?? 0.32, sassi = comp.roccia ?? 1 - fe, sole = abbondanzeFisse(1), su = (e) => sole[e] / sole.Si;
   const mantello = { Si: 1, Mg: comp.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
   const basalto = fondi(mantello, D_MANTELLO, F_BASALTO), granito = fondi(basalto, D_BASALTO, F_GRANITO);
   const perKg = (r) => { let m = 0; for (const e in r) m += r[e] * OSSIDI[e]; const o = {}; for (const e in r) o[e] = (1000 * r[e]) / m; return o; };
@@ -705,11 +723,23 @@ export function rocceDelPianeta(P = {}) {
 const KW_ACQUA = 1e-14;
 export const acidoDelSuolo = (pCO2, T = 288) => Math.sqrt(Math.pow(10, ROCCE.acidoCarbonico[0]) * Math.exp(((-1000 * ROCCE.acidoCarbonico[1]) / R_GAS) * (1 / T - 1 / 298.15)) * Math.max(0, pCO2) + KW_ACQUA);
 // quanta parte di un minerale si scioglie nel tempo che il granello resta nel suolo (anni), a T, con l'acqua acida aH
-const lab = (minerale, T, aH) => { const [ln, En, , la, n, Ea] = MINERALI_ROCCIA[minerale], ar = (E) => Math.exp(((-1000 * E) / R_GAS) * (1 / T - 1 / 298.15)); return Math.pow(10, ln) * ar(En) + (la > -90 ? Math.pow(10, la) * ar(Ea) * Math.pow(aH, n) : 0); };
+// (PRESTAZIONI, senza cambiare un bit: il ciclo del carbonio chiede la stessa roccia migliaia di volte cambiando solo la CO2.
+// Di ogni minerale si tengono le potenze di dieci delle sue costanti e i due fattori di Arrhenius dell'ultima temperatura
+// chiesta (chiave esatta); il valore di riferimento del laboratorio, che non dipende da chi chiama, si calcola una volta;
+// l'integrale sull'età del suolo resta in memoria per l'ultima età chiesta. Stesse formule, stessi argomenti.)
+const LAB = {};
+const lab = (minerale, T, aH) => {
+  const M = MINERALI_ROCCIA[minerale]; let q = LAB[minerale];
+  if (!q) q = LAB[minerale] = { dieciN: Math.pow(10, M[0]), dieciA: M[3] > -90 ? Math.pow(10, M[3]) : 0, T: NaN, arN: 0, arA: 0, riferimento: NaN };
+  if (q.T !== T) { q.arN = Math.exp(((-1000 * M[1]) / R_GAS) * (1 / T - 1 / 298.15)); q.arA = M[3] > -90 ? Math.exp(((-1000 * M[5]) / R_GAS) * (1 / T - 1 / 298.15)) : 0; q.T = T; }
+  return q.dieciN * q.arN + (M[3] > -90 ? q.dieciA * q.arA * Math.pow(aH, M[4]) : 0); };
+const labDiRiferimento = (minerale) => { let q = LAB[minerale]; if (!q || q.riferimento !== q.riferimento) { const v = lab(minerale, ROCCE.Tsuoli, acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)); q = LAB[minerale]; q.riferimento = v; } return q.riferimento; };
+let etaSuolo = NaN, integraleSuolo = NaN;
 export function sciolto(minerale, T, anni, aH = acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)) {
-  const cambia = lab(minerale, T, aH) / lab(minerale, ROCCE.Tsuoli, acidoDelSuolo(ROCCE.pCO2suoli, ROCCE.Tsuoli)); // (dal laboratorio: solo il rapporto)
+  const cambia = lab(minerale, T, aH) / labDiRiferimento(minerale); // (dal laboratorio: solo il rapporto)
   // l'integrale di 3,1·10⁻¹³·t^−0,61 sull'età del suolo (mol/m²)
-  const perMetroQuadro = (ROCCE.velocita * 3.156e7 * Math.pow(Math.max(anni, 1), 1 - ROCCE.invecchia)) / (1 - ROCCE.invecchia);
+  if (anni !== etaSuolo) { integraleSuolo = (ROCCE.velocita * 3.156e7 * Math.pow(Math.max(anni, 1), 1 - ROCCE.invecchia)) / (1 - ROCCE.invecchia); etaSuolo = anni; }
+  const perMetroQuadro = integraleSuolo;
   return 1 - Math.exp(-perMetroQuadro * cambia * ROCCE.superficieGrani * MINERALI_ROCCIA[minerale][2]);
 }
 // ciò che un kg di roccia consumata cede all'acqua (mol), a T e sotto pCO2 (bar); quanta della sua massa diventa argilla

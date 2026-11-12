@@ -73,7 +73,7 @@ export function massaNascita(u) {
 // nuclide libera, neutrini esclusi: U-238 95,13 µW · U-235 568,47 µW · Th-232 26,28 µW · K-40 28,47 µW (Dye 2012), con le
 // abbondanze isotopiche 99,274% · 0,7204% · 100% · 0,0117%. Gli stessi nuclidi, contati uno per uno, sono in materia.js.)
 export const ISOTOPI = [[0.7555e-12, 4.468], [0.0328e-12, 0.704], [0.7621e-12, 14.05], [1.832e-12, 1.248]];
-export const caloreDellaRoccia = (etaAnni = 4.5e9) => ISOTOPI.reduce((s, [h, mezza]) => s + h * Math.pow(2, (4.5 - etaAnni / 1e9) / mezza), 0);
+export const caloreDellaRoccia = (etaAnni = 4.5e9) => { let s = 0; for (let i = 0; i < ISOTOPI.length; i++) { const q = ISOTOPI[i]; s = s + q[0] * Math.pow(2, (4.5 - etaAnni / 1e9) / q[1]); } return s; }; // (la stessa somma, nello stesso ordine, senza funzioni dentro)
 
 // ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.
 export const UA = 1.496e11, R_GAS = 8.314;
@@ -303,10 +303,23 @@ export function colonnaAria({ pressione, gravita, massaMolare = ARIA.massaMolare
 }
 // l'adiabatica (satura se «umida») dalla superficie a T0 fino alla pressione fp·p: la temperatura lassù
 // («n»: in quanti passi si sale; 24 per i venti di meteo.js, meno per le tabelle del clima a fasce, che la chiede molte volte)
+// (PRESTAZIONI, senza cambiare un bit: i livelli di pressione a cui si passa salendo dipendono solo da «fp» e da «n», non
+// dalla temperatura né dall'aria: exp(ln p) a ogni passo e a ogni mezzo passo si calcola una volta per coppia (fp, n) —
+// gli stessi argomenti dati a Math.exp, quindi gli stessi numeri — e si tiene in tabella; la derivata è scritta sul posto)
+const LIVELLI = [];
+function livelliDi(fp, n) {
+  for (let i = 0; i < LIVELLI.length; i++) if (LIVELLI[i].fp === fp && LIVELLI[i].n === n) return LIVELLI[i].E;
+  const dl = Math.log(fp) / n, E = new Float64Array(2 * n); let lp = 0;
+  for (let i = 0; i < n; i++) { E[2 * i] = Math.exp(lp); E[2 * i + 1] = Math.exp(lp + 0.5 * dl); lp += dl; }
+  if (LIVELLI.length < 64) LIVELLI.push({ fp, n, E });
+  return E;
+}
+const derUmida = (col, T, e) => { const p = col.pressione * e, es = vaporeNellAria(T, p), r = (col.eps * es) / (p - es), L = R_VAPORE * T * T * pendenzaVapore(T); return (col.R * T + L * r) / (col.cp + (L * L * r * col.eps) / (col.R * T * T)); };
 export function adiabatica(col, T0, fp, umida, n = 24) {
-  const { pressione, R, cp, kappa, eps } = col, dl = Math.log(fp) / n; let T = T0, lp = 0;
-  const der = (T, lp) => { if (!umida) return kappa * T; const p = pressione * Math.exp(lp), e = vaporeNellAria(T, p), r = (eps * e) / (p - e), L = R_VAPORE * T * T * pendenzaVapore(T); return (R * T + L * r) / (cp + (L * L * r * eps) / (R * T * T)); };
-  for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * der(T, lp); T += dl * der(m, lp + 0.5 * dl); lp += dl; } return T;
+  const kappa = col.kappa, dl = Math.log(fp) / n; let T = T0;
+  if (!umida) { for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * (kappa * T); T += dl * (kappa * m); } return T; }
+  const E = livelliDi(fp, n);
+  for (let i = 0; i < n; i++) { const m = T + 0.5 * dl * derUmida(col, T, E[2 * i]); T += dl * derUmida(col, m, E[2 * i + 1]); } return T;
 }
 // L'EQUILIBRIO sopra una superficie a temperatura T: le temperature potenziali dei due strati lungo l'adiabatica che
 // parte da lì ([alto, basso]); un'aria secca resta comunque stabile del minimo misurato. La differenza è la stratificazione
@@ -407,9 +420,10 @@ function ariaSulleFasce(aria, lat) {
 // parallelo (W; «raggioM» per averlo in watt). T e calore per fascia, da nord a sud. (Nel bilancio per fasce D si misura
 // istante per istante lungo l'ultimo anno — sommaDelTrasporto —: con le stagioni, e ancora di più con un asse molto
 // inclinato, le medie dell'anno sono quasi uniformi mentre il calore passa da un emisfero all'altro)
-function sommaDelTrasporto(lat, T, calore, somma) {
-  const H = lat.length, dphi = Math.PI / H; let Tm = 0, Fm = 0, w = 0; for (let j = 0; j < H; j++) { const c = Math.cos(lat[j]); Tm += c * T[j]; Fm += c * calore[j]; w += c; } Tm /= w; Fm /= w;
-  for (let j = 0; j < H; j++) { somma.FT += (calore[j] - Fm) * (T[j] - Tm) * Math.cos(lat[j]); if (j < H - 1) { const g = (T[j] - T[j + 1]) / dphi; somma.GG += g * g * Math.max(0, Math.cos(lat[j] - dphi / 2)); } }
+// («cosLat» e «cosS»: cos(lat) e max(0, cos(lat − dphi/2)) di ogni fascia, che chi chiama ha già: gli stessi numeri)
+function sommaDelTrasporto(lat, T, calore, somma, cosLat, cosS) {
+  const H = lat.length, dphi = Math.PI / H; let Tm = 0, Fm = 0, w = 0; for (let j = 0; j < H; j++) { const c = cosLat[j]; Tm += c * T[j]; Fm += c * calore[j]; w += c; } Tm /= w; Fm /= w;
+  for (let j = 0; j < H; j++) { somma.FT += (calore[j] - Fm) * (T[j] - Tm) * cosLat[j]; if (j < H - 1) { const g = (T[j] - T[j + 1]) / dphi; somma.GG += g * g * cosS[j]; } }
 }
 function misuraDelTrasporto(lat, T, calore, raggioM) {
   const H = lat.length, dphi = Math.PI / H, area = raggioM > 0 ? 2 * Math.PI * raggioM * raggioM * dphi : 0, flusso = [], latFlusso = [];
@@ -446,6 +460,7 @@ export function trasportoSuSuperficie({ T, pressione, gravita, raggioM, giorno, 
 //   vento (m/s: quello al suolo, medio sul pianeta e sull'anno, raffiche comprese), scambio (W/m²/K, medio),
 //   trasporto { lat (gradi: i paralleli tra le fasce), flusso (W verso il «polo nord» attraverso ognuno), massimo (W) e
 //   latitudine (gradi) del più grande flusso verso il polo nell'emisfero nord, calore (W/m² dato a ogni fascia), aria (K) }
+const LUCI = { S0: NaN, eps: NaN, H: 0, passiAnno: 0, luci: null };
 export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = null, giorno = null, raggioM = null, gravita = null, massaMolare = ARIA.massaMolare, cp = null, Tavvio = 288, fasce = 16, anni = 8, passiAnno = 16 }) {
   const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
   const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
@@ -458,7 +473,10 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   // la luce rimandata da una fascia: la media di riflette() sulla sua terra e sul suo mare (scritta qui per esteso, con
   // gli stessi numeri: è il conto che si ripete di più; lontano dal gelo la tangente iperbolica vale già −1 o 1)
   const { albedoTerra: aT, albedoMare: aM, albedoGhiaccio: aG, geloTerra: gT, geloMare: gM } = CLIMA;
-  const gelo = (t, soglia) => (t > soglia + 80 ? 0 : t < soglia - 80 ? ghiaccioAcqua : ghiaccioAcqua * 0.5 * (1 - Math.tanh((t - soglia) / 4)));
+  // (PRESTAZIONI, stessi bit: senz'acqua per il ghiaccio la curva vale 0 esatto a ogni temperatura — 0 per qualunque
+  // numero finito —: non serve la tangente iperbolica; t === t lascia a un NaN la strada di prima)
+  const senzaGhiaccio = ghiaccioAcqua === 0;
+  const gelo = (t, soglia) => (senzaGhiaccio && t === t ? 0 : t > soglia + 80 ? 0 : t < soglia - 80 ? ghiaccioAcqua : ghiaccioAcqua * 0.5 * (1 - Math.tanh((t - soglia) / 4)));
   const albedo = (t, luce, v) => {
     const cielo = nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce, v) : 0; let a = 0;
     if (mare < 1) { const g = gelo(t, gT), suolo = g * aG + (1 - g) * aT; a += (1 - mare) * (suolo + cielo * (1 - suolo)); }
@@ -470,9 +488,14 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   const dtLento = dtVero * Math.max(1, bloccato ? (12 * memoria) / (anni * anno) : (8 * memoria - veri * anno) / ((anni - veri) * anno));
   const sotto = new Float64Array(H), diag = new Float64Array(H), sopra = new Float64Array(H), cp_ = new Float64Array(H);
   // la luce di ogni fascia in ogni momento dell'anno (si calcola una volta)
-  const luci = bloccato ? null : new Float64Array(passiAnno * H);
+  // (PRESTAZIONI, stessi bit: chi cerca il clima di un pianeta chiede molti bilanci di fila con la stessa luce e lo stesso
+  // asse: la tabella dell'ultimo — stessa S0, stessa inclinazione, stesse fasce e stessi passi, confronto esatto — vale ancora;
+  // qui la si legge soltanto)
+  let luci = null;
   if (bloccato) for (let j = 0; j < H; j++) sole[j] = S0 * Math.max(0, Math.sin(lat[j]));
-  else for (let f = 0; f < passiAnno; f++) { const del = eps * Math.sin((2 * Math.PI * f) / passiAnno); for (let j = 0; j < H; j++) luci[f * H + j] = luceDelGiorno(S0, lat[j], del); }
+  else if (LUCI.luci && LUCI.S0 === S0 && LUCI.eps === eps && LUCI.H === H && LUCI.passiAnno === passiAnno) luci = LUCI.luci;
+  else { luci = new Float64Array(passiAnno * H); for (let f = 0; f < passiAnno; f++) { const del = eps * Math.sin((2 * Math.PI * f) / passiAnno); for (let j = 0; j < H; j++) luci[f * H + j] = luceDelGiorno(S0, lat[j], del); }
+    LUCI.S0 = S0; LUCI.eps = eps; LUCI.H = H; LUCI.passiAnno = passiAnno; LUCI.luci = luci; }
   A.set(T);
   // se alla fine il pianeta irradia ancora più (o meno) di quanto assorbe, non è a regime (il ghiaccio che avanza è
   // lento): si va avanti per altri anni, finché il bilancio torna. (Il passo lento non si allunga oltre: un passo
@@ -484,7 +507,10 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
     const ultimo = n >= totale - passiAnno, dt = n < lenti && (giro === 0 || bloccato) ? dtAdesso : dtVero; // (gli anni lenti solo al primo giro: poi anni veri)
     if (!bloccato) { const o = (n % passiAnno) * H; for (let j = 0; j < H; j++) sole[j] = luci[o + j]; }
     for (let j = 0; j < H; j++) {
-      const t = T[j], entra = sole[j] * (1 - albedo(t, sole[j], vento[j])), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
+      // (PRESTAZIONI, stessi bit: al buio — la notte polare, la faccia lontana di un pianeta bloccato — la luce che entra è
+      // zero qualunque sia l'albedo, che per temperature e venti finiti sta tra 0 e 0,9: zero per un numero positivo è
+      // zero, con il suo segno. Fuori da quei limiti (mai, a regime) si fa il conto intero, come prima.)
+      const t = T[j], sj = sole[j], vj = vento[j], entra = sj === 0 && t >= 3 && t <= 1e9 && vj >= 0 && vj <= 1e9 ? sj : sj * (1 - albedo(t, sj, vj)), esce = (sigma * t * t * t * t) / serra, molla = (4 * esce) / t, dT = frenaPasso(t, (dt * (entra - esce)) / (C + dt * molla));
       nuovo[j] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
@@ -499,13 +525,16 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
       for (let j = H - 2; j >= 0; j--) nuovo[j] -= cp_[j] * nuovo[j + 1];
       for (let j = 0; j < H; j++) { dato[j] = ((nuovo[j] - dato[j]) * C) / dt; A[j] = nuovo[j]; }
     } else { dato.fill(0); A.set(nuovo); }
-    if (ultimo && su) sommaDelTrasporto(lat, nuovo, dato, somma);
+    if (ultimo && su) sommaDelTrasporto(lat, nuovo, dato, somma, cosLat, cosS);
     for (let j = 0; j < H; j++) { T[j] = nuovo[j]; if (ultimo) { media[j] += nuovo[j] / passiAnno; calore[j] += dato[j] / passiAnno; ariaMedia[j] += A[j] / passiAnno; ventoMedio += (cosLat[j] * vento[j]) / passiAnno; scambioMedio += (cosLat[j] * scambio[j]) / passiAnno;
       // (il ghiaccio che si conta è QUELLO CHE L'ALBEDO VEDE: la stessa curva morbida gelo() attorno alle stesse soglie
       // (geloMare, geloTerra), fascia per fascia e momento per momento. Prima si contava a parte, con un taglio netto a
       // 271 K per il mare e a geloTerra per la terra: avanzava a gradini di una fascia intera, e chi cercava il ghiaccio
       // che «torna uguale a sé stesso» — il ciclo del carbonio in chimica.js — non trovava un punto fermo)
-      ghiaccio += (cosLat[j] * (mare * gelo(nuovo[j], gM) + (1 - mare) * gelo(nuovo[j], gT))) / passiAnno; } }
+      // (PRESTAZIONI, stessi bit: tutto mare o tutta terra, e una temperatura che è un numero: la curva dell'altro è
+      // moltiplicata per zero — un numero tra 0 e 1 per zero fa zero, e sommarlo non cambia niente — e non si calcola)
+      const tn = nuovo[j];
+      ghiaccio += (cosLat[j] * (tn === tn && mare === 1 ? mare * gelo(tn, gM) + 0 : tn === tn && mare === 0 ? 0 + (1 - mare) * gelo(tn, gT) : mare * gelo(tn, gM) + (1 - mare) * gelo(tn, gT))) / passiAnno; } }
   }
   if (Math.abs(irradiata - assorbita) < 0.01 * assorbita) break;
   }

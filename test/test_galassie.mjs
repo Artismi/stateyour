@@ -1,6 +1,6 @@
 // test_galassie.mjs — le galassie come conseguenza: la Via Lattea dai suoi numeri veri, e le galassie di cosmo(1)
 import assert from 'node:assert/strict';
-import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, velocitaPeculiare, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
+import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, velocitaPeculiare, coloreCorpoNero, colorePerTemperatura, luceGenerazione, luceNascite, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, COSMO, etaUniverso, massaNascita } from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
@@ -67,8 +67,15 @@ prova('una galassia come la Via Lattea: disco, rotazione, stelle, gas, supernove
   tra(VL.bracci.numero, 1.5, 4.5, 'bracci'); tra((VL.bracci.passo * 180) / Math.PI, 12, 35, 'passo dei bracci (gradi: 12–25 nella Via Lattea)'); tra(VL.bracci.contrasto, 0.05, 0.46, 'contrasto');
 });
 
-prova('i metalli escono dal bilancio: Z ≈ 1 dove e quando è nato il Sole, il gradiente, la relazione età–metallicità', () => {
-  const zSole = metallicita(VL, ADESSO - 4.6e9, 8); tra(zSole, 1 / 1.5, 1.5, 'Z a 8 kpc, 4,6 miliardi di anni fa (in Z☉)');
+prova('i metalli escono dal bilancio: Z ≈ 1 nel gas vicino al Sole oggi, e dove è nato il Sole; il gradiente, la relazione età–metallicità', () => {
+  // oggi, a 8 kpc, il gas ha i metalli del Sole (le stelle giovani e le nebulose vicine: entro 0,3 dex)
+  const z8 = metallicita(VL, ADESSO, 8); tra(z8, 10 ** -0.3, 10 ** 0.3, 'Z del gas a 8 kpc, oggi (in Z☉)');
+  // DOVE È NATO IL SOLE. Il modello non ha migrazione delle stelle: una stella con Z = 1 nata 4,6 Ga fa è nata dove il gas
+  // aveva Z = 1 allora. Il Sole vero non è nato dov'è: «the most likely radius lies in the range 4.4 < r < 7.7 kpc» (Minchev,
+  // Chiappini & Martig 2013, A&A 558, A9 [V]). La prova chiede quel raggio; Z a 8 kpc 4,6 Ga fa è stampato più sotto
+  // (prima si chiedeva lì 0,67–1,5: con la legge delle nascite di ora il disco a 8 kpc cresce più tardi, e viene meno)
+  const zSole = metallicita(VL, ADESSO - 4.6e9, 8); let rSole = NaN; for (let r = 1; r < 16; r += 0.05) if (metallicita(VL, ADESSO - 4.6e9, r) < 1) { rSole = r; break; }
+  tra(rSole, 4.4, 7.7, 'il raggio a cui il gas aveva Z = 1, 4,6 miliardi di anni fa (kpc)');
   // il gradiente radiale oggi, tra 4 e 12 kpc (nel disco vero: circa −0,05 dex/kpc)
   const grad = Math.log10(metallicita(VL, ADESSO, 12) / metallicita(VL, ADESSO, 4)) / 8; tra(grad, -0.12, -0.005, 'gradiente (dex/kpc)');
   for (const t of [4e9, 8e9, ADESSO]) assert.ok(metallicita(VL, t, 3) > metallicita(VL, t, 8) && metallicita(VL, t, 8) > metallicita(VL, t, 14), `più metalli al centro a ${t / 1e9} Ga`);
@@ -84,7 +91,8 @@ prova('i metalli escono dal bilancio: Z ≈ 1 dove e quando è nato il Sole, il 
   assert.ok(mediana(disco.filter((s) => r(s) < 3).map((s) => s.eta)) > mediana(disco.filter((s) => r(s) > 8).map((s) => s.eta)) + 1e9, 'il disco cresce dall\'interno');
   // ogni stella ha la Z del gas da cui è nata: quella del suo anello nel suo passo
   for (const s of disco.filter((_, i) => i % 50 === 0)) { const j = Math.min(PASSI, Math.floor((ADESSO - s.eta) / 1e9 / DT) + 1); let k = 0; while (k < ANELLI - 1 && VL.anelli.bordo[k + 1] < r(s)) k++; tra(s.Z / Math.max(1e-4, VL.interno.Zn[j * ANELLI + k]), 0.999, 1.001, 'Z della stella / Z del gas del suo anello'); }
-  console.log(`      (Z a 8 kpc: ${[2, 4, 6, 8, ADESSO / 1e9 - 4.6, 12, ADESSO / 1e9].map((t) => `${num(t, 2)} Ga ${num(metallicita(VL, t * 1e9, 8), 2)}`).join(' · ')}; gradiente oggi ${num(grad, 2)} dex/kpc)`);
+  console.log(`      (Z a 8 kpc: ${[2, 4, 6, 8, ADESSO / 1e9 - 4.6, 12, ADESSO / 1e9].map((t) => `${num(t, 2)} Ga ${num(metallicita(VL, t * 1e9, 8), 2)}`).join(' · ')}; gradiente oggi ${num(grad, 2)} dex/kpc; il gas aveva Z = 1, 4,6 Ga fa, a ${num(rSole, 2)} kpc)`);
+  if (!(zSole > 1 / 1.5 && zSole < 1.5)) console.log(`      ≠ NON TORNA: Z del gas a 8 kpc, 4,6 Ga fa: ${num(zSole, 2)} Z☉ (il gas vicino al Sole di allora: 0,67–1,5); il disco a 8 kpc si fa tardi`);
 });
 
 prova('il bilancio è chiuso: la massa entrata è quella che c\'è più quella uscita, i metalli che ci sono sono quelli prodotti', () => {
@@ -219,7 +227,12 @@ prova('le galassie vere di cosmo(1): l\'alone dal picco, lo spin dalle maree dei
   const ell = (v) => v.filter((f) => f.tipo === 'ellittica').length, frazione = ell(F) / n, densi = F.slice(0, terzo), radi = F.slice(-terzo);
   // (le galassie segnate sulla mappa sono le grandi: aloni attorno a 10¹² M☉. Tra le galassie grandi vere, ellittiche e lenticolari
   // sono circa metà; tra tutte, nane comprese, il 10–20%)
-  tra(frazione, 0.1, 0.65, 'frazione di ellittiche tra le galassie grandi'); assert.ok(ell(densi) / terzo > frazione && ell(densi) > 2 * ell(radi), `nel terzo più denso ${ell(densi)}, nel più rado ${ell(radi)}`);
+  tra(frazione, 0.1, 0.65, 'frazione di ellittiche tra le galassie grandi'); assert.ok(ell(densi) / terzo > frazione, `nel terzo più denso ${ell(densi)} su ${terzo}, in tutto ${ell(F)} su ${n}`);
+  // più del doppio nel terzo più denso che nel più rado: contate su tre cosmi invece che su uno (in un cosmo i terzi hanno una
+  // ventina di galassie, e un conteggio di 5–7 ha uno scarto di ±2,5: da solo non regge un rapporto)
+  let eDensi = ell(densi), eRadi = ell(radi), nTerzi = terzo;
+  for (const nc of [2, 3]) { const F2 = cosmo(nc).galassie.map((G) => G.forma), t2 = Math.floor(F2.length / 3); eDensi += ell(F2.slice(0, t2)); eRadi += ell(F2.slice(-t2)); nTerzi += t2; }
+  assert.ok(eDensi > 2 * eRadi, `in tre cosmi: nel terzo più denso ${eDensi} ellittiche su ${nTerzi}, nel più rado ${eRadi}`);
   // chi è ellittica ha avuto fusioni; le spirali hanno gas, bracci, e stelle che nascono ancora
   for (const f of F) {
     assert.ok(['spirale', 'spirale barrata', 'lenticolare', 'ellittica'].includes(f.classe));
@@ -289,6 +302,53 @@ prova('collegate al cosmo: le scale vere, i moti della stella nella galassia e d
   console.log(`      (universo n. 1616476: ${M.slice(1).map((m) => `${m.nome} ${num(m.kmS3d ?? m.kmS)} km/s`).join(' · ')})`);
 });
 
+// dove nascono le stelle oggi: il raggio a cui le nascite per kpc di raggio sono di più, e quello che ne contiene il 95%
+const profiloNascite = (f) => {
+  const e = f.interno, NR = ANELLI; let tot = 0, meglio = 0, picco = 0, c = 0, r95 = 0, anelli = 0; for (let k = 0; k < NR; k++) { tot += e.nati[PASSI * NR + k]; if (e.nati[PASSI * NR + k] > 0) anelli++; }
+  for (let k = 0; k < NR; k++) { const n = e.nati[PASSI * NR + k], d = n / (e.bordo[k + 1] - e.bordo[k]); if (d > meglio) { meglio = d; picco = e.rc[k]; } if (c < 0.95 * tot && c + n >= 0.95 * tot) r95 = e.bordo[k] + ((0.95 * tot - c) / n) * (e.bordo[k + 1] - e.bordo[k]); c += n; }
+  return { picco, r95, anelli };
+};
+// la legge delle nascite misurata sugli anelli: la retta in log Σ_SFR – log Σ_gas (M☉/anno/kpc² e M☉/pc²) tra due densità
+const leggeMisurata = (forme, quando, lo, hi) => {
+  let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const f of forme) { const e = f.interno; for (let j = quando === 'oggi' ? PASSI : 1; j <= PASSI; j++) for (let k = 0; k < ANELLI; k++) { const m = e.nati[j * ANELLI + k], sg = e.Sg[j * ANELLI + k] / 1e6; if (!(m > 0 && sg > lo && sg < hi)) continue; const x = Math.log10(sg), y = Math.log10(m / DT / 1e9 / e.area[k]); n++; sx += x; sy += y; sxx += x * x; sxy += x * y; } }
+  const p = (n * sxy - sx * sy) / (n * sxx - sx * sx); return { n, pendenza: p, a10: 10 ** ((sy - p * sx) / n + p) };
+};
+
+prova('le stelle nascono in tutto il disco: dal gas molecolare che la pressione fa, senza soglie; la luce e il colore anello per anello', () => {
+  const A = VL.anelli, e = VL.interno, NR = ANELLI, C1 = cosmo(1).galassie.map((G) => G.forma);
+  // gli anelli: bordi in progressione geometrica, in scale del disco; dentro il primo bordo sta la stessa parte di un disco
+  // esponenziale che sta fuori dall'ultimo (a 8 scale: 9·e⁻⁸)
+  for (let k = 2; k < NR; k++) tra((A.bordo[k + 1] * A.bordo[k - 1]) / A.bordo[k] ** 2, 1 - 1e-9, 1 + 1e-9, 'bordi in progressione geometrica');
+  const x0 = (8 * A.bordo[1]) / A.bordo[NR]; tra((1 - (1 + x0) * Math.exp(-x0)) / (9 * Math.exp(-8)), 1 - 1e-6, 1 + 1e-6, 'la parte dentro il primo bordo / la parte fuori dall\'ultimo');
+  // dove nascono oggi. Nella Via Lattea vera il massimo sta a 4–6 kpc e la coda arriva a ~15, con una scala del disco di
+  // 2,5–3,5 kpc: in scale del disco, il massimo tra 4/3,5 e 6/2,5 e il 95% entro 12/3,5–18/2,5
+  const P = profiloNascite(VL); tra(P.picco / VL.raggioDisco, 4 / 3.5, 6 / 2.5, 'il massimo delle nascite (in scale del disco)'); tra(P.r95 / VL.raggioDisco, 12 / 3.5, 18 / 2.5, 'il raggio che tiene il 95% delle nascite (in scale del disco)');
+  // NIENTE SOGLIA: nessun anello con più gas di quanto l'idrogeno atomico ne regge (9 M☉/pc²: «a sharp saturation of the HI
+  // surface density», Bigiel et al. 2008 [V]: sopra, il resto è molecolare) resta senza nascite; nella Via Lattea e in tutte le galassie di cosmo(1)
+  for (const f of [VL, ...C1]) for (let k = 0; k < NR; k++) if (f.anelli.sigmaGas[k] > 9e6) assert.ok(f.interno.nati[PASSI * NR + k] > 0, `un anello con ${f.anelli.sigmaGas[k] / 1e6} M☉/pc² di gas e nessuna nascita`);
+  // dove c'è un disco con il gas (le spirali) le stelle nascono in tanti anelli, non al centro soltanto: almeno una su tre oltre una scala del disco
+  const sp = C1.filter((f) => f.tipo === 'spirale'), fuori = (f) => { let t = 0, o = 0; for (let k = 0; k < NR; k++) { const n = f.interno.nati[PASSI * NR + k]; t += n; if (f.anelli.r[k] > f.raggioDisco) o += n; } return o / t; };
+  tra(mediana(sp.map((f) => profiloNascite(f).anelli)), NR / 2, NR + 1, 'anelli con nascite oggi, nella spirale mediana'); tra(mediana(sp.map(fuori)), 1 / 3, 1, 'nascite oltre una scala del disco, nella spirale mediana');
+  // LA LEGGE DI KENNICUTT, misurata sugli anelli di tutte le galassie di cosmo(1) in tutta la loro storia, sull'intervallo di
+  // Kennicutt 1998 (dischi e scoppi, da 3 a 10⁵ M☉/pc²): pendenza 1,40 ± 0,15. Non è scritta: esce dal gas molecolare (pendenza
+  // 1 dove è tutto molecolare, più ripida dove è atomico) e dagli scoppi
+  const ks = leggeMisurata(C1, 'sempre', 3, 1e5); tra(ks.pendenza, 1.25, 1.55, 'pendenza della legge di Kennicutt-Schmidt sugli anelli');
+  // la luce anello per anello: sommata sul disco (senza sferoide) è la luce della galassia; le giovani ne sono una parte, più azzurra
+  let somma = 0, giovani = 0; for (let k = 0; k < NR; k++) { somma += A.luce[k] * A.area[k]; giovani += A.luceGiovani[k] * A.area[k]; assert.ok(A.luceGiovani[k] <= A.luce[k] * (1 + 1e-9) && A.luceVGiovani[k] <= A.luceV[k] * (1 + 1e-9) && A.vitaBraccio[k] > 0); if (A.luceVGiovani[k] > 0) assert.ok(A.coloreGiovani[k][2] / A.coloreGiovani[k][0] >= A.colore[k][2] / A.colore[k][0], 'le giovani sono più azzurre'); }
+  tra(somma / VL.luce, 1 - 1e-9, 1 + 1e-9, 'la luce degli anelli / la luce della galassia'); tra(giovani / somma, 0.3, 0.999, 'la parte della luce (in tutto) che viene dalle stelle più giovani di un braccio');
+  // il colore di un corpo nero: il Sole quasi bianco (appena caldo), 9500 K bianco-azzurro, 3000 K arancio; più caldo, più azzurro
+  const sole = colorePerTemperatura(5772), calda = colorePerTemperatura(9500), fredda = colorePerTemperatura(3000);
+  assert.ok(sole[0] === 255 && sole[1] > 230 && sole[2] > 215 && sole[1] >= sole[2], `il Sole: ${sole}`); assert.ok(calda[2] === 255 && calda[0] < calda[1] && calda[1] < 255 && calda[0] > 180, `9500 K: ${calda}`); assert.ok(fredda[0] === 255 && fredda[2] < 140 && fredda[1] < 210, `3000 K: ${fredda}`);
+  let prima = Infinity; for (let T = 1500; T < 40000; T *= 1.1) { const c = coloreCorpoNero(T), q = c[0] / Math.max(c[2], 1e-9); assert.ok(q <= prima * (1 + 1e-9) && Math.max(...c) === 1 && Math.min(...c) >= 0); prima = q; }
+  // la luce di una generazione cala con l'età e arrossa; le giovani di un braccio (100 Ma) fanno migliaia di L☉ per M☉/anno
+  const g0 = luceGenerazione(0.01), g1 = luceGenerazione(1), g2 = luceGenerazione(10); assert.ok(g0.luce > 10 * g1.luce && g1.luce > 3 * g2.luce && g0.colore[2] === 1 && g2.colore[0] === 1);
+  tra(luceNascite(0.3).luce / (popolazione().luce[0] * DT * 1e9), 1 - 1e-3, 1 + 1e-3, 'luceNascite(un passo) / luce della generazione del primo passo');
+  console.log(`      (Via Lattea: nascite in ${P.anelli} anelli su ${NR}; il massimo a ${num(P.picco)} kpc, il 95% entro ${num(P.r95)} kpc; spirali di cosmo(1): anelli con nascite ${mediana(sp.map((f) => profiloNascite(f).anelli))} (mediana), oltre una scala ${num(100 * mediana(sp.map(fuori)))}%)`);
+  console.log(`      (Kennicutt-Schmidt sugli anelli, 3–10⁵ M☉/pc², ${ks.n} punti: pendenza ${num(ks.pendenza)}, a 10 M☉/pc² ${num(ks.a10)} M☉/anno/kpc² (Kennicutt 1998, con l'elio: 4,1·10⁻³ con le masse di Salpeter, 2,7·10⁻³ con quelle di Kroupa))`);
+  console.log(`      (luce: il ${num(100 * giovani / somma)}% dalle stelle più giovani di un braccio; colori: il Sole ${sole}, 9500 K ${calda}, 3000 K ${fredda}; il disco a 8 kpc ${A.colore[A.r.findIndex((r) => r > 8)]}, le sue giovani ${A.coloreGiovani[A.r.findIndex((r) => r > 8)]})`);
+});
+
 // ---------- il confronto con la Via Lattea, in chiaro
 console.log('\n  la Via Lattea (alone 10¹² M☉, spin 0,04, nessuna fusione)        modello     vera');
 const riga = (che, m, v) => console.log(`    ${che.padEnd(58)} ${String(m).padStart(9)}   ${v}`);
@@ -297,5 +357,33 @@ riga('massa in stelle (10¹⁰ M☉)', num(VL.massaStelle / 1e10), '5–6'); rig
 riga('supernove al secolo (collasso + Ia)', `${num(100 * VL.ritmoSN.collasso, 2)} + ${num(100 * VL.ritmoSN.Ia, 2)}`, '≈ 2 (1,5 + 0,5)'); riga('Z a 8 kpc, 4,6 Ga fa (Z☉)', num(metallicita(VL, ADESSO - 4.6e9, 8)), '1');
 riga('gradiente di Z oggi, 4–12 kpc (dex/kpc)', num(Math.log10(metallicita(VL, ADESSO, 12) / metallicita(VL, ADESSO, 4)) / 8, 2), '−0,05'); riga('bracci · passo (gradi)', `${VL.bracci.numero} · ${num((VL.bracci.passo * 180) / Math.PI, 2)}`, '2–4 · 12–25');
 riga('barra (kpc)', VL.barra ? num(VL.barra.raggio) : 'no', '≈ 5'); riga('buco nero centrale (M☉)', num(VL.buco.M), '4,3·10⁶ (qui: senza sferoide resta il germe)'); riga('gas caldo nell\'alone (10¹⁰ M☉)', num(VL.massaCalda / 1e10), '2–10 (incerto)');
+// ---------- I RISCONTRI su più galassie (stampati: ciò che non torna è segnato e non ferma la catena)
+// Tre campioni di aloni come quello della Via Lattea: (a) quello della prova; (b) sedici aloni quieti, senza fusioni, masse
+// 0,8–1,6·10¹² M☉ e spin attorno alla mediana (0,028–0,055); (c) le galassie vere dei cosmi 1–3 con alone 0,7–2·10¹² M☉ e
+// meno di metà delle stelle nello sferoide (con le loro fusioni). Per ognuno la mediana e gli estremi.
+{
+  const misura = (f) => { const Z = (t, r) => metallicita(f, t, r), P = profiloNascite(f); let rSole = NaN; for (let r = 1; r < 16; r += 0.05) if (Z(ADESSO - 4.6e9, r) < 1) { rSole = r; break; }
+    return [f.raggioDisco, f.storia.sfr[PASSI], P.picco, P.r95, Math.log10(Z(ADESSO, 12) / Z(ADESSO, 4)) / 8, Z(ADESSO, 8), Z(ADESSO - 4.6e9, 8), rSole, f.anelli.Z[0], f.massaStelle / 1e10, f.massaGas / 1e9, curvaRotazione(f, 8)]; };
+  const VOCI = [['scala del disco di stelle (kpc)', 2.5, 3.5], ['stelle che nascono oggi (M☉/anno)', 1, 3], ['raggio dove nascono più stelle per kpc (kpc)', 4, 6], ['raggio che tiene il 95% delle nascite (kpc)', 12, 18], ['gradiente dei metalli, 4–12 kpc (dex/kpc)', -0.07, -0.04],
+    ['Z del gas a 8 kpc, oggi (Z☉: 1 entro 0,3 dex)', 0.5, 2], ['Z del gas a 8 kpc, 4,6 Ga fa (Z☉)', 0.67, 1.5], ['raggio dove il gas aveva Z = 1, 4,6 Ga fa (kpc)', 4.4, 7.7], ['Z del gas al centro, oggi (Z☉)', 0, 3], ['massa in stelle (10¹⁰ M☉)', 5, 6], ['gas freddo (10⁹ M☉)', 7, 12], ['velocità di rotazione a 8 kpc (km/s)', 220, 240]];
+  const quieti = []; for (const M of [0.8e12, 1e12, 1.3e12, 1.6e12]) for (const spin of [0.028, 0.035, 0.044, 0.055]) quieti.push(misura(formaDaAlone({ massa: M, spin, fusioni: [] }, sorgente(`prova/riscontri/alone ${M}/spin ${spin}`))));
+  const veri = [], tutte = []; for (const nc of [1, 2, 3]) for (const G of cosmo(nc).galassie) { tutte.push(G.forma); if (G.forma.alone.massa > 0.7e12 && G.forma.alone.massa < 2e12 && G.forma.frazioneSferoide < 0.5) veri.push(misura(G.forma)); }
+  const campioni = [['(a) la prova', [misura(VL)]], [`(b) ${quieti.length} aloni quieti`, quieti], [`(c) ${veri.length} galassie dei cosmi 1–3`, veri]];
+  console.log(`\n  UN ALONE COME QUELLO DELLA VIA LATTEA, su più galassie: mediana [minimo … massimo]; ≠ segna la mediana che NON TORNA col vero`);
+  console.log(`    ${''.padEnd(48)} ${'vero'.padEnd(12)} ${campioni.map(([n]) => n.padEnd(30)).join(' ')}`);
+  let no = 0;
+  VOCI.forEach(([che, a, b], i) => console.log(`    ${che.padEnd(48)} ${`${num(a)}…${num(b)}`.padEnd(12)} ${campioni.map(([, R]) => { const v = R.map((r) => r[i]).filter(Number.isFinite), m = mediana(v), bene = m >= a && m <= b; if (!bene) no++; return `${bene ? ' ' : '≠'} ${num(m)}${R.length > 1 ? ` [${num(Math.min(...v), 2)} … ${num(Math.max(...v), 2)}]` : ''}`.padEnd(30); }).join(' ')}`));
+  console.log(`    (${no} mediane su ${VOCI.length * campioni.length} NON TORNANO. Le cause, per quel che si sa: l'alone raffredda poco gas — il suo gas caldo resta senza metalli — e le stelle sono la metà delle vere; il disco a 8 kpc cresce tardi; nelle galassie con le fusioni il gas del centro, chiuso, sale a 4 Z☉)`);
+  // la legge delle nascite misurata sugli anelli (Kennicutt 1998: pendenza 1,40 ± 0,15 da 3 a 10⁵ M☉/pc²; a 10 M☉/pc², con l'elio, 4,1·10⁻³ M☉/anno/kpc² con le masse di Salpeter e 2,7·10⁻³ con quelle di Kroupa)
+  console.log(`\n  LA LEGGE DI KENNICUTT-SCHMIDT misurata sugli anelli (${tutte.length} galassie dei cosmi 1–3)                 punti   pendenza (1,40 ± 0,15)   a 10 M☉/pc² (2,7·10⁻³)`);
+  for (const [che, q, lo, hi] of [['tutta la storia, 3–10⁵ M☉/pc² (dischi e scoppi: Kennicutt 1998)', 'sempre', 3, 1e5], ['oggi, 3–100 M☉/pc² (i dischi, con il gas atomico dei bordi)', 'oggi', 3, 100], ['oggi, 10–100 M☉/pc² (gas quasi tutto molecolare)', 'oggi', 10, 100], ['tutta la storia, 100–10⁵ M☉/pc² (solo gli scoppi)', 'sempre', 100, 1e5]]) {
+    const r = leggeMisurata(tutte, q, lo, hi); console.log(`    ${che.padEnd(70)} ${String(r.n).padStart(7)}   ${Math.abs(r.pendenza - 1.4) <= 0.15 ? ' ' : '≠'} ${num(r.pendenza).padEnd(8)}                ${num(r.a10)}`); }
+  // la relazione tra massa e metalli e la sequenza delle galassie che fanno stelle (cosmi 1–3)
+  const sp = tutte.filter((f) => f.tipo === 'spirale'), el = tutte.filter((f) => f.tipo === 'ellittica'), zStelle = (f) => f.bilancio.metalliStelle / f.massaStelle / dentro.ZSOLE, perMassa = [...tutte].sort((x, y) => x.massaStelle - y.massaStelle), terzo = Math.floor(tutte.length / 3);
+  console.log(`\n  LE GALASSIE DEI COSMI 1–3 (${tutte.length}): nascite per massa di stelle (per Ga): spirali ${num(1e9 * mediana(sp.map((f) => f.storia.sfr[PASSI] / f.massaStelle)))}, ellittiche ${num(1e9 * mediana(el.map((f) => f.storia.sfr[PASSI] / f.massaStelle)))} (vere: 0,03–0,1 e meno di 0,003)`);
+  console.log(`    metalli delle stelle (Z☉, in massa): nel terzo più leggero ${num(mediana(perMassa.slice(0, terzo).map(zStelle)))}, nel più pesante ${num(mediana(perMassa.slice(-terzo).map(zStelle)))}; Z delle stelle che nascono oggi (pesata con le nascite): spirali ${num(mediana(sp.map((f) => { let a = 0, b = 0; for (let k = 0; k < ANELLI; k++) { const n = f.interno.nati[PASSI * ANELLI + k]; a += n * f.interno.Zn[PASSI * ANELLI + k]; b += n; } return a / b; })))}, ellittiche ${num(mediana(el.map((f) => { let a = 0, b = 0; for (let k = 0; k < ANELLI; k++) { const n = f.interno.nati[PASSI * ANELLI + k]; a += n * f.interno.Zn[PASSI * ANELLI + k]; b += n; } return b > 0 ? a / b : NaN; }).filter(Number.isFinite)))} (≠ NON TORNA sopra 2–3: il gas chiuso al centro dopo una fusione)`);
+  const unAnello = tutte.filter((f) => profiloNascite(f).anelli <= 1), nelCentro = (f) => { const e = f.interno; let a = 0, b = 0; for (let i = Math.max(1, e.sferoideFino); i <= PASSI; i++) for (let k = 0; k < ANELLI; k++) { const n = e.nati[i * ANELLI + k]; b += n; if (k === 0) a += n; } return b > 0 ? a / b : NaN; };
+  console.log(`    nascite di oggi in un anello solo: ${unAnello.length} galassie su ${tutte.length} (${unAnello.filter((f) => f.tipo === 'ellittica').length} ellittiche: dopo una fusione maggiore, senza gas che si raffreddi, resta solo quello del centro); stelle del disco nate nell'anello centrale: ${num(100 * mediana(sp.map(nelCentro).filter(Number.isFinite)))}% nelle spirali (mediana)`);
+}
 void GK;
 console.log(`\n${ok} prove superate`);

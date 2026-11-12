@@ -54,8 +54,11 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // la storia degli impatti del pianeta (impatti.js, P.impatti); se il pianeta non la porta restano i ripieghi da seme.
   // Lo stato da cui parte il mantello è l'impronta termica dei suoi urti
   const storiaUrti = P.impatti ?? null;
-  const mantello = aPlacche ? statoDelMantello(P, int) : null; // (dalla storia termica: da lì la velocità delle placche)
-  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
+  // (dalla storia termica: da lì la velocità delle placche; e, per la litosfera, la dilatazione e la densità del mantello che
+  // la storia usa, la crosta di basalto che il mantello produce, la temperatura della superficie; poi l'acqua e la gravità)
+  const mantello0 = aPlacche ? statoDelMantello(P, int) : null, Tsup = P.clima?.T ?? P.clima?.Teq, mantello = mantello0 ? { ...mantello0, alfa: STORIA.alfa, rho: STORIA.rhoSu, ...(int.crosta > 0 ? { basalto: int.crosta * P.raggioM } : {}), ...(Tsup > 0 ? { Ts: Tsup } : {}) } : null;
+  const gravita = P.massaKg > 0 ? (6.674e-11 * P.massaKg) / P.raggioM ** 2 : 9.81;
+  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, acquaM3: acquaKg / 1000, gravita, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
   const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(`onda ${k}/direzione`), f: 2 + k * 0.7, fi: caso(`onda ${k}/fase`) * 6.28, a: 1 / (1 + k * 0.35) }));
@@ -145,7 +148,8 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // ispessisce (m/anno); tetto = la quota (m) oltre la quale la crosta, più spessa di quanto la spinta regge, cede
   const tetto = tt ? new Float32Array(W * H) : null; if (tt) for (let k = 0; k < W * H; k++) tetto[k] = alt[k] + tt.regge[k];
   const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati,
-    ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita } } : {}) };
+    ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, spessore: tt.spessore, copre: tt.copre, calore: tt.calore, termica: tt.termica,
+      tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera } } : {}) };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
@@ -427,7 +431,7 @@ export const EROSIONE = Object.freeze({ m: 0.4, n: 1, K: Object.freeze({ granito
   consumo: Object.freeze({ granito: 4.2e-6, vulcanica: 2e-5, sedimento: 2e-4 }), // (1/m) la parte della ghiaia che si disfa in carico fine per ogni metro di strada
   suolo: 3.1e-4, // (m/anno) P₀: quanto in fretta, al più, la roccia diventa suolo
   velo: 1, // (m) sotto, una copertura non conta
-  isostasia: 2800 / 3300, sottoIlMare: (2700 - 1000) / (3300 - 1000), densita: 2700, durataSenzaPlacche: 1e8 });
+  isostasia: 2800 / 3300, sottoIlMare: (2700 - 1000) / (3300 - 1000), sottoLAcqua: 1000 / 3300, densita: 2700, durataSenzaPlacche: 1e8 });
 const memoErosione = new Map();
 export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso = null, crescita = true, scala = 1, durata = null } = {}) {
   if (memoErosione.has(chiave)) return memoErosione.get(chiave);
@@ -465,6 +469,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     // (le lave: gli edifici ci sono già; quelle degli archi escono un po' per volta, per tutta la durata: vedi il passo)
     const l = sf.lava ? sf.lava[k] : 0; if (l + (arco ? arco[k] * T : 0) > E.velo) { lava[k] = l; diLava[k] = 1; cop[k] = 0; } }
   const soll = crescita && sf.sollevamento ? sf.sollevamento : null, tetto = sf.tetto || null, V0 = E.suolo * dt;
+  const lit = sf.tettonica?.litosfera || null, termica = crescita && sf.termica && lit?.tau > 0 ? sf.termica : null, tauT = lit?.tau ?? 1, affonda = lit?.aria > 0 ? 1 - lit.aria : E.sottoLAcqua; // (ρw/ρ del mantello caldo: dalla litosfera del pianeta, se c'è)
   const kSed = E.K.sedimento, kMez = E.K.vulcanica, kGra = E.K.granito, cS = E.consumo.sedimento, cV = E.consumo.vulcanica, cG = E.consumo.granito;
   const resiste = (x) => (x > 1e-6 ? (1 - Math.exp(-x)) / x : 1); // quanta della ghiaia nata lungo un tratto ne esce ancora ghiaia (x = consumo × lunghezza)
   let erosoTot = 0, depTerra = 0, depMare = 0, alMare = 0, daiVersanti = 0, areaTerre = 0, copPrima = 0, copErosa = 0, copPosata = 0, sollevato = 0, fresca = 0;
@@ -499,7 +504,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
     for (let x = 0; x < n; x++) {
       const k = ordine[x], r = ricevente[k]; if (r < 0 || alt[k] < mare) continue;
       if (pieno[k] > alt[k] + 0.5) continue; // nel lago non si scava: si deposita
-      const zr = alt[r]; let z = alt[k]; if (!(zr < z)) continue;
+      const zr = alt[r] < mare ? mare : alt[r]; let z = alt[k]; if (!(zr < z)) continue; // (il livello di base di un fiume che sbocca in mare è il MARE, non il fondo: prima la costa veniva scavata fin sotto il pelo dell'acqua)
       const g = (Math.pow(portata[k] / E.pioggiaRif, E.m) * dt) / dist[k], ak = aDi(k); let resto = 1, tc = 0, tl = 0;
       let c = sci[k];
       if (c > 0) { const F = kSed * g, giu = ((z - zr) * F) / (1 + F); if (giu <= c) { tc = giu; resto = 0; } else { tc = c; resto -= c / ((z - zr - c) * F); } z -= tc; sci[k] = c - tc; eSci[k] = tc * ak; }
@@ -519,7 +524,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
         const d = dist[k]; ghS[k] = 0; ghV[k] = 0; ghG[k] = 0; gS *= Math.exp(-cS * d); gV *= Math.exp(-cV * d); gG *= Math.exp(-cG * d); // la ghiaia in arrivo si consuma per strada
         // i blocchi di questo passo: ciò che è stato scavato oltre quanto il suolo riesce a disfare, dal fondo dello scavo
         let bB = 0, bL = 0, bC = 0; const blocchi = scavato - V0 * ak; if (blocchi > 0) { bB = Math.min(eBase[k], blocchi); bL = Math.min(eMez[k], blocchi - bB); bC = Math.max(0, blocchi - bB - bL); }
-        const pB = resiste((base[k] ? cV : cG) * d), pL = resiste(cV * d), pC = resiste(cS * d), S = Math.max(0, alt[k] - alt[r]) / d;
+        const pB = resiste((base[k] ? cV : cG) * d), pL = resiste(cV * d), pC = resiste(cS * d), S = Math.max(0, alt[k] - (alt[r] < mare ? mare : alt[r])) / d;
         let troppo = gS + gV + gG + pB * bB + pL * bL + pC * bC - E.kQs * E.piena * portata[k] * Math.pow(S, E.capacitaEsponente) * dt;
         if (troppo > 0) {
           const uB = Math.min(bB, troppo / pB); troppo -= uB * pB; bB -= uB;
@@ -564,7 +569,12 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
       for (let k = 0; k < N; k++) { if (!(alt[k] < mare)) { let su = portata[k];
           if (soll) { const u = soll[k] * dt, z = alt[k] + su, fin = tetto ? tetto[k] : Infinity, s = u < 0 ? u : z < fin ? Math.min(u, fin - z) : 0; su += s; sollevato += s * aDi(k); }
           alt[k] += su; } calo[k] = 0; }
-      if (volumeMare > 0) { const [v, a] = acqua(); if (a > 0) mare += (volumeMare - v) / a; } }
+      // LA SUBSIDENZA TERMICA: la litosfera stirata si raffredda e la colonna scende di ciò che le resta (sf.termica, m in
+      // aria: tettonica.js), come e^(−t/τ) (McKenzie 1978); sotto il mare il peso dell'acqua che entra la fa scendere di più
+      if (termica) { const f = Math.exp((-it * dt) / tauT) - Math.exp((-(it + 1) * dt) / tauT); for (let k = 0; k < N; k++) { const s = termica[k]; if (s !== 0) alt[k] -= alt[k] < mare ? (s * f) / (1 - affonda) : s * f; } }
+      // l'acqua si conserva, e PESA: se il fondo si alza di sedimento il mare deve salire di w metri d'acqua in più, ma sotto
+      // quel peso il fondo cede di w·ρw/ρm: il livello sale di w·(1 − ρw/ρm), le terre non si muovono
+      if (volumeMare > 0) { const [v, a] = acqua(); if (a > 0) { const w = (volumeMare - v) / a, giu = w * affonda; for (let k = 0; k < N; k++) if (alt[k] < mare) alt[k] -= giu; mare += w - giu; } } }
   }
   if (volumeMare > 0) for (let giro = 0; giro < 6; giro++) { const [v, a] = acqua(); if (!(a > 0) || Math.abs(volumeMare - v) < 1e-9 * volumeMare) break; mare += (volumeMare - v) / a; }
   // una conca diventa lago solo se l'acqua che le arriva supera quella che evapora (più fa caldo, più

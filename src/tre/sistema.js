@@ -17,6 +17,7 @@ import { sistema } from '../camera/cosmo.js';
 import { corpiSistema, scenaSistema } from '../camera/spazio3d.js';
 import { creaBucoNero } from './buconero.js';
 import { COSTANTI } from '../camera/leggi.js';
+import { creaMinori } from './minori.js';
 
 // un buco nero nel mondo: lo strato di buconero.js (nel modo «scena»: piega ciò che gli altri hanno disegnato) più il
 // TEMPO PROPRIO di chi gli sta vicino: per chi sta fermo a r il suo secondo vale 1/√(1 − 2r_g/r) secondi di chi sta
@@ -137,13 +138,15 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
     },
   };
   N.aggiungi(strato);
+  // i corpi minori (minori.js): la polvere che diffonde la luce della stella, i corpi delle fasce, le comete attive
+  const minori = O.minori === false || buco ? null : creaMinori(N, { via, nodo, stella, luminosita: stella.luminosita, raggioStella: stella.raggio, T: Tstella, coloreLuce, opzioni: O.minori || {} });
   return {
-    nodo, stella, corpi, schede, Sis, coloreLuce,
+    nodo, stella, corpi, schede, Sis, coloreLuce, minori,
     pianeta: (i) => schede.find((s) => s.c.cosa === 'pianeta' && s.c.id === i)?.corpo || null,
     vero: () => schede.find((s) => s.vero)?.vero || null, scheda: (corpo) => schede.find((s) => s.corpo === corpo) || null,
     // che cosa è un corpo, in parole (per la riga in basso)
     descrivi(corpo) { const s = schede.find((x) => x.corpo === corpo); if (!s) return ''; if (s.c.cosa === 'stella') return `la stella: ${Tstella.toFixed(0)} K, raggio ${(corpo.raggio / 6.957e8).toFixed(2)} raggi solari`; if (s.P) return `il pianeta ${s.c.id + 1}: ${s.P.tipo}, raggio ${(corpo.raggio / 1000).toFixed(0)} km, a ${((s.P.aM || 0) / UA).toFixed(2)} UA${s.P.anello ? ', con gli anelli' : ''}${(s.P.lune || []).length ? `, ${(s.P.lune || []).length} lune` : ''}`; return `una luna del pianeta ${s.c.pianeta + 1}: raggio ${(corpo.raggio / 1000).toFixed(0)} km`; },
-    buco, libera() { N.togli(strato); if (buco) N.togli(buco); for (const s of schede) { if (s.vero) s.vero.libera(); if (s.anello) s.anello.libera(); } for (const o of orbite) { gl.deleteBuffer(o.buf); gl.deleteVertexArray(o.vao); } punti.libera(); gl.deleteBuffer(quadrato.b); gl.deleteVertexArray(quadrato.vao);
+    buco, libera() { N.togli(strato); if (minori) minori.libera(); if (buco) N.togli(buco); for (const s of schede) { if (s.vero) s.vero.libera(); if (s.anello) s.anello.libera(); } for (const o of orbite) { gl.deleteBuffer(o.buf); gl.deleteVertexArray(o.vao); } punti.libera(); gl.deleteBuffer(quadrato.b); gl.deleteVertexArray(quadrato.vao);
       for (const c of [nodo, ...corpi]) { const i = N.corpi.indexOf(c); if (i >= 0) N.corpi.splice(i, 1); } },
   };
 }

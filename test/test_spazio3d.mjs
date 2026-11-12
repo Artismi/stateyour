@@ -156,9 +156,13 @@ prova('le galassie vere nel tempo: le stelle girano, quelle non ancora nate non 
   const C = CO.cosmo(1), gid = C.galassie.findIndex((g) => g.forma.classe.startsWith('spirale')), Gx = CO.galassia(1, gid), U1 = Gx.forma.unitaM;
   const o = S3.statoGalassia(1, gid, 0); assert.equal(o.n, 2500);
   for (let i = 0; i < o.n; i += 7) { assert.ok(Math.hypot(o.pos[3 * i] / U1 - Gx.stelle[i].pos[0], o.pos[3 * i + 1] / U1 - Gx.stelle[i].pos[1]) < 1e-12, 'a t = 0, viste dall\'alto, sono quelle del catalogo'); assert.equal(o.stati[o.stato[i]], Gx.stelle[i].stato); assert.equal(o.esiste[i], 1); }
-  // tra dieci milioni di anni le stelle del disco hanno girato di qualche grado, tutte nello stesso verso
+  // tra dieci milioni di anni le stelle del disco hanno girato di qualche grado, tutte nello stesso verso. (Il verso si legge
+  // da due istanti solo finché la stella ha fatto meno di mezzo giro. Vicino al centro in dieci milioni di anni ne fa di più
+  // — a 0,3 kpc un giro dura 7 milioni di anni —, e da quando gli anelli di galassie.js risolvono il centro il catalogo ha
+  // stelle del disco anche lì. Si contano quelle sotto mezzo giro: Ω·t·1,35 < π, dove 1,35 = 1 + 2·0,15/0,85 è quanto
+  // l'epiciclo, che motoStella tiene sotto 0,15 r, può far correre l'angolo più del cerchio guida)
   const dopo = S3.statoGalassia(1, gid, 1e7 * ANNO), verso = GA.cinematica(Gx.forma).verso; let nelVerso = 0, disco = 0;
-  for (let i = 0; i < o.n; i++) { if (Gx.stelle[i].componente !== 'disco') continue; disco++; const a0 = Math.atan2(o.pos[3 * i + 1], o.pos[3 * i]), a1 = Math.atan2(dopo.pos[3 * i + 1], dopo.pos[3 * i]), d = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)); if (Math.sign(d) === verso) nelVerso++; }
+  for (let i = 0; i < o.n; i++) { if (Gx.stelle[i].componente !== 'disco') continue; const rK = Math.max(1e-6, Math.hypot(o.pos[3 * i], o.pos[3 * i + 1]) / GA.dentro.KPC); if (1.35 * (GA.curvaRotazione(Gx.forma, rK) / rK) * GA.dentro.KMS * 0.01 >= Math.PI) continue; disco++; const a0 = Math.atan2(o.pos[3 * i + 1], o.pos[3 * i]), a1 = Math.atan2(dopo.pos[3 * i + 1], dopo.pos[3 * i]), d = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)); if (Math.sign(d) === verso) nelVerso++; }
   assert.ok(disco > 200 && nelVerso > 0.9 * disco, `${nelVerso} su ${disco} nel verso del disco`);
   // cinque miliardi di anni fa: chi è nato dopo non c'è; chi oggi è un resto giovane era una stella viva, più luminosa
   const prima = S3.statoGalassia(1, gid, -5e9 * ANNO); let nonNate = 0, eranoVive = 0;

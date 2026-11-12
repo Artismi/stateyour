@@ -69,14 +69,19 @@ export const MAREE = Object.freeze({
 // la funzione degli errori (Abramowitz e Stegun 7.1.26: sbaglia meno di 1,5·10⁻⁷)
 export function erf(x) { const s = x < 0 ? -1 : 1, a = Math.abs(x), t = 1 / (1 + 0.3275911 * a); return s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a)); }
 // Γ(x) per x tra 1 e 2 (serve Γ(1 + α)): approssimazione di Lanczos a sei termini (errore sotto 10⁻⁹)
-function gamma(x) { const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5]; let y = x, t = x + 5.5, s = 1.000000000190015; t -= (x + 0.5) * Math.log(t); for (const k of c) s += k / ++y; return Math.exp(-t + Math.log((2.5066282746310005 * s) / x)); }
+// (PRESTAZIONI: Γ è chiesta milioni di volte sempre con lo stesso argomento, 1 + α: l'ultimo valore resta in memoria, con
+// la chiave ESATTA — lo stesso x, lo stesso numero, bit per bit)
+const LANCZOS = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+let gammaDi = NaN, gammaVale = NaN;
+function gamma(x) { if (x === gammaDi) return gammaVale; let y = x, t = x + 5.5, s = 1.000000000190015; t -= (x + 0.5) * Math.log(t); for (let i = 0; i < 6; i++) s += LANCZOS[i] / ++y; gammaDi = x; return (gammaVale = Math.exp(-t + Math.log((2.5066282746310005 * s) / x))); }
 
 // ---------- la materia: una viscosità sola per la convezione e per la marea
 // quanto il fuso abbassa viscosità e rigidità (Costa; F = frazione fusa): ε_fuso ≥ 1
 export function epsilonFuso(F) {
   if (!(F > 0)) return 1;
-  const { B, fiStar, delta, gamma: gm, xi } = MAREE.costa, fi = Math.min(1, F) / fiStar, Ft = (1 - xi) * erf((Math.sqrt(PI) / (2 * (1 - xi))) * fi * (1 + Math.pow(fi, gm)));
-  return (1 + Math.pow(fi, delta)) / Math.pow(1 - Ft, B * fiStar);
+  // (PRESTAZIONI: con γ = δ le due potenze di φ sono la stessa chiamata: si fa una volta)
+  const { B, fiStar, delta, gamma: gm, xi } = MAREE.costa, fi = Math.min(1, F) / fiStar, pg = Math.pow(fi, gm), Ft = (1 - xi) * erf((Math.sqrt(PI) / (2 * (1 - xi))) * fi * (1 + pg));
+  return (1 + (delta === gm ? pg : Math.pow(fi, delta))) / Math.pow(1 - Ft, B * fiStar);
 }
 // la viscosità cinematica della roccia del mantello (m²/s) a T, con una frazione fusa F
 export const viscositaCinematicaRoccia = (T, F = 0) => (MAREE.roccia.nuRif * Math.exp(MAREE.roccia.Enu / (R_GAS * T))) / epsilonFuso(F);
@@ -85,14 +90,23 @@ export const viscositaRoccia = (T, F = 0, densita = MAREE.roccia.densita) => den
 export const rigiditaRoccia = (F = 0) => MAREE.roccia.rigidita / epsilonFuso(F);
 // il ghiaccio: η₀ al punto di fusione, più viscoso al freddo
 export const viscositaGhiaccio = (T, { eta0 = MAREE.ghiaccio.eta0, Tfusione = MAREE.ghiaccio.Tfusione } = {}) => eta0 * Math.exp(Math.min(200, (MAREE.ghiaccio.E / (R_GAS * Tfusione)) * (Tfusione / T - 1)));
+// (PRESTAZIONI: la stessa formula con gli argomenti in fila, per chi la chiede dentro un ciclo: nessun oggetto da creare)
+export const viscositaGhiaccioA = (T, eta0, Tfusione) => eta0 * Math.exp(Math.min(200, (MAREE.ghiaccio.E / (R_GAS * Tfusione)) * (Tfusione / T - 1)));
 
 // ---------- la cedevolezza complessa J*(ω) → [parte reale, parte immaginaria] (1/Pa; l'immaginaria è negativa)
-export function cedevolezza(rigidita, viscosita, omega, { reologia = 'andrade', alfa = MAREE.andrade.alfa, zeta = MAREE.andrade.zeta } = {}) {
+// (PRESTAZIONI: il conto sta in cedevolezzaIn, che lascia le due parti in JR e JI senza creare vettori; coseno e seno di
+// α·π/2 restano in memoria per l'ultimo α chiesto (chiave esatta). Le operazioni e il loro ordine sono quelli di sempre)
+let JR = 0, JI = 0, alfaDi = NaN, cosAlfa = NaN, sinAlfa = NaN;
+function cedevolezzaIn(rigidita, viscosita, omega, reologia, alfa, zeta) {
   const J = 1 / rigidita, viscoso = 1 / (viscosita * omega);
-  if (reologia === 'maxwell') return [J, -viscoso];
+  if (reologia === 'maxwell') { JR = J; JI = -viscoso; return; }
   if (reologia !== 'andrade') throw new Error(`maree: reologia «${reologia}» sconosciuta (ci sono: andrade, maxwell)`);
   const x = Math.pow(omega * zeta * viscosita * J, -alfa) * gamma(1 + alfa);
-  return [J * (1 + x * Math.cos((alfa * PI) / 2)), -(J * x * Math.sin((alfa * PI) / 2) + viscoso)];
+  if (alfa !== alfaDi) { cosAlfa = Math.cos((alfa * PI) / 2); sinAlfa = Math.sin((alfa * PI) / 2); alfaDi = alfa; }
+  JR = J * (1 + x * cosAlfa); JI = -(J * x * sinAlfa + viscoso);
+}
+export function cedevolezza(rigidita, viscosita, omega, { reologia = 'andrade', alfa = MAREE.andrade.alfa, zeta = MAREE.andrade.zeta } = {}) {
+  cedevolezzaIn(rigidita, viscosita, omega, reologia, alfa, zeta); return [JR, JI];
 }
 
 // ---------- LA DISSIPAZIONE di un corpo omogeneo alla frequenza ω (rad/s)
@@ -106,6 +120,18 @@ export function dissipazione(corpo, omega, opz = {}) {
   // z = c/J* = c·conj(J*)/|J*|²;  k₂* = 1,5/(1 + z)
   const zr = (c * jr) / j2, zi = (-c * ji) / j2, d = (1 + zr) ** 2 + zi * zi, re = (1.5 * (1 + zr)) / d, im = (-1.5 * zi) / d;
   return { k2: [re, im], k2Reale: re, imK2: -im, Q: Math.hypot(re, im) / -im, rigiditaEfficace: c * rigidita, omegaTau: (omega * viscosita) / rigidita };
+}
+// (PRESTAZIONI) LA STESSA DISSIPAZIONE PER CHI LA CHIEDE DENTRO UN CICLO (storia.js a ogni passo della storia termica, lune.js):
+// «c» è 19/(2ρgR) del corpo, che non cambia finché il corpo è quello: lo dà coefficienteDelCorpo, una volta; qui si
+// riempiono solo esce.imK2 e esce.k2Reale (gli stessi numeri di dissipazione(), bit per bit: stesse operazioni nello
+// stesso ordine, senza il Q e senza oggetti nuovi)
+export const coefficienteDelCorpo = (M, R) => { const rho = M / ((4 / 3) * PI * R ** 3), g = (G * M) / (R * R); return 19 / (2 * rho * g * R); };
+export function dissipazioneIn(c, rigidita, viscosita, omega, opz, esce) {
+  if (!(omega > 0) || !(rigidita > 0) || !(viscosita > 0)) { esce.k2Reale = 1.5 / (1 + c * (rigidita > 0 ? rigidita : 0)); esce.imK2 = 0; return esce; }
+  const reologia = opz && opz.reologia !== undefined ? opz.reologia : 'andrade', alfa = opz && opz.alfa !== undefined ? opz.alfa : MAREE.andrade.alfa, zeta = opz && opz.zeta !== undefined ? opz.zeta : MAREE.andrade.zeta;
+  cedevolezzaIn(rigidita, viscosita, omega, reologia, alfa, zeta);
+  const jr = JR, ji = JI, j2 = jr * jr + ji * ji, zr = (c * jr) / j2, zi = (-c * ji) / j2, d = (1 + zr) ** 2 + zi * zi, re = (1.5 * (1 + zr)) / d, im = (-1.5 * zi) / d;
+  esce.k2Reale = re; esce.imK2 = -im; return esce;
 }
 // la geometria del calore di marea di un corpo sincrono: ciò che moltiplica −Im(k₂*) (W)
 //   Mospite: la massa del corpo che alza la marea (kg); raggioM: il raggio di chi è deformato; aM, eccentricita, obliquita (gradi) dell'orbita
@@ -122,6 +148,8 @@ export const motoMedio = (Mospite, aM) => Math.sqrt((G * Mospite) / aM ** 3);
 // ---------- IL GUSCIO DI GHIACCIO SOPRA UN OCEANO: la membrana (Beuthe 2015)
 // la rigidità complessa μ* = 1/J* → [reale, immaginaria] (Pa)
 export function rigiditaComplessa(rigidita, viscosita, omega, opz = {}) { const [jr, ji] = cedevolezza(rigidita, viscosita, omega, opz), j2 = jr * jr + ji * ji; return [jr / j2, -ji / j2]; }
+// (PRESTAZIONI: la stessa, con la reologia di norma (Andrade, α e ζ di MAREE), riempiendo esce[0] e esce[1] senza creare vettori)
+export function rigiditaComplessaIn(rigidita, viscosita, omega, esce) { cedevolezzaIn(rigidita, viscosita, omega, 'andrade', MAREE.andrade.alfa, MAREE.andrade.zeta); const jr = JR, ji = JI, j2 = jr * jr + ji * ji; esce[0] = jr / j2; esce[1] = -ji / j2; return esce; }
 // corpo: { massaKg, raggioM, spessore (m, del guscio), rigidita: [re, im] (la media nello spessore, Pa), densitaOceano, poisson }
 // → { h2: [re, im], k2: [re, im], k2Reale, imK2 (= −Im k₂), Lambda: [re, im], fluido: { h2, k2 } (senza guscio), sottile (d/R) }
 export function dissipazioneGuscio({ massaKg: M, raggioM: R, spessore: d, rigidita, densitaOceano = 1000, poisson = MAREE.ghiaccio.poisson }) {
