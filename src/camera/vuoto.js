@@ -37,6 +37,23 @@
 //   oggettiIn(forma, { centro: [x, y, z] kpc, raggio kpc }, t, { caso, catalogo, massimo }) → { oggetti: [{ tipo, indirizzo,
 //     pos (kpc), raggio (m), …, emette: { righe: [{ nome, nm, W }], continuo, colore: [r, g, b] | null } }], nebbia: { tipo: { veri, mostrati, soglia } } }
 //   corpiMinori(sistema, t, { caso, attorno }) → { fasce, esaurite, nube, comete, polvere, vento(rM), flusso, espulso, corpi }
+//   scenaVuoto({ sistema, caso, attorno }, t) → (tutto in metri, watt, secondi; gli elementi delle orbite valgono a t = 0)
+//     corpi[]:  { cosa, id, pos, vel, raggio, massaKg, colore, albedo (geometrico), albedoDiBond, fase: { legge: 'HG', G }, fascia,
+//                 orbita: { a, e, inclinazione, nodo, pericentro, M0, epoca, motoMedio, assi, periodo } }
+//     fasce[]:  { nome, interno, esterno, spessore, sigma (rad: larghezza in latitudine dei corpi), massaKg, veri, mostrati,
+//                 colore, albedo, fase, polvere: null | { tau, massaKg, raggioGrano, sigma }, risonanze }
+//     comete[]: { id, pos, vel, raggio, orbita (come i corpi, più perielio e tPerielio), attivita (0…1), accesa, acquaKgS,
+//                 molecoleS, velocitaGas, vitaAcqua, nucleo: { raggio, albedo, colore, fase: { legge: 'lineare', magPerGrado }, densita },
+//                 lumen, magnitudineA1UA,
+//                 chioma: { raggio, colore, righe: [{ nome, nm, W, molecole }] (C₂, CN, C₃), W, polvere: { sezione (m²), W, colore } },
+//                 codaIoni: { direzione, lunghezza, velocita, colore, righe: [{ nome: 'CO⁺', nm, W, molecole }], W, ioni },
+//                 codaPolvere: { kgS, suGas, taglie: { esponente, aMin, aMax }, albedo, fase, densitaGrano, eta: [s], direzione, colore,
+//                                sindine: [{ raggioGrano, beta, uscita (m/s), kgS, perSecondo, soffiato, punti: [{ eta, pos, attivita, larghezza }] }],
+//                                linee (come prima: 1, 10, 100 µm a 3, 10, 30 giorni) } }
+//     polvere:  { sezione(r, lat) (m²/m³), in(r, lat) (kg/m³), grani(r, lat) (per m³), tau(r), raggioGrano(r), bordoInterno,
+//                 bordoGhiaccio, albedo, fase: { g, pesi, in(θ) }, grano: { densita, indice: { n, k } }, versoLaStellaKgS, daCometeKgS,
+//                 fasce: [{ nome, interno, esterno, sigma, tau, massaKg, raggioGrano, tauBordo, profilo(r) → { tau, massa, numero, raggioGrano } }],
+//                 luceZodiacale({ rOss, elongazione }) → { brillanza (W/m²/sr), suStella } }
 //   Tempi: t in SECONDI da oggi (come spazio3d.js). Distanze nella galassia in kpc (come galassie.js); nel sistema in metri.
 //
 // CHE COSA SI DERIVA [D] E CHE COSA SI PRENDE [R] (in breve; i numeri stanno in MEZZO, LARSON, OGGETTI, SISTEMA)
@@ -83,8 +100,11 @@
 //   · i fotoni ionizzanti per stella nata sono il doppio dei veri (stelle come corpi neri);
 //   · gli oggetti interstellari: tre ordini di grandezza meno della stima da 1I/'Oumuamua (lo sono anche nei modelli veri);
 //   · le fasce: quelle interne sono quasi tutte esaurite a 4,5 miliardi di anni (impatti.js lo dichiara: manca Yarkovsky),
-//     quelle esterne pesano decine di Terre (manca la migrazione): la polvere zodiacale viene 10⁵ volte la vera, e gli
-//     urti di oggi sui mondi di roccia dieci volte meno dei veri. (Le STESSE leggi, con la massa vera della fascia degli
+//     quelle esterne pesano decine di Terre (manca la migrazione); gli urti di oggi sui mondi di roccia dieci volte meno dei veri.
+//     LA POLVERE A 1 UA: 6 volte la nostra in massa, 25 in profondità ottica, 40 nella luce zodiacale (mediane di 12
+//     sistemi). Viene tutta dalla parte RIMESCOLATA dei resti attorno ai pianeti esterni lenti (impatti.js rimastaKg:
+//     ~200 fasce degli asteroidi, a eccentricità 0,3): le decine di Terre ferme non si macinano e non ne fanno. (Prima
+//     veniva 4·10⁵ volte: mancavano gli urti tra i grani mentre scendono, ora ci sono: polvereDellaFascia.) (Le STESSE leggi, con la massa vera della fascia degli
 //     asteroidi, danno invece numeri giusti: 440 corpi sopra 100 km, urti distruttivi ogni 4,6 miliardi di anni, 10⁴ kg/s di polvere.)
 //   · la pendenza dell'estinzione: R_V = 3,8 invece di 3,1 (un solo materiale per i grani, ottica approssimata).
 // I COLORI DELLE NEBULOSE, da sapere. `coloreVero` è quello dell'OCCHIO (CIE 1931), che a 501 nm è quattro volte più
@@ -109,7 +129,6 @@
 import { COSTANTI, MSOLE, UA } from './leggi.js';
 import * as ST from './stelle.js';
 import { LEGGI, ANELLI, popolazione, COSMOLOGIA, dentro as GAL } from './galassie.js';
-import { LEGGI_ANELLI } from './anelli.js';
 import { sorgente } from './eventi.js';
 import { MEZZO, KPC, GA_S, contenuto, quadro, coloreVero } from './vuoto_mezzo.js';
 import { oggettiIn, densitaOggetti } from './vuoto_oggetti.js';
@@ -204,16 +223,28 @@ export function piuVicino(luogo = {}, tipo = null, opz = {}) {
 //   nube: { interno, esterno, massaKg, veri }, polvere: { in(r) → kg/m³ }, vento: (r) → { protoni per m³, velocita } }
 export function scenaVuoto(dove = {}, t = 0) {
   if (dove.sistema) {
-    const m = corpiMinori(dove.sistema, t, { caso: dove.caso || sorgente('sistema'), attorno: dove.attorno ?? null, massimo: dove.massimo ?? 40 }), col = LEGGI_ANELLI.colore;
-    return { livello: 'sistema', t, riferimento: { origine: 'la stella', assi: 'x, y: il piano medio del sistema; z: la normale (gli stessi di scenaSistema)', unita: 'm' },
-      corpi: m.corpi.map((c) => ({ cosa: c.tipo, id: c.indirizzo, pos: c.pos, vel: c.vel, raggio: c.diametroM / 2, massaKg: c.massaKg, luminosita: 0, colore: c.tipo === 'asteroide' ? col.roccia : col.ghiaccio, fascia: c.fascia, orbita: c.orbita })),
-      fasce: m.fasce.map((f) => ({ nome: f.nome, interno: f.a1, esterno: f.a2, spessore: 2 * f.a * Math.sin(Math.min(1, 0.5 * f.e)), massaKg: f.oggiKg, veri: f.sopra1km, mostrati: m.corpi.filter((c) => c.fascia === f.nome).length, colore: col[f.materiale], risonanze: f.risonanze.map((x) => ({ nome: x.nome, a: x.aM, larghezza: x.larghezza, con: x.con })) })),
-      comete: (m.comete?.attive || []).map((c) => ({ cosa: 'cometa', id: c.indirizzo, pos: c.pos, vel: c.vel, raggio: c.diametroM / 2, orbita: c.orbita, attiva: c.attiva, acquaKgS: c.acquaKgS,
-        chioma: c.attiva ? { raggio: c.chioma.raggio, colore: c.chioma.emette.colore, righe: c.chioma.emette.righe } : null, codaIoni: c.attiva ? { direzione: c.codaIoni.direzione, lunghezza: c.codaIoni.lunghezza, colore: c.codaIoni.emette.colore, righe: c.codaIoni.emette.righe } : null,
-        codaPolvere: c.attiva ? { direzione: c.codaPolvere.direzione, colore: c.codaPolvere.colore, linee: c.codaPolvere.grani.map((g) => ({ raggioGrano: g.raggioGrano, beta: g.beta, punti: [c.pos, ...g.punti.map((p) => p.pos)] })) } : null })),
+    const m = corpiMinori(dove.sistema, t, { caso: dove.caso || sorgente('sistema'), attorno: dove.attorno ?? null, massimo: dove.massimo ?? 40 });
+    return { livello: 'sistema', t, riferimento: { origine: 'la stella', assi: 'x, y: il piano medio del sistema; z: la normale (gli stessi di scenaSistema)', unita: 'm', epoca: 'gli elementi delle orbite valgono a t = 0 (oggi): l\'anomalia media a t è M0 + motoMedio·t' },
+      corpi: m.corpi.map((c) => ({ cosa: c.tipo, id: c.indirizzo, pos: c.pos, vel: c.vel, raggio: c.diametroM / 2, massaKg: c.massaKg, luminosita: 0, colore: c.colore, albedo: c.albedo, albedoDiBond: c.albedoDiBond, fase: c.fase, fascia: c.fascia, orbita: c.orbita })),
+      fasce: m.fasce.map((f) => ({ nome: f.nome, interno: f.a1, esterno: f.a2, spessore: 2 * f.a * Math.sin(Math.min(1, 0.5 * f.e)), sigma: f.sigma, massaKg: f.oggiKg, veri: f.sopra1km, mostrati: m.corpi.filter((c) => c.fascia === f.nome).length, colore: f.superficie.colore, albedo: f.superficie.albedo, fase: f.superficie.fase,
+        polvere: f.polvereFine ? { tau: f.polvereFine.tau, massaKg: f.polvereFine.massaKg, raggioGrano: f.polvereFine.raggioGrano, sigma: f.polvereFine.sigma } : null, risonanze: f.risonanze.map((x) => ({ nome: x.nome, a: x.aM, larghezza: x.larghezza, con: x.con })) })),
+      // le comete: tutto è dato sempre (anche lontano, dove è quasi niente): `attivita` dice quanto è accesa (0…1), senza soglie
+      comete: (m.comete?.attive || []).map((c) => ({ cosa: 'cometa', id: c.indirizzo, pos: c.pos, vel: c.vel, raggio: c.diametroM / 2, orbita: c.orbita, attiva: true, attivita: c.attivita, accesa: c.attiva, acquaKgS: c.acquaKgS, molecoleS: c.molecoleS, velocitaGas: c.velocitaGas, vitaAcqua: c.vitaAcqua,
+        nucleo: c.nucleo, albedo: c.nucleo.albedo, colore: c.nucleo.colore, fase: c.nucleo.fase, lumen: c.lumen, magnitudineA1UA: c.magnitudineA1UA,
+        chioma: { raggio: c.chioma.raggio, colore: c.chioma.emette.colore, righe: c.chioma.righe, W: c.chioma.W, polvere: c.chioma.polvere },
+        codaIoni: { direzione: c.codaIoni.direzione, lunghezza: c.codaIoni.lunghezza, velocita: c.codaIoni.velocita, colore: c.codaIoni.emette.colore, righe: c.codaIoni.righe, W: c.codaIoni.W, ioni: c.codaIoni.ioni },
+        codaPolvere: { direzione: c.codaPolvere.direzione, colore: c.codaPolvere.colore, kgS: c.codaPolvere.kgS, suGas: c.codaPolvere.suGas, taglie: c.codaPolvere.taglie, albedo: c.codaPolvere.albedo, fase: c.codaPolvere.fase, densitaGrano: c.codaPolvere.densitaGrano, eta: c.codaPolvere.eta,
+          // `sindine`: per ogni taglia, dove stanno oggi i grani lasciati eta[k] secondi fa (a età fissa, tra le taglie: una sincrona)
+          sindine: c.codaPolvere.grani.filter((g) => g.punti.length).map((g) => ({ raggioGrano: g.raggioGrano, beta: g.beta, uscita: g.uscita, kgS: g.kgS, perSecondo: g.perSecondo, soffiato: g.soffiato, punti: g.punti.map((p) => ({ eta: p.eta, pos: p.pos, attivita: p.attivita, larghezza: p.larghezza })) })),
+          // (come prima, per chi leggeva `linee`: le taglie di 1, 10 e 100 µm, il nucleo e i grani di 3, 10 e 30 giorni)
+          linee: [1e-6, 1e-5, 1e-4].map((a) => c.codaPolvere.grani.find((g) => g.raggioGrano === a)).filter((g) => g && g.punti.length).map((g) => ({ raggioGrano: g.raggioGrano, beta: g.beta, punti: [c.pos, ...[3, 10, 30].map((d) => g.punti.find((p) => p.giorni === d).pos)] })) } })),
       nube: m.nube ? { interno: m.nube.aIn, esterno: m.nube.aOut, massaKg: m.nube.massaKg, veri: m.nube.sopra1km, profilo: m.nube.profilo } : null,
-      polvere: { in: (r) => m.polvere.densitaA(r), grani: (r) => m.polvere.graniA(r), colore: m.stella.T > 0 ? coloreVero([], { T: m.stella.T, W: 1 }).rgb : null },
-      vento: (r) => ventoA(dove.sistema, r), accensione: m.rAttiva, nebbia: Object.fromEntries(m.fasce.map((f) => [f.nome, { veri: f.sopra1km, mostrati: m.corpi.filter((c) => c.fascia === f.nome).length }])) };
+      // la polvere: `sezione(r, lat)` (m² di grani per m³) è ciò che diffonde; ATTENZIONE: non è più una somma di scalini K/r
+      // (i grani si urtano mentre scendono): per ogni fascia che fa polvere c'è `profilo(r)` → { tau, massa, numero, raggioGrano }
+      polvere: { in: (r, lat = 0) => m.polvere.densitaA(r, lat), grani: (r, lat = 0) => m.polvere.graniA(r, lat), sezione: (r, lat = 0) => m.polvere.sezioneA(r, lat), tau: (r) => m.polvere.tauA(r), raggioGrano: (r) => m.polvere.raggioGranoA(r),
+        fasce: m.polvere.fasce, bordoInterno: m.polvere.bordoInterno, bordoGhiaccio: m.polvere.bordoGhiaccio, albedo: m.polvere.albedo, fase: m.polvere.fase, grano: m.polvere.grano, versoLaStellaKgS: m.polvere.versoLaStellaKgS, daCometeKgS: m.comete?.polvereKgS ?? 0,
+        luceZodiacale: m.polvere.luceZodiacale, colore: m.stella.T > 0 ? coloreVero([], { T: m.stella.T, W: 1 }).rgb : null },
+      vento: (r) => ventoA(dove.sistema, r), accensione: m.rAttiva, elenco: m.rElenco, nebbia: Object.fromEntries(m.fasce.map((f) => [f.nome, { veri: f.sopra1km, mostrati: m.corpi.filter((c) => c.fascia === f.nome).length }])) };
   }
   const forma = dove.forma, k = KPC, reg = dove.regione || { centro: [0, 0, 0], raggio: forma.anelli.bordo[ANELLI] }, O = oggettiIn(forma, reg, t, { caso: dove.caso || sorgente('galassia'), catalogo: dove.catalogo || null, massimo: dove.massimo ?? 400 }), Q = quadro(forma);
   return { livello: 'galassia', t, riferimento: { origine: 'il centro della galassia (il buco nero)', assi: 'x, y: il piano della galassia; z: la normale (gli stessi di scenaGalassia)', unita: 'm', regione: { centro: reg.centro.map((v) => v * k), raggio: reg.raggio * k } },

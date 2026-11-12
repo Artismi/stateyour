@@ -433,6 +433,9 @@ export const EROSIONE = Object.freeze({ m: 0.4, n: 1, K: Object.freeze({ granito
   velo: 1, // (m) sotto, una copertura non conta
   isostasia: 2800 / 3300, sottoIlMare: (2700 - 1000) / (3300 - 1000), sottoLAcqua: 1000 / 3300, densita: 2700, durataSenzaPlacche: 1e8 });
 const memoErosione = new Map();
+// la più piccola quota a 32 bit che non sta sotto x: le quote sono scritte in un Float32Array e il mare è un numero a 64
+// bit; una terra a un millimetro dal mare, arrotondata, non deve finire sotto il mare
+const f32NonSotto = (x) => { const f = Math.fround(x); return f >= x ? f : Math.fround(f + Math.abs(f) * 2 ** -23) || 1e-30; };
 export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso = null, crescita = true, scala = 1, durata = null } = {}) {
   if (memoErosione.has(chiave)) return memoErosione.get(chiave);
   const { W, H } = sf, N = W * H, alt = Float32Array.from(sf.alt); let mare = sf.mare;
@@ -482,7 +485,7 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   for (let it = 0; it < passi; it++) {
     // inondazione: dal mare (o dal punto più basso, se non c'è mare) verso l'interno; chi resta sotto il
     // livello di chi lo precede sta in una conca: lì c'è un lago
-    hn = 0; visto.fill(0); let n = 0;
+    hn = 0; visto.fill(0); let n = 0; const mareSu = Number.isFinite(mare) ? f32NonSotto(mare) : 0;
     let fonti = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { push(k, alt[k]); visto[k] = 1; ricevente[k] = -1; pieno[k] = alt[k]; fonti++; }
     // una tessera ha i bordi aperti: l'acqua esce verso le tessere vicine
     if (aperto) for (let k = 0; k < N; k++) { const i = k % W, j = (k - i) / W; if ((i === 0 || j === 0 || i === W - 1 || j === H - 1) && !visto[k]) { push(k, alt[k]); visto[k] = 1; ricevente[k] = -1; pieno[k] = alt[k]; fonti++; } }
@@ -510,7 +513,10 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
       if (c > 0) { const F = kSed * g, giu = ((z - zr) * F) / (1 + F); if (giu <= c) { tc = giu; resto = 0; } else { tc = c; resto -= c / ((z - zr - c) * F); } z -= tc; sci[k] = c - tc; eSci[k] = tc * ak; }
       if (resto > 0 && (c = diLava[k] ? lava[k] : cop[k]) > 0) { const F = kMez * g * resto, giu = ((z - zr) * F) / (1 + F); if (giu <= c) { tl = giu; resto = 0; } else { tl = c; resto -= (resto * c) / ((z - zr - c) * F); } z -= tl; if (diLava[k]) lava[k] = c - tl; else cop[k] = c - tl; eMez[k] = tl * ak; }
       if (resto > 0) { const F = (base[k] ? kMez : kGra) * g * resto, giu = ((z - zr) * F) / (1 + F); z -= giu; eBase[k] = giu * ak; }
-      alt[k] = z;
+      // (il fiume non scava sotto il suo livello di base: z ≥ zr ≥ mare; ma scritta in 32 bit una quota a meno di un decimo di
+      // millimetro dal mare poteva arrotondarsi SOTTO il mare, e la cella, spianata fino al livello di base, diventava mare
+      // per un bit: su un mondo senza sollevamento le terre «annegavano» a metà senza che la quota media cambiasse di un metro)
+      alt[k] = z; if (alt[k] < mare) alt[k] = mareSu;
     }
     // IL SEDIMENTO (m³): scende con l'acqua, da monte a valle. Il carico fine passa; la ghiaia al più quanto la capacità
     // del fiume: quella che lui stesso ha fatto in più non la scava (resta dov'era), quella che arriva in più si posa.
@@ -606,6 +612,28 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
 const memoTessere = new Map();
 const hashReticolo = (ix, iy, seme) => { let h = (ix * 374761393 + iy * 668265263 + seme * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const rumore = (x, y, seme) => { const x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v); return (hashReticolo(x0, y0, seme) * (1 - su) + hashReticolo(x0 + 1, y0, seme) * su) * (1 - sv) + (hashReticolo(x0, y0 + 1, seme) * (1 - su) + hashReticolo(x0 + 1, y0 + 1, seme) * su) * sv - 0.5; };
+// LA COSTA È QUELLA DELLA MADRE (regola 4: il dettaglio è condizionato da ciò che c'è sopra). Una cella della madre è terra
+// o è mare, tutta: la figlia non può spostare la costa se non di ciò che da lontano non si vedeva. Interpolare le quote in
+// linea retta tra i centri non lo rispetta: tra una piana a +20 m e un fondale a −300 la quota zero cade a un sedicesimo
+// della strada, e la piana perde metà della sua cella per ogni lato che dà sul mare; e un rumore di ampiezza fissa annega
+// le piane più basse della sua ampiezza e non fa emergere nessun fondale (misurato su un mondo spianato fino al mare:
+// pezzi tutti di terra nella madre uscivano mare per il 70–80%). Perciò, dove c'è un mare:
+//   · IL LATO (σ, da −1 a +1): l'interpolazione del segno delle quattro celle attorno (+1 terra, −1 mare). La costa è
+//     dove σ = 0: sul confine tra le celle, come la vede la madre;
+//   · LA QUOTA: la media delle sole celle di terra (o di mare) attorno, per σ: scende in linea retta fino a zero sulla
+//     costa, da una parte e dall'altra, senza gradini;
+//   · IL DETTAGLIO sposta la costa di quanto la sposterebbe sul pendio tra la quota di terra A e il fondale B (di
+//     2·δ/(A + B) in σ, lo stesso numero da una parte e dall'altra: in media la parte di mare non cambia; non oltre
+//     1 − σ²: dentro una terra o un mare interi non nasce costa), e lontano dalla costa si somma com'era, ma mai più di
+//     quanto il punto sta sopra (o sotto) il mare: il rilievo che da lontano non si vedeva non scende sotto il livello di
+//     base;
+// CHE COSA NON TORNA: la media. Una cella di costa che scende in linea retta fino a zero sul suo bordo non ha più la
+// media della madre (il fondale accanto alla costa esce meno fondo, la piana più bassa), e la costa spostata dal dettaglio
+// costa quota dove il fondale è più fondo di quanto la terra è alta. Misurato su 16 tessere di livello 1, prima della loro
+// erosione: +9 m su una Terra di prova (al più 22 su una tessera), +0,2 m su un mondo spianato fino al mare; la parte di
+// mare torna entro 0,003 (al più 0,006). Riscalare ogni cella della madre perché la media delle sue sedici figlie sia la
+// sua è stato PROVATO E NON TENUTO: una piana a zero metri non si riscala, e il conto finiva a −12 m.
+// Senza mare (o tutto sotto il mare) non cambia niente: è l'interpolazione di prima.
 // IL BORDO. Ogni tessera si calcola un po' più larga di quel che mostra (un ottavo in più per lato): così l'erosione
 // vede anche il terreno appena fuori, i fiumi non «sentono» il taglio, e due tessere vicine combaciano. Il bordo in
 // più non si mostra, ma resta alla tessera per fare da madre alle sue figlie (che così leggono oltre il loro lato).
@@ -623,11 +651,25 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   const alt = new Float32Array(N), afflusso = new Float32Array(N), livelloLago = new Float32Array(N);
   // la roccia della madre (copertura, lave, basamento), cella per cella: la figlia scava la stessa roccia
   const copertura = m.copertura ? new Float32Array(N) : null, sciolto = m.sciolto ? new Float32Array(N) : null, lava = m.lava ? new Float32Array(N) : null, roccia = new Uint8Array(N), [nu0, nv0, nu1, nv1] = m.rett;
-  const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1;
+  const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1, ampMax = 0.725 * amp; // (il rumore sta tra −0,5 e 0,5: la somma dei due tra ±0,725)
+  const dettaglio = (gu, gv) => amp * (rumore(gu * f1, gv * f1 * 0.5, seme + L) + 0.45 * rumore(gu * f2, gv * f2 * 0.5, seme + 31 * L));
+  // la quota condizionata alla costa della madre (vedi sopra), in metri SUL MARE, col dettaglio d
+  const conMare = Number.isFinite(mare), valore = (x, y) => M.alt[iy(y) * MW + ix(x)] - mare;
+  const sulMare = (fx, fy, d) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0;
+    const z00 = valore(x0, y0), z10 = valore(x0 + 1, y0), z01 = valore(x0, y0 + 1), z11 = valore(x0 + 1, y0 + 1), w00 = (1 - u) * (1 - v), w10 = u * (1 - v), w01 = (1 - u) * v, w11 = u * v;
+    let t = 0, A = 0, B = 0; // t: quanta parte dei pesi sta su celle di terra; A, B: le somme pesate delle quote di terra e dei fondali
+    if (z00 >= 0) { t += w00; A += w00 * z00; } else B -= w00 * z00; if (z10 >= 0) { t += w10; A += w10 * z10; } else B -= w10 * z10;
+    if (z01 >= 0) { t += w01; A += w01 * z01; } else B -= w01 * z01; if (z11 >= 0) { t += w11; A += w11 * z11; } else B -= w11 * z11;
+    let z; const tutta = z00 >= 0 && z10 >= 0 && z01 >= 0 && z11 >= 0, niente = z00 < 0 && z10 < 0 && z01 < 0 && z11 < 0;
+    if (tutta) z = A; else if (niente) z = -B;
+    else { if (t <= 0) z = -B; else if (t >= 1) z = A; else { A /= t; B /= 1 - t; const s0 = 2 * t - 1, lim = 1 - s0 * s0; let ds = A + B > 0 ? (2 * d) / (A + B) : d > 0 ? lim : d < 0 ? -lim : 0; if (ds > lim) ds = lim; else if (ds < -lim) ds = -lim; const s = s0 + ds; z = s >= 0 ? A * s : B * s; d *= s0 < 0 ? -s0 : s0; } }
+    const q = z < 0 ? -z : z; return z + (q < ampMax ? (d * q) / ampMax : d); };
+  const mareSu = conMare ? f32NonSotto(mare) : 0; // (una terra a un millimetro dal mare resta terra anche scritta in un Float32)
   for (let j = 0; j < Hl; j++) for (let i = 0; i < Wl; i++) {
     const gu = rettL[0] + ((i + 0.5) / Wl) * (rettL[2] - rettL[0]), gv = rettL[1] + ((j + 0.5) / Hl) * (rettL[3] - rettL[1]), c = j * Wl + i;
     const fx = ((gu - mu0) / (mu1 - mu0)) * MW - 0.5, fy = ((gv - mv0) / (mv1 - mv0)) * MH - 0.5;
-    alt[c] = bil(M.alt, fx, fy) + amp * (rumore(gu * f1, gv * f1 * 0.5, seme + L) + 0.45 * rumore(gu * f2, gv * f2 * 0.5, seme + 31 * L));
+    if (conMare) { const z = sulMare(fx, fy, dettaglio(gu, gv)); alt[c] = mare + z; if (z >= 0 && alt[c] < mare) alt[c] = mareSu; else if (z < 0 && !(alt[c] < mare)) alt[c] = mare + z - Math.abs(mare) * 2 ** -23; }
+    else alt[c] = bil(M.alt, fx, fy) + dettaglio(gu, gv);
     { const mi = Math.floor(((gu - nu0) / (nu1 - nu0)) * W), mj = Math.max(0, Math.min(H - 1, Math.floor(((gv - nv0) / (nv1 - nv0)) * H))), q = mj * W + (L === 1 ? ((mi % W) + W) % W : Math.max(0, Math.min(W - 1, mi)));
       if (copertura) copertura[c] = m.copertura[q]; if (sciolto) sciolto[c] = m.sciolto[q]; if (lava) lava[c] = m.lava[q]; roccia[c] = m.roccia ? m.roccia[q] : m.cont && !m.cont[q] ? 1 : 0; }
     if (i === 0 || j === 0 || i === Wl - 1 || j === Hl - 1) afflusso[c] = M.flusso[iy(Math.round(fy)) * MW + ix(Math.round(fx))] * 4; // la portata dei fiumi che entrano
