@@ -260,7 +260,8 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     apriGalassia(via.galassia); if (livello === 'galassia' || via.stella == null) return guardaDa(G.nodo, 2.6 * G.raggio, 0.55, 0.7);
     if (!assiSistema) return false; apriSistema(via.stella); if (!Sis) return guardaDa(G.nodo, 2.6 * G.raggio);
     if (livello === 'sistema' || via.pianeta == null) { const lontano = Math.max(...Sis.Sis.pianeti.map((p) => p.aM || 0), 1e11); return guardaDa(Sis.nodo, 2.4 * lontano, 0.5, 0.8); }
-    const c = Sis.pianeta(via.pianeta); N.attacca(c, { distanza: 3.2 * c.raggio, lat: 0.25 });
+    // (da lontano abbastanza da vederlo intero, con spazio attorno: a 5,5 raggi dal centro occupa metà dell'altezza)
+    const c = Sis.pianeta(via.pianeta); N.attacca(c, { distanza: 5.5 * c.raggio, lat: 0.25 });
   }
   // andare a una bolla: l'istante, poi il luogo (si apre ciò che serve lungo il percorso), poi chi guarda. Se manca ancora
   // qualcosa per aprirla (gli assi dei sistemi, che arrivano un attimo dopo) si riprova al fotogramma seguente.
@@ -276,7 +277,7 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     if (b.posizione && b.assi) { cam.corpo = corpo; cam.solidale = !!(b.moto && b.moto.solidale) && !!corpo.assetto; cam.pos = b.posizione.slice(); cam.assi = b.assi.slice(); cam.perno = null; }
     else { // solo il luogo (e magari la grandezza): lo si guarda intero, o da tanto lontano quanto la grandezza chiede
       const d = b.grandezza > 0 ? b.grandezza / (2 * Math.tan((cam.fov || 0.75) / 2)) : 0;
-      if (tipo === 'corpo' || corpo === (Sis && Sis.stella)) N.attacca(corpo, { distanza: corpo.raggio + (d || 2.2 * corpo.raggio), lat: 0.25 });
+      if (tipo === 'corpo' || corpo === (Sis && Sis.stella)) N.attacca(corpo, { distanza: corpo.raggio + (d || 4.5 * corpo.raggio), lat: 0.25 });
       else if (tipo === 'sistema') guardaDa(corpo, d || 2.4 * Math.max(...Sis.Sis.pianeti.map((q) => q.aM || 0), 1e11), 0.5, 0.8);
       else if (tipo === 'galassia') guardaDa(corpo, d || 2.6 * G.raggio, 0.55, 0.7);
       else { const sc = cosmo.scena(), P = sc.punti.pos, k = (d || 0.15 * cosmo.lato()) / Math.hypot(0.12, 0.05, 0.09); cam.corpo = cosmo.radice; cam.solidale = false; cam.pos = [P[0] + 0.12 * k, P[1] + 0.05 * k, P[2] + 0.09 * k]; cam.assi = N.assiDa(V.norma([-0.12, -0.05, -0.09]), [0, 0, 1]); cam.perno = null; } }
