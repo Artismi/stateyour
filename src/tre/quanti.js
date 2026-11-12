@@ -154,7 +154,7 @@ export function creaQuanti(N, opzioni = {}) {
       if (stato.misure > 0) {
         usa(prg, AU.a0); const rPx = Math.max(6, ((info ? Math.min(info.estensione, 40) : 4) * 0.35 * AU.a0 / d) * S.fuoco), area = Math.PI * rPx * rPx;
         gl.uniform1f(prg.u.u_k, stato.kNow); gl.uniform1f(prg.u.u_kmin, kmin); gl.uniform1f(prg.u.u_esposizione, esposizione); gl.uniform1f(prg.u.u_fuoco, S.fuoco); gl.uniform1f(prg.u.u_massimo, 96);
-        gl.uniform1f(prg.u.u_luce, (1.2 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_passato, 1); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
+        gl.uniform1f(prg.u.u_luce, (0.6 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_passato, 1); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
         gl.bindVertexArray(vao); gl.drawArrays(gl.POINTS, 0, K);
         if (nScie) { usa(prgS, AU.a0); gl.bindVertexArray(vaoS); gl.drawArrays(gl.LINES, 0, 2 * nScie); }
       }
@@ -168,11 +168,11 @@ export function creaQuanti(N, opzioni = {}) {
     },
     sopra() {
       if (!riga) return; const n = stato.misure, vicino = stato.nucleoVisibile;
-      let decoTesto = 'stato stazionario: |ψ|² non cambia, niente che interferisca';
-      if (deco) decoTesto = deco.tempo > (info && info.periodoBattimento || 0) * 4 ? `decoerenza in ${tempoUmano(deco.tempo)} (Joos–Zeh): la sovrapposizione si vede interferire per ~${fmt(deco.tempo / info.periodoBattimento)} battimenti` : `decoerenza in ${tempoUmano(deco.tempo)} (Joos–Zeh): più corta di un battimento, ciò che si vede è già un insieme di esiti`;
+      let decoTesto = 'stato stazionario: niente che interferisca';
+      if (deco) decoTesto = deco.tempo > (info && info.periodoBattimento || 0) * 4 ? `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): sovrapposizione che interferisce (~${fmt(deco.tempo / info.periodoBattimento)} battimenti)` : `decoerenza ${tempoUmano(deco.tempo)} (Joos–Zeh): già un insieme di esiti, non interferisce`;
       riga.textContent = errore ? `quanti: ${errore.split('\n')[0]}` : vicino
-        ? `Non è luce: ogni punto è un nucleone (o un quark) dove una misura lo troverebbe — istantanea ${jNow} del nucleo, Z = ${nuc.Z}, A = ${nuc.A}; il colore dice la carica (blu: neutroni, verde +, magenta −)`
-        : `Non è luce: a questa scala niente rimbalza nel visibile. Ogni punto è una misura (un evento) di un rivelatore di posizione, nel verde del suo fosforo — ${n} misure, finestra σ = ${fmt(O.sigma)} a₀ · ${decoTesto}`;
+        ? `Non è luce: ogni punto è un nucleone o un quark dove una misura lo troverebbe · istantanea ${jNow}, Z = ${nuc.Z}, A = ${nuc.A} · colore = carica (blu n, verde +, magenta −)`
+        : `Non è luce: ogni punto è una misura (un evento) di un rivelatore di posizione, nel verde del suo fosforo · ${n} misure, σ = ${fmt(O.sigma)} a₀ · ${decoTesto}`;
     },
     libera() { if (wk) wk.terminate(); if (riga) riga.remove(); for (const b of [bP, bQ, bPN, bQN, bS]) gl.deleteBuffer(b); for (const v of [vao, vaoN, vaoS]) gl.deleteVertexArray(v); gl.deleteProgram(prg.p); gl.deleteProgram(prgS.p); N.togliCorpo && N.togliCorpo(corpo); },
   };

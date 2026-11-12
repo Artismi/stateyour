@@ -389,10 +389,11 @@ export function misura(stato, indirizzo, k, { t = 0, sigma = 0, impulso = false,
 // 'posizione', 'impulso'] — ogni misura è un evento il cui indirizzo dice CHE COSA si misura e la STORIA delle misure
 // prima: «indirizzo/misura k/px dopo x». Lo stato dopo ogni misura è quello RIDOTTO: per la posizione ψ·finestra(x),
 // per l'impulso φ·finestra(p) riportata nello spazio con la trasformata inversa (operatori di Kraus gaussiani, larghezze
-// sigmaX e sigmaP). Posizione e impulso lungo lo stesso asse non commutano: x poi p_x dà altro che p_x poi x; lungo
+// sigmaX e sigmaP; un passo può essere { cosa, dopo: Δt in unità atomiche }: in mezzo lo stato evolve, vedi sotto; 'resta'
+// è la misura «è ancora nello stato iniziale?», che con misure fitte dà l'effetto Zeno). Posizione e impulso lungo lo stesso asse non commutano: x poi p_x dà altro che p_x poi x; lungo
 // assi diversi commutano, e l'ordine non cambia la statistica (prove). Tutto su una griglia N³ attorno al componente.
 const ASSE = { x: 0, y: 1, z: 2, px: 0, py: 1, pz: 2 };
-export function misureInFila(stato, indirizzo, k, sequenza, { t = 0, sigmaX = 0.5, sigmaP = 0.5, N = 32, L = null } = {}) {
+export function misureInFila(stato, indirizzo, k, sequenza, { t = 0, sigmaX = 0.5, sigmaP = 0.5, N = 32, L = null, potenziale = null } = {}) {
   const C = stato.componenti, tot = C.reduce((s, c) => s + c.peso, 0), r0 = contatore(`${indirizzo}/misura ${k}/quale elettrone`);
   let u = r0() * tot, ci = 0; for (; ci < C.length - 1; ci++) { u -= C[ci].peso; if (u <= 0) break; }
   const comp = C[ci], lato = L || 2 * comp.estensioneFFT, h = lato / N, n3 = N * N * N, re = new Float64Array(n3), im = new Float64Array(n3), dp = (2 * PI) / lato;
@@ -401,7 +402,24 @@ export function misureInFila(stato, indirizzo, k, sequenza, { t = 0, sigmaX = 0.
   const tira = (rnd, spazio) => { let s = 0; for (let q = 0; q < n3; q++) s += re[q] * re[q] + im[q] * im[q]; let v = rnd() * s, q = 0; for (; q < n3 - 1; q++) { v -= re[q] * re[q] + im[q] * im[q]; if (v <= 0) break; } const g = idx(q); return spazio === 'x' ? g.map((i, a) => coord(i, a) + (rnd() - 0.5) * h) : g.map((i) => fr(i) + (rnd() - 0.5) * dp); };
   const esiti = []; let storia = 'niente', nelloSpazio = 'x';
   const vaiA = (spazio) => { if (spazio === nelloSpazio) return; fft3(re, im, N, spazio === 'x'); nelloSpazio = spazio; };
-  for (const cosa of sequenza) {
+  // TRA DUE MISURE lo stato ridotto evolve con l'equazione di Schrödinger (passo diviso, Feit, Fleck & Steiger 1982 [R]):
+  // e^(−iVdt/2)·e^(−ip²dt/2)·e^(−iVdt/2); libero (V = 0) il passo è esatto in un colpo solo; nell'atomo V = −Z/√(r² + (h/2)²)
+  // (il Coulomb ammorbidito di mezza cella: la griglia non risolve la cuspide; dichiarato)
+  const Zv = potenziale === 'coulomb' ? stato.Z || 1 : 0, Vg = Zv ? new Float64Array(n3) : null;
+  if (Vg) for (let q = 0; q < n3; q++) { const g = idx(q), r2 = coord(g[0], 0) ** 2 + coord(g[1], 1) ** 2 + coord(g[2], 2) ** 2; Vg[q] = -Zv / Math.sqrt(r2 + (h / 2) ** 2); }
+  const fase = (arr, k) => { for (let q = 0; q < n3; q++) { const c = Math.cos(k * arr(q)), sn = -Math.sin(k * arr(q)), a = re[q], b = im[q]; re[q] = a * c - b * sn; im[q] = a * sn + b * c; } };
+  const cinetica = (q) => { const g = idx(q); return 0.5 * (fr(g[0]) ** 2 + fr(g[1]) ** 2 + fr(g[2]) ** 2); };
+  const evolvi = (dt) => { if (!(dt > 0)) return; const passi = Vg ? Math.ceil(dt / 0.05) : 1, d = dt / passi;
+    for (let i = 0; i < passi; i++) { if (Vg) { vaiA('x'); fase((q) => Vg[q], d / 2); } vaiA('p'); fase(cinetica, d); if (Vg) { vaiA('x'); fase((q) => Vg[q], d / 2); } } };
+  const iniziale = { re: Float64Array.from(re), im: Float64Array.from(im) }; { let s0 = 0; for (let q = 0; q < n3; q++) s0 += re[q] ** 2 + im[q] ** 2; const k0 = 1 / Math.sqrt(s0); for (let q = 0; q < n3; q++) { iniziale.re[q] *= k0; iniziale.im[q] *= k0; } }
+  for (let passo of sequenza) {
+    if (typeof passo === 'string') passo = { cosa: passo }; const cosa = passo.cosa; evolvi(passo.dopo || 0);
+    if (cosa === 'resta') { // la misura del proiettore sullo stato iniziale: «è ancora com'era?» (sì / no)
+      vaiA('x'); let s2 = 0, ar = 0, ai = 0; for (let q = 0; q < n3; q++) { s2 += re[q] ** 2 + im[q] ** 2; ar += iniziale.re[q] * re[q] + iniziale.im[q] * im[q]; ai += iniziale.re[q] * im[q] - iniziale.im[q] * re[q]; }
+      const P = (ar * ar + ai * ai) / s2, rnd = contatore(`${indirizzo}/misura ${k}/resta dopo ${storia}`), si = rnd() < P;
+      for (let q = 0; q < n3; q++) { if (si) { re[q] = iniziale.re[q]; im[q] = iniziale.im[q]; } else { re[q] -= ar * iniziale.re[q] - ai * iniziale.im[q]; im[q] -= ar * iniziale.im[q] + ai * iniziale.re[q]; } }
+      esiti.push({ cosa, valore: si, probabilita: P, indirizzo: `${indirizzo}/misura ${k}/resta dopo ${storia}` }); storia = storia === 'niente' ? cosa : `${storia} poi ${cosa}`; continue;
+    }
     const rnd = contatore(`${indirizzo}/misura ${k}/${cosa} dopo ${storia}`), impulso = cosa[0] === 'p' || cosa === 'impulso', spazio = impulso ? 'p' : 'x', assi = cosa === 'posizione' || cosa === 'impulso' ? [0, 1, 2] : [ASSE[cosa]], sg = impulso ? sigmaP : sigmaX;
     vaiA(spazio); const vero = tira(rnd, spazio), esito = vero.slice(); for (const a of assi) esito[a] += sg * campana(rnd(), rnd());
     // la riduzione: la finestra attorno all'esito, lungo gli assi misurati
@@ -536,7 +554,7 @@ export const STATO = Object.freeze([
   { legge: 'battimenti tra stati di energie diverse; pacchetto che si allarga', funzioni: 'sovrapposizione, pacchetto', stato: 'misurata', misura: 'battimenti quantistici; il moto degli elettroni di valenza seguito ad attosecondi (Goulielmakis et al. 2010, Nature 466, 739 [R]); pacchetti di Rydberg (citati in Stodolna 2013 [V])' },
   { legge: 'emissione spontanea (Weisskopf-Wigner) e salto come evento', funzioni: 'ritmoEmissione, sovrapposizione', stato: 'misurata', misura: 'vita del 2p dell\'idrogeno 1,596 ns (A = 6,2649·10⁸/s [R]); salti quantistici osservati su un singolo ione (Nagourney, Sandberg & Dehmelt 1986 [R])' },
   { legge: 'decoerenza per urti e fotoni (Joos-Zeh): tempo stimato, coerenze smorzate', funzioni: 'decoerenza, sovrapposizione', stato: 'misurata (il fenomeno) / stima (il liquido visto come gas fitto)', misura: 'decoerenza per urti di molecole di fullerene con un gas, misurata dal contrasto delle frange (Hornberger et al. 2003, PRL 90, 160401 [R]); in cavità (Brune et al. 1996 [R]); Zurek 2003 [V]. Ogni misura dello strumento è su un atomo preparato uguale (dichiarato)' },
-  { legge: 'misure in fila: l\'ordine conta per osservabili che non commutano', funzioni: 'misureInFila', stato: 'misurata', misura: 'misure successive di spin lungo assi diversi (Stern-Gerlach in fila); errore e disturbo di misure successive con i neutroni (Erhart et al. 2012 [R])' },
+  { legge: 'misure in fila: l\'ordine conta per osservabili che non commutano; tra due misure l\'evoluzione di Schrödinger; effetto Zeno', funzioni: 'misureInFila', stato: 'misurata', misura: 'misure successive di spin lungo assi diversi (Stern-Gerlach in fila); errore e disturbo con i neutroni (Erhart et al. 2012 [R]); effetto Zeno su ioni di berillio intrappolati (Itano, Heinzen, Bollinger & Wineland 1990, PRA 41, 2295 [R])' },
   { legge: 'densità di carica dei nuclei: raggi misurati, forma a shell o di Fermi', funzioni: 'nucleo', stato: 'misurata (raggio) / modello (forma)', misura: 'diffusione di elettroni (Hofstadter 1956 [R]); compilazioni di De Vries, De Jager & De Vries 1987 e Angeli & Marinova 2013 [R]' },
   { legge: 'densità dei neutroni uguale a quella dei protoni', funzioni: 'nucleo', stato: 'modello', misura: 'la pelle di neutroni del piombo è 0,28 ± 0,07 fm (PREX-II 2021 [R]): qui manca' },
   { legge: 'carica del nucleone dai fattori di forma; quark u e d per isospin', funzioni: 'nucleone, istantanea', stato: 'misurata (fattori di forma) / interpretazione (densità 3D) / modello (posizioni dei quark)', misura: 'raggio di carica del protone 0,84087 fm (idrogeno muonico, Antognini et al. 2013 [R]); CODATA 2018 0,8414 fm [R]; r² del neutrone −0,1161 fm² (PDG [R]); separazione dei sapori (Cates et al. 2011 [R]); la densità tridimensionale vale solo nel riferimento di Breit (Miller 2007 [R])' },

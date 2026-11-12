@@ -95,6 +95,26 @@ prova('la FFT della 1s dà la distribuzione di Podolsky e Pauling, 8/(π²(1 + p
   });
 }
 {
+  // TRA DUE MISURE LO STATO EVOLVE: x, poi dopo t ancora x. Il pacchetto ridotto (largo s', 1/s'² = 1/σ₀² + 1/σx², centrato
+  // in x₁σ₀²/(σ₀² + σx²)) si riallarga come s'√(1 + (t/2s'²)²): la seconda misura ne è il campione (più la sua finestra)
+  const G = Q.pacchetto({ sigma0: 1 }), sx = 0.4, s1 = 1 / Math.sqrt(1 + 1 / (sx * sx)), opz = { sigmaX: sx, N: 32, L: 24 };
+  for (const t of [0.5, 2]) {
+    const v = Array.from({ length: 800 }, (_, k) => Q.misureInFila(G, `prova/riallarga ${t}`, k, ['x', { cosa: 'x', dopo: t }], opz).esiti.map((e) => e.valore)), d = scarto(v.map(([a, b]) => b - a / (1 + sx * sx))), teoria = Math.sqrt((s1 * Math.sqrt(1 + (t / (2 * s1 * s1)) ** 2)) ** 2 + sx * sx);
+    prova(`dopo una misura di posizione il pacchetto si riallarga: dopo ${t} u.a. la seconda misura sta a ${n(teoria)} a₀ dalla prima (evoluzione di Schrödinger sulla griglia)`, () => vicino(d, teoria, 0.08, `t = ${t}`));
+  }
+  // L'EFFETTO ZENO: in un tempo fisso T = 4 u.a., n misure «è ancora nello stato iniziale?» sul pacchetto (σ₀ = 0,7 a₀).
+  // Senza misure lo stato se ne va (sopravvive |⟨ψ₀|ψ(T)⟩|² = (1 + (T/4σ₀²)²)^(−3/2)); con n misure (1 + (T/4nσ₀²)²)^(−3n/2) → 1
+  const P = Q.pacchetto({ sigma0: 0.7 }), T = 4, prove = 300; console.log('      effetto Zeno (T = 4 u.a., σ₀ = 0,7 a₀): misure n → frazione rimasta (formula)');
+  let prima = -1;
+  for (const nm of [1, 3, 10, 30]) {
+    let rimasti = 0; for (let k = 0; k < prove; k++) { const e = Q.misureInFila(P, `prova/zeno ${nm}`, k, Array.from({ length: nm }, () => ({ cosa: 'resta', dopo: T / nm })), { N: 32, L: 12 }).esiti; if (e.every((x) => x.valore)) rimasti++; }
+    const f = rimasti / prove, formula = (1 + (T / (4 * nm * 0.49)) ** 2) ** (-1.5 * nm), err = Math.sqrt(formula * (1 - formula) / prove);
+    console.log(`        n = ${nm}: ${n(f)} (formula ${n(formula)})`);
+    confronta(`Zeno: frazione rimasta con ${nm} misure in T`, f, formula - 3 * err - 0.01, formula + 3 * err + 0.01, `${n(formula)} (prodotto delle sopravvivenze; Itano et al. 1990 l'hanno misurato su ioni [R])`);
+    assert.ok(f >= prima - 0.05, 'più misure, più resta'); prima = f;
+  }
+}
+{
   const acqua = Q.decoerenza({ ambiente: { n: 3.343e28, massaKg: 18.015 * 1.66054e-27, T: 298.15, raggioM: 1.4e-10 }, raggioM: 1.06e-10, separazioneM: 2 * 0.7449 * Q.AU.a0 });
   const vuoto = Q.decoerenza({ ambiente: { fotoni: 300 }, raggioM: 1.06e-10, separazioneM: 2 * 0.7449 * Q.AU.a0 });
   console.log(`      decoerenza di 1s + 2p_z (Δx = ${n(2 * 0.7449)} a₀): nell'acqua a 25 °C ${n(acqua.tempo)} s (${acqua.regime}); nel vuoto con i fotoni a 300 K ${n(vuoto.tempo)} s`);
