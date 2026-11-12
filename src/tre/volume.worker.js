@@ -19,7 +19,7 @@ import { scenaGalassia } from '../camera/spazio3d.js';
 import { densitaGalassia } from '../camera/galassie.js';
 import { galassia } from '../camera/cosmo.js';
 import { coloreCorpoNero } from './nucleo.js';
-import { classiSuGriglia, raffina, ondeDi, aloniAttesi } from '../camera/ragnatela.js';
+import { classiSuGriglia, campoDi, raffina, ondeDi, aloniAttesi } from '../camera/ragnatela.js';
 import { galassiaAlTempo } from '../camera/galassie.js';
 import { cosmo as cosmoDi } from '../camera/cosmo.js';
 import { ANNI_OGGI } from '../camera/spazio3d.js';
@@ -67,8 +67,8 @@ function volumeGalassia(d, manda) {
 //   richiude, la media di Ψ è zero; in una regione resta ignota una traslazione di tutta la regione, che non cambia
 //   la forma dei filamenti ma la sposta di qualche Mpc rispetto alla grana grossa — dichiarato).
 function volumeRagnatela(d, manda) {
-  const O = ondeDi(d.cosmo), campo = d.kmax > O.kmax ? raffina(d.cosmo, d.kmax) : O, reg = d.regione ? { centro: d.regione.centro, lato: d.regione.lato, celle: d.celle } : null;
-  const G = classiSuGriglia(campo, reg, { celle: d.celle }), n = G.n, n2 = n * n, F = G.campo, h = G.passo; // (h: il passo in frazioni del toro; le λ sono in quelle unità: Ψ in frazioni del toro)
+  const C = campoDi(d.cosmo), O = C ? null : ondeDi(d.cosmo), campo = C ? d.cosmo : d.kmax > O.kmax ? raffina(d.cosmo, d.kmax) : O, dettaglio = C && d.regione && d.kmax ? C.toroM / d.kmax : null, TM = (C || O).toroM, reg = d.regione ? { centro: d.regione.centro, lato: d.regione.lato, celle: d.celle } : null;
+  const G = classiSuGriglia(campo, reg, { celle: d.celle, dettaglio }), n = G.n, n2 = n * n, F = G.campo, h = G.passo; // (h: il passo in frazioni del toro; le λ sono in quelle unità: Ψ in frazioni del toro)
   // Ψ per integrazione: lungo x da (0, j, k), con il punto di partenza di ogni fila ottenuto lungo y da (0, 0, k) e quello lungo z da (0, 0, 0)
   const P = [new Float32Array(n * n2), new Float32Array(n * n2), new Float32Array(n * n2)], T = [[F.xx, F.xy, F.xz], [F.xy, F.yy, F.yz], [F.xz, F.yz, F.zz]], q = (i, j, k) => (k * n + j) * n + i;
   for (let c = 0; c < 3; c++) { const [tx, ty, tz] = T[c], p = P[c];
@@ -87,7 +87,7 @@ function volumeRagnatela(d, manda) {
   let peso = null;
   try { const forme = cosmoDi(d.cosmo).galassie.map((x) => galassiaAlTempo(x.forma, ANNI_OGGI / 1e9 + (d.t || 0) / (1e9 * 3.15576e7))).filter((x) => x.esiste && x.massaAlone > 0), m0 = Math.min(...forme.map((x) => x.massaAlone)), m1 = Math.max(...forme.map((x) => x.massaAlone));
     const NB = 10, fasce = Array.from({ length: NB }, (_, b) => [m0 * (m1 / m0) ** (b / NB), m0 * (m1 / m0) ** ((b + 1) / NB)]), tab = [], passo = Math.max(1, Math.floor((n * n2) / 64));
-    for (let a = Math.floor(passo / 2); a < n * n2; a += passo) { const i = a % n, j = Math.floor(a / n) % n, k = Math.floor(a / n2), r = aloniAttesi(campo, [(G.origine[0] + i * h) * O.toroM, (G.origine[1] + j * h) * O.toroM, (G.origine[2] + k * h) * O.toroM], 0.62 * G.latoCellaM, { fasce, t: d.t || 0 });
+    for (let a = Math.floor(passo / 2); a < n * n2; a += passo) { const i = a % n, j = Math.floor(a / n) % n, k = Math.floor(a / n2), r = aloniAttesi(campo, [(G.origine[0] + i * h) * TM, (G.origine[1] + j * h) * TM, (G.origine[2] + k * h) * TM], 0.62 * G.latoCellaM, { fasce, t: d.t || 0 });
       tab.push([G.delta[a], r.fasce.reduce((somma, f) => somma + f.perMpc3DiMateria * Math.sqrt(f.da * f.a), 0)]); }
     tab.sort((x, y) => x[0] - y[0]); peso = new Float32Array(n * n2); let media = 0;
     for (let a = 0; a < n * n2; a++) { const x = G.delta[a]; let lo = 0, hi = tab.length - 1; if (x <= tab[0][0]) hi = 0; else if (x >= tab[hi][0]) lo = hi; else { while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tab[m][0] <= x) lo = m; else hi = m; } }
@@ -101,7 +101,7 @@ function volumeRagnatela(d, manda) {
     const i0 = Math.floor(X[0]), j0 = Math.floor(X[1]), k0 = Math.floor(X[2]), fx = X[0] - i0, fy = X[1] - j0, fz = X[2] - k0;
     for (let dk = 0; dk < 2; dk++) for (let dj = 0; dj < 2; dj++) for (let di = 0; di < 2; di++) { let x = i0 + di, y = j0 + dj, z = k0 + dk; if (per) { x = ((x % g) + g) % g; y = ((y % g) + g) % g; z = ((z % g) + g) % g; } else if (x < 0 || y < 0 || z < 0 || x >= g || y >= g || z >= g) continue;
       rho[(z * g + y) * g + x] += massa * (peso ? peso[a] : 1) * (di ? fx : 1 - fx) * (dj ? fy : 1 - fy) * (dk ? fz : 1 - fz); } }
-  manda({ n: d.n, tipo: 'ragnatela', dati: rho, griglia: g, periodica: per, origine: o0.map((v) => v * O.toroM), latoM: lato * O.toroM, toroM: O.toroM, kmax: campo.kmax, D, legge });
+  manda({ n: d.n, tipo: 'ragnatela', dati: rho, griglia: g, periodica: per, origine: o0.map((v) => v * TM), latoM: lato * TM, toroM: TM, kmax: O ? campo.kmax : d.kmax, D, legge });
 }
 
 self.onmessage = (e) => {

@@ -7,13 +7,13 @@
 // alla vista, per ogni elemento: dove sta (metri comoventi di oggi, dall'angolo del toro), quanto è larga la sua cella
 // (m comoventi) e i tre autovalori: il volume a ogni tempo (e quindi lungo il cono di luce) lo fa la scheda grafica.
 // Messaggi: { n, cosmo, regione: null | { centro: [m], lato: m }, celle, kmax } → { n, dati: Float32Array(8·celle³), celle, cellaM, toroM, ms }
-import { classiSuGriglia, raffina, ondeDi, dentro } from '../camera/ragnatela.js';
+import { classiSuGriglia, campoDi, raffina, ondeDi, dentro } from '../camera/ragnatela.js';
 
 self.onmessage = (e) => {
   const d = e.data, t0 = performance.now();
   try {
-    const O = ondeDi(d.cosmo), campo = d.kmax > O.kmax ? raffina(d.cosmo, d.kmax) : O, reg = d.regione ? { centro: d.regione.centro, lato: d.regione.lato, celle: d.celle } : null;
-    const G = classiSuGriglia(campo, reg, { celle: d.celle }), n = G.n, F = G.campo, dati = new Float32Array(8 * n * n * n), l = [0, 0, 0], L = O.toroM;
+    const C = campoDi(d.cosmo), O = C ? null : ondeDi(d.cosmo), campo = C ? d.cosmo : d.kmax > O.kmax ? raffina(d.cosmo, d.kmax) : O, dettaglio = C && d.regione && d.kmax ? C.toroM / d.kmax : null, reg = d.regione ? { centro: d.regione.centro, lato: d.regione.lato, celle: d.celle } : null;
+    const G = classiSuGriglia(campo, reg, { celle: d.celle, dettaglio }), n = G.n, F = G.campo, dati = new Float32Array(8 * n * n * n), l = [0, 0, 0], L = (C || O).toroM;
     for (let k = 0, q = 0; k < n; k++) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++, q++) {
       dentro.autovalori(F.xx[q], F.yy[q], F.zz[q], F.xy[q], F.xz[q], F.yz[q], l);
       // (dentro la sua cella l'elemento sta in un punto a caso — sempre lo stesso: dipende dal suo posto —: tutti al centro,
