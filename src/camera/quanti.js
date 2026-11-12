@@ -143,7 +143,7 @@ export function ritmoEmissione(n, l, Z = 1) { // 1/s, sommato su tutti i canali 
   let A = 0; for (let n2 = 1; n2 < n; n2++) for (const l2 of [l - 1, l + 1]) { if (l2 < 0 || l2 >= n2) continue; const w = energiaIdrogenoide(n, Z) - energiaIdrogenoide(n2, Z), d = dipoloRadiale(n, l, n2, l2, Z), ang = Math.max(l, l2) / (2 * l + 1); A += (4 / 3) * (w ** 3) * d * d * ang / AU.c ** 3; }
   return A / AU.t;
 }
-export function sovrapposizione(termini, Z = 1, { indirizzo = 'sovrapposizione', emissione = true } = {}) {
+export function sovrapposizione(termini, Z = 1, { indirizzo = 'sovrapposizione', emissione = true, tempoDecoerenza = Infinity } = {}) {
   const T = termini.map((t) => ({ ...t, o: orbitale(t.n, t.l, t.m, Z), c: Array.isArray(t.c) ? t.c : [t.c, 0] }));
   const norma = Math.sqrt(T.reduce((s, t) => s + t.c[0] ** 2 + t.c[1] ** 2, 0)); for (const t of T) { t.c = [t.c[0] / norma, t.c[1] / norma]; t.w = t.c[0] ** 2 + t.c[1] ** 2; }
   const fondo = T.reduce((a, t) => (t.o.E < a.o.E ? t : a), T[0]), eccitati = T.filter((t) => t !== fondo);
@@ -161,11 +161,14 @@ export function sovrapposizione(termini, Z = 1, { indirizzo = 'sovrapposizione',
     peso: 1, nome: T.map((t) => t.o.nome).join(' + '), centro: [0, 0, 0], estensione: Math.max(...T.map((t) => t.o.estensione)), estensioneFFT: Math.max(...T.map((t) => t.o.estensioneFFT)), psiT, ampiezze,
     // un punto da |Σ aψ|²: proposta dalla miscela Σ|a||ψ|², accettato con |Σaψ|²/((Σ|a|)(Σ|a||ψ|²)) (esatto)
     campiona(rnd, t) { const A = ampiezze(t), sa = A.reduce((s, q) => s + q.a, 0);
+      // decoerenza: con probabilità 1 − e^(−t/τ_D) l'ambiente ha già distinto le parti, e la misura legge una di esse
+      // (la matrice densità con le coerenze smorzate di e^(−t/τ_D); l'impulso dopo la misura usa sempre il ramo coerente)
+      if (tempoDecoerenza < Infinity && rnd() > Math.exp((-t * AU.t) / tempoDecoerenza)) { let v = rnd(), q = A[0]; for (const x of A) { v -= x.a * x.a; if (v <= 0) { q = x; break; } } return q.o.campiona(rnd); }
       for (let k = 0; k < 100000; k++) { let u = rnd() * sa, q = A[0]; for (const x of A) { u -= x.a; if (u <= 0) { q = x; break; } } const p = q.o.campiona(rnd), [re, im] = psiT(p[0], p[1], p[2], t); let mix = 0; for (const x of A) mix += x.a * x.o.psi(p[0], p[1], p[2]) ** 2; if (rnd() * sa * mix <= re * re + im * im) return p; }
       return [0, 0, 0]; },
   };
   const batt = eccitati.length ? (2 * PI) / Math.abs(eccitati[0].o.E - fondo.o.E) * AU.t : Infinity;
-  return { tipo: 'sovrapposizione', Z, componenti: [comp], elettroni: 1, estensione: comp.estensione, periodoBattimento: batt, ritmoEmissione: G, tSalto, nucleo: { Z, A: numeroDiMassa(Z) } };
+  return { tipo: 'sovrapposizione', Z, componenti: [comp], elettroni: 1, estensione: comp.estensione, periodoBattimento: batt, ritmoEmissione: G, tSalto, tempoDecoerenza, nucleo: { Z, A: numeroDiMassa(Z) } };
 }
 
 // UN PACCHETTO LIBERO gaussiano (massa dell'elettrone): ψ(x, t) esatto; σ(t) = σ₀√(1 + (t/2σ₀²)²) in unità atomiche
@@ -382,6 +385,48 @@ export function misura(stato, indirizzo, k, { t = 0, sigma = 0, impulso = false,
   if (impulso && sigma > 0) { const sc = scatolaFFT(comp, x, sigma), D = impulsi(comp.psiT, { centro: sc.centro, L: sc.L, N, t, riempi, finestra: { x0: x, sigma } }); p = tiraImpulso(D, rnd); }
   return { x, p, componente: ci, k };
 }
+// MISURE IN FILA SULLO STESSO ATOMO: l'ordine conta solo dove la fisica lo dice. sequenza: ['x', 'px', 'y', …,
+// 'posizione', 'impulso'] — ogni misura è un evento il cui indirizzo dice CHE COSA si misura e la STORIA delle misure
+// prima: «indirizzo/misura k/px dopo x». Lo stato dopo ogni misura è quello RIDOTTO: per la posizione ψ·finestra(x),
+// per l'impulso φ·finestra(p) riportata nello spazio con la trasformata inversa (operatori di Kraus gaussiani, larghezze
+// sigmaX e sigmaP). Posizione e impulso lungo lo stesso asse non commutano: x poi p_x dà altro che p_x poi x; lungo
+// assi diversi commutano, e l'ordine non cambia la statistica (prove). Tutto su una griglia N³ attorno al componente.
+const ASSE = { x: 0, y: 1, z: 2, px: 0, py: 1, pz: 2 };
+export function misureInFila(stato, indirizzo, k, sequenza, { t = 0, sigmaX = 0.5, sigmaP = 0.5, N = 32, L = null } = {}) {
+  const C = stato.componenti, tot = C.reduce((s, c) => s + c.peso, 0), r0 = contatore(`${indirizzo}/misura ${k}/quale elettrone`);
+  let u = r0() * tot, ci = 0; for (; ci < C.length - 1; ci++) { u -= C[ci].peso; if (u <= 0) break; }
+  const comp = C[ci], lato = L || 2 * comp.estensioneFFT, h = lato / N, n3 = N * N * N, re = new Float64Array(n3), im = new Float64Array(n3), dp = (2 * PI) / lato;
+  const coord = (i, a) => comp.centro[a] + (i - N / 2) * h, fr = (i) => freq(i, N) * dp, idx = (q) => [q % N, ((q / N) | 0) % N, (q / (N * N)) | 0];
+  for (let q = 0; q < n3; q++) { const [i, j, kk] = idx(q), [a, b] = comp.psiT(coord(i, 0), coord(j, 1), coord(kk, 2), t); re[q] = a; im[q] = b; }
+  const tira = (rnd, spazio) => { let s = 0; for (let q = 0; q < n3; q++) s += re[q] * re[q] + im[q] * im[q]; let v = rnd() * s, q = 0; for (; q < n3 - 1; q++) { v -= re[q] * re[q] + im[q] * im[q]; if (v <= 0) break; } const g = idx(q); return spazio === 'x' ? g.map((i, a) => coord(i, a) + (rnd() - 0.5) * h) : g.map((i) => fr(i) + (rnd() - 0.5) * dp); };
+  const esiti = []; let storia = 'niente', nelloSpazio = 'x';
+  const vaiA = (spazio) => { if (spazio === nelloSpazio) return; fft3(re, im, N, spazio === 'x'); nelloSpazio = spazio; };
+  for (const cosa of sequenza) {
+    const rnd = contatore(`${indirizzo}/misura ${k}/${cosa} dopo ${storia}`), impulso = cosa[0] === 'p' || cosa === 'impulso', spazio = impulso ? 'p' : 'x', assi = cosa === 'posizione' || cosa === 'impulso' ? [0, 1, 2] : [ASSE[cosa]], sg = impulso ? sigmaP : sigmaX;
+    vaiA(spazio); const vero = tira(rnd, spazio), esito = vero.slice(); for (const a of assi) esito[a] += sg * campana(rnd(), rnd());
+    // la riduzione: la finestra attorno all'esito, lungo gli assi misurati
+    for (let q = 0; q < n3; q++) { const g = idx(q); let e = 0; for (const a of assi) { const c = spazio === 'x' ? coord(g[a], a) : fr(g[a]); e += (c - esito[a]) ** 2; } const w = Math.exp(-e / (4 * sg * sg)); re[q] *= w; im[q] *= w; }
+    esiti.push({ cosa, valore: assi.length === 3 ? esito : esito[assi[0]], indirizzo: `${indirizzo}/misura ${k}/${cosa} dopo ${storia}` });
+    storia = storia === 'niente' ? cosa : `${storia} poi ${cosa}`;
+  }
+  return { componente: ci, esiti };
+}
+
+// LA DECOERENZA: quanto dura una sovrapposizione dentro il suo ambiente (Joos & Zeh 1985, Z. Phys. B 59, 223 [R];
+// Zurek 2003, RMP 75, 715 [V]; Schlosshauer 2007 per le formule [R]). Due parti di una sovrapposizione separate di Δx
+// si distinguono per l'ambiente che le urta: il ritmo è Λ·Δx² finché Δx è più piccola della lunghezza d'onda di chi urta,
+// e non supera il ritmo degli urti stessi (ogni urto, al più, «misura» una volta):
+//   · molecole (gas, o un liquido visto come gas fitto: STIMA) di densità n, massa m, temperatura T, contro un oggetto
+//     di raggio a: Λ = (8/3ħ²)·n·√(2πm)·(k_BT)^(3/2)·a²; urti Γ = n·π(a + a_m)²·v̄, v̄ = √(8k_BT/πm);
+//   · fotoni termici a T: Λ = 8!·8ζ(9)·c·a⁶/(9π)·(k_BT/ħc)⁹.
+// → { tempo (s), ritmo (1/s), regime }. ambiente: { n (1/m³), massaKg, T, raggioM (di chi urta) } o { fotoni: T }.
+export function decoerenza({ ambiente = { fotoni: 2.7255 }, raggioM = 1e-10, separazioneM = 1e-10 } = {}) {
+  const hb = 1.054571817e-34, kB = 1.380649e-23, c = 2.99792458e8;
+  if (ambiente.fotoni != null) { const T = ambiente.fotoni, L = (40320 * 8 * 1.0020083928 * c * raggioM ** 6) / (9 * PI) * ((kB * T) / (hb * c)) ** 9, r = L * separazioneM ** 2; return { tempo: 1 / r, ritmo: r, regime: `fotoni termici a ${T} K`, Lambda: L }; }
+  const { n, massaKg: m, T, raggioM: am = 1.4e-10 } = ambiente, L = (8 / (3 * hb * hb)) * n * Math.sqrt(2 * PI * m) * (kB * T) ** 1.5 * raggioM ** 2, urti = n * PI * (raggioM + am) ** 2 * Math.sqrt((8 * kB * T) / (PI * m)), r = Math.min(L * separazioneM ** 2, urti);
+  return { tempo: 1 / r, ritmo: r, regime: r === urti ? 'ogni urto distingue (Δx più grande della lunghezza d\'onda di chi urta)' : 'Λ·Δx²', Lambda: L, urti };
+}
+
 // la densità totale (elettroni per a₀³) di uno stato, a un tempo
 export function densita(stato, x, y, z, t = 0) { if (stato.densita) return stato.densita(x, y, z); let s = 0; for (const c of stato.componenti) { const [a, b] = c.psiT(x, y, z, t); s += c.peso * (a * a + b * b); } return s; }
 
@@ -475,7 +520,7 @@ export function atomoDaScena(scena, indice, { indirizzo = null } = {}) {
 // neon, elettroni pari, al più 8 atomi), altrimenti l'atomo nel campo centrale; `preparazione` (solo un elettrone):
 // una sovrapposizione scelta da chi guarda
 export function statoDi(atomo) {
-  if (atomo.preparazione) return sovrapposizione(atomo.preparazione, atomo.Z, { indirizzo: atomo.indirizzo });
+  if (atomo.preparazione) return sovrapposizione(atomo.preparazione, atomo.Z, { indirizzo: atomo.indirizzo, tempoDecoerenza: atomo.tempoDecoerenza ?? Infinity });
   const m = atomo.molecola || [];
   if (m.length >= 2 && m.length <= 8 && m.every((a) => a.Z <= 10) && (m.reduce((s, a) => s + a.Z, 0) - (atomo.carica || 0)) % 2 === 0) { const s = molecola(m, { carica: atomo.carica || 0 }); s.nucleo = { Z: atomo.Z, A: numeroDiMassa(atomo.Z) }; return s; }
   return statoAtomo(atomo.Z, { carica: atomo.carica || 0 });
@@ -490,7 +535,8 @@ export const STATO = Object.freeze([
   { legge: 'misura non nitida (Kraus gaussiano) e trasformata di Fourier: l\'indeterminazione', funzioni: 'misura, impulsi, tiraImpulso', stato: 'misurata', misura: 'Δx·Δp ≥ ħ/2 (Kennard 1927): stati coerenti e compressi della luce e degli ioni la raggiungono; il limite delle misure congiunte (Arthurs & Kelly 1965) e l\'errore-disturbo (Ozawa; neutroni: Erhart et al. 2012 [R])' },
   { legge: 'battimenti tra stati di energie diverse; pacchetto che si allarga', funzioni: 'sovrapposizione, pacchetto', stato: 'misurata', misura: 'battimenti quantistici; il moto degli elettroni di valenza seguito ad attosecondi (Goulielmakis et al. 2010, Nature 466, 739 [R]); pacchetti di Rydberg (citati in Stodolna 2013 [V])' },
   { legge: 'emissione spontanea (Weisskopf-Wigner) e salto come evento', funzioni: 'ritmoEmissione, sovrapposizione', stato: 'misurata', misura: 'vita del 2p dell\'idrogeno 1,596 ns (A = 6,2649·10⁸/s [R]); salti quantistici osservati su un singolo ione (Nagourney, Sandberg & Dehmelt 1986 [R])' },
-  { legge: 'decoerenza: ogni misura su un atomo preparato uguale', funzioni: 'misura (dichiarata)', stato: 'dichiarata, non simulata', misura: 'Zurek 2003, RMP 75, 715 [V]; decoerenza misurata in cavità (Brune et al. 1996 [R])' },
+  { legge: 'decoerenza per urti e fotoni (Joos-Zeh): tempo stimato, coerenze smorzate', funzioni: 'decoerenza, sovrapposizione', stato: 'misurata (il fenomeno) / stima (il liquido visto come gas fitto)', misura: 'decoerenza per urti di molecole di fullerene con un gas, misurata dal contrasto delle frange (Hornberger et al. 2003, PRL 90, 160401 [R]); in cavità (Brune et al. 1996 [R]); Zurek 2003 [V]. Ogni misura dello strumento è su un atomo preparato uguale (dichiarato)' },
+  { legge: 'misure in fila: l\'ordine conta per osservabili che non commutano', funzioni: 'misureInFila', stato: 'misurata', misura: 'misure successive di spin lungo assi diversi (Stern-Gerlach in fila); errore e disturbo di misure successive con i neutroni (Erhart et al. 2012 [R])' },
   { legge: 'densità di carica dei nuclei: raggi misurati, forma a shell o di Fermi', funzioni: 'nucleo', stato: 'misurata (raggio) / modello (forma)', misura: 'diffusione di elettroni (Hofstadter 1956 [R]); compilazioni di De Vries, De Jager & De Vries 1987 e Angeli & Marinova 2013 [R]' },
   { legge: 'densità dei neutroni uguale a quella dei protoni', funzioni: 'nucleo', stato: 'modello', misura: 'la pelle di neutroni del piombo è 0,28 ± 0,07 fm (PREX-II 2021 [R]): qui manca' },
   { legge: 'carica del nucleone dai fattori di forma; quark u e d per isospin', funzioni: 'nucleone, istantanea', stato: 'misurata (fattori di forma) / interpretazione (densità 3D) / modello (posizioni dei quark)', misura: 'raggio di carica del protone 0,84087 fm (idrogeno muonico, Antognini et al. 2013 [R]); CODATA 2018 0,8414 fm [R]; r² del neutrone −0,1161 fm² (PDG [R]); separazione dei sapori (Cates et al. 2011 [R]); la densità tridimensionale vale solo nel riferimento di Breit (Miller 2007 [R])' },

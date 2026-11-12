@@ -69,11 +69,37 @@ prova('la FFT della 1s dà la distribuzione di Podolsky e Pauling, 8/(π²(1 + p
   const G = Q.pacchetto({ sigma0: 1 }); console.log('      finestra σ → Δx₀, Δp dopo la misura, prodotto (stato gaussiano σ₀ = 1 a₀; teoria Arthurs-Kelly: (σ₀² + σ²)/(2σ₀σ))');
   let prima = 0;
   for (const sg of [0.25, 1, 4]) {
-    const v = misure(G, `prova/finestra ${sg}`, 1500, { sigma: sg, impulso: true, N: 32, riempi: 2 }), dx = scarto(v.map((m) => m.x[0])), dp = scarto(v.map((m) => m.p[0])), teoria = (1 + sg * sg) / (2 * sg);
+    const v = misure(G, `prova/finestra ${sg}`, 1500, { sigma: sg, impulso: true, N: 16, riempi: 2 }), dx = scarto(v.map((m) => m.x[0])), dp = scarto(v.map((m) => m.p[0])), teoria = (1 + sg * sg) / (2 * sg);
     console.log(`        σ = ${n(sg)} a₀: Δx₀ = ${n(dx)} (teoria ${n(Math.sqrt(1 + sg * sg))}), Δp = ${n(dp)} ħ/a₀ (teoria ${n(Math.sqrt(1 + 1 / (sg * sg)) / 2)}), Δx₀·Δp = ${n(dx * dp)} (teoria ${n(teoria)})`);
     if (prima) assert.ok(dp < prima, 'la finestra più larga disturba meno'); prima = dp;
     confronta(`Δx₀·Δp della stessa misura, σ = ${n(sg)}`, dx * dp, teoria * 0.92, teoria * 1.08, `${n(teoria)} ħ (Arthurs & Kelly 1965: ≥ 1 ħ)`, 'ħ');
   }
+}
+
+{
+  // L'ORDINE DELLE MISURE: x poi p_x contro p_x poi x sullo stesso pacchetto (σ₀ = 1 a₀, finestre σx = σp = 0,5)
+  const G = Q.pacchetto({ sigma0: 1 }), nn = 1200, opz = { sigmaX: 0.5, sigmaP: 0.5, N: 32, L: 16 };
+  const fila = (seq, nome) => Array.from({ length: nn }, (_, k) => Q.misureInFila(G, `prova/fila/${nome}`, k, seq, opz).esiti.map((e) => e.valore));
+  const XP = fila(['x', 'px'], 'xp'), PX = fila(['px', 'x'], 'px'), XY = fila(['x', 'py'], 'xpy'), YX = fila(['py', 'x'], 'pyx');
+  const dXP = [scarto(XP.map((v) => v[0])), scarto(XP.map((v) => v[1]))], dPX = [scarto(PX.map((v) => v[1])), scarto(PX.map((v) => v[0]))];
+  // teoria (gaussiane): x prima: Δx = √(σ₀² + σx²) = 1,118; p dopo x: √(1/4σ'² + σp²) con 1/σ'² = 1/σ₀² + 1/σx² → 1,225
+  //                    p prima: Δp = √(1/4σ₀² + σp²) = 0,707; x dopo p: lo stato si allarga a 1/(2σp') con 1/σp'² = 4σ₀²·… → 1,5
+  console.log(`      x poi p_x: Δx = ${n(dXP[0])} (teoria 1,118), Δp = ${n(dXP[1])} ħ/a₀ (1,225)  ·  p_x poi x: Δp = ${n(dPX[1])} (0,707), Δx = ${n(dPX[0])} a₀ (1,5)`);
+  prova('l\'ordine conta dove gli osservabili non commutano: dopo x l\'impulso si allarga, dopo p_x la posizione; x e p_y commutano', () => {
+    vicino(dXP[0], 1.118, 0.07, 'Δx prima'); vicino(dXP[1], 1.225, 0.07, 'Δp dopo x'); vicino(dPX[1], 0.707, 0.07, 'Δp prima'); vicino(dPX[0], 1.5, 0.07, 'Δx dopo p');
+    assert.ok(dXP[1] / dPX[1] > 1.5 && dPX[0] / dXP[0] > 1.25, 'i due ordini danno statistiche diverse');
+    // assi diversi: l'ordine non cambia la statistica (entro lo scarto)
+    vicino(scarto(XY.map((v) => v[0])), scarto(YX.map((v) => v[1])), 0.07, 'Δx con p_y prima o dopo'); vicino(scarto(XY.map((v) => v[1])), scarto(YX.map((v) => v[0])), 0.07, 'Δp_y con x prima o dopo');
+    // l'indirizzo di ogni esito dice che cosa e dopo che cosa
+    assert.equal(Q.misureInFila(G, 'prova/fila/xp', 0, ['x', 'px'], opz).esiti[1].indirizzo, 'prova/fila/xp/misura 0/px dopo x');
+  });
+}
+{
+  const acqua = Q.decoerenza({ ambiente: { n: 3.343e28, massaKg: 18.015 * 1.66054e-27, T: 298.15, raggioM: 1.4e-10 }, raggioM: 1.06e-10, separazioneM: 2 * 0.7449 * Q.AU.a0 });
+  const vuoto = Q.decoerenza({ ambiente: { fotoni: 300 }, raggioM: 1.06e-10, separazioneM: 2 * 0.7449 * Q.AU.a0 });
+  console.log(`      decoerenza di 1s + 2p_z (Δx = ${n(2 * 0.7449)} a₀): nell'acqua a 25 °C ${n(acqua.tempo)} s (${acqua.regime}); nel vuoto con i fotoni a 300 K ${n(vuoto.tempo)} s`);
+  prova('nell\'acqua la sovrapposizione diventa un insieme in meno di un picosecondo; nel vuoto prima si svuota emettendo (1,6 ns)', () => { assert.ok(acqua.tempo < 1e-12 && acqua.tempo > 1e-15); assert.ok(vuoto.tempo > 1e-9 * 1e6); });
+  confronta('tempo di decoerenza elettronica di un atomo in un liquido (stima a urti)', acqua.tempo, 1e-15, 1e-12, 'decine di fs – frazioni di ps (le coerenze elettroniche nei liquidi si smorzano in ~10–100 fs [R])', 's');
 }
 
 console.log('\n— 3. IL MOTO —');
