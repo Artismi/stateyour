@@ -1729,6 +1729,8 @@ try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Arr
 let salvato = '';
 setInterval(() => { const j = JSON.stringify(comp); if (j !== salvato) { try { localStorage.setItem(CHIAVE, j); salvato = j; } catch { /* spazio finito */ } } }, 1500);
 adattaPattern(); aggiornaVista();
+// si entra dall'universo: il pattern è una finestra dentro di lui, e ci si arriva scendendo fino alla materia di un punto
+apriCosmo();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
 window.__camera = {
