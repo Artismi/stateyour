@@ -48,7 +48,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
   const bucoNero = (() => { try { if (!(sc.buco && sc.buco.massaKg > 0)) return null; const bc = bucoCentrale(galassiaDi(via.cosmo, via.galassia).forma), acceso = bc && bc.frazioneEddington >= 0.01;
     const b = bucoNelMondo(N, { genitore: nodo, luogo: 'buco', massaKg: sc.buco.massaKg, accrescimento: acceso ? bc.frazioneEddington * bc.accrescimentoEddington : 0, luce: acceso ? 'disco' : null, radice: `cosmo ${via.cosmo}/galassia ${via.galassia}/buco` });
     b.corpo.influenza = 2000 * b.raggioGravitazionale; b.modello = bc; return b; } catch (e) { console.warn('il buco nero centrale non si è potuto montare:', e); return null; } })();
-  const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
+  const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n), luceV = new Float32Array(4 * n), _tr = [1, 1, 1];
   function luciStelle() { const P = sc.punti; for (let i = 0; i < n; i++) { const L = P.esiste[i] ? P.luminosita[i] / LUCE : 0; luce[4 * i] = L * lineare(P.colore[3 * i]); luce[4 * i + 1] = L * lineare(P.colore[3 * i + 1]); luce[4 * i + 2] = L * lineare(P.colore[3 * i + 2]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
   luciStelle();
   // la luce diffusa: batuffoli presi dagli anelli del disco (più dove c'è più massa di stelle) e dallo sferoide; ognuno
@@ -93,12 +93,15 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       let fMax = 0, vicina = -1, dv = Infinity;
       // (col cono di luce ogni stella si vede dov'era quando è partita la luce: indietro della sua velocità per distanza/c)
       const Vs = N.vista.cono ? sc.punti.vel : null;
+      // (la polvere del volume oscura e arrossa anche le stelle del campione: la stessa colonna, dall'occhio alla stella)
+      const conPolvere = !!(volume && volume.pronto()), giroV = conPolvere ? omega * (S.t - volume.stato.meta.t) : 0;
       for (let i = 0; i < n; i++) { let x = P[3 * i] - eG[0], y = P[3 * i + 1] - eG[1], z = P[3 * i + 2] - eG[2], d2 = x * x + y * y + z * z;
         if (Vs) { const rit = Math.sqrt(d2) / 299792458; x -= Vs[3 * i] * rit; y -= Vs[3 * i + 1] * rit; z -= Vs[3 * i + 2] * rit; d2 = x * x + y * y + z * z; }
         pos[3 * i] = q[0] * x + q[1] * y + q[2] * z; pos[3 * i + 1] = q[3] * x + q[4] * y + q[5] * z; pos[3 * i + 2] = q[6] * x + q[7] * y + q[8] * z;
+        if (conPolvere) { volume.trasparenza(eG, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], giroV, _tr); luceV[4 * i] = luce[4 * i] * _tr[0]; luceV[4 * i + 1] = luce[4 * i + 1] * _tr[1]; luceV[4 * i + 2] = luce[4 * i + 2] * _tr[2]; luceV[4 * i + 3] = luce[4 * i + 3]; }
         if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia }); } }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
-      stelle.metti(pos, luce, n);
+      stelle.metti(pos, conPolvere ? luceV : luce, n);
       // la luce che l'occhio chiede tra le stelle: che la più brillante in cielo valga qualche unità al suo centro
       // la luce che l'occhio chiede: quella diffusa della galassia (contata su un batuffolo ogni trenta). Da dentro riempie il
       // cielo e deve restare tenue; da fuori sta tutta in un disco piccolo, che deve valere quasi uno

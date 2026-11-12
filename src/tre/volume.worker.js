@@ -19,7 +19,10 @@ import { scenaGalassia } from '../camera/spazio3d.js';
 import { densitaGalassia } from '../camera/galassie.js';
 import { galassia } from '../camera/cosmo.js';
 import { coloreCorpoNero } from './nucleo.js';
-import { classiSuGriglia, raffina, ondeDi, dentro } from '../camera/ragnatela.js';
+import { classiSuGriglia, raffina, ondeDi, aloniAttesi } from '../camera/ragnatela.js';
+import { galassiaAlTempo } from '../camera/galassie.js';
+import { cosmo as cosmoDi } from '../camera/cosmo.js';
+import { ANNI_OGGI } from '../camera/spazio3d.js';
 
 const KPC = 3.0857e19, MSOLE = 1.989e30, GIOVANI = 3, lin = (c) => (c / 255) ** 2.2;
 
@@ -59,7 +62,7 @@ function volumeGalassia(d, manda) {
 // { tipo: 'ragnatela', n, cosmo, regione: null | { centro, lato } (m comoventi), celle, griglia, kmax, D }
 // → la densità ρ/ρ̄ su una griglia (griglia³, Float32) DOPO lo spostamento di Zel'dovich: ogni elemento di materia (i nodi
 //   di una griglia celle³: tutti della stessa massa) è portato da q a x = q + D·Ψ(q) e depositato nelle otto celle
-//   vicine. Ψ = −∇φ con ∇²φ = δ: ragnatela.js dà le derivate seconde di φ (il tensore di marea) nei nodi; le prime si
+//   vicine, con la LUCE che gli spetta (vedi sotto: quella degli aloni attesi in lui). Ψ = −∇φ con ∇²φ = δ: ragnatela.js dà le derivate seconde di φ (il tensore di marea) nei nodi; le prime si
 //   ricavano da lì integrando lungo le file della griglia (∂ψ_x/∂x = −φ_xx …: trapezi; su tutto il toro, che si
 //   richiude, la media di Ψ è zero; in una regione resta ignota una traslazione di tutta la regione, che non cambia
 //   la forma dei filamenti ma la sposta di qualche Mpc rispetto alla grana grossa — dichiarato).
@@ -73,13 +76,32 @@ function volumeRagnatela(d, manda) {
     for (let k = 0; k < n; k++) for (let j = 1; j < n; j++) p[q(0, j, k)] = p[q(0, j - 1, k)] - 0.5 * h * (ty[q(0, j, k)] + ty[q(0, j - 1, k)]);
     for (let k = 0; k < n; k++) for (let j = 0; j < n; j++) for (let i = 1; i < n; i++) p[q(i, j, k)] = p[q(i - 1, j, k)] - 0.5 * h * (tx[q(i, j, k)] + tx[q(i - 1, j, k)]);
     let m = 0; for (let a = 0; a < p.length; a++) m += p[a]; m /= p.length; for (let a = 0; a < p.length; a++) p[a] -= m; }
+  // LA LUCE VIENE DALLE GALASSIE, non dalla massa: ogni elemento di materia porta la luce degli aloni che fanno galassie
+  // attesi in lui, e quanti sono lo dice ragnatela.js `aloniAttesi` (Press–Schechter condizionata all'ambiente: in un
+  // vuoto gli aloni grandi spariscono, in un nodo abbondano — cresce molto più in fretta della densità). Gli aloni che
+  // contano sono quelli tra il più piccolo e il più grande alone delle galassie della biblioteca (galassie.js), e la
+  // luce va con la loro massa (luce su massa d'alone: una costante del campione, che qui si semplifica: conta il
+  // rapporto con la media). La legge dipende dall'ambiente solo attraverso la sovradensità lineare: la si calcola in 64
+  // elementi sparsi e per gli altri si interpola su quella (dichiarato: `aloniAttesi` media su una sfera grande quanto
+  // la cella, la griglia dà il valore nel nodo; con onde più lunghe di due celle la differenza è piccola).
+  let peso = null;
+  try { const forme = cosmoDi(d.cosmo).galassie.map((x) => galassiaAlTempo(x.forma, ANNI_OGGI / 1e9 + (d.t || 0) / (1e9 * 3.15576e7))).filter((x) => x.esiste && x.massaAlone > 0), m0 = Math.min(...forme.map((x) => x.massaAlone)), m1 = Math.max(...forme.map((x) => x.massaAlone));
+    const NB = 10, fasce = Array.from({ length: NB }, (_, b) => [m0 * (m1 / m0) ** (b / NB), m0 * (m1 / m0) ** ((b + 1) / NB)]), tab = [], passo = Math.max(1, Math.floor((n * n2) / 64));
+    for (let a = Math.floor(passo / 2); a < n * n2; a += passo) { const i = a % n, j = Math.floor(a / n) % n, k = Math.floor(a / n2), r = aloniAttesi(campo, [(G.origine[0] + i * h) * O.toroM, (G.origine[1] + j * h) * O.toroM, (G.origine[2] + k * h) * O.toroM], 0.62 * G.latoCellaM, { fasce, t: d.t || 0 });
+      tab.push([G.delta[a], r.fasce.reduce((somma, f) => somma + f.perMpc3DiMateria * Math.sqrt(f.da * f.a), 0)]); }
+    tab.sort((x, y) => x[0] - y[0]); peso = new Float32Array(n * n2); let media = 0;
+    for (let a = 0; a < n * n2; a++) { const x = G.delta[a]; let lo = 0, hi = tab.length - 1; if (x <= tab[0][0]) hi = 0; else if (x >= tab[hi][0]) lo = hi; else { while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tab[m][0] <= x) lo = m; else hi = m; } }
+      const f = lo === hi || tab[hi][0] === tab[lo][0] ? tab[lo][1] : tab[lo][1] + ((tab[hi][1] - tab[lo][1]) * (x - tab[lo][0])) / (tab[hi][0] - tab[lo][0]); peso[a] = Math.max(0, f); media += peso[a]; }
+    media /= n * n2; if (media > 0) for (let a = 0; a < n * n2; a++) peso[a] /= media; else peso = null;
+    var legge = { aloniDa: m0, aloniA: m1, punti: tab.length, minimo: tab[0], massimo: tab[tab.length - 1], media };
+  } catch (e) { peso = null; var legge = { errore: String(e) }; }
   // il deposito: griglia g³ sulla stessa regione (tutto il toro: periodica), nuvola-nella-cella (otto celle vicine)
   const g = d.griglia, rho = new Float32Array(g * g * g), per = !reg, lato = per ? 1 : n * h, o0 = per ? [0, 0, 0] : G.origine.map((v) => v - 0.5 * h), D = d.D ?? 1, massa = (g / n) ** 3;
   for (let k = 0; k < n; k++) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const a = q(i, j, k), X = [G.origine[0] + i * h + D * P[0][a], G.origine[1] + j * h + D * P[1][a], G.origine[2] + k * h + D * P[2][a]].map((v, c) => ((v - o0[c]) / lato) * g - 0.5);
     const i0 = Math.floor(X[0]), j0 = Math.floor(X[1]), k0 = Math.floor(X[2]), fx = X[0] - i0, fy = X[1] - j0, fz = X[2] - k0;
     for (let dk = 0; dk < 2; dk++) for (let dj = 0; dj < 2; dj++) for (let di = 0; di < 2; di++) { let x = i0 + di, y = j0 + dj, z = k0 + dk; if (per) { x = ((x % g) + g) % g; y = ((y % g) + g) % g; z = ((z % g) + g) % g; } else if (x < 0 || y < 0 || z < 0 || x >= g || y >= g || z >= g) continue;
-      rho[(z * g + y) * g + x] += massa * (di ? fx : 1 - fx) * (dj ? fy : 1 - fy) * (dk ? fz : 1 - fz); } }
-  manda({ n: d.n, tipo: 'ragnatela', dati: rho, griglia: g, periodica: per, origine: o0.map((v) => v * O.toroM), latoM: lato * O.toroM, toroM: O.toroM, kmax: campo.kmax, D });
+      rho[(z * g + y) * g + x] += massa * (peso ? peso[a] : 1) * (di ? fx : 1 - fx) * (dj ? fy : 1 - fy) * (dk ? fz : 1 - fz); } }
+  manda({ n: d.n, tipo: 'ragnatela', dati: rho, griglia: g, periodica: per, origine: o0.map((v) => v * O.toroM), latoM: lato * O.toroM, toroM: O.toroM, kmax: campo.kmax, D, legge });
 }
 
 self.onmessage = (e) => {

@@ -16,7 +16,8 @@
 // disegna su un'immagine più piccola di tanto per lato e si aggiunge al fondo). Sono il costo: sono regolabili.
 const PASSI_MAX = 160;
 const V_Q = `out vec2 v_uv; void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
-const GLSL_CASO = `float caso(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`; // (rumore a gradiente interlacciato: sposta l'inizio dei passi da un punto all'altro)
+// (un numero a caso per punto dello schermo, senza trama: sposta di poco l'inizio dei passi; quello «interlacciato» di prima, dove contavano pochi passi, lasciava un retino)
+const GLSL_CASO = `float caso(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }`;
 const F_GALASSIA = `
 precision highp sampler3D;
 in vec2 v_uv; out vec4 o_col;
@@ -38,7 +39,7 @@ void main() {
   bool piano = abs(d.z) < 0.04 || abs(u1 - u0) < 0.5; // il raggio corre (quasi) nel piano: passi fitti vicino all'inizio
   vec3 C = vec3(0.0), T = vec3(1.0); float prima = t0;
   for (int i = 0; i < ${PASSI_MAX}; i++) { if (i >= n) break;
-    float f = (float(i) + 1.0) / float(n), t = piano ? t0 + (t1 - t0) * f * f : (h * sinh(mix(u0, u1, f)) - o.z) / d.z, ds = t - prima, tm = prima + ds * (0.25 + 0.5 * g); prima = t;
+    float f = (float(i) + 1.0) / float(n), t = piano ? t0 + (t1 - t0) * f * f : (h * sinh(mix(u0, u1, f)) - o.z) / d.z, ds = t - prima, tm = prima + ds * (0.35 + 0.3 * g); prima = t;
     vec3 p = o + d * tm; float R = length(p.xy), fi = atan(p.y, p.x) - u_cam.w;
     vec4 c = texture(u_vol, vec3(fi * 0.15915494, R / Rm, 0.5 + 0.5 * sign(p.z) * sqrt(min(1.0, abs(p.z) / zm))));
     vec3 tau = c.a * ds * 0.921 * u_k.w * vec3(0.79, 1.0, 1.31), via = exp(-tau);
@@ -60,7 +61,7 @@ ${GLSL_CASO}
 void main() {
   vec3 d = normalize(u_raggi * vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0)); int n = int(u_cam.z); float lungo = u_cam.w, g = caso(gl_FragCoord.xy), somma = 0.0, prima = 0.0;
   for (int i = 0; i < ${PASSI_MAX}; i++) { if (i >= n) break;
-    float f = (float(i) + 1.0) / float(n), t = lungo * f * f, ds = t - prima, tm = prima + ds * (0.25 + 0.5 * g); prima = t; // passi fitti vicino, radi lontano
+    float f = (float(i) + 1.0) / float(n), t = lungo * f * f, ds = t - prima, tm = prima + ds * (0.35 + 0.3 * g); prima = t; // passi fitti vicino, radi lontano
     vec3 p = u_occhio + d * tm;
     vec3 rel = fract(p - u_fine0.xyz + 0.5) - 0.5; // (rispetto al centro della regione fine, nell'immagine più vicina del toro)
     float rho; if (u_fine0.w > 0.0 && max(abs(rel.x), max(abs(rel.y), abs(rel.z))) < 0.5 * u_fine0.w * 0.94) rho = texture(u_fine, rel / u_fine0.w + 0.5).r; else rho = texture(u_grossa, fract(p)).r;
@@ -91,14 +92,21 @@ const lega3d = (gl, unita, t, u) => { gl.activeTexture(gl.TEXTURE0 + unita); gl.
 // ---------- la galassia: { cosmo, galassia } → { pronto(), disegna(S, occhio (in Rg, nel riferimento della galassia), quadro, giro), stato }
 export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
   const gl = N.gl, O = { nf: 160, nr: 96, nz: 48, estinzione: 1, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, ms: 0, nebulose: 0, errore: null, meta: null };
-  let prg = null, vol = null, filo = null; const u9 = new Float32Array(9);
+  let prg = null, vol = null, filo = null, copia = null; const u9 = new Float32Array(9);
   try { filo = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
     filo.onmessage = (e) => { const d = e.data; if (d.errore) { stato.errore = d.errore; console.error('il volume della galassia non si è potuto calcolare:', d.errore); return; }
-      if (vol) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); stato.meta = { Rmax: d.Rmax, zmax: d.zmax, raggioM: d.raggioM, luce: d.luce, t: d.t }; stato.pronto = true; stato.ms = d.ms; stato.nebulose = d.nebulose; N.cambia(); };
+      if (vol) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); copia = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz }; stato.meta = { Rmax: d.Rmax, zmax: d.zmax, raggioM: d.raggioM, luce: d.luce, t: d.t }; stato.pronto = true; stato.ms = d.ms; stato.nebulose = d.nebulose; N.cambia(); };
     filo.onerror = (e) => { stato.errore = e.message; };
     filo.postMessage({ tipo: 'galassia', n: 1, cosmo, galassia, t: N.tempo.t, nf: O.nf, nr: O.nr, nz: O.nz });
   } catch (e) { stato.errore = String(e); }
   return { stato, pronto: () => stato.pronto,
+    // quanta luce passa da un punto all'altro della galassia (m, nel suo riferimento; `giro`: l'angolo dei bracci): la
+    // stessa polvere del volume, sommata lungo il segmento (24 tratti, la cella più vicina) → [rosso, verde, blu]
+    trasparenza(a, b, giro, out = [1, 1, 1]) {
+      if (!copia) { out[0] = out[1] = out[2] = 1; return out; } const m = stato.meta, Rg = m.raggioM, { dati, nf, nr, nz } = copia, N = 24, dx = (b[0] - a[0]) / Rg, dy = (b[1] - a[1]) / Rg, dz = (b[2] - a[2]) / Rg, ds = Math.hypot(dx, dy, dz) / N; let av = 0;
+      for (let k = 0; k < N; k++) { const f = (k + 0.5) / N, x = a[0] / Rg + dx * f, y = a[1] / Rg + dy * f, z = a[2] / Rg + dz * f, R = Math.hypot(x, y); if (R >= m.Rmax || Math.abs(z) >= m.zmax) continue;
+        let fi = (Math.atan2(y, x) - giro) / (2 * Math.PI); fi -= Math.floor(fi); const jf = Math.min(nf - 1, Math.floor(fi * nf)), jr = Math.min(nr - 1, Math.floor((R / m.Rmax) * nr)), sz = Math.sign(z) * Math.sqrt(Math.abs(z) / m.zmax), jz = Math.min(nz - 1, Math.floor(((sz + 1) / 2) * nz)); av += dati[4 * ((jz * nr + jr) * nf + jf) + 3] * ds; }
+      const tau = 0.921 * av * O.estinzione; out[0] = Math.exp(-0.79 * tau); out[1] = Math.exp(-tau); out[2] = Math.exp(-1.31 * tau); return out; },
     // occhio: [x, y, z] nel riferimento della galassia (m); quadro: i suoi assi nel mondo (3×3 per righe); giro: di quanto sono girati i bracci (rad)
     disegna(S, occhio, quadro, giro, frazione = 1) {
       if (!vol) return; if (!prg) prg = N.programma(V_Q, F_GALASSIA); const u = prg.u, m = stato.meta, Rg = m.raggioM;
@@ -115,10 +123,10 @@ export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
 export function creaVolumeRete(N, { cosmo, luce, tinta = [1, 0.9, 0.8], toroM, opzioni = {} } = {}) {
   const gl = N.gl, O = { celle: 96, griglia: 128, celleFine: 64, grigliaFine: 96, latoFine: 0.2, kmaxFine: 72, media: 0.05, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, fine: false, ms: 0, msFine: 0, errore: null, D: 1 };
   let prg = null, grossa = null, fine = null, fineReg = null, filo = null, inCorso = 0, n = 0, chiesta = null, vuota = null; const u9 = new Float32Array(9), tab = new Float32Array(NT);
-  const chiedi = (m) => { inCorso++; filo.postMessage({ tipo: 'ragnatela', n: ++n, cosmo, ...m }); };
+  const chiedi = (m) => { inCorso++; filo.postMessage({ tipo: 'ragnatela', n: ++n, cosmo, t: N.tempo.t, ...m }); };
   try { filo = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
     filo.onmessage = (e) => { const d = e.data; inCorso--; if (d.errore) { stato.errore = d.errore; console.error('il volume della ragnatela non si è potuto calcolare:', d.errore); return; }
-      if (d.periodica) { if (grossa) gl.deleteTexture(grossa); grossa = immagine3d(gl, d.griglia, d.griglia, d.griglia, 1, d.dati, 'tutti'); stato.pronto = true; stato.ms = d.ms; stato.D = d.D; }
+      if (d.periodica) { if (grossa) gl.deleteTexture(grossa); grossa = immagine3d(gl, d.griglia, d.griglia, d.griglia, 1, d.dati, 'tutti'); stato.pronto = true; stato.ms = d.ms; stato.D = d.D; stato.legge = d.legge; }
       else { if (fine) gl.deleteTexture(fine); fine = immagine3d(gl, d.griglia, d.griglia, d.griglia, 1, d.dati, false); fineReg = { centro: d.origine.map((v) => (v + d.latoM / 2) / toroM), lato: d.latoM / toroM, D: d.D }; stato.fine = true; stato.msFine = d.ms; }
       N.cambia(); };
     filo.onerror = (e) => { stato.errore = e.message; };
