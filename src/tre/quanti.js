@@ -153,9 +153,9 @@ export function creaQuanti(N, opzioni = {}) {
       const usa = (p, unita) => { gl.useProgram(p.p); gl.uniformMatrix4fv(p.u.u_proj, false, S.proj); gl.uniformMatrix3fv(p.u.u_vista, false, S.vista); gl.uniformMatrix3fv(p.u.u_quadro, false, u9); gl.uniform3f(p.u.u_centro, _v[0] / unita, _v[1] / unita, _v[2] / unita); };
       // gli elettroni (in a₀)
       if (stato.misure > 0) {
-        usa(prg, AU.a0); const rPx = Math.max(6, ((info ? Math.min(info.estensione, 40) : 4) * 0.35 * AU.a0 / d) * S.fuoco), area = Math.PI * rPx * rPx;
+        usa(prg, AU.a0); const rPx = Math.max(6, ((info ? Math.min(info.estensione, 40) : 4) * 0.35 * AU.a0 / d) * S.fuoco), area = Math.min(Math.PI * rPx * rPx, S.W * S.H); // (la luce di tutte le misure non supera quella che riempie lo schermo)
         gl.uniform1f(prg.u.u_k, stato.kNow); gl.uniform1f(prg.u.u_kmin, kmin); gl.uniform1f(prg.u.u_esposizione, esposizione); gl.uniform1f(prg.u.u_fuoco, S.fuoco); gl.uniform1f(prg.u.u_massimo, 96);
-        gl.uniform1f(prg.u.u_luce, (0.6 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_passato, 1); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
+        gl.uniform1f(prg.u.u_luce, (0.35 * area) / Math.max(30, Math.min(stato.misure, esposizione * 3))); gl.uniform1f(prg.u.u_passato, 1); gl.uniform1f(prg.u.u_sigE, Math.max(O.sigma, 0.02)); gl.uniform4f(prg.u.u_sig, 0.5, 0.06, 0, 0);
         gl.bindVertexArray(vao); gl.drawArrays(gl.POINTS, 0, K);
         if (nScie) { usa(prgS, AU.a0); gl.bindVertexArray(vaoS); gl.drawArrays(gl.LINES, 0, 2 * nScie); }
       }
