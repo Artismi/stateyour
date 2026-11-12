@@ -179,7 +179,7 @@ const T0 = performance.now(), sf = GE.superficiePianeta('fili|terra', TERRA, TER
 const acque = MA.mare(TERRA, se, cl, se, 'fili|terra/mare'), clMare = GE.climaConIlMare('fili|terra', TERRA, sf, cl, acque);
 
 prova('i vulcani stanno sulle salite del mantello (tettonica.js), il più caldo per primo', () => {
-  const tt = evolviTettonica({ W: sf.W, H: sf.H, raggioM: TERRA.raggioM, nucleo: TERRA.interno.nucleo, q: TERRA.interno.q, eta: TERRA.interno.eta, acqua: true, seme: TERRA.origine, placche: true, termico: GE.statoDelMantello(TERRA) }); // (lo stato del mantello dalla storia, come lo passa superficiePianeta: la velocità delle placche viene da lì)
+  const tt = { salite: sf.tettonica.salite }; // (il campo del mantello della STESSA storia che ha fatto la superficie: superficiePianeta lo porta con sé. Prima la prova rifaceva la tettonica con gli stessi argomenti; ora la superficie le passa anche la litosfera, l'acqua e la gravità, e rifarla qui a mano sarebbe una seconda fonte)
   assert.ok(tt.salite && tt.salite.length === sf.W * sf.H); assert.equal(sf.vulcani.length, TERRA.interno.vulcani);
   let mx = 0; for (const v of tt.salite) if (v > mx) mx = v; const u = sf.vulcani.map(([i, j]) => tt.salite[j * sf.W + i]);
   for (const [k, v] of u.entries()) { assert.ok(v > 0, `il vulcano ${k} sta dove il mantello scende: ${v}`); if (k) assert.ok(v <= u[k - 1] + 1e-12, 'in ordine: il più caldo per primo'); }

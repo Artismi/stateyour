@@ -149,7 +149,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const tetto = tt ? new Float32Array(W * H) : null; if (tt) for (let k = 0; k < W * H; k++) tetto[k] = alt[k] + tt.regge[k];
   const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati,
     ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, spessore: tt.spessore, copre: tt.copre, calore: tt.calore, termica: tt.termica,
-      tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera } } : {}) };
+      tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera, salite: tt.salite, stiramento: tt.stiramento } } : {}) };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }

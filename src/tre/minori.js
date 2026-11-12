@@ -9,7 +9,7 @@
 //    (densità di grani K_f/(m·r), luce L/4πr², sezione per steradiante (a²/4)·Φ). Lungo il raggio si usa l'angolo φ visto
 //    dalla stella (s = b·tan φ): ds/r³ = cos φ·dφ/b² e l'angolo di diffusione è θ = π/2 + φ, così Φ(θ)·cos φ — tutto ciò
 //    che cambia in fretta, col lobo in avanti — si somma una volta in una tabella F(θ) e a ogni passo vale F(φ₂) − F(φ₁),
-//    esatto; i pochi passi (N.vista.passi.minori, 8) servono solo alla campana della latitudine e al bordo delle fasce.
+//    esatto; i pochi passi (N.vista.passi.minori, 12) servono solo alla campana della latitudine e al bordo delle fasce.
 //    La polvere toglie anche luce (la sezione geometrica dei grani) alla stella che la illumina e lungo lo sguardo: lo
 //    si conta solo dove è fitta (spessore ottico > 0,15).
 //  · I CORPI DELLE FASCE: ognuno sulla sua orbita (Keplero, col tempo del motore), un corpo del nucleo (ci si può
@@ -18,9 +18,9 @@
 //    Un corpo di 50 km si vede solo da vicino: chi è troppo lontano per mandare luce che l'occhio veda non costa niente
 //    (lo si scarta dal suo semiasse, senza risolvere l'orbita) e non è un bersaglio.
 //  · LE COMETE ATTIVE: il nucleo come gli altri corpi; chioma, coda di ioni e coda di polvere come batuffoli a campana
-//    (minori.worker.js), disegnati esatti: per un batuffolo lontano la sua proiezione sullo schermo (una campana in due
-//    dimensioni che conserva la luce); per uno in cui si è dentro, o quasi, la somma lungo il raggio in forma chiusa
-//    (∫₀^∞ di una campana: erfc) su un'immagine più piccola. I grani diffondono con la funzione di fase della loro
+//    (minori.worker.js), disegnati senza camminare: per un batuffolo lontano la sua proiezione sullo schermo (una campana
+//    in due dimensioni che conserva la luce: anche se è più piccolo di un punto); per uno in cui si è dentro, o a meno
+//    di 8 delle sue larghezze, la somma lungo il raggio in forma chiusa (∫₀^∞ di una campana: erfc) su un'immagine più piccola. I grani diffondono con la funzione di fase della loro
 //    taglia (i più fini molto in avanti), il gas brilla di suo nelle sue righe. Le code girano con la cometa (il loro
 //    riferimento la segue: via dalla stella, lungo l'orbita); forma e luce si richiedono al lavoratore quando il tempo
 //    è andato avanti. Una cometa la cui luce sta sotto la soglia dell'occhio non si disegna.
@@ -88,7 +88,9 @@ void main() {
   float q = u_lim.y, A = d.z * d.z - q, B = o.z * d.z - q * dot(o, d), C = o.z * o.z - q * dot(o, o), disc = B * B - A * C;
   if (A > 1e-6) { if (disc <= 0.0) return; float s = sqrt(disc); a0 = max(t0, (-B - s) / A); a1 = min(t1, (-B + s) / A); }
   else if (A < -1e-6 && disc > 0.0) { float s = sqrt(disc), r1 = (-B + s) / A, r2 = (-B - s) / A; if (C > 0.0) a0 = max(t0, r2); else if (r1 > 0.0) { a1 = min(t1, r1); b0 = max(t0, r2); b1 = t1; } }
-  int n = int(u_cam.z), na = b1 > b0 ? (n + 1) / 2 : n; float g = caso(gl_FragCoord.xy), tau = 0.0, zb = pc.z / b;
+  // (i passi divisi tra i due tratti secondo l'angolo che coprono visti dalla stella)
+  int n = int(u_cam.z), na = n; if (b1 > b0) { float fa = max(atan((a1 - tc) / b) - atan((a0 - tc) / b), 0.0), fb = atan((b1 - tc) / b) - atan((b0 - tc) / b); na = clamp(int(float(n) * fa / max(fa + fb, 1e-9) + 0.5), 1, n - 1); }
+  float g = caso(gl_FragCoord.xy), tau = 0.0, zb = pc.z / b;
   vec3 somma = tratto(a0, a1, na, tc, b, zb, d.z, g, tau); if (b1 > b0) somma += tratto(b0, b1, n - na, tc, b, zb, d.z, g, tau);
   o_col = vec4(somma / (b * b), 1.0);
 }`;
@@ -136,7 +138,7 @@ void main() {
 }`;
 
 export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T = 0, coloreLuce = [1, 1, 1], opzioni = {} } = {}) {
-  const gl = N.gl, O = { passi: 8, massimoComete: 64, ...opzioni }, L = luminosita, limite = 30 * (nodo.influenza || 40 * UA);
+  const gl = N.gl, O = { passi: 12, massimoComete: 64, ...opzioni }, L = luminosita, limite = 30 * (nodo.influenza || 40 * UA);
   const st = { pronto: false, acceso: true, parti: { polvere: true, corpi: true, comete: true } /* (per le prove: spegnere una parte) */, errore: null, ms: 0, richieste: 0, mancanti: [], polvere: null, nCorpi: 0, nComete: 0, visti: { polvere: false, valorePolvere: 0, corpi: 0, sfere: 0, comete: 0, batuffoli: 0 } };
   if (!(L > 0)) return { stato: st, corpi: [], comete: () => [], libera() {} }; // (una stella spenta non illumina niente)
   let filo = null, inCorso = false, tDati = NaN, ultima = 0, nRichiesta = 0, dati = null;
@@ -168,7 +170,7 @@ export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T =
       st.nCorpi = fasce.n; }
     // le comete: quelle nuove nascono, quelle che non ci sono più (spente, o uscite) se ne vanno; le altre cambiano forma
     const viste = new Set();
-    for (const c of d.comete.slice(0, O.massimoComete)) { viste.add(c.id); let m = comete.get(c.id);
+    for (const c of (d.comete.length > O.massimoComete ? [...d.comete].sort((x, y) => y.acquaKgS - x.acquaKgS) : d.comete).slice(0, O.massimoComete)) { viste.add(c.id); let m = comete.get(c.id); // (se sono troppe: le più attive)
       if (!m) { const corpo = corpoDa(c.el, 0, `cometa (${c.id.split('/').slice(-2).join(' ')})`, c.raggio, 0), vao = gl.createVertexArray(), buf = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
         for (const [i, n, o] of [[0, 3, 0], [1, 3, 12], [2, 2, 24], [3, 4, 32]]) { gl.enableVertexAttribArray(i); gl.vertexAttribPointer(i, n, gl.FLOAT, false, 4 * NB, o); gl.vertexAttribDivisor(i, 1); } gl.bindVertexArray(null);
         m = { id: c.id, corpo, el: c.el, k: 0, vao, buf, capienza: 0, rel: [0, 0, 0], sole: [1, 0, 0], E: 0, quadro: new Float32Array(9), fasi: new Float32Array(9), disegna: false, cometa: null }; m.cometa = m; m.Lmax = luceMassima(c.el, 0); comete.set(c.id, m); }
@@ -182,8 +184,18 @@ export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T =
   function chiedi(t) { if (!filo || inCorso || st.errore) return; inCorso = true; ultima = performance.now(); st.richieste++; filo.postMessage({ n: ++nRichiesta, via: { cosmo: via.cosmo, galassia: via.galassia, stella: via.stella }, t, corpi: !fasce, stella: { L, R: raggioStella, T } }); }
   try { filo = new Worker(new URL('./minori.worker.js', import.meta.url), { type: 'module' }); filo.onmessage = (e) => arrivati(e.data); filo.onerror = (e) => { inCorso = false; st.errore = e.message || 'il lavoratore dei corpi minori non parte'; }; chiedi(N.tempo.t); } catch (e) { st.errore = String(e); }
 
+  // la funzione di fase dei grani sommata, in tabella: F(θ) = ∫₀^θ Φ·sen θ dθ per rosso, verde, blu (θ = π·w²; quattro punti
+  // di Gauss per tratto), col raggio apparente della stella vista da dove si è: la si rifà quando quello cambia
+  function tabella(P) {
+    const alfa = raggioStella / Math.max(raggioStella, V.lungo(oSys)); if (tabFase && Math.abs(alfa - tabFase.alfa) <= 0.05 * alfa && tabFase.dati === P) return;
+    if (!tabFase) { const img = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, img); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, NFASE, 1, 0, gl.RGBA, gl.FLOAT, null); for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST); for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE); tabFase = { img, v: new Float32Array(4 * NFASE) }; }
+    tabFase.alfa = alfa; tabFase.dati = P; const som = [0, 0, 0], GX = [-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116], GW = [0.3478548451, 0.6521451549, 0.6521451549, 0.3478548451];
+    for (let i = 1; i < NFASE; i++) { const ta = PI * ((i - 1) / (NFASE - 1)) ** 2, tb = PI * (i / (NFASE - 1)) ** 2; for (let j = 0; j < 4; j++) { const th = 0.5 * (ta + tb) + 0.5 * (tb - ta) * GX[j], w = 0.5 * (tb - ta) * GW[j] * Math.sin(th); for (let c = 0; c < 3; c++) som[c] += w * fase(P.R, th, P.x[c], alfa); } tabFase.v.set(som, 4 * i); }
+    gl.bindTexture(gl.TEXTURE_2D, tabFase.img); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NFASE, 1, gl.RGBA, gl.FLOAT, tabFase.v);
+  }
+  const sommataA = (th) => { const w = Math.sqrt(Math.max(0, Math.min(1, th / PI))) * (NFASE - 1), i = Math.min(NFASE - 2, Math.floor(w)); return tabFase.v[4 * i + 1] + (tabFase.v[4 * i + 5] - tabFase.v[4 * i + 1]) * (w - i); }; // (il verde)
   // ---------- un fotogramma
-  const oSys = [0, 0, 0], relS = [0, 0, 0], sfere = [], daDisegnare = []; let nPunti = 0, Qs = V.identita(), polv = null;
+  const oSys = [0, 0, 0], relS = [0, 0, 0], sfere = [], daDisegnare = []; let nPunti = 0, Qs = V.identita(), polv = null, lontano = false;
   // un corpo che si vede (una scheda delle fasce o una cometa): punto di luce o sfera, bersaglio, e la camera gli si può attaccare
   function mostra(S, m, R, rifl, px) {
     S.versoCorpo(m.corpo, m.rel); const d = V.lungo(m.rel) || 1, vs = N.tra(m.corpo, stella, S.t), r2 = V.scal(vs, vs); V.norma(vs, m.sole); m.E = L / (4 * PI * r2);
@@ -203,13 +215,18 @@ export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T =
       const P = dati.polvere, nf = Math.min(NF, P.fasce.length);
       if (nf && P.grano && st.parti.polvere) { let aMax = 0, sMax = 0, somma = 0, spessa = 0; const g = P.grano, R90 = P.R[16];
         for (let k = 0; k < nf; k++) { const f = P.fasce[k], C = (f.K * g.raggio * g.raggio * L) / (16 * g.massa * UA * UA * S.E0), kappa = (f.K * PI * g.raggio * g.raggio) / g.massa; uf[4 * k] = f.a / UA; uf[4 * k + 1] = C; uf[4 * k + 2] = 1 / (2 * f.sigma * f.sigma); uf[4 * k + 3] = kappa; aMax = Math.max(aMax, f.a); sMax = Math.max(sMax, f.sigma); somma += C; spessa += kappa * Math.log(Math.max(1, f.a / raggioStella)); }
-        const bRif = Math.max(3 * raggioStella, dS * px) / UA, valore = (somma * R90 * 2) / (bRif * bRif); v.valorePolvere = valore;
+        // quanto vale al più nel campo. Da fuori: il raggio che passa accanto alla stella (o il più vicino che lo schermo
+        // distingue), ∫ds/r³ = 2/b². Da dentro: il raggio del campo più vicino alla direzione della stella, a elongazione ε,
+        // se corresse tutto nel piano: [F(π) − F(ε)]/b² con b = r·sen ε (di giorno su un pianeta, o guardando altrove, non vale niente)
+        let valore; if (dS > aMax) { const bRif = Math.max(3 * raggioStella, dS * px) / UA; valore = (somma * R90 * 2) / (bRif * bRif); }
+        else { tabella(P); const eps = Math.max(0, Math.acos(Math.max(-1, Math.min(1, -(S.assi[2] * relS[0] + S.assi[5] * relS[1] + S.assi[8] * relS[2]) / dS))) - Math.atan(Math.hypot(S.tanX, S.tanY))), bRif = Math.max(3 * raggioStella, dS * px, dS * Math.sin(Math.min(eps, PI / 2))) / UA; valore = (somma * (sommataA(PI) - sommataA(eps))) / (bRif * bRif); }
+        v.valorePolvere = valore;
         if (valore > 10 * SOGLIA && aMax > 2 * px * dS) { v.polvere = true; polv = { nf, aMax: aMax / UA, q: Math.sin(Math.min(1.5, 3.3 * sMax)) ** 2, fitta: spessa > 0.15, ritaglio: null }; v.spessorePolvere = spessa;
           // (vista da fuori sta in un cerchio: se è fuori dal campo non si disegna; se no, solo il rettangolo che lo contiene)
           if (dS > 1.05 * aMax) { const m = S.vista, cx = m[0] * relS[0] + m[3] * relS[1] + m[6] * relS[2], cy = m[1] * relS[0] + m[4] * relS[1] + m[7] * relS[2], cz = -(m[2] * relS[0] + m[5] * relS[1] + m[8] * relS[2]), ro = Math.asin(aMax / dS) * 1.05 + 2 * px, ax = Math.atan2(cx, cz), ay = Math.atan2(cy, cz);
             if (Math.acos(Math.max(-1, Math.min(1, cz / dS))) - ro > Math.atan(Math.hypot(S.tanX, S.tanY))) { polv = null; v.polvere = false; }
             else if (cz > 0 && Math.abs(ax) + ro < 1.45 && Math.abs(ay) + ro < 1.45) polv.ritaglio = [0.5 + (0.5 * Math.tan(ax - ro)) / S.tanX, 0.5 + (0.5 * Math.tan(ay - ro)) / S.tanY, 0.5 + (0.5 * Math.tan(ax + ro)) / S.tanX, 0.5 + (0.5 * Math.tan(ay + ro)) / S.tanY].map((x) => Math.max(0, Math.min(1, x))); } } }
-      if (dS > limite) return;
+      if (dS > limite) { if (!lontano) { lontano = true; for (const c of corpi) c.influenza = 0; for (const m of comete.values()) m.corpo.influenza = 0; } return; } lontano = false;
       // --- quando chiedere di nuovo al lavoratore: il tempo è andato avanti (le comete cambiano in giorni; senza comete, per sapere se ne arrivano)
       const passo = comete.size ? 86400 : 30 * 86400; if (!inCorso && Math.abs(S.t - tDati) > passo && performance.now() - ultima > 300) chiedi(S.t);
       if (!insieme) return;
@@ -225,7 +242,7 @@ export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T =
       const E0 = S.E0, f2 = S.fuoco * S.fuoco, av = [-S.assi[2], -S.assi[5], -S.assi[8]], mezzoCampo = Math.atan(Math.hypot(S.tanX, S.tanY));
       if (st.parti.comete) for (const m of comete.values()) { const c = m.d, el = m.el, R = c.raggio; m.disegna = false;
         stato(el, 0, S.t, _p, null); const d0 = Math.hypot(_p[0] - oSys[0], _p[1] - oSys[1], _p[2] - oSys[2]), inf = Math.max(30 * R, 2 * c.chioma); m.corpo.influenza = d0 < 20 * inf || m.corpo === cam ? inf : 0;
-        const dVis = Math.max(Math.sqrt(m.Lmax / (4 * PI * Emin)), R / (0.5 * px)); if (d0 < dVis || m.corpo === cam) mostra(S, m, R, [el[11], el[12], el[13]], px); else S.versoCorpo(m.corpo, m.rel);
+        const dVis = Math.max(Math.sqrt(m.Lmax / (4 * PI * Emin)), R / (0.5 * px)), nucleo = d0 < dVis || m.corpo === cam; if (nucleo) mostra(S, m, R, [el[11], el[12], el[13]], px); else S.versoCorpo(m.corpo, m.rel);
         // chioma e code: l'angolo di diffusione (stella → cometa → occhio), la funzione di fase delle tre taglie, e se la luce arriva alla soglia
         stato(el, 0, S.t - S.ritardo(m.corpo), _p, null); const r = V.lungo(_p), d = V.lungo(m.rel) || 1, e1 = [_p[0] / r, _p[1] / r, _p[2] / r], e1w = V.mv(Qs, e1), ct = -(e1w[0] * m.rel[0] + e1w[1] * m.rel[1] + e1w[2] * m.rel[2]) / d, th = Math.acos(Math.max(-1, Math.min(1, ct)));
         let Lt = c.Lem, Bt = c.Bem; for (let q = 0; q < 3; q++) for (let ch = 0; ch < 3; ch++) { const fi = q < c.x.length ? fase(dati.polvere.R, th, c.x[q][ch], raggioStella / r) * c.tintaPolvere[ch] : 0; m.fasi[3 * q + ch] = fi; if (ch === 1 && q < c.x.length) { Lt += c.P[q] * fi; Bt += c.Bp[q] * fi; } }
@@ -233,19 +250,12 @@ export function creaMinori(N, { via, nodo, stella, luminosita, raggioStella, T =
         if (Math.acos(Math.max(-1, Math.min(1, (av[0] * m.rel[0] + av[1] * m.rel[1] + av[2] * m.rel[2]) / d))) > mezzoCampo + Math.asin(Math.min(1, c.fuori / d))) continue; // fuori dal campo
         // il riferimento della cometa nel mondo: via dalla stella, lungo l'orbita, la normale
         const W = [el[5] * el[9] - el[6] * el[8], el[6] * el[7] - el[4] * el[9], el[4] * el[8] - el[5] * el[7]], e2 = V.vett(W, e1), e2w = V.mv(Qs, e2), e3w = V.mv(Qs, W);
-        m.quadro.set([e1w[0], e1w[1], e1w[2], e2w[0], e2w[1], e2w[2], e3w[0], e3w[1], e3w[2]]); m.disegna = true; daDisegnare.push(m); v.comete++; v.batuffoli += m.nb; }
+        m.quadro.set([e1w[0], e1w[1], e1w[2], e2w[0], e2w[1], e2w[2], e3w[0], e3w[1], e3w[2]]); m.disegna = true; daDisegnare.push(m); v.comete++; v.batuffoli += m.nb; if (!nucleo) S.bersaglio({ p: m.rel, raggio: R, corpo: m.corpo }); }
       if (nPunti) insieme.metti(posP, luceP, nPunti);
     },
     disegna(S, passata) {
       if (!st.acceso || !dati) return;
-      if (passata === 'fondo') { if (!polv) return; if (!prgPolvere) prgPolvere = N.programma(V_Q, F_POLVERE); const u = prgPolvere.u, P = dati.polvere, A = S.assi, T = piccolaPolvere;
-        // la funzione di fase sommata, in tabella (col raggio apparente della stella vista da dove si è: la si rifà quando cambia):
-        // F(θ) = ∫₀^θ Φ·sen θ dθ, quattro punti di Gauss per tratto
-        const alfa = raggioStella / Math.max(raggioStella, V.lungo(oSys)); if (!tabFase || Math.abs(alfa - tabFase.alfa) > 0.05 * alfa || tabFase.dati !== P) {
-          if (!tabFase) { const img = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, img); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, NFASE, 1, 0, gl.RGBA, gl.FLOAT, null); for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST); for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE); tabFase = { img, v: new Float32Array(4 * NFASE) }; }
-          tabFase.alfa = alfa; tabFase.dati = P; const som = [0, 0, 0], GX = [-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116], GW = [0.3478548451, 0.6521451549, 0.6521451549, 0.3478548451];
-          for (let i = 1; i < NFASE; i++) { const ta = PI * ((i - 1) / (NFASE - 1)) ** 2, tb = PI * (i / (NFASE - 1)) ** 2; for (let j = 0; j < 4; j++) { const th = 0.5 * (ta + tb) + 0.5 * (tb - ta) * GX[j], w = 0.5 * (tb - ta) * GW[j] * Math.sin(th); for (let c = 0; c < 3; c++) som[c] += w * fase(P.R, th, P.x[c], alfa); } tabFase.v.set(som, 4 * i); }
-          gl.bindTexture(gl.TEXTURE_2D, tabFase.img); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NFASE, 1, gl.RGBA, gl.FLOAT, tabFase.v); }
+      if (passata === 'fondo') { if (!polv) return; if (!prgPolvere) prgPolvere = N.programma(V_Q, F_POLVERE); const u = prgPolvere.u, P = dati.polvere, A = S.assi, T = piccolaPolvere; tabella(P);
         T.apri(S, !!polv.ritaglio); if (polv.ritaglio) T.ritaglia(polv.ritaglio, T.w, T.h); gl.disable(gl.BLEND); gl.useProgram(prgPolvere.p); gl.uniform3f(u.u_occhio, oSys[0] / UA, oSys[1] / UA, oSys[2] / UA);
         for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = Qs[r] * A[c] + Qs[3 + r] * A[3 + c] + Qs[6 + r] * A[6 + c]; gl.uniformMatrix3fv(u.u_raggi, false, u9);
         gl.uniform4f(u.u_cam, S.tanX, S.tanY, Math.min(PASSI_MAX, (N.vista.passi && N.vista.passi.minori) || O.passi), raggioStella / UA); gl.uniform4fv(u.u_f, uf); gl.uniform1i(u.u_nf, polv.nf);

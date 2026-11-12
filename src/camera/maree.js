@@ -113,8 +113,11 @@ export function cedevolezza(rigidita, viscosita, omega, { reologia = 'andrade', 
 // corpo: { massaKg, raggioM, rigidita (Pa), viscosita (Pa·s) }  (la materia allo stato in cui è: chi chiama la prende
 // dalla storia del corpo, con viscositaRoccia / rigiditaRoccia / viscositaGhiaccio qui sopra)
 // → { k2: [re, im], k2Reale, imK2 (= −Im k₂*, positivo: è il «k₂/Q»), Q (= |k₂*|/imK2), rigiditaEfficace (μ̃), omegaTau (ω·τ_M) }
+// (c = 19/(2ρgR): quanto la rigidità pesa contro la gravità del corpo; non cambia finché il corpo è quello, e chi chiede la
+// dissipazione dentro un ciclo — dissipazioneIn, più sotto — lo calcola una volta)
+export const coefficienteDelCorpo = (M, R) => { const rho = M / ((4 / 3) * PI * R ** 3), g = (G * M) / (R * R); return 19 / (2 * rho * g * R); };
 export function dissipazione(corpo, omega, opz = {}) {
-  const { massaKg: M, raggioM: R, rigidita, viscosita } = corpo, rho = M / ((4 / 3) * PI * R ** 3), g = (G * M) / (R * R), c = 19 / (2 * rho * g * R);
+  const { massaKg: M, raggioM: R, rigidita, viscosita } = corpo, c = coefficienteDelCorpo(M, R);
   if (!(omega > 0) || !(rigidita > 0) || !(viscosita > 0)) return { k2: [1.5 / (1 + c * (rigidita > 0 ? rigidita : 0)), 0], k2Reale: 1.5 / (1 + c * (rigidita > 0 ? rigidita : 0)), imK2: 0, Q: Infinity, rigiditaEfficace: c * (rigidita || 0), omegaTau: Infinity };
   const [jr, ji] = cedevolezza(rigidita, viscosita, omega, opz), j2 = jr * jr + ji * ji;
   // z = c/J* = c·conj(J*)/|J*|²;  k₂* = 1,5/(1 + z)
@@ -125,7 +128,6 @@ export function dissipazione(corpo, omega, opz = {}) {
 // «c» è 19/(2ρgR) del corpo, che non cambia finché il corpo è quello: lo dà coefficienteDelCorpo, una volta; qui si
 // riempiono solo esce.imK2 e esce.k2Reale (gli stessi numeri di dissipazione(), bit per bit: stesse operazioni nello
 // stesso ordine, senza il Q e senza oggetti nuovi)
-export const coefficienteDelCorpo = (M, R) => { const rho = M / ((4 / 3) * PI * R ** 3), g = (G * M) / (R * R); return 19 / (2 * rho * g * R); };
 export function dissipazioneIn(c, rigidita, viscosita, omega, opz, esce) {
   if (!(omega > 0) || !(rigidita > 0) || !(viscosita > 0)) { esce.k2Reale = 1.5 / (1 + c * (rigidita > 0 ? rigidita : 0)); esce.imK2 = 0; return esce; }
   const reologia = opz && opz.reologia !== undefined ? opz.reologia : 'andrade', alfa = opz && opz.alfa !== undefined ? opz.alfa : MAREE.andrade.alfa, zeta = opz && opz.zeta !== undefined ? opz.zeta : MAREE.andrade.zeta;

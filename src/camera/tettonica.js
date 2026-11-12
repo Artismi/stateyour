@@ -10,26 +10,48 @@
 //      e le fosse sono i bordi stretti dove quella velocità cambia verso.
 //   2. LA CROSTA CONTINENTALE è una quantità che si conserva (uno spessore su griglia). È leggera e non
 //      affonda. Nasce a poco a poco sopra le fosse (gli archi di vulcani), il mantello la raccoglie dove
-//      converge, e lì si salda in continenti. Un continente è una zattera rigida e coesa: va tutto insieme,
-//      e tirato da due parti non si assottiglia ma si strappa. Dove è compresso si ispessisce (le catene)
-//      finché la spinta lo regge; poi si ingorga, e si allarga. I fiumi consumano ciò che sporge e lo
-//      depositano sulle coste, che così avanzano. Sotto un continente che resta fermo a lungo il mantello,
-//      coperto, si scalda: la discesa si spegne, diventa una salita, e il continente si spacca. I pezzi
-//      vanno alla deriva e si scontrano altrove (il ciclo dei supercontinenti: nessuno lo impone).
+//      converge, e lì si salda in continenti. LA LITOSFERA FREDDA È RIGIDA (litosfera(): la sua resistenza è molte
+//      volte la spinta della dorsale): un continente non si ispessisce e non si stira, va tutto insieme. Si
+//      ispessisce solo dove un bordo di placca lo stringe (le catene), fino allo spessore che quella spinta regge;
+//      si stira solo dove un bordo si apre sotto di lui (McKenzie 1978): lì si assottiglia restando intero, la
+//      litosfera si scalda e poi si raffredda (subsidenza iniziale e termica), e se arriva allo spessore del
+//      basalto si strappa e nasce oceano; se il bordo si sposta prima, resta un bacino. I fiumi consumano ciò che
+//      sporge DAL MARE (quello che l'acqua del pianeta fa, col suo peso) e lo depositano sulle coste, che così
+//      avanzano: lo spessore dei continenti è l'equilibrio tra le catene, l'erosione fino al mare e il cedimento
+//      della crosta che fonde in basso. Sotto un continente che resta fermo a lungo il mantello, coperto, si
+//      scalda: la discesa si spegne, diventa una salita, e il continente si spacca. I pezzi vanno alla deriva e si
+//      scontrano altrove (il ciclo dei supercontinenti: nessuno lo impone).
 //   3. LA CROSTA OCEANICA nasce alle dorsali e dietro i continenti che si separano, invecchia
 //      allontanandosi, affonda nelle fosse. Raffreddandosi si contrae: l'oceano è più profondo dove è
 //      più vecchio.
-//   4. LE QUOTE vengono dal galleggiamento (isostasia): la crosta spessa sta alta, come un iceberg.
+//   4. LE QUOTE vengono dal galleggiamento della LITOSFERA (crosta più mantello freddo, sull'astenosfera calda:
+//      litosfera()), misurate dalla dorsale; sotto il mare il peso dell'acqua le abbassa ancora.
 //
-// LEGGI EMPIRICHE (misurate sulla Terra e usate così, non derivate; i numeri sono in COSTANTI):
+// LEGGI E DATI (ciascuno con la fonte dov'è scritto: COSTANTI, litosfera(), crostaAttesa, passoCrosta):
+//   · la colonna di McKenzie 1978 (via Angevine, Heller e Paola 1990, cap. 4 [V]): quote, stiramento, τ;
+//   · lo stato di riferimento: l'energia potenziale media della litosfera (Coblentz e altri 1994 [V, riassunto]):
+//     lo spessore neutro, quello a cui la spinta di un bordo debole smette di ispessire, è ricavato a ogni passo;
+//   · la crosta che fonde scorre (700 °C, 10¹⁹ Pa·s: Beaumont e altri 2004 [V, riassunti]); l'attrito di Byerlee;
+//   · il volume della crosta continentale terrestre (Cogley 1984 [V]) per crostaAttesa.
+// LEGGI EMPIRICHE rimaste (misurate sulla Terra e usate così; i numeri sono in COSTANTI):
 //   · la profondità dell'oceano con l'età: 2500 m + 350 m·√(milioni di anni), fino a 6000 m (profonditaOceano);
-//   · quanta crosta continentale si è separata dal mantello nel tempo (crostaAttesa);
 //   · la velocità delle placche: ricavata dal calore che portano (velocitaPlacche) se è dato lo stato del mantello; se no
 //     4 cm/anno sulla Terra, e cresce come q² (legge di scala della convezione);
-//   · lo spessore che la crosta regge sotto spinta: da 39 km (spinta debole) a 70 km (il Tibet);
+//   · lo spessore che uno scontro pieno regge: 70 km (il Tibet); tra quello e il neutro va come la forza (h²);
 //   · l'erosione: i pendii si spianano (una catena larga 300 km in ~10 milioni di anni, se nulla la sostiene) e i
-//     fiumi portano alle coste ciò che sporge dal livello di riferimento (lo dimezzano in ~100 milioni di anni);
+//     fiumi portano alle coste ciò che sporge dal mare (lo riducono a 1/e in 130 milioni di anni);
 //   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
+// CHE COSA NON TORNA O MANCA (misurato su 8 Terre di prova, 2026-11: test_erosione, test_tettonica): le terre emerse sono
+// il 19–22% (vero 29) e la crosta continentale sommersa il 15% (vero 11): gli scudi stanno al livello del mare e una
+// parte sotto, perché il sedimento dei fiumi va alle celle in proporzione a quanto sono fonde (i fondali accanto alle
+// coste se lo prendono, le piattaforme restano affamate); così la moda dei fondali cade sulle piattaforme. Un rift è
+// largo una cella (150 km): i margini stirati a più celle non si formano (0,4% della superficie). Il mantello
+// litosferico ispessito sotto le catene non si tiene (x ≥ 0), e manca il calore radioattivo della crosta: la crosta
+// fonde solo oltre ~55–60 km, le radici delle catene vecchie restano finché l'erosione le toglie. I veli più sottili
+// di 1 m vanno col fango. La rigidità è un conto a passate alterne: «stretta» conta il 50% in più del guadagno vero in
+// uno scontro di prova. IL COSTO: una storia intera costa ~1,5 volte quella di prima (2 s contro 1,3): i conti in più
+// sono la velocità d'entrata e d'uscita di ogni cella (rigidità), lo stiramento e lo stato termico che viaggiano con la
+// crosta, il mare e l'energia media a ogni aggiornamento del mantello.
 // CIÒ CHE PASSA ALL'EROSIONE (geologia.js erosione), senza cambiare niente di ciò che la crosta fa:
 //   · la COPERTURA SEDIMENTARIA: quanta della crosta di ogni cella è sedimento posato nella storia (dai fiumi sulle
 //     coste, dai pendii sulla cella accanto) e non più tolto. Va con la crosta, si ispessisce con lei, e ciò che finisce
@@ -42,7 +64,7 @@
 //     di questo modello (vTerra·(q/qTerra)²). E «regge»: di quanto può ancora salire prima che la crosta ceda.
 //   · le due leggi empiriche dell'erosione qui sopra, cella per cella (consumata, posata): sono una SECONDA FONTE della
 //     denudazione, a grana grossa e con un altro livello di base (la quota 0 di qui, non il mare vero che geologia.js
-//     ricava dall'acqua: sulla Terra di prova sta ~850 m più in basso, e i continenti restano ~1 km troppo alti).
+//     ricava dall'acqua; da quando la tettonica calcola il suo mare dalla stessa acqua i due livelli coincidono a ~10 m).
 // PARAMETRI LIBERI (non misurati: scelti guardando il risultato, perché i continenti restino interi, si spacchino
 // e si riuniscano): quanto è larga la zattera rigida, la coesione, quanto e in quanto tempo un continente scalda
 // il mantello che ha sotto (rigida, coesione, coperta, inerzia).
@@ -327,7 +349,7 @@ export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0, fiumi = 
   const { W, H } = st, N = W * H, L = st.lit || LIT0, hM = C.hMargine;
   // (tutto ciò che il passo tiene nello stato, creato la prima volta; poi quattro tempi, ciascuno una funzione: gli scambi
   // tra celle vicine, l'ingorgo e la tenuta, lo spostamento, il bilancio di ogni cella)
-  if (!st.passa) { st.m ??= new Float64Array(N).fill(hM); st.x ??= new Float64Array(N); st.im ??= Float64Array.from(st.m, (v) => 1 / v); st.hb = new Float64Array(N).fill(L.base(st.mare ?? 0, 0));
+  if (!st.passa) { st.m ??= new Float64Array(N).fill(hM); st.x ??= new Float64Array(N); st.im ??= Float64Array.from(st.m, (v) => 1 / v); st.hb = new Float64Array(N).fill(L.base(Number.isFinite(st.mare) ? st.mare : 0, 0));
     for (const nome of ['dh', 'dw', 'dq', 'vten', 'vin', 'vout', 'numM', 'numX', 'entra', 'esce', 'sete']) st[nome] ??= new Float64Array(N);
     st.tira = new Float64Array(N).fill(1); st.passa = new Float64Array(N).fill(1); st.tiene = new Uint8Array(2 * N); st.piena = Uint8Array.from(st.h, (v, k) => (v > 0 && v * st.im[k] >= 1 ? 1 : 0)); st.FF = new Float64Array(2 * N); st.geo = vicine(W, H);
     if (st.cop) { st.dc ??= new Float64Array(N); st.via ??= new Float64Array(N); } st.verso = false; st.xMax ??= 1; }
@@ -437,7 +459,7 @@ function sposta(st, ca, L, kappa, cede) {
 }
 function bilancio(st, ca, L, dtMa, apporto, fiumi) {
   const { W, H, h, a, sub, m, x, im, hb, dh, dw, dq, tira, vten, piena, vin, vout, numM, numX, entra, esce, passa, sete } = st, N = W * H, { Q } = ca;
-  const mare = st.mare ?? 0, hM = C.hMargine, h0 = L.base(mare, 0), mMin = Math.min(hM, L.basalto), spegne = Math.exp((-dtMa * 1e6) / L.tau); let xMax = 0;
+  const mare = Number.isFinite(st.mare) ? st.mare : 0 /* (senza mare: lo zero delle quote, come prima) */, hM = C.hMargine, h0 = L.base(mare, 0), mMin = Math.min(hM, L.basalto), spegne = Math.exp((-dtMa * 1e6) / L.tau); let xMax = 0;
   const X0 = 0.05, dHb = (L.base(mare, X0) - h0) / X0; // (lo spessore di base di una colonna poco calda: in linea retta fino a x = X0; oltre, la formula intera)
   const cop = st.cop || null, copMax = st.copMax ?? Infinity, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null;
   // il bilancio di ogni cella. Se dopo il trasporto la crosta oceanica non basta a coprire il fondo, lo spazio

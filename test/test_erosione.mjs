@@ -137,7 +137,7 @@ prova('la legge di Hack a due scale: sul pianeta (celle di ~150 km) e su tessere
   // sedicesimo del tempo e il suo rilievo è ancora quello della madre più il dettaglio: è stampata, non riscontrata.
   const L = 2, n = 4 ** L, hack = [], conc = [], pianeta = []; const t = performance.now();
   for (const m of MONDI) { let fatta = false;
-    for (let ty = 3; ty < n - 3 && !fatta; ty += 2) for (let tx = 0; tx < n && !fatta; tx += 3) {
+    for (let ty = 3; ty < n - 3 && !fatta; ty++) for (let tx = 0; tx < n && !fatta; tx++) { // (tutte le tessere, non una ogni sei: con le terre basse di adesso quelle oltre i 300 m sono meno)
       const ci = Math.floor(((tx + 0.5) / n) * m.se.W), cj = Math.floor(((ty + 0.5) / n) * m.se.H); if (m.se.alt[cj * m.se.W + ci] < m.se.mare + 300) continue;
       const ts = GE.tessera(`erosione-${m.seme}`, m.se, m.cl, L, tx, ty, m.seme); let terra = 0; for (let k = 0; k < ts.alt.length; k++) if (!(ts.alt[k] < ts.mare)) terra++; if (terra < 0.8 * ts.alt.length) continue;
       assert.ok(ts.copertura instanceof Float32Array && ts.litologia instanceof Uint8Array && ts.roccia instanceof Uint8Array && ts.mare === m.se.mare, 'la tessera eredita la roccia e il mare della madre');
