@@ -169,11 +169,13 @@ export function creaNucleo(tela, opzioni = {}) {
   // `accumulo` (accumulo.js): gli strati che costano fanno a ogni fotogramma `passi` campioni, sfasati in modo diverso
   // ogni volta, e li sommano alla storia dei fotogrammi prima riportata con il moto della camera: a camera ferma la media
   // arriva a `ferma` fotogrammi (come `ferma` volte i passi), in moto si ferma a `moto`; la storia si scarta dove la
-  // distanza che ricorda si scosta più di `tolleranza` (relativa) da quella che dovrebbe avere. Spento: ogni fotogramma
-  // fa da sé (e allora i passi vanno alzati: 64 e 56 erano quelli di prima). Anche il buco nero: un pixel su quattro.
-  // `vuoto`: sotto quale frazione della luce più forte (e della polvere) una cella della galassia conta come vuota e il
+  // distanza che ricorda si scosta più di `tolleranza` (relativa) da quella che dovrebbe avere; a camera ferma i passi
+  // diventano `passiFerma` volte tanti, e a storia piena non si calcola più niente (l'immagine è quella). Spento: ogni fotogramma
+  // fa da sé (e allora i passi vanno alzati: 64 e 56 erano quelli di prima). Il buco nero: un pixel su quattro
+  // per fotogramma. L'aria del pianeta: a camera ferma si calcola una volta sola.
+  // `vuoto`: sotto quale frazione della luce più forte del suo anello (e A_V per raggio) una cella della galassia è vuota e il
   // raggio la salta (volumi.js; 0: niente salto).
-  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15 }, vuoto: 1e-5 }, C_LUCE = 299792458;
+  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4 }, C_LUCE = 299792458;
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)

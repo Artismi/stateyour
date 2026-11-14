@@ -26,7 +26,9 @@
 // che la storia ricorda non combacia (oltre `vista.accumulo.tolleranza`, relativa) con quella che dovrebbe avere.
 // La luce della storia si riporta all'unità di adesso (E0 di prima / E0 di adesso: l'occhio che si adatta).
 //
-// QUALITÀ (N.vista.accumulo): { attivo, ferma, moto, tolleranza }. Non sono fisica: sono quanto si aspetta e quanto si
+// QUALITÀ (N.vista.accumulo): { attivo, ferma, moto, tolleranza, passiFerma }. A camera ferma, dopo quattro fotogrammi,
+// i passi diventano `passiFerma` volte tanti (dove c'è polvere ogni passo lungo sbaglia un poco la trasparenza, e la media
+// di passi lunghi non va a zero: con passi più corti sì), e a storia piena il fotogramma non si calcola più. Non sono fisica: sono quanto si aspetta e quanto si
 // accetta di vedere strisciare.
 const V_Q = `out vec2 v_uv; void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
 const F_RISOLVI = `
@@ -61,32 +63,44 @@ export const sfasatura = (k) => [(0.5 + k * 0.6180339887498949) % 1, (0.5 + k * 
 export const accumuloAttivo = (N) => !!(N.vista.accumulo && N.vista.accumulo.attivo && N.stato.conVirgola);
 
 // una storia: due coppie d'immagini (si legge dall'una e si scrive sull'altra)
-export function creaStoria(N) {
-  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null, ultimo = -2; const A = [null, null], B = [null, null], F = [null, null];
-  const fmt = gl.getExtension('OES_texture_float_linear') ? 'rgba32f' : 'rgba16f';
+export function creaStoria(N, formato = null) {
+  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null, ultimo = -2, fermi = 0; const A = [null, null], B = [null, null], F = [null, null];
+  const fmt = formato || (gl.getExtension('OES_texture_float_linear') ? 'rgba32f' : 'rgba16f');
   const u9 = new Float32Array(9), u9p = new Float32Array(9);
   function prepara(W, H) {
     if (W === w && H === h && A[0]) return; libera(); w = W; h = H; piena = false;
     for (let i = 0; i < 2; i++) { A[i] = N.immagine(w, h, fmt, null); B[i] = N.immagine(w, h, fmt, null, { filtro: gl.NEAREST }); F[i] = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, F[i]); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, A[i], 0); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, B[i], 0); }
   }
   function libera() { for (let i = 0; i < 2; i++) { if (A[i]) gl.deleteTexture(A[i]); if (B[i]) gl.deleteTexture(B[i]); if (F[i]) gl.deleteFramebuffer(F[i]); A[i] = B[i] = F[i] = null; } w = h = 0; piena = false; }
+  // la camera (nel riferimento dello strato) è dov'era al fotogramma prima? (entro gli arrotondamenti)
+  const comePrima = (S, occhio, raggi) => { if (!piena || !prima || S.indice !== ultimo + 1 || prima.tan[0] !== S.tanX || prima.tan[1] !== S.tanY) return false; const r = Math.hypot(occhio[0], occhio[1], occhio[2]) + 1e-30;
+    for (let i = 0; i < 3; i++) if (Math.abs(occhio[i] - prima.occhio[i]) > 1e-9 * r) return false; for (let i = 0; i < 9; i++) if (Math.abs(raggi[i] - prima.raggi[i]) > 1e-7) return false; return true; };
   return {
-    get w() { return w; }, get h() { return h; }, get immagine() { return A[cur]; },
-    azzera() { piena = false; },
+    get w() { return w; }, get h() { return h; }, get immagine() { return A[cur]; }, get fermi() { return fermi; },
+    azzera() { piena = false; fermi = 0; },
+    // A CAMERA FERMA: quanti fotogrammi di fila (questo compreso) la camera è stata ferma nel riferimento dello strato, con
+    // `mondoFermo` (lo strato sa se ciò che disegna cambia col tempo). Lo strato ne fa due cose: dopo qualche fotogramma
+    // fermo alza i passi (la media si avvicina al conto pieno anche dove la polvere rende ogni passo un po' sbagliato), e
+    // a storia piena smette di calcolare (`tieni`): l'immagine è quella, finché non ci si muove.
+    ferma(S, { occhio, raggi }, mondoFermo = true) { return mondoFermo && comePrima(S, occhio, raggi) ? fermi + 1 : 0; },
+    // il fotogramma non si calcola: si tiene la storia (→ l'immagine e il fattore che la porta all'E0 di adesso)
+    tieni(S) { ultimo = S.indice; fermi++; return { img: A[cur], scala: prima ? prima.E0 / S.E0 : 1 }; },
     // img: l'immagine di adesso (rgb, distanza); W, H: i lati della storia (per 'intreccio' il doppio di quelli di img);
     // occhio: [x, y, z] (doppia precisione) e raggi (3×3 per righe, dagli assi dell'occhio a quelli dello strato), nel
-    // riferimento dello strato; quale: il pixel del blocco calcolato adesso; distanza: > 0 per dare a tutti la stessa
-    risolvi(S, img, W, H, { occhio, raggi, modo = 'media', quale = 0, distanza = 0 }) {
+    // riferimento dello strato; quale: il pixel del blocco calcolato adesso; distanza: > 0 per dare a tutti la stessa;
+    // luce: false se l'immagine non è una luce (una trasparenza: non si riporta all'E0 di adesso); ferma: un tetto più
+    // basso alla storia per questo fotogramma (lo strato sa che il mondo cambia in fretta: il tempo corre)
+    risolvi(S, img, W, H, { occhio, raggi, modo = 'media', quale = 0, distanza = 0, luce = true, ferma = 0 }) {
       const Q = N.vista.accumulo || {}; prepara(W, H); if (!prg) prg = N.programma(V_Q, F_RISOLVI); const u = prg.u, leggi = cur, scrivi = 1 - cur, salvata = gl.getParameter(gl.FRAMEBUFFER_BINDING);
       for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = raggi[3 * r + c]; // (per colonne)
-      let sposta = [0, 0, 0], tanP = [S.tanX, S.tanY], scala = 1, c = piena && prima && S.indice === ultimo + 1; ultimo = S.indice; // (un fotogramma saltato: la storia non vale più)
-      if (c) { sposta = [occhio[0] - prima.occhio[0], occhio[1] - prima.occhio[1], occhio[2] - prima.occhio[2]]; for (let i = 0; i < 9; i++) u9p[i] = prima.raggi[i]; tanP = prima.tan; scala = prima.E0 / S.E0; if (!(isFinite(sposta[0] + sposta[1] + sposta[2]) && isFinite(scala))) c = false; }
+      fermi = comePrima(S, occhio, raggi) ? fermi + 1 : 0; let sposta = [0, 0, 0], tanP = [S.tanX, S.tanY], scala = 1, c = piena && prima && S.indice === ultimo + 1; ultimo = S.indice; // (un fotogramma saltato: la storia non vale più)
+      if (c) { sposta = [occhio[0] - prima.occhio[0], occhio[1] - prima.occhio[1], occhio[2] - prima.occhio[2]]; for (let i = 0; i < 9; i++) u9p[i] = prima.raggi[i]; tanP = prima.tan; scala = luce ? prima.E0 / S.E0 : 1; if (!(isFinite(sposta[0] + sposta[1] + sposta[2]) && isFinite(scala))) c = false; }
       // (u_primaT: la trasposta degli assi di prima, per colonne = gli assi di prima per righe)
       gl.bindFramebuffer(gl.FRAMEBUFFER, F[scrivi]); gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST);
       gl.useProgram(prg.p); N.lega(0, img, u.u_cor); N.lega(1, A[leggi], u.u_stA); N.lega(2, B[leggi], u.u_stB);
       gl.uniformMatrix3fv(u.u_ora, false, u9); gl.uniformMatrix3fv(u.u_primaT, false, c ? u9p : u9);
       gl.uniform3f(u.u_sposta, sposta[0], sposta[1], sposta[2]); gl.uniform4f(u.u_tan, S.tanX, S.tanY, tanP[0], tanP[1]);
-      gl.uniform4f(u.u_q, Math.max(1, Q.ferma || 64) - 1, Math.max(1, Q.moto || 4) - 1, Q.tolleranza || 0.15, scala);
+      gl.uniform4f(u.u_q, Math.max(1, ferma > 0 ? Math.min(ferma, Q.ferma || 64) : Q.ferma || 64) - 1, Math.max(1, Q.moto || 4) - 1, Q.tolleranza || 0.15, scala);
       gl.uniform4f(u.u_m, modo === 'intreccio' ? 1 : 0, quale, c ? 1 : 0, distanza); gl.uniform2f(u.u_lati, w, h); S.schermo();
       gl.drawBuffers([gl.COLOR_ATTACHMENT0]); gl.bindFramebuffer(gl.FRAMEBUFFER, salvata);
       prima = { occhio: occhio.slice(), raggi: raggi.slice(), tan: [S.tanX, S.tanY], E0: S.E0 }; piena = true; cur = scrivi; return A[cur];

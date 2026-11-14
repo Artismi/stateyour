@@ -212,10 +212,12 @@ export function creaBucoNero(N, opzioni = {}) {
   function intrecciato(S, modo, scena) {
     const W = S.W, H = S.H, w = Math.ceil(W / 2), h = Math.ceil(H / 2), q = ORDINE[(S.indice || 0) % 4], dove = gl.getParameter(gl.FRAMEBUFFER_BINDING);
     if (w !== mw || h !== mh) { if (mezza) { gl.deleteTexture(mezza); gl.deleteFramebuffer(telMezza); } mw = w; mh = h; mezza = N.immagine(w, h, 'rgba16f', null, { filtro: gl.NEAREST }); telMezza = N.telaio(mezza, null); }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, telMezza); gl.viewport(0, 0, w, h); uniformi(S, modo, scena); gl.uniform4f(prg.u.u_sub, q & 1, q >> 1, W, H); S.schermo();
-    const fatto = storia.risolvi(S, mezza, W, H, { occhio: [-_v[0] / rg, -_v[1] / rg, -_v[2] / rg], raggi: S.assi, modo: 'intreccio', quale: q, distanza: stato.distanza });
-    if (!prgCopia) prgCopia = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_img; void main() { o = vec4(texture(u_img, v_uv).rgb, 1.0); }`);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, W, H); gl.useProgram(prgCopia.p); N.lega(0, fatto, prgCopia.u.u_img); S.schermo();
+    // (a camera ferma e col tempo fermo, dopo quattro fotogrammi ogni pixel è il conto pieno: non si rifà niente)
+    const rif = { occhio: [-_v[0] / rg, -_v[1] / rg, -_v[2] / rg], raggi: S.assi, modo: 'intreccio', quale: q, distanza: stato.distanza }; let fatto, scala = 1;
+    if (storia.ferma(S, rif, S.dt === 0) > 4) { const t = storia.tieni(S); fatto = t.img; scala = t.scala; }
+    else { gl.bindFramebuffer(gl.FRAMEBUFFER, telMezza); gl.viewport(0, 0, w, h); uniformi(S, modo, scena); gl.uniform4f(prg.u.u_sub, q & 1, q >> 1, W, H); S.schermo(); fatto = storia.risolvi(S, mezza, W, H, rif); }
+    if (!prgCopia) prgCopia = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_img; uniform float u_k; void main() { o = vec4(texture(u_img, v_uv).rgb * u_k, 1.0); }`);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, W, H); gl.useProgram(prgCopia.p); N.lega(0, fatto, prgCopia.u.u_img); gl.uniform1f(prgCopia.u.u_k, scala); S.schermo();
   }
   const strato = {
     nome: 'buco nero', corpo, disco, stato, raggioGravitazionale: rg, opzioni: O, mettiCielo,

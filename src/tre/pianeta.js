@@ -38,6 +38,7 @@
 import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucleo.js';
 import { semeEvento } from '../camera/cosmo.js';
 import { sorgente } from '../camera/eventi.js';
+import { accumuloAttivo } from './accumulo.js';
 
 const TW = 256, TH = 128, TWB = TW + 2, THB = TH + 2, MX = 32, MY = 16, LMAX = 7, DMAX = 2 * LMAX + 3;
 const RAD = Math.PI / 180, K_B = 1.380649e-23, R_GAS = 8.314;
@@ -228,8 +229,12 @@ void main() {
 }`;
 
 // ---------- l'aria e le nuvole: una passata sull'immagine intera
+// La passata può scrivere, invece del colore, le due cose di cui il colore è fatto — colore = scena·Tot + Add (Tot:
+// quanta luce della scena passa, nuvole comprese; Add: la luce che l'aria e le nuvole aggiungono): a camera ferma si
+// calcolano una volta e si compongono con la scena di ogni fotogramma (vedi lo strato). u_sfasa resta per sfasare i passi.
 const F_ARIA = (passi) => `
-in vec2 v_uv; out vec4 o_col;
+in vec2 v_uv; layout(location = 0) out vec4 o_col; layout(location = 1) out vec4 o_tot;
+uniform vec3 u_sfasa;    // lo sfasamento dei passi (quanto, ampiezza); z: 1 = si scrivono Add e Tot invece del colore
 uniform sampler2D u_col, u_prof;
 uniform vec3 u_occhio;   // l'occhio rispetto al centro del pianeta, nello spazio in cui il pianeta è tondo (m)
 uniform mat3 u_raggi;    // dagli assi dell'occhio a quello spazio
@@ -240,10 +245,11 @@ ${GLSL_ARIA}
 ${GLSL_RUMORE}
 ${GLSL_NUVOLE}
 // la luce diffusa lungo un tratto del raggio: restituisce la luce aggiunta e (in tra) quanta ne passa
+float gPasso = 0.5;
 vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   float ds = (t1 - t0) / ${passi}.0, odR = 0.0, odM = 0.0; vec3 sR = vec3(0.0), sM = vec3(0.0), sMS = vec3(0.0);
   for (int i = 0; i < ${passi}; i++) {
-    vec3 p = o + d * (t0 + (float(i) + 0.5) * ds); float r = length(p), h = r - u_atm.x;
+    vec3 p = o + d * (t0 + (float(i) + gPasso) * ds); float r = length(p), h = r - u_atm.x;
     float rR = exp(clamp(-h / u_atm.y, -40.0, 8.0)), rM = exp(clamp(-h / u_atm.z, -40.0, 8.0));
     odR += rR * ds * 0.5; odM += rM * ds * 0.5;
     float mus = dot(p, u_soleC) / r; vec3 Te = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM))), T = luceCheArriva(r, mus) * Te;
@@ -253,30 +259,32 @@ vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   tra = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM)));
   return u_E * (u_betaR * fR * sR + vec3(u_betaM.x * fM) * sM + sMS);
 }
+void esce(vec3 scena, vec3 Tot, vec3 Add, float dist) { if (u_sfasa.z > 0.5) { o_col = vec4(Add, dist); o_tot = vec4(Tot, dist); } else { o_col = vec4(scena * Tot + Add, 1.0); o_tot = vec4(0.0); } }
 void main() {
   vec3 scena = texture(u_col, v_uv).rgb; float prof = texture(u_prof, v_uv).r;
-  vec3 de = u_raggi * vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0); float lung = length(de); vec3 d = de / lung, o = u_occhio;
-  float fino = prof < 1.0 ? (exp2(prof * 2.0 / u_cam.z) - 1.0) * lung : 1e30;
+  vec3 dO = vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0), de = u_raggi * dO; float lung = length(de); vec3 d = de / lung, o = u_occhio;
+  float wP = exp2(prof * 2.0 / u_cam.z) - 1.0, fino = prof < 1.0 ? wP * lung : 1e30, dist = prof < 1.0 ? wP * length(dO) : 0.0; // (dist: metri veri lungo il raggio; 0: il cielo)
+  gPasso = 0.5 + (fract(fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) + u_sfasa.x) - 0.5) * u_sfasa.y;
   float Rt = u_atm.x + u_atm.w, b = -dot(o, d), disc = b * b - dot(o, o) + Rt * Rt;
-  if (disc <= 0.0 || u_atm.w <= 0.0) { o_col = vec4(scena, 1.0); return; }
+  if (disc <= 0.0 || u_atm.w <= 0.0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; }
   float sq = sqrt(disc), t0 = max(0.0, b - sq), t1 = min(b + sq, fino);
-  if (t1 <= t0) { o_col = vec4(scena, 1.0); return; }
+  if (t1 <= t0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; }
   // le nuvole: dove il raggio attraversa il loro strato, davanti a ciò che c'è dietro
   float Rn = u_atm.x + u_nuv.x, dn = b * b - dot(o, o) + Rn * Rn, tn = -1.0;
   if (u_nuv.w > 0.0 && dn > 0.0) { float s = sqrt(dn); tn = b - s > 0.0 ? b - s : b + s; if (tn <= t0 || tn >= t1) tn = -1.0; }
   vec3 tra, luce;
   if (tn > 0.0) {
     vec3 p = o + d * tn; float c = nuvola(p, 1.0), r = length(p), muS = dot(p, u_soleC) / r;
-    vec3 dietro = scena;
-    if (c < 0.995 && t1 - tn > 1.0) { vec3 tr2; vec3 l2 = tratto(o, d, tn, t1, tr2); dietro = scena * tr2 + l2 * u_cam.w; }
+    vec3 dT = vec3(1.0), dA = vec3(0.0); // (ciò che c'è dietro la nuvola = scena·dT + dA)
+    if (c < 0.995 && t1 - tn > 1.0) { vec3 tr2; vec3 l2 = tratto(o, d, tn, t1, tr2); dT = tr2; dA = l2 * u_cam.w; }
     if (c > 0.003) {
       float ombra = nuvola(p + u_soleC * 2500.0, 0.0); // quanto la nuvola si fa ombra da sé verso la stella
       vec3 sole = (u_E / 3.14159) * luceCheArriva(r, muS) * smoothstep(-0.05, 0.1, muS);
       vec3 bianco = 0.82 * sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra * c) + 0.82 * (u_E / 3.14159) * cieloSu(muS); // (più la luce del cielo, quella vera)
-      dietro = mix(dietro, bianco * u_cam.w, clamp(c * 1.15, 0.0, 1.0));
+      float k = clamp(c * 1.15, 0.0, 1.0); dT *= 1.0 - k; dA = dA * (1.0 - k) + bianco * u_cam.w * k;
     }
-    luce = tratto(o, d, t0, tn, tra); o_col = vec4(dietro * tra + luce * u_cam.w, 1.0);
-  } else { luce = tratto(o, d, t0, t1, tra); o_col = vec4(scena * tra + luce * u_cam.w, 1.0); }
+    luce = tratto(o, d, t0, tn, tra); esce(scena, dT * tra, dA * tra + luce * u_cam.w, dist);
+  } else { luce = tratto(o, d, t0, t1, tra); esce(scena, tra, luce * u_cam.w, dist); }
 }`;
 
 // ---------- le sfere lontane (la stella, le lune): un quadratino e la sfera calcolata nel frammento
@@ -703,17 +711,39 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   }
 
   // ---------- lo strato dell'aria e delle nuvole
+  // A CAMERA FERMA (con N.vista.accumulo): l'aria si calcola una volta sola. Il colore è scena·Tot + Add (vedi F_ARIA):
+  // al primo fotogramma fermo la passata scrive Tot e Add sulle immagini sue (e compone), ai seguenti si compone soltanto
+  // con la scena di adesso. È lo stesso conto di prima (gli stessi passi, a metà di ogni tratto), non una media: qui la
+  // media di passi sfasati, provata, convergeva peggio dei passi a metà (l'aria è liscia) e in moto non faceva risparmiare.
+  // In moto, o col tempo che corre più di un secondo per fotogramma, si calcola tutto ogni volta, come senza accumulo.
+  let acA = null, prgComponi = null, primaRif = null, primaIndice = -2, primaE0 = 1, pronte = false;
+  function componi(S, da, dove, k) {
+    if (!prgComponi) prgComponi = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col, u_add, u_tot; uniform float u_k; void main() { o = vec4(texture(u_col, v_uv).rgb * texture(u_tot, v_uv).rgb + texture(u_add, v_uv).rgb * u_k, 1.0); }`);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, S.W, S.H); gl.useProgram(prgComponi.p); S.lega(0, da.col, prgComponi.u.u_col); S.lega(1, acA.add, prgComponi.u.u_add); S.lega(2, acA.tot, prgComponi.u.u_tot); gl.uniform1f(prgComponi.u.u_k, k); S.schermo(); return true;
+  }
+  // la camera è dov'era al fotogramma prima (negli assi del corpo, che girano con lui) e il mondo è quasi fermo?
+  function ferma(S) { const o = stato.occhioCorpo, a = stato.assiCorpo, p = primaRif, r = V.lungo(o) + 1e-30; let si = !!p && S.indice === primaIndice + 1 && Math.abs(S.dt) <= 1 && p.tan === S.tanY && p.W === S.W && p.H === S.H;
+    if (si) { for (let i = 0; i < 3; i++) if (Math.abs(o[i] - p.o[i]) > 1e-9 * r) si = false; for (let i = 0; i < 9; i++) if (Math.abs(a[i] - p.a[i]) > 1e-7) si = false; }
+    primaRif = { o: o.slice(), a: a.slice(), tan: S.tanY, W: S.W, H: S.H }; primaIndice = S.indice; return si; }
   const cielo3d = {
+    libera() { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); acA = null; } if (prgComponi) gl.deleteProgram(prgComponi.p); prgComponi = null; },
     nome: 'aria',
     dopo(S, da) {
-      if (!aria) return false; if (!prgAria) prgAria = N.programma(N.V_SCHERMO, F_ARIA(O.passiAria)); const u = prgAria.u, A = stato.A, At = V.trasposta(A); gl.useProgram(prgAria.p);
+      if (!aria) return false; const acc = accumuloAttivo(N), fermo = acc && ferma(S), dove = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      if (fermo && pronte) return componi(S, da, dove, primaE0 / S.E0); // (Add è una luce: la si riporta all'E0 di adesso)
+      if (!prgAria || prgAria.n !== O.passiAria) { if (prgAria) gl.deleteProgram(prgAria.p); prgAria = { ...N.programma(N.V_SCHERMO, F_ARIA(O.passiAria)), n: O.passiAria }; } const u = prgAria.u, A = stato.A, At = V.trasposta(A); gl.useProgram(prgAria.p);
       S.lega(0, da.col, u.u_col); S.lega(1, da.prof, u.u_prof); S.lega(2, texMS, u.u_ms); S.lega(3, texCielo, u.u_cieloT); impostaNuvole(u, S);
       const o = stato.occhioTondo; gl.uniform3f(u.u_occhio, o[0], o[1], o[2]);
       // dagli assi dell'occhio allo spazio tondo del corpo: (1/schiacciamento sull'asse) · Aᵀ · assi
       const M = V.mm(At, S.assi); for (let j = 0; j < 3; j++) M[3 + j] /= schiaccia; gl.uniformMatrix3fv(u.u_raggi, false, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]);
       const s = V.norma(tondo(V.mv(At, stato.sole))); gl.uniform3f(u.u_soleC, s[0], s[1], s[2]);
       gl.uniform4f(u.u_cam, S.tanX, S.tanY, S.fc, espo(S)); gl.uniform3f(u.u_E, Math.PI * coloreLuce[0], Math.PI * coloreLuce[1], Math.PI * coloreLuce[2]);
-      impostaAria(u); S.schermo(); return true;
+      impostaAria(u); gl.uniform3f(u.u_sfasa, 0, 0, fermo ? 1 : 0);
+      if (!fermo) { pronte = false; S.schermo(); return true; }
+      const W = S.W, H = S.H;
+      if (!acA || acA.W !== W || acA.H !== H) { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); } const add = N.immagine(W, H, 'rgba16f', null, { filtro: gl.NEAREST }), tot = N.immagine(W, H, 'rgba16f', null, { filtro: gl.NEAREST }), f = N.telaio(add, null); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, tot, 0); acA = { W, H, add, tot, f }; }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, acA.f); gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]); gl.viewport(0, 0, W, H); S.schermo(); gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+      pronte = true; primaE0 = S.E0; return componi(S, da, dove, 1);
     },
   };
 
@@ -753,7 +783,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     if (corpi) for (const k of Object.keys(terreno)) corpoPianeta[k] = null;
   }
   return {
-    corpo: corpoPianeta, stella: corpoStella, lune, aria, coloreLuce, anello: !!anello, opzioni: O, libera, stagione,
+    corpo: corpoPianeta, stella: corpoStella, lune, aria, cielo3d, coloreLuce, anello: !!anello, opzioni: O, libera, stagione,
     // che cosa c'è in un punto: quota del terreno (m), se c'è acqua e quanto è profonda
     info: (lon, lat) => { const [h, l] = leggi(lon, lat); return { quota: h, acqua: l > h, profondita: l > h ? l - h : 0, livello: l }; },
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,
