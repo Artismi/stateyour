@@ -52,6 +52,7 @@ import { V } from './nucleo.js';
 import { COSTANTI } from '../camera/leggi.js';
 import { PASSO_RAGGIO, raggioGravitazionale, discoSottile } from '../camera/relativita.js';
 import { sorgente } from '../camera/eventi.js';
+import { creaStoria, accumuloAttivo } from './accumulo.js';
 
 // ---------- IL COLORE VERO DI UN CORPO NERO, in assoluto
 // le curve dell'occhio (CIE 1931, 2°) come somme di campane asimmetriche (Wyman, Sloan & Shirley 2013, JCGT 2(2) [R])
@@ -110,13 +111,15 @@ uniform vec3 u_beta;            // la velocità di chi guarda rispetto a chi sta
 uniform vec4 u_p;               // il passo: k, minimo, raggio di uscita, numero di passi
 uniform vec4 u_macchie[${NM}];  // raggio, angolo all'istante di adesso al suo raggio, età (r_g/c), quanto è accesa (0…1)
 uniform sampler2D u_nero, u_cielo, u_scena;
+uniform vec4 u_sub;             // l'intreccio (accumulo.js): quale pixel del blocco 2×2 (x, y) e i lati dell'immagine intera; z = 0: niente intreccio
 const float PI = 3.141592653589793;
 // la luce visibile di un corpo nero a T (già nell'unità del nucleo, a meno di π/E0)
 vec3 nero(float T) { float u = (log(max(T, 1.0)) / 2.302585093 - ${LT0.toFixed(1)}) / ${(LT1 - LT0).toFixed(1)}; if (u <= 0.0) return vec3(0.0); vec4 q = texture(u_nero, vec2(clamp(u, 0.0, 1.0), 0.5)); return q.rgb * pow(10.0, q.a); }
 vec3 acc(vec3 p, float h2) { float r2 = dot(p, p); return p * (-3.0 * h2 / (r2 * r2 * sqrt(r2))); }
 void main() {
   // la direzione dello sguardo, negli assi del mondo; il fotone che arriva viaggia nel verso opposto
-  vec3 d = normalize(u_assi * vec3((v_uv * 2.0 - 1.0) * u_tan, -1.0)); float dopp = 1.0;
+  vec2 uv = u_sub.z > 0.0 ? (2.0 * floor(gl_FragCoord.xy) + u_sub.xy + 0.5) / u_sub.zw : v_uv;
+  vec3 d = normalize(u_assi * vec3((uv * 2.0 - 1.0) * u_tan, -1.0)); float dopp = 1.0;
   float b2 = dot(u_beta, u_beta);
   if (b2 > 0.0) { // chi guarda si muove: dal suo riferimento a quello di chi sta fermo lì (aberrazione), e ν_sua/ν_fermo
     float g = inversesqrt(1.0 - b2); vec3 np = -d; float bn = dot(u_beta, np); vec3 n = (np + ((g - 1.0) / b2 * bn + g) * u_beta) / (g * (1.0 + bn)); d = -normalize(n); dopp = 1.0 / (g * (1.0 + bn)); }
@@ -168,6 +171,11 @@ void main() {
 //   luce             'disco' | 'cielo' | un numero (W/m²: l'irradianza che vale 1); su che cosa si regola l'esposizione
 //   betaCamera       (S) → [βx, βy, βz] la velocità di chi guarda rispetto a chi sta fermo lì (assi del mondo), o niente
 //   sogliaPixel      nel modo 'scena': sotto tanti pixel di raggio dell'ombra lo strato non fa niente (non si calcola ciò che non si vede)
+// Con N.vista.accumulo (accumulo.js, modo 'intreccio'): a ogni fotogramma si seguono le geodetiche di un pixel su quattro
+// (un'immagine di metà lato; il pixel del blocco 2×2 gira), gli altri tre vengono dai fotogrammi prima, riportati come se
+// tutto stesse alla distanza del buco; a camera ferma dopo quattro fotogrammi è il conto pieno, pixel per pixel. Dove la
+// storia non si può riportare si prende il pixel calcolato adesso nel blocco. Costa un quarto; in moto, e col tempo che
+// corre (il disco gira), i tre pixel vecchi sono indietro fino a tre fotogrammi.
 export function creaBucoNero(N, opzioni = {}) {
   const O = { corpo: null, genitore: null, posizione: null, luogo: null, massaKg: 0, accrescimento: 0, asse: [0, 0, 1], raggioEsterno: 30, cielo: null, modo: 'cielo', macchie: 12, grana: 1.5, radice: 'buco nero', luce: 'disco', betaCamera: null, sogliaPixel: 1.5, passi: PASSO_RAGGIO.passi, ...opzioni };
   const gl = N.gl, rg = raggioGravitazionale(O.massaKg), tg = rg / COSTANTI.c; // r_g (m) e r_g/c (s)
@@ -197,7 +205,17 @@ export function creaBucoNero(N, opzioni = {}) {
     gl.uniform4f(u.u_d, rin, disco ? O.raggioEsterno : 0, Tstella, Math.PI / S.E0); gl.uniform4f(u.u_c, (unitaCielo * Math.PI) / S.E0, modo, O.grana, nMacchie);
     const b = O.betaCamera ? O.betaCamera(S) : null; gl.uniform3f(u.u_beta, b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0);
     gl.uniform4f(u.u_p, PASSO_RAGGIO.k, PASSO_RAGGIO.minimo, Math.max(60, PASSO_RAGGIO.lontano * stato.distanza, 1.2 * O.raggioEsterno), O.passi); if (nMacchie) gl.uniform4fv(u.u_macchie, uMacchie);
-    N.lega(0, tNero, u.u_nero); N.lega(1, tCielo || vuoto, u.u_cielo); N.lega(2, scena || vuoto, u.u_scena);
+    N.lega(0, tNero, u.u_nero); N.lega(1, tCielo || vuoto, u.u_cielo); N.lega(2, scena || vuoto, u.u_scena); gl.uniform4f(u.u_sub, 0, 0, 0, 0);
+  }
+  // l'intreccio: il conto su metà lato, poi la storia (un'immagine intera), poi la copia dove andava il disegno
+  const storia = creaStoria(N), ORDINE = [0, 3, 1, 2]; let mezza = null, telMezza = null, mw = 0, mh = 0, prgCopia = null;
+  function intrecciato(S, modo, scena) {
+    const W = S.W, H = S.H, w = Math.ceil(W / 2), h = Math.ceil(H / 2), q = ORDINE[(S.indice || 0) % 4], dove = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    if (w !== mw || h !== mh) { if (mezza) { gl.deleteTexture(mezza); gl.deleteFramebuffer(telMezza); } mw = w; mh = h; mezza = N.immagine(w, h, 'rgba16f', null, { filtro: gl.NEAREST }); telMezza = N.telaio(mezza, null); }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, telMezza); gl.viewport(0, 0, w, h); uniformi(S, modo, scena); gl.uniform4f(prg.u.u_sub, q & 1, q >> 1, W, H); S.schermo();
+    const fatto = storia.risolvi(S, mezza, W, H, { occhio: [-_v[0] / rg, -_v[1] / rg, -_v[2] / rg], raggi: S.assi, modo: 'intreccio', quale: q, distanza: stato.distanza });
+    if (!prgCopia) prgCopia = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_img; void main() { o = vec4(texture(u_img, v_uv).rgb, 1.0); }`);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, W, H); gl.useProgram(prgCopia.p); N.lega(0, fatto, prgCopia.u.u_img); S.schermo();
   }
   const strato = {
     nome: 'buco nero', corpo, disco, stato, raggioGravitazionale: rg, opzioni: O, mettiCielo,
@@ -210,9 +228,10 @@ export function creaBucoNero(N, opzioni = {}) {
       else if (O.luce === 'disco' && disco) { const A0 = Math.sqrt(Math.max(1e-6, 1 - 2 / stato.distanza)); S.proponiLuce((Math.PI * radianzaVisibile(disco.Tmax / A0)) / 0.7); }
       else if (O.modo === 'cielo' && mediaCielo > 0) S.proponiLuce((Math.PI * mediaCielo) / 6);
     },
-    disegna(S, passata) { if (passata !== 'fondo' || O.modo !== 'cielo' || !stato.attivo) return; uniformi(S, 0, null); S.schermo(); },
-    dopo(S, da) { if (O.modo !== 'scena' || !stato.attivo) return false; uniformi(S, 1, da.col); S.schermo(); return true; },
-    libera() { gl.deleteProgram(prg.p); gl.deleteTexture(tNero); gl.deleteTexture(vuoto); if (tCielo) gl.deleteTexture(tCielo); },
+    disegna(S, passata) { if (passata !== 'fondo' || O.modo !== 'cielo' || !stato.attivo) return; if (accumuloAttivo(N)) return intrecciato(S, 0, null); storia.azzera(); uniformi(S, 0, null); S.schermo(); },
+    dopo(S, da) { if (O.modo !== 'scena' || !stato.attivo) return false; if (accumuloAttivo(N)) intrecciato(S, 1, da.col); else { storia.azzera(); uniformi(S, 1, da.col); S.schermo(); } return true; },
+    storia, // (per le prove)
+    libera() { storia.libera(); if (mezza) { gl.deleteTexture(mezza); gl.deleteFramebuffer(telMezza); } if (prgCopia) gl.deleteProgram(prgCopia.p); gl.deleteProgram(prg.p); gl.deleteTexture(tNero); gl.deleteTexture(vuoto); if (tCielo) gl.deleteTexture(tCielo); },
   };
   N.aggiungi(strato); return strato;
 }

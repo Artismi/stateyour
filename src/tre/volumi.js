@@ -107,6 +107,8 @@ function teloPiccolo(N) {
       this.prima = gl.getParameter(gl.FRAMEBUFFER_BINDING); gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND); },
     chiudi(S, tinta = [1, 1, 1], rif = null) { if (!prgCopia) prgCopia = N.programma(V_Q, F_COPIA); const da = rif && accumuloAttivo(N) ? storia.risolvi(S, img, w, h, rif) : img; if (!(rif && accumuloAttivo(N))) storia.azzera();
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.prima); gl.viewport(0, 0, S.W, S.H); gl.useProgram(prgCopia.p); N.lega(0, da, prgCopia.u.u_img); gl.uniform3f(prgCopia.u.u_tinta, tinta[0], tinta[1], tinta[2]); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); S.schermo(); gl.disable(gl.BLEND); },
+    // PER LE PROVE: il fotogramma di adesso (rgb, distanza), w × h × 4
+    leggi() { const px = new Float32Array(w * h * 4), salvata = gl.getParameter(gl.FRAMEBUFFER_BINDING); gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, px); gl.bindFramebuffer(gl.FRAMEBUFFER, salvata); return px; },
     libera() { if (img) { gl.deleteTexture(img); gl.deleteFramebuffer(tel); } if (prgCopia) gl.deleteProgram(prgCopia.p); storia.libera(); } };
 }
 function immagine3d(gl, w, h, d, canali, dati, ripetiX) {
@@ -141,7 +143,7 @@ export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
     filo.onerror = (e) => { stato.errore = e.message; };
     filo.postMessage({ tipo: 'galassia', n: 1, cosmo, galassia, t: N.tempo.t, nf: O.nf, nr: O.nr, nz: O.nz });
   } catch (e) { stato.errore = String(e); }
-  return { stato, pronto: () => stato.pronto, dati: () => copia, // (dati: la griglia sulla CPU, per gli splat di splat.js che stanno dentro il volume)
+  return { stato, telo, pronto: () => stato.pronto, dati: () => copia, // (dati: la griglia sulla CPU, per gli splat di splat.js che stanno dentro il volume)
     // quanta luce passa da un punto all'altro della galassia (m, nel suo riferimento; `giro`: l'angolo dei bracci): la
     // stessa polvere del volume, sommata lungo il segmento (24 tratti, la cella più vicina) → [rosso, verde, blu]
     trasparenza(a, b, giro, out = [1, 1, 1]) {
@@ -182,7 +184,7 @@ export function creaVolumeRete(N, { cosmo, luce, tinta = [1, 0.9, 0.8], toroM, o
     filo.onerror = (e) => { stato.errore = e.message; };
   } catch (e) { stato.errore = String(e); }
   let Dchiesta = NaN;
-  return { stato, pronto: () => stato.pronto, opzioni: O,
+  return { stato, telo, pronto: () => stato.pronto, opzioni: O,
     // occhio: comovente (m); D: la crescita di adesso; cono(χ) → (a_e/a_o)²; chiMax: fin dove si cammina (m comoventi)
     aggiorna(S, occhio, a, D, cono, chiMax) {
       if (!filo || stato.errore) return 0; this._occhio = occhio; this._a = a; this._chiMax = chiMax; for (let k = 0; k < NT; k++) tab[k] = cono((k * chiMax) / (NT - 1));

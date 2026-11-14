@@ -62,7 +62,7 @@ export const accumuloAttivo = (N) => !!(N.vista.accumulo && N.vista.accumulo.att
 
 // una storia: due coppie d'immagini (si legge dall'una e si scrive sull'altra)
 export function creaStoria(N) {
-  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null; const A = [null, null], B = [null, null], F = [null, null];
+  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null, ultimo = -2; const A = [null, null], B = [null, null], F = [null, null];
   const fmt = gl.getExtension('OES_texture_float_linear') ? 'rgba32f' : 'rgba16f';
   const u9 = new Float32Array(9), u9p = new Float32Array(9);
   function prepara(W, H) {
@@ -79,12 +79,12 @@ export function creaStoria(N) {
     risolvi(S, img, W, H, { occhio, raggi, modo = 'media', quale = 0, distanza = 0 }) {
       const Q = N.vista.accumulo || {}; prepara(W, H); if (!prg) prg = N.programma(V_Q, F_RISOLVI); const u = prg.u, leggi = cur, scrivi = 1 - cur, salvata = gl.getParameter(gl.FRAMEBUFFER_BINDING);
       for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = raggi[3 * r + c]; // (per colonne)
-      let sposta = [0, 0, 0], tanP = [S.tanX, S.tanY], scala = 1, c = piena && prima;
+      let sposta = [0, 0, 0], tanP = [S.tanX, S.tanY], scala = 1, c = piena && prima && S.indice === ultimo + 1; ultimo = S.indice; // (un fotogramma saltato: la storia non vale più)
       if (c) { sposta = [occhio[0] - prima.occhio[0], occhio[1] - prima.occhio[1], occhio[2] - prima.occhio[2]]; for (let i = 0; i < 9; i++) u9p[i] = prima.raggi[i]; tanP = prima.tan; scala = prima.E0 / S.E0; if (!(isFinite(sposta[0] + sposta[1] + sposta[2]) && isFinite(scala))) c = false; }
       // (u_primaT: la trasposta degli assi di prima, per colonne = gli assi di prima per righe)
       gl.bindFramebuffer(gl.FRAMEBUFFER, F[scrivi]); gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST);
       gl.useProgram(prg.p); N.lega(0, img, u.u_cor); N.lega(1, A[leggi], u.u_stA); N.lega(2, B[leggi], u.u_stB);
-      gl.uniformMatrix3fv(u.u_ora, false, u9); gl.uniformMatrix3fv(u.u_primaT, false, c ? u9p : u9.map((_, i) => raggi[i]));
+      gl.uniformMatrix3fv(u.u_ora, false, u9); gl.uniformMatrix3fv(u.u_primaT, false, c ? u9p : u9);
       gl.uniform3f(u.u_sposta, sposta[0], sposta[1], sposta[2]); gl.uniform4f(u.u_tan, S.tanX, S.tanY, tanP[0], tanP[1]);
       gl.uniform4f(u.u_q, Math.max(1, Q.ferma || 64) - 1, Math.max(1, Q.moto || 4) - 1, Q.tolleranza || 0.15, scala);
       gl.uniform4f(u.u_m, modo === 'intreccio' ? 1 : 0, quale, c ? 1 : 0, distanza); gl.uniform2f(u.u_lati, w, h); S.schermo();
