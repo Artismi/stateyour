@@ -111,7 +111,7 @@ export function creaNucleo(tela, opzioni = {}) {
     return { p, u };
   }
   // un'immagine: formato 'rgba8' | 'rgba16f' | 'rg32f' | 'rg16f' | 'r8' | 'profondita'
-  const FORMATI = { rgba8: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba16f: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rgba16fDaFloat: [gl.RGBA16F, gl.RGBA, gl.FLOAT], rg32f: [gl.RG32F, gl.RG, gl.FLOAT], rg16f: [gl.RG16F, gl.RG, gl.FLOAT], r8: [gl.R8, gl.RED, gl.UNSIGNED_BYTE], profondita: [gl.DEPTH_COMPONENT32F, gl.DEPTH_COMPONENT, gl.FLOAT] };
+  const FORMATI = { rgba8: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba16f: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rgba16fDaFloat: [gl.RGBA16F, gl.RGBA, gl.FLOAT], rg32f: [gl.RG32F, gl.RG, gl.FLOAT], rgba32f: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rg16f: [gl.RG16F, gl.RG, gl.FLOAT], r8: [gl.R8, gl.RED, gl.UNSIGNED_BYTE], profondita: [gl.DEPTH_COMPONENT32F, gl.DEPTH_COMPONENT, gl.FLOAT] };
   // (`mip`: con le copie rimpicciolite, per le immagini che si guardano anche da lontano — senza, più punti dell'immagine
   // che punti dello schermo fanno un reticolo che non c'è)
   function immagine(w, h, formato = 'rgba8', dati = null, { filtro = gl.LINEAR, ripeti = false, mip = false } = {}) {
@@ -166,7 +166,14 @@ export function creaNucleo(tela, opzioni = {}) {
   // la luce che arriva adesso (t − distanza/c); false: la sezione «adesso», tutto allo stesso istante (per confrontare).
   // `passi`: quanti campioni per raggio nei volumi attraversati dallo sguardo (volumi.js); `riduzione`: di quanto è più
   // piccola, per lato, l'immagine su cui li si disegna. Sono la qualità (e il costo): si possono cambiare in ogni momento.
-  const vista = { cono: O.cono !== false, passi: { galassia: 64, ragnatela: 56 }, riduzione: 2 }, C_LUCE = 299792458;
+  // `accumulo` (accumulo.js): gli strati che costano fanno a ogni fotogramma `passi` campioni, sfasati in modo diverso
+  // ogni volta, e li sommano alla storia dei fotogrammi prima riportata con il moto della camera: a camera ferma la media
+  // arriva a `ferma` fotogrammi (come `ferma` volte i passi), in moto si ferma a `moto`; la storia si scarta dove la
+  // distanza che ricorda si scosta più di `tolleranza` (relativa) da quella che dovrebbe avere. Spento: ogni fotogramma
+  // fa da sé (e allora i passi vanno alzati: 64 e 56 erano quelli di prima). Anche il buco nero: un pixel su quattro.
+  // `vuoto`: sotto quale frazione della luce più forte (e della polvere) una cella della galassia conta come vuota e il
+  // raggio la salta (volumi.js; 0: niente salto).
+  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15 }, vuoto: 1e-5 }, C_LUCE = 299792458;
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
@@ -359,7 +366,7 @@ export function creaNucleo(tela, opzioni = {}) {
     }
     scegliRiferimento(tempo.t); scegliCorpo();
     passoMondo = tempo.pausa ? 0 : Math.abs(tempo.velocita) / 60; S.passo = passoMondo;
-    S.t = tempo.t; S.dt = dtVero * (tempo.pausa ? 0 : tempo.velocita); S.dtVero = dtVero; _a.clear();
+    S.t = tempo.t; S.dt = dtVero * (tempo.pausa ? 0 : tempo.velocita); S.dtVero = dtVero; S.indice = stat.fotogrammi; _a.clear();
     preparaImmagini(); const W = S.W = tela.width, H = S.H = tela.height;
     // la camera negli assi inerziali: l'occhio rispetto al centro del suo corpo, e la matrice mondo → occhio
     const A = cam.solidale ? S.assetto(cam.corpo) : V.identita(), assi = cam.solidale ? V.mm(A, cam.assi) : cam.assi; occhioInerziale = cam.solidale ? V.mv(A, cam.pos) : cam.pos.slice();
