@@ -156,6 +156,9 @@ export function cosGiro(u) {
 // la campana (media 0, scarto 1) da due numeri tra 0 e 1: Box-Muller
 export const campana = (a, b) => Math.sqrt(-2 * logEsatto(a < 1e-12 ? 1e-12 : a)) * cosGiro(b);
 
+// la scelta per cumulata: l'esito i con probabilità pesi[i]/Σ pesi (una somma e un confronto: esatta ovunque)
+export function sceltaDiscreta(u, pesi) { let W = 0; for (const w of pesi) W += w; let s = 0; for (let i = 0; i < pesi.length; i++) { s += pesi[i]; if (u * W < s) return i; } return pesi.length - 1; }
+
 // un numero intero (32 bit) da un indirizzo e da un ramo
 // (chi chiede uno dopo l'altro molti eventi dello stesso luogo non ne rifà la chiave: si tiene quella dell'ultimo
 // contenitore visto, cioè dell'indirizzo fino all'ultima «/»)
@@ -199,6 +202,11 @@ function fonte(radice, r0, r1, r2, r3, rami) {
   c.fila = (indirizzo) => { scendi(r0, r1, r2, r3, String(indirizzo)); return inFila(X0, X1, X2, X3, ramoDi(indirizzo)); };
   // un esito con distribuzione a campana (media 0, scarto 1): le prime due estrazioni dell'evento
   c.normale = (indirizzo) => { scendi(r0, r1, r2, r3, String(indirizzo)); const k0 = X0, k1 = X1, k2 = X2, k3 = X3, ramo = ramoDi(indirizzo); tf(0, ramo, 0, 0, k0, k1, k2, k3); const a = frazione(); tf(1, ramo, 0, 0, k0, k1, k2, k3); return campana(a, frazione()); };
+  // le leggi discrete che i consumatori applicavano da sé al tiro (c(x) < p; una scelta per cumulata): dichiarate qui,
+  // il registro sa quale legge ha consumato il tiro e la misura (misura.js) ne pesa l'esito. Stesso tiro di c(indirizzo).
+  // (Il nome «sotto» è già della sorgente di una parte: la Bernoulli si chiama bernoulli.)
+  c.bernoulli = (indirizzo, p) => c(indirizzo) < p;
+  c.discreta = (indirizzo, pesi) => sceltaDiscreta(c(indirizzo), pesi);
   // per i moduli che chiedono ancora un «seme»: un intero legato a questo indirizzo e a questo ramo
   c.seme = (indirizzo) => { scendi(r0, r1, r2, r3, String(indirizzo)); tf(0, ramoDi(indirizzo), 0, 0, X0, X1, X2, X3); return (X0 >>> 0) % 2147483646 + 1; };
   return c;
@@ -207,17 +215,23 @@ function fonte(radice, r0, r1, r2, r3, rami) {
 // LA STESSA SORGENTE, CHE ANNOTA CIÒ CHE LEGGE: in «registro» (una Map) finisce ogni evento chiesto, indirizzo → esito
 // (per le estrazioni dopo la prima: «indirizzo#k»). Dice da quali eventi dipende un calcolo, e serve alle prove di
 // «un ramo cambia una cosa sola»: in due mondi che differiscono per un evento, ogni altro evento letto ha lo stesso esito.
-export function conRegistro(c, registro) {
+// Con «leggi» (una Map, facoltativa) annota anche QUALE legge ha consumato il tiro: indirizzo → { legge, parametri, tiri,
+// esito }, con legge tra uniforme (c nudo, serie, fila), intero, tra, bernoulli, discreta, normale, seme. È ciò che serve
+// alla misura dei rami (misura.js: massa, storia, rapporto). Il registro dei tiri resta quello di prima, identico.
+export function conRegistro(c, registro, leggi = null) {
   const nota = (indirizzo, v) => { registro.set(`${c.radice}/${indirizzo}`, v); return v; };
-  const d = (indirizzo) => nota(indirizzo, c(indirizzo));
+  const legge = leggi ? (indirizzo, nome, parametri, tiri, esito) => { leggi.set(`${c.radice}/${indirizzo}`, { legge: nome, parametri, tiri, esito }); return esito; } : (i, n, p, t, esito) => esito;
+  const d = (indirizzo) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'uniforme', {}, [u], u); };
   d.radice = c.radice; d.rami = c.rami;
-  d.sotto = (nome) => conRegistro(c.sotto(nome), registro);
-  d.intero = (indirizzo, n) => Math.min(n - 1, Math.floor(d(indirizzo) * n));
-  d.tra = (indirizzo, a, b) => a + (b - a) * d(indirizzo);
-  d.serie = (indirizzo) => { const s = c.serie(indirizzo); return (k = 0) => nota(k ? `${indirizzo}#${k}` : indirizzo, s(k)); };
+  d.sotto = (nome) => conRegistro(c.sotto(nome), registro, leggi);
+  d.intero = (indirizzo, n) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'intero', { n }, [u], Math.min(n - 1, Math.floor(u * n))); };
+  d.tra = (indirizzo, a, b) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'tra', { a, b }, [u], a + (b - a) * u); };
+  d.bernoulli = (indirizzo, p) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'bernoulli', { p }, [u], u < p); };
+  d.discreta = (indirizzo, pesi) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'discreta', { pesi: [...pesi] }, [u], sceltaDiscreta(u, pesi)); };
+  d.serie = (indirizzo) => { const s = c.serie(indirizzo); return (k = 0) => { const v = k ? `${indirizzo}#${k}` : indirizzo, u = nota(v, s(k)); return legge(v, 'uniforme', {}, [u], u); }; };
   d.fila = (indirizzo) => { const s = d.serie(indirizzo); let k = 0; return () => s(k++); };
-  d.normale = (indirizzo) => { const s = d.serie(indirizzo); return campana(s(0), s(1)); };
-  d.seme = (indirizzo) => { nota(indirizzo, c(indirizzo)); return c.seme(indirizzo); };
+  d.normale = (indirizzo) => { const s = c.serie(indirizzo), a = nota(indirizzo, s(0)), b = nota(`${indirizzo}#1`, s(1)); return legge(indirizzo, 'normale', {}, [a, b], campana(a, b)); };
+  d.seme = (indirizzo) => { const u = nota(indirizzo, c(indirizzo)); return legge(indirizzo, 'seme', {}, [u], c.seme(indirizzo)); };
   return d;
 }
 // l'esito di un evento del registro («indirizzo» o «indirizzo#k»), chiesto da capo a una sorgente
