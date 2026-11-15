@@ -230,8 +230,8 @@ prova('le galassie vere di cosmo(1): l\'alone dal picco, lo spin dalle maree dei
   tra(frazione, 0.1, 0.65, 'frazione di ellittiche tra le galassie grandi'); assert.ok(ell(densi) / terzo > frazione, `nel terzo più denso ${ell(densi)} su ${terzo}, in tutto ${ell(F)} su ${n}`);
   // più del doppio nel terzo più denso che nel più rado: contate su tre cosmi invece che su uno (in un cosmo i terzi hanno una
   // ventina di galassie, e un conteggio di 5–7 ha uno scarto di ±2,5: da solo non regge un rapporto)
-  let eDensi = ell(densi), eRadi = ell(radi), nTerzi = terzo;
-  for (const nc of [2, 3]) { const F2 = cosmo(nc).galassie.map((G) => G.forma), t2 = Math.floor(F2.length / 3); eDensi += ell(F2.slice(0, t2)); eRadi += ell(F2.slice(-t2)); nTerzi += t2; }
+  let eDensi = ell(densi), eRadi = ell(radi), nTerzi = terzo; const altri = [2, 3].map((nc) => cosmo(nc).galassie.map((G) => G.forma));
+  for (const F2 of altri) { const t2 = Math.floor(F2.length / 3); eDensi += ell(F2.slice(0, t2)); eRadi += ell(F2.slice(-t2)); nTerzi += t2; }
   assert.ok(eDensi > 2 * eRadi, `in tre cosmi: nel terzo più denso ${eDensi} ellittiche su ${nTerzi}, nel più rado ${eRadi}`);
   // chi è ellittica ha avuto fusioni; le spirali hanno gas, bracci, e stelle che nascono ancora
   for (const f of F) {
@@ -243,12 +243,18 @@ prova('le galassie vere di cosmo(1): l\'alone dal picco, lo spin dalle maree dei
     assert.ok(f.formazione > 0 && f.formazione < 3e9 * ANNO && f.tinta.every((x) => x >= 0 && x <= 255) && f.perG.bracci >= 2 && f.perG.passo > 0);
   }
   const sp = F.filter((f) => f.tipo === 'spirale'), el = F.filter((f) => f.tipo === 'ellittica');
-  assert.ok(mediana(sp.map((f) => f.storia.sfr[PASSI] / f.massaStelle)) > 3 * mediana(el.map((f) => f.storia.sfr[PASSI] / f.massaStelle)), 'le ellittiche hanno quasi smesso di fare stelle');
+  // le ellittiche hanno quasi smesso di fare stelle (le stelle nate oggi per stella già fatta) e hanno i buchi neri più grandi:
+  // mediana delle spirali contro mediana delle ellittiche, CONTATE SU SEI COSMI (circa 180 + 180 galassie). In un cosmo solo
+  // le ellittiche sono 20–40, e i due rapporti vanno da un mondo all'altro di un fattore 2 (con la fonte Threefry-4x32, otto
+  // cosmi presi uno per uno: stelle che nascono da 2,5 a 6, buchi neri da 2,5 a 4,5): una legge non si legge su un mondo solo
+  const sei = [F, ...altri, ...[4, 5, 6].map((nc) => cosmo(nc).galassie.map((G) => G.forma))].flat(), spS = sei.filter((f) => f.tipo === 'spirale'), elS = sei.filter((f) => f.tipo === 'ellittica');
+  const sSFR = (f) => f.storia.sfr[PASSI] / f.massaStelle, buco = (f) => f.buco.M, rSFR = mediana(spS.map(sSFR)) / mediana(elS.map(sSFR)), rBuco = mediana(elS.map(buco)) / mediana(spS.map(buco));
+  assert.ok(rSFR > 3, `le ellittiche hanno quasi smesso di fare stelle: in sei cosmi le spirali ne fanno ${num(rSFR)} volte tanto (per stella già fatta)`);
   // (quando è nata metà delle stelle: qui non distingue i tipi — in tutte entro i primi 4 Ga: vedi «che cosa non torna»)
   const meta = (f) => { const e = f.interno, m = new Float64Array(PASSI + 1); let tot = 0, c = 0; for (let i = 1; i <= PASSI; i++) { m[i] = e.est[i]; for (let k = 0; k < ANELLI; k++) m[i] += e.nati[i * ANELLI + k]; tot += m[i]; } for (let i = 1; i <= PASSI; i++) { c += m[i]; if (c >= tot / 2) return i * DT; } return T0; };
   // le ellittiche degli aloni grandi si sono messe insieme DOPO aver fatto le stelle: l'ultima grande fusione viene dopo la metà delle nascite
   for (const f of el.filter((x) => x.alone.massa > 3e12)) assert.ok(f.ultimaFusioneMaggiore > meta(f), `fusione a ${f.ultimaFusioneMaggiore} Ga, metà delle stelle a ${meta(f)} Ga`);
-  assert.ok(mediana(el.map((f) => f.buco.M)) > 3 * mediana(sp.map((f) => f.buco.M)), 'e hanno i buchi neri più grandi');
+  assert.ok(rBuco > 3, `e hanno i buchi neri più grandi: in sei cosmi ${num(rBuco)} volte quelli delle spirali (mediane)`);
   const classi = {}; for (const f of F) classi[f.classe] = (classi[f.classe] || 0) + 1;
   console.log(`      (${n} galassie in ${ms.toFixed(0)} ms; aloni da ${num(F[n - 1].alone.massa)} a ${num(F[0].alone.massa)} M☉, mediana ${num(mediana(F.map((f) => f.alone.massa)))}; spin mediano ${num(mediana(spin))})`);
   console.log(`      (tipi: ${Object.entries(classi).map(([k, v]) => `${k} ${v}`).join(', ')}; ellittiche e lenticolari ${num(100 * frazione)}%; con più di metà delle stelle nello sferoide ${num((100 * F.filter((f) => f.frazioneSferoide > 0.5).length) / n)}%; ellittiche nel terzo più denso ${ell(densi)} su ${terzo}, in quello di mezzo ${ell(F.slice(terzo, n - terzo))} su ${n - 2 * terzo}, nel più rado ${ell(radi)} su ${terzo})`);

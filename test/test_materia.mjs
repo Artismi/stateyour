@@ -158,16 +158,28 @@ prova('lo spettro β nel motore è quello di Fermi; un ramo cambia un solo decad
 });
 
 prova("il muone nell'acqua: il cono di luce Cherenkov e i raggi delta", () => {
-  // (l'evento «prova/mare 2»: con la fonte unica del caso quello di «prova/mare» è un muone lento, quasi fermo, sotto la soglia della luce — capita a un muone su sei a 10 m d'acqua)
-  const r = M.cellaMateria(MARE, { processo: 'muone cosmico', latoM: 0.3 }, sorgente('prova/mare 2')), { tr, ms } = simula(r), c = r.cella;
-  assert.ok(ms < 300, `simulata in ${ms} ms`); assert.match(c.sorgenti[0].origine, /muone di uno sciame nato a \d+ km di quota, sopravvissuto a 10 m di acqua/);
-  const mu = tr.find((t) => t.specie.nome.startsWith('muone')), luce = tr.filter((t) => t.specie.nome === 'fotone Cherenkov'); assert.ok(mu && luce.length > 10, `${luce.length} fotoni`);
-  // l'angolo tra ogni fotone e il muone: cos θ = 1/(nβ) → 41°
-  const dir = (t) => { const a = t.punti[0], b = t.punti[t.punti.length - 1]; return Math.atan2(b[1] - a[1], b[0] - a[0]); }, dm = dir(mu);
-  for (const f of luce.slice(0, 12)) tra((Math.abs(Math.atan2(Math.sin(dir(f) - dm), Math.cos(dir(f) - dm))) * 180) / Math.PI, 39, 43, 'angolo Cherenkov (gradi)');
-  // la luce va a c/n: 40/1,333 unità per unità di tempo
-  const f = luce[0], p0 = f.punti[0], p1 = f.punti[f.punti.length - 1]; tra(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / (p1[3] - p0[3]), 29.5, 30.5, 'velocità della luce in acqua (unità del motore)');
-  assert.ok(c.mezzo.delta.taglio > 0 && c.scala.fotoniPerLinea > 1);
+  // SU PIÙ MONDI (gli eventi «prova/mare», «prova/mare 1», …), non su uno scelto: ogni muone sopra la soglia (nβ > 1)
+  // accende la luce, e ogni fotone parte dalla traccia all'angolo cos θ = 1/(nβ), con il β e la direzione che il muone
+  // ha DOVE lo emette (il muone rallenta e si piega: θ non è un numero solo, 41° è quello di un muone che va quasi a c);
+  // un muone sotto la soglia non ne fa (a 10 m d'acqua capita a circa uno su sei)
+  let conLuce = 0;
+  for (let w = 0; w < 6; w++) {
+    const r = M.cellaMateria(MARE, { processo: 'muone cosmico', latoM: 0.3 }, sorgente(w ? `prova/mare ${w}` : 'prova/mare')), { tr, ms } = simula(r), c = r.cella, n = c.mezzo.n;
+    assert.ok(ms < 300, `simulata in ${ms} ms`); assert.match(c.sorgenti[0].origine, /muone di uno sciame nato a \d+ km di quota, sopravvissuto a 10 m di acqua/);
+    const mu = tr.find((t) => t.specie.nome.startsWith('muone')), luce = tr.filter((t) => t.specie.nome === 'fotone Cherenkov'), P = mu.punti;
+    const tratto = (j) => { const a = P[j - 1], b = P[j]; return { beta: Math.hypot(b[0] - a[0], b[1] - a[1]) / (b[3] - a[3]) / c.c, dir: Math.atan2(b[1] - a[1], b[0] - a[0]) }; };
+    if (n * tratto(1).beta <= 1) { assert.equal(luce.length, 0, `un muone sotto la soglia (β ${tratto(1).beta}) non fa luce`); continue; }
+    conLuce++; assert.ok(luce.length > 10, `${luce.length} fotoni`);
+    for (const f of luce.slice(0, 12)) {
+      const a = f.punti[0], b = f.punti[f.punti.length - 1], j = Math.max(1, P.findIndex((p) => p[3] >= a[3])), { beta, dir } = tratto(j), d = Math.atan2(b[1] - a[1], b[0] - a[0]) - dir;
+      const theta = (Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) * 180) / Math.PI, atteso = (Math.acos(1 / (n * beta)) * 180) / Math.PI;
+      tra(theta - atteso, -1, 1, `angolo Cherenkov meno arccos(1/(nβ)) = ${atteso.toFixed(2)}° (gradi; mondo ${w})`);
+    }
+    // la luce va a c/n: 40/1,333 unità per unità di tempo
+    const f = luce[0], p0 = f.punti[0], p1 = f.punti[f.punti.length - 1]; tra(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / (p1[3] - p0[3]), 29.5, 30.5, 'velocità della luce in acqua (unità del motore)');
+    assert.ok(c.mezzo.delta.taglio > 0 && c.scala.fotoniPerLinea > 1);
+  }
+  assert.ok(conLuce > 0, 'in sei mondi nessun muone sopra la soglia (atteso circa uno su sei sotto)');
   // sotto la soglia non c'è luce: una α non ne fa
   const al = simulaMondo(M.cellaMateria(MARE, { processo: 'uranio-238 α' }, sorgente('prova/mare')).cella); assert.ok(!al.some((t) => t.specie.nome === 'fotone Cherenkov') && al.some((t) => t.specie.nome === 'alfa'));
 });

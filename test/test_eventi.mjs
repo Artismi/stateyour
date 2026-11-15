@@ -1,16 +1,28 @@
-// test_eventi.mjs — la fonte unica del caso: Threefry-2x32, la chiave dall'indirizzo, i rami, l'ordine che non conta
+// test_eventi.mjs — la fonte unica del caso: Threefry-4x32, la chiave (128 bit) dall'indirizzo, i rami, l'ordine che non conta
 import assert from 'node:assert/strict';
-import { threefry2x32, chiaveDi, numero, sorgente, contatore, comeSorgente, logEsatto, cosGiro, campana } from '../src/camera/eventi.js';
+import { threefry2x32, threefry4x32, chiaveDi, numero, sorgente, contatore, comeSorgente, logEsatto, cosGiro, campana } from '../src/camera/eventi.js';
 import { readFileSync } from 'node:fs';
 import { casoEvento } from '../src/camera/mondo.js';
 import { semeEvento, hash } from '../src/camera/cosmo.js';
 
 let ok = 0; const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 const hex = (x) => x.toString(16).padStart(8, '0'), esito53 = (x0, x1) => (x0 * 2 ** 21 + (x1 >>> 11)) / 2 ** 53, x0y1 = ([x0, x1]) => esito53(x0, x1);
+// l'esito dell'estrazione k di una chiave, nel ramo dato: il contatore è (k, ramo, 0, 0)
+const esitoDi = (chiave, k = 0, ramo = 0) => threefry4x32([k, ramo, 0, 0], chiave);
 
-// I VETTORI NOTI di Random123 (tests/kat_vectors, le righe «threefry2x32»): giri, contatore (2 parole), chiave
-// (2 parole), esito (2 parole). Copiati dal file ufficiale di DEShawResearch/random123.
-const KAT = `
+// I VETTORI NOTI di Random123 (tests/kat_vectors, le righe «threefry4x32» e «threefry2x32»): giri, contatore,
+// chiave, esito. Copiati dal file ufficiale di DEShawResearch/random123 (github.com/DEShawResearch/random123).
+const KAT4 = `
+13 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 531c7e4f 39491ee5 2c855a92 3d6abf9a
+13 ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff c4189358 1c9cc83a d5881c67 6a0a89e0
+13 243f6a88 85a308d3 13198a2e 03707344 a4093822 299f31d0 082efa98 ec4e6c89 4aa71d8f 734738c2 431fc6a8 ae6debf1
+20 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 9c6ca96a e17eae66 fc10ecd4 5256a7d8
+20 ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff 2a881696 57012287 f6c7446e a16a6732
+20 243f6a88 85a308d3 13198a2e 03707344 a4093822 299f31d0 082efa98 ec4e6c89 59cd1dbb b8879579 86b5d00c ac8b6d84
+72 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 93171da6 9220326d b392b7b1 ff58a002
+72 ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff 60743f3d 9961e684 aab21c34 8c65fb7d
+72 243f6a88 85a308d3 13198a2e 03707344 a4093822 299f31d0 082efa98 ec4e6c89 09930adf 7f27bd55 9ed68ce1 97f803f6`.trim().split('\n').map((r) => r.trim().split(/\s+/));
+const KAT2 = `
 13 00000000 00000000 00000000 00000000 9d1c5ec6 8bd50731
 13 ffffffff ffffffff ffffffff ffffffff fd36d048 2d17272c
 13 243f6a88 85a308d3 13198a2e 03707344 ba3e4725 f27d669e
@@ -21,36 +33,64 @@ const KAT = `
 32 ffffffff ffffffff ffffffff ffffffff 6e2fe0d0 b1b76f82
 32 243f6a88 85a308d3 13198a2e 03707344 e2827716 c3c05cdf`.trim().split('\n').map((r) => r.trim().split(/\s+/));
 
-prova('Threefry-2x32 ridà i vettori noti di Random123 (13, 20 e 32 giri)', () => {
-  for (const [giri, c0, c1, k0, k1, x0, x1] of KAT) {
+prova('Threefry-4x32 ridà i vettori noti di Random123 (13, 20 e 72 giri); la versione di lavoro è la stessa funzione', () => {
+  for (const [giri, ...h] of KAT4) {
+    const v = h.map((x) => parseInt(x, 16)), x = threefry4x32(v.slice(0, 4), v.slice(4, 8), Number(giri));
+    assert.equal(x.map(hex).join(' '), h.slice(8).join(' '), `giri ${giri}, contatore ${h.slice(0, 4)}, chiave ${h.slice(4, 8)}`);
+  }
+  assert.deepEqual(threefry4x32([0, 0, 0, 0], [0, 0, 0, 0]), [0x9c6ca96a, 0xe17eae66, 0xfc10ecd4, 0x5256a7d8], 'senza dire i giri sono 20');
+  // la versione di lavoro (i giri scritti per esteso) dà la chiave di un nome corto: un blocco solo, sotto la chiave
+  // della radice (0, 0, 0, 0): è il vettore noto con quel contatore. Il blocco di «a»: il byte 0x61, e in cima 0xF1
+  assert.deepEqual(chiaveDi('a'), threefry4x32([0x61, 0, 0, 0xF1000000], [0, 0, 0, 0]));
+  // e con una chiave qualunque (quelle dei vettori noti) fa come la versione da leggere: la chiave del nome vuoto (un
+  // blocco con il solo conto, 0xF0) e i suoi esiti in fila
+  for (const [, ...h] of KAT4.filter((r) => r[0] === '20')) {
+    const k = h.slice(4, 8).map((x) => parseInt(x, 16)), c = contatore('', 0, k), figlio = threefry4x32([0, 0, 0, 0xF0000000], k);
+    for (let i = 0; i < 4; i++) assert.equal(c(), x0y1(esitoDi(figlio, i)));
+  }
+});
+prova('Threefry-2x32 (la fonte di prima, che resta per confronto) ridà i suoi vettori noti (13, 20 e 32 giri)', () => {
+  for (const [giri, c0, c1, k0, k1, x0, x1] of KAT2) {
     const [a, b] = threefry2x32(parseInt(c0, 16), parseInt(c1, 16), parseInt(k0, 16), parseInt(k1, 16), Number(giri));
     assert.equal(`${hex(a)} ${hex(b)}`, `${x0} ${x1}`, `giri ${giri}, contatore ${c0} ${c1}, chiave ${k0} ${k1}`);
   }
-  assert.deepEqual(threefry2x32(0, 0, 0, 0), [0x6b200159, 0x99ba4efe], 'senza dire i giri sono 20');
 });
 
 // la regola della chiave, riscritta qui nel modo più piano (i byte con TextEncoder, i blocchi uno per uno, la
 // funzione «da leggere»): deve dare la stessa chiave di quella di lavoro, che è scritta per i cicli caldi
 function chiavePiana(indirizzo) {
-  let k = [0, 0];
+  // i byte di un nome: ogni unità del testo (UTF-16) in UTF-8 per sé (anche le due metà di un carattere fuori dal piano base)
+  const byte = (nome) => [...nome].flatMap((car) => Array.from({ length: car.length }, (_, i) => car.charCodeAt(i))).flatMap((u) => (u < 0x80 ? [u] : u < 0x800 ? [0xC0 | (u >> 6), 0x80 | (u & 63)] : [0xE0 | (u >> 12), 0x80 | ((u >> 6) & 63), 0x80 | (u & 63)]));
+  const parola = (q, i) => (q[i] | (q[i + 1] << 8) | (q[i + 2] << 16) | (q[i + 3] << 24)) >>> 0, blocco = (q) => [0, 4, 8, 12].map((i) => parola(q, i));
+  let k = [0, 0, 0, 0];
   for (const nome of String(indirizzo).split('/')) {
-    const b = [...new TextEncoder().encode(nome)], parola = (q) => (q[0] | (q[1] << 8) | (q[2] << 16) | (q[3] << 24)) >>> 0;
-    while (b.length >= 8) { const q = b.splice(0, 8); k = threefry2x32(parola(q), parola(q.slice(4)), k[0], k[1]); }
-    const n = b.length; while (b.length < 7) b.push(0); b.push(0xF8 | n);
-    k = threefry2x32(parola(b), parola(b.slice(4)), k[0], k[1]);
+    const b = byte(nome);
+    while (b.length >= 15) k = threefry4x32(blocco([...b.splice(0, 15), 0xFF]), k); // un blocco pieno: 15 byte e 0xF0 + 15
+    const n = b.length; while (b.length < 15) b.push(0); b.push(0xF0 | n); // l'ultimo: i byte rimasti, zeri, 0xF0 + quanti
+    k = threefry4x32(blocco(b), k);
   }
   return k;
 }
 const INDIRIZZI = ['', 'a', 'cosmo 1', 'cosmo 1/galassia 3/stella 53/pianeta 0/impatto 12/dove', 'otto ott', 'nove nove', 'sedici caratteri', 'profondità', 'età/città/perché/più giù', 'a/', '/a', 'a//b',
-  'x'.repeat(7), 'x'.repeat(8), 'x'.repeat(9), 'x'.repeat(15), 'x'.repeat(16), 'x'.repeat(17), 'è'.repeat(4), 'è'.repeat(5), '→ freccia', 'cosmo 1/galassia 3/stella 53/disco/embrione 12/fusione con 13', 'cosmo 1/galassia 3/stella 53/pianeta 2/lune/cattura 3/distanza'];
-prova('la chiave è il cammino dei nomi: Threefry del nome (a blocchi di 8 byte, l\'ultimo con il conto) con la chiave di chi lo contiene', () => {
+  'x'.repeat(7), 'x'.repeat(8), 'x'.repeat(9), 'x'.repeat(14), 'x'.repeat(15), 'x'.repeat(16), 'x'.repeat(29), 'x'.repeat(30), 'x'.repeat(31), 'è'.repeat(7), 'è'.repeat(8), 'aè'.repeat(5), 'a→'.repeat(5), 'aa→'.repeat(5), '→'.repeat(5), '→ freccia', 'una stella ✶ e una 🌍', '🌍'.repeat(4), 'cosmo 1/galassia 3/stella 53/disco/embrione 12/fusione con 13', 'cosmo 1/galassia 3/stella 53/pianeta 2/lune/cattura 3/distanza'];
+prova('la chiave è il cammino dei nomi: Threefry del nome (a blocchi di 15 byte e un byte di conto) con la chiave di chi lo contiene', () => {
   for (const s of INDIRIZZI) assert.deepEqual(chiaveDi(s), chiavePiana(s), `«${s}»`);
-  // l'esito: contatore (numero dell'estrazione, ramo), chiave dell'indirizzo; numero() ne dà i primi 32 bit
-  for (const s of INDIRIZZI) for (const ramo of [0, 1, 2, 7]) assert.equal(numero(s, ramo), threefry2x32(0, ramo, ...chiavePiana(s))[0], `«${s}» ramo ${ramo}`);
+  // l'esito: contatore (numero dell'estrazione, ramo, 0, 0), chiave dell'indirizzo; numero() ne dà i primi 32 bit
+  for (const s of INDIRIZZI) for (const ramo of [0, 1, 2, 7]) assert.equal(numero(s, ramo), esitoDi(chiavePiana(s), 0, ramo)[0], `«${s}» ramo ${ramo}`);
   // c() ne usa i primi 53: tutta la prima parola e i 21 più alti della seconda
-  const [x0, x1] = threefry2x32(0, 0, ...chiavePiana('cosmo 1/galassia 3/massa'));
+  const [x0, x1] = esitoDi(chiavePiana('cosmo 1/galassia 3/massa'));
   assert.equal(sorgente('cosmo 1/galassia 3')('massa'), esito53(x0, x1));
   assert.equal(numero(12345), numero('12345'));
+  // il conto nel byte più alto separa i nomi dai loro prolungamenti: un nome di 15 byte (un blocco pieno e uno vuoto) non è
+  // quello di 14 con un carattere in più, né un nome lungo è il cammino dei suoi pezzi
+  const chiavi = new Set(['x'.repeat(14), 'x'.repeat(15), 'x'.repeat(15) + '\0', 'x'.repeat(16), 'x'.repeat(15) + '/', 'x'.repeat(15) + '/x', 'x'.repeat(30)].map((s) => chiaveDi(s).join(' ')));
+  assert.equal(chiavi.size, 7);
+  // la chiave di una parte è Threefry del suo blocco con la chiave di chi la contiene: «stella 53» sono 9 byte, e in cima 0xF9
+  const blocco = [...new TextEncoder().encode('stella 53'), 0, 0, 0, 0, 0, 0, 0xF9].reduce((w, b, i) => { w[i >> 2] = (w[i >> 2] | (b << ((i & 3) * 8))) >>> 0; return w; }, [0, 0, 0, 0]);
+  assert.deepEqual(chiaveDi('cosmo 1/galassia 3/stella 53'), threefry4x32(blocco, chiaveDi('cosmo 1/galassia 3')));
+  // nessun esito di un luogo è la chiave di una sua parte: i contatori d'esito hanno 0 nel byte più alto, i blocchi dei
+  // nomi almeno 0xF0, e con la stessa chiave Threefry è una biiezione
+  assert.ok(blocco[3] >>> 24 >= 0xF0 && esitoDi.toString().includes('[k, ramo, 0, 0]'));
 });
 
 prova('la sorgente: stessa interfaccia di sempre; la chiave della radice vale per tutte le sue parti', () => {
@@ -79,7 +119,7 @@ prova('un ramo cambia quell\'evento e solo quello: non i vicini, non ciò che gl
   assert.equal(d.sotto('impatto 12')('dove'), d('impatto 12/dove')); assert.equal(sorgente('cosmo 1', { [ev]: 1 }).sotto('galassia 3/stella 53/pianeta 0/impatto 12')('dove'), d('impatto 12/dove'));
   assert.notEqual(c.normale('impatto 12/dove'), d.normale('impatto 12/dove')); assert.equal(c.normale('impatto 13/dove'), d.normale('impatto 13/dove'));
   assert.notEqual(c.serie('impatto 12/dove')(5), d.serie('impatto 12/dove')(5)); assert.equal(c.serie('impatto 13/dove')(5), d.serie('impatto 13/dove')(5));
-  assert.notEqual(c.seme('impatto 12/dove'), d.seme('impatto 12/dove')); assert.equal(d('impatto 12/dove'), esito53(...threefry2x32(0, 1, ...chiaveDi(ev))));
+  assert.notEqual(c.seme('impatto 12/dove'), d.seme('impatto 12/dove')); assert.equal(d('impatto 12/dove'), x0y1(esitoDi(chiaveDi(ev), 0, 1)));
   assert.equal(numero(ev, 1), Math.floor(d('impatto 12/dove') * 4294967296));
 });
 
@@ -117,20 +157,20 @@ function* indirizziVeri() {
   }
   for (let n = 1; n <= 400; n++) for (let i = 0; i < 20; i++) { yield `mondo ${n}/${i}`; yield `mondo ${n}/${i}|emissione`; yield `mondo ${n}/${i}|mezzo`; yield `mondo ${n}/${i}.0`; yield `mondo ${n}/${i}.1`; yield `mondo ${n}/${i}.0.1`; }
 }
-prova('nessuna collisione su un milione di indirizzi veri: né tra le chiavi (64 bit), né tra gli esiti (53 bit)', () => {
-  // (una chiave a 64 bit non sta in un double: le chiavi si confrontano metà per metà; gli esiti sono i 53 bit di c())
-  const esiti = new Set(), primi32 = new Set(), perMeta = new Map(), visti = new Set(); let n = 0, doppie = 0;
+prova('nessuna collisione su un milione di indirizzi veri: né tra le chiavi (128 bit), né tra gli esiti (53 bit)', () => {
+  // (una chiave a 128 bit non sta in un double: se ne tengono i primi 53 bit; se nemmeno quelli coincidono, non coincide
+  // la chiave intera. Su un milione di chiavi davvero sparse una coincidenza nei primi 53 bit ha probabilità 6·10⁻⁵)
+  const esiti = new Set(), primi32 = new Set(), chiavi53 = new Set(), visti = new Set(); let n = 0;
   for (const a of indirizziVeri()) {
     assert.ok(!visti.has(a), `l'elenco ripete «${a}»`); visti.add(a); n++;
-    const [k0, k1] = chiaveDi(a), v = perMeta.get(k0);
-    if (v === undefined) perMeta.set(k0, k1); else if (v === k1 || (Array.isArray(v) && v.includes(k1))) doppie++; else perMeta.set(k0, Array.isArray(v) ? [...v, k1] : [v, k1]);
-    const [x0, x1] = threefry2x32(0, 0, k0, k1); esiti.add(x0 * 2 ** 21 + (x1 >>> 11)); primi32.add(x0);
+    const k = chiaveDi(a); chiavi53.add(k[0] * 2 ** 21 + (k[1] >>> 11));
+    const [x0, x1] = esitoDi(k); esiti.add(x0 * 2 ** 21 + (x1 >>> 11)); primi32.add(x0);
   }
   assert.ok(n >= 1e6, `gli indirizzi sono ${n}`);
-  assert.equal(doppie, 0, `${doppie} chiavi a 64 bit coincidono`);
+  assert.equal(chiavi53.size, n, `${n - chiavi53.size} chiavi coincidono nei primi 53 bit`);
   assert.equal(esiti.size, n, `${n - esiti.size} esiti a 53 bit coincidono`);
-  // a 32 bit invece le coincidenze ci sono, e quante ce ne aspettiamo da numeri davvero sparsi: n²/2³³ (per questo servono 64 bit)
-  const attese = (n * n) / 2 ** 33, viste = n - primi32.size; console.log(`      (${n} indirizzi: 0 coincidenze a 64 e a 53 bit; nei soli primi 32 bit ${viste}, attese ${attese.toFixed(0)})`);
+  // a 32 bit invece le coincidenze ci sono, e quante ce ne aspettiamo da numeri davvero sparsi: n²/2³³ (per questo servono chiavi lunghe)
+  const attese = (n * n) / 2 ** 33, viste = n - primi32.size; console.log(`      (${n} indirizzi: 0 coincidenze tra le chiavi e tra gli esiti a 53 bit; nei soli primi 32 bit ${viste}, attese ${attese.toFixed(0)})`);
   assert.ok(Math.abs(viste - attese) < 5 * Math.sqrt(attese), `coincidenze a 32 bit: ${viste}, attese ${attese}`);
 });
 
@@ -153,11 +193,12 @@ prova('gli esiti sono sparsi come devono: media, varianza, coppie vicine, bit; l
 // i 64 bit di un numero, scritti in esadecimale: per confrontare «al bit»
 const bit = (x) => { const b = new DataView(new ArrayBuffer(8)); b.setFloat64(0, x); return b.getBigUint64(0).toString(16).padStart(16, '0'); };
 prova('gli esiti si ricavano dai bit con sole operazioni esatte: la campana ha il suo logaritmo e il suo coseno, uguali al bit su ogni motore', () => {
-  // VALORI ATTESI AL BIT (calcolati una volta; non dipendono da Math.log né da Math.cos, che lo standard non fissa all'ultimo bit)
+  // VALORI ATTESI AL BIT (calcolati una volta, le campane con la fonte Threefry-4x32; non dipendono da Math.log né da
+  // Math.cos, che lo standard non fissa all'ultimo bit)
   const attesi = [[logEsatto(0.3), 'bff34378fcbda720'], [logEsatto(1e-9), 'c034b927f32bffb8'], [logEsatto(7), '3fff2272ae325a56'], [cosGiro(0.1), '3fe9e3779b97f4a8'], [cosGiro(0.37), 'bfe5e7cf55112013'],
-    [cosGiro(0.93), '3fecf457dcdc158d'], [campana(0.25, 0.6), 'bff58dba77ef920f'], [sorgente('prova/campana').normale('uno'), 'bfeeab9b34941a19'], [sorgente('prova/campana').normale('due'), '3ff784b4d5379b01'], [sorgente('prova/campana').normale('età'), 'bfdd3edef5d5ce10']];
+    [cosGiro(0.93), '3fecf457dcdc158d'], [campana(0.25, 0.6), 'bff58dba77ef920f'], [sorgente('prova/campana').normale('uno'), 'bfdad83971c68c5d'], [sorgente('prova/campana').normale('due'), '3fa2b645208232d1'], [sorgente('prova/campana').normale('età'), 'bfe06bbfd02856e6']];
   attesi.forEach(([v, b], i) => assert.equal(bit(v), b, `valore ${i}: ${v}`));
-  assert.equal(bit(sorgente('cosmo 1/galassia 3')('massa')), bit((x0y1(threefry2x32(0, 0, ...chiaveDi('cosmo 1/galassia 3/massa'))))), 'c() sono i primi 53 bit');
+  assert.equal(bit(sorgente('cosmo 1/galassia 3')('massa')), bit(x0y1(esitoDi(chiaveDi('cosmo 1/galassia 3/massa')))), 'c() sono i primi 53 bit');
   // sono il logaritmo e il coseno veri, entro qualche 10⁻¹⁶
   let eL = 0, eC = 0;
   for (let i = 1; i < 200000; i++) { const x = i / 200000, y = Math.pow(10, -12 * x); eL = Math.max(eL, Math.abs(logEsatto(x) - Math.log(x)) / (Math.abs(Math.log(x)) || 1), Math.abs(logEsatto(y) / Math.log(y) - 1)); eC = Math.max(eC, Math.abs(cosGiro(x) - Math.cos(2 * Math.PI * x))); }
