@@ -97,11 +97,20 @@ scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie un
   modo deterministico, dichiara quanti ne ha provati e quale parte andava bene (con l'errore), e sceglie in
   proporzione al peso. Ridiscendendo dal mondo trovato il contenuto c'è (prova). L'albero della vita di un pianeta
   chiede a chi sta sopra da quanto tempo c'è acqua liquida (`albero_vita.js`: la radice non può essere più antica).
+  **I pesi degli esiti** (`src/camera/misura.js`, `test_lingua_indirizzo` E–H, LINGUA.md): ogni legge di un tiro
+  (uniforme, tra, intero, bernoulli, discreta, normale, seme) dà il peso di ogni esito, e i pesi di un evento sommano a 1;
+  il peso di un mondo con i suoi rami è il rapporto di verosimiglianza rispetto al mondo di partenza, nella parte «rami»
+  di `lingua.peso` e nella distanza tra rami; le galassie e le stelle vere hanno un indirizzo (`vera k`) e `puntoACaso` è
+  uniforme sulle stelle vere; le fusioni (`lingua.fondi`) sommano i pesi delle storie decoerenti con la stessa impronta;
+  una prima stima dei cervelli di Boltzmann, per mondo: la via evolutiva vince di ~10⁵¹ bit per un pianeta con acqua.
 - Manca: le richieste degli altri livelli (roccia e cristallo verso il pianeta, molecola verso l'acqua, macchina
   molecolare verso la storia); la discesa alla superficie dentro la ricerca (oggi è a parte, `inFondo`, ~11 s a
   pianeta: le croste di sale dei mari chiusi si decidono solo lì); il peso dei livelli non lineari è una stima su
-  centinaia di mondi di due cosmi, non sulla biblioteca intera; i pesi dei singoli eventi (`rami` non ha
-  probabilità); le osservazioni da fuori (una fotografia) come ingresso; la storia dell'abitabilità (`storia.js`).
+  centinaia di mondi di due cosmi, non sulla biblioteca intera; le leggi dichiarate
+  dai consumatori dei tiri (quasi tutti leggono il tiro nudo e lo confrontano da sé con una probabilità: per la misura
+  è uniforme, e i loro rami pesano 1) e il registro di `eventi.js` che annota la legge (la patch è pronta, non applicata);
+  i sistemi dei pianeti delle stelle vere (hanno quello del campione); il conto dei cervelli di Boltzmann per
+  osservatore; le osservazioni da fuori (una fotografia) come ingresso; la storia dell'abitabilità (`storia.js`).
 
 ## 6. Il tempo: le cause stanno prima
 Lo stato di una cosa a un istante viene dalla sua storia: le leggi integrate dagli eventi d'origine fino a

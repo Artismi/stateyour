@@ -4,7 +4,12 @@
 //   B. la misura: Kraft per l'indice del cosmo (la coda stampata), HEALPix (pixel di area uguale, annidati), i pesi di
 //      ogni livello che sommano a 1;
 //   C. la discesa a caso: deterministica, coerente con un inizio dato, distribuita come peso() (χ² sui livelli economici);
-//   D. l'impronta del contenuto: uguale per lo stesso pianeta da due strade, diversa per pianeti diversi, monotona.
+//   D. l'impronta del contenuto: uguale per lo stesso pianeta da due strade, diversa per pianeti diversi, monotona;
+//   E. i pesi dei rami (C4, misura.js): normalizzazione locale per ogni legge, le celle realizzate dalla fonte, il prodotto
+//      dei pesi = il rapporto di verosimiglianza su un caso noto;
+//   F. dal campione al vero: le galassie e le stelle vere, puntoACaso uniforme sulle stelle vere (χ²);
+//   G. le fusioni (C11): fondi conserva il peso totale;
+//   H. i cervelli di Boltzmann contati (C13): il rapporto tra le due vie, in bit (stima d'ordine di grandezza).
 // Non dipende da un mondo particolare: i luoghi si trovano cercandoli (le stelle con pianeti, i pianeti diversi).
 // (Il nome test_lingua.mjs è già della lingua delle immagini, src/lingua.js.)
 import assert from 'node:assert/strict';
@@ -15,6 +20,11 @@ import { bolla as bollaDi } from '../src/camera/bolle.js';
 import { sorgente } from '../src/camera/eventi.js';
 import * as CO from '../src/camera/cosmo.js';
 import { ANNI_OGGI } from '../src/camera/spazio3d.js';
+import * as M from '../src/camera/misura.js';
+import { cosmo3d } from '../src/camera/cosmo3d.js';
+import { massaNascita } from '../src/camera/leggi.js';
+import { formaPianeti } from '../src/camera/disco.js';
+import { dentro as GAL } from '../src/camera/galassie.js';
 
 let ok = 0; const T0 = performance.now(), nonTorna = [];
 const prova = (nome, f) => { const t = performance.now(); f(); ok++; console.log(`  ✓ ${nome} (${((performance.now() - t) / 1000).toFixed(1)} s)`); };
@@ -192,6 +202,147 @@ prova('la distanza tra rami: quanti eventi sono andati diversamente (il peso man
   assert.equal(d.eventi, 2); assert.ok(d.stessoLuogo); assert.equal(L.distanzaRami(b, b).eventi, 0);
 });
 
+console.log('E. i pesi dei rami (C4)');
+const LEGGI_PROVA = [['uniforme', {}], ['tra', { a: -3, b: 7 }], ['intero', { n: 7 }], ['bernoulli', { p: 0.3 }], ['discreta', { pesi: [1, 2, 3.5, 0.25] }], ['normale', {}], ['seme', {}]];
+prova('normalizzazione locale: per ogni legge i pesi di tutti gli esiti sommano a 1, a ogni grana', () => {
+  const righe = []; let peggiore = 0;
+  for (const [l, P] of LEGGI_PROVA) for (const grana of [2, 8, 12]) { const r = M.celle(l, P, { grana }); peggiore = Math.max(peggiore, Math.abs(1 - r.somma)); if (grana === 8) righe.push(`${l} ${r.quante} esiti, 1 − Σ = ${(1 - r.somma).toExponential(1)}`); }
+  console.log(`    ${righe.join('; ')}`); assert.ok(peggiore < 1e-12, `scarto ${peggiore}`);
+  // la funzione d'errore contro valori di tabella (Abramowitz e Stegun)
+  for (const [x, v] of [[0.5, 0.4795001221869535], [1, 0.1572992070502851], [2, 0.004677734981047266], [3, 2.209049699858544e-5], [5, 1.537459794428035e-12]]) assert.ok(Math.abs(M.erfc(x) / v - 1) < 1e-14, `erfc(${x})`);
+  // a grana fine la massa della cella della campana è densità × ampiezza
+  const z = 1.3, g = 22, m = M.massa({ legge: 'normale', esito: z }, { grana: g }).p, d = Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI) * 2 ** -g; assert.ok(Math.abs(m / d - 1) < 1e-5, `${m} contro ${d}`);
+});
+prova('i pesi sono quelli che la fonte realizza: le frequenze degli esiti di 20 000 tiri contro le masse (χ²)', () => {
+  const righe = [];
+  for (const [l, P] of LEGGI_PROVA.filter(([l]) => l !== 'seme')) {
+    const grana = 3, Lg = M.LEGGI[l], celle = [...Lg.celle(P, grana)], indice = new Map(celle.map((j, i) => [String(j), i])), conti = new Array(celle.length).fill(0), Lm = new Map();
+    const c = M.conMisura(sorgente(`prova/lingua/legge ${l}`), Lm), N = 20000;
+    for (let i = 0; i < N; i++) { const x = `tiro ${i}`; if (l === 'uniforme') c(x); else if (l === 'tra') c.tra(x, P.a, P.b); else if (l === 'intero') c.intero(x, P.n); else if (l === 'bernoulli') c.bernoulli(x, P.p); else if (l === 'discreta') c.discreta(x, P.pesi); else c.normale(x); }
+    for (const v of Lm.values()) conti[indice.get(String(M.massa(v, { grana }).cella))]++;
+    const r = chi2(conti, celle.map((j) => Lg.massa(j, P, grana)), N); righe.push(`${l}: ${dice(r)}`); assert.ok(r.p > 1e-4, `${l}: ${dice(r)}`);
+  }
+  console.log(`    ${righe.join('\n    ')}`);
+});
+// il caso noto: una moneta truccata (0,3) decide se leggere una campana o un tiro tra 0 e 4; un colore da tre pesi non ne dipende
+const casoNoto = (c) => { const testa = c.bernoulli('moneta', 0.3), x = testa ? c.normale('se testa') : c.tra('se croce', 0, 4), colore = c.discreta('colore', [1, 2, 5]); return { testa, x, colore }; };
+const RADICE_NOTA = 'prova/lingua/caso noto', MONETA = `${RADICE_NOTA}/moneta`;
+const cammino = (rami) => { const Lm = new Map(); return { esito: casoNoto(M.conMisura(sorgente(RADICE_NOTA, rami), Lm)), Lm }; };
+prova('il prodotto dei pesi è il rapporto di verosimiglianza su un caso noto; peso() e distanzaRami lo usano', () => {
+  const base = cammino(null); let r = 1; while (cammino({ [MONETA]: r }).esito.testa === base.esito.testa) r++;
+  const ramo = cammino({ [MONETA]: r }), g = M.OPZIONI_MISURA.grana, phi = (z) => Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI);
+  // a mano: la moneta (0,3 contro 0,7), e la cella del ramo nuovo contro quella del ramo tolto: la campana φ(x)·2^−g, il tiro tra 0 e 4 2^−g
+  const atteso = ramo.esito.testa ? (0.3 / 0.7) * phi(ramo.esito.x) : (0.7 / 0.3) / phi(base.esito.x), R = M.rapporto(ramo.Lm, base.Lm);
+  console.log(`    ramo ${r} della moneta: ${base.esito.testa ? 'testa' : 'croce'} → ${ramo.esito.testa ? 'testa' : 'croce'}; rapporto ${R.P.toPrecision(6)} (a mano ${atteso.toPrecision(6)}), ${R.bit.toFixed(3)} bit; contano ${R.diversi.map((v) => v.evento.slice(RADICE_NOTA.length + 1)).join(', ')}; ${R.uguali} si semplifica (il colore)`);
+  assert.ok(Math.abs(R.P / atteso - 1) < 1e-4, `${R.P} contro ${atteso}`); assert.equal(R.diversi.length, 3); assert.equal(R.uguali, 1);
+  // ogni cammino è normalizzato: i bit di un cammino sono la somma dei −log₂ p delle sue voci, e il rapporto è la differenza
+  assert.ok(Math.abs(R.bit - (M.storia(ramo.Lm).bit - M.storia(base.Lm).bit)) < 1e-9);
+  // nella lingua: il peso dell'indirizzo con quel ramo (i due cammini), e la distanza tra i due rami, orientata
+  const a = L.componi({ ...L.analizza('cosmo 1'), rami: { [MONETA]: r } }), pa = L.peso(a, { tempo: 'adesso', registri: { base: base.Lm, mondo: ramo.Lm } });
+  assert.ok(Math.abs(pa.parti.find((x) => x.livello === 'rami').p / R.P - 1) < 1e-12); assert.ok(Math.abs(pa.bit - (L.peso('cosmo 1', { tempo: 'adesso' }).bit + R.bit)) < 1e-9);
+  const dAB = L.distanzaRami('cosmo 1', a, { registri: { a: base.Lm, b: ramo.Lm } }), dBA = L.distanzaRami(a, 'cosmo 1', { registri: { a: ramo.Lm, b: base.Lm } });
+  assert.equal(dAB.eventi, 1); assert.ok(Math.abs(dAB.bit - R.bit) < 1e-12 && Math.abs(dAB.bit + dBA.bit) < 1e-12);
+  // solo l'evento del ramo, data la sua legge: la moneta sola (ciò che ne discende non c'è)
+  const solo = L.distanzaRami('cosmo 1', a, { leggi: base.Lm }); assert.ok(Math.abs(solo.peso - (ramo.esito.testa ? 0.3 / 0.7 : 0.7 / 0.3)) < 1e-12, solo.nota);
+  // senza leggi: il tiro è uniforme, peso 1, e lo dice
+  const nudo = L.peso(a, { tempo: 'adesso' }).parti.find((x) => x.livello === 'rami'); assert.equal(nudo.p, 1); assert.match(nudo.conta, /senza legge dichiarata/);
+  // i rami realizzano la legge: su 4000 rami la moneta è testa ~30 volte su cento
+  let teste = 0; for (let k = 1; k <= 4000; k++) if (M.conMisura(sorgente(RADICE_NOTA, { [MONETA]: k })).bernoulli('moneta', 0.3)) teste++;
+  assert.ok(Math.abs(teste / 4000 - 0.3) < 4 * Math.sqrt(0.21 / 4000), `${teste} teste su 4000`);
+  console.log(`    su 4000 rami della moneta ${teste} teste (atteso 1200 ± 29)`);
+});
+prova('un consumatore vero (disco.js) letto con le leggi: i suoi tiri sono uniformi, il rapporto conta solo i tiri in più o in meno', () => {
+  let detto = null;
+  for (let n = 1; n <= 40 && !detto; n++) {
+    const radice = `prova/stella ${n}/disco`, L0 = new Map(), P0 = formaPianeti({ massa: 1, Z: 1, eta: 4.6e9 }, M.conMisura(sorgente(radice), L0)), incontri = [...L0.keys()].filter((x) => /\/incontro con \d+$/.test(x)); if (!incontri.length) continue;
+    for (let r = 1; r <= 12 && !detto; r++) { const L1 = new Map(), P1 = formaPianeti({ massa: 1, Z: 1, eta: 4.6e9 }, M.conMisura(sorgente(radice, { [incontri[0]]: r }), L1)); if (L1.size === L0.size) continue;
+      const R = M.rapporto(L1, L0); assert.ok(Math.abs(R.bit - (L1.size - L0.size) * M.OPZIONI_MISURA.grana) < 1e-6, `${R.bit}`); assert.ok([...L0.values(), ...L1.values()].every((v) => v.legge === 'uniforme'));
+      detto = `${radice}: l'incontro ${incontri[0].split('/').slice(-2).join(' ')} al ramo ${r} fa ${P1.length} pianeti invece di ${P0.length} e legge ${L1.size} tiri invece di ${L0.size}: ${R.bit.toFixed(0)} bit (${L1.size - L0.size} tiri × ${M.OPZIONI_MISURA.grana}), tutti «uniforme»: la legge vera (una probabilità confrontata col tiro dentro disco.js) non arriva al registro`; }
+  }
+  assert.ok(detto, 'nessun incontro che cambi il numero dei tiri'); console.log(`    ${detto}`); nonTorna.push('i tiri di disco.js, lune.js, galassie.js e quasi tutti gli altri sono letti senza legge (c(…) nudo, poi confrontato con una probabilità): pesano come uniformi, il rapporto dei loro rami è 1 (a parità di tiri). Per pesarli i consumatori devono usare c.bernoulli, c.discreta, c.intero, c.tra, c.normale (la patch di eventi.js le aggiunge; misura.conMisura ne fa le veci)');
+});
+
+console.log('F. dal campione al vero');
+prova('le galassie e le stelle vere: N per livello (come cosmo3d.js), pesi 1/N che sommano a 1, bit log₂ N', () => {
+  const V = L.galassieVere(1), F = cosmo3d(CO.cosmo(1), 'cosmo 1', null, { toroM: CO.TORO_M });
+  assert.ok(Math.abs(V.perGalassia - F.peso) <= 0.5, `${V.perGalassia} contro cosmo3d ${F.peso}`);
+  const G = CO.galassia(1, 0), s0 = G.stelle.findIndex((S) => S.peso > 1), S0 = G.stelle[s0], Ns = L.stelleVereDi(S0);
+  const pg = L.peso(`cosmo 1/galassia 0/vera ${V.perGalassia - 1}`, { tempo: 'adesso' }).parti.find((x) => x.livello === 'vera galassia'), ps = L.peso(`cosmo 1/galassia 0/stella ${s0}/vera 0`, { tempo: 'adesso' }).parti.find((x) => x.livello === 'vera stella');
+  assert.ok(Math.abs(pg.p * V.perGalassia - 1) < 1e-12 && Math.abs(ps.p * Ns - 1) < 1e-12);
+  assert.equal(L.peso(`cosmo 1/galassia 0/vera ${V.perGalassia}`, { tempo: 'adesso' }).P, 0); assert.equal(L.peso(`cosmo 1/galassia 0/stella ${s0}/vera ${Ns}`, { tempo: 'adesso' }).P, 0);
+  const riservate = G.stelle.map((S, s) => [S, s]).filter(([S]) => S.peso === 1); for (const [, s] of riservate) assert.equal(L.peso(`cosmo 1/galassia 0/stella ${s}/vera 0`).parti.find((x) => x.livello === 'vera stella').p, 1);
+  // il totale delle stelle vere di una galassia: Σ N_s = stelleVere (entro l'arrotondamento)
+  const somma = G.stelle.reduce((t, S) => t + L.stelleVereDi(S), 0); assert.ok(Math.abs(somma / G.stelleVere - 1) < 1e-6, `${somma} contro ${G.stelleVere}`);
+  console.log(`    cosmo 1: ${V.vere.toExponential(2)} galassie vere (aloni da ${V.massaMinima.toExponential(1)} M☉) in ${V.campione} del campione: ${V.perGalassia} ciascuna, ${pg.bit.toFixed(1)} bit; galassia 0: ${G.stelleVere.toExponential(2)} stelle vere in ${G.stelle.length}, ${Ns} per stella del campione (${ps.bit.toFixed(1)} bit), ${riservate.length} vere una per una (le ultime supernove)`);
+});
+prova('puntoACaso è uniforme sulle stelle vere, non sul campione: χ² sull\'indice globale della stella vera e sulla galassia vera', () => {
+  const G = CO.galassia(1, 0), Nst = G.stelle.map(L.stelleVereDi), cum = []; let t = 0; for (const n of Nst) { cum.push(t); t += n; }
+  const N = 3000, conti = new Array(20).fill(0), contiG = new Array(10).fill(0), Ng = L.galassieVere(1).perGalassia; let riservate = 0;
+  for (let i = 0; i < N; i++) { const d = L.analizza(L.puntoACaso(`χ²/vere/${i}`, { da: 'cosmo 1/galassia 0', fino: 'vera stella', tempo: 'adesso' }).indirizzo); conti[Math.floor((cum[d.stella] + d.veraStella) / t * 20)]++; contiG[Math.floor(d.veraGalassia / Ng * 10)]++; if (Nst[d.stella] === 1) riservate++; }
+  const r = chi2(conti, new Array(20).fill(1 / 20), N), rg = chi2(contiG, new Array(10).fill(0.1), N);
+  console.log(`    ${N} stelle vere della galassia 0, indice globale in 20 parti uguali: ${dice(r)}; galassia vera in 10 parti: ${dice(rg)}; stelle vere una per una (peso 1) estratte: ${riservate} (sul campione uniforme sarebbero ~${(N * Nst.filter((n) => n === 1).length / Nst.length).toFixed(1)})`);
+  assert.ok(r.p > 1e-4 && rg.p > 1e-4, `${dice(r)}; ${dice(rg)}`); assert.equal(riservate, 0);
+  // e la discesa intera resta coerente con un inizio dato che passa per le vere
+  const a = L.puntoACaso('vere/coerenza'); for (const fino of [3, 5]) assert.equal(L.puntoACaso('vere/coerenza', { da: a.indirizzo.percorso.slice(0, fino).join('/') }).testo, a.testo);
+  assert.equal(L.peso(a.testo).bit, a.bit);
+});
+prova('la stella vera: che cosa varia (massa nella classe, con Kroupa; età nel passo) e che cosa no; la galassia vera', () => {
+  const G = CO.galassia(1, 0), s0 = G.stelle.findIndex((S) => S.peso > 1 && S.stato === 'in vita'), S0 = G.stelle[s0], base = `cosmo 1/galassia 0/stella ${s0}`;
+  const uDi = (m) => { let lo = 0, hi = 1; for (let i = 0; i < 64; i++) { const x = (lo + hi) / 2; if (massaNascita(x) < m) lo = x; else hi = x; } return lo; };
+  const K = 1000, conti = new Array(8).fill(0); let primo = null;
+  for (let k = 0; k < K; k++) {
+    const v = L.stellaVera(`${base}/vera ${k * 7919}`); if (!primo) primo = v;
+    assert.equal(v.Z, S0.Z); assert.equal(v.componente, S0.componente); assert.ok(v.massaNascita >= v.classe.da && v.massaNascita < v.classe.a * (1 + 1e-12), `massa ${v.massaNascita}`);
+    assert.ok(S0.massa >= v.classe.da && S0.massa < v.classe.a, 'la classe non è quella del campione'); assert.ok(v.eta / 1e9 <= GAL.T0 - v.passo.da + 1e-9 && v.eta / 1e9 >= GAL.T0 - v.passo.a - 1e-9);
+    const ua = uDi(v.classe.da), ub = uDi(v.classe.a); conti[Math.min(7, Math.floor((uDi(v.massaNascita) - ua) / (ub - ua) * 8))]++;
+  }
+  assert.deepEqual(L.stellaVera(`${base}/vera 0`), L.stellaVera(`${base}/vera 0`));
+  const r = chi2(conti, new Array(8).fill(1 / 8), K); assert.ok(r.p > 1e-4, dice(r));
+  console.log(`    stella ${s0} del campione (${S0.massa.toFixed(3)} M☉, ${(S0.eta / 1e9).toFixed(2)} Ga, ${S0.stato}) → la vera 0: ${primo.massaNascita.toFixed(3)} M☉ (classe ${primo.classe.da.toFixed(3)}–${primo.classe.a.toFixed(3)}), ${(primo.eta / 1e9).toFixed(2)} Ga, ${primo.stato}; la massa nella classe è di Kroupa: ${dice(r)}. Uguali: ${primo.uguale.join(', ')}`);
+  const gv = L.galassiaVera(`cosmo 1/galassia 0/vera 5`); assert.deepEqual(gv.posto, L.galassiaVera('cosmo 1/galassia 0/vera 5').posto); assert.notDeepEqual(gv.posto, L.galassiaVera('cosmo 1/galassia 0/vera 6').posto); assert.ok(gv.posto.every((x) => x >= 0 && x < CO.TORO_M));
+  const sn = G.stelle.findIndex((S) => S.peso === 1); if (sn >= 0) assert.equal(L.stellaVera(`cosmo 1/galassia 0/stella ${sn}/vera 0`).campione, G.stelle[sn]);
+  nonTorna.push('una stella vera ha il sistema dei pianeti (e il luogo, e il tempo) della stella del campione che la rappresenta: il modello ne calcola uno per stella del campione; il suo posto non è calcolato. Una galassia vera è quella del campione in un altro posto del toro, senza correlazioni tra aloni');
+});
+
+console.log('G. le fusioni (C11)');
+prova('fondi raggruppa per impronta e somma i pesi: il peso totale si conserva a ogni grana, lo stesso pianeta da due strade si fonde', () => {
+  const sistemi = []; for (let s = 0; sistemi.length < 3 && s < 200; s++) if (CO.sistemaPigro(1, 0, s).pianeti.length) sistemi.push(s);
+  let altra = sistemi.at(-1) + 1; while (!CO.sistemaPigro(1, 0, altra).pianeti.length) altra++;
+  const ramo = CO.cosmoRamo(1, `disco/0/${altra}`, 1), voci = [];
+  for (const s of [...sistemi, altra]) for (const cosmoN of [1, ramo]) CO.sistemaPigro(cosmoN, 0, s).pianeti.forEach((_, p) => voci.push(L.scrivi(L.daVia({ cosmo: cosmoN, galassia: 0, stella: s, pianeta: p }))));
+  const O = { tempo: 'adesso' }, righe = []; let prima = Infinity;
+  for (let g = 8; g >= 0; g -= 2) {
+    const F = L.fondi(voci, g, O); assert.ok(Math.abs(F.totale / F.ingresso - 1) < 1e-12, `grana ${g}: ${F.totale} contro ${F.ingresso}`);
+    assert.ok(F.classi.length <= prima, 'più classi a grana più grossa'); prima = F.classi.length; righe.push(`grana ${g}: ${F.classi.length} classi`);
+    // ogni pianeta delle stelle non toccate dal ramo sta nella stessa classe nei due mondi
+    for (const s of sistemi) CO.sistemaPigro(1, 0, s).pianeti.forEach((_, p) => { const a = L.scrivi(L.daVia({ cosmo: 1, galassia: 0, stella: s, pianeta: p })), b = L.scrivi(L.daVia({ cosmo: ramo, galassia: 0, stella: s, pianeta: p })); assert.ok(F.classi.some((C) => C.membri.includes(a) && C.membri.includes(b)), `${a} e ${b} non si fondono a grana ${g}`); });
+  }
+  const F8 = L.fondi(voci, 8, O); console.log(`    ${voci.length} cilindri (${sistemi.length + 1} sistemi nel cosmo 1 e nel ramo «disco/0/${altra}»): ${righe.join(', ')}; peso totale ${F8.ingresso.toExponential(4)} conservato`);
+  // lo stesso cilindro due volte si conta una; due cilindri uno dentro l'altro non si sommano
+  assert.equal(L.fondi([...voci, voci[0]], 8, O).ingresso, F8.ingresso);
+  assert.throws(() => L.fondi([PIANETA, `${PIANETA}/punto 0,0`], 8, O), /disgiunti/);
+});
+
+console.log('H. i cervelli di Boltzmann (C13)');
+prova('la storia evolutiva contro quella per fluttuazione, per un pianeta con acqua liquida e atmosfera: il rapporto in bit', () => {
+  const contenuto = (P) => P.tipo === 'roccioso' && P.clima?.acqua === 'liquida' && P.clima.pressione > 0;
+  const fr = L.frazione(contenuto, { N: 120, seme: 'C13', da: 'cosmo 1', pianeti: 'uniforme', lune: false, vere: false });
+  const f = fr.f || fr.limite, masse = fr.trovati.map((x) => x.P.massaKg).sort((x, y) => x - y), Mp = masse.length ? masse[masse.length >> 1] : 5.97e24;
+  // quanti pianeti ha il cosmo 1 (ordine di grandezza): stelle vere per massa in stelle dalla galassia 0, per tutte le galassie vere, per i pianeti di una stella
+  const C = CO.cosmo(1), G0 = CO.galassia(1, 0), stellePerMassa = G0.stelleVere / C.galassie[0].forma.massaStelle, V = L.galassieVere(1);
+  let pianeti = 0, sistemi = 0; for (let s = 0; s < 20; s++) { pianeti += CO.sistemaPigro(1, 0, s).pianeti.length; sistemi++; }
+  const stelle = C.galassie.reduce((t, G) => t + G.forma.massaStelle * stellePerMassa * V.perGalassia, 0), oggetti = stelle * (pianeti / sistemi);
+  const B = M.cervelliDiBoltzmann({ massaKg: Mp, frazioneEvolutiva: f, oggettiNelMondo: oggetti, volumeMondoM3: CO.TORO_M ** 3, etaAnni: ANNI_OGGI });
+  console.log(`    via evolutiva: ${fr.si} pianeti su ${fr.N} (per numero, cosmo 1) hanno acqua liquida e atmosfera: f = ${f.toFixed(3)} ± ${fr.errore.toFixed(3)} (${B.bitEvolutivaOggetto.toFixed(1)} bit); nel cosmo ~10^${Math.log10(oggetti).toFixed(1)} pianeti, ~2^${B.log2Evolutivi.toFixed(0)} con quel contenuto`);
+  console.log(`    via per fluttuazione: un pianeta di ${Mp.toExponential(2)} kg = ${B.particelle.toExponential(2)} atomi dal mezzo (${B.mezzo.nome}): s_gas = ${B.entropiaGas.toFixed(1)} k, ΔS = ${B.deltaS_k.toExponential(2)} k → ${B.bitFluttuazioneTentativo.toExponential(2)} bit per tentativo; tentativi nel cosmo fino a oggi ≤ 2^${B.log2Tentativi.toFixed(0)}`);
+  console.log(`    RAPPORTO evolutivi / per fluttuazione = 2^${B.rapportoBit.toExponential(3)} (${B.conta}). ${B.nota}`);
+  assert.ok(B.rapportoBit > 1e40 && B.bitFluttuazioneTentativo > 1e3 * B.log2Tentativi);
+  // e un cervello (1,4 kg d'acqua, 2,8 k per atomo; massa media 6 u): la fluttuazione costa molto meno di un pianeta, ma i tentativi restano pochi
+  const cervello = M.cervelliDiBoltzmann({ massaKg: 1.4, massaParticella: 6 * 1.66053907e-27, entropiaPerParticella: 2.8, frazioneEvolutiva: 1, oggettiNelMondo: 1, volumeMondoM3: CO.TORO_M ** 3, etaAnni: ANNI_OGGI });
+  console.log(`    un cervello di 1,4 kg per fluttuazione: ${cervello.bitFluttuazioneTentativo.toExponential(2)} bit per tentativo contro ≤ 2^${cervello.log2Tentativi.toFixed(0)} tentativi; il suo peso evolutivo (per osservatore) manca: nessun modulo sa dove c'è un osservatore`);
+  assert.ok(cervello.bitFluttuazioneTentativo > 1e3 * cervello.log2Tentativi);
+});
+
 if (nonTorna.length) console.log(`\nNON TORNA:\n  · ${nonTorna.join('\n  · ')}`);
-console.log(`\nMANCA alla misura: le probabilità dei rami (pesano 1); i bit per scegliere una stella vera tra le ~${Math.round(CO.galassia(1, 0).pesoCampione).toExponential(1)} che ogni stella del campione rappresenta; la costante «ha pianeti»; i momenti d'osservatore per il tempo.`);
+console.log(`\nMANCA alla misura: le leggi dichiarate dai consumatori (i tiri nudi pesano come uniformi) e la patch del registro di eventi.js; i sistemi delle stelle vere (hanno quello del campione); la costante «ha pianeti»; i momenti d'osservatore per il tempo e per C13; le ampiezze sotto la decoerenza (C11 somma i pesi).`);
 console.log(`\ntest_lingua_indirizzo: ${ok} prove, tutto ok (${((performance.now() - T0) / 1000).toFixed(1)} s)`);
