@@ -75,7 +75,8 @@ function coloriTraccia(cella, tr) {
 
 // ---------- lo stato
 // all'avvio: un ornamento trovato dal dado: raggi cosmici nel campo di un pianeta, in un ramo dove alcuni eventi sono andati diversamente
-let comp = compBiblioteca(15853763, {"centro":[579.333,182.366],"lato":433.17}, {"fine":94.029,"durata":95.85}, {"inclinazione":0,"rotazione":0,"scalaTempo":7.074}, {"gruppo":"una","angolo":-11.238}, { rami: {}, separato: null });
+// (15853643: la stella 72 della galassia 34, il suo primo pianeta, regione 11 — con la catena degli elementi la stella ha 6 pianeti e il vecchio numero 15853763 cadeva sul quinto, un ghiaccio a −254 °C; il primo è un roccioso a 11 °C con 3 bar e acqua liquida)
+let comp = compBiblioteca(15853643, {"centro":[579.333,182.366],"lato":433.17}, {"fine":94.029,"durata":95.85}, {"inclinazione":0,"rotazione":0,"scalaTempo":7.074}, {"gruppo":"una","angolo":-11.238}, { rami: {}, separato: null });
 let vista = 'pattern', corrente = 0, scelto = null, sopra = null; // scelto/sopra: { e, p } nel pattern
 let tracce = [], prima = null, sel = null, strumento = 'seleziona';
 let tempo = Infinity, fetta = 0, gioca = false, evidenzia = null, sonda = null;
