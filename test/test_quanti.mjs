@@ -78,7 +78,11 @@ prova('la FFT della 1s dà la distribuzione di Podolsky e Pauling, 8/(π²(1 + p
 
 {
   // L'ORDINE DELLE MISURE: x poi p_x contro p_x poi x sullo stesso pacchetto (σ₀ = 1 a₀, finestre σx = σp = 0,5)
-  const G = Q.pacchetto({ sigma0: 1 }), nn = 1200, opz = { sigmaX: 0.5, sigmaP: 0.5, N: 32, L: 16 };
+  // (3600 misure per ordine. Lo scarto di n misure gaussiane ha un errore relativo di 1/√(2n): con 1200 il 2%, e la griglia
+  // sposta Δp di +1,4% (0,717 su 12 000 misure, curtosi 2,96): il 7% era a 2,8 errori, e un confronto tra due scarti — x con
+  // p_y prima o dopo — a 2,5. Con la fonte Threefry-4x32 «prova/fila» dava Δp prima 0,758: +5,8%, tre errori. Con 3600 misure
+  // l'errore è 1,2% e il 7% sta a più di quattro)
+  const G = Q.pacchetto({ sigma0: 1 }), nn = 3600, opz = { sigmaX: 0.5, sigmaP: 0.5, N: 32, L: 16 };
   const fila = (seq, nome) => Array.from({ length: nn }, (_, k) => Q.misureInFila(G, `prova/fila/${nome}`, k, seq, opz).esiti.map((e) => e.valore));
   const XP = fila(['x', 'px'], 'xp'), PX = fila(['px', 'x'], 'px'), XY = fila(['x', 'py'], 'xpy'), YX = fila(['py', 'x'], 'pyx');
   const dXP = [scarto(XP.map((v) => v[0])), scarto(XP.map((v) => v[1]))], dPX = [scarto(PX.map((v) => v[1])), scarto(PX.map((v) => v[0]))];

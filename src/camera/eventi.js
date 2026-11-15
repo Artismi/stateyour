@@ -21,8 +21,9 @@
 //     dice «il nome continua»; l'ultimo ne ha da 0 a 14. Così nomi diversi danno successioni di blocchi diverse, e
 //     due indirizzi diversi hanno la stessa chiave solo per una coincidenza a 128 bit: tra N indirizzi la
 //     probabilità che ce ne sia una è circa N²/2¹²⁹ (1,5·10⁻¹⁵ a mille miliardi di indirizzi; con le chiavi a 64 bit
-//     della fonte di prima era già il 2,7% a un miliardo). Due figli dello stesso nodo che differiscono nell'ultimo blocco non coincidono MAI (biiezione).
-//     La radice di tutto è la chiave (0, 0, 0, 0).
+//     della fonte di prima era già il 2,7% a un miliardo). Due figli dello stesso nodo che differiscono solo
+//     nell'ultimo blocco non coincidono MAI (con la stessa chiave Threefry è una biiezione). La radice di tutto è la
+//     chiave (0, 0, 0, 0).
 //   · IL CONTATORE è (k, ramo, 0, 0): k è il numero dell'estrazione DENTRO l'evento (un evento può aver bisogno di più
 //     numeri: i due di una campana, il rumore di una griglia cella per cella), ramo è il mondo scelto per
 //     quell'evento. Un ramo cambia quindi i numeri di quell'evento e di nessun altro: le chiavi di ciò che gli sta

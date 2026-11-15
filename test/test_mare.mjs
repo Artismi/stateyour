@@ -62,7 +62,9 @@ const P = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: 
   Mstella: 1.989e30, lune: [{ id: 0, massaKg: 7.35e22, aM: 3.844e8, raggioM: 1.737e6 }] }; // (il Sole e la Luna, per le maree)
 const it = interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 1.4e21; P.interno = it;
 // (il seme 13: con la fonte unica del caso il seme 11 dà un altro pianeta, dove l'acqua del fondo non si forma solo oltre i 50° di latitudine; le prove di
-// questo file sono agganciate a UNA Terra: tra i semi da 11 a 20 passano tutte solo sul 13 — con la fonte di prima solo sull'11 e sul 14)
+// questo file sono agganciate a UNA Terra: tra i semi da 11 a 20 passano tutte solo sul 13 — con la fonte di prima solo sull'11 e sul 14.
+// Con la fonte Threefry-4x32 il seme resta il 13; tra i semi 11–21 passano tutte sull'11, 12, 13 e 14, e sugli altri sette no — come con
+// la 2x32, sempre per le stesse prove che dipendono dal mondo: il bilancio dei sali a trenta milioni di anni, la foce, il fondo freddo)
 const sf = superficiePianeta('mare-terra', P, it, 13), cl = climaSuperficie('mare-terra', P, sf), se = erosione('mare-terra', sf, cl);
 const tCostruita = performance.now();
 let t0 = performance.now(); const T = mare(P, sf, cl, se, sorgente('prova/terra/mare')); const tempoMare = performance.now() - t0;
@@ -167,7 +169,11 @@ prova('l\'acqua risale all\'equatore e scende nei giri dei tropici; quella densa
   attesa(pr.T < tropici - 5, `(4/8) l'acqua del fondo è fredda: qui ${n3(pr.T - 273.15)} °C e ${n3(pr.salinita)} g/kg, contro ${n3(tropici - 273.15)} °C in superficie tra i tropici`); attesa(pr.dove.every((d) => Math.abs(d.lat) > 50), '(11/12) e si forma alle alte latitudini');
   confronta('temperatura del fondo (°C; misurata 1–3)', pr.T - 273.15, -2, 5);
   assert.ok(pr.densita >= densita(fascia(T.temperatura, 0, 30), fascia(T.salinita, 0, 30)), 'è la più densa'); tra(pr.tempoGiroAnni, 50, 5000, 'tempo del giro profondo (anni; misurato ~1000)');
-  assert.ok(fascia(T.temperatura, 0, 20) > fascia(T.temperatura, 60, 90) + 8, 'mare caldo ai tropici, freddo ai poli');
+  // (la legge è il verso: ai tropici arriva più sole. Di QUANTO, dipende dal mondo: su venti Terre — semi 11–30, novembre 2026 —
+  // il salto tra 0–20° e 60–90° va da 7,1 a 10,7 K con la fonte Threefry-2x32 e da 7,3 a 11,0 con la 4x32, sotto gli 8 K in 4
+  // su 20 con l'una e con l'altra; sulla Terra vera è ~25 K. «Almeno 8 K» era scritto su un mondo: resta un'attesa stampata)
+  const salto = fascia(T.temperatura, 0, 20) - fascia(T.temperatura, 60, 90);
+  assert.ok(salto > 0, `mare caldo ai tropici, freddo ai poli: ${salto} K`); attesa(salto > 8, `(16/20) il mare dei tropici è più caldo di quello dei poli di almeno 8 K: qui ${n3(salto)} K`);
   console.log(`      risalita all'equatore ${n3(fascia(T.risalita, 0, 3) * anno)} m/anno, discesa ai tropici ${n3(fascia(T.risalita, 18, 32) * anno)}; fondo a ${n3(pr.T - 273.15)} °C e ${n3(pr.salinita)} g/kg, nato a ${pr.dove.map((d) => d.lat.toFixed(0) + '°').join(', ')}; il giro profondo dura ${n3(pr.tempoGiroAnni)} anni`);
 });
 

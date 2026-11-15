@@ -60,7 +60,7 @@ prova('Threefry-2x32 (la fonte di prima, che resta per confronto) ridà i suoi v
 // funzione «da leggere»): deve dare la stessa chiave di quella di lavoro, che è scritta per i cicli caldi
 function chiavePiana(indirizzo) {
   // i byte di un nome: ogni unità del testo (UTF-16) in UTF-8 per sé (anche le due metà di un carattere fuori dal piano base)
-  const byte = (nome) => [...nome].flatMap((car) => Array.from({ length: car.length }, (_, i) => car.charCodeAt(i))).flatMap((u) => (u < 0x80 ? [u] : u < 0x800 ? [0xC0 | (u >> 6), 0x80 | (u & 63)] : [0xE0 | (u >> 12), 0x80 | ((u >> 6) & 63), 0x80 | (u & 63)]));
+  const byte = (nome) => Array.from({ length: nome.length }, (_, i) => nome.charCodeAt(i)).flatMap((u) => (u < 0x80 ? [u] : u < 0x800 ? [0xC0 | (u >> 6), 0x80 | (u & 63)] : [0xE0 | (u >> 12), 0x80 | ((u >> 6) & 63), 0x80 | (u & 63)]));
   const parola = (q, i) => (q[i] | (q[i + 1] << 8) | (q[i + 2] << 16) | (q[i + 3] << 24)) >>> 0, blocco = (q) => [0, 4, 8, 12].map((i) => parola(q, i));
   let k = [0, 0, 0, 0];
   for (const nome of String(indirizzo).split('/')) {
@@ -89,8 +89,9 @@ prova('la chiave è il cammino dei nomi: Threefry del nome (a blocchi di 15 byte
   const blocco = [...new TextEncoder().encode('stella 53'), 0, 0, 0, 0, 0, 0, 0xF9].reduce((w, b, i) => { w[i >> 2] = (w[i >> 2] | (b << ((i & 3) * 8))) >>> 0; return w; }, [0, 0, 0, 0]);
   assert.deepEqual(chiaveDi('cosmo 1/galassia 3/stella 53'), threefry4x32(blocco, chiaveDi('cosmo 1/galassia 3')));
   // nessun esito di un luogo è la chiave di una sua parte: i contatori d'esito hanno 0 nel byte più alto, i blocchi dei
-  // nomi almeno 0xF0, e con la stessa chiave Threefry è una biiezione
-  assert.ok(blocco[3] >>> 24 >= 0xF0 && esitoDi.toString().includes('[k, ramo, 0, 0]'));
+  // nomi almeno 0xF0 (che gli esiti siano quelli del contatore (k, ramo, 0, 0) lo provano numero() e c() qui sopra), e con la
+  // stessa chiave Threefry è una biiezione
+  assert.ok(blocco[3] >>> 24 >= 0xF0); for (let k = 0; k < 4; k++) assert.notDeepEqual(esitoDi(chiaveDi('cosmo 1/galassia 3'), k), chiaveDi('cosmo 1/galassia 3/stella 53'));
 });
 
 prova('la sorgente: stessa interfaccia di sempre; la chiave della radice vale per tutte le sue parti', () => {
