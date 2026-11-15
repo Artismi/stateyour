@@ -107,11 +107,11 @@
 
 import { sorgente } from './eventi.js';
 import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
-import { TORO_M, STELLE, cosmo as cosmoDi, sistema, numeroDi } from './cosmo.js';
+import { TORO_M, STELLE, cosmo as cosmoDi, sistema, numeroDi, cosmoBase, ramiCosmo, cosmoCon } from './cosmo.js';
 import { massaAlone } from './galassie.js';
 import { campoCosmo, ANNI_OGGI } from './spazio3d.js';
 import { campoPigro } from './campo_pigro.js';
-import { indirizzo, scrivi } from './intreccio.js';
+import { indirizzo, scrivi, leggiAncheVecchia } from './intreccio.js';
 import { statoAcqua, ebollizione, ACQUA } from './leggi.js';
 import { minerali } from './chimica.js';
 import { ventoStellare } from './risalita.js';
@@ -414,21 +414,36 @@ export const CONTENUTI = {
 // ---------- LA BOLLA
 // luogo: 'cosmo 1/galassia 0/stella 21/pianeta 0/punto 12.5,-30' (longitudine, latitudine in gradi) o un suo inizio, o
 // niente (libero); anche come lista di nomi o come indirizzo di intreccio.js. contenuto: 'anello' oppure { cosa, … }.
+// Il luogo si scrive nella forma di lingua.js (LINGUA.md § 1): in un cosmo parallelo il cosmo col suo numero di base e i
+// rami in fondo («cosmo 1/galassia 0#{"disco/0/5":3}»). Si legge anche la forma di prima, coi rami nel nome del cosmo
+// («cosmo 1#{…}/galassia 0»); `dove.cosmo` è il numero di cosmo.js, coi rami dentro («1#{…}»), come lo vogliono i moduli.
 export function bolla(b) {
   if (b && b.dove && b.contenuto && Object.isFrozen(b)) return b;
   const { luogo = [], grandezza = 1, istante = null, contenuto } = b || {};
-  const percorso = typeof luogo === 'string' ? (luogo ? luogo.split('/') : []) : Array.isArray(luogo) ? luogo.map(String) : luogo?.percorso ? [...luogo.percorso] : [];
+  const scritto = typeof luogo === 'string' && luogo.includes('#') ? leggiAncheVecchia(luogo) : null; // (coi rami: in fondo, o nel nome del cosmo come prima)
+  const percorso = scritto ? [...scritto.percorso] : typeof luogo === 'string' ? (luogo ? luogo.split('/') : []) : Array.isArray(luogo) ? luogo.map(String) : luogo?.percorso ? [...luogo.percorso] : [];
   const dove = {};
   percorso.forEach((nome, i) => { const m = /^(\S+) (.+)$/.exec(nome); if (!m || m[1] !== LIVELLI[i]) throw new Error(`il luogo di una bolla scende per ${LIVELLI.join(', ')}: al posto ${i} c'è «${nome}»`);
     dove[m[1]] = i === 4 ? m[2].split(',').map(Number) : /^\d+$/.test(m[2]) ? Number(m[2]) : m[2]; });
+  // i rami: quelli scritti in fondo (o dell'indirizzo dato) vanno nel numero del cosmo; quelli nel nome del cosmo, in fondo
+  const ramiDati = scritto ? scritto.rami : luogo?.rami || {};
+  if (dove.cosmo != null && (Object.keys(ramiDati).length || typeof dove.cosmo === 'string')) {
+    dove.cosmo = cosmoCon(cosmoBase(dove.cosmo), { ...ramiCosmo(dove.cosmo), ...ramiDati }); if (typeof dove.cosmo === 'string' && /^\d+$/.test(dove.cosmo)) dove.cosmo = Number(dove.cosmo);
+    percorso[0] = `cosmo ${cosmoBase(dove.cosmo)}`; }
   const c = typeof contenuto === 'string' ? { cosa: contenuto } : { ...(contenuto || {}) };
   if (!CONTENUTI[c.cosa]) throw new Error(`non so giudicare «${c.cosa}»: i contenuti che i moduli sanno riconoscere sono ${Object.keys(CONTENUTI).join(', ')}`);
   if (!(grandezza > 0)) throw new Error('la grandezza di una bolla è una lunghezza in metri');
-  return Object.freeze({ luogo: indirizzo(percorso, { tempo: istante }), dove: Object.freeze(dove), grandezza, istante, contenuto: Object.freeze(c) });
+  return Object.freeze({ luogo: indirizzo(percorso, { tempo: istante, rami: dove.cosmo != null ? ramiCosmo(dove.cosmo) : null }), dove: Object.freeze(dove), grandezza, istante, contenuto: Object.freeze(c) });
 }
 const livelloDi = (dove) => LIVELLI.filter((l) => dove[l] != null).length;
+// DUE COSE DIVERSE. (1) I NOMI PER LA FONTE DEL CASO e le chiavi interne: `percorsoDi` (il cosmo col suo numero così com'è,
+// anche coi rami: «cosmo 1#{…}») e `canonico` (la bolla scritta per il nome dei suoi eventi): sono quelli di sempre, e
+// non devono cambiare (cambierebbero i mondi scelti); non si rileggono. (2) GLI INDIRIZZI che si danno fuori: `luogoDe` /
+// `luogoDi`, nella forma di lingua.js (i rami in fondo), che si rilegge. Nel cosmo di base (1) e (2) sono lo stesso testo.
 const percorsoDi = (dove) => LIVELLI.filter((l) => dove[l] != null).map((l) => `${l} ${l === 'punto' ? dove[l].join(',') : dove[l]}`);
-const canonico = (b) => JSON.stringify([scrivi(b.luogo), b.grandezza, b.istante, Object.keys(b.contenuto).sort().map((k) => [k, b.contenuto[k]])]);
+const canonico = (b) => JSON.stringify([scrivi(indirizzo([...(typeof b.dove.cosmo === 'string' ? [`cosmo ${b.dove.cosmo}`] : b.luogo.percorso.slice(0, 1)), ...b.luogo.percorso.slice(1)], { tempo: b.luogo.tempo })), b.grandezza, b.istante, Object.keys(b.contenuto).sort().map((k) => [k, b.contenuto[k]])]);
+const luogoDe = (dove) => indirizzo(LIVELLI.filter((l) => dove[l] != null).map((l) => `${l} ${l === 'punto' ? dove[l].join(',') : l === 'cosmo' ? cosmoBase(dove[l]) : dove[l]}`), { rami: dove.cosmo != null ? ramiCosmo(dove.cosmo) : null });
+const luogoDi = (dove) => scrivi(luogoDe(dove));
 
 // CHE COSA CHIEDE una bolla a chi le sta sopra, livello per livello (dal punto in su)
 export function chiede(b0) {
@@ -446,7 +461,7 @@ function prima(M, b) { if (b.istante == null) return null; const nascita = ANNI_
 // dalle sue condizioni, nel punto. → { esito, parte, perche, legge, misura, livello, soloAdesso }
 export function giudica(b0, M = null) {
   const b = bolla(b0); if (livelloDi(b.dove) < 4) throw new Error('per giudicare una bolla serve il suo luogo almeno fino al pianeta');
-  M = M || mondo(b.dove); if (!M) return { ...no(`il sistema ${percorsoDi(b.dove).slice(0, 3).join('/')} non ha un pianeta ${b.dove.pianeta}`), livello: 'stella' };
+  M = M || mondo(b.dove); if (!M) return { ...no(`il sistema ${luogoDi({ cosmo: b.dove.cosmo, galassia: b.dove.galassia, stella: b.dove.stella })} non ha un pianeta ${b.dove.pianeta}`), livello: 'stella' };
   const C = CONTENUTI[b.contenuto.cosa], tempo = prima(M, b); if (tempo) return { ...tempo, livello: 'stella' };
   if (b.grandezza > 2 * M.P.raggioM) return { ...no(`una bolla di ${cifre(b.grandezza)} m non sta in un pianeta largo ${cifre(2 * M.P.raggioM)} m`), livello: 'pianeta' };
   const g = { ...C.pianeta(M, b.contenuto), livello: 'pianeta', soloAdesso: b.istante != null && Math.abs(b.istante - ANNI_OGGI) > 1 };
@@ -462,7 +477,7 @@ export function giudica(b0, M = null) {
 export function antenatoComune(bolle) {
   const B = bolle.map(bolla), dove = {}; let n = 0;
   for (; n < LIVELLI.length; n++) { const l = LIVELLI[n], v = B[0].dove[l]; if (v == null || !B.every((b) => b.dove[l] != null && String(b.dove[l]) === String(v))) break; dove[l] = v; }
-  return { livello: n ? LIVELLI[n - 1] : 'biblioteca', profondita: n, dove, luogo: percorsoDi(dove).join('/') };
+  return { livello: n ? LIVELLI[n - 1] : 'biblioteca', profondita: n, dove, luogo: n ? luogoDi(dove) : '' };
 }
 // le bolle messe nello stesso punto allo stesso istante: i loro intervalli devono avere un'intersezione
 function contraddizioni(B) {
@@ -508,7 +523,7 @@ function cerca(B, pre, c, nome, { mondi, cosmi, campione }) {
   const elenco = tutti(pre), kEsimo = elenco ? null : mondiDi(pre, cosmi, campione), N = elenco ? elenco.length : mondi, buoni = [], dubbi = [], motivi = new Map(), bene = new Float64Array(N).fill(NaN), pesi = new Float64Array(N).fill(NaN); let provati = 0;
   for (let k = 0; k < N; k++) {
     const via = elenco ? elenco[k] : kEsimo(k); if (!via) continue; const M = mondo(via); if (!M) continue; provati++; bene[k] = 0; pesi[k] = 0;
-    const G = B.map((b) => giudica({ luogo: percorsoDi({ ...via }), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)), negato = G.find((g) => g.esito === 'no');
+    const G = B.map((b) => giudica({ luogo: luogoDe(via), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)), negato = G.find((g) => g.esito === 'no');
     if (negato) { motivi.set(negato.legge || negato.perche, (motivi.get(negato.legge || negato.perche) || 0) + 1); continue; }
     if (G.some((g) => g.esito === 'forse')) { dubbi.push({ via, G }); continue; }
     const peso = G.reduce((a, g) => a * g.parte, 1); buoni.push({ via, G, peso }); bene[k] = 1; pesi[k] = peso;
@@ -522,7 +537,7 @@ function posa(b, via, g, c, nome) {
   if (g.misura?.dove) { lon = g.misura.dove.lon; lat = g.misura.dove.lat; }
   else if (g.misura?.fasce?.length) { const F = g.misura.fasce, w = F.map((x) => Math.cos(x * RAD)), tot = w.reduce((a, x) => a + x, 0); let r = c(`${nome}/fascia`) * tot, j = 0; while (j < F.length - 1 && (r -= w[j]) >= 0) j++; lat = F[j]; }
   const dove = { ...via, punto: [Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4] };
-  return bolla({ luogo: percorsoDi(dove), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto });
+  return bolla({ luogo: luogoDe(dove), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto });
 }
 
 // DOVE SI INCONTRANO. bolle: una lista di bolle (anche una sola).
@@ -556,11 +571,11 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
     // nel cosmo ogni gruppo vuole la SUA galassia: se i mondi buoni stanno tutti in galassie già prese, se ne provano altri
     if (nelCosmo && (R.buoni.length || R.dubbi.length)) { let quanti = mondi; while (!libere(R.buoni).length && !libere(R.dubbi).length && g.pre.galassia == null && quanti < 4 * mondi) { quanti += 4 * GRAPPOLO; R = cerca(Bg, g.pre, c, nome, { mondi: quanti, cosmi, campione }); }
       if (!libere(R.buoni).length && !libere(R.dubbi).length) return fuori(`i mondi buoni per ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')} stanno tutti in galassie già prese dalle altre bolle (${R.provati} provati): nel cosmo ogni bolla vuole la sua galassia`, { ricerche }); }
-    ricerche.push({ bolle: g.quali, luogo: percorsoDi(g.pre).join('/') || 'la biblioteca', provati: R.provati, esatto: R.esatto, buoni: R.buoni.length, frazione: R.frazione, forse: R.forse, peso: R.peso, motivi: R.motivi });
+    ricerche.push({ bolle: g.quali, luogo: livelloDi(g.pre) ? luogoDi(g.pre) : 'la biblioteca', provati: R.provati, esatto: R.esatto, buoni: R.buoni.length, frazione: R.frazione, forse: R.forse, peso: R.peso, motivi: R.motivi });
     if (!R.buoni.length && !R.dubbi.length) {
       const m = R.motivi[0];
-      if (g.pre.pianeta != null) { const neg = Bg.map((b) => giudica({ luogo: percorsoDi(g.pre).slice(0, 4), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto })).find((x) => x.esito === 'no'); return fuori(`non esiste: ${neg ? neg.perche : 'quel pianeta non c\'è'}`, { legge: neg?.legge ?? null, ricerche }); }
-      return fuori(`nessun mondo su ${R.provati} provati in ${percorsoDi(g.pre).join('/') || `${cosmi} cosmi della biblioteca`} contiene ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')}${Bg.length > 1 ? ' insieme' : ''}${m ? ` (il più delle volte lo vieta: ${m.legge})` : ''}`, { ricerche });
+      if (g.pre.pianeta != null) { const neg = Bg.map((b) => giudica({ luogo: luogoDe({ cosmo: g.pre.cosmo, galassia: g.pre.galassia, stella: g.pre.stella, pianeta: g.pre.pianeta }), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto })).find((x) => x.esito === 'no'); return fuori(`non esiste: ${neg ? neg.perche : 'quel pianeta non c\'è'}`, { legge: neg?.legge ?? null, ricerche }); }
+      return fuori(`nessun mondo su ${R.provati} provati in ${livelloDi(g.pre) ? luogoDi(g.pre) : `${cosmi} cosmi della biblioteca`} contiene ${Bg.map((b) => `«${b.contenuto.cosa}»`).join(' e ')}${Bg.length > 1 ? ' insieme' : ''}${m ? ` (il più delle volte lo vieta: ${m.legge})` : ''}`, { ricerche });
     }
     // la scelta: in proporzione al peso tra i mondi che vanno bene; se nessuno è deciso, il primo dei «forse»
     let scelto = null, daVerificare = false;
@@ -568,15 +583,15 @@ export function incontra(bolle, { insieme = null, mondi = 300, cosmi = 2, etiche
     if (buoni.length) { const tot = buoni.reduce((a, w) => a + w.peso, 0); let r = c(`${nome}/scelta`) * tot; scelto = buoni[buoni.length - 1]; for (const w of buoni) if ((r -= w.peso) < 0) { scelto = w; break; } }
     else { scelto = dubbi[Math.min(dubbi.length - 1, Math.floor(c(`${nome}/scelta`) * dubbi.length))]; daVerificare = true; }
     prese.add(galassiaDi(scelto.via));
-    g.quali.forEach((i, j) => { const gi = scelto.G[j], b = B[i].dove.punto ? bolla({ luogo: percorsoDi({ ...scelto.via, punto: B[i].dove.punto }), grandezza: B[i].grandezza, istante: B[i].istante, contenuto: B[i].contenuto }) : posa(B[i], scelto.via, gi, c, `${ordine[i]}/${j}`);
-      esito[i] = { bolla: b, luogo: scrivi(b.luogo).replace(/@.*$/, ''), giudizio: gi, daVerificare: daVerificare || gi.esito === 'forse', numero: numeroDi({ ...scelto.via, regione: 0 }), candidati: daVerificare ? dubbi.map((d) => d.via) : null }; });
+    g.quali.forEach((i, j) => { const gi = scelto.G[j], b = B[i].dove.punto ? bolla({ luogo: luogoDe({ ...scelto.via, punto: B[i].dove.punto }), grandezza: B[i].grandezza, istante: B[i].istante, contenuto: B[i].contenuto }) : posa(B[i], scelto.via, gi, c, `${ordine[i]}/${j}`);
+      esito[i] = { bolla: b, luogo: scrivi(indirizzo(b.luogo.percorso, { rami: b.luogo.rami })), giudizio: gi, daVerificare: daVerificare || gi.esito === 'forse', numero: numeroDi({ ...scelto.via, regione: 0 }), candidati: daVerificare ? dubbi.map((d) => d.via) : null }; });
   }
   // LA PARTE COSMICA: le galassie delle bolle come vincoli sul campo (posti dati: un cosmo nominato dalle bolle; stesso
   // cosmo della biblioteca e galassie diverse: i posti sono quelli che hanno lì)
   let nelCampo = null;
   if (nelCosmo) { nelCampo = cosmoDelleBolle(esito, nelCosmo, c, `bolle/${[...ordine].sort().join('|')}`); if (!nelCampo.esiste) return fuori(nelCampo.perche, { ricerche, bolle: esito, cosmo: nelCampo }); }
   else if (A.dove.cosmo != null && A.dove.galassia == null && new Set(esito.map((e) => e.bolla.dove.galassia)).size > 1) nelCampo = cosmoDelleBolle(esito, { biblioteca: A.dove.cosmo }, c, '');
-  const mondiTrovati = [...new Set(esito.map((e) => percorsoDi(e.bolla.dove).slice(0, 4).join('/')))];
+  const mondiTrovati = [...new Set(esito.map((e) => { const d = e.bolla.dove; return luogoDi({ cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta }); }))];
   return { esiste: true, antenato: antenatoComune(esito.map((e) => e.bolla)), chiesto: A, ricerche, bolle: esito, mondi: mondiTrovati, daVerificare: esito.some((e) => e.daVerificare),
     cosmo: nelCampo, pesi: nelCampo ? { cosmico: { esatto: true, chi2: nelCampo.chi2, gradi: nelCampo.gradi, probabilita: nelCampo.probabilita, logPeso: nelCampo.logPeso, logDensita: nelCampo.logDensita }, planetario: ricerche.map((x) => ({ esatto: x.esatto, ...x.peso })) } : null,
     perche: esito.some((e) => e.daVerificare) ? 'le condizioni necessarie ci sono; per alcune bolle decide la superficie: scendi con inFondo()' : 'ogni bolla ha il suo contenuto nel luogo trovato' };
@@ -629,7 +644,7 @@ export function causaComune(bolle, { mondi = 300, cosmi = 2, aPriori = 0.5, etic
   const n = B.length, N = elenco ? elenco.length : mondi, parti = B.map(() => new Float64Array(N).fill(NaN)), prodotti = new Float64Array(N).fill(NaN); let provati = 0, dubbi = 0;
   for (let k = 0; k < N; k++) {
     const via = elenco ? elenco[k] : kEsimo(k); if (!via) continue; const M = mondo(via); if (!M) continue;
-    const G = B.map((b) => giudica({ luogo: percorsoDi(via), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)); if (G.some((g) => g.esito === 'forse')) { dubbi++; continue; }
+    const G = B.map((b) => giudica({ luogo: luogoDe(via), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }, M)); if (G.some((g) => g.esito === 'forse')) { dubbi++; continue; }
     provati++; let p = 1; G.forEach((g, i) => { parti[i][k] = g.parte; p *= g.parte; }); prodotti[k] = p;
   }
   if (!provati) return { provati, dubbi, antenato: A, stesso: { peso: 0, errore: 0 }, separati: { peso: 0, errore: 0 }, guadagno: NaN, probabilita: NaN, scelta: null };
@@ -647,9 +662,9 @@ export function causaComune(bolle, { mondi = 300, cosmi = 2, aPriori = 0.5, etic
 export async function inFondo(b0, candidati = null, { massimo = 3 } = {}) {
   const b = bolla(b0), C = CONTENUTI[b.contenuto.cosa]; if (!C.superficie) return { esiste: giudica(b).esito === 'sì', provati: 0, bolla: b, giudizio: giudica(b), scartati: [] };
   const { superficieDi } = await import('./mappa.js'), vie = (candidati && candidati.length ? candidati : [b.dove]).slice(0, massimo), scartati = [];
-  for (const d of vie) { const via = { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta }, U = superficieDi(via); if (!U) { scartati.push({ luogo: percorsoDi(via).join('/'), perche: 'la superficie non si è potuta calcolare' }); continue; }
-    const g = C.superficie(U, b.contenuto); if (g.esito !== 'sì') { scartati.push({ luogo: percorsoDi(via).join('/'), perche: g.perche }); continue; }
+  for (const d of vie) { const via = { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta }, U = superficieDi(via); if (!U) { scartati.push({ luogo: luogoDi(via), perche: 'la superficie non si è potuta calcolare' }); continue; }
+    const g = C.superficie(U, b.contenuto); if (g.esito !== 'sì') { scartati.push({ luogo: luogoDi(via), perche: g.perche }); continue; }
     const dove = { ...via, punto: [Math.round(g.misura.dove.lon * 100) / 100, Math.round(g.misura.dove.lat * 100) / 100] };
-    return { esiste: true, provati: scartati.length + 1, bolla: bolla({ luogo: percorsoDi(dove), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }), giudizio: { ...g, livello: 'superficie' }, scartati }; }
+    return { esiste: true, provati: scartati.length + 1, bolla: bolla({ luogo: luogoDe(dove), grandezza: b.grandezza, istante: b.istante, contenuto: b.contenuto }), giudizio: { ...g, livello: 'superficie' }, scartati }; }
   return { esiste: false, provati: scartati.length, bolla: null, giudizio: null, scartati };
 }

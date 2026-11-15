@@ -34,8 +34,15 @@ resto     := tutto ciò che segue il luogo    parti non contate dalla misura («
 - `scala L`: il lato del luogo in metri (la `grandezza` di `bolla.js`).
 - Un indirizzo che non comincia da `cosmo N` è un indirizzo d'evento («disco/1/3/53», «lingua/punto a caso/7»).
 - La via di `cosmo.js` ({ cosmo: "1#{…}", galassia, … }) si traduce con `daVia` / `viaDi`: i rami passano dal numero
-  del cosmo all'indirizzo. **Non torna oggi**: `bolla.js` (`percorsoDi`) e i luoghi dei corpi in `src/tre` scrivono
-  `cosmo ${via.cosmo}`, cioè i rami dentro il nome del cosmo: in un cosmo parallelo il testo non si rilegge.
+  del cosmo all'indirizzo. Così scrivono tutti: `bolla.js` (`percorsoDi`, `luogoDi`, `bollaDaVia`, `viaDi`,
+  `scriviBolla`) e i luoghi dei corpi in `src/tre`, `bolle.js` (i luoghi delle bolle di contenuto), `grandezze.js`
+  (`indirizzoDi`), il punto a caso di `laboratorio.js`. La forma di prima della vista 3D, coi rami nel nome del cosmo
+  («cosmo 1#{…}/galassia 0/…»), si legge ancora (`intreccio.leggiAncheVecchia`: le bolle già salvate si riaprono) ma
+  nessuno la scrive più.
+- **Indirizzo e nome per la fonte del caso sono due cose.** Un testo dato a `eventi.js` (la radice del disco di un buco
+  nero, `bolla.js` `nomeFonte`; i nomi degli eventi di `bolle.js`; le radici di `cosmo.js`) è una chiave e non si
+  rilegge: resta quello di sempre, anche dove un cosmo parallelo vi mette il suo numero coi rami, perché cambiarlo
+  cambierebbe i mondi. Nel cosmo di base i due testi coincidono.
 
 Esempio: `cosmo 1/galassia 39/stella 1618/pianeta 0/punto -69.17,0.093/scala 10000@11514352010.10819#{"disco/39/1618":2}`
 
@@ -196,7 +203,8 @@ d'ordine uno su ΔS, non sull'esponente).
 | C16 | Chapman–Kolmogorov: P_{Δt₁}∘P_{Δt₂} = P_{Δt₁+Δt₂} in distribuzione | prova | manca |
 
 Prove della lingua stessa (`test_lingua_indirizzo`): andata e ritorno su 23 indirizzi veri (cosmo.js, bolla.js,
-bolle.js, intreccio.js, eventi) e rifiuto dei non canonici; HEALPix (centro ↔ pixel fino all'ordine 24, figlio nel
+bolle.js, intreccio.js, eventi) e rifiuto dei non canonici; ogni indirizzo che il programma produce, anche in un cosmo
+parallelo (I: bolla.js, src/tre, bolle.js, grandezze.js, il punto a caso), e le bolle salvate nella forma di prima; HEALPix (centro ↔ pixel fino all'ordine 24, figlio nel
 padre, area uguale); pesi per livello che sommano a 1 (13 somme, scarto < 10⁻¹²); `puntoACaso` deterministico,
 coerente con un prefisso, distribuito come `peso` (χ² su cosmo γ e δ, galassia, stella, pianeta, punto, tempo); i pesi
 dei rami (E: C4); le galassie e le stelle vere (F: N come cosmo3d.js, Σ N_s = stelle vere, `puntoACaso` uniforme sulle

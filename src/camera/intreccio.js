@@ -22,6 +22,20 @@ export function leggi(testo) {
   const it = corpo.lastIndexOf('@'), dove = it < 0 ? corpo : corpo.slice(0, it);
   return indirizzo(dove.split('/'), { tempo: it < 0 ? null : Number(corpo.slice(it + 1)), rami });
 }
+// LA FORMA DI PRIMA (fino al lavoro 3 di PROGETTO.md): in un cosmo parallelo la vista 3D scriveva i rami dentro il nome
+// del cosmo, «cosmo 1#{"disco/0/5":3}/galassia 0/…@t#{…}», che `leggi` non sa leggere (il primo «#» non è quello dei
+// rami in fondo). Qui la si legge come «cosmo 1/galassia 0/…@t#{…}», con i rami del nome uniti a quelli in fondo (sono
+// gli stessi). Ogni altro testo: `leggi`. Solo per leggere ciò che è stato salvato prima: nessuno scrive più così.
+export function leggiAncheVecchia(testo) {
+  const v = /^cosmo (\d+)#\{/.exec(testo); if (!v) return leggi(testo);
+  let k = v[0].length - 1, p = 0, str = false; // (dove si chiude l'oggetto dei rami: le graffe dentro le stringhe non contano)
+  for (; k < testo.length; k++) { const c = testo[k]; if (str) { if (c === '\\') k++; else if (c === '"') str = false; } else if (c === '"') str = true; else if (c === '{') p++; else if (c === '}' && --p === 0) break; }
+  if (k >= testo.length) throw new Error(`«${testo}»: i rami del cosmo non si chiudono`);
+  const rami = JSON.parse(testo.slice(v[0].length - 1, k + 1)), resto = testo.slice(k + 1);
+  if (resto && !/^[/@#]/.test(resto)) throw new Error(`«${testo}»: dopo i rami del cosmo viene «${resto.slice(0, 20)}»`);
+  const a = leggi(`cosmo ${v[1]}${resto}`);
+  return indirizzo(a.percorso, { tempo: a.tempo, rami: { ...rami, ...a.rami } });
+}
 export const luogo = (a) => a.percorso.join('/');
 export const figlio = (a, nome) => indirizzo([...a.percorso, nome], a);
 export const genitore = (a) => (a.percorso.length > 1 ? indirizzo(a.percorso.slice(0, -1), a) : null);

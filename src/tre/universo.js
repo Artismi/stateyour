@@ -24,8 +24,8 @@ import { creaVolumeGalassia, creaVolumeRete } from './volumi.js';
 import { bucoCentrale } from '../camera/relativita.js';
 import { bucoNelMondo } from './sistema.js';
 import { sorgente } from '../camera/eventi.js';
-import { ramiCosmo, cosmo as cosmoDi, galassia as galassiaDi } from '../camera/cosmo.js';
-import { bollaDi, viaDi, conoBolla } from './bolla.js';
+import { ramiCosmo, cosmoBase, cosmo as cosmoDi, galassia as galassiaDi } from '../camera/cosmo.js';
+import { bollaDi, viaDi, conoBolla, luogoDi, nomeFonte } from './bolla.js';
 import { creaSplatRete, creaSplatNebulose } from './splat.js'; // (N.vista.splat: accanto ai volumi, per confrontare)
 
 const ANNO = 3.156e7, LUCE = 1e20; // (le luminosità passano alla scheda in unità di 10²⁰ W: una galassia vale 10¹⁷)
@@ -47,7 +47,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
   // flusso vero). Finché la sua ombra è sotto un pixel e mezzo lo strato non fa niente. Entro duemila r_g la camera gli
   // si attacca (e non scende sotto 2,5 r_g).
   const bucoNero = (() => { try { if (!(sc.buco && sc.buco.massaKg > 0)) return null; const bc = bucoCentrale(galassiaDi(via.cosmo, via.galassia).forma), acceso = bc && bc.frazioneEddington >= 0.01;
-    const b = bucoNelMondo(N, { genitore: nodo, luogo: 'buco', massaKg: sc.buco.massaKg, accrescimento: acceso ? bc.frazioneEddington * bc.accrescimentoEddington : 0, luce: acceso ? 'disco' : null, radice: `cosmo ${via.cosmo}/galassia ${via.galassia}/buco` });
+    const b = bucoNelMondo(N, { genitore: nodo, luogo: 'buco', massaKg: sc.buco.massaKg, accrescimento: acceso ? bc.frazioneEddington * bc.accrescimentoEddington : 0, luce: acceso ? 'disco' : null, radice: nomeFonte(via, 'buco') }); // (la radice è un nome per la fonte del caso, quello di sempre: bolla.js `nomeFonte`)
     b.corpo.influenza = 2000 * b.raggioGravitazionale; b.modello = bc; return b; } catch (e) { console.warn('il buco nero centrale non si è potuto montare:', e); return null; } })();
   const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n), luceV = new Float32Array(4 * n), _tr = [1, 1, 1];
   function luciStelle() { const P = sc.punti; for (let i = 0; i < n; i++) { const L = P.esiste[i] ? P.luminosita[i] / LUCE : 0; luce[4 * i] = L * lineare(P.colore[3 * i]); luce[4 * i + 1] = L * lineare(P.colore[3 * i + 1]); luce[4 * i + 2] = L * lineare(P.colore[3 * i + 2]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
@@ -156,7 +156,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
 // la nebbia allo stesso modo (rete.js). Con N.vista.cono = false tutto è disegnato allo stesso istante.
 export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   const O = { rete: 1, puntiLuce: 6e-4, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t), tScena = N.tempo.t;
-  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: `cosmo ${cosmo}`, raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
+  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: luogoDi({ cosmo }), raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
   let lato = sc.riferimento.periodico[0]; const nascosta = new Set(), forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
   // la luce di ogni galassia come la si vede: [watt, r, g, b (0…255), c'è]; col cono, quella di quando la luce è partita
   const vista = new Float64Array(5 * n), stato = { cono: null, occhio: [NaN, 0, 0], t: NaN, msCono: 0, zMassimo: 0 };
@@ -301,7 +301,7 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     viaOra() { const v = { cosmo: via.cosmo }; let c = N.camera.corpo, inG = false, inS = false; for (let x = c; x; x = x.genitore) { if (G && x === G.nodo) inG = true; if (Sis && x === Sis.nodo) inS = true; }
       if (inG) v.galassia = G.via.galassia; if (inS) { v.stella = Sis.via.stella; const s = Sis.scheda(c); if (s && s.c.cosa === 'pianeta') v.pianeta = s.c.id; else if (s && s.c.cosa === 'luna') v.pianeta = s.c.pianeta; } return v; },
     // dove si è, dal livello più grande al più piccolo (per la riga in basso)
-    percorso() { const v = this.viaOra(), out = [`il cosmo ${v.cosmo}`]; if (v.galassia != null) out.push(`la galassia ${v.galassia + 1}`); if (v.stella != null) out.push(`il sistema della stella ${v.stella + 1}`); if (v.pianeta != null) out.push(`il pianeta ${v.pianeta + 1}`); return out; },
+    percorso() { const v = this.viaOra(), out = [`il cosmo ${cosmoBase(v.cosmo)}${Object.keys(ramiCosmo(v.cosmo)).length ? ' (un ramo parallelo)' : ''}`]; if (v.galassia != null) out.push(`la galassia ${v.galassia + 1}`); if (v.stella != null) out.push(`il sistema della stella ${v.stella + 1}`); if (v.pianeta != null) out.push(`il pianeta ${v.pianeta + 1}`); return out; },
     libera() { chiudiSistema(); if (G) G.libera(); cosmo.libera(); punti.libera(); for (const s of [governo, aspetta]) { const i = N.strati.indexOf(s); if (i >= 0) N.strati.splice(i, 1); } },
   };
 }

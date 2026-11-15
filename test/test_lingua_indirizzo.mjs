@@ -10,6 +10,9 @@
 //   F. dal campione al vero: le galassie e le stelle vere, puntoACaso uniforme sulle stelle vere (χ²);
 //   G. le fusioni (C11): fondi conserva il peso totale;
 //   H. i cervelli di Boltzmann contati (C13): il rapporto tra le due vie, in bit (stima d'ordine di grandezza).
+//   I. una forma sola (PROGETTO.md, lavoro 3): ogni indirizzo che il programma produce si rilegge, anche in un cosmo
+//      parallelo (bolla.js, src/tre, bolle.js, grandezze.js, il punto a caso); le bolle salvate nella forma di prima si
+//      riaprono; i nomi per la fonte del caso restano quelli di prima.
 // Non dipende da un mondo particolare: i luoghi si trovano cercandoli (le stelle con pianeti, i pianeti diversi).
 // (Il nome test_lingua.mjs è già della lingua delle immagini, src/lingua.js.)
 import assert from 'node:assert/strict';
@@ -341,6 +344,87 @@ prova('la storia evolutiva contro quella per fluttuazione, per un pianeta con ac
   const cervello = M.cervelliDiBoltzmann({ massaKg: 1.4, massaParticella: 6 * 1.66053907e-27, entropiaPerParticella: 2.8, frazioneEvolutiva: 1, oggettiNelMondo: 1, volumeMondoM3: CO.TORO_M ** 3, etaAnni: ANNI_OGGI });
   console.log(`    un cervello di 1,4 kg per fluttuazione: ${cervello.bitFluttuazioneTentativo.toExponential(2)} bit per tentativo contro ≤ 2^${cervello.log2Tentativi.toFixed(0)} tentativi; il suo peso evolutivo (per osservatore) manca: nessun modulo sa dove c'è un osservatore`);
   assert.ok(cervello.bitFluttuazioneTentativo > 1e3 * cervello.log2Tentativi);
+});
+
+console.log('I. una forma sola dell\'indirizzo (PROGETTO.md, lavoro 3: bolla.js, src/tre, bolle.js, grandezze.js)');
+// (i moduli di questa parte si caricano qui, per non toccare l'inizio della prova)
+const TB = await import('../src/tre/bolla.js'), BO = await import('../src/camera/bolle.js'), GZ = await import('../src/camera/grandezze.js');
+const ANNO_B = 3.15576e7;
+// un cosmo parallelo con due rami (uno dentro un sistema, uno dentro un pianeta) e le vie di ogni livello, nel cosmo 1 e lì
+const RAMI_I = { [`disco/0/${stellaP}`]: 3, [`${PIANETA}/impatto 2/dove`]: 1 }, RAMO_I = CO.cosmoCon(1, RAMI_I);
+const VIE_I = [{ cosmo: 1 }, { cosmo: 1, galassia: 0 }, { cosmo: 1, galassia: 0, stella: stellaP }, { cosmo: 1, galassia: 0, stella: stellaP, pianeta: 0 }, { cosmo: 1, galassia: 1, stella: 7, pianeta: 0, luna: 1 }];
+const nelCosmo = (v, c) => ({ ...v, cosmo: c });
+// un nucleo finto con l'albero dei luoghi che universo.js e sistema.js danno ai corpi (la radice: luogoDi({ cosmo }))
+function nucleoFinto(via) {
+  let c = { luogo: TB.luogoDi({ cosmo: via.cosmo }), genitore: null };
+  if (via.galassia != null) c = { luogo: `galassia ${via.galassia}`, genitore: c };
+  if (via.stella != null) c = { luogo: `stella ${via.stella}`, genitore: c };
+  if (via.pianeta != null) c = { luogo: `pianeta ${via.pianeta}`, genitore: c };
+  if (via.luna != null) c = { luogo: `luna ${via.luna}`, genitore: c };
+  return { camera: { corpo: c, pos: [3e7, 1e6, -2e6], assi: [1, 0, 0, 0, 1, 0, 0, 0, 1], solidale: false, fov: 0.75 }, tempo: { t: -3.2e9, velocita: 60, pausa: false }, stato: { vicinoM: 2e7, tanY: 0.4 } };
+}
+prova('ogni indirizzo che il programma produce si rilegge, anche in un cosmo parallelo: bolla.js (percorsoDi, luogoDi, bollaDaVia, bollaDi, scriviBolla), bolle.js, grandezze.js, il punto a caso', () => {
+  let n = 0; const esempi = [];
+  for (const c of [1, RAMO_I]) for (const v0 of VIE_I) {
+    const via = nelCosmo(v0, c), nome = `${JSON.stringify(via)}`;
+    // bolla.js: la bolla da una via, la sua via, il percorso e il luogo dei corpi (senza rami: il luogo, non il mondo)
+    const b = TB.bollaDaVia(via, -3.2e9), t = andataERitorno(b.indirizzo, `bollaDaVia ${nome}`); n++;
+    assert.equal(t, L.scrivi(L.daVia(via, { tempo: ANNI_OGGI - 3.2e9 / ANNO_B })), `${nome}: la bolla non è lingua.daVia`);
+    assert.deepEqual(TB.viaDi(b), via, `${nome}: la via della bolla non torna`);
+    andataERitorno(indirizzo(TB.percorsoDi(via)), `percorsoDi ${nome}`); assert.equal(TB.luogoDi(via), TB.percorsoDi(via).join('/')); assert.ok(!TB.luogoDi(via).includes('#'), `${nome}: rami nel luogo`); n++;
+    // la bolla scritta nella memoria del browser (laboratorio.js, «stateyour.bolla3d»), riletta
+    const s = TB.scriviBolla({ ...b, posizione: [1, 2, 3], assi: [1, 0, 0, 0, 1, 0, 0, 0, 1], grandezza: 1e7 }), b2 = TB.leggiBolla(s);
+    assert.equal(JSON.parse(s).i, t, `${nome}: scriviBolla non scrive con lingua.scrivi`); assert.equal(L.scrivi(b2.indirizzo), t); assert.deepEqual(TB.viaDi(b2), via); assert.deepEqual(b2.posizione, [1, 2, 3]); n++;
+    // la bolla letta dal nucleo, con i luoghi che i corpi hanno nella vista 3D
+    const bn = TB.bollaDi(nucleoFinto(via), CO.ramiCosmo(via.cosmo)); andataERitorno(bn.indirizzo, `bollaDi ${nome}`); assert.deepEqual(TB.viaDi(bn), via, `${nome}: la bolla del nucleo è in un altro posto`); n++;
+    // il nome della stella di creaPianeta da solo (pianeta.js)
+    if (via.stella != null) { andataERitorno(indirizzo(TB.luogoDi({ cosmo: via.cosmo, galassia: via.galassia, stella: via.stella }).split('/')), `pianeta.js ${nome}`); n++; }
+    // grandezze.js: l'indirizzo di un mondo
+    if (via.pianeta != null && via.luna == null) { const g = GZ.indirizzoDi({ via }); assert.equal(L.scrivi(L.leggi(g)), g); assert.deepEqual(L.viaDi(L.leggi(g)), via); n++; }
+    // bolle.js: il luogo di una bolla di contenuto, dato nella forma di lingua.js o in quella di prima (i nomi coi rami)
+    if (via.galassia != null && via.luna == null) {
+      const nuovo = BO.bolla({ luogo: L.daVia(via), contenuto: 'cratere' }), vecchio = BO.bolla({ luogo: Object.keys(via).map((k) => `${k} ${via[k]}`), contenuto: 'cratere' });
+      const tb = andataERitorno(nuovo.luogo, `bolle.js ${nome}`); assert.equal(L.scrivi(vecchio.luogo), tb); assert.equal(BO.bolla({ luogo: tb, contenuto: 'cratere' }).dove.cosmo, via.cosmo); assert.equal(nuovo.dove.cosmo, via.cosmo); n++;
+      if (c !== 1 && via.stella != null && via.pianeta == null) esempi.push(tb);
+    }
+  }
+  // bolle.js incontra in un cosmo parallelo: i luoghi e i mondi che dà si rileggono, e nel ramo; la forma di prima dà la stessa scelta
+  const vS = { cosmo: RAMO_I, galassia: 0, stella: stellaP }, r1 = BO.incontra([{ luogo: L.scrivi(L.daVia(vS)), contenuto: 'cratere' }]), r0 = BO.incontra([{ luogo: [`cosmo ${RAMO_I}`, 'galassia 0', `stella ${stellaP}`], contenuto: 'cratere' }]);
+  assert.ok(r1.esiste, r1.perche); assert.deepEqual(r1.bolle.map((e) => e.luogo), r0.bolle.map((e) => e.luogo), 'la forma di prima e quella di lingua.js non danno la stessa bolla');
+  for (const t of [...r1.bolle.map((e) => e.luogo), ...r1.mondi, r1.antenato.luogo, ...r1.ricerche.map((q) => q.luogo)]) { assert.equal(L.scrivi(L.leggi(t)), t); assert.equal(L.viaDi(L.leggi(t)).cosmo, RAMO_I, `«${t}» non è nel ramo`); n++; }
+  // il punto a caso (laboratorio.js «🎲»): la via della mappa è lingua.viaDi dell'indirizzo
+  // (la via non conosce le galassie e le stelle vere: è quella del campione che le rappresenta)
+  for (const seme of ['a', 'b', 'c']) { const r = L.puntoACaso(seme, { lune: false, tempo: 'adesso' }), d = L.analizza(r.indirizzo), via = L.viaDi(r.indirizzo);
+    assert.deepEqual(via, { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta }); andataERitorno(L.daVia(via, { punto: d.punto, scala: d.scala, tempo: d.tempo }), `punto a caso ${seme}`); n++; }
+  // IL NON TORNA DI PRIMA (sezione A): la bolla della vista in un cosmo parallelo ora si rilegge, ed è lingua.daVia
+  const viaR = { cosmo: CO.cosmoRamo(CO.cosmoRamo(1, `disco/0/${stellaP}`, 3), `${PIANETA}/impatto 2/dove`, 1), galassia: 0, stella: stellaP, pianeta: 0 };
+  assert.equal(L.scrivi(L.leggi(scriviI(TB.bollaDaVia(viaR).indirizzo))), L.scrivi(L.daVia(viaR, { tempo: ANNI_OGGI })));
+  console.log(`    ${n} indirizzi riletti, per esempio «${L.scrivi(TB.bollaDaVia(viaR).indirizzo)}», «${esempi[0]}»`);
+});
+prova('le bolle salvate nella forma di prima (i rami nel nome del cosmo) si riaprono nello stesso posto, e si riscrivono nella forma nuova', () => {
+  let n = 0;
+  for (const c of [1, RAMO_I]) for (const v0 of VIE_I) for (const ramiInFondo of [true, false]) {
+    const via = nelCosmo(v0, c), t = -1.234e8, ANNI = ANNI_OGGI + t / ANNO_B;
+    // com'era scritta prima: percorsoDi → «cosmo ${via.cosmo}», i rami del cosmo anche in fondo (bollaDi; senza: creaPianeta da solo)
+    const vecchiaI = scriviI(indirizzo(['cosmo', 'galassia', 'stella', 'pianeta', 'luna'].filter((k) => via[k] != null).map((k) => `${k} ${via[k]}`), { tempo: ANNI, rami: ramiInFondo ? CO.ramiCosmo(via.cosmo) : null }));
+    const vecchia = JSON.stringify({ i: vecchiaI, t, p: [4, 5, 6], a: [0, 1, 0, -1, 0, 0, 0, 0, 1], g: 2.5e4, m: { solidale: true, velocita: [0, 0, 0], tempo: 60, pausa: false } });
+    if (c !== 1) assert.throws(() => L.leggi(vecchiaI), Error, 'la forma di prima, in un cosmo parallelo, non doveva rileggersi con lingua.leggi');
+    const b = TB.leggiBolla(vecchia); assert.ok(b, 'la bolla salvata non si apre');
+    assert.deepEqual(TB.viaDi(b), via, `${vecchiaI}: la bolla riaperta è in un altro posto`); assert.equal(b.t, t); assert.equal(b.indirizzo.tempo, ANNI); assert.deepEqual(b.posizione, [4, 5, 6]); assert.equal(b.grandezza, 2.5e4); assert.equal(b.moto.solidale, true);
+    const nuova = JSON.parse(TB.scriviBolla(b)).i; assert.equal(L.scrivi(L.leggi(nuova)), nuova); assert.equal(nuova, L.scrivi(TB.bollaDaVia(via, t).indirizzo));
+    if (c === 1) assert.equal(nuova, vecchiaI, 'nel cosmo di base la forma scritta doveva restare la stessa');
+    n++;
+  }
+  console.log(`    ${n} bolle nella forma di prima riaperte; nel cosmo di base il testo scritto è lo stesso di prima`);
+});
+prova('i nomi per la fonte del caso non cambiano: nomeFonte (src/tre) è il testo di prima, anche in un cosmo parallelo', () => {
+  let n = 0; const vie = [];
+  for (const numero of [1, 2, 13, 4321, 96e6 + 17]) { const v = CO.indirizzoDi(numero); vie.push(v, { ...v, cosmo: CO.cosmoCon(v.cosmo, RAMI_I) }); }
+  for (const v of vie) {
+    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia }, 'buco'), `cosmo ${v.cosmo}/galassia ${v.galassia}/buco`); // universo.js, il buco al centro della galassia
+    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia, stella: v.stella }, 'buco'), `cosmo ${v.cosmo}/galassia ${v.galassia}/stella ${v.stella}/buco`); n += 2; // sistema.js, una stella che è un buco nero
+  }
+  console.log(`    ${n} nomi uguali al testo di prima (la prova sull'insieme dei nomi dati alla fonte, prima e dopo: l'impronta nel rapporto del lavoro 3)`);
 });
 
 if (nonTorna.length) console.log(`\nNON TORNA:\n  · ${nonTorna.join('\n  · ')}`);

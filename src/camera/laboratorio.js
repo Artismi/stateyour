@@ -31,7 +31,7 @@ import { creaVista3D } from '../vista3d.js';
 import { cellaMateria, luogoDaAria } from './materia.js';
 import { risalita } from './risalita.js';
 import { sorgente } from './eventi.js';
-import { puntoACaso, analizza as analizzaIndirizzo } from './lingua.js'; // (LINGUA.md: «portami in un punto a caso»)
+import { puntoACaso, analizza as analizzaIndirizzo, viaDi as viaDellIndirizzo } from './lingua.js'; // (LINGUA.md: «portami in un punto a caso»)
 
 const $ = (id) => document.getElementById(id);
 const tela = $('tela'), ctx = tela.getContext('2d'), tela3d = $('tela3d'), pannello = $('pannello');
@@ -274,10 +274,10 @@ function apriCosmo() {
 let notaPunto = null;
 function vaiAPuntoACaso() {
   const seme = String(Date.now()), r = puntoACaso(seme, { lune: false, tempo: 'adesso' }); if (!r.indirizzo) { $('dove').textContent = r.note.join('; '); return; }
-  const d = analizzaIndirizzo(r.indirizzo), via = { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta };
+  const d = analizzaIndirizzo(r.indirizzo), via = viaDellIndirizzo(r.indirizzo); delete via.luna; // (la via della mappa: lingua.viaDi, i rami nel numero del cosmo)
   notaPunto = { via, testo: `un punto a caso (seme ${seme}, senza lune, adesso): «${r.testo}» · ${r.bit.toFixed(1)} bit (${r.peso.parti.filter((x) => x.bit > 0).map((x) => `${x.livello} ${x.bit.toFixed(1)}`).join(', ')})` };
   camMappa = { livello: 4, via, cx: (d.punto[0] + 180) / 360, cy: (90 - d.punto[1]) / 360, z: 5.5e6, quota3d: d.scala / (2 * tanMondo()) };
-  smontaMondo(); sopraMappa = null; vista = 'cosmo'; aggiornaVista(); $('dove').textContent = notaPunto.testo;
+  const nota = notaPunto.testo; smontaMondo(); sopraMappa = null; vista = 'cosmo'; aggiornaVista(); $('dove').textContent = nota;
 }
 document.getElementById('puntoACaso')?.addEventListener('click', vaiAPuntoACaso);
 function entraRegione(a) {
@@ -548,7 +548,7 @@ function rigaMondo() {
   const q = d && cursoreMondo ? mondo3d.sotto(cursoreMondo[0], cursoreMondo[1]) : null, i = q && pi ? pi.info(q.lon, q.lat) : null;
   if (i) testo += ` · sotto il cursore (${gradi(q.lon, q.lat)}, a ${lungo(q.distanza)}): ${i.acqua ? `acqua profonda ${fmtLunghezza(i.profondita)}` : `terra a quota ${Math.round(i.quota)} m`}`;
   if (d && d.quota < 3) testo += ' · avvicinati ancora: si entra nella materia di questo punto';
-  const qui = universo3d.viaOra(); if (notaPunto && (qui.stella !== notaPunto.via.stella || qui.galassia !== notaPunto.via.galassia)) notaPunto = null; if (notaPunto) testo = `${notaPunto.testo} · ${testo}`;
+  const qui = universo3d.viaOra(); if (notaPunto && universo3d.pronto() && (qui.stella !== notaPunto.via.stella || qui.galassia !== notaPunto.via.galassia)) notaPunto = null; if (notaPunto) testo = `${notaPunto.testo} · ${testo}`; // (finché lo spazio non è pronto la nota resta)
   $('dove').textContent = testo + '. Trascina: gira il mondo sotto la mano; tasto destro: orbita; rotella: verso ciò che sta sotto il cursore; W A S D R F: vola.';
   if (barraMondo) barraMondo.querySelector('span').textContent = mondo3d.tempo.pausa ? 'in pausa' : diceTempo(mondo3d.tempo.velocita);
 }

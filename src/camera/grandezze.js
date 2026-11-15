@@ -57,6 +57,7 @@ import * as mEventi from './eventi.js';
 import * as mCosmo from './cosmo.js';
 import * as mBolle from './bolle.js';
 import * as mStoria from './storia.js';
+import { scrivi as scriviIndirizzo, daVia } from './lingua.js';
 
 // i moduli, per nome di file: una fonte dice «modulo: 'leggi.js', funzione: 'clima'» e la funzione si cerca qui al
 // momento della chiamata (se un modulo l'ha rinominata, `coerenza()` lo dice invece di far cadere tutto)
@@ -553,7 +554,8 @@ export function mondo(n, gid, sid, pid) {
   const Sis = mCosmo.sistema(n, gid, sid), P = Sis.pianeti[pid]; if (!P) return null;
   return { via: { cosmo: n, galassia: gid, stella: sid, pianeta: pid }, P, S: Sis.stella, Sis, G: mCosmo.cosmo(n).galassie[gid] };
 }
-export const indirizzoDi = (M) => `cosmo ${M.via.cosmo}/galassia ${M.via.galassia}/stella ${M.via.stella}/pianeta ${M.via.pianeta}`;
+// (l'indirizzo scritto del mondo, nella forma di lingua.js: in un cosmo parallelo i rami in fondo, non nel nome del cosmo)
+export const indirizzoDi = (M) => scriviIndirizzo(daVia(M.via));
 // UN CAMPIONE DI MONDI VERI, dalla fonte unica degli eventi (a grappoli, come bolle.js: fare una galassia costa, un
 // sistema poco): `galassie` galassie di `cosmi` cosmi, `sistemi` stelle con pianeti per galassia, tutti i loro pianeti
 // (`basta(mondi)`: chi ha i minuti contati si ferma prima; l'ordine dei sistemi resta lo stesso)

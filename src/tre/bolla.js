@@ -22,7 +22,13 @@
 // t, velocita, pausa) SONO la bolla; `bollaDi(N)` la legge, `universo.vaiAllaBolla(b)` (universo.js) la mette — e prepara
 // in secondo piano ciò che in quel volume c'è. Ogni corpo del nucleo porta il nome del suo luogo (`corpo.luogo`): il
 // percorso si legge risalendo l'albero dei corpi, senza sapere che livelli ci sono.
-import { indirizzo, scrivi, leggi } from '../camera/intreccio.js';
+// LA FORMA DELL'INDIRIZZO è quella di lingua.js (una sola, LINGUA.md § 1): il cosmo si scrive col suo numero di base
+// («cosmo 1») e i rami di un cosmo parallelo stanno in fondo («…#{"disco/0/5":3}»), mai dentro il nome del cosmo. Da e
+// verso la «via» della mappa ({ cosmo: "1#{…}", … }) si passa con lingua.daVia / lingua.viaDi (qui: percorsoDi,
+// luogoDi, bollaDaVia, viaDi). Ciò che va alla fonte del caso (eventi.js) NON è un indirizzo da rileggere: è un nome, e
+// deve restare quello di sempre (cambiarlo cambierebbe i mondi): lo fa `nomeFonte`, a parte.
+import { indirizzo, leggiAncheVecchia } from '../camera/intreccio.js';
+import { scrivi as scriviL, leggi as leggiL, daVia, viaDi as viaL } from '../camera/lingua.js'; // la forma scritta, una sola (LINGUA.md § 1)
 import { ANNI_OGGI, motiRegione } from '../camera/spazio3d.js'; // l'età del cosmo oggi (anni): t = 0
 import { sezioneDi, conoPassato } from '../camera/relativita.js';
 
@@ -32,17 +38,34 @@ export function bolla({ percorso, t = 0, rami = null, posizione = null, assi = n
   const m = { solidale: false, velocita: [0, 0, 0], tempo: 1, pausa: false, ...(moto || {}) };
   return { indirizzo: indirizzo(percorso || ['cosmo 1'], { tempo: ANNI_OGGI + t / ANNO, rami }), t, posizione: posizione ? Array.from(posizione) : null, assi: assi ? Array.from(assi) : null, grandezza, moto: m };
 }
-// la forma scritta (una riga di testo, per salvarla e ripartire da lì) e la lettura
-export const scriviBolla = (b) => JSON.stringify({ i: scrivi(b.indirizzo), t: b.t, p: b.posizione, a: b.assi, g: b.grandezza, m: b.moto });
+// la forma scritta (una riga di testo, per salvarla e ripartire da lì) e la lettura. Si scrive con lingua.scrivi; si legge
+// con lingua.leggi, e anche nella forma di prima (fino al lavoro 3 di PROGETTO.md), che in un cosmo parallelo metteva i
+// rami nel nome del cosmo: «cosmo 1#{R}/galassia 0/…@t#{R}» → «cosmo 1/galassia 0/…@t#{R}» (le bolle già salvate si
+// riaprono; la prossima scrittura è nella forma nuova).
+export const scriviBolla = (b) => JSON.stringify({ i: scriviL(b.indirizzo), t: b.t, p: b.posizione, a: b.assi, g: b.grandezza, m: b.moto });
 export function leggiBolla(testo) {
-  const o = typeof testo === 'string' ? JSON.parse(testo) : testo; if (!o || typeof o.i !== 'string') return null; const a = leggi(o.i);
+  const o = typeof testo === 'string' ? JSON.parse(testo) : testo; if (!o || typeof o.i !== 'string') return null; const a = leggiIndirizzo(o.i);
   return bolla({ percorso: a.percorso, rami: a.rami, t: Number(o.t) || 0, posizione: Array.isArray(o.p) && o.p.length === 3 ? o.p.map(Number) : null, assi: Array.isArray(o.a) && o.a.length === 9 ? o.a.map(Number) : null, grandezza: o.g > 0 ? +o.g : null, moto: o.m || null });
 }
-// dal percorso alla «via» della mappa ({ cosmo, galassia, stella, pianeta, luna }) e ritorno
-export function viaDi(b) { const v = {}; for (const p of b.indirizzo.percorso) { const m = /^(cosmo|galassia|stella|pianeta|luna) (-?\d+)$/.exec(p); if (m) v[m[1]] = +m[2]; } return v; }
-export function percorsoDi(via) { const out = []; for (const k of ['cosmo', 'galassia', 'stella', 'pianeta', 'luna']) { if (via[k] == null) break; out.push(`${k} ${via[k]}`); } return out; }
-// la bolla da cui si parte quando si ha solo un indirizzo della biblioteca: quel luogo, visto intero
-export const bollaDaVia = (via, t = 0, rami = null) => bolla({ percorso: percorsoDi(via), t, rami });
+// l'indirizzo di una bolla scritta: la forma di lingua.js (anche non ancora canonica), o quella di prima coi rami nel nome
+// del cosmo (intreccio.js `leggiAncheVecchia`); torna canonico
+export const leggiIndirizzo = (testo) => leggiL(scriviL(leggiAncheVecchia(testo)), { severo: false });
+// dal percorso alla «via» della mappa ({ cosmo, galassia, stella, pianeta, luna }, i rami nel numero del cosmo: «1#{…}»)
+// e ritorno: lingua.viaDi / lingua.daVia. (Una via si legge fino al primo livello che manca.)
+export function viaDi(b) {
+  try { return viaL(b.indirizzo); } catch { // (un percorso fuori dalla grammatica del luogo: i livelli che si riconoscono, come prima)
+    const v = {}; for (const p of b.indirizzo.percorso) { const m = /^(cosmo|galassia|stella|pianeta|luna) (\d+)$/.exec(p); if (m) v[m[1]] = +m[2]; } return v; }
+}
+const finoAlBuco = (via) => { const v = {}; for (const k of ['cosmo', 'galassia', 'stella', 'pianeta', 'luna']) { if (via[k] == null) break; v[k] = via[k]; } return v; };
+export const percorsoDi = (via) => (via.cosmo == null ? [] : [...daVia(finoAlBuco(via)).percorso]);
+// il nome del luogo di un corpo del nucleo (`corpo.luogo`): lo stesso percorso, scritto
+export const luogoDi = (via) => percorsoDi(via).join('/');
+// la bolla da cui si parte quando si ha solo un indirizzo della biblioteca: quel luogo, visto intero (con i rami del cosmo)
+export const bollaDaVia = (via, t = 0, rami = null) => { const a = daVia(finoAlBuco(via), { rami }); return bolla({ percorso: [...a.percorso], t, rami: a.rami }); };
+// IL NOME PER LA FONTE DEL CASO di ciò che sta in un luogo (il disco di un buco nero: buconero.js `radice`): «cosmo <via.cosmo>
+// /galassia g/…/<resto>», con il numero del cosmo così com'è, anche coi rami («cosmo 1#{…}/…»). Non è un indirizzo e non
+// si rilegge: è la chiave di sempre, e non deve cambiare (cambierebbe il mondo che ne esce).
+export const nomeFonte = (via, ...resto) => [...['cosmo', 'galassia', 'stella'].filter((k) => via[k] != null).map((k) => `${k} ${via[k]}`), ...resto].join('/');
 
 // la bolla di adesso, letta dal nucleo: il percorso risalendo i luoghi dei corpi, la posizione nel riferimento del
 // primo corpo che ha un luogo (di solito quello a cui la camera è attaccata)

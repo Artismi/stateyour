@@ -35,7 +35,10 @@
 //     radici): anche la campana, che ha il suo logaritmo e il suo coseno scritti qui sotto. Così lo stesso
 //     indirizzo dà gli stessi bit su qualunque motore.
 // Parametri liberi: nessuno (le costanti di rotazione e 0x1BD11BDA sono quelle di Threefry; il numero di giri, 20,
-// è quello consigliato). Riscontro: i vettori noti di Random123 (test/test_eventi.mjs).
+// è quello consigliato). Riscontro: i vettori noti di Random123 a 13, 20 e 72 giri (test/test_eventi.mjs). La qualità del
+// flusso VERO, con la derivazione delle chiavi (un indirizzo nuovo per ogni numero: «prova/evento i», i fratelli; padre e
+// figlio alternati, «p/i» e «p/i/figlio»; cammini di cinque nomi dalla radice), provata con TestU01 1.2.3 (novembre 2026):
+// SmallCrush e Crush passati, 3,4·10¹⁰ indirizzi per Crush.
 
 // ---------- Threefry
 // le versioni «da leggere», con i giri a scelta: servono alle prove (i vettori noti di Random123). La 2x32 è la fonte

@@ -14,6 +14,7 @@ import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucl
 import { creaPianeta, fabbricaAnello, V_SFERA, F_SFERA } from './pianeta.js';
 import { creaPunti } from './luci.js';
 import { sistema } from '../camera/cosmo.js';
+import { nomeFonte } from './bolla.js';
 import { corpiSistema, scenaSistema } from '../camera/spazio3d.js';
 import { creaBucoNero } from './buconero.js';
 import { COSTANTI } from '../camera/leggi.js';
@@ -66,7 +67,7 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   // piegato attorno. La massa è quella del suo orizzonte (spazio3d.js dà il raggio di Schwarzschild); niente disco: il
   // modello non gli dà niente da inghiottire. Sotto 2,5 r_g non si scende (lì chi sta fermo non esiste quasi più).
   const eBuco = Sis.stella.stato === 'buco nero' || (!(defs[0].luminosita > 0) && defs[0].raggio < 1e6 && Sis.stella.massa > 2.5), massaBuco = eBuco ? (defs[0].raggio * COSTANTI.c ** 2) / (2 * COSTANTI.G) : 0;
-  const buco = eBuco ? bucoNelMondo(N, { corpo: stella, massaKg: massaBuco, radice: `cosmo ${via.cosmo}/galassia ${via.galassia}/stella ${via.stella}/buco` }) : null;
+  const buco = eBuco ? bucoNelMondo(N, { corpo: stella, massaKg: massaBuco, radice: nomeFonte(via, 'buco') }) : null; // (la radice: un nome per la fonte del caso, quello di sempre — bolla.js `nomeFonte`)
   if (buco) { stella.raggio = 2.5 * buco.raggioGravitazionale; stella.influenza = 2000 * buco.raggioGravitazionale; }
   const punti = creaPunti(N), alone = punti.insieme(1), segni = punti.insieme(defs.length), posS = new Float32Array(3 * defs.length), luceS = new Float32Array(4 * defs.length), prgSfera = N.programma(V_SFERA, F_SFERA, { a_angolo: 0 });
   const quadrato = (() => { const vao = gl.createVertexArray(), b = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null); return { vao, b }; })();

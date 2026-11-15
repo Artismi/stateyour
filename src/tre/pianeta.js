@@ -39,6 +39,7 @@ import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucl
 import { semeEvento } from '../camera/cosmo.js';
 import { sorgente } from '../camera/eventi.js';
 import { accumuloAttivo } from './accumulo.js';
+import { luogoDi } from './bolla.js';
 
 const TW = 256, TH = 128, TWB = TW + 2, THB = TH + 2, MX = 32, MY = 16, LMAX = 7, DMAX = 2 * LMAX + 3;
 const RAD = Math.PI / 180, K_B = 1.380649e-23, R_GAS = 8.314;
@@ -381,7 +382,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
   const nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c); // (l'occhio si adatta in parte al colore della stella)
-  const corpoStella = corpi ? corpi.stella : N.corpo({ nome: 'stella', luogo: via ? `cosmo ${via.cosmo}/galassia ${via.galassia}/stella ${via.stella}` : null, raggio: raggioStella, luce: { colore: coloreLuce, T: Tstella } });
+  const corpoStella = corpi ? corpi.stella : N.corpo({ nome: 'stella', luogo: via ? luogoDi({ cosmo: via.cosmo, galassia: via.galassia, stella: via.stella }) : null, raggio: raggioStella, luce: { colore: coloreLuce, T: Tstella } });
   const anno = P.anno || 3.15e7, f0 = (P.fase || 0) / (2 * Math.PI), eps = (P.obliquita || 0) * RAD, verso = P.retrogrado ? -1 : 1, giorno = P.giorno || 86400, inclina = V.giro([0, 0, 1], -eps);
   const frazioneAnno = (t) => { const f = t / anno + f0; return f - Math.floor(f); };
   // verso la stella (assi inerziali): la declinazione della stella è ε·sin(2π·f), come nel clima di geologia.js

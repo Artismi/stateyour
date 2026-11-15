@@ -34,7 +34,7 @@ Ogni strato parla solo con quello sotto attraverso la lingua: la vista non chied
 
 | Strato | C'è | Manca | Condizioni |
 |---|---|---|---|
-| 1 Lingua | grammatica unica, andata e ritorno, HEALPix, peso per livello, punto a caso, impronta | una forma unica anche in `bolla.js` e `src/tre` (oggi nei cosmi paralleli scrivono un indirizzo che non si rilegge) | C1 |
+| 1 Lingua | grammatica unica, andata e ritorno, HEALPix, peso per livello, punto a caso, impronta; una forma sola in tutto il programma, anche nei cosmi paralleli (lavoro 3) | — | C1 |
 | 2 Caso | fonte unica, ordine indifferente | 128 bit e variante verificata (in corso); il registro della legge di ogni tiro | C2, C3 |
 | 3 Leggi | cosmo senza bordo; galassie, stelle, pianeti, storia termica, clima, erosione, mare, chimica, grani, atomi, scala quantistica; zoom senza salti | una prova di conservazione M∘μ = I per **ogni** passaggio di scala; la misura della commutazione per le soglie di comodo; lo stato a un istante diverso da «adesso» sopra le particelle; la vita | C6, C7, C8, C14 |
 | 4 Misura | indice del cosmo (Elias γ, libero), galassia per massa, stella per peso, pianeta per area, luogo per area, tempo sulla vita della stella | pesi degli esiti (in corso); dal campione al vero (in corso); fusioni (in corso); cervelli di Boltzmann contati (in corso); momenti d'osservatore (serve la vita) | C4, C5, C11, C13 |
@@ -51,7 +51,7 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
 2. **Misura** — pesi degli esiti, dal campione al vero, fusioni, prima stima dei cervelli di Boltzmann. *Fatto quando:*
    C4, C11, C13 provate; `puntoACaso` uniforme sulle stelle vere. (In corso.)
 3. **Una forma sola dell'indirizzo** — `bolla.js` e `src/tre` scrivono con `lingua.scrivi`. *Fatto quando:* ogni
-   indirizzo prodotto dal programma si rilegge (C1), anche nei cosmi paralleli.
+   indirizzo prodotto dal programma si rilegge (C1), anche nei cosmi paralleli. (Fatto: `test_lingua_indirizzo` I.)
 4. **Il passo** — P(a′\|a): stesso luogo a t+Δt (lento dalle leggi, veloce per peso oltre il tempo di amplificazione)
    e rami vicini. *Fatto quando:* C16 su un pianeta (due passi da 500 anni = uno da 1000, in distribuzione).
    Richiede lo stato a istanti diversi (C14) almeno per clima e superficie.
