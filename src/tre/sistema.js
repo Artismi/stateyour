@@ -10,7 +10,7 @@
 // uso:  const sis = creaSistema(N, { via: { cosmo, galassia, stella }, superficie: (viaPianeta) => superficieDi(viaPianeta),
 //                                    genitore (il corpo-riferimento della galassia, o niente), posizione, assi });
 //       N.attacca(sis.nodo, { distanza: … });   sis.pianeta(i) → il corpo del pianeta i;   sis.libera()
-import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucleo.js';
+import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero, luminanzaUno } from './nucleo.js';
 import { creaPianeta, fabbricaAnello, V_SFERA, F_SFERA } from './pianeta.js';
 import { creaPunti } from './luci.js';
 import { sistema } from '../camera/cosmo.js';
@@ -41,7 +41,9 @@ void main() { o_col = vec4(u_tinta.rgb, 0.0);${GLSL_PROFONDITA_F} }`;
 export function creaSistema(N, { via, superficie = () => null, genitore = null, posizione = null, assi = null, opzioni = {} } = {}) {
   const gl = N.gl, O = { orbite: true, dettaglio: true, ...opzioni }, Sis = sistema(via.cosmo, via.galassia, via.stella), defs = corpiSistema(via.cosmo, via.galassia, via.stella);
   if (!defs.length) return null; // la stella non è ancora nata
-  const Tstella = Sis.stella.T || 5772, nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c);
+  // (la luce della stella col suo colore vero, a luminanza 1: un foglio bianco sotto di lei vale 1. L'occhio che si adatta a
+  // quel colore — prima qui, a mano, «0,45 + 0,55·colore» — è in nucleo.js: OCCHIO, von Kries col grado di CIECAM02)
+  const Tstella = Sis.stella.T || 5772, nero = coloreCorpoNero(Tstella), coloreLuce = luminanzaUno(nero);
   // il riferimento del sistema (il suo baricentro, coi suoi assi): dentro la galassia, se c'è, altrimenti la radice
   const lontanoMax = Math.max(1, ...Sis.pianeti.map((P) => P.aM || 0));
   const nodo = N.corpo({ nome: `sistema ${via.stella}`, luogo: `stella ${via.stella}`, genitore, posizione, assi, raggio: 0, influenza: Math.max(3 * lontanoMax, 40 * UA) });

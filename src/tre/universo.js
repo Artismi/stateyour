@@ -120,7 +120,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         // un cielo, che qui è questo stesso chiarore; lo si aggiorna quando cambia di un decimo)
         for (const b of strato.buchi) if (b && b.stato.attivo && Math.abs(strato.chiarore[1] - (b._cieloDato || 0)) > 0.1 * (b._cieloDato || 0)) { b._cieloDato = strato.chiarore[1]; const c = strato.chiarore, d = new Float32Array(32); for (let q = 0; q < 8; q++) d.set([c[0], c[1], c[2], 1], 4 * q); b.mettiCielo(b._cieloDato > 0 ? { w: 4, h: 2, dati: d, unita: 1 } : null); }
         carico *= 30 * 0.785; strato.quanti = Math.max(3000, Math.min(nube.K, Math.round((nube.K * O.frammenti) / Math.max(carico, 1))));
-        E *= (30 * LUCE) / (4 * Math.PI); const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
+        E *= (30 * LUCE) / (4 * Math.PI); S.luceGalassia = (S.luceGalassia || 0) + E * O.diffusa; const angolo = Math.min(4 * Math.PI, Math.max(1e-5, Math.PI * (Rg / Math.max(strato.distanza, Rg * 0.3)) ** 2));
         if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.07 : 0.3) * angolo)); }
     },
     // (i buchi neri a cui dare il cielo: quello del centro, e quello del sistema aperto se è un buco nero)

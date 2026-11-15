@@ -35,7 +35,7 @@
 // uso:  const pianeta = creaPianeta(N, { P, stella, via, superficie: () => superficieDi(via) });
 //       N.attacca(pianeta.corpo, { distanza: 3 * P.raggioM });
 //       pianeta.info(lon, lat) → { quota, acqua, profondita }   pianeta.statistiche()   pianeta.libera()
-import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero } from './nucleo.js';
+import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F, coloreCorpoNero, luminanzaUno } from './nucleo.js';
 import { semeEvento } from '../camera/cosmo.js';
 import { sorgente } from '../camera/eventi.js';
 import { accumuloAttivo } from './accumulo.js';
@@ -190,9 +190,14 @@ void main() {
   vec3 su = normalize(v_su), est = normalize(v_est - su * dot(v_est, su)), nord = cross(su, est);
   vec3 suM = normalize(u_normali * su), occhio = normalize(-v_rel);
   float muS = dot(suM, u_sole), r = v_dati.z;
-  vec3 arriva = u_luce * luceCheArriva(max(r, u_atm.x), muS) * smoothstep(-0.02, 0.03, muS);
+  // (la parte del disco della stella sopra l'orizzonte: il segmento di un disco di raggio angolare u_disco — prima una
+  // sfumatura a mano tra −0,02 e 0,03 — e la luce che passa lungo l'orizzonte per la parte che c'è)
+  float hS = clamp(muS / max(u_disco, 1e-6), -1.0, 1.0), discoSu = (acos(-hS) + hS * sqrt(1.0 - hS * hS)) / 3.14159265;
+  vec3 arriva = u_luce * luceCheArriva(max(r, u_atm.x), max(muS, 0.0)) * discoSu;
   if (muS > 0.0) arriva *= ombraNuvole(v_rel);
   // la luce del cielo: l'irradianza del cielo vero (diffusione semplice e multipla) su un suolo orizzontale
+  // (e di notte la luce diffusa della galassia, uguale da ogni parte: su un suolo orizzontale un quarto di quella che arriva
+  // da tutte le direzioni — u_espo.w, nell'unità della stella; prima 0,0006 a mano)
   vec3 ambiente = u_luce * cieloSu(muS) + vec3(u_espo.w);
   vec2 rv = riva(u_alt, v_uv); if (v_uvM.z > 0.002) rv = mix(rv, riva(u_altM, v_uvM.xy), v_uvM.z);
   // (la riva passa dentro il punto dello schermo: i due colori pesati per quanto ne copre)
@@ -325,7 +330,10 @@ void main() {
   }
   float t = b - sqrt(disc); if (t < 0.0) discard;
   vec3 p = d * t, n = (p - v_c) / r, nM = transpose(u_vista) * n; vec3 col;
-  if (u_tinta.w > 0.0) { float mu = max(dot(n, -d), 0.0); col = u_tinta.rgb * u_tinta.w * (0.4 + 0.6 * pow(mu, 0.6)); } // la stella: più scura al bordo
+  // la stella: più scura al bordo con la legge dell'atmosfera grigia di Eddington, I(μ) = I(1)·(2 + 3μ)/5, e la luce che
+  // esce (π∫I·2μdμ = 0,8·πI(1)) uguale al flusso vero: u_tinta.w = F/E0 → π·I(μ)/E0 = u_tinta.w·(0,5 + 0,75μ)
+  // (prima: 0,4 + 0,6·μ^0,6, a mano, e senza conservare il flusso)
+  if (u_tinta.w > 0.0) { float mu = max(dot(n, -d), 0.0); col = u_tinta.rgb * u_tinta.w * (0.5 + 0.75 * mu); }
   else {
     vec3 pM = transpose(u_vista) * p - u_ombra.xyz; float bb = dot(pM, u_sole), cc = dot(pM, pM) - u_ombra.w * u_ombra.w; // l'ombra del pianeta sulla luna
     float luce = (bb < 0.0 && bb * bb - cc > 0.0) ? 0.0 : 1.0;
@@ -388,7 +396,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
-  const nero = coloreCorpoNero(Tstella), coloreLuce = nero.map((c) => 0.45 + 0.55 * c); // (l'occhio si adatta in parte al colore della stella)
+  const nero = coloreCorpoNero(Tstella), coloreLuce = luminanzaUno(nero); // (il colore vero della luce, a luminanza 1: l'occhio che vi si adatta è in nucleo.js, OCCHIO)
   const corpoStella = corpi ? corpi.stella : N.corpo({ nome: 'stella', luogo: via ? luogoDi({ cosmo: via.cosmo, galassia: via.galassia, stella: via.stella }) : null, raggio: raggioStella, luce: { colore: coloreLuce, T: Tstella } });
   const anno = P.anno || 3.15e7, f0 = (P.fase || 0) / (2 * Math.PI), eps = (P.obliquita || 0) * RAD, verso = P.retrogrado ? -1 : 1, giorno = P.giorno || 86400, inclina = V.giro([0, 0, 1], -eps);
   const frazioneAnno = (t) => { const f = t / anno + f0; return f - Math.floor(f); };
@@ -671,7 +679,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         const t = z.t;
         if (t !== tess) { tess = t; madre = t.L > 0 ? tessere.get(chiave(t.L - 1, t.tx >> 2, t.ty >> 2)) : null; if (madre && !madre.pronta) madre = null; const m2 = madre || t;
           S.lega(0, t.alt, u.u_alt); S.lega(1, t.pend, u.u_pend); S.lega(2, t.terra, u.u_terra); S.lega(3, t.acqua || trasparente, u.u_acqua); S.lega(4, t.oriz1, u.u_oriz1); S.lega(10, t.oriz2, u.u_oriz2);
-          S.lega(6, m2.alt, u.u_altM); S.lega(7, m2.pend, u.u_pendM); S.lega(8, m2.terra, u.u_terraM); S.lega(9, m2.acqua || trasparente, u.u_acquaM); S.lega(11, m2.oriz1, u.u_oriz1M); S.lega(12, m2.oriz2, u.u_oriz2M); gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, m2.acqua ? 1 : 0, 0.0006);
+          S.lega(6, m2.alt, u.u_altM); S.lega(7, m2.pend, u.u_pendM); S.lega(8, m2.terra, u.u_terraM); S.lega(9, m2.acqua || trasparente, u.u_acquaM); S.lega(11, m2.oriz1, u.u_oriz1M); S.lega(12, m2.oriz2, u.u_oriz2M); gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, m2.acqua ? 1 : 0, (S.luceGalassia || 0) / 4 / stato.E);
           // (il livello L serve fino alla distanza D; negli ultimi due quinti di D i dati sfumano in quelli della madre)
           const D = madre ? distanzaLivello(t.L, S) : 0; gl.uniform2f(u.u_sfuma, 0.55 * D, 0.95 * D); if (madre) madre.uso = uso; }
         // il centro della pezza rispetto all'occhio, in doppia precisione; poi i tre assi della pezza negli assi del mondo

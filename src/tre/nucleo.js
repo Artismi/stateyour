@@ -123,6 +123,9 @@ export const pesoConi = (LA) => Math.max(0, Math.min(1, Math.log(Math.max(LA, 1e
 // l'irradianza «che vale 1» (W/m²: la luce di un foglio bianco) che l'occhio adattato a L_A sceglie: L_A va al grigio medio
 export const E0Adattato = (LA, K) => (Math.PI * Math.max(LA, OCCHIO.soglia)) / (K * X_MEDIO);
 
+// un colore lineare portato a luminanza 1 (Rec. 709)
+export const luminanzaUno = (c) => { const y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] || 1; return c.map((x) => x / y); };
+
 export function creaNucleo(tela, opzioni = {}) {
   const O = {
     fov: 0.75, // l'angolo di campo verticale (radianti)
@@ -219,7 +222,9 @@ export function creaNucleo(tela, opzioni = {}) {
   // per fotogramma. L'aria del pianeta: a camera ferma si calcola una volta sola.
   // `vuoto`: sotto quale frazione della luce più forte del suo anello (e A_V per raggio) una cella della galassia è vuota e il
   // raggio la salta (volumi.js; 0: niente salto).
-  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4 }, C_LUCE = 299792458;
+  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4, occhio: { adatta: O.adatta !== false, E0: 0 } }, C_LUCE = 299792458;
+  // (`occhio`: l'esposizione dell'occhio — vedi OCCHIO in cima —; `adatta: false` lascia l'unità a ciò che gli strati
+  // propongono, come prima; `E0` > 0 la fissa, W/m², per le prove)
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
@@ -366,12 +371,36 @@ export function creaNucleo(tela, opzioni = {}) {
     imm = { W, H, colA: immagine(W, H, f, null, { filtro: gl.NEAREST }), colB: immagine(W, H, f, null, { filtro: gl.NEAREST }), prof: immagine(W, H, 'profondita', null, { filtro: gl.NEAREST }) };
     imm.fA = telaio(imm.colA, imm.prof); imm.fB = telaio(imm.colB);
   }
-  // la tonalità: dall'immagine in virgola mobile allo schermo (curva filmica di Narkowicz 2015, poi la gamma)
-  const prgTono = programma(V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col;
-    void main() { vec3 x = max(texture(u_col, v_uv).rgb, 0.0); x = clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); o = vec4(pow(x, vec3(1.0 / 2.2)), 1.0); }`);
+  // la tonalità: dall'immagine in virgola mobile allo schermo. Prima l'occhio (OCCHIO in cima): von Kries verso il bianco
+  // della luce del luogo (u_bianco, luminanza 1) di D; il colore che sfuma nella luminanza scotopica quando i coni non
+  // bastano (u_occ.y: il loro peso); poi la curva (Narkowicz 2015) e la gamma dello schermo (sRGB, ~2,2)
+  const prgTono = programma(V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col; uniform vec3 u_bianco; uniform vec2 u_occ;
+    void main() { vec3 x = max(texture(u_col, v_uv).rgb, 0.0); x /= mix(vec3(1.0), max(u_bianco, vec3(1e-3)), u_occ.x);
+      if (u_occ.y < 1.0) { vec3 X = mat3(0.4124, 0.2126, 0.0193, 0.3576, 0.7152, 0.1192, 0.1805, 0.0722, 0.9505) * x; float sc = X.y * max(0.0, 1.33 * (1.0 + (X.y + X.z) / max(X.x, 1e-20)) - 1.68) / 2.5731; x = mix(vec3(sc), x, u_occ.y); }
+      x = clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); o = vec4(pow(x, vec3(1.0 / 2.2)), 1.0); }`);
+  // LA MISURA DELLA LUCE per l'occhio: la luminanza (Rec. 709, primari sRGB) media di ogni casella di una griglia 32×32
+  // sull'immagine finale (tutti i suoi punti, nessuno saltato), letta un fotogramma dopo senza fermare la scheda (un
+  // buffer di lettura e un recinto); la media dell'immagine è la media delle caselle pesata per la loro area
+  const NG = 32, prgMisura = conVirgola ? programma(V_SCHERMO, `out vec4 o; uniform sampler2D u_col; uniform vec2 u_lati;
+    void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(vec2(c) * u_lati / ${NG}.0), b = ivec2(vec2(c + 1) * u_lati / ${NG}.0); float s = 0.0;
+      for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) s += dot(max(texelFetch(u_col, ivec2(x, y), 0).rgb, 0.0), vec3(0.2126, 0.7152, 0.0722));
+      o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), 0.0, 0.0, 1.0); }`) : null;
+  const misura = { img: null, f: null, pbo: null, recinto: null, E0: 1, aree: null, W: 0, H: 0, dati: new Float32Array(4 * NG * NG), LA: NaN, K: 0 };
+  function misuraLuce(col, W, H) {
+    if (!prgMisura) return; const prima = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    if (!misura.img) { misura.img = immagine(NG, NG, gl.getExtension('EXT_color_buffer_float') ? 'rgba32f' : 'rgba16f', null, { filtro: gl.NEAREST }); misura.f = telaio(misura.img); misura.pbo = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 4 * 4 * NG * NG, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); }
+    if (misura.recinto) { const st = gl.getSyncParameter(misura.recinto, gl.SYNC_STATUS); if (st !== gl.SIGNALED) return; // (la lettura di prima non è ancora pronta: si aspetta)
+      gl.deleteSync(misura.recinto); misura.recinto = null; gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, misura.dati); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      let m = 0, a = 0; const cx = (i, L) => Math.floor(((i + 1) * L) / NG) - Math.floor((i * L) / NG);
+      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const w = cx(i, misura.W) * cx(j, misura.H), v = misura.dati[4 * (j * NG + i)]; if (w > 0 && Number.isFinite(v)) { m += w * v; a += w; } }
+      if (a > 0) misura.LA = ((m / a) * misura.E0 * misura.K) / Math.PI; }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, misura.f); gl.viewport(0, 0, NG, NG); gl.useProgram(prgMisura.p); lega(0, col, prgMisura.u.u_col); gl.uniform2f(prgMisura.u.u_lati, W, H); schermo();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.readPixels(0, 0, NG, NG, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    misura.recinto = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); misura.E0 = S.E0; misura.W = W; misura.H = H; gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
+  }
 
   // ---------- un fotogramma
-  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], esposizione: 1, quota: 0, luceQui: 1, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0 };
+  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0 };
   S.bersaglio = (b) => { S.bersagli.push(b); const d = V.lungo(b.p) - b.raggio; if (d > 0 && d < S._vicino) S._vicino = d; };
   S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
   const _a = new Map(); let occhioInerziale = [0, 0, 0];
@@ -395,7 +424,7 @@ export function creaNucleo(tela, opzioni = {}) {
     }
     return out;
   };
-  const stat = { cpuMs: 0, fotogrammi: 0 }; let esposto = 1, perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
+  const stat = { cpuMs: 0, fotogrammi: 0 }; let perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
   const tasti = new Set();
   function fotogramma(ms = performance.now()) {
     if (perso || !cam.corpo || !tela.width || !tela.height) return;
@@ -422,15 +451,20 @@ export function creaNucleo(tela, opzioni = {}) {
     S.tanX = tX; S.tanY = tY; S.fuoco = H / (2 * tY); S.fc = 2 / Math.log2(lontano + 1);
     // la stella che illumina: quella più in alto nell'albero del corpo a cui si è attaccati
     let st = cam.corpo; while (st && !st.luce) st = st.genitore; if (!st) st = cam.corpo.stella || null; S.stella = st || null; // (un riferimento può dire qual è la sua stella: `stella`)
-    S.bersagli.length = 0; S._vicino = Infinity; S.luceVoluta = 0;
+    S.bersagli.length = 0; S._vicino = Infinity; S.luceVoluta = 0; S.luceGalassia = 0; // (luceGalassia: W/m², la luce diffusa della galassia che arriva all'occhio da tutte le direzioni — universo.js)
     if (st && st !== cam.corpo) { const v = tra(cam.corpo, st, S.t); S.distanzaStella = V.lungo(v); S.versoStella = V.norma(v); } else { S.versoStella = [0, 1, 0]; S.distanzaStella = 1; }
     S.coloreStella = st && st.luce.colore ? st.luce.colore : [1, 1, 1];
     for (const s of strati) if (s.aggiorna) s.aggiorna(S);
     S.vicinoM = isFinite(S._vicino) ? S._vicino : 0;
-    // l'irradianza che vale «1»: quella proposta dagli strati, seguita come fa l'occhio (in fretta verso il chiaro, piano verso il buio)
-    if (S.luceVoluta > 0) { const v = Math.log(S.luceVoluta), o = Math.log(S.E0), k = Math.min(1, dtVero > 0 ? dtVero * (v > o ? 6 : 2.5) : 1); S.E0 = Math.exp(o + (v - o) * k); }
-    // l'esposizione: quella fissata, o quella che la luce del posto chiede (gli strati dicono S.luceQui: 1 in pieno giorno)
-    const voluta = O.esposizione > 0 ? O.esposizione : 1 / Math.max(0.004, S.luceQui); esposto += (voluta - esposto) * Math.min(1, dtVero > 0 ? dtVero * 2.5 : 1); S.esposizione = esposto;
+    // l'irradianza che vale «1»: quella che l'occhio sceglie adattandosi alla luce misurata nell'immagine (OCCHIO in cima);
+    // finché non c'è una misura (i primi fotogrammi), o senza immagini in virgola mobile, quella proposta dagli strati.
+    // La si segue come fa l'occhio: in fretta verso il chiaro, piano verso il buio
+    const K = efficaciaLuminosa((st && st.luce && st.luce.T) || OCCHIO.TSole); misura.K = K; S.efficacia = K;
+    if (vista.occhio.adatta && Number.isFinite(misura.LA)) S.luceVoluta = E0Adattato(misura.LA, K);
+    if (vista.occhio.E0 > 0) S.E0 = vista.occhio.E0;
+    else if (S.luceVoluta > 0) { const v = Math.log(S.luceVoluta), o = Math.log(S.E0), k = Math.min(1, dtVero > 0 ? dtVero * (v > o ? 6 : 2.5) : 1); S.E0 = Math.exp(o + (v - o) * k); }
+    // ciò che l'occhio è adesso: la luminanza a cui è adattato (cd/m²), il grado di adattamento al colore, il peso dei coni
+    S.LA = Number.isFinite(misura.LA) ? Math.max(misura.LA, OCCHIO.soglia) : (S.E0 * K * X_MEDIO) / Math.PI;
     gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA); gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 1); gl.clearDepth(1); gl.depthMask(true); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
     for (const s of strati) if (s.disegna) s.disegna(S, 'fondo');
@@ -442,7 +476,10 @@ export function creaNucleo(tela, opzioni = {}) {
     // le passate sull'immagine intera (l'aria), poi la tonalità
     let da = { col: imm.colA, prof: imm.prof, f: imm.fA }, a = { col: imm.colB, prof: imm.prof, f: imm.fB };
     for (const s of strati) if (s.dopo) { gl.bindFramebuffer(gl.FRAMEBUFFER, a.f); gl.viewport(0, 0, W, H); if (s.dopo(S, da, a)) { const x = da; da = a; a = x; } }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); schermo();
+    if (vista.occhio.adatta) misuraLuce(da.col, W, H);
+    // (il bianco della luce del luogo, a luminanza 1: S.coloreStella è il colore vero della sua luce)
+    const cs = S.coloreStella, yb = 0.2126 * cs[0] + 0.7152 * cs[1] + 0.0722 * cs[2] || 1, Dc = S.stella ? gradoAdattamento(S.LA) : 0; S.adattamento = { LA: S.LA, D: Dc, coni: pesoConi(S.LA) };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); schermo();
     for (const s of strati) if (s.sopra) s.sopra(S);
     gl.bindVertexArray(null);
     stat.cpuMs = performance.now() - t0; stat.fotogrammi++;
