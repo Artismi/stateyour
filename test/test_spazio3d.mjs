@@ -161,9 +161,14 @@ prova('le galassie vere nel tempo: le stelle girano, quelle non ancora nate non 
   // — a 0,3 kpc un giro dura 7 milioni di anni —, e da quando gli anelli di galassie.js risolvono il centro il catalogo ha
   // stelle del disco anche lì. Si contano quelle sotto mezzo giro: Ω·t·1,35 < π, dove 1,35 = 1 + 2·0,15/0,85 è quanto
   // l'epiciclo, che motoStella tiene sotto 0,15 r, può far correre l'angolo più del cerchio guida)
-  const dopo = S3.statoGalassia(1, gid, 1e7 * ANNO), verso = GA.cinematica(Gx.forma).verso; let nelVerso = 0, disco = 0;
-  for (let i = 0; i < o.n; i++) { if (Gx.stelle[i].componente !== 'disco') continue; const rK = Math.max(1e-6, Math.hypot(o.pos[3 * i], o.pos[3 * i + 1]) / GA.dentro.KPC); if (1.35 * (GA.curvaRotazione(Gx.forma, rK) / rK) * GA.dentro.KMS * 0.01 >= Math.PI) continue; disco++; const a0 = Math.atan2(o.pos[3 * i + 1], o.pos[3 * i]), a1 = Math.atan2(dopo.pos[3 * i + 1], dopo.pos[3 * i]), d = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)); if (Math.sign(d) === verso) nelVerso++; }
-  assert.ok(disco > 200 && nelVerso > 0.9 * disco, `${nelVerso} su ${disco} nel verso del disco`);
+  // (Quante stelle restano sotto mezzo giro dipende dalla galassia: in una compatta, con lo sferoide all'80%, quasi tutto il
+  // disco gira in meno di venti milioni di anni. Perciò si contano le prime tre spirali del cosmo, non la prima sola)
+  const dopo = S3.statoGalassia(1, gid, 1e7 * ANNO); let nelVerso = 0, disco = 0;
+  for (const gs of C.galassie.map((g, i) => (g.forma.classe.startsWith('spirale') ? i : -1)).filter((i) => i >= 0).slice(0, 3)) {
+    const Gs = CO.galassia(1, gs), os = S3.statoGalassia(1, gs, 0), ds = gs === gid ? dopo : S3.statoGalassia(1, gs, 1e7 * ANNO), verso = GA.cinematica(Gs.forma).verso;
+    for (let i = 0; i < os.n; i++) { if (Gs.stelle[i].componente !== 'disco') continue; const rK = Math.max(1e-6, Math.hypot(os.pos[3 * i], os.pos[3 * i + 1]) / GA.dentro.KPC); if (1.35 * (GA.curvaRotazione(Gs.forma, rK) / rK) * GA.dentro.KMS * 0.01 >= Math.PI) continue; disco++; const a0 = Math.atan2(os.pos[3 * i + 1], os.pos[3 * i]), a1 = Math.atan2(ds.pos[3 * i + 1], ds.pos[3 * i]), d = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)); if (Math.sign(d) === verso) nelVerso++; }
+  }
+  assert.ok(disco > 200 && nelVerso > 0.9 * disco, `${nelVerso} su ${disco} nel verso del disco (le prime tre spirali)`);
   // cinque miliardi di anni fa: chi è nato dopo non c'è; chi oggi è un resto giovane era una stella viva, più luminosa
   const prima = S3.statoGalassia(1, gid, -5e9 * ANNO); let nonNate = 0, eranoVive = 0;
   for (let i = 0; i < o.n; i++) { const S = Gx.stelle[i]; assert.equal(prima.esiste[i], S.eta > 5e9 ? 1 : 0); if (S.eta <= 5e9) nonNate++; else if (S.morta !== undefined && S.morta < 5e9) { eranoVive++; assert.ok(prima.stato[i] <= 1 && prima.L[i] > o.L[i], 'un resto di oggi, prima di morire, era una stella'); } else if (S.morta === undefined && S.massa > 0.1) assert.ok(prima.L[i] <= o.L[i] * 1.01 || o.stato[i] === 1, 'una stella da giovane è meno luminosa (le nane brune no: si raffreddano)'); }
