@@ -24,13 +24,14 @@ import { creaNucleo } from '../nucleo.js';
 import { creaUniverso } from '../universo.js';
 import { creaPianeta } from '../pianeta.js';
 import { sistema } from '../../camera/cosmo.js';
-import { superficieDi } from '../../camera/mappa.js';
 
 let N = null, U = null, Pi = null, nome = null;
 const aspetta = (f, ms = 120000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto: ' + nome)); else { if (N) N.fotogramma(); setTimeout(p, 50); } }; p(); });
 const immagini = new Map();
 
 async function scena(quale) {
+  // (da dentro la galassia: la stessa scena di «galassia», con la camera nel disco — il volume non si rifà)
+  if (quale === 'dentro' && nome === 'galassia' && U) { nome = quale; immagini.clear(); const G = U.galassia(); U.guardaDa(G.nodo, 0.45 * G.raggio, 0.02, 0.6); return adatta(quale); }
   if (N) { try { U?.libera(); N.libera(); } catch { /* già libero */ } }
   N = null; U = null; Pi = null; nome = quale; immagini.clear();
   const vecchia = document.getElementById('tela'), tl = vecchia.cloneNode(); vecchia.replaceWith(tl);
@@ -38,7 +39,7 @@ async function scena(quale) {
   if (quale === 'galassia' || quale === 'dentro') {
     U = creaUniverso(N, { via: { cosmo: 1, galassia: 2 }, livello: 'galassia' });
     await aspetta(() => U.pronto() && U.galassia() && U.galassia().volume && U.galassia().volume.stato.nebulose > 0);
-    const G = U.galassia(); if (quale === 'dentro') U.guardaDa(G.nodo, 0.45 * G.raggio, 0.02, 0.6);
+    const G = U.galassia(); if (quale === 'dentro') U.guardaDa(G.nodo, 0.45 * G.raggio, 0.02, 0.6); nome = quale;
   } else if (quale === 'ragnatela') {
     U = creaUniverso(N, { via: { cosmo: 1 }, livello: 'cosmo' });
     await aspetta(() => U.pronto() && U.cosmo.rete && U.cosmo.rete.pronto() && U.cosmo.rete.stato.fine);
@@ -46,25 +47,29 @@ async function scena(quale) {
     // il primo pianeta di roccia con l'aria spessa almeno un decimo di quella della Terra, dalla galassia 2 del cosmo 1
     let via = null, P = null; for (let s = 838; s < 1400 && !P; s++) { const Sis = sistema(1, 2, s); for (const [i, q] of Sis.pianeti.entries()) if (q.tipo !== 'gassoso' && q.interno && (q.clima?.pressione || 0) > 1e4 && (q.clima?.T || 0) > 200) { via = { cosmo: 1, galassia: 2, stella: s, pianeta: i }; P = q; break; } }
     const Sis = sistema(via.cosmo, via.galassia, via.stella);
-    Pi = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => superficieDi(via), opzioni: { nuvole: 0, onde: 0 } });
+    // (senza la superficie: il suolo è la sfera liscia del pianeta — qui si prova l'aria, e le tessere costerebbero mezzo minuto)
+    Pi = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => null, opzioni: { nuvole: 0, onde: 0 } });
     N.attacca(Pi.corpo, { distanza: 3 * P.raggioM });
-    await aspetta(() => Pi.pronto() && Pi.statistiche().inAttesa === 0, 120000);
     // la stella a mezza altezza (seno 0,5) sopra il punto (0°, 20°), salendo; lo sguardo verso l'orizzonte, dalla parte opposta alla stella
     const lat = 20 * Math.PI / 180, lon = 0, cl = Math.cos(lat), q = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], g = P.bloccato ? P.anno : P.giorno;
     const mu = (tt) => { const A = N.assettoDi(Pi.corpo, tt), s = N.V.norma(N.tra(Pi.corpo, Pi.stella, tt)), su = N.V.mv(A, q); return N.V.scal(su, s); };
     let tm = 0, dm = Infinity; for (let k = 0; k < 720; k++) { const tt = (k / 720) * g, m = mu(tt); if (mu(tt + g / 720) > m && Math.abs(m - 0.5) < dm) { dm = Math.abs(m - 0.5); tm = tt; } } N.tempo.t = tm;
     N.vai({ lon, lat, quota: 1500, direzione: Math.PI, alza: 0.04 });
-    await aspetta(() => Pi.statistiche().inAttesa === 0, 60000);
   }
+  return adatta(quale);
+}
+async function adatta(quale) {
   // l'occhio si adatta per qualche fotogramma, poi lo si ferma lì: le immagini da confrontare hanno la stessa esposizione
-  N.vista.occhio.E0 = 0; N.vista.occhio.adatta = true; for (let i = 0; i < 24; i++) N.fotogramma(performance.now() + 100 * i);
+  // (tra un fotogramma e l'altro si torna al giro del browser: la misura della luce si legge solo lì — un recinto della
+  // scheda cambia stato solo fra un compito e l'altro, come in un'applicazione vera)
+  N.vista.occhio.E0 = 0; N.vista.occhio.adatta = true; for (let i = 0; i < 40; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 20)); }
   N.vista.occhio.E0 = N.stato.E0; N.vista.occhio.adatta = false;
   return { scena: quale, E0: N.stato.E0, LA: N.stato.LA, W: N.stato.W, H: N.stato.H, pianeta: Pi ? Pi.aria && { H: Pi.aria.H, pressione: Pi.aria.pressione } : null };
 }
 
 // disegna con una discretizzazione: passi dei volumi, passi dell'aria, accumulo (fotogrammi a camera ferma)
-function disegna({ passi = null, passiAria = null, accumulo = false, fotogrammi = 1, chiave = null } = {}) {
-  const t0 = performance.now();
+function disegna({ passi = null, passiAria = null, accumulo = false, fotogrammi = 1, chiave = null, nuovaAria = false } = {}) {
+  const t0 = performance.now(); if (nuovaAria && Pi) Pi.cielo3d.libera(); // (le immagini di Add e Tot si rifanno durante il fotogramma, come la prima volta)
   if (passi) N.vista.passi = { ...N.vista.passi, galassia: passi, ragnatela: passi };
   if (passiAria && Pi) Pi.opzioni.passiAria = passiAria;
   N.vista.accumulo = { ...N.vista.accumulo, attivo: !!accumulo };

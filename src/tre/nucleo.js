@@ -23,11 +23,12 @@
 //    per secondo di chi guarda (1, un giorno, un anno…), `tempo.pausa`. Tutto ciò che si muove lo legge da lì.
 //  · LA LUCE. Le luminanze sono in unità in cui 1 è un foglio bianco opaco illuminato in pieno dalla stella del corpo a
 //    cui si è attaccati; l'immagine si disegna in virgola mobile (una stella vale decine di migliaia, la notte millesimi)
-//    e alla fine l'ESPOSIZIONE e una curva di tonalità la portano sullo schermo. L'esposizione segue da sé la luce che
-//    c'è (di notte l'occhio si apre), o la si fissa.
-//    In S.E0 c'è l'irradianza (W/m²) che vale «1» in questo fotogramma: gli strati la propongono (S.proponiLuce(E):
-//    la luce della stella dove si è; tra le stelle, il flusso delle più brillanti) e ognuno moltiplica la sua luce per
-//    S.espo(E) = E / E0.
+//    e alla fine L'OCCHIO (OCCHIO, qui sotto) e una curva di tonalità la portano sullo schermo. L'occhio si adatta da sé
+//    alla luce che misura nell'immagine (la luminanza media; non sotto la sua soglia assoluta), o lo si fissa (vista.occhio).
+//    In S.E0 c'è l'irradianza (W/m²) che vale «1» in questo fotogramma: quella che l'occhio sceglie; finché non ha misurato
+//    niente, quella che gli strati propongono (S.proponiLuce(E): la luce della stella dove si è; tra le stelle, il flusso
+//    delle più brillanti). Ognuno moltiplica la sua luce per S.espo(E) = E / E0. In S.adattamento: { LA (cd/m²), D (il grado
+//    di adattamento al colore), coni (1: fotopico, 0: scotopico) }.
 //  · I BERSAGLI. Ogni strato può dire che cosa c'è da raggiungere (S.bersaglio({ p, raggio, corpo })): la rotella porta
 //    verso quello che sta sotto il cursore, il volo va veloce quanto è lontana la cosa più vicina.
 //  · GLI STRATI. Chi disegna si aggiunge come strato: { nome, aggiorna(S), disegna(S, passata), dopo(S, da, a), sopra(S),
@@ -45,7 +46,7 @@
 //   N.tempo.velocita = 86400;                     // un giorno al secondo
 // Lo stato S che ogni strato riceve: { gl, t, dt, W, H, proj, vista (mondo → occhio, 3×3), fc (per la profondità),
 //   tanX, tanY, fuoco (pixel), camera, versoCorpo(corpo, out) (occhio → centro, metri, doppia precisione),
-//   assetto(corpo) (3×3), stella (il corpo che illumina), versoStella (unitario), esposizione, quota (dal suolo) }.
+//   assetto(corpo) (3×3), stella (il corpo che illumina), versoStella (unitario), E0, LA, adattamento, quota (dal suolo) }.
 
 // ---------- piccola algebra, in doppia precisione (vettori [x, y, z], matrici 3×3 per righe)
 export const V = {
@@ -385,18 +386,24 @@ export function creaNucleo(tela, opzioni = {}) {
     void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(vec2(c) * u_lati / ${NG}.0), b = ivec2(vec2(c + 1) * u_lati / ${NG}.0); float s = 0.0;
       for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) s += dot(max(texelFetch(u_col, ivec2(x, y), 0).rgb, 0.0), vec3(0.2126, 0.7152, 0.0722));
       o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), 0.0, 0.0, 1.0); }`) : null;
-  const misura = { img: null, f: null, pbo: null, recinto: null, E0: 1, aree: null, W: 0, H: 0, dati: new Float32Array(4 * NG * NG), LA: NaN, K: 0 };
+  // (tre buffer di lettura a giro: ognuno si rilegge solo quando il suo recinto è passato, e intanto si scrive nel successivo;
+  // d'uso «COPY»: con «READ» Chromium ne tiene una copia d'ombra che qui scartava a ogni fotogramma, con un avviso)
+  const misura = { img: null, f: null, code: [], liberi: [], LA: NaN, K: 0, dati: new Float32Array(4 * NG * NG) };
   function misuraLuce(col, W, H) {
     if (!prgMisura) return; const prima = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-    if (!misura.img) { misura.img = immagine(NG, NG, gl.getExtension('EXT_color_buffer_float') ? 'rgba32f' : 'rgba16f', null, { filtro: gl.NEAREST }); misura.f = telaio(misura.img); misura.pbo = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 4 * 4 * NG * NG, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); }
-    if (misura.recinto) { const st = gl.getSyncParameter(misura.recinto, gl.SYNC_STATUS); if (st !== gl.SIGNALED) return; // (la lettura di prima non è ancora pronta: si aspetta)
-      gl.deleteSync(misura.recinto); misura.recinto = null; gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, misura.dati); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    if (!misura.img) { misura.img = immagine(NG, NG, gl.getExtension('EXT_color_buffer_float') ? 'rgba32f' : 'rgba16f', null, { filtro: gl.NEAREST }); misura.f = telaio(misura.img);
+      for (let i = 0; i < 3; i++) { const b = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, b); gl.bufferData(gl.PIXEL_PACK_BUFFER, 4 * 4 * NG * NG, gl.STREAM_COPY); misura.liberi.push(b); } gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); }
+    // la lettura più vecchia, se è pronta (senza fermare la scheda)
+    const q = misura.code[0];
+    if (q && gl.getSyncParameter(q.recinto, gl.SYNC_STATUS) === gl.SIGNALED) { misura.code.shift();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, q.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, misura.dati); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); gl.deleteSync(q.recinto); misura.liberi.push(q.pbo);
       let m = 0, a = 0; const cx = (i, L) => Math.floor(((i + 1) * L) / NG) - Math.floor((i * L) / NG);
-      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const w = cx(i, misura.W) * cx(j, misura.H), v = misura.dati[4 * (j * NG + i)]; if (w > 0 && Number.isFinite(v)) { m += w * v; a += w; } }
-      if (a > 0) misura.LA = ((m / a) * misura.E0 * misura.K) / Math.PI; }
+      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const w = cx(i, q.W) * cx(j, q.H), v = misura.dati[4 * (j * NG + i)]; if (w > 0 && Number.isFinite(v)) { m += w * v; a += w; } }
+      if (a > 0) misura.LA = ((m / a) * q.E0 * q.K) / Math.PI; }
+    const pbo = misura.liberi.shift(); if (!pbo) return; // (tutte e tre in viaggio: questo fotogramma non si misura)
     gl.bindFramebuffer(gl.FRAMEBUFFER, misura.f); gl.viewport(0, 0, NG, NG); gl.useProgram(prgMisura.p); lega(0, col, prgMisura.u.u_col); gl.uniform2f(prgMisura.u.u_lati, W, H); schermo();
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, misura.pbo); gl.readPixels(0, 0, NG, NG, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    misura.recinto = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); misura.E0 = S.E0; misura.W = W; misura.H = H; gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.readPixels(0, 0, NG, NG, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    misura.code.push({ pbo, recinto: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), E0: S.E0, K: misura.K, W, H }); gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
   }
 
   // ---------- un fotogramma

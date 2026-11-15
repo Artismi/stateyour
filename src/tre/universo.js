@@ -14,7 +14,7 @@
 //   girano con i bracci; dove c'è più polvere la luce è più debole e più rossa.
 // Che cosa NON è vero: i batuffoli sono un campione della forma (decine di migliaia: da dentro la galassia si vedono
 // come nubi larghe, non come la Via Lattea in cielo); la polvere non fa ombra lungo la linea di vista.
-import { V } from './nucleo.js';
+import { V, coloreCorpoNero } from './nucleo.js';
 import { creaPunti } from './luci.js';
 import { creaSistema } from './sistema.js';
 import { scenaCosmo, scenaGalassia, statoCosmo } from '../camera/spazio3d.js';
@@ -28,6 +28,10 @@ import { ramiCosmo, cosmoBase, cosmo as cosmoDi, galassia as galassiaDi } from '
 import { bollaDi, viaDi, conoBolla, luogoDi, nomeFonte } from './bolla.js';
 import { creaSplatRete, creaSplatNebulose } from './splat.js'; // (N.vista.splat: accanto ai volumi, per confrontare)
 
+// (i colori dei batuffoli, il ripiego finché il volume non c'è: gli stessi corpi neri delle stelle vecchie e giovani di
+// volume.worker.js, e la polvere che arrossa con la curva di Cardelli, Clayton & Mathis come in volumi.js — prima tre
+// terne scritte a mano; restano a mano quanto vale «giovane» e quanto «buio», vedi sotto)
+const VECCHIE = coloreCorpoNero(4300), GIOVANI_C = coloreCorpoNero(9500), ARROSSA = [0.79, 1, 1.31];
 const ANNO = 3.156e7, LUCE = 1e20; // (le luminosità passano alla scheda in unità di 10²⁰ W: una galassia vale 10¹⁷)
 const lineare = (c) => (c / 255) ** 2.2;
 const tiri = (nome) => { let s = sorgente('mondo3d').seme(nome); return () => (s = (s * 16807) % 2147483647) / 2147483647; };
@@ -64,14 +68,14 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       let x, y, z, taglia, col;
       if (r() < parteSfer) { // lo sferoide (profilo di Hernquist): stelle vecchie, giallastre
         const u = Math.sqrt(r() * 0.92), rr = (C.sferoide.scala * u) / (1 - u), ct = 2 * r() - 1, st = Math.sqrt(1 - ct * ct), fi = 2 * Math.PI * r(); x = rr * st * Math.cos(fi); y = rr * st * Math.sin(fi); z = rr * ct * (C.sferoide.schiacciata || 1);
-        taglia = Math.max(0.012 * Rg, 0.5 * rr); col = [1, 0.82, 0.6]; w[k] = 1;
+        taglia = Math.max(0.012 * Rg, 0.5 * rr); col = VECCHIE; w[k] = 1;
       } else { // il disco: un anello a caso (in proporzione alla massa), un angolo, un'altezza con la legge sech²
         let m = r() * tot, i = 0; while (i < nA - 1 && m > pesi[i]) { m -= pesi[i]; i++; }
         const r0 = A.bordo[i], r1 = A.bordo[i + 1], rr = Math.sqrt(r0 * r0 + r() * (r1 * r1 - r0 * r0)), fi = 2 * Math.PI * r(), z0 = A.spessore[i] || 0.01 * Rg; x = rr * Math.cos(fi); y = rr * Math.sin(fi); z = z0 * Math.atanh(Math.max(-0.995, Math.min(0.995, 2 * r() - 1)));
         // quanto vale la densità vera lì rispetto alla media dell'anello: i bracci, la barra
         const qui = C.densita(x, y, z), media = (A.stelle[i] / (2 * z0)) / Math.cosh(z / z0) ** 2, rapporto = media > 0 ? Math.max(0.15, Math.min(6, qui.stelle / media)) : 1, polvere = qui.polvere / (qui.stelle + 1e-30);
         const giovane = Math.max(0, Math.min(1, (rapporto - 1) * 0.8)), buio = 1 / (1 + 60 * polvere); // nei bracci stelle giovani e azzurre; dove c'è polvere, meno luce e più rossa
-        w[k] = rapporto * (0.45 + 0.55 * buio); taglia = Math.max(0.018 * Rg, 3 * z0, 0.5 * (r1 - r0)); col = [1 - 0.25 * giovane + 0.1 * (1 - buio), 0.88 - 0.05 * giovane, 0.72 + 0.4 * giovane - 0.2 * (1 - buio)];
+        w[k] = rapporto * (0.45 + 0.55 * buio); taglia = Math.max(0.018 * Rg, 3 * z0, 0.5 * (r1 - r0)); const av = -2.5 * Math.log10(0.45 + 0.55 * buio); col = [0, 1, 2].map((c) => (VECCHIE[c] + giovane * (GIOVANI_C[c] - VECCHIE[c])) * 10 ** (-0.4 * av * (ARROSSA[c] - 1)));
       }
       d.set([x, y, z, taglia, col[0] * tinta[0] / 255, col[1] * tinta[1] / 255, col[2] * tinta[2] / 255, 1], 8 * k); somma += w[k];
     }

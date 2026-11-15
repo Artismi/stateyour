@@ -255,13 +255,22 @@ ${GLSL_NUVOLE}
 // la luce diffusa lungo un tratto del raggio: restituisce la luce aggiunta e (in tra) quanta ne passa
 float gPasso = 0.5;
 vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
-  float ds = (t1 - t0) / ${passi}.0, odR = 0.0, odM = 0.0; vec3 sR = vec3(0.0), sM = vec3(0.0), sMS = vec3(0.0);
+  float L = t1 - t0, odR = 0.0, odM = 0.0; vec3 sR = vec3(0.0), sM = vec3(0.0), sMS = vec3(0.0);
+  // (ogni tratto: l'aria del suo punto — la densità, la luce della stella che le arriva — e la parte di luce che esce dal
+  // tratto sommata in modo esatto per un tratto uniforme: ∫₀^ds e^(−σs)ds = (1 − e^(−σ·ds))/σ, con la trasparenza dal suo
+  // inizio. Prima la trasparenza era quella a metà del tratto per tutto il tratto: dove un tratto è otticamente spesso —
+  // nel blu, sull'orizzonte di un'aria di qualche bar — la luce dell'aria vicina si perdeva, e l'immagine non convergeva
+  // ai passi dell'app: test_vista)
   for (int i = 0; i < ${passi}; i++) {
-    vec3 p = o + d * (t0 + (float(i) + gPasso) * ds); float r = length(p), h = r - u_atm.x;
+    // (i tratti sono fitti vicino all'occhio e radi lontano — t ∝ f² —: la luce dell'aria vicina, che sull'orizzonte di
+    // un'aria spessa è quasi tutta, cambia in pochi chilometri; quella lontana arriva già attenuata)
+    float fa = float(i) / ${passi}.0, fb = float(i + 1) / ${passi}.0, ta = t0 + L * fa * fa, ds = L * (fb * fb - fa * fa);
+    vec3 p = o + d * (ta + gPasso * ds); float r = length(p), h = r - u_atm.x;
     float rR = exp(clamp(-h / u_atm.y, -40.0, 8.0)), rM = exp(clamp(-h / u_atm.z, -40.0, 8.0));
-    odR += rR * ds * 0.5; odM += rM * ds * 0.5;
-    float mus = dot(p, u_soleC) / r; vec3 Te = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM))), T = luceCheArriva(r, mus) * Te;
-    sR += rR * T * ds; sM += rM * T * ds; sMS += (u_betaR * rR + vec3(u_betaM.x * rM)) * multipla(r, mus) * Te * ds; odR += rR * ds * 0.5; odM += rM * ds * 0.5;
+    vec3 sig = u_betaR * rR + vec3(u_betaM.x * 1.1 * rM), Te = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM))), tau = sig * ds;
+    vec3 w = Te * mix(vec3(ds), (1.0 - exp(-tau)) / max(sig, vec3(1e-30)), step(vec3(1e-4), tau));
+    float mus = dot(p, u_soleC) / r; vec3 T = luceCheArriva(r, mus) * w;
+    sR += rR * T; sM += rM * T; sMS += (u_betaR * rR + vec3(u_betaM.x * rM)) * multipla(r, mus) * w; odR += rR * ds; odM += rM * ds;
   }
   float mu = dot(d, u_soleC), g = u_betaM.y, fR = 0.0596831 * (1.0 + mu * mu), fM = 0.0795775 * (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5);
   tra = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM)));
@@ -421,11 +430,13 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 24 }
   const dirs = (n) => { const d = []; for (let i = 0; i < n; i++) { const y = 1 - (2 * (i + 0.5)) / n, q = Math.sqrt(1 - y * y), a = i * 2.39996323; d.push([q * Math.cos(a), y, q * Math.sin(a)]); } return d; };
   const Ts = [0, 0, 0];
   // lungo un raggio dal punto (0, r, 0): chiama f(rp, mus, Te, ds, ρR, ρM) a ogni passo; restituisce [Te alla fine, μ della stella al suolo] o null
-  const marcia = (r, d, s, f) => { const b = r * d[1], disc = b * b - r * r + R * R, aTerra = disc > 0 && -b - Math.sqrt(disc) > 0, fine = aTerra ? -b - Math.sqrt(disc) : -b + Math.sqrt(Math.max(0, b * b - r * r + Rt * Rt)), ds = fine / NS, od = [0, 0, 0], Te = [1, 1, 1];
-    for (let k = 0; k < NS; k++) { const t = (k + 0.5) * ds, px = d[0] * t, py = r + d[1] * t, pz = d[2] * t, rp = Math.hypot(px, py, pz), h = rp - R, rR = Math.exp(-h / H), rM = Math.exp(-h / HM);
-      for (let c = 0; c < 3; c++) { od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; Te[c] = Math.exp(-od[c]); }
-      f(rp, (px * s[0] + py * s[1] + pz * s[2]) / rp, Te, ds, rR, rM, d);
-      for (let c = 0; c < 3; c++) od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; }
+  const marcia = (r, d, s, f) => { const b = r * d[1], disc = b * b - r * r + R * R, aTerra = disc > 0 && -b - Math.sqrt(disc) > 0, fine = aTerra ? -b - Math.sqrt(disc) : -b + Math.sqrt(Math.max(0, b * b - r * r + Rt * Rt)), od = [0, 0, 0], Te = [1, 1, 1];
+    // (tratti fitti all'inizio — t ∝ f², come nel frammento —: la luce che arriva dall'aria vicina al punto)
+    for (let k = 0; k < NS; k++) { const ta = fine * (k / NS) ** 2, ds = fine * ((k + 1) / NS) ** 2 - ta, t = ta + 0.5 * ds, px = d[0] * t, py = r + d[1] * t, pz = d[2] * t, rp = Math.hypot(px, py, pz), h = rp - R, rR = Math.exp(-h / H), rM = Math.exp(-h / HM);
+      // (come nel frammento: la trasparenza dall'inizio del tratto per ∫e^(−σs)ds sul tratto, esatto per un tratto uniforme;
+      // a f va questo «Te·ds» pesato, al posto della trasparenza a metà per ds)
+      for (let c = 0; c < 3; c++) { const sig = betaR[c] * rR + betaM * 1.1 * rM, tau = sig * ds; Te[c] = Math.exp(-od[c]) * (tau > 1e-4 ? -Math.expm1(-tau) / sig : ds); od[c] += tau; }
+      f(rp, (px * s[0] + py * s[1] + pz * s[2]) / rp, Te, 1, rR, rM, d); }
     if (!aTerra) return null; const pz = [d[0] * fine, r + d[1] * fine, d[2] * fine]; for (let c = 0; c < 3; c++) Te[c] = Math.exp(-od[c]); return [Te, (pz[0] * s[0] + pz[1] * s[1] + pz[2] * s[2]) / R]; };
   const D64 = dirs(ND), D256 = dirs(NC).filter((d) => d[1] > 0);
   for (let ih = 0; ih < NM; ih++) for (let im = 0; im < NM; im++) {
@@ -445,7 +456,7 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 24 }
 }
 
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {}, corpi = null } = {}) {
-  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 12, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
+  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 24, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
@@ -751,7 +762,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     if (si) { for (let i = 0; i < 3; i++) if (Math.abs(o[i] - p.o[i]) > 1e-9 * r) si = false; for (let i = 0; i < 9; i++) if (Math.abs(a[i] - p.a[i]) > 1e-7) si = false; }
     primaRif = { o: o.slice(), a: a.slice(), tan: S.tanY, W: S.W, H: S.H }; primaIndice = S.indice; return si; }
   const cielo3d = {
-    libera() { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); acA = null; } },
+    libera() { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); acA = null; } pronte = false; },
     nome: 'aria',
     get pronte() { return pronte; }, // (per le prove)
     dopo(S, da) {

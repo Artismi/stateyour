@@ -293,6 +293,18 @@ Un colore, una luce, un'esposizione o una forma scelti a mano sono difetti, come
 dichiarati, e da togliere.
 - Fatto: il buco nero (geodetiche vere, colore del disco dal corpo nero), l'aria (diffusione multipla da pressione e gas),
   la galassia e la ragnatela come volumi con emissione e assorbimento, la polvere che arrossa, le nebulose dalle loro righe,
-  la luce zodiacale dalla funzione di fase dei grani, la scala quantistica come accumulo di misure.
-- Manca: l'elenco di ogni scelta a mano rimasta nel motore (fattori di luce, esposizioni fisse, rumori, forme delle
-  nuvole) misurato come la mappa delle grandezze; la prova di convergenza di ogni discretizzazione.
+  la luce zodiacale dalla funzione di fase dei grani, la scala quantistica come accumulo di misure. L'OCCHIO come
+  rivelatore (`nucleo.js`, OCCHIO): si adatta alla luminanza media misurata nell'immagine e la porta al grigio medio della
+  percezione (L* = 50), non sotto la soglia assoluta della visione (10⁻⁶ cd/m²), con le candele dal corpo nero della stella
+  del luogo; di notte i colori sfumano nella luminanza scotopica (CIE 191; Larson 1997); l'adattamento al colore è quello di
+  CIECAM02. L'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 125 costanti con riga e classe; 7 tolte:
+  l'esposizione, il colore della luce «adattato» a mano, i colori dei batuffoli, il terminatore, la luce di notte, il bordo
+  della stella). La convergenza (C12, `test_vista`): i passi dei volumi, dell'aria, delle tabelle del cielo e l'accumulo
+  convergono, con l'ordine stimato, e i valori dell'app stanno sotto la soglia dell'occhio (ΔE*ab = 2,3) — tranne la
+  ragnatela in moto; l'aria spessa, che non convergeva, è stata corretta.
+- Manca: le 67 scelte a mano rimaste — le più grandi: la curva di tonalità (servirebbe la risposta dei fotorecettori),
+  l'abbagliamento e le soglie di visibilità dei punti, le forme e la luce delle nuvole, la foschia, le popolazioni di stelle
+  della galassia (4300 K, 9500 K, «tre volte la luce»), gli anelli e i corpi lontani —; la convergenza delle griglie dei
+  volumi, della riduzione, del salto del vuoto, della luce zodiacale e del rilievo; la ragnatela in moto; uno strumento
+  dichiarato accanto all'occhio (una lunga esposizione: con l'occhio una galassia da fuori è grigia e la ragnatela sta alla
+  soglia); la prova su una scheda grafica vera.

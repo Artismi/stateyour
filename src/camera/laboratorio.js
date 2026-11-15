@@ -548,6 +548,8 @@ function rigaMondo() {
   const q = d && cursoreMondo ? mondo3d.sotto(cursoreMondo[0], cursoreMondo[1]) : null, i = q && pi ? pi.info(q.lon, q.lat) : null;
   if (i) testo += ` · sotto il cursore (${gradi(q.lon, q.lat)}, a ${lungo(q.distanza)}): ${i.acqua ? `acqua profonda ${fmtLunghezza(i.profondita)}` : `terra a quota ${Math.round(i.quota)} m`}`;
   if (d && d.quota < 3) testo += ' · avvicinati ancora: si entra nella materia di questo punto';
+  // L'OCCHIO (nucleo.js, OCCHIO): a quanta luce è adattato, e se vede i colori; sotto la sua soglia ciò che c'è resta scuro
+  const ad = mondo3d.stato.adattamento; if (ad && Number.isFinite(ad.LA)) testo += ` · l'occhio è adattato a ${ad.LA >= 0.1 ? ad.LA.toPrecision(2).replace('.', ',') : ad.LA.toExponential(0).replace('e', '·10^')} cd/m²${ad.LA <= 1.0001e-6 ? ' (la sua soglia: qui quasi non vede)' : ad.coni <= 0 ? ' (visione notturna: coi bastoncelli, senza colori)' : ad.coni < 1 ? ' (crepuscolo: i colori sbiadiscono)' : ''}`;
   const qui = universo3d.viaOra(); if (notaPunto && universo3d.pronto() && (qui.stella !== notaPunto.via.stella || qui.galassia !== notaPunto.via.galassia)) notaPunto = null; if (notaPunto) testo = `${notaPunto.testo} · ${testo}`; // (finché lo spazio non è pronto la nota resta)
   $('dove').textContent = testo + '. Trascina: gira il mondo sotto la mano; tasto destro: orbita; rotella: verso ciò che sta sotto il cursore; W A S D R F: vola.';
   if (barraMondo) barraMondo.querySelector('span').textContent = mondo3d.tempo.pausa ? 'in pausa' : diceTempo(mondo3d.tempo.velocita);

@@ -38,7 +38,7 @@ Ogni strato parla solo con quello sotto attraverso la lingua: la vista non chied
 | 2 Caso | fonte unica, ordine indifferente; Threefry‑4×32‑20 con chiave a 128 bit (vettori noti Random123, SmallCrush e Crush di TestU01 passati); il registro annota la legge di ogni tiro (`bernoulli`, `discreta`, …) | i moduli che dichiarano la legge dei loro tiri (oggi quasi tutti leggono tiri nudi e pesano 1); BigCrush | C2, C3 |
 | 3 Leggi | cosmo senza bordo; galassie, stelle, pianeti, storia termica, clima, erosione, mare, chimica, grani, atomi, scala quantistica; zoom senza salti; la coerenza tra le scale provata passaggio per passaggio, dal campo del cosmo ai quark (`test_coerenza_scale`: C6 su 15 passaggi, C8 misurata dove ci sono due grane; lavoro 5) | M (o μ) dove la tabella dice «manca»: il posto delle galassie vere, il sistema delle stelle vere, le regioni della magnetosfera, un'evoluzione a due grane sotto gli atomi; le incoerenze note della tabella (la quota media delle tessere, le celle non neutre di feldspati e biotite); un limite dal modello al difetto delle soglie di comodo (la gigante, il clima: oggi solo misurato); lo stato a un istante diverso da «adesso» sopra le particelle; la vita | C6, C7, C8, C14 |
 | 4 Misura | indice del cosmo (Elias γ, libero), galassia per massa, stella per peso, pianeta per area, luogo per area, tempo sulla vita della stella | pesi degli esiti (in corso); dal campione al vero (in corso); fusioni (in corso); cervelli di Boltzmann contati (in corso); momenti d'osservatore (serve la vita) | C4, C5, C11, C13 |
-| 5 Vista | trasporto di luce: aria, polvere, nebulose, buco nero, galassia e ragnatela come volumi, accumulo nel tempo | l'elenco delle scelte a mano rimaste; la prova di convergenza di ogni discretizzazione; la prova su scheda grafica vera | C12 |
+| 5 Vista | trasporto di luce: aria, polvere, nebulose, buco nero, galassia e ragnatela come volumi, accumulo nel tempo; **l'occhio** come rivelatore (si adatta alla luminanza misurata nell'immagine, soglia assoluta, visione crepuscolare, adattamento al colore di CIECAM02); l'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 125 righe, 19 dal modello, 32 discretizzazioni, 74 a mano di cui 7 tolte); la convergenza dei passi dei volumi, dell'aria, delle tabelle del cielo e dell'accumulo (`test_vista`, lavoro 7) | le 67 scelte a mano rimaste (la curva di tonalità, l'abbagliamento e le soglie di visibilità, le nuvole, la foschia, le popolazioni della galassia, gli anelli…); la convergenza delle griglie dei volumi, della riduzione, del salto del vuoto, della luce zodiacale, del rilievo; la ragnatela in moto (non torna); la prova su scheda grafica vera; uno strumento dichiarato accanto all'occhio (la lunga esposizione) | C12 |
 | Bolle | campo condizionato esatto, antenato comune nel punto e nel tempo; l'impronta di bordo (O11: armoniche dei campi sulla sfera, ℓmax dalla grana), l'incollamento sul bordo comune e la ricostruzione dal bordo, l'antenato tra luoghi e istanti diversi in tempo conforme (η_c), il cono di luce dei rami del campo (lavoro 6: `bordo.js`) | le impronte nel cosmo con le sue galassie (insieme in `vincola`); temperatura, campo magnetico e radianza sul bordo; Gauss e Dirichlet con i nuclei troncati; l'antenato di più di due eventi quando non lo sostiene una coppia; il cono di luce sopra il campo (i rami di stelle e pianeti hanno ancora solo il contenitore); le distanze tra contenuti («una stella a un metro da un fiocco di neve») | C9, C10, C15 |
 | Passo | «pianeta parallelo», «ramo parallelo più pulito» | il nucleo P(a′\|a) nel tempo e di lato, con Chapman–Kolmogorov | C16 |
 
@@ -81,7 +81,22 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    campo: un ramo fuori portata lascia l'impronta identica al bit; senza l'inflazione cadrebbe, e lo si misura: oggi il
    51% della varianza del potenziale viene da celle più larghe dell'orizzonte. Non torna / manca: vedi la riga Bolle.)
 7. **La vista come misura** — l'elenco delle scelte a mano nel motore, tolte o dichiarate; la prova di convergenza
-   dell'immagine (C12); la prova su una scheda grafica vera.
+   dell'immagine (C12); la prova su una scheda grafica vera. (Fatto senza la scheda vera: `reports/Scelte a mano nella
+   vista.md` — 125 costanti che decidono l'aspetto, con riga, classe e che cosa servirebbe: 19 dal modello, 32
+   discretizzazioni, 74 a mano; tolte 7: l'esposizione, che ora è L'OCCHIO di `nucleo.js` — si adatta alla luminanza media
+   misurata nell'immagine, la porta al grigio L* = 50, non sotto la soglia assoluta di 10⁻⁶ cd/m², con le candele del corpo
+   nero della stella, i colori che sfumano nella visione notturna (CIE 191, Larson 1997) e l'adattamento al colore di
+   CIECAM02 al posto di «0,45 + 0,55·colore» in due file —, i colori dei batuffoli, il terminatore, la luce di notte, il bordo
+   della stella (Eddington). `test_vista` (`npm run vista`, a parte: vuole Chromium; ~60 s, 10 prove): ΔE*ab = 2,3 dichiarata
+   (Mahy e altri 1994) sull'immagine dello schermo, ε = 5,9% per gli scarti di luce; passi della galassia da fuori e da dentro
+   (ordine 1,8 e 2,1; a 24 passi ΔE 0,5 e 1,8), accumulo (ordine 0,5 nei fotogrammi; a storia piena ΔE 0,4), aria (ordine 2;
+   24 passi ΔE 1,3), tabelle del cielo (ordini 1,6–2, l'app entro 1,3%), ragnatela a camera ferma (ΔE 2,2). Corretti nel
+   farla: l'aria e le tabelle del cielo non convergevano su un'aria spessa (trasparenza a metà tratto, passi uniformi: ΔE 35 a
+   12 passi; ora tratti sommati in modo esatto e fitti vicino all'occhio, e 24 passi); IL 3D NERO del punto a caso — un
+   errore vero: le immagini dell'aria a camera ferma create sull'unità che il programma leggeva, il disegno rifiutato, l'aria
+   nera finché non ci si muoveva —, e dopo, il suolo sotto una nana bianca a 27 UA che l'esposizione di prima lasciava 10
+   volte sotto. Non torna: la ragnatela in moto (ΔE 7,7, dichiarato). Manca: la scheda vera, le griglie dei volumi, le 67
+   scelte rimaste.)
 8. **La vita in potenza** — la scala che manca; da qui i momenti d'osservatore e la misura del tempo per esperienza.
    Si progetta a parte, partendo da `reports/Regole per la vita in potenza.md`.
 
