@@ -85,6 +85,44 @@ export function coloreCorpoNero(T) {
   return c.map((q) => q / m);
 }
 
+// ---------- L'OCCHIO (INTRECCIO.md, regola 14: anche il rivelatore è fisica). Ciò che decide come un'immagine in luce
+// vera arriva allo schermo, con la legge da cui viene:
+//  · l'ADATTAMENTO alla luce: l'occhio si porta sulla luminanza media di ciò che ha davanti (L_A, cd/m²: la media della
+//    luminanza nell'immagine — l'adattamento segue la luce che entra, l'illuminamento della retina, non la media dei
+//    logaritmi), e la mostra come il grigio medio della percezione: chiarezza CIE L* = 50, cioè Y = ((50 + 16)/116)³ =
+//    0,184 dello schermo dopo la curva di tonalità. Non scende sotto la SOGLIA ASSOLUTA della visione: ~10⁻⁶ cd/m² su un
+//    campo largo, occhio adattato al buio (Hecht, Shlaer & Pirenne 1942; misurata) — sotto, ciò che c'è resta scuro;
+//  · le candele: dalla luce (W) alla luminanza (cd/m²) con l'efficacia luminosa della luce che illumina,
+//    K = 683 lm/W · π∫B_λ(T)·ȳ(λ)dλ / (σT⁴) — il corpo nero della stella del luogo (fuori da un sistema quella del Sole,
+//    5772 K, l'unità di buconero.js); ȳ nella forma analitica di Wyman, Sloan & Shirley 2013 (come buconero.js);
+//  · la VISIONE CREPUSCOLARE: tra 0,005 e 5 cd/m² (il campo mesopico, CIE 191:2010) i coni lasciano il posto ai
+//    bastoncelli, che non vedono i colori: il colore sfuma (in log L_A) nella luminanza scotopica, Y′ = Y·(1,33·(1 +
+//    (Y + Z)/X) − 1,68) (Larson, Rushmeier & Piatko 1997), riportata al bianco D65;
+//  · l'ADATTAMENTO AL COLORE: von Kries verso il bianco della luce che illumina (la stella del luogo), di quanto dice
+//    CIECAM02: D = F·[1 − (1/3,6)·e^((−L_A − 42)/92)], F = 1 (chi guarda lo schermo in una stanza illuminata:
+//    dichiarato). Fatto nei primari sRGB, non nello spazio dei coni CAT02 (dichiarato).
+// SCELTE RIMASTE (dichiarate): la curva di tonalità (Narkowicz 2015, un'approssimazione di ACES: manca la risposta dei
+// fotorecettori al posto suo); quanto in fretta l'occhio si adatta (6/s verso il chiaro, 2,5/s verso il buio: l'occhio
+// vero impiega minuti al buio — Hecht 1937 —; qui è tarato su chi guarda uno schermo); l'abbagliamento è l'alone di
+// luci.js, non la diffusione nell'occhio (CIE 135).
+export const OCCHIO = { soglia: 1e-6, grigioL: ((50 + 16) / 116) ** 3, mesopico: [0.005, 5], F: 1, TSole: 5772 };
+// la curva di tonalità (la stessa del frammento in fondo) e il valore che lei porta al grigio medio
+export const tonalita = (x) => Math.max(0, Math.min(1, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
+export const X_MEDIO = (() => { let a = 0, b = 10; for (let i = 0; i < 80; i++) { const m = 0.5 * (a + b); if (tonalita(m) < OCCHIO.grigioL) a = m; else b = m; } return 0.5 * (a + b); })();
+// l'efficacia luminosa (lm/W) di un corpo nero a T
+const _efficacia = new Map();
+export function efficaciaLuminosa(T) {
+  const k = Math.round(T); if (_efficacia.has(k)) return _efficacia.get(k);
+  const h = 6.62607015e-34, c = 299792458, kB = 1.380649e-23, sigma = 5.670374419e-8, campana = (l, mu, s1, s2) => { const t = (l - mu) / (l < mu ? s1 : s2); return Math.exp(-0.5 * t * t); };
+  let Y = 0; for (let nm = 360.5; nm < 830; nm += 1) { const l = nm * 1e-9, e = (h * c) / (l * kB * k), B = e > 700 ? 0 : (2 * h * c * c) / (l ** 5 * Math.expm1(e)); Y += B * (0.821 * campana(nm, 568.8, 46.9, 40.5) + 0.286 * campana(nm, 530.9, 16.3, 31.1)) * 1e-9; }
+  const K = (683 * Math.PI * Y) / (sigma * k ** 4); _efficacia.set(k, K); return K;
+}
+// il grado di adattamento al colore (CIECAM02) e il peso dei coni (1: fotopico, 0: scotopico) a una luminanza di adattamento
+export const gradoAdattamento = (LA) => Math.max(0, Math.min(1, OCCHIO.F * (1 - (1 / 3.6) * Math.exp((-LA - 42) / 92))));
+export const pesoConi = (LA) => Math.max(0, Math.min(1, Math.log(Math.max(LA, 1e-30) / OCCHIO.mesopico[0]) / Math.log(OCCHIO.mesopico[1] / OCCHIO.mesopico[0])));
+// l'irradianza «che vale 1» (W/m²: la luce di un foglio bianco) che l'occhio adattato a L_A sceglie: L_A va al grigio medio
+export const E0Adattato = (LA, K) => (Math.PI * Math.max(LA, OCCHIO.soglia)) / (K * X_MEDIO);
+
 export function creaNucleo(tela, opzioni = {}) {
   const O = {
     fov: 0.75, // l'angolo di campo verticale (radianti)
@@ -114,12 +152,18 @@ export function creaNucleo(tela, opzioni = {}) {
   const FORMATI = { rgba8: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba16f: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rgba16fDaFloat: [gl.RGBA16F, gl.RGBA, gl.FLOAT], rg32f: [gl.RG32F, gl.RG, gl.FLOAT], rgba32f: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rg16f: [gl.RG16F, gl.RG, gl.FLOAT], r8: [gl.R8, gl.RED, gl.UNSIGNED_BYTE], profondita: [gl.DEPTH_COMPONENT32F, gl.DEPTH_COMPONENT, gl.FLOAT] };
   // (`mip`: con le copie rimpicciolite, per le immagini che si guardano anche da lontano — senza, più punti dell'immagine
   // che punti dello schermo fanno un reticolo che non c'è)
+  // (l'immagine nuova si lega a un'unità di servizio, l'ultima, che nessun programma legge: legata all'unità attiva
+  // prenderebbe il posto di ciò che un programma sta leggendo lì — se poi si disegna proprio su di lei, la scheda rifiuta
+  // il disegno («feedback loop») e resta ciò che c'era: così l'aria a camera ferma restava nera, vedi pianeta.js)
+  const UNITA_SERVIZIO = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) - 1;
   function immagine(w, h, formato = 'rgba8', dati = null, { filtro = gl.LINEAR, ripeti = false, mip = false } = {}) {
+    const attiva = gl.getParameter(gl.ACTIVE_TEXTURE); gl.activeTexture(gl.TEXTURE0 + UNITA_SERVIZIO);
     const t = gl.createTexture(), [interno, forma, tipo] = FORMATI[formato]; gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, interno, w, h, 0, forma, tipo, dati);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filtro); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filtro);
     if (mip && dati) { gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); }
     const bordo = ripeti === true ? gl.REPEAT : gl.CLAMP_TO_EDGE; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, ripeti === 'x' ? gl.REPEAT : bordo); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, bordo);
+    gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(attiva);
     return t;
   }
   const telaio = (colore, profondita) => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colore, 0); if (profondita) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, profondita, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null); return f; };

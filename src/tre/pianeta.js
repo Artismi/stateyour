@@ -235,8 +235,10 @@ void main() {
 // calcolano una volta e si compongono con la scena di ogni fotogramma (vedi lo strato). u_sfasa resta per sfasare i passi.
 const F_ARIA = (passi) => `
 in vec2 v_uv; layout(location = 0) out vec4 o_col; layout(location = 1) out vec4 o_tot;
-uniform vec3 u_sfasa;    // lo sfasamento dei passi (quanto, ampiezza); z: 1 = si scrivono Add e Tot invece del colore
+uniform vec3 u_sfasa;    // lo sfasamento dei passi (quanto, ampiezza); z: 1 = si scrivono Add e Tot invece del colore; 2 = si compone con Add e Tot già fatti
 uniform sampler2D u_col, u_prof;
+uniform sampler2D u_cAdd, u_cTot; // (z = 2) Add e Tot di un fotogramma fermo, con la distanza (m) per cui valgono
+uniform vec2 u_cK;       // (z = 2) E0 di allora / E0 di adesso (Add è una luce); scarto relativo di distanza oltre cui Add e Tot non valgono più
 uniform vec3 u_occhio;   // l'occhio rispetto al centro del pianeta, nello spazio in cui il pianeta è tondo (m)
 uniform mat3 u_raggi;    // dagli assi dell'occhio a quello spazio
 uniform vec3 u_soleC;    // verso la stella, in quello spazio
@@ -260,12 +262,17 @@ vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   tra = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM)));
   return u_E * (u_betaR * fR * sR + vec3(u_betaM.x * fM) * sM + sMS);
 }
-void esce(vec3 scena, vec3 Tot, vec3 Add, float dist) { if (u_sfasa.z > 0.5) { o_col = vec4(Add, dist); o_tot = vec4(Tot, dist); } else { o_col = vec4(scena * Tot + Add, 1.0); o_tot = vec4(0.0); } }
+void esce(vec3 scena, vec3 Tot, vec3 Add, float dist) { if (u_sfasa.z > 0.5 && u_sfasa.z < 1.5) { o_col = vec4(Add, dist); o_tot = vec4(Tot, dist); } else { o_col = vec4(scena * Tot + Add, 1.0); o_tot = vec4(0.0); } }
 void main() {
   vec3 scena = texture(u_col, v_uv).rgb; float prof = texture(u_prof, v_uv).r;
   vec3 dO = vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0), de = u_raggi * dO; float lung = length(de); vec3 d = de / lung, o = u_occhio;
   float wP = exp2(prof * 2.0 / u_cam.z) - 1.0, fino = prof < 1.0 ? wP * lung : 1e30, dist = prof < 1.0 ? wP * length(dO) : 0.0; // (dist: metri veri lungo il raggio; 0: il cielo)
   gPasso = 0.5 + (fract(fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) + u_sfasa.x) - 0.5) * u_sfasa.y;
+  // (a camera ferma: Add e Tot già calcolati valgono solo se dietro il punto c'è ancora ciò che c'era — la stessa distanza
+  // entro la precisione della profondità e dell'immagine che li tiene —; dove la scena è cambiata — una tessera arrivata,
+  // il suolo che allora non c'era — si rifà il conto qui)
+  if (u_sfasa.z > 1.5) { ivec2 q = ivec2(gl_FragCoord.xy); vec4 cA = texelFetch(u_cAdd, q, 0), cT = texelFetch(u_cTot, q, 0);
+    if ((dist <= 0.0 && cA.a <= 0.0) || (dist > 0.0 && abs(cA.a - dist) <= u_cK.y * dist)) { o_col = vec4(scena * cT.rgb + cA.rgb * u_cK.x, 1.0); o_tot = vec4(0.0); return; } }
   float Rt = u_atm.x + u_atm.w, b = -dot(o, d), disc = b * b - dot(o, o) + Rt * Rt;
   if (disc <= 0.0 || u_atm.w <= 0.0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; }
   float sq = sqrt(disc), t0 = max(0.0, b - sq), t1 = min(b + sq, fino);
@@ -713,38 +720,46 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
 
   // ---------- lo strato dell'aria e delle nuvole
   // A CAMERA FERMA (con N.vista.accumulo): l'aria si calcola una volta sola. Il colore è scena·Tot + Add (vedi F_ARIA):
-  // al primo fotogramma fermo la passata scrive Tot e Add sulle immagini sue (e compone), ai seguenti si compone soltanto
-  // con la scena di adesso. È lo stesso conto di prima (gli stessi passi, a metà di ogni tratto), non una media: qui la
+  // al primo fotogramma fermo la passata scrive Tot e Add sulle immagini sue (con la distanza della scena per cui valgono),
+  // ai seguenti la stessa passata compone con la scena di adesso, punto per punto, SOLO dove dietro c'è ancora la stessa
+  // distanza (entro la precisione della profondità, «2 parti su un milione», e dell'immagine che la tiene); dove la scena
+  // è cambiata rifà il conto. È lo stesso conto di prima (gli stessi passi, a metà di ogni tratto), non una media: qui la
   // media di passi sfasati, provata, convergeva peggio dei passi a metà (l'aria è liscia) e in moto non faceva risparmiare.
-  // In moto, o col tempo che corre più di un secondo per fotogramma, si calcola tutto ogni volta, come senza accumulo.
-  let acA = null, prgComponi = null, primaRif = null, primaIndice = -2, primaE0 = 1, pronte = false;
-  function componi(S, da, dove, k) {
-    if (!prgComponi) prgComponi = N.programma(N.V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col, u_add, u_tot; uniform float u_k; void main() { o = vec4(texture(u_col, v_uv).rgb * texture(u_tot, v_uv).rgb + texture(u_add, v_uv).rgb * u_k, 1.0); }`);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, S.W, S.H); gl.useProgram(prgComponi.p); S.lega(0, da.col, prgComponi.u.u_col); S.lega(1, acA.add, prgComponi.u.u_add); S.lega(2, acA.tot, prgComponi.u.u_tot); gl.uniform1f(prgComponi.u.u_k, k); S.schermo(); return true;
-  }
+  // In moto, col tempo che corre più di un secondo per fotogramma, o quando la scena del pianeta è cambiata (una tessera
+  // arrivata, le pezze rifatte), si calcola tutto ogni volta, come senza accumulo, e al fotogramma fermo dopo si rifanno
+  // Add e Tot. (Prima la composizione non guardava la distanza: Add e Tot fatti al primo fotogramma fermo valevano per
+  // sempre, e se quel fotogramma era sbagliato — le immagini nuove legate sull'unità che il programma leggeva, il disegno
+  // rifiutato, Tot = 0 — l'aria restava nera finché non ci si muoveva: il 3D nero del punto a caso.)
+  const preciso = !!gl.getExtension('EXT_color_buffer_float'), FORMATO_AT = preciso ? 'rgba32f' : 'rgba16f', SCARTO_AT = Math.max(4e-6, 2 * (preciso ? 2 ** -23 : 2 ** -10));
+  let acA = null, primaRif = null, primaIndice = -2, primaE0 = 1, pronte = false, firmaAT = '';
   // la camera è dov'era al fotogramma prima (negli assi del corpo, che girano con lui) e il mondo è quasi fermo?
   function ferma(S) { const o = stato.occhioCorpo, a = stato.assiCorpo, p = primaRif, r = V.lungo(o) + 1e-30; let si = !!p && S.indice === primaIndice + 1 && Math.abs(S.dt) <= 1 && p.tan === S.tanY && p.W === S.W && p.H === S.H;
     if (si) { for (let i = 0; i < 3; i++) if (Math.abs(o[i] - p.o[i]) > 1e-9 * r) si = false; for (let i = 0; i < 9; i++) if (Math.abs(a[i] - p.a[i]) > 1e-7) si = false; }
     primaRif = { o: o.slice(), a: a.slice(), tan: S.tanY, W: S.W, H: S.H }; primaIndice = S.indice; return si; }
   const cielo3d = {
-    libera() { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); acA = null; } if (prgComponi) gl.deleteProgram(prgComponi.p); prgComponi = null; },
+    libera() { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); acA = null; } },
     nome: 'aria',
+    get pronte() { return pronte; }, // (per le prove)
     dopo(S, da) {
-      if (!aria) return false; const acc = accumuloAttivo(N), fermo = acc && ferma(S), dove = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-      if (fermo && pronte) return componi(S, da, dove, primaE0 / S.E0); // (Add è una luce: la si riporta all'E0 di adesso)
+      if (!aria) return false; const acc = accumuloAttivo(N), firma = `${arrivate}|${pezze}|${base.pronta}`, fermo = acc && ferma(S) && firma === firmaAT, dove = gl.getParameter(gl.FRAMEBUFFER_BINDING); firmaAT = firma;
+      const W = S.W, H = S.H, rifai = fermo && !pronte;
+      // (le immagini di Add e Tot si fanno PRIMA di legare quelle che il programma legge)
+      if (rifai && (!acA || acA.W !== W || acA.H !== H)) { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); } const add = N.immagine(W, H, FORMATO_AT, null, { filtro: gl.NEAREST }), tot = N.immagine(W, H, FORMATO_AT, null, { filtro: gl.NEAREST }), f = N.telaio(add, null); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, tot, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, dove); acA = { W, H, add, tot, f }; }
       if (!prgAria || prgAria.n !== O.passiAria) { if (prgAria) gl.deleteProgram(prgAria.p); prgAria = { ...N.programma(N.V_SCHERMO, F_ARIA(O.passiAria)), n: O.passiAria }; } const u = prgAria.u, A = stato.A, At = V.trasposta(A); gl.useProgram(prgAria.p);
       S.lega(0, da.col, u.u_col); S.lega(1, da.prof, u.u_prof); S.lega(2, texMS, u.u_ms); S.lega(3, texCielo, u.u_cieloT); impostaNuvole(u, S);
+      const componi = fermo && pronte; S.lega(6, componi ? acA.add : trasparente, u.u_cAdd); S.lega(7, componi ? acA.tot : trasparente, u.u_cTot); gl.uniform2f(u.u_cK, componi ? primaE0 / S.E0 : 1, SCARTO_AT);
       const o = stato.occhioTondo; gl.uniform3f(u.u_occhio, o[0], o[1], o[2]);
       // dagli assi dell'occhio allo spazio tondo del corpo: (1/schiacciamento sull'asse) · Aᵀ · assi
       const M = V.mm(At, S.assi); for (let j = 0; j < 3; j++) M[3 + j] /= schiaccia; gl.uniformMatrix3fv(u.u_raggi, false, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]);
       const s = V.norma(tondo(V.mv(At, stato.sole))); gl.uniform3f(u.u_soleC, s[0], s[1], s[2]);
       gl.uniform4f(u.u_cam, S.tanX, S.tanY, S.fc, espo(S)); gl.uniform3f(u.u_E, Math.PI * coloreLuce[0], Math.PI * coloreLuce[1], Math.PI * coloreLuce[2]);
-      impostaAria(u); gl.uniform3f(u.u_sfasa, 0, 0, fermo ? 1 : 0);
+      impostaAria(u); gl.uniform3f(u.u_sfasa, 0, 0, componi ? 2 : rifai ? 1 : 0); cielo3d.modo = componi ? 'componi' : rifai ? 'rifai' : 'tutto'; // (per le prove)
       if (!fermo) { pronte = false; S.schermo(); return true; }
-      const W = S.W, H = S.H;
-      if (!acA || acA.W !== W || acA.H !== H) { if (acA) { gl.deleteTexture(acA.add); gl.deleteTexture(acA.tot); gl.deleteFramebuffer(acA.f); } const add = N.immagine(W, H, 'rgba16f', null, { filtro: gl.NEAREST }), tot = N.immagine(W, H, 'rgba16f', null, { filtro: gl.NEAREST }), f = N.telaio(add, null); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, tot, 0); acA = { W, H, add, tot, f }; }
+      if (componi) { S.schermo(); return true; } // (Add è una luce: la si riporta all'E0 di adesso, u_cK.x)
       gl.bindFramebuffer(gl.FRAMEBUFFER, acA.f); gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]); gl.viewport(0, 0, W, H); S.schermo(); gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
-      pronte = true; primaE0 = S.E0; return componi(S, da, dove, 1);
+      pronte = true; primaE0 = S.E0;
+      // e subito la composizione di questo fotogramma, con la stessa passata
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dove); gl.viewport(0, 0, W, H); S.lega(6, acA.add, u.u_cAdd); S.lega(7, acA.tot, u.u_cTot); gl.uniform2f(u.u_cK, 1, SCARTO_AT); gl.uniform3f(u.u_sfasa, 0, 0, 2); S.schermo(); return true;
     },
   };
 
