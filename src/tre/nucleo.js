@@ -225,7 +225,7 @@ export function creaNucleo(tela, opzioni = {}) {
   // per fotogramma. L'aria del pianeta: a camera ferma si calcola una volta sola.
   // `vuoto`: sotto quale frazione della luce più forte del suo anello (e A_V per raggio) una cella della galassia è vuota e il
   // raggio la salta (volumi.js; 0: niente salto).
-  const vista = { cono: O.cono !== false, passi: { galassia: 24, ragnatela: 24 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4, occhio: { adatta: O.adatta !== false, E0: 0 } }, C_LUCE = 299792458;
+  const vista = { cono: O.cono !== false, passi: { galassia: 48, ragnatela: 48 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4, occhio: { adatta: O.adatta !== false, E0: 0 } }, C_LUCE = 299792458;
   // (`occhio`: l'esposizione dell'occhio — vedi OCCHIO in cima —; `adatta: false` lascia l'unità a ciò che gli strati
   // propongono, come prima; `E0` > 0 la fissa, W/m², per le prove)
 

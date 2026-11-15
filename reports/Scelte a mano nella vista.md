@@ -90,14 +90,14 @@ il termine più fine della serie, e il resto che gli manca (Richardson) deve sta
 | discretizzazione | serie | ordine | l'app | contro il più fine | esito |
 |---|---|---|---|---|---|
 | tabelle del cielo: direzioni (ND) | 16–256 | 1,6 | 64 | 0,13% | torna |
-| tabelle del cielo: passi (NS) | 6–96 | 1,9 | 24 | 1,3% (prima della correzione: ~20%) | torna |
+| tabelle del cielo: passi (NS) | 6–96 | 1,9 | 48 | 1,7% (con 24: 6,7% sul pianeta di prova della catena degli elementi, 26 bar; prima della correzione: ~20%) | torna |
 | tabelle del cielo: irradianza (NC) | 32–512 | 2,0 | 256 | 0,0075% | torna |
-| volume della galassia, da fuori | 6–96 passi | 1,8 | 24 | ΔE 99° centile 0,43 | torna |
-| volume della galassia, da dentro il disco | 6–96 passi | 2,1 | 24 | ΔE 99° centile 2,1 | torna |
+| volume della galassia, da fuori | 6–96 passi | 1,8 | 48 | ΔE 99° centile 0 (con 24 passava: 0,43) | torna |
+| volume della galassia, da dentro il disco | 6–96 passi | 2,1 | 48 | ΔE 99° centile 0,82 (con 24: 3,3 dopo la catena degli elementi, che ha cambiato la galassia) | torna |
 | accumulo nel tempo (galassia) | 1–64 fotogrammi | 0,52 | 64 | 0,25%, ΔE 0,4 | torna |
 | aria da dentro (4,2 bar, verso l'orizzonte) | 3–192 passi | 1,9 | 48 (era 12) | ΔE 0,66 (con 24: 2,4) | torna |
 | aria da fuori (9550 bar, il pianeta d'avvio a 5,5 raggi) | 6–384 passi | 2,1 | 48 | ΔE 0,79 (con 24: ~12) | torna |
-| volume della ragnatela, a camera ferma | 6–96 passi, storia piena | 0,9 | 24 | ΔE 2,2 | torna |
+| volume della ragnatela, a camera ferma | 6–96 passi, storia piena | 0,9 | 48 | ΔE 0,44 (con 24: 2,5 dopo la catena degli elementi) | torna |
 | volume della ragnatela, in moto (un fotogramma) | | | 24 | ΔE 7,7 | **NON TORNA** (dichiarato) |
 | il 3D nero: l'aria a camera ferma | | | | scarto 0 dal conto pieno | torna |
 
@@ -215,7 +215,7 @@ leggi sono dichiarate nella sua testa; qui le costanti che decidono l'aspetto, c
 | `src/tre/nucleo.js:390` | la misura della luce media: griglia 32×32 su tutti i punti dell'immagine | (b) discretizzazione | esatta (somma di tutti i punti): non è un campione |
 | `src/tre/nucleo.js:480` | l'ESPOSIZIONE: l'irradianza «che vale 1» era la più alta proposta dagli strati, coi loro fattori (0,07; 0,3; 0,6; 0,05; /20/10; /0,7…) e, sul pianeta, un'apertura di notte fino a 100 volte | (c) → **sostituita** | SOSTITUITA: l'occhio si adatta alla luminanza media misurata nell'immagine (tutti i punti, letta senza fermare la scheda), al grigio L* = 50, non sotto la soglia assoluta; le proposte restano solo per i primi fotogrammi |
 | `src/tre/nucleo.js:134` | angolo di campo verticale 0,75 rad (43°) | (c) a mano | servirebbe dalla geometria dello schermo e dalla distanza di chi guarda (l'angolo che lo schermo sottende) |
-| `src/tre/nucleo.js:228` | passi dei volumi della galassia e della ragnatela: 24 | (b) discretizzazione | provati: test_vista C (galassia da fuori e da dentro: ΔE p99 0,5 e 1,8; ragnatela a camera ferma 2,2) |
+| `src/tre/nucleo.js:228` | passi dei volumi della galassia e della ragnatela: 48 | (b) discretizzazione | provati: test_vista C (galassia da fuori e da dentro: ΔE p99 0 e 0,82; ragnatela a camera ferma 0,44; con 24, dopo la catena degli elementi, 3,3 da dentro e 2,5 la ragnatela) |
 | `src/tre/nucleo.js:228` | riduzione 2: i volumi su un'immagine di metà lato | (b) discretizzazione | non provata: manca il confronto a riduzione 1 |
 | `src/tre/nucleo.js:228` | accumulo: ferma 64 fotogrammi, passiFerma 2 | (b) discretizzazione | provato: test_vista (ordine 0,5 nei fotogrammi; a storia piena ΔE p99 0,4 galassia, 2,2 ragnatela) |
 | `src/tre/nucleo.js:228` | accumulo: moto 4 fotogrammi, tolleranza 0,15 della distanza | (c) a mano | quanto si accetta di vedere strisciare in moto (accumulo.js lo dice); in moto la ragnatela NON TORNA (ΔE p99 7,7) |

@@ -66,7 +66,7 @@ console.log('B. le tabelle del cielo (pianeta.js tabelleAria: Hillaire 2020)');
 let P = null; for (let s = 838; s < 1400 && !P; s++) for (const q of sistema(1, 2, s).pianeti) if (q.tipo !== 'gassoso' && q.interno && (q.clima?.pressione || 0) > 1e4 && (q.clima?.T || 0) > 200) { P = q; break; }
 const R = P.raggioM, aria = ariaDi(P, R, P.clima?.g || (6.674e-11 * P.massaKg) / R / R);
 const relT = (x, y) => { let s = 0, t = 0; for (let i = 0; i < x.length; i++) { if (i % 4 === 3) continue; s += Math.abs(x[i] - y[i]); t += Math.abs(y[i]); } return s / t; };
-for (const [nome, serie, app, cosa] of [['ND', [16, 32, 64, 128, 256], 64, 'direzioni della luce diffusa due volte'], ['NS', [6, 12, 24, 48, 96], 24, 'passi lungo ogni raggio'], ['NC', [32, 64, 128, 256, 512], 256, 'direzioni dell\'irradianza del cielo']]) {
+for (const [nome, serie, app, cosa] of [['ND', [16, 32, 64, 128, 256], 64, 'direzioni della luce diffusa due volte'], ['NS', [6, 12, 24, 48, 96], 48, 'passi lungo ogni raggio'], ['NC', [32, 64, 128, 256, 512], 256, 'direzioni dell\'irradianza del cielo']]) {
   await prova(`${nome} (${cosa}): converge, e ${app} (l'app) sta entro ε = ${num(EPS * 100, 2)}% dal limite`, () => {
     const T = serie.map((n) => tabelleAria(aria, R, P.clima?.albedo, { [nome]: n })), d = serie.slice(0, -1).map((_, i) => Math.max(relT(T[i].ms, T[i + 1].ms), relT(T[i].cieloT, T[i + 1].cieloT)));
     const { p, resto } = ordine(serie, d), k = serie.indexOf(app), eApp = Math.max(relT(T[k].ms, T[T.length - 1].ms), relT(T[k].cieloT, T[T.length - 1].cieloT)) + resto;
@@ -86,8 +86,8 @@ async function serie(P_, chiaveOpz, valori, app, nome) {
 }
 const G = su(pG), Rr = su(pR); const infoG = await galassiaPronta;
 console.log(`    la galassia 2 del cosmo 1: l'occhio adattato a ${num(infoG.LA)} cd/m²`);
-await prova('i passi del volume della galassia, da fuori: convergono, e 24 (l\'app) è sotto la soglia dell\'occhio', async () => {
-  const s = await serie(G, 'passi', [6, 12, 24, 48, 96], 24, 'g'); assert.ok(s.luce > 0, 'la galassia è buia');
+await prova('i passi del volume della galassia, da fuori: convergono, e 48 (l\'app) è sotto la soglia dell\'occhio', async () => {
+  const s = await serie(G, 'passi', [6, 12, 24, 48, 96], 48, 'g'); assert.ok(s.luce > 0, 'la galassia è buia');
   assert.ok(s.p > 0.5 && s.d[s.d.length - 1] < s.d[0] && s.resto < EPS); assert.ok(s.c.dE.p99 <= JND, `ΔE ${s.c.dE.p99}`);
 });
 await prova('ACCUMULO NEL TEMPO (galassia da fuori, camera ferma): la storia converge al conto pieno, e a storia piena (64) è sotto la soglia', async () => {
@@ -96,8 +96,8 @@ await prova('ACCUMULO NEL TEMPO (galassia da fuori, camera ferma): la storia con
   console.log(`      contro 160 passi: ${K.map((k, i) => `${k}: ${num(d[i] * 100, 2)}%`).join(' · ')}; ordine nei fotogrammi ${num(p, 2)}; a storia piena ΔE*ab 99° centile ${num(c.dE.p99, 2)}`);
   assert.ok(p > 0.2 && d[d.length - 1] < d[0] && d[d.length - 1] < EPS && c.dE.p99 <= JND);
 });
-await prova('i passi del volume della galassia, da dentro il disco (il raggio corre nel piano): convergono, e 24 è sotto la soglia', async () => {
-  await G.scena('dentro'); const s = await serie(G, 'passi', [6, 12, 24, 48, 96], 24, 'd'); assert.ok(s.luce > 0);
+await prova('i passi del volume della galassia, da dentro il disco (il raggio corre nel piano): convergono, e 48 (l\'app) è sotto la soglia', async () => {
+  await G.scena('dentro'); const s = await serie(G, 'passi', [6, 12, 24, 48, 96], 48, 'd'); assert.ok(s.luce > 0);
   assert.ok(s.p > 0.5 && s.d[s.d.length - 1] < s.d[0] && s.resto < EPS); assert.ok(s.c.dE.p99 <= JND, `ΔE ${s.c.dE.p99}`);
 });
 const infoA = await G.scena('aria');
@@ -120,14 +120,14 @@ await prova('i passi dell\'aria, da fuori, su un\'aria di migliaia di bar (prima
 });
 const infoR = await ragnatelaPronta;
 console.log(`    la ragnatela del cosmo 1, da dentro: l'occhio a ${num(infoR.LA)} cd/m² (la soglia assoluta è ${num(NU.OCCHIO.soglia)})`);
-await prova('i passi del volume della ragnatela: convergono; a camera ferma, con l\'accumulo, 24 (l\'app) è sotto la soglia', async () => {
-  const s = await serie(Rr, 'passi', [6, 12, 24, 48, 96], 24, 'r'); assert.ok(s.luce > 0);
+await prova('i passi del volume della ragnatela: convergono; a camera ferma, con l\'accumulo, 48 (l\'app) è sotto la soglia', async () => {
+  const s = await serie(Rr, 'passi', [6, 12, 24, 48, 96], 48, 'r'); assert.ok(s.luce > 0);
   assert.ok(s.p > 0.5 && s.d[s.d.length - 1] < s.d[0], 'la ragnatela non converge');
-  // il riferimento: la storia piena con 96 passi (192 a camera ferma) — il più fine che la scheda fa —; l'app: la storia piena con 24
-  await Rr.disegna({ passi: 96, accumulo: true, fotogrammi: 68, chiave: 'rrif' }); await Rr.disegna({ passi: 24, accumulo: true, fotogrammi: 68, chiave: 'racc' });
-  const c = await Rr.confronta('racc', 'rrif'), u = await Rr.confronta('r24', 'rrif');
-  console.log(`      a storia piena (24 contro 96 passi): scarto ${num(c.scarto * 100, 2)}%, ΔE*ab 99° centile ${num(c.dE.p99, 2)}; un fotogramma da solo (in moto) contro la stessa: ΔE*ab 99° centile ${num(u.dE.p99, 2)}`);
-  if (u.dE.p99 > JND) nonTorna.push(`la ragnatela IN MOTO (un fotogramma, 24 passi, prima che la storia si riempia): ΔE*ab 99° centile ${num(u.dE.p99, 2)} > ${num(JND)} — la grana dei passi si vede finché la camera si muove (dichiarato: è il prezzo dell'accumulo; accumulo.js)`);
+  // il riferimento: la storia piena con 96 passi (192 a camera ferma) — il più fine che la scheda fa —; l'app: la storia piena con 48
+  await Rr.disegna({ passi: 96, accumulo: true, fotogrammi: 68, chiave: 'rrif' }); await Rr.disegna({ passi: 48, accumulo: true, fotogrammi: 68, chiave: 'racc' });
+  const c = await Rr.confronta('racc', 'rrif'), u = await Rr.confronta('r48', 'rrif');
+  console.log(`      a storia piena (48 contro 96 passi): scarto ${num(c.scarto * 100, 2)}%, ΔE*ab 99° centile ${num(c.dE.p99, 2)}; un fotogramma da solo (in moto) contro la stessa: ΔE*ab 99° centile ${num(u.dE.p99, 2)}`);
+  if (u.dE.p99 > JND) nonTorna.push(`la ragnatela IN MOTO (un fotogramma, 48 passi, prima che la storia si riempia): ΔE*ab 99° centile ${num(u.dE.p99, 2)} > ${num(JND)} — la grana dei passi si vede finché la camera si muove (dichiarato: è il prezzo dell'accumulo; accumulo.js)`);
   assert.ok(c.scarto < EPS && c.dE.p99 <= JND, `ΔE ${c.dE.p99}`);
 });
 // ---------- E. LA FINESTRA A OGNI DISTANZA (PROGETTO.md, lavoro 9): il primo mare con il vento del catalogo, dal 3D ai

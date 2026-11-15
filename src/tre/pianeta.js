@@ -450,7 +450,7 @@ export function ariaDi(P, R, grav) {
 // dal mare. Gli stessi coefficienti, la stessa funzione di Chapman, la stessa foschia del conto sulla scheda.
 // (ND, NC: direzioni per la luce diffusa due volte e per l'irradianza del cielo; NS: passi lungo ogni raggio — le
 // discretizzazioni di cui test_vista prova la convergenza)
-export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 24 } = {}) {
+export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 48 } = {}) {
   const NM = 32, ms = new Float32Array(4 * NM * NM), cieloT = new Float32Array(4 * NM); if (!aria) return { ms, cieloT };
   const { H, HM, cima, betaR, betaM } = aria, Rt = R + cima, albedo = Math.max(0.02, Math.min(0.9, albedoClima ?? 0.3)), g = 0.76;
   const chap = (X, c) => { const k = Math.sqrt(1.5707963 * X); return k / ((k - 1) * c + 1); };
