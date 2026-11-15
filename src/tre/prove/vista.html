@@ -43,6 +43,11 @@ async function scena(quale) {
   } else if (quale === 'ragnatela') {
     U = creaUniverso(N, { via: { cosmo: 1 }, livello: 'cosmo' });
     await aspetta(() => U.pronto() && U.cosmo.rete && U.cosmo.rete.pronto() && U.cosmo.rete.stato.fine);
+  } else if (quale === 'fuori') {
+    // il pianeta d'avvio dell'app (cosmo 1, galassia 33, stella 71, pianeta 0: un'aria di ~9500 bar), da fuori come all'avvio
+    const via = { cosmo: 1, galassia: 33, stella: 71, pianeta: 0 }, Sis = sistema(1, 33, 71), P = Sis.pianeti[0];
+    Pi = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => null, opzioni: { nuvole: 0, onde: 0 } });
+    N.attacca(Pi.corpo, { distanza: 5.5 * P.raggioM, lat: 0.25 });
   } else if (quale === 'aria') {
     // il primo pianeta di roccia con l'aria spessa almeno un decimo di quella della Terra, dalla galassia 2 del cosmo 1
     let via = null, P = null; for (let s = 838; s < 1400 && !P; s++) { const Sis = sistema(1, 2, s); for (const [i, q] of Sis.pianeti.entries()) if (q.tipo !== 'gassoso' && q.interno && (q.clima?.pressione || 0) > 1e4 && (q.clima?.T || 0) > 200) { via = { cosmo: 1, galassia: 2, stella: s, pianeta: i }; P = q; break; } }

@@ -88,9 +88,11 @@ export function coloreCorpoNero(T) {
 
 // ---------- L'OCCHIO (INTRECCIO.md, regola 14: anche il rivelatore è fisica). Ciò che decide come un'immagine in luce
 // vera arriva allo schermo, con la legge da cui viene:
-//  · l'ADATTAMENTO alla luce: l'occhio si porta sulla luminanza media di ciò che ha davanti (L_A, cd/m²: la media della
-//    luminanza nell'immagine — l'adattamento segue la luce che entra, l'illuminamento della retina, non la media dei
-//    logaritmi), e la mostra come il grigio medio della percezione: chiarezza CIE L* = 50, cioè Y = ((50 + 16)/116)³ =
+//  · l'ADATTAMENTO alla luce: l'occhio si porta sulla luminanza media di ciò che GUARDA — la FOVEA, un campo di 2° attorno
+//    al punto fissato, che qui è il centro dello schermo (adattamento foveale: Larson, Rushmeier & Piatko 1997, che usano
+//    campi di 1°; la fovea centrale è larga ~1,5–2°) —, la media della luminanza e non dei logaritmi (l'adattamento
+//    segue la luce che entra, l'illuminamento della retina). (Prima: la media di tutta l'immagine — un pianeta piccolo nel
+//    cielo nero ne usciva bianco saturo.) La mostra come il grigio medio della percezione: chiarezza CIE L* = 50, cioè Y = ((50 + 16)/116)³ =
 //    0,184 dello schermo dopo la curva di tonalità. Non scende sotto la SOGLIA ASSOLUTA della visione: ~10⁻⁶ cd/m² su un
 //    campo largo, occhio adattato al buio (Hecht, Shlaer & Pirenne 1942; misurata) — sotto, ciò che c'è resta scuro;
 //  · le candele: dalla luce (W) alla luminanza (cd/m²) con l'efficacia luminosa della luce che illumina,
@@ -106,7 +108,7 @@ export function coloreCorpoNero(T) {
 // fotorecettori al posto suo); quanto in fretta l'occhio si adatta (6/s verso il chiaro, 2,5/s verso il buio: l'occhio
 // vero impiega minuti al buio — Hecht 1937 —; qui è tarato su chi guarda uno schermo); l'abbagliamento è l'alone di
 // luci.js, non la diffusione nell'occhio (CIE 135).
-export const OCCHIO = { soglia: 1e-6, grigioL: ((50 + 16) / 116) ** 3, mesopico: [0.005, 5], F: 1, TSole: 5772 };
+export const OCCHIO = { soglia: 1e-6, grigioL: ((50 + 16) / 116) ** 3, mesopico: [0.005, 5], F: 1, TSole: 5772, fovea: (2 * Math.PI) / 180 };
 // la curva di tonalità (la stessa del frammento in fondo) e il valore che lei porta al grigio medio
 export const tonalita = (x) => Math.max(0, Math.min(1, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
 export const X_MEDIO = (() => { let a = 0, b = 10; for (let i = 0; i < 80; i++) { const m = 0.5 * (a + b); if (tonalita(m) < OCCHIO.grigioL) a = m; else b = m; } return 0.5 * (a + b); })();
@@ -376,15 +378,18 @@ export function creaNucleo(tela, opzioni = {}) {
   // della luce del luogo (u_bianco, luminanza 1) di D; il colore che sfuma nella luminanza scotopica quando i coni non
   // bastano (u_occ.y: il loro peso); poi la curva (Narkowicz 2015) e la gamma dello schermo (sRGB, ~2,2)
   const prgTono = programma(V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col; uniform vec3 u_bianco; uniform vec2 u_occ;
-    void main() { vec3 x = max(texture(u_col, v_uv).rgb, 0.0); x /= mix(vec3(1.0), max(u_bianco, vec3(1e-3)), u_occ.x);
+    void main() { vec3 x = texture(u_col, v_uv).rgb; x = any(isnan(x)) ? vec3(65504.0) : clamp(x, 0.0, 65504.0); x /= mix(vec3(1.0), max(u_bianco, vec3(1e-3)), u_occ.x);
       if (u_occ.y < 1.0) { vec3 X = mat3(0.4124, 0.2126, 0.0193, 0.3576, 0.7152, 0.1192, 0.1805, 0.0722, 0.9505) * x; float sc = X.y * max(0.0, 1.33 * (1.0 + (X.y + X.z) / max(X.x, 1e-20)) - 1.68) / 2.5731; x = mix(vec3(sc), x, u_occ.y); }
       x = clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); o = vec4(pow(x, vec3(1.0 / 2.2)), 1.0); }`);
   // LA MISURA DELLA LUCE per l'occhio: la luminanza (Rec. 709, primari sRGB) media di ogni casella di una griglia 32×32
   // sull'immagine finale (tutti i suoi punti, nessuno saltato), letta un fotogramma dopo senza fermare la scheda (un
   // buffer di lettura e un recinto); la media dell'immagine è la media delle caselle pesata per la loro area
-  const NG = 32, prgMisura = conVirgola ? programma(V_SCHERMO, `out vec4 o; uniform sampler2D u_col; uniform vec2 u_lati;
-    void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(vec2(c) * u_lati / ${NG}.0), b = ivec2(vec2(c + 1) * u_lati / ${NG}.0); float s = 0.0;
-      for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) s += dot(max(texelFetch(u_col, ivec2(x, y), 0).rgb, 0.0), vec3(0.2126, 0.7152, 0.0722));
+  // (un punto oltre ciò che l'immagine a 16 bit tiene — 65 504 — o reso indefinito dal suo traboccare, Inf·0 nelle miscele, vale
+  // il più chiaro che il formato tiene: nella misura e sullo schermo. Senza, un occhio adattato al buio con una stella nel
+  // campo riempiva l'immagine di NaN, la misura non vedeva più niente e l'occhio restava al buio: il pianeta d'avvio nero)
+  const NG = 32, prgMisura = conVirgola ? programma(V_SCHERMO, `out vec4 o; uniform sampler2D u_col; uniform vec4 u_reg; // la regione misurata: angolo (x, y) e lati (punti)
+    void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(u_reg.xy + floor(vec2(c) * u_reg.zw / ${NG}.0)), b = max(ivec2(u_reg.xy + floor(vec2(c + 1) * u_reg.zw / ${NG}.0)), a + 1); float s = 0.0;
+      for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) { vec3 q = texelFetch(u_col, ivec2(x, y), 0).rgb; s += dot(any(isnan(q)) ? vec3(65504.0) : clamp(q, 0.0, 65504.0), vec3(0.2126, 0.7152, 0.0722)); }
       o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), 0.0, 0.0, 1.0); }`) : null;
   // (tre buffer di lettura a giro: ognuno si rilegge solo quando il suo recinto è passato, e intanto si scrive nel successivo;
   // d'uso «COPY»: con «READ» Chromium ne tiene una copia d'ombra che qui scartava a ogni fotogramma, con un avviso)
@@ -397,11 +402,14 @@ export function creaNucleo(tela, opzioni = {}) {
     const q = misura.code[0];
     if (q && gl.getSyncParameter(q.recinto, gl.SYNC_STATUS) === gl.SIGNALED) { misura.code.shift();
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, q.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, misura.dati); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); gl.deleteSync(q.recinto); misura.liberi.push(q.pbo);
-      let m = 0, a = 0; const cx = (i, L) => Math.floor(((i + 1) * L) / NG) - Math.floor((i * L) / NG);
-      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const w = cx(i, q.W) * cx(j, q.H), v = misura.dati[4 * (j * NG + i)]; if (w > 0 && Number.isFinite(v)) { m += w * v; a += w; } }
+      // (la media sulle caselle il cui centro sta nel cerchio della fovea: caselle uguali, ognuna la media dei suoi punti)
+      let m = 0, a = 0;
+      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const x = (i + 0.5) / NG - 0.5, y = (j + 0.5) / NG - 0.5, v = misura.dati[4 * (j * NG + i)]; if (x * x + y * y <= 0.25 && Number.isFinite(v)) { m += v; a++; } }
       if (a > 0) misura.LA = ((m / a) * q.E0 * q.K) / Math.PI; }
     const pbo = misura.liberi.shift(); if (!pbo) return; // (tutte e tre in viaggio: questo fotogramma non si misura)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, misura.f); gl.viewport(0, 0, NG, NG); gl.useProgram(prgMisura.p); lega(0, col, prgMisura.u.u_col); gl.uniform2f(prgMisura.u.u_lati, W, H); schermo();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, misura.f); gl.viewport(0, 0, NG, NG); gl.useProgram(prgMisura.p); lega(0, col, prgMisura.u.u_col);
+    // (la fovea: un cerchio di OCCHIO.fovea gradi attorno al centro dello schermo, dove si guarda; il quadrato che lo contiene)
+    const rf = Math.min(W, H, Math.max(1, (2 * (H / 2) * Math.tan(OCCHIO.fovea / 2)) / S.tanY)); gl.uniform4f(prgMisura.u.u_reg, Math.round(W / 2 - rf / 2), Math.round(H / 2 - rf / 2), Math.max(1, Math.round(rf)), Math.max(1, Math.round(rf))); schermo();
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.readPixels(0, 0, NG, NG, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     misura.code.push({ pbo, recinto: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), E0: S.E0, K: misura.K, W, H }); gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
   }

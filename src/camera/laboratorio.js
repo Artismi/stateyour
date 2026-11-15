@@ -275,7 +275,7 @@ let notaPunto = null;
 function vaiAPuntoACaso() {
   const seme = String(Date.now()), r = puntoACaso(seme, { lune: false, tempo: 'adesso' }); if (!r.indirizzo) { $('dove').textContent = r.note.join('; '); return; }
   const d = analizzaIndirizzo(r.indirizzo), via = viaDellIndirizzo(r.indirizzo); delete via.luna; // (la via della mappa: lingua.viaDi, i rami nel numero del cosmo)
-  notaPunto = { via, testo: `un punto a caso (seme ${seme}, senza lune, adesso): «${r.testo}» · ${r.bit.toFixed(1)} bit (${r.peso.parti.filter((x) => x.bit > 0).map((x) => `${x.livello} ${x.bit.toFixed(1)}`).join(', ')})` };
+  notaPunto = { via, testo: `un punto a caso (seme ${seme}, senza lune, adesso): «${r.testo}» ${via.galassia != null ? ` (nell'indirizzo galassie, stelle e pianeti si contano da 0, nei nomi qui sotto e nei pannelli da 1: «galassia ${via.galassia}» è la galassia ${via.galassia + 1})` : ''} · ${r.bit.toFixed(1)} bit (${r.peso.parti.filter((x) => x.bit > 0).map((x) => `${x.livello} ${x.bit.toFixed(1)}`).join(', ')})` };
   camMappa = { livello: 4, via, cx: (d.punto[0] + 180) / 360, cy: (90 - d.punto[1]) / 360, z: 5.5e6, quota3d: d.scala / (2 * tanMondo()) };
   const nota = notaPunto.testo; smontaMondo(); sopraMappa = null; vista = 'cosmo'; aggiornaVista(); $('dove').textContent = nota;
 }

@@ -112,11 +112,11 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
     disegna(S, passata) {
       if (passata === 'solido') {
         const u = prgSfera.u; gl.useProgram(prgSfera.p); gl.bindVertexArray(quadrato.vao);
-        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform1f(u.u_espo, 1); gl.uniform2f(u.u_minimo, (1.6 * S.tanY * 2) / S.H, 0);
+        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform1f(u.u_espo, 1); gl.uniform1f(u.u_notte, (S.luceGalassia || 0) / 4 / S.E0); gl.uniform2f(u.u_minimo, (1.6 * S.tanY * 2) / S.H, 0);
         // (un buco nero non è una sfera nera: lo disegna il suo strato)
         for (const s of schede) {
           if (s.vero || (buco && s.corpo === stella)) continue; const c = s.corpo; gl.uniform4f(u.u_sfera, s.rel[0], s.rel[1], s.rel[2], c.raggio);
-          if (c === stella) { gl.uniform4f(u.u_tinta, nero[0], nero[1], nero[2], Math.min(1e7, S.espo(stella.luminosita / (4 * Math.PI * c.raggio ** 2)))); gl.uniform4f(u.u_ombra, 0, 0, 0, 0); gl.uniform4f(u.u_asse, 0, 1, 0, 0); gl.uniform3f(u.u_luce, 0, 0, 0); gl.uniform3f(u.u_sole, 1, 0, 0); }
+          if (c === stella) { gl.uniform4f(u.u_tinta, nero[0], nero[1], nero[2], Math.min(6.5e4, S.espo(stella.luminosita / (4 * Math.PI * c.raggio ** 2))) /* (al più quanto l'immagine a 16 bit tiene) */); gl.uniform4f(u.u_ombra, 0, 0, 0, 0); gl.uniform4f(u.u_asse, 0, 1, 0, 0); gl.uniform3f(u.u_luce, 0, 0, 0); gl.uniform3f(u.u_sole, 1, 0, 0); }
           else {
             const col = s.c.colore || [170, 170, 165], k = S.espo(s.E), gas = s.P && s.P.tipo === 'gassoso', A = c.assetto ? S.assetto(c) : null; gl.uniform4f(u.u_tinta, (col[0] / 255) ** 2.2, (col[1] / 255) ** 2.2, (col[2] / 255) ** 2.2, 0);
             gl.uniform3f(u.u_luce, coloreLuce[0] * k, coloreLuce[1] * k, coloreLuce[2] * k); gl.uniform3fv(u.u_sole, s.sole); gl.uniform4f(u.u_asse, A ? A[1] : 0, A ? A[4] : 1, A ? A[7] : 0, gas ? 1 : 0);

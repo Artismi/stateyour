@@ -102,14 +102,20 @@ await prova('i passi del volume della galassia, da dentro il disco (il raggio co
 const infoA = await G.scena('aria');
 console.log(`    l'aria: ${num(infoA.pianeta.pressione / 1e5)} bar, scala d'altezza ${num(infoA.pianeta.H / 1000)} km; dal suolo verso l'orizzonte, la stella a 30°; l'occhio a ${num(infoA.LA)} cd/m²`);
 await prova('D. IL 3D NERO: l\'aria a camera ferma, dal primo fotogramma fermo in poi, è il conto pieno (prima: Add e Tot mai scritti, nero finché non ci si muoveva)', async () => {
-  await G.disegna({ passiAria: 24, chiave: 'pieno' }); await G.disegna({ passiAria: 24, accumulo: true, fotogrammi: 3, chiave: 'fermo', nuovaAria: true });
+  await G.disegna({ passiAria: 48, chiave: 'pieno' }); await G.disegna({ passiAria: 48, accumulo: true, fotogrammi: 3, chiave: 'fermo', nuovaAria: true });
   const c = await G.confronta('fermo', 'pieno'), l = await G.luce('fermo'); console.log(`      luce media ${num(l)} (unità del nucleo); scarto dal conto pieno ${num(c.scarto, 2)}, ΔE*ab massimo ${num(c.dE.max, 2)}`);
   assert.ok(l > 0.01 && c.scarto < 1e-4 && c.dE.max <= JND);
 });
-await prova('i passi dell\'aria (pianeta.js, F_ARIA: tratti fitti vicino all\'occhio, ogni tratto sommato in modo esatto): convergono, e 24 (l\'app) è sotto la soglia', async () => {
-  const s = await serie(G, 'passiAria', [3, 6, 12, 24, 48, 96, 192], 24, 'a');
+await prova('i passi dell\'aria, da dentro (pianeta.js, F_ARIA: ogni tratto sommato in modo esatto, i confini dalla misura dei passi): convergono, e 48 (l\'app) è sotto la soglia', async () => {
+  const s = await serie(G, 'passiAria', [3, 6, 12, 24, 48, 96, 192], 48, 'a');
   assert.ok(s.p > 0.5 && s.d[s.d.length - 1] < s.d[0] && s.resto < EPS); assert.ok(s.c.dE.p99 <= JND, `ΔE ${s.c.dE.p99}`);
-  const c12 = await G.confronta('a12', 'a192'); if (c12.dE.p99 > JND) console.log(`      (con 12 passi, il valore di prima: ΔE*ab 99° centile ${num(c12.dE.p99, 2)} — fuori; perciò 24)`);
+  const c24 = await G.confronta('a24', 'a192'); if (c24.dE.p99 > JND) console.log(`      (con 24 passi: ΔE*ab 99° centile ${num(c24.dE.p99, 2)} — fuori; perciò 48)`);
+});
+const infoF = await G.scena('fuori');
+console.log(`    l'aria del pianeta d'avvio dell'app, da fuori (5,5 raggi): ${num(infoF.pianeta.pressione / 1e5)} bar, scala d'altezza ${num(infoF.pianeta.H / 1000)} km; l'occhio a ${num(infoF.LA)} cd/m²`);
+await prova('i passi dell\'aria, da fuori, su un\'aria di migliaia di bar (prima: il disco ad anelli fino a centinaia di passi): convergono, e 48 è sotto la soglia', async () => {
+  const s = await serie(G, 'passiAria', [6, 12, 24, 48, 96, 192, 384], 48, 'f'); assert.ok(s.luce > 0, 'il pianeta è buio');
+  assert.ok(s.p > 0.5 && s.d[s.d.length - 1] < s.d[0] && s.resto < EPS); assert.ok(s.c.dE.p99 <= JND, `ΔE ${s.c.dE.p99}`);
 });
 const infoR = await ragnatelaPronta;
 console.log(`    la ragnatela del cosmo 1, da dentro: l'occhio a ${num(infoR.LA)} cd/m² (la soglia assoluta è ${num(NU.OCCHIO.soglia)})`);

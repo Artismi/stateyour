@@ -76,6 +76,7 @@ vec3 cieloSu(float mus) { return texture(u_cieloT, vec2((0.5 + (clamp(mus, -1.0,
 const GLSL_NUVOLE = `
 uniform sampler2D u_meteo;
 uniform vec4 u_nuv;      // quota delle nuvole (m), tempo (s), periodo del trascinamento (s), quanto coprono (0: niente nuvole)
+uniform float u_notte;   // la luce di notte su una superficie orizzontale (un quarto della luce diffusa della galassia), nell'unità della stella
 float nuvola(vec3 p, float fine) {
   vec3 q = normalize(p); float lon = atan(-q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
   vec4 m = texture(u_meteo, vec2(lon / 6.2831853 + 0.5, 0.5 - lat / 3.1415927));
@@ -249,13 +250,30 @@ uniform mat3 u_raggi;    // dagli assi dell'occhio a quello spazio
 uniform vec3 u_soleC;    // verso la stella, in quello spazio
 uniform vec4 u_cam;      // tangenti di metà campo, costante della profondità, esposizione
 uniform vec3 u_E;        // l'irradianza della stella (π × il suo colore)
+uniform float u_cima;    // dove il cammino entra nell'aria (m sopra il suolo): sopra, lo spessore ottico è sotto 10⁻³ anche di striscio (vedi impostaAria)
 ${GLSL_ARIA}
 ${GLSL_RUMORE}
 ${GLSL_NUVOLE}
 // la luce diffusa lungo un tratto del raggio: restituisce la luce aggiunta e (in tra) quanta ne passa
+// (lo spessore ottico verticale dell'aria sopra il raggio r, in logaritmo: il gas nel suo colore più diffuso, e la foschia)
+float gOtt(float r) { float h = r - u_atm.x; return log(max(1e-30, max(u_betaR.x, max(u_betaR.y, u_betaR.z)) * u_atm.y * exp(clamp(-h / u_atm.y, -80.0, 80.0)) + 1.1 * u_betaM.x * u_atm.z * exp(clamp(-h / u_atm.z, -80.0, 80.0)))); }
+// LA MISURA DEI PASSI lungo il raggio, da 0 (in t0) a 1 (in t1): la media di due — √((t − t0)/L), che mette i passi
+// vicino all'occhio, e la parte della variazione di gOtt fatta fin lì (scende fino al punto più vicino al centro, tc, poi
+// risale), che li mette dove lo spessore ottico cambia —: le densità di passi delle due regole si sommano
+float misuraPassi(float t, float t0, float L, vec3 o, vec3 d, float tc, float g0, float gc, float Vg) {
+  float g = gOtt(length(o + d * t)), fo = t <= tc ? (g - g0) / Vg : ((gc - g0) + (gc - g)) / Vg;
+  return 0.5 * (sqrt(clamp((t - t0) / L, 0.0, 1.0)) + clamp(fo, 0.0, 1.0)); }
 float gPasso = 0.5;
 vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   float L = t1 - t0, odR = 0.0, odM = 0.0; vec3 sR = vec3(0.0), sM = vec3(0.0), sMS = vec3(0.0);
+  // (I CONFINI DEI TRATTI: due regole insieme (le loro densità di passi si sommano: misuraPassi) — t ∝ f², fitta vicino all'occhio, dove
+  // un'aria spessa vista da dentro fa quasi tutta la sua luce in pochi chilometri; e passi uguali nel logaritmo dello
+  // SPESSORE OTTICO VERTICALE dell'aria che sta sopra (gas e foschia, ognuno con la sua scala d'altezza): ogni fattore e di
+  // spessore ottico ha i suoi passi anche dove l'aria densa sta lontano dall'occhio, come guardando un pianeta da fuori — lì,
+  // con t ∝ f² soltanto, su un'aria di migliaia di bar il disco veniva ad anelli finché i passi non erano centinaia)
+  float tc = clamp(-dot(o, d), t0, t1), g0 = gOtt(length(o + d * t0)), gc = gOtt(length(o + d * tc)), Vg = max((gc - g0) + (gc - gOtt(length(o + d * t1))), 1e-6), tPrima = t0;
+  // (la misura in 65 punti del raggio, fitti all'inizio; i confini si leggono interpolando: la misura cresce)
+  float TM[65], FM[65]; int jM = 0; for (int j = 0; j <= 64; j++) { float u = float(j) / 64.0; TM[j] = t0 + L * u * u; FM[j] = misuraPassi(TM[j], t0, L, o, d, tc, g0, gc, Vg); }
   // (ogni tratto: l'aria del suo punto — la densità, la luce della stella che le arriva — e la parte di luce che esce dal
   // tratto sommata in modo esatto per un tratto uniforme: ∫₀^ds e^(−σs)ds = (1 − e^(−σ·ds))/σ, con la trasparenza dal suo
   // inizio. Prima la trasparenza era quella a metà del tratto per tutto il tratto: dove un tratto è otticamente spesso —
@@ -264,7 +282,7 @@ vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
   for (int i = 0; i < ${passi}; i++) {
     // (i tratti sono fitti vicino all'occhio e radi lontano — t ∝ f² —: la luce dell'aria vicina, che sull'orizzonte di
     // un'aria spessa è quasi tutta, cambia in pochi chilometri; quella lontana arriva già attenuata)
-    float fa = float(i) / ${passi}.0, fb = float(i + 1) / ${passi}.0, ta = t0 + L * fa * fa, ds = L * (fb * fb - fa * fa);
+    float fb = float(i + 1) / ${passi}.0, ta = i == 0 ? t0 : tPrima; while (jM < 64 && FM[jM + 1] < fb) jM++; float tb = i == ${passi} - 1 ? t1 : mix(TM[jM], TM[jM + 1], clamp((fb - FM[jM]) / max(FM[jM + 1] - FM[jM], 1e-9), 0.0, 1.0)), ds = tb - ta; tPrima = tb;
     vec3 p = o + d * (ta + gPasso * ds); float r = length(p), h = r - u_atm.x;
     float rR = exp(clamp(-h / u_atm.y, -40.0, 8.0)), rM = exp(clamp(-h / u_atm.z, -40.0, 8.0));
     vec3 sig = u_betaR * rR + vec3(u_betaM.x * 1.1 * rM), Te = exp(-(u_betaR * odR + vec3(u_betaM.x * 1.1 * odM))), tau = sig * ds;
@@ -278,7 +296,7 @@ vec3 tratto(vec3 o, vec3 d, float t0, float t1, out vec3 tra) {
 }
 void esce(vec3 scena, vec3 Tot, vec3 Add, float dist) { if (u_sfasa.z > 0.5 && u_sfasa.z < 1.5) { o_col = vec4(Add, dist); o_tot = vec4(Tot, dist); } else { o_col = vec4(scena * Tot + Add, 1.0); o_tot = vec4(0.0); } }
 void main() {
-  vec3 scena = texture(u_col, v_uv).rgb; float prof = texture(u_prof, v_uv).r;
+  vec3 scena = texture(u_col, v_uv).rgb; scena = any(isnan(scena)) ? vec3(65504.0) : min(scena, vec3(65504.0)); float prof = texture(u_prof, v_uv).r; // (Inf·0 farebbe NaN)
   vec3 dO = vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0), de = u_raggi * dO; float lung = length(de); vec3 d = de / lung, o = u_occhio;
   float wP = exp2(prof * 2.0 / u_cam.z) - 1.0, fino = prof < 1.0 ? wP * lung : 1e30, dist = prof < 1.0 ? wP * length(dO) : 0.0; // (dist: metri veri lungo il raggio; 0: il cielo)
   gPasso = 0.5 + (fract(fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) + u_sfasa.x) - 0.5) * u_sfasa.y;
@@ -287,7 +305,7 @@ void main() {
   // il suolo che allora non c'era — si rifà il conto qui)
   if (u_sfasa.z > 1.5) { ivec2 q = ivec2(gl_FragCoord.xy); vec4 cA = texelFetch(u_cAdd, q, 0), cT = texelFetch(u_cTot, q, 0);
     if ((dist <= 0.0 && cA.a <= 0.0) || (dist > 0.0 && abs(cA.a - dist) <= u_cK.y * dist)) { o_col = vec4(scena * cT.rgb + cA.rgb * u_cK.x, 1.0); o_tot = vec4(0.0); return; } }
-  float Rt = u_atm.x + u_atm.w, b = -dot(o, d), disc = b * b - dot(o, o) + Rt * Rt;
+  float Rt = u_atm.x + u_cima, b = -dot(o, d), disc = b * b - dot(o, o) + Rt * Rt;
   if (disc <= 0.0 || u_atm.w <= 0.0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; }
   float sq = sqrt(disc), t0 = max(0.0, b - sq), t1 = min(b + sq, fino);
   if (t1 <= t0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; }
@@ -302,7 +320,7 @@ void main() {
     if (c > 0.003) {
       float ombra = nuvola(p + u_soleC * 2500.0, 0.0); // quanto la nuvola si fa ombra da sé verso la stella
       vec3 sole = (u_E / 3.14159) * luceCheArriva(r, muS) * smoothstep(-0.05, 0.1, muS);
-      vec3 bianco = 0.82 * sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra * c) + 0.82 * (u_E / 3.14159) * cieloSu(muS); // (più la luce del cielo, quella vera)
+      vec3 bianco = 0.82 * sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra * c) + 0.82 * (u_E / 3.14159) * cieloSu(muS) + 0.82 * vec3(u_notte); // (più la luce del cielo, quella vera, e di notte quella della galassia: prima mancava, e una coltre di nuvole di notte era nero puro — il 3D nero del seme 12345)
       float k = clamp(c * 1.15, 0.0, 1.0); dT *= 1.0 - k; dA = dA * (1.0 - k) + bianco * u_cam.w * k;
     }
     luce = tratto(o, d, t0, tn, tra); esce(scena, dT * tra, dA * tra + luce * u_cam.w, dist);
@@ -326,7 +344,7 @@ export const F_SFERA = `
 in vec3 v_q; in vec3 v_c; in float v_w;
 uniform mat3 u_vista; uniform float u_fc; uniform vec4 u_sfera; uniform vec3 u_sole, u_luce; uniform vec4 u_tinta; // colore; w > 0: brilla di suo (quanto)
 uniform vec4 u_ombra;    // il corpo che può farle ombra: centro rispetto all'occhio (assi del mondo) e raggio
-uniform vec2 u_minimo; uniform float u_espo; uniform vec4 u_asse; // l'asse del corpo (assi del mondo) e quanto è a fasce (i giganti gassosi)
+uniform vec2 u_minimo; uniform float u_espo; uniform vec4 u_asse; uniform float u_notte; // u_notte: la luce di notte (un quarto della luce diffusa della galassia), nell'unità di u_luce  // l'asse del corpo (assi del mondo) e quanto è a fasce (i giganti gassosi)
 ${GLSL_RUMORE}
 out vec4 o_col;
 void main() {
@@ -334,7 +352,7 @@ void main() {
   float lontano = length(v_c) * u_minimo.x;
   if (disc < 0.0) { // più piccola di un punto dello schermo: un dischetto con la stessa luce in tutto
     float fuori = length(v_q - v_c) / max(lontano, 1e-9); if (r > lontano || fuori > 1.0 || r < 0.35 * lontano) discard; // (ancora più piccola: non copre niente; la si vede dal suo punto di luce)
-    float area = (r * r) / (lontano * lontano); vec3 c = u_tinta.w > 0.0 ? u_tinta.rgb * u_tinta.w : u_tinta.rgb * u_luce * 0.5;
+    float area = (r * r) / (lontano * lontano); vec3 c = u_tinta.w > 0.0 ? u_tinta.rgb * u_tinta.w : u_tinta.rgb * (u_luce * 0.5 + u_notte);
     o_col = vec4(c * area * u_espo * (1.0 - smoothstep(0.5, 1.0, fuori)), 1.0); gl_FragDepth = log2(max(1e-6, 1.0 + length(v_c))) * u_fc * 0.5; return;
   }
   float t = b - sqrt(disc); if (t < 0.0) discard;
@@ -347,7 +365,7 @@ void main() {
     vec3 pM = transpose(u_vista) * p - u_ombra.xyz; float bb = dot(pM, u_sole), cc = dot(pM, pM) - u_ombra.w * u_ombra.w; // l'ombra del pianeta sulla luna
     float luce = (bb < 0.0 && bb * bb - cc > 0.0) ? 0.0 : 1.0;
     float lat = dot(nM, u_asse.xyz), macchie = mix(0.75 + 0.5 * frattale(nM * 6.0 + u_tinta.rgb * 20.0), 0.8 + 0.35 * sin(lat * 23.0 + 3.0 * frattale3(nM * 3.0 + u_tinta.rgb * 9.0) + 2.0 * sin(lat * 7.0)), u_asse.w);
-    col = u_tinta.rgb * macchie * u_luce * max(dot(nM, u_sole), 0.0) * luce + u_tinta.rgb * 0.0008;
+    col = u_tinta.rgb * macchie * u_luce * max(dot(nM, u_sole), 0.0) * luce + u_tinta.rgb * u_notte; // (di notte la luce della galassia: prima 0,0008 a mano, e il lato in ombra di un gigante era nero)
   }
   o_col = vec4(col * u_espo, 1.0);
   gl_FragDepth = log2(max(1e-6, 1.0 - p.z)) * u_fc * 0.5;
@@ -456,7 +474,7 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 24 }
 }
 
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {}, corpi = null } = {}) {
-  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 24, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
+  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 48, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
@@ -696,7 +714,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         const t = z.t;
         if (t !== tess) { tess = t; madre = t.L > 0 ? tessere.get(chiave(t.L - 1, t.tx >> 2, t.ty >> 2)) : null; if (madre && !madre.pronta) madre = null; const m2 = madre || t;
           S.lega(0, t.alt, u.u_alt); S.lega(1, t.pend, u.u_pend); S.lega(2, t.terra, u.u_terra); S.lega(3, t.acqua || trasparente, u.u_acqua); S.lega(4, t.oriz1, u.u_oriz1); S.lega(10, t.oriz2, u.u_oriz2);
-          S.lega(6, m2.alt, u.u_altM); S.lega(7, m2.pend, u.u_pendM); S.lega(8, m2.terra, u.u_terraM); S.lega(9, m2.acqua || trasparente, u.u_acquaM); S.lega(11, m2.oriz1, u.u_oriz1M); S.lega(12, m2.oriz2, u.u_oriz2M); gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, m2.acqua ? 1 : 0, (S.luceGalassia || 0) / 4 / stato.E);
+          S.lega(6, m2.alt, u.u_altM); S.lega(7, m2.pend, u.u_pendM); S.lega(8, m2.terra, u.u_terraM); S.lega(9, m2.acqua || trasparente, u.u_acquaM); S.lega(11, m2.oriz1, u.u_oriz1M); S.lega(12, m2.oriz2, u.u_oriz2M); gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, m2.acqua ? 1 : 0, (S.luceGalassia || 0) / 4 / stato.E); // (la stessa luce di notte di u_notte)
           // (il livello L serve fino alla distanza D; negli ultimi due quinti di D i dati sfumano in quelli della madre)
           const D = madre ? distanzaLivello(t.L, S) : 0; gl.uniform2f(u.u_sfuma, 0.55 * D, 0.95 * D); if (madre) madre.uso = uso; }
         // il centro della pezza rispetto all'occhio, in doppia precisione; poi i tre assi della pezza negli assi del mondo
@@ -737,8 +755,14 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   function impostaNuvole(u, S) {
     const periodo = Math.max(6 * 3600, Math.abs(N.tempo.velocita) * 6); S.lega(5, meteoTex || trasparente, u.u_meteo);
     gl.uniform4f(u.u_nuv, aria ? Math.min(0.7 * aria.H, 9000) : 0, S.t % (periodo * 64), periodo, aria && meteoTex && O.nuvole ? O.nuvole : 0);
+    gl.uniform1f(u.u_notte, (S.luceGalassia || 0) / 4 / stato.E);
   }
+  // (dove comincia l'aria che conta: la quota sopra cui lo spessore ottico che resta, anche preso di striscio — per il
+  // fattore di Chapman all'orizzonte, √(πR/2H) —, è sotto 10⁻³: ciò che sta sopra cambia la luce di meno di un millesimo,
+  // molto sotto la soglia dell'occhio di test_vista; la si prende per il gas e per la foschia, e al più la cima)
+  const cimaOttica = !aria ? 0 : Math.min(aria.cima, Math.max(...[[Math.max(...aria.betaR), aria.H], [1.1 * aria.betaM, aria.HM]].map(([b, Hs]) => Hs * Math.log(Math.max(1, (b * Hs * Math.sqrt((Math.PI * R) / (2 * Hs))) / 1e-3))), 0));
   function impostaAria(u) {
+    if (u.u_cima) gl.uniform1f(u.u_cima, cimaOttica);
     if (aria) { gl.uniform4f(u.u_atm, R, aria.H, aria.HM, aria.cima); gl.uniform3fv(u.u_betaR, aria.betaR); gl.uniform4f(u.u_betaM, aria.betaM, 0.76, 0, 0); }
     else { gl.uniform4f(u.u_atm, R, 1, 1, 0); gl.uniform3f(u.u_betaR, 0, 0, 0); gl.uniform4f(u.u_betaM, 0, 0, 0, 0); }
   }
@@ -804,11 +828,11 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       }
       if (passata === 'solido') {
         const u = prgSfera.u; gl.useProgram(prgSfera.p); gl.bindVertexArray(quadrato.vao);
-        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform3fv(u.u_sole, stato.sole); gl.uniform3fv(u.u_luce, coloreLuce); gl.uniform1f(u.u_espo, espo(S));
+        gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); gl.uniform3fv(u.u_sole, stato.sole); gl.uniform3fv(u.u_luce, coloreLuce); gl.uniform1f(u.u_espo, espo(S)); gl.uniform1f(u.u_notte, (S.luceGalassia || 0) / 4 / stato.E);
         gl.uniform4f(u.u_asse, 0, 1, 0, 0); gl.uniform2f(u.u_minimo, (1.6 * S.tanY * 2) / S.H, 0); gl.uniform4f(u.u_ombra, stato.versoC[0], stato.versoC[1], stato.versoC[2], R);
         const sfera = (c, raggio, tinta, brilla) => { const v = S.versoCorpo(c); gl.uniform4f(u.u_sfera, v[0], v[1], v[2], raggio); gl.uniform4f(u.u_tinta, tinta[0], tinta[1], tinta[2], brilla); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
         // la stella: la sua superficie è (distanza / raggio)² volte più luminosa di un foglio bianco che illumina
-        sfera(corpoStella, raggioStella, nero, Math.min(3e5, ((P.aM || 1.5e11) / raggioStella) ** 2));
+        sfera(corpoStella, raggioStella, nero, Math.min(6.5e4, ((P.aM || 1.5e11) / raggioStella) ** 2)); // (al più quanto l'immagine a 16 bit tiene)
         for (const l of lune) sfera(l.corpo, l.L.raggioM, l.tinta, 0);
         gl.bindVertexArray(null); return;
       }
