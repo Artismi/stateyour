@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: la vista come misura (convergenza delle discretizzazioni, C12)</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e4da; font: 12px ui-monospace, monospace; }
+  canvas { display: block; width: 320px; height: 200px; }
+</style>
+</head>
+<body>
+<canvas id="tela"></canvas>
+<script type="module">
+// La pagina che test/test_vista.mjs guida (con Chromium, senza finestre): monta una scena alla volta e la disegna con una
+// discretizzazione data, a esposizione fissa, e confronta le immagini. Le scene:
+//   galassia   la galassia 2 del cosmo 1 da fuori (2,6 raggi, il volume di volumi.js);
+//   dentro     la stessa da dentro il disco, a 0,45 raggi dal centro, nel piano (il raggio corre nel piano: i passi «fitti
+//              vicino all'occhio»);
+//   ragnatela  il cosmo 1 da dentro la sua ragnatela (il volume di volumi.js, grana grossa e regione fine);
+//   aria       un pianeta con l'aria, dal suolo verso l'orizzonte, con la stella a mezza altezza (la passata dell'aria di
+//              pianeta.js, i suoi passi `passiAria`).
+// window.prova: { pronta, scena(nome), disegna({ passi, passiAria, accumulo, fotogrammi }), tieni(chiave), confronta(a, b) }
+import { creaNucleo } from '../nucleo.js';
+import { creaUniverso } from '../universo.js';
+import { creaPianeta } from '../pianeta.js';
+import { sistema } from '../../camera/cosmo.js';
+import { superficieDi } from '../../camera/mappa.js';
+
+let N = null, U = null, Pi = null, nome = null;
+const aspetta = (f, ms = 120000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto: ' + nome)); else { if (N) N.fotogramma(); setTimeout(p, 50); } }; p(); });
+const immagini = new Map();
+
+async function scena(quale) {
+  if (N) { try { U?.libera(); N.libera(); } catch { /* già libero */ } }
+  N = null; U = null; Pi = null; nome = quale; immagini.clear();
+  const vecchia = document.getElementById('tela'), tl = vecchia.cloneNode(); vecchia.replaceWith(tl);
+  N = creaNucleo(tl, { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = true;
+  if (quale === 'galassia' || quale === 'dentro') {
+    U = creaUniverso(N, { via: { cosmo: 1, galassia: 2 }, livello: 'galassia' });
+    await aspetta(() => U.pronto() && U.galassia() && U.galassia().volume && U.galassia().volume.stato.nebulose > 0);
+    const G = U.galassia(); if (quale === 'dentro') U.guardaDa(G.nodo, 0.45 * G.raggio, 0.02, 0.6);
+  } else if (quale === 'ragnatela') {
+    U = creaUniverso(N, { via: { cosmo: 1 }, livello: 'cosmo' });
+    await aspetta(() => U.pronto() && U.cosmo.rete && U.cosmo.rete.pronto() && U.cosmo.rete.stato.fine);
+  } else if (quale === 'aria') {
+    // il primo pianeta di roccia con l'aria spessa almeno un decimo di quella della Terra, dalla galassia 2 del cosmo 1
+    let via = null, P = null; for (let s = 838; s < 1400 && !P; s++) { const Sis = sistema(1, 2, s); for (const [i, q] of Sis.pianeti.entries()) if (q.tipo !== 'gassoso' && q.interno && (q.clima?.pressione || 0) > 1e4 && (q.clima?.T || 0) > 200) { via = { cosmo: 1, galassia: 2, stella: s, pianeta: i }; P = q; break; } }
+    const Sis = sistema(via.cosmo, via.galassia, via.stella);
+    Pi = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => superficieDi(via), opzioni: { nuvole: 0, onde: 0 } });
+    N.attacca(Pi.corpo, { distanza: 3 * P.raggioM });
+    await aspetta(() => Pi.pronto() && Pi.statistiche().inAttesa === 0, 120000);
+    // la stella a mezza altezza (seno 0,5) sopra il punto (0°, 20°), salendo; lo sguardo verso l'orizzonte, dalla parte opposta alla stella
+    const lat = 20 * Math.PI / 180, lon = 0, cl = Math.cos(lat), q = [cl * Math.cos(lon), Math.sin(lat), -cl * Math.sin(lon)], g = P.bloccato ? P.anno : P.giorno;
+    const mu = (tt) => { const A = N.assettoDi(Pi.corpo, tt), s = N.V.norma(N.tra(Pi.corpo, Pi.stella, tt)), su = N.V.mv(A, q); return N.V.scal(su, s); };
+    let tm = 0, dm = Infinity; for (let k = 0; k < 720; k++) { const tt = (k / 720) * g, m = mu(tt); if (mu(tt + g / 720) > m && Math.abs(m - 0.5) < dm) { dm = Math.abs(m - 0.5); tm = tt; } } N.tempo.t = tm;
+    N.vai({ lon, lat, quota: 1500, direzione: Math.PI, alza: 0.04 });
+    await aspetta(() => Pi.statistiche().inAttesa === 0, 60000);
+  }
+  // l'occhio si adatta per qualche fotogramma, poi lo si ferma lì: le immagini da confrontare hanno la stessa esposizione
+  N.vista.occhio.E0 = 0; N.vista.occhio.adatta = true; for (let i = 0; i < 24; i++) N.fotogramma(performance.now() + 100 * i);
+  N.vista.occhio.E0 = N.stato.E0; N.vista.occhio.adatta = false;
+  return { scena: quale, E0: N.stato.E0, LA: N.stato.LA, W: N.stato.W, H: N.stato.H, pianeta: Pi ? Pi.aria && { H: Pi.aria.H, pressione: Pi.aria.pressione } : null };
+}
+
+// disegna con una discretizzazione: passi dei volumi, passi dell'aria, accumulo (fotogrammi a camera ferma)
+function disegna({ passi = null, passiAria = null, accumulo = false, fotogrammi = 1, chiave = null } = {}) {
+  const t0 = performance.now();
+  if (passi) N.vista.passi = { ...N.vista.passi, galassia: passi, ragnatela: passi };
+  if (passiAria && Pi) Pi.opzioni.passiAria = passiAria;
+  N.vista.accumulo = { ...N.vista.accumulo, attivo: !!accumulo };
+  // (un fotogramma con la camera spostata d'un nulla e rimessa: le storie dell'accumulo e dell'aria ripartono da zero)
+  N.guarda(1e-4, 0); N.fotogramma(); N.guarda(-1e-4, 0);
+  const tappe = {}; for (let k = 1; k <= fotogrammi; k++) { N.fotogramma(); if (accumulo && (k & (k - 1)) === 0) tappe[k] = N.leggiImmagine(); }
+  const img = { hdr: N.leggiImmagine(), rgb: leggiSchermo(), tappe, ms: performance.now() - t0 }; if (chiave) immagini.set(chiave, img); return { ms: img.ms, chiave };
+}
+function leggiSchermo() { const gl = N.gl, W = N.stato.W, H = N.stato.H, px = new Uint8Array(4 * W * H); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; }
+
+// ΔE*ab (CIE 1976) tra due immagini dello schermo (sRGB, bianco D65)
+const lin = (c) => { const x = c / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+const f3 = (t) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+function lab(px, i) { const r = lin(px[i]), g = lin(px[i + 1]), b = lin(px[i + 2]), X = 0.4124 * r + 0.3576 * g + 0.1805 * b, Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Z = 0.0193 * r + 0.1192 * g + 0.9505 * b;
+  const fx = f3(X / 0.95047), fy = f3(Y), fz = f3(Z / 1.08883); return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]; }
+function deltaE(a, b) { const n = a.length / 4, d = new Float64Array(n); for (let k = 0; k < n; k++) { const p = lab(a, 4 * k), q = lab(b, 4 * k); d[k] = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }
+  const s = Array.from(d).sort((x, y) => x - y), q = (f) => s[Math.min(n - 1, Math.floor(f * n))]; let m = 0; for (const x of d) m += x; return { media: m / n, p95: q(0.95), p99: q(0.99), max: s[n - 1] }; }
+// lo scarto relativo (norma 1, sui tre colori) tra due immagini in luce: Σ|a − b| / Σ|b|
+function scarto(a, b) { let s = 0, t = 0; for (let k = 0; k < a.length; k += 4) for (let c = 0; c < 3; c++) { s += Math.abs(a[k + c] - b[k + c]); t += Math.abs(b[k + c]); } return t > 0 ? s / t : 0; }
+function confronta(ka, kb, tappa = null) { const a = immagini.get(ka), b = immagini.get(kb); if (!a || !b) throw new Error(`manca ${!a ? ka : kb}`); const A = tappa ? a.tappe[tappa] : a.hdr; return { scarto: scarto(A, b.hdr), dE: tappa ? null : deltaE(a.rgb, b.rgb) }; }
+// quanta luce c'è nell'immagine (per dire che la scena non è vuota)
+function luce(k) { const a = immagini.get(k).hdr; let s = 0; for (let i = 0; i < a.length; i += 4) s += a[i] + a[i + 1] + a[i + 2]; return s / (a.length / 4); }
+
+window.prova = { pronta: true, scena, disegna, confronta, luce, get N() { return N; } };
+</script>
+</body>
+</html>

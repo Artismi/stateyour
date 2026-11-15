@@ -424,7 +424,9 @@ export function creaNucleo(tela, opzioni = {}) {
     }
     return out;
   };
-  const stat = { cpuMs: 0, fotogrammi: 0 }; let perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
+  const stat = { cpuMs: 0, fotogrammi: 0 }; let ultima = null; // (ultima: l'immagine in virgola mobile dell'ultimo fotogramma, prima della tonalità)
+  // PER LE PROVE (test_vista): l'immagine in luce dell'ultimo fotogramma, W × H × 4 (nell'unità del nucleo: 1 = un foglio bianco sotto S.E0)
+  function leggiImmagine() { if (!ultima) return null; const W = S.W, H = S.H, px = new Float32Array(4 * W * H), prima = gl.getParameter(gl.FRAMEBUFFER_BINDING); gl.bindFramebuffer(gl.FRAMEBUFFER, ultima.f); gl.readPixels(0, 0, W, H, gl.RGBA, gl.FLOAT, px); gl.bindFramebuffer(gl.FRAMEBUFFER, prima); return px; } let perso = false, ultimoMs = 0, giro = 0, richiesto = 0;
   const tasti = new Set();
   function fotogramma(ms = performance.now()) {
     if (perso || !cam.corpo || !tela.width || !tela.height) return;
@@ -476,7 +478,7 @@ export function creaNucleo(tela, opzioni = {}) {
     // le passate sull'immagine intera (l'aria), poi la tonalità
     let da = { col: imm.colA, prof: imm.prof, f: imm.fA }, a = { col: imm.colB, prof: imm.prof, f: imm.fB };
     for (const s of strati) if (s.dopo) { gl.bindFramebuffer(gl.FRAMEBUFFER, a.f); gl.viewport(0, 0, W, H); if (s.dopo(S, da, a)) { const x = da; da = a; a = x; } }
-    if (vista.occhio.adatta) misuraLuce(da.col, W, H);
+    ultima = da; if (vista.occhio.adatta) misuraLuce(da.col, W, H);
     // (il bianco della luce del luogo, a luminanza 1: S.coloreStella è il colore vero della sua luce)
     const cs = S.coloreStella, yb = 0.2126 * cs[0] + 0.7152 * cs[1] + 0.0722 * cs[2] || 1, Dc = S.stella ? gradoAdattamento(S.LA) : 0; S.adattamento = { LA: S.LA, D: Dc, coni: pesoConi(S.LA) };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); schermo();
@@ -513,7 +515,7 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.libera) s.libera(); strati.length = 0;
     if (!perso) gl.getExtension('WEBGL_lose_context')?.loseContext(); perso = true;
   }
-  const N = { gl, tela, opzioni: O, V, tempo, vista, camera: cam, corpo, corpi, togliCorpo, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
+  const N = { gl, tela, opzioni: O, V, tempo, vista, camera: cam, corpo, corpi, togliCorpo, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, leggiImmagine, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
     avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; }, tasti };
   ridimensiona();
   return N;

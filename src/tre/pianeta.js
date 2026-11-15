@@ -391,6 +391,59 @@ export function fabbricaAnello(N, P) {
     },
     libera() { gl.deleteTexture(tex); gl.deleteBuffer(b); gl.deleteVertexArray(vao); } };
 }
+// ---------- l'aria di un pianeta: dai gas veri e dalla pressione (P: il pianeta; R: il suo raggio; grav: la gravità al suolo)
+export function ariaDi(P, R, grav) {
+  const p = P.clima?.pressione || 0, gas = P.atmosfera?.gas || null; if (!(p > 1) || !isFinite(p)) return null;
+  let M = 0, diff = 0, tot = 0; for (const [nome, x] of Object.entries(gas || { N2: 1 })) { const g = GAS[nome] || [0.03, 1]; M += x * g[0]; diff += x * g[1]; tot += x; } M /= tot || 1; diff /= tot || 1;
+  const T = P.clima.Taria || P.clima.T || 250, H = (R_GAS * T) / (M * grav), densita = p / (K_B * T) / 2.547e25; // molecole rispetto all'aria della Terra al suolo (2,55·10²⁵ per m³)
+  // Rayleigh dell'aria terrestre al suolo: 5,8 · 13,5 · 33,1 per milione di metri (680, 550, 440 nm)
+  const betaR = [5.8e-6, 13.5e-6, 33.1e-6].map((b) => b * densita * diff), foschia = 2.5e-6 * Math.min(40, densita) * (1 + 12 * (P.atmosfera?.fuliggine || 0) + 40 * (gas?.H2O || 0));
+  return { H, HM: Math.max(600, 0.15 * H), cima: Math.min(0.6 * R, H * Math.max(8, 4 + Math.log(Math.max(1, densita * diff)) * 2.5 + 6)), betaR, betaM: foschia, pressione: p, T, M };
+}
+
+// LA LUCE DIFFUSA PIÙ VOLTE E LA LUCE DEL CIELO SUL SUOLO. Il conto lungo i raggi (F_ARIA) segue la luce diffusa una volta
+// sola; dove l'aria è spessa (su questo genere di mondi lo spessore ottico nel blu arriva a 3) la luce diffusa più volte
+// è la parte maggiore: senza, l'aria spessa toglie il blu e non lo rende, e il pianeta esce scuro e arrossato.
+// Qui, una volta per pianeta, la tabella di Hillaire (2020, «A Scalable and Production Ready Sky and Atmosphere Rendering
+// Technique», EGSR): in ogni punto (quota × altezza della stella, 32 × 32) la luce diffusa due volte che arriva da tutte
+// le direzioni (L₂, con 64 direzioni e il suolo che rimanda la luce con l'albedo del clima) e la parte f che l'aria
+// ridiffonde: tutte le volte successive valgono L₂/(1 − f). E l'irradianza del cielo su un suolo orizzontale (semplice +
+// multipla, 256 direzioni) per 32 altezze della stella: la luce del cielo sul suolo e sulle nuvole, e il cielo riflesso
+// dal mare. Gli stessi coefficienti, la stessa funzione di Chapman, la stessa foschia del conto sulla scheda.
+// (ND, NC: direzioni per la luce diffusa due volte e per l'irradianza del cielo; NS: passi lungo ogni raggio — le
+// discretizzazioni di cui test_vista prova la convergenza)
+export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 24 } = {}) {
+  const NM = 32, ms = new Float32Array(4 * NM * NM), cieloT = new Float32Array(4 * NM); if (!aria) return { ms, cieloT };
+  const { H, HM, cima, betaR, betaM } = aria, Rt = R + cima, albedo = Math.max(0.02, Math.min(0.9, albedoClima ?? 0.3)), g = 0.76;
+  const chap = (X, c) => { const k = Math.sqrt(1.5707963 * X); return k / ((k - 1) * c + 1); };
+  const spess = (r, mu, Hs) => { const rho = Math.exp(Math.max(-40, Math.min(8, -(r - R) / Hs))); if (mu >= 0) return rho * chap(r / Hs, mu); const rt = r * Math.sqrt(Math.max(0, 1 - mu * mu)); if (rt < R) return 1e7; return 2 * Math.exp(-(rt - R) / Hs) * chap(rt / Hs, 0) - rho * chap(r / Hs, -mu); };
+  const sole = (r, mu, o) => { const a = spess(r, mu, H) * H, b = betaM * 1.1 * HM * spess(r, mu, HM); for (let c = 0; c < 3; c++) o[c] = Math.exp(-(betaR[c] * a + b)); return o; };
+  const dirs = (n) => { const d = []; for (let i = 0; i < n; i++) { const y = 1 - (2 * (i + 0.5)) / n, q = Math.sqrt(1 - y * y), a = i * 2.39996323; d.push([q * Math.cos(a), y, q * Math.sin(a)]); } return d; };
+  const Ts = [0, 0, 0];
+  // lungo un raggio dal punto (0, r, 0): chiama f(rp, mus, Te, ds, ρR, ρM) a ogni passo; restituisce [Te alla fine, μ della stella al suolo] o null
+  const marcia = (r, d, s, f) => { const b = r * d[1], disc = b * b - r * r + R * R, aTerra = disc > 0 && -b - Math.sqrt(disc) > 0, fine = aTerra ? -b - Math.sqrt(disc) : -b + Math.sqrt(Math.max(0, b * b - r * r + Rt * Rt)), ds = fine / NS, od = [0, 0, 0], Te = [1, 1, 1];
+    for (let k = 0; k < NS; k++) { const t = (k + 0.5) * ds, px = d[0] * t, py = r + d[1] * t, pz = d[2] * t, rp = Math.hypot(px, py, pz), h = rp - R, rR = Math.exp(-h / H), rM = Math.exp(-h / HM);
+      for (let c = 0; c < 3; c++) { od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; Te[c] = Math.exp(-od[c]); }
+      f(rp, (px * s[0] + py * s[1] + pz * s[2]) / rp, Te, ds, rR, rM, d);
+      for (let c = 0; c < 3; c++) od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; }
+    if (!aTerra) return null; const pz = [d[0] * fine, r + d[1] * fine, d[2] * fine]; for (let c = 0; c < 3; c++) Te[c] = Math.exp(-od[c]); return [Te, (pz[0] * s[0] + pz[1] * s[1] + pz[2] * s[2]) / R]; };
+  const D64 = dirs(ND), D256 = dirs(NC).filter((d) => d[1] > 0);
+  for (let ih = 0; ih < NM; ih++) for (let im = 0; im < NM; im++) {
+    const r = R + Math.max(1, cima * (ih / (NM - 1)) ** 2), mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], L2 = [0, 0, 0], fm = [0, 0, 0];
+    for (const d of D64) {
+      const suolo = marcia(r, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) { const sc = betaR[c] * rR + betaM * rM; L2[c] += (Te[c] * sc * Ts[c] * ds) / (4 * Math.PI); fm[c] += Te[c] * sc * ds; } });
+      if (suolo && suolo[1] > 0) { sole(R, suolo[1], Ts); for (let c = 0; c < 3; c++) L2[c] += (suolo[0][c] * Ts[c] * suolo[1] * albedo) / Math.PI; } }
+    for (let c = 0; c < 3; c++) { const v = L2[c] / ND / Math.max(0.05, 1 - fm[c] / ND); ms[4 * (ih * NM + im) + c] = Number.isFinite(v) ? v : 0; }
+    ms[4 * (ih * NM + im) + 3] = 1; }
+  const psi = (rp, mus, c) => { const x = Math.max(0, Math.min(NM - 1.001, (mus * 0.5 + 0.5) * (NM - 1))), y = Math.max(0, Math.min(NM - 1.001, Math.sqrt(Math.max(0, Math.min(1, (rp - R) / cima))) * (NM - 1))), i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, q = (jj, ii) => ms[4 * (jj * NM + ii) + c];
+    return (q(j, i) * (1 - u) + q(j, i + 1) * u) * (1 - v) + (q(j + 1, i) * (1 - u) + q(j + 1, i + 1) * u) * v; };
+  for (let im = 0; im < NM; im++) { const mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], E = [0, 0, 0];
+    for (const d of D256) { const cosS = d[0] * s[0] + d[1] * s[1], fR = (3 / (16 * Math.PI)) * (1 + cosS * cosS), fM = (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * cosS, 1.5)), w = (2 * Math.PI) / D256.length;
+      marcia(R + 1, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) E[c] += w * d[1] * Te[c] * ds * (betaR[c] * rR * fR * Ts[c] + betaM * rM * fM * Ts[c] + (betaR[c] * rR + betaM * rM) * psi(rp, mus, c)); }); }
+    cieloT.set([E[0], E[1], E[2], 1], 4 * im); }
+  return { ms, cieloT };
+}
+
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {}, corpi = null } = {}) {
   const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 12, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
@@ -425,55 +478,8 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     if (eps < 0.02) return 0; const decl = (tt) => { const A = corpoPianeta.assetto(tt, new Array(9)), s = V.norma(N.tra(corpoPianeta, corpoStella, tt, _s)); return Math.asin(Math.max(-1, Math.min(1, A[1] * s[0] + A[4] * s[1] + A[7] * s[2]))); };
     const d = decl(t), x = Math.asin(Math.max(-1, Math.min(1, d / eps))) / (2 * Math.PI), sale = decl(t + anno / 400) > d, f = sale ? x : 0.5 - x; return f - Math.floor(f);
   }
-  // ---------- l'aria: dai gas veri e dalla pressione
-  const aria = (() => {
-    const p = P.clima?.pressione || 0, gas = P.atmosfera?.gas || null; if (!(p > 1) || !isFinite(p)) return null;
-    let M = 0, diff = 0, tot = 0; for (const [nome, x] of Object.entries(gas || { N2: 1 })) { const g = GAS[nome] || [0.03, 1]; M += x * g[0]; diff += x * g[1]; tot += x; } M /= tot || 1; diff /= tot || 1;
-    const T = P.clima.Taria || P.clima.T || 250, H = (R_GAS * T) / (M * grav), densita = p / (K_B * T) / 2.547e25; // molecole rispetto all'aria della Terra al suolo (2,55·10²⁵ per m³)
-    // Rayleigh dell'aria terrestre al suolo: 5,8 · 13,5 · 33,1 per milione di metri (680, 550, 440 nm)
-    const betaR = [5.8e-6, 13.5e-6, 33.1e-6].map((b) => b * densita * diff), foschia = 2.5e-6 * Math.min(40, densita) * (1 + 12 * (P.atmosfera?.fuliggine || 0) + 40 * (gas?.H2O || 0));
-    return { H, HM: Math.max(600, 0.15 * H), cima: Math.min(0.6 * R, H * Math.max(8, 4 + Math.log(Math.max(1, densita * diff)) * 2.5 + 6)), betaR, betaM: foschia, pressione: p, T, M };
-  })();
-  // LA LUCE DIFFUSA PIÙ VOLTE E LA LUCE DEL CIELO SUL SUOLO. Il conto lungo i raggi (F_ARIA) segue la luce diffusa una volta
-  // sola; dove l'aria è spessa (su questo genere di mondi lo spessore ottico nel blu arriva a 3) la luce diffusa più volte
-  // è la parte maggiore: senza, l'aria spessa toglie il blu e non lo rende, e il pianeta esce scuro e arrossato.
-  // Qui, una volta per pianeta, la tabella di Hillaire (2020, «A Scalable and Production Ready Sky and Atmosphere Rendering
-  // Technique», EGSR): in ogni punto (quota × altezza della stella, 32 × 32) la luce diffusa due volte che arriva da tutte
-  // le direzioni (L₂, con 64 direzioni e il suolo che rimanda la luce con l'albedo del clima) e la parte f che l'aria
-  // ridiffonde: tutte le volte successive valgono L₂/(1 − f). E l'irradianza del cielo su un suolo orizzontale (semplice +
-  // multipla, 256 direzioni) per 32 altezze della stella: la luce del cielo sul suolo e sulle nuvole, e il cielo riflesso
-  // dal mare. Gli stessi coefficienti, la stessa funzione di Chapman, la stessa foschia del conto sulla scheda.
-  const tabelle = (() => {
-    const NM = 32, ms = new Float32Array(4 * NM * NM), cieloT = new Float32Array(4 * NM); if (!aria) return { ms, cieloT };
-    const { H, HM, cima, betaR, betaM } = aria, Rt = R + cima, albedo = Math.max(0.02, Math.min(0.9, P.clima?.albedo ?? 0.3)), g = 0.76;
-    const chap = (X, c) => { const k = Math.sqrt(1.5707963 * X); return k / ((k - 1) * c + 1); };
-    const spess = (r, mu, Hs) => { const rho = Math.exp(Math.max(-40, Math.min(8, -(r - R) / Hs))); if (mu >= 0) return rho * chap(r / Hs, mu); const rt = r * Math.sqrt(Math.max(0, 1 - mu * mu)); if (rt < R) return 1e7; return 2 * Math.exp(-(rt - R) / Hs) * chap(rt / Hs, 0) - rho * chap(r / Hs, -mu); };
-    const sole = (r, mu, o) => { const a = spess(r, mu, H) * H, b = betaM * 1.1 * HM * spess(r, mu, HM); for (let c = 0; c < 3; c++) o[c] = Math.exp(-(betaR[c] * a + b)); return o; };
-    const dirs = (n) => { const d = []; for (let i = 0; i < n; i++) { const y = 1 - (2 * (i + 0.5)) / n, q = Math.sqrt(1 - y * y), a = i * 2.39996323; d.push([q * Math.cos(a), y, q * Math.sin(a)]); } return d; };
-    const Ts = [0, 0, 0];
-    // lungo un raggio dal punto (0, r, 0): chiama f(rp, mus, Te, ds, ρR, ρM) a ogni passo; restituisce [Te alla fine, μ della stella al suolo] o null
-    const marcia = (r, d, s, f) => { const b = r * d[1], disc = b * b - r * r + R * R, aTerra = disc > 0 && -b - Math.sqrt(disc) > 0, fine = aTerra ? -b - Math.sqrt(disc) : -b + Math.sqrt(Math.max(0, b * b - r * r + Rt * Rt)), NS = 24, ds = fine / NS, od = [0, 0, 0], Te = [1, 1, 1];
-      for (let k = 0; k < NS; k++) { const t = (k + 0.5) * ds, px = d[0] * t, py = r + d[1] * t, pz = d[2] * t, rp = Math.hypot(px, py, pz), h = rp - R, rR = Math.exp(-h / H), rM = Math.exp(-h / HM);
-        for (let c = 0; c < 3; c++) { od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; Te[c] = Math.exp(-od[c]); }
-        f(rp, (px * s[0] + py * s[1] + pz * s[2]) / rp, Te, ds, rR, rM, d);
-        for (let c = 0; c < 3; c++) od[c] += (betaR[c] * rR + betaM * 1.1 * rM) * ds * 0.5; }
-      if (!aTerra) return null; const pz = [d[0] * fine, r + d[1] * fine, d[2] * fine]; for (let c = 0; c < 3; c++) Te[c] = Math.exp(-od[c]); return [Te, (pz[0] * s[0] + pz[1] * s[1] + pz[2] * s[2]) / R]; };
-    const D64 = dirs(64), D256 = dirs(256).filter((d) => d[1] > 0);
-    for (let ih = 0; ih < NM; ih++) for (let im = 0; im < NM; im++) {
-      const r = R + Math.max(1, cima * (ih / (NM - 1)) ** 2), mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], L2 = [0, 0, 0], fm = [0, 0, 0];
-      for (const d of D64) {
-        const suolo = marcia(r, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) { const sc = betaR[c] * rR + betaM * rM; L2[c] += (Te[c] * sc * Ts[c] * ds) / (4 * Math.PI); fm[c] += Te[c] * sc * ds; } });
-        if (suolo && suolo[1] > 0) { sole(R, suolo[1], Ts); for (let c = 0; c < 3; c++) L2[c] += (suolo[0][c] * Ts[c] * suolo[1] * albedo) / Math.PI; } }
-      for (let c = 0; c < 3; c++) { const v = L2[c] / 64 / Math.max(0.05, 1 - fm[c] / 64); ms[4 * (ih * NM + im) + c] = Number.isFinite(v) ? v : 0; }
-      ms[4 * (ih * NM + im) + 3] = 1; }
-    const psi = (rp, mus, c) => { const x = Math.max(0, Math.min(NM - 1.001, (mus * 0.5 + 0.5) * (NM - 1))), y = Math.max(0, Math.min(NM - 1.001, Math.sqrt(Math.max(0, Math.min(1, (rp - R) / cima))) * (NM - 1))), i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, q = (jj, ii) => ms[4 * (jj * NM + ii) + c];
-      return (q(j, i) * (1 - u) + q(j, i + 1) * u) * (1 - v) + (q(j + 1, i) * (1 - u) + q(j + 1, i + 1) * u) * v; };
-    for (let im = 0; im < NM; im++) { const mu = -1 + (2 * im) / (NM - 1), s = [Math.sqrt(1 - mu * mu), mu, 0], E = [0, 0, 0];
-      for (const d of D256) { const cosS = d[0] * s[0] + d[1] * s[1], fR = (3 / (16 * Math.PI)) * (1 + cosS * cosS), fM = (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * cosS, 1.5)), w = (2 * Math.PI) / D256.length;
-        marcia(R + 1, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) E[c] += w * d[1] * Te[c] * ds * (betaR[c] * rR * fR * Ts[c] + betaM * rM * fM * Ts[c] + (betaR[c] * rR + betaM * rM) * psi(rp, mus, c)); }); }
-      cieloT.set([E[0], E[1], E[2], 1], 4 * im); }
-    return { ms, cieloT };
-  })();
+  const aria = ariaDi(P, R, grav);
+  const tabelle = tabelleAria(aria, R, P.clima?.albedo);
   const texMS = N.immagine(32, 32, 'rgba16fDaFloat', tabelle.ms), texCielo = N.immagine(32, 1, 'rgba16fDaFloat', tabelle.cieloT);
   // il raggio angolare della stella vista dal pianeta: la penombra delle ombre del rilievo
   const discoStella = () => Math.max(1e-3, Math.min(0.2, (corpoStella.raggio || raggioStella) / Math.max(1, stato.dStella)));
