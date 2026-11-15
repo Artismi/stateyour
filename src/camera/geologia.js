@@ -497,7 +497,10 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
   // ultimi T anni, prima di erodere qui. Nelle catene quelle leggi tolgono fino a un millimetro l'anno, e questa erosione
   // sul granito molto meno: i monti rimessi restano, 17 km. Il doppio conto resta dichiarato, vedi CHE COSA NON TORNA.)
   // L'ACQUA DEL MARE SI CONSERVA (solo sul pianeta intero): il suo volume è quello di partenza; se il fondo si alza il livello sale
-  const acqua = () => { let v = 0, a = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { const ak = aDi(k); v += (mare - alt[k]) * ak; a += ak; } return [v, a]; }, volumeMare = crescita && Number.isFinite(mare) ? acqua()[0] : 0;
+  // (in m³ VERI: l'area della cella senza il pavimento di un decimo vicino ai poli, che vale solo per i conti dei fiumi. È la
+  // misura con cui la superficie ha messo l'acqua: con quella del conto il mare polare cambiava volume, 3·10⁻⁵ del totale)
+  const aVeroJ = Float64Array.from(aJ, (a, j) => (2 * Math.PI * R * Math.cos(Math.PI / 2 - (rv0 + ((j + 0.5) / H) * (rv1 - rv0)) * Math.PI) * (ru1 - ru0) / W) * dy);
+  const acqua = () => { let v = 0, a = 0; for (let k = 0; k < N; k++) if (alt[k] < mare) { const ak = aVeroJ[(k - (k % W)) / W]; v += (mare - alt[k]) * ak; a += ak; } return [v, a]; }, volumeMare = crescita && Number.isFinite(mare) ? acqua()[0] : 0;
   for (let k = 0; k < N; k++) { const a = aDi(k); if (!(alt[k] < mare)) areaTerre += a; copPrima += (cop[k] + sci[k]) * a; }
   for (let it = 0; it < passi; it++) {
     // inondazione: dal mare (o dal punto più basso, se non c'è mare) verso l'interno; chi resta sotto il

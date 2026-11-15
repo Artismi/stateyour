@@ -42,6 +42,16 @@ export function granoGhiaccio(T, anni, D0) {
   const K = GOW.K0mm2 * 1e-6 * Math.exp(-GOW.E / (GOW.R * Math.max(1, T))), A = (Math.PI / 4) * D0 * D0 + K * Math.max(0, anni);
   return { D: 2 * Math.sqrt(A / Math.PI), K, A };
 }
+// QUANTI CRISTALLI SONO GIÀ NATI quando il fuso si ferma alla frazione cristallina X (nascita costante I, crescita G = 1, in
+// sezione): N(t) = I·∫₀ᵗ (1 − X(τ)) dτ = I·∫₀ᵗ e^(−π/3·I·τ³) dτ = N(∞)·P(⅓, π/3·I·t³), con P la funzione gamma incompleta
+// regolarizzata e π/3·I·t³ = −ln(1 − X). → N(X)/N(∞) (la serie di P(s, x) = x^s·e^(−x)·Σ x^k/(s(s+1)…(s+k)) / Γ(s), che
+// converge per ogni x: fino a X = 0,9999, x = 9,2, bastano una cinquantina di termini)
+export function natiFinoA(X) {
+  if (!(X > 0)) return 0; if (X >= 1) return 1;
+  const x = -Math.log(1 - X), s = 1 / 3, GAMMA_TERZO = 2.678938534707747; let t = 1 / s, somma = t;
+  for (let k = 1; k < 400 && t > 1e-17 * somma; k++) { t *= x / (s + k); somma += t; }
+  return Math.min(1, (Math.pow(x, s) * Math.exp(-x) * somma) / GAMMA_TERZO);
+}
 // un conteggio di Poisson con le estrazioni di un evento (k0, k0+1, …); sopra 30 la campana
 function poisson(media, s, k0) {
   if (!(media > 0)) return 0;
@@ -63,11 +73,21 @@ export function campoGrani(spec, caso) {
   const asp = M.map((m) => 1 + 3 * limita(m.anisotropia || 0, 0, 1)), cel = caso.sotto('grani');
   const tass = S.modo !== 'impacchettamento';
   // tassellatura: densità (per u², u = il grano medio) → I/G; G = 1 (un'unità di lunghezza per unità di tempo)
-  const NA = 4 / Math.PI, I = Math.pow(NA / AVRAMI_2D, 1.5), X = limita(S.cristallino, 0, 1);
+  // Dove il fuso si ferma a X < 1 i cristalli sono quelli nati fino ad allora: N(X) = AVRAMI_2D·I^⅔·P(⅓, −ln(1 − X)) (vedi
+  // natiFinoA). Perché il grano medio sia quello della roccia (l'area cristallina divisa per i cristalli: X·u²/(N·u²) = π/4·u²,
+  // come rocce.js granoMedio) deve essere N = NA·X: è I che lo dà, non la densità di una roccia tutta cristallina.
+  const NA = 4 / Math.PI, X = limita(S.cristallino, 0, 1), I = X >= 0.9999 ? Math.pow(NA / AVRAMI_2D, 1.5) : Math.pow((NA * X) / (AVRAMI_2D * natiFinoA(X)), 1.5);
   const tFine = X >= 0.9999 ? 2.4 * Math.cbrt(3 / (Math.PI * I)) : Math.cbrt((-3 * Math.log(1 - X)) / (Math.PI * I));
   // impacchettamento: n·π·⟨r²⟩ = −ln(porosità), con ⟨D²⟩ = D50²·e^(2s²), s = selezione·ln 2
   const s = S.selezione * Math.LN2, nImp = (-Math.log(S.porosita) * 4) / (Math.PI * Math.exp(2 * s * s));
-  const lam = tass ? I * tFine : nImp, R = 2; // germi per cella (cella = u × u); si cerca nelle 5 × 5 celle attorno
+  // fin dove arriva un cristallo: nel tempo t un germe raggiunge i punti a distanza «a modo del cristallo» t, cioè fino a
+  // t·portata in metri-u lungo la sua direzione più veloce (le listelle: l'asse lungo, o lo spigolo delle facce piane). Si
+  // cercano i germi in tutte le celle che un cristallo nato a 0 può raggiungere entro tFine (prima: sempre 5 × 5 celle, e i
+  // grani allungati che arrivavano da più lontano erano persi: il punto andava a un germe più vicino e più tardo, e i grani
+  // contati erano il 13% di più di quanti la legge ne dà). Per i granelli del sedimento basta il raggio più grande (1,75).
+  const portataDi = (m) => { const al = Math.sqrt(asp[m]), w = limita(M[m].anisotropia || 0, 0, 1); let k = 0; for (let q = 0; q <= 720; q++) { const f = (q / 720) * (Math.PI / 2), a = Math.cos(f) / al, b = Math.sin(f) * al, e = Math.sqrt(a * a + b * b); k = Math.max(k, 1 / (w ? e + w * (1.13 * Math.max(a, b) - e) : e)); } return k * 1.01; };
+  const portata = tass ? Math.max(...M.map((m, i) => portataDi(i))) : 1;
+  const lam = tass ? I * tFine : nImp, R = tass ? Math.max(2, Math.ceil(tFine * portata)) : 2; // germi per cella (cella = u × u); si cerca nelle (2R + 1)² celle attorno
   const memo = new Map();
   // I GERMI DI UNA CELLA: eventi con indirizzo («grani/cella ix iy», estrazioni 0… : quanti, poi 6 per germe)
   function germi(ix, iy) {
@@ -85,14 +105,36 @@ export function campoGrani(spec, caso) {
   }
   // la distanza «a modo del cristallo» (rocce.js): più corta lungo l'asse veloce, con le facce piane dei minerali anisotropi
   const dist = (g, x, y) => { const dx = x - g.x, dy = y - g.y, a = Math.abs(dx * g.c + dy * g.s) / g.al, b = Math.abs(dy * g.c - dx * g.s) * g.al, e = Math.sqrt(a * a + b * b); return g.w ? e + g.w * (1.13 * Math.max(a, b) - e) : e; };
+  // le celle attorno, dalle più vicine: così i primi arrivi si trovano presto e le celle lontane si saltano senza guardarle
+  const ORDINE = []; { const c = []; for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) c.push([i, j]); c.sort((a, b) => Math.max(Math.abs(a[0]), Math.abs(a[1])) - Math.max(Math.abs(b[0]), Math.abs(b[1])) || a[0] * a[0] + a[1] * a[1] - b[0] * b[0] - b[1] * b[1]); for (const [i, j] of c) ORDINE.push(i, j); }
+  // UN GERME È VERO se quando nasce il suo posto è ancora fuso: nessun germe vero nato prima ci è già arrivato. Con una sola
+  // legge di crescita (grani tondi) un fantasma non vince mai un punto (disuguaglianza triangolare) e la prova non serve;
+  // con le listelle orientate a caso sì: un germe nato dentro il lato lento di un cristallo arriverebbe prima di lui lungo
+  // il proprio asse veloce, e i grani contati sarebbero più di quanti ne nascono (misurato: il 13% con anisotropia 1).
+  // Si risale per tempo di nascita (un germe guarda solo quelli nati prima): la ricorsione finisce, e il risultato resta nel germe.
+  const tutteTonde = M.every((m, i) => asp[i] === 1 && !(m.anisotropia > 0));
+  function vero(g) {
+    if (tutteTonde) return true;
+    if (g.vero !== undefined) return g.vero;
+    const cx = Math.floor(g.x), cy = Math.floor(g.y);
+    for (let o = 0; o < ORDINE.length; o += 2) { const i = cx + ORDINE[o], j = cy + ORDINE[o + 1];
+      const ex = g.x < i ? i - g.x : g.x > i + 1 ? g.x - i - 1 : 0, ey = g.y < j ? j - g.y : g.y > j + 1 ? g.y - j - 1 : 0, d2 = ex * ex + ey * ey, tp = g.t * portata; if (d2 >= tp * tp) continue; const lb = Math.sqrt(d2) / portata;
+      const l = germi(i, j);
+      for (let q = 0; q < l.length; q++) { const h = l[q]; if (h.t + lb >= g.t) break; if (h !== g && h.t + dist(h, g.x, g.y) < g.t && vero(h)) return (g.vero = false); }
+    }
+    return (g.vero = true);
+  }
   // il grano in un punto (in unità u): { g, primo, secondo } (primo: il tempo d'arrivo o la distanza di potenza)
   function trova(x, y) {
     const cx = Math.floor(x), cy = Math.floor(y); let best = Infinity, sec = Infinity, chi = null;
-    for (let j = cy - R; j <= cy + R; j++) for (let i = cx - R; i <= cx + R; i++) {
+    for (let o = 0; o < ORDINE.length; o += 2) { const i = cx + ORDINE[o], j = cy + ORDINE[o + 1];
+      // (nessun germe di questa cella arriva prima di t + lb: lb è la distanza dal punto alla cella divisa per la portata)
+      let lb = 0;
+      if (tass) { const ex = x < i ? i - x : x > i + 1 ? x - i - 1 : 0, ey = y < j ? j - y : y > j + 1 ? y - j - 1 : 0, d2 = ex * ex + ey * ey; if (d2 > 0) { const sp = sec * portata; if (d2 >= sp * sp) continue; lb = Math.sqrt(d2) / portata; } }
       const l = germi(i, j);
       for (let q = 0; q < l.length; q++) {
         const g = l[q];
-        if (tass) { if (g.t >= sec) break; const v = g.t + dist(g, x, y); if (v < best) { sec = best; best = v; chi = g; } else if (v < sec) sec = v; }
+        if (tass) { if (g.t + lb >= sec) break; const v = g.t + dist(g, x, y); if (v >= sec || !vero(g)) continue; if (v < best) { sec = best; best = v; chi = g; } else sec = v; }
         else { const dx = x - g.x, dy = y - g.y, d2 = dx * dx + dy * dy; if (d2 >= g.r * g.r) continue; const v = d2 - g.r * g.r; if (v < best) { sec = best; best = v; chi = g; } else if (v < sec) sec = v; }
       }
     }

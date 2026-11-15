@@ -64,8 +64,11 @@ grandezze che si conservano (massa, energia, carica, elementi, quantità di moto
 sopra e contate da sotto. Gli eventi del dettaglio hanno indirizzi sotto quello della madre.
 - Fatto: tessere del terreno (media uguale alla madre), bolle di particelle, campione d'acqua (conteggi veri),
   bilanci di massa e metalli; `test_coerenza` (47 prove).
-- Manca: una prova di conservazione per ogni passaggio di scala (oggi alcuni); il terreno fine non eredita ancora
-  tutto (i fiumi tra tessere).
+- Fatto: `test_coerenza_scale` stampa la tabella di conservazione M∘μ = I per ogni passaggio, dal campo cosmico ai quark,
+  con tolleranze dal modello, e i difetti di commutazione misurati.
+- Manca: il riassunto M sotto gli atomi e per la magnetosfera; μ per le galassie vere nel toro e per i pianeti delle stelle
+  vere; la quota media delle tessere (la costa condizionata non la conserva e la tessera si erode due volte); la neutralità
+  delle celle di feldspati e biotite; il terreno fine non eredita ancora tutto (i fiumi tra tessere).
 
 ## 5. Dal piccolo al grande: il mondo compatibile
 Questa è la direzione che conta di più. Si può partire da un punto qualsiasi, anche piccolissimo: un cristallo, una

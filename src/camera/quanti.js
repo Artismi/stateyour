@@ -532,7 +532,12 @@ export function atomoDaScena(scena, indice, { indirizzo = null } = {}) {
     if (stesso && (A.gruppo ? d < 0.5e-9 / u : true)) mol.push({ Z: A.elemento[j], pos: [0, 1, 2].map((k) => ((A.pos[3 * j + k] - p0[k]) * u) / AU.a0), indice: j });
   }
   mol.sort((a, b) => (a.indice === indice ? -1 : b.indice === indice ? 1 : a.indice - b.indice));
-  return { Z, indice, pos: p0, scala: u, molecola: mol, indirizzo: indirizzo || `${scena.nome || 'scena'}/atomo ${indice}` };
+  // LA CARICA: uno ione di un atomo solo (le parti della scena con la loro carica, un atomo per ione: gli ioni del mare di
+  // atomi3d.js) ha Z − carica elettroni; prima l'atomo si prendeva sempre neutro, e il Na⁺ dell'acqua di mare ne aveva 11.
+  // Le cariche parziali dei campi di forza (l'ossigeno dell'acqua, il silicio del quarzo) non sono elettroni tolti: lì resta neutro.
+  const parte = (scena.parti || []).find((q) => indice >= q.da && indice < q.a && Number.isInteger(q.carica) && q.a - q.da === q.quanti);
+  const carica = parte && mol.length === 1 ? parte.carica : 0;
+  return { Z, indice, pos: p0, scala: u, molecola: mol, ...(carica ? { carica } : {}), indirizzo: indirizzo || `${scena.nome || 'scena'}/atomo ${indice}` };
 }
 // lo stato quantistico dell'atomo guardato: la molecola con Hartree-Fock se si può (tutti gli atomi dall'idrogeno al
 // neon, elettroni pari, al più 8 atomi), altrimenti l'atomo nel campo centrale; `preparazione` (solo un elettrone):

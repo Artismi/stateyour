@@ -46,13 +46,15 @@ const MONDI = SEMI.map((seme) => {
   let t = performance.now(); const sf = GE.superficiePianeta(`erosione-${seme}`, P, it, seme); tempoSuperficie += performance.now() - t;
   const cl = GE.climaSuperficie(`erosione-${seme}`, P, sf, { aria: false }); t = performance.now(); const se = GE.erosione(`erosione-${seme}`, sf, cl); tempoErosione += performance.now() - t;
   const { W, H } = sf, N = W * H, R = P.raggioM, dy = (Math.PI * R) / H, aJ = (j) => Math.max(0.1 * dy, (2 * Math.PI * R * Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI)) / W) * dy, aDi = (k) => aJ((k - (k % W)) / W);
+  // (l'acqua si misura in m³ veri, come la mette la superficie: l'area senza il pavimento polare dei conti dei fiumi)
+  const aVera = (k) => (2 * Math.PI * R * Math.cos(Math.PI / 2 - ((((k - (k % W)) / W) + 0.5) / H) * Math.PI) / W) * dy;
   // l'incasso: di quanto il letto è sceso rispetto ai quattro vicini, dove scorre molta acqua (la misura di test_biblioteca)
   const inc = (alt, k) => { const i = k % W, j = (k - i) / W; let m = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const jj = j + dj; if (jj < 0 || jj >= H) continue; m += alt[jj * W + ((i + di + W) % W)]; n++; } return m / n - alt[k]; };
   let d = 0, n = 0; for (let k = 0; k < N; k++) if (sf.alt[k] > sf.mare && se.lago[k] === 0 && se.flusso[k] > 30) { d += inc(se.alt, k) - inc(sf.alt, k); n++; }
   // le quote sul mare di oggi; l'ipsometria (quanta superficie a ogni quota, a passi di 250 m, lisciata su tre passi)
   let hMax = -Infinity, hSomma = 0, aTerre = 0, aTutta = 0, acquaPrima = 0, acquaDopo = 0, copPrima = 0, aTerrePrima = 0; const B = 250, n0 = 40, isto = new Float64Array(80);
-  for (let k = 0; k < N; k++) { const a = aDi(k), h = se.alt[k] - se.mare; aTutta += a; if (h >= 0) { aTerre += a; hSomma += h * a; if (h > hMax) hMax = h; } else acquaDopo -= h * a;
-    isto[Math.max(0, Math.min(79, Math.floor(h / B) + n0))] += a; if (sf.alt[k] < sf.mare) acquaPrima += (sf.mare - sf.alt[k]) * a; else { aTerrePrima += a; if (sf.copertura[k] > GE.EROSIONE.velo) copPrima += a; } }
+  for (let k = 0; k < N; k++) { const a = aDi(k), h = se.alt[k] - se.mare; aTutta += a; if (h >= 0) { aTerre += a; hSomma += h * a; if (h > hMax) hMax = h; } else acquaDopo -= h * aVera(k);
+    isto[Math.max(0, Math.min(79, Math.floor(h / B) + n0))] += a; if (sf.alt[k] < sf.mare) acquaPrima += (sf.mare - sf.alt[k]) * aVera(k); else { aTerrePrima += a; if (sf.copertura[k] > GE.EROSIONE.velo) copPrima += a; } }
   const liscio = isto.map((_, b) => (isto[Math.max(0, b - 1)] + isto[b] + isto[Math.min(79, b + 1)]) / 3); let bT = n0, bM = n0 - 1; for (let b = n0; b < 80; b++) if (liscio[b] > liscio[bT]) bT = b; for (let b = 0; b < n0; b++) if (liscio[b] > liscio[bM]) bM = b;
   let valle = Infinity; for (let b = bM; b <= bT; b++) valle = Math.min(valle, liscio[b]);
   // il sollevamento che le placche danno oggi (m/anno alla superficie; la roccia, a regime con l'erosione, sale di 1/galleggia volte tanto)
