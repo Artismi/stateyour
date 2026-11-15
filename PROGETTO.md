@@ -30,6 +30,38 @@ si può andare da lì. Tutto il resto è un modo di chiedere.
 
 Ogni strato parla solo con quello sotto attraverso la lingua: la vista non chiede «il pianeta 3», chiede un indirizzo.
 
+## La regola zero: una regola sola, declinata a ogni grana
+
+Le leggi dello strato 3 non sono leggi indipendenti scritte una per una: sono **una regola sola vista a grane diverse**.
+Ogni modulo deve poter dire, nella stessa forma:
+
+1. **Stati** — su che cosa è una distribuzione a questa grana (molecole, grani, masse d'aria, stelle…).
+2. **Conservazioni** — energia, elementi (numero per numero), carica, quantità di moto: ciò che entra nel libro dei conti.
+3. **Energie** — le energie libere degli stati; da loro le velocità dei passaggi, con il **bilancio dettagliato locale**:
+   k(x→y)/k(y→x) = e^{Δs/k_B}, l'entropia prodotta nel passaggio (termodinamica stocastica; Crooks 1999, Seifert 2012).
+4. **Flussi dal bordo** — la luce della stella, il calore interno, la chimica dei vulcani: ciò che tiene il sistema
+   lontano dall'equilibrio.
+
+E **la regola di una grana è quella che commuta con la regola sotto**: M∘T_fine = T_grossa∘M (C8). La commutazione non è
+solo una prova: è il criterio per dire se una legge è giusta. Oggi molti moduli sono formule della letteratura; il difetto
+di commutazione misurato dice quanto ciascuno è lontano dall'essere una declinazione della regola. Dove una legge è presa
+da una tabella misurata (energie, solubilità, viscosità), va bene come dato, ma in linea di principio deve potersi
+ricavare dalla grana sotto, o almeno confrontarsi con essa.
+
+Conseguenze:
+- **Nessun «a priori»**: le quantità (quanti elementi in un mare, quanta vita) escono dalla storia; il libro dei conti
+  garantisce soltanto che nulla si crei o sparisca tra un passaggio e l'altro.
+- **Dall'alto si condiziona, dal basso si media**: la grana grossa vincola la fine (μ); la fine agisce sulla grossa in media,
+  e da singolo evento solo dove un processo lo amplifica (mutazione, primo nucleo, caos): lì nasce un ramo.
+- **La vita non si scrive**: si danno i presupposti (la chimica di quel pianeta, le energie, i flussi, i luoghi) e il
+  programma *riconosce* ciò che emerge (reti che si autoalimentano, compartimenti che si chiudono da sé, molecole che si
+  copiano). L'elenco dei gradini diventa una prova di ciò che la regola deve saper produrre, non codice. La probabilità
+  di arrivarci si stima con i metodi degli eventi rari sulla chimica riassunta, una volta per indirizzo, e diventa un
+  ramo con il suo peso. Dichiarato: nessuno sa oggi calcolarla dalla fisica; il numero dipenderà dalla grana della
+  chimica riassunta, che è una scelta di modello.
+- **Anche la vista è una finestra**: a ogni distanza si calcola con la regola di quella grana solo ciò che si inquadra,
+  come campione della grana sopra; riassunta, la finestra ridà il padre.
+
 ## Che cosa c'è e che cosa manca, strato per strato
 
 | Strato | C'è | Manca | Condizioni |
@@ -49,7 +81,8 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
 1. **Fondamenta del caso** — 128 bit, variante verificata, registro della legge di ogni tiro. *Fatto quando:* C2, C3,
    catena intera verde sul nuovo universo. (Fatto: 50 prove verdi a macchina ferma; registro delle leggi applicato e provato.)
 2. **Misura** — pesi degli esiti, dal campione al vero, fusioni, prima stima dei cervelli di Boltzmann. *Fatto quando:*
-   C4, C11, C13 provate; `puntoACaso` uniforme sulle stelle vere. (In corso.)
+   C4, C11, C13 provate; `puntoACaso` uniforme sulle stelle vere. (Fatto: `misura.js`, «vera k»; manca che i moduli
+   dichiarino la legge dei loro tiri.)
 3. **Una forma sola dell'indirizzo** — `bolla.js` e `src/tre` scrivono con `lingua.scrivi`. *Fatto quando:* ogni
    indirizzo prodotto dal programma si rilegge (C1), anche nei cosmi paralleli. (Fatto: `test_lingua_indirizzo` I.)
 4. **Il passo** — P(a′\|a): stesso luogo a t+Δt (lento dalle leggi, veloce per peso oltre il tempo di amplificazione)
@@ -97,8 +130,28 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    nera finché non ci si muoveva —, e dopo, il suolo sotto una nana bianca a 27 UA che l'esposizione di prima lasciava 10
    volte sotto. Non torna: la ragnatela in moto (ΔE 7,7, dichiarato). Manca: la scheda vera, le griglie dei volumi, le 67
    scelte rimaste.)
-8. **La vita in potenza** — la scala che manca; da qui i momenti d'osservatore e la misura del tempo per esperienza.
-   Si progetta a parte, partendo da `reports/Regole per la vita in potenza.md`.
+8. **La catena degli elementi** — nessun inventario fissato: le abbondanze della stella dall'arricchimento della
+   galassia (supernove II e Ia, giganti, con i loro tempi), il disco per temperature di condensazione, il pianeta che si
+   separa (coefficienti di ripartizione metallo/silicato), la crosta per fusione parziale (elementi incompatibili), aria e
+   mare da ciò che si libera e si scioglie. *Fatto quando:* il libro dei conti torna elemento per elemento in ogni
+   serbatoio, ed è una riga della tabella di coerenza.
+9. **La finestra a ogni distanza** — cominciando dall'acqua: da lontano lo spettro delle onde dal vento; a metri il campo
+   delle onde di quel tratto, la schiuma, la corrente; a centimetri increspature, bolle, granelli; a micron fiocchi di
+   argilla; a nanometri l'acqua liquida con ogni specie disciolta nel suo numero. Poi la roccia, l'aria, il suolo.
+   *Fatto quando:* a ogni distanza si vede ciò che c'è (mai un cristallo solo nel vuoto) e la finestra riassunta ridà il padre.
+10. **La chimica che si muove da sé** (era «la vita in potenza») — la regola zero applicata alla chimica del pianeta, con
+   la rilevazione di ciò che emerge e la stima degli eventi rari; da qui i momenti d'osservatore. Base:
+   `reports/Regole per la vita in potenza.md`, riletta come elenco di prove, non di passi.
+11. **Eredità, sviluppo, evoluzione** — la stessa regola un livello sopra. *Eredità*: un polimero che si copia con errori
+   (il DNA sulla Terra; altrove quello che la chimica del pianeta permette). *Sviluppo*: il genoma non disegna il corpo,
+   regola una rete di geni; i tipi di cellula sono gli stati stabili di quella rete (Kauffman; il paesaggio di Waddington),
+   e la forma viene da campi chimici che si diffondono e reagiscono (Turing) e dalla meccanica dei tessuti. *Evoluzione*:
+   nessuna «idoneità» scritta: è la velocità di riproduzione in quell'ambiente; le leggi della genetica di popolazione
+   (Wright–Fisher, probabilità di fissazione di Kimura, equazione di Price) ne sono la declinazione a grana di specie. Il
+   corpo è limitato dalla fisica del pianeta (gravità e ossa per il quadrato-cubo, ossigeno e respirazione, luce e
+   occhi). L'albero della vita si calcola pigro come le galassie: clade → specie → individuo → cellule, ogni nodo
+   condizionato alla storia del suo ambiente; riassunto, ridà biomassa, ossigeno, carbonio. *Fatto quando:* due grane
+   (individui e specie) commutano entro una tolleranza dal modello.
 
 ## Come si usa, alla fine
 
