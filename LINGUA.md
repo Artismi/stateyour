@@ -60,7 +60,7 @@ Esempio: `cosmo 1/galassia 39/stella 1618/pianeta 0/punto -69.17,0.093/scala 100
 | O8 | Impronta a grana | F_g(x) = H(c(M_g(x))), H a 128 bit; w_g(s) = Σ_{F_g(x)=s} μ([x]) | teorema se decoerenti | `lingua.impronta` (pianeti), `lingua.fondi` (quoziente con i pesi) |
 | O9 | Osservazione | O_{B,c} = ∫∫ R_c(λ) L(x_B, ω, λ, t_B) W(ω) dω dλ; O_g = M_pix(O_h) lineare | teorema | `src/tre` (r. 14) |
 | O10 | Lettura | leggi(a) = W(a), pura; pigro = completo | teorema | ovunque (r. 8) |
-| O11 | Impronta di bordo | vedi sotto | teorema / ipotesi | **manca** |
+| O11 | Impronta di bordo | vedi sotto | teorema / ipotesi | `bordo.js` (densità e potenziale; gli altri campi **mancano**) |
 | O12 | Passo | vedi sotto | — | `lingua.distanzaRami` (d e d_w); il nucleo nel tempo **manca** |
 
 **O7 nel programma** (`lingua.peso`; ogni parte dice che cosa conta):
@@ -145,6 +145,27 @@ incollamento   B₁, B₂ vicine:  ∂F_B₁|_{∂S₁∩∂S₂} = ∂F_B₂|_{
 ℓ ordina il riassunto per scala (ℓ ≈ π r/λ): troncare a ℓmax è il riassunto M_g del bordo. L'impronta di bordo non
 determina l'interno dove ci sono sorgenti (solo i loro multipoli): è un riassunto, non un'identità.
 
+**O11 nel programma** (`bordo.js`, prova `test_bordo`). La bolla è una sfera comovente (centro x_B, raggio R) a un istante,
+sulla fetta del fondo; il campo è quello senza bordo di `campo_pigro.js` alla grana J (celle di lato h_J).
+
+```
+Y_ℓm reali e ortonormali (Y_ℓ,±m = √2·P̄_ℓ^m·cos, sin mφ; P̄ di ragnatela.js), indice ℓ² + ℓ + m
+ℓmax = ⌈k_max·R⌉,  k_max = π/h_J                il bordo esatto della banda (B_J = 0 oltre 2k_J): teorema, non scelto
+a_ℓm = Σ_c w_c·λ_ℓ(d_c)·Y_ℓm(d̂_c),  λ_ℓ(d) = (2π/Rd)∫_{|R−d|}^{R+d} K(r) P_ℓ(μ(r)) r dr     Funk–Hecke, cella per cella
+      (K lineare a tratti sulla tabella: Gauss–Legendre a ℓmax + 2 nodi per tratto è esatto)
+coda = 1 − Σ_{ℓ≤ℓmax}(2ℓ+1)C_ℓ/(4πσ²),  C_ℓ = 4π∫dlnk Δ²(k)·ΣB_j²(k)·j_ℓ(kR)²             la parte che il riassunto lascia
+nel tempo: δ ∝ D(a);  Φ = (3/2)Ω_m H₀²·(D/a)·φ, ∇²φ = δ (m²/s²)                            Poisson comovente
+dal bordo: media ξᵀC⁻¹c, varianza ⟨φ²⟩ − ξᵀC⁻¹ξ (C = AAᵀ, ξ = A·g_x); realizzazione w′ = w + Aᵀ C⁻¹(c − Aw)   Hoffman–Ribak
+```
+
+Alla grana del cosmo (J = 16, h = 18,7 Mpc) una bolla di 40 Mpc ha ℓmax = 7 (64 coefficienti) e lascia oltre il 2·10⁻⁴
+della varianza della densità sul bordo (del potenziale 8·10⁻⁸). Il bordo dice poco del centro di una sola bolla (10%
+della varianza) e molto vicino al bordo (76% nella lente); due bolle sovrapposte insieme ~90%. Non c'è: temperatura,
+campo magnetico e radianza (nessun campo del modello li porta ancora su una sfera qualunque); Gauss e Dirichlet (i nuclei
+di `campo_pigro.js` sono troncati e rinormalizzati uno per uno: δ e −∇·Ψ differiscono di ~0,06 scarti); il
+condizionamento di un campo già vincolato (il cosmo con le sue galassie: andrebbe fatto in `vincola`, tutti insieme);
+l'olografia resta un'ipotesi sul nostro universo, non una regola del modello.
+
 **O12. Il passo.** Da a ci si muove scendendo l'albero (O7) o con un nucleo P(a′ | a):
 
 ```
@@ -193,13 +214,13 @@ d'ordine uno su ΔS, non sull'esponente).
 | C6 | Zoom coerente (M)_#μ = δ, conservazione | prova | `test_coerenza_scale` (lavoro 5): una tabella per passaggio — grandezza del padre, riassunto dei figli, scarto, tolleranza dal modello (campionamento, numero dei figli, precisione), esito. Tornano: i livelli del campo (lisciato, 0), il campo vincolato nel posto delle galassie, il numero e la massa degli aloni veri (la massa solo entro un largo errore: CV = 4,8 su 59 galassie), la massa nata e i tempi di nascita del campione di stelle (χ²), la massa media alla nascita, le stelle vere (classe, passo, massa di Kroupa), la massa del disco, solidi + cibo dei pianeti = isolamento delle strisce, l'acqua della superficie, continenti e mare delle tessere, composizione della roccia, densità, vetro e composizione dei grani, la neutralità delle celle, gli atomi di un campione di quarzo, la salinità della scena d'acqua, gli elettroni di ioni e molecole, la densità degli orbitali, la regola di Born, protoni, neutroni, quark e raggio di carica del nucleo. **Non torna** (note): la quota media delle tessere (≈ −7 m contro ±5, dopo l'erosione della tessera; dichiarato in `geologia.js`); la carica per formula delle celle di feldspato potassico e plagioclasio (+1: Al scritto come Si, un catione solo) e della biotite (−1: senza gli idrogeni degli ossidrili). **Manca** M o μ: il posto delle galassie vere, il sistema e il luogo delle stelle vere, le regioni della magnetosfera. Anche `test_coerenza`, `test_campo_pigro` «regola 4» |
 | C7 | Proiettività | teorema + prova | `test_campo_pigro` (σ₈, spettro), `test_bolle` (media e varianza) |
 | C8 | Commutazione ‖M T_h μ − T_g‖, PΠ = ΠP̂ | prova | `test_coerenza_scale`, dove ci sono due grane con un'evoluzione: la storia della galassia a passi contro le stelle del campione evolute una per una (massa in stelle oggi e collassi: il difetto sta nel campionamento); l'acqua dopo l'erosione del pianeta (torna a 3·10⁻¹⁴); misurati senza limite dal modello: la soglia di comodo della gigante del catalogo (T ≤ 4200 K a 0,9 della vita: 31% da `stelle.js`), il clima per fasce contro la mappa (~1 K). Manca: un limite dal modello al difetto delle soglie di comodo; un'evoluzione a due grane sotto gli atomi; PΠ = ΠP̂ |
-| C9 | Località causale: un ramo in e cambia solo J⁺(e) ∩ contenitore | prova | «un ramo cambia una cosa sola» in `test_disco`, `test_lune`, `test_vuoto`, `test_bolle`; `test_lingua_indirizzo` «lo stesso pianeta da due strade»; il cono di luce: manca |
-| C10 | Incollamento delle bolle | teorema + prova | `test_bolle` (in parte: nel punto e nel tempo) |
+| C9 | Località causale: un ramo in e cambia solo J⁺(e) ∩ contenitore | prova | «un ramo cambia una cosa sola» in `test_disco`, `test_lune`, `test_vuoto`, `test_bolle`; `test_lingua_indirizzo` «lo stesso pianeta da due strade»; **il cono di luce per il campo del cosmo** (`test_bordo` D): con l'ipotesi dell'inflazione (la cella del livello j è un evento a η ≤ −6h_j, prima della fine dell'inflazione) un ramo su una cella fuori dalla portata del bordo di una bolla lascia la sua impronta identica al bit, e una cella che la cambia sta nel passato causale del bordo; le celle che due punti condividono stanno nel loro passato comune. Senza l'inflazione cadrebbe, e la prova lo misura (oggi i livelli con il nucleo più largo dell'orizzonte portano il 51% della varianza del potenziale, 4·10⁻⁷ di quella della densità; alla ricombinazione il 99% e il 6%). Manca: il cono di luce sopra il campo (stelle, pianeti: solo il contenitore) e il «dopo» degli eventi |
+| C10 | Incollamento delle bolle | teorema + prova | `test_bolle` (nel punto e nel tempo); `test_bordo` B e C: le bolle si incollano condizionando lo stesso campo a tutte (un altro mondo, condizionato alle impronte di due bolle sovrapposte di questo, le riproduce entro 10⁻¹²; il campo condizionato all'impronta di sé non si muove: 0 al bit); dal solo bordo l'interno condizionato contiene il campo vero (⟨z²⟩ ≈ 1 su 160 mondi); bolle di mondi diversi sulla stessa regione hanno il χ² che il modello prevede (tr(C⁻¹·diag(C₁₁, C₂₂)) contro i gradi). **L'antenato comune tra luoghi e istanti diversi**, in tempo conforme: η_c = (η_p + η_q − max(0, \|Δx\| − R_p − R_q))/2, o il più vecchio se uno sta nel passato dell'altro (`bordo.js antenatoTraEventi`): nel passato di entrambi e il più recente su 400 coppie, ridà l'evento per eventi coincidenti, prima dell'inizio oltre η_p + η_q (2η₀ = 28,3 Gpc oggi; c'è solo con l'inflazione, dichiarata). Manca: più di due eventi quando non li sostiene una coppia; le impronte nel cosmo con le galassie; le distanze tra contenuti |
 | C11 | Additività delle fusioni w_g(s) = Σ μ([x]) | teorema | `test_lingua_indirizzo` D (impronta, monotonia) e G (`fondi`: peso totale conservato a ogni grana, due strade fuse, doppioni contati una volta, cilindri sovrapposti rifiutati). Solo per storie decoerenti; i contenuti oltre il pianeta: manca |
 | C12 | Convergenza della resa | prova | manca come prova per ogni discretizzazione |
 | C13 | Cervelli di Boltzmann contati sui cammini | prova | prima stima: `test_lingua_indirizzo` H (per mondo, ordine di grandezza: ~10⁵¹ bit a favore della via evolutiva per un pianeta con acqua liquida e atmosfera). Per osservatore: manca |
 | C14 | Il tempo nella bolla: stato a t qualsiasi | prova | manca sopra le particelle |
-| C15 | Incollamento per impronte di bordo: ∂F_B₁ = ∂F_B₂ su ∂S₁∩∂S₂ | prova | manca |
+| C15 | Incollamento per impronte di bordo: ∂F_B₁ = ∂F_B₂ su ∂S₁∩∂S₂ | prova | `test_bordo` B: sul cerchio ∂S₁∩∂S₂ di due bolle sovrapposte (40 e 50 Mpc a 60 Mpc, ℓmax 7 e 9) le due impronte risommate concordano tra loro e col campo vero entro il resto oltre ℓmax che il modello dà esatto (⟨z²⟩ 0,99, 0,97, 1,04 su 160 mondi; lo scarto del disaccordo è 0,019 di quello del campo); l'impronta è l'integrale vero del campo (seconda via per quadratura, converge di ordine 1,9), pura dell'indirizzo (al bit), con il χ² giusto (1,02 per grado). Solo per densità e potenziale del campo lineare; gli altri campi di O11 mancano |
 | C16 | Chapman–Kolmogorov: P_{Δt₁}∘P_{Δt₂} = P_{Δt₁+Δt₂} in distribuzione | prova | manca |
 
 Prove della lingua stessa (`test_lingua_indirizzo`): andata e ritorno su 23 indirizzi veri (cosmo.js, bolla.js,

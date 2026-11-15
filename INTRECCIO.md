@@ -242,15 +242,31 @@ per poi cucirli (al bordo non combacerebbero), si condiziona lo stesso mondo a t
   ognuna torna: dal campo l'altezza, dall'altezza la massa dell'alone, dalla galassia il pianeta e il contenuto.
   A mezzo megaparsec due galassie diverse pesano e^(−173) contro e^(0,5) da libere; nello stesso punto non esistono.
   A decine di megaparsec invece due picchi costano MENO che lontani (ρ > 0): è l'ammassarsi delle galassie.
+- Fatto, sul bordo (`bordo.js`, `test_bordo`): **l'impronta di bordo** di una bolla (una sfera a un istante): i
+  coefficienti in armoniche sferiche della densità e del potenziale fino a ℓmax = ⌈πR/h⌉, che viene dal raggio e dalla
+  grana del campo (il bordo della sua banda), esatti per il campo com'è e puri dell'indirizzo; **le bolle si incollano**
+  condizionando lo stesso campo a tutte le impronte insieme: sul cerchio comune di due bolle sovrapposte le due impronte
+  danno lo stesso campo entro il resto che il modello prevede, un altro mondo condizionato alle due impronte le
+  riproduce, e due bolle di mondi diversi sulla stessa regione pesano quanto dice il χ² del modello (molto meno);
+  **dal solo bordo** l'interno condizionato contiene il campo vero con la statistica attesa. **L'antenato comune tra
+  luoghi e istanti diversi**, in tempo conforme (i coni a 45°): η_c = (η_p + η_q − |Δx|)/2 (con i raggi delle bolle),
+  o il più vecchio dei due se uno sta nel passato dell'altro; oltre η_p + η_q (oggi 28 Gpc) è prima dell'inizio, e
+  c'è solo con l'inflazione, dichiarata come ipotesi (il campo del modello la contiene già: è correlato oltre
+  l'orizzonte, e le celle che due punti condividono sono eventi del loro passato comune). Con la stessa ipotesi il
+  ramo di una cella del campo cambia solo il suo cono futuro (C9).
 - Manca: l'intersezione delle richieste è fatta nel punto (temperatura, pressione) e nel tempo, non ancora per le
-  distanze («una stella a un metro da un fiocco di neve») né tra istanti diversi (una bolla nel futuro di un'altra);
-  il peso dei pianeti è stimato a livello di pianeta: i contenuti che decide la superficie restano «forse» finché
-  non si scende; il cosmo delle bolle è (indirizzo, vincoli) e non ancora un cosmo che `cosmo.js` sa aprire: dentro
+  distanze tra contenuti («una stella a un metro da un fiocco di neve»); tra istanti diversi c'è ora il cono (chi può
+  discendere da chi), ma i contenuti di un pianeta si giudicano ancora sullo stato di oggi; l'antenato di più di due
+  bolle è esatto solo quando lo sostiene una coppia; le impronte di bordo valgono per il campo lineare del cosmo
+  (densità, potenziale) e non ancora per il cosmo con le sue galassie (andrebbero vincolate insieme) né per gli altri
+  campi (temperatura, campo magnetico, radianza); il peso dei pianeti è stimato a livello di pianeta: i contenuti
+  che decide la superficie restano «forse» finché non si scende; il cosmo delle bolle è (indirizzo, vincoli) e non
+  ancora un cosmo che `cosmo.js` sa aprire: dentro
   ogni galassia si scende con il suo indirizzo d'origine, e ciò che in `galassie.js` dipende dai vicini (metà del
   giro dell'alone) resta quello del cosmo d'origine; il vincolo è l'altezza del picco, non «è un massimo»; i mondi
   delle bolle sono scelti prima del peso cosmico, non insieme; manca la legge che vieta due aloni a meno del loro
-  raggio; la prova che al bordo tutto combacia; mille bolle con un batterio (serve il contenuto «vivo», che nessun
-  modulo sa ancora giudicare).
+  raggio; la prova che al bordo tutto combacia oltre il campo lineare; mille bolle con un batterio (serve il contenuto
+  «vivo», che nessun modulo sa ancora giudicare).
 
 ## 13. Ciò che è uguale è lo stesso
 Due rami a cui si arriva per strade diverse, ma che a una scala data sono uguali in tutto ciò che a quella scala esiste,

@@ -39,7 +39,7 @@ Ogni strato parla solo con quello sotto attraverso la lingua: la vista non chied
 | 3 Leggi | cosmo senza bordo; galassie, stelle, pianeti, storia termica, clima, erosione, mare, chimica, grani, atomi, scala quantistica; zoom senza salti; la coerenza tra le scale provata passaggio per passaggio, dal campo del cosmo ai quark (`test_coerenza_scale`: C6 su 15 passaggi, C8 misurata dove ci sono due grane; lavoro 5) | M (o μ) dove la tabella dice «manca»: il posto delle galassie vere, il sistema delle stelle vere, le regioni della magnetosfera, un'evoluzione a due grane sotto gli atomi; le incoerenze note della tabella (la quota media delle tessere, le celle non neutre di feldspati e biotite); un limite dal modello al difetto delle soglie di comodo (la gigante, il clima: oggi solo misurato); lo stato a un istante diverso da «adesso» sopra le particelle; la vita | C6, C7, C8, C14 |
 | 4 Misura | indice del cosmo (Elias γ, libero), galassia per massa, stella per peso, pianeta per area, luogo per area, tempo sulla vita della stella | pesi degli esiti (in corso); dal campione al vero (in corso); fusioni (in corso); cervelli di Boltzmann contati (in corso); momenti d'osservatore (serve la vita) | C4, C5, C11, C13 |
 | 5 Vista | trasporto di luce: aria, polvere, nebulose, buco nero, galassia e ragnatela come volumi, accumulo nel tempo | l'elenco delle scelte a mano rimaste; la prova di convergenza di ogni discretizzazione; la prova su scheda grafica vera | C12 |
-| Bolle | campo condizionato esatto, antenato comune nel punto e nel tempo | la formula dell'antenato per luoghi e istanti diversi (η_c); l'impronta di bordo; la continuità al bordo | C9, C10, C15 |
+| Bolle | campo condizionato esatto, antenato comune nel punto e nel tempo; l'impronta di bordo (O11: armoniche dei campi sulla sfera, ℓmax dalla grana), l'incollamento sul bordo comune e la ricostruzione dal bordo, l'antenato tra luoghi e istanti diversi in tempo conforme (η_c), il cono di luce dei rami del campo (lavoro 6: `bordo.js`) | le impronte nel cosmo con le sue galassie (insieme in `vincola`); temperatura, campo magnetico e radianza sul bordo; Gauss e Dirichlet con i nuclei troncati; l'antenato di più di due eventi quando non lo sostiene una coppia; il cono di luce sopra il campo (i rami di stelle e pianeti hanno ancora solo il contenitore); le distanze tra contenuti («una stella a un metro da un fiocco di neve») | C9, C10, C15 |
 | Passo | «pianeta parallelo», «ramo parallelo più pulito» | il nucleo P(a′\|a) nel tempo e di lato, con Chapman–Kolmogorov | C16 |
 
 ## L'ordine dei lavori
@@ -66,7 +66,20 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    TORNA, note: la quota media delle tessere; la carica delle celle di feldspati e biotite. Mancano i riassunti segnati
    «manca».)
 6. **Bolle sul bordo** — l'impronta di bordo (armoniche sferiche dei campi sul bordo) e l'incollamento sulla parte
-   comune; l'antenato comune per luoghi e istanti diversi. *Fatto quando:* C10 e C15.
+   comune; l'antenato comune per luoghi e istanti diversi. *Fatto quando:* C10 e C15. (Fatto: `src/camera/bordo.js`,
+   `test_bordo`, 16 prove in ~12 s. L'impronta a_ℓm di densità e potenziale su una sfera, con ℓmax = ⌈πR/h_J⌉ dal bordo
+   della banda del campo alla grana J (40 Mpc alla grana del cosmo: ℓmax 7, coda oltre 2·10⁻⁴ della varianza), esatta per
+   il campo com'è (Funk–Hecke cella per cella; la quadratura del campo punto per punto converge a lei, ordine 1,9), pura
+   dell'indirizzo, nel tempo con D(a) e D/a. Su 160 mondi indipendenti: χ² dell'impronta per grado 1,02; sul cerchio comune
+   di due bolle le due impronte risommate e il campo vero concordano entro il resto previsto (⟨z²⟩ 0,97–1,04); dal solo
+   bordo l'interno condizionato contiene il campo vero (⟨z²⟩ 0,8–1,2; due bolle insieme spiegano ~90% della varianza
+   dentro); il campo condizionato all'impronta di sé non si muove (0 al bit; 2·10⁻⁵ scarti con l'impronta della
+   quadratura, sotto il limite di Cauchy–Schwarz); un altro mondo condizionato alle due impronte le riproduce entro
+   10⁻¹²; bolle di due mondi diversi sulla stessa regione hanno il χ² che il modello prevede, e pesano molto meno.
+   L'antenato η_c = (η_p + η_q − |Δx|)/2 (con i raggi delle bolle) sta nel passato di entrambe ed è il più recente su 400
+   coppie; oltre 2η₀ = 28,3 Gpc è prima dell'inizio e c'è solo con l'inflazione (dichiarata). C9 col cono di luce per il
+   campo: un ramo fuori portata lascia l'impronta identica al bit; senza l'inflazione cadrebbe, e lo si misura: oggi il
+   51% della varianza del potenziale viene da celle più larghe dell'orizzonte. Non torna / manca: vedi la riga Bolle.)
 7. **La vista come misura** — l'elenco delle scelte a mano nel motore, tolte o dichiarate; la prova di convergenza
    dell'immagine (C12); la prova su una scheda grafica vera.
 8. **La vita in potenza** — la scala che manca; da qui i momenti d'osservatore e la misura del tempo per esperienza.
