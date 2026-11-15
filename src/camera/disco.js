@@ -17,29 +17,37 @@
 // giganti amano le stelle ricche di metalli e disertano le stelle piccole.
 // Le LEGGI EMPIRICHE (misurate, o ricavate da simulazioni che qui non si
 // possono rifare) sono dichiarate una per una dove si usano, con «LEGGE EMPIRICA».
-// Una scelta da sapere: «i solidi sono Z × 0,0134 del gas» qui vale OLTRE la neve
-// (tutti i metalli condensati); dentro, dove il ghiaccio è vapore, ne resta un
-// quarto. Il rapporto di quattro è quello chiesto, e la massa non si inventa.
+// LA MATERIA (la catena degli elementi, elementi.js): i solidi sono gli elementi del gas di QUELLA stella che a quella
+// temperatura condensano (Lodders 2003: ogni elemento alla sua temperatura del 50%), con la temperatura che il disco ha lì
+// (la luce della stella o il gas che cade, la più alta); oltre la neve anche i ghiacci. Ogni pianeta sa di quali embrioni
+// è fatto, e quindi di quale roccia; poi si separa (elementi.js differenzia): il suo «ferro» è il nucleo che ne esce.
+// (Prima: i solidi erano Z × 0,0119 × una parte fissa, e il ferro della polvere cresceva come T², una regola semplice.)
 // Che cosa manca: la migrazione delle orbite nel disco (niente «Giovi caldi»),
 // le risonanze, i sistemi con due stelle.
 
-import { COSTANTI, MSOLE, ANNO, UA } from './leggi.js';
+import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
-import { SOLE } from './chimica.js';
+import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA } from './elementi.js'; // la catena degli elementi
+import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
-const G = COSTANTI.G;
+const G = COSTANTI.G, IDX = Object.fromEntries(SIMBOLI.map((s, i) => [s, i]));
+const tipoDi = (gas, ghiaccio) => (gas > 0.5 ? 'gassoso' : ghiaccio > 0.2 ? 'ghiacciato' : 'roccioso'); // (i tre tipi: una soglia di comodo dichiarata in grandezze.js)
 
 // ---------- i parametri del modello (pochi, e tutti qui)
+// DI CHE COSA È FATTO IL DISCO: la miscela del gas da cui è nata la stella (elementi.js: dalla storia della sua galassia, o
+// per chi non la sa la miscela protosolare scalata a Z). I numeri qui sotto sono quelli della miscela protosolare, per chi
+// vuole un riferimento (impatti.js, le prove): il disco vero di una stella li calcola dalla sua miscela, temperatura per
+// temperatura (elementi.js tabellaSolidi: ogni elemento condensa alla sua temperatura del 50%, Lodders 2003)
+const SOLARE = tabellaSolidi(PROTOSOLARE), ZS = 1 - PROTOSOLARE.H - PROTOSOLARE.He;
 export const DISCO = Object.freeze({
-  // DI CHE COSA È FATTO IL DISCO: la miscela del Sole, dalla tavola degli elementi di chimica.js (SOLE), che è la fonte unica
-  metalliSole: SOLE.Z, // la frazione di materia pesante (dei quindici elementi della tavola: 0,0119)
-  roccia: SOLE.roccia, // la parte dei metalli che è solida anche al caldo (ferro e roccia con il loro ossigeno): 0,35
-  solidiFreddi: SOLE.roccia + SOLE.ghiacci, // oltre la neve si aggiungono i ghiacci (l'acqua, e il carbonio e l'azoto gelati con lei): in tutto 0,91 dei metalli
-  ghiaccio: SOLE.ghiaccio, // la parte di ghiacci nei solidi oltre la neve: 0,61
-  ferro: SOLE.ferro, // il ferro sulla somma di ferro e roccia: 0,31, uguale per ogni metallicità (ferro e roccia crescono insieme)
-  idrogeno: SOLE.X / (SOLE.X + SOLE.Y), // il gas: idrogeno ed elio, 75 a 25
+  metalliSole: ZS, // la frazione di materia pesante della miscela protosolare (Z☉ di stelle.js: 0,0142)
+  roccia: SOLARE.rocciaFredda / ZS, // la parte dei metalli che è solida al freddo dentro la neve (roccia, ferro, zolfo e il loro ossigeno): 0,35
+  solidiFreddi: (SOLARE.rocciaFredda + SOLARE.ghiaccio) / ZS, // oltre la neve si aggiungono i ghiacci (l'acqua, e il carbonio e l'azoto gelati con lei): 0,84 dei metalli
+  ghiaccio: SOLARE.ghiaccio / (SOLARE.ghiaccio + SOLARE.rocciaFredda), // la parte di ghiacci nei solidi oltre la neve: 0,58
+  ferro: PROTOSOLARE.Fe / SOLARE.rocciaFredda, // il ferro (come elemento) sulla roccia fredda: 0,28
+  idrogeno: PROTOSOLARE.H / (PROTOSOLARE.H + PROTOSOLARE.He), // il gas: idrogeno ed elio, 73 a 27
   pendenza: 1.5, raggio: 30, // Σ ∝ r^(-3/2), fino a 30 UA·√M
   frazione: 0.055, sparpaglio: 0.5, // la massa del disco su quella della stella: mediana e larghezza (in logaritmo)
   vitaMinima: 1e6, vitaMedia: 3.5e6, // quanto dura il gas (anni): si osserva che metà dei dischi è sparita in 2–3 milioni di anni
@@ -98,10 +106,17 @@ export function disco(st, seme = 1) {
   const T4 = (9 * 0.1 * Z * sigma0 * G * M * MSOLE * (massaKg / (vita * ANNO))) / (128 * Math.PI * COSTANTI.sigma * UA ** 3);
   const rIn = Math.min(0.5 * rOut, Math.max(0.02, 0.034 * Math.sqrt(L), 0.05 * Math.cbrt(M), Math.pow(T4 / 1500 ** 4, 1 / 4.5)));
   const sigmaGas = (r) => sigma0 * Math.pow(r, -DISCO.pendenza);
-  // i solidi: i metalli del gas (Z × 0,0134); al caldo solo un quarto è solido (ferro e roccia), oltre la neve
-  // lo è anche il ghiaccio: quattro volte di più
-  const sigmaSolidi = (r) => Z * DISCO.metalliSole * (r < neve ? DISCO.roccia : DISCO.solidiFreddi) * sigmaGas(r);
-  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi };
+  // I SOLIDI (la catena degli elementi, elementi.js): la miscela del gas di QUESTA stella; ogni elemento condensa alla sua
+  // temperatura (Lodders 2003, con la curva di Clausius–Clapeyron), e la temperatura del luogo è la più alta tra quella che dà
+  // la luce della stella (280 K·L^¼/√r, la stessa della linea della neve) e quella del gas che cade (la legge del bordo
+  // interno qui sopra: T⁴ = T4·r^−4,5, con il ritmo medio della caduta). Dentro la neve è solida la roccia che a quella
+  // temperatura è condensata (vicino alla stella mancano zolfo, sodio, potassio, zinco, cloro; oltre i 1300 K anche il ferro e
+  // i silicati); oltre la neve anche i ghiacci. (La neve resta quella della luce: con il calore del gas che cade starebbe un
+  // poco più fuori; dichiarato.)
+  const X = st.abbondanze || miscelaSolare(Z), tab = tabellaSolidi(X);
+  const Tcond = (r) => Math.max((280 * Math.pow(L, 0.25)) / Math.sqrt(r), Math.pow(T4 * Math.pow(r, -4.5), 0.25));
+  const sigmaSolidi = (r) => (tab.roccia(Tcond(r)) + (r < neve ? 0 : tab.ghiaccio)) * sigmaGas(r);
+  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi, Tcond, miscela: X, solidi: tab };
 }
 
 // ---------- 5. il raggio, dalla massa e da ciò di cui è fatto
@@ -144,7 +159,7 @@ export const giriCheRegge = (delta, mu) => { if (delta <= 2 * Math.sqrt(3)) retu
 // In più ogni pianeta porta «formazione», i NUMERI della sua storia (quelli che «storia» racconta a parole; serve a
 // impatti.js). Non è enumerabile: chi elenca, stampa o confronta i pianeti vede quelli di sempre; chi li copia campo per
 // campo deve copiarla apposta.
-//   formazione = { embrione, urti, cibo, tGas, mIso, tIso, nato, scacciati, orfani, massaAlGas }
+//   formazione = { embrione, urti, cibo, tGas, mIso, tIso, nato, scacciati, orfani, massaAlGas, misto }
 //   embrione    il numero dell'embrione da cui è cresciuto (quello dei suoi eventi: «embrione 12/eccentricità»)
 //   urti        gli urti giganti che l'hanno fatto, in ordine di tempo: [{ bersaglioKg, massaKg (i solidi dei due corpi,
 //               il più grosso e il più piccolo), delta (la distanza tra le due orbite, in raggi di Hill reciproci, a cui
@@ -155,6 +170,7 @@ export const giriCheRegge = (delta, mu) => { if (delta <= 2 * Math.sqrt(3)) retu
 //   tGas        (anni) quando è sparito il gas; mIso (kg) la somma delle masse di isolamento delle sue strisce; tIso (anni)
 //               il tempo di isolamento dell'embrione principale; nato (UA); scacciati: quanti vicini ha scacciato
 //   massaAlGas  (kg) quanti solidi avevano già raccolto i suoi embrioni quando il gas è sparito
+//   misto       vero se tra i suoi embrioni ce n'erano di qua e di là della linea della neve
 //   orfani      i corpi che ha scacciato (con la fionda): [{ aUA (dov'era), massaKg (i suoi solidi), ciboKg (la parte della
 //               sua striscia non ancora mangiata), ghiaccio (frazione), t (anni: quando), dentro (stava più vicino alla stella) }]:
 //               i sassi che gli giravano attorno restano lì, senza più chi li raccoglie (impatti.js ne fa una fascia)
@@ -185,9 +201,11 @@ export function formaPianeti(st, seme = 1) {
     // stella è metallica. L'acqua: oltre la neve i solidi sono per tre quarti ghiaccio; dentro sono asciutti, salvo
     // quella portata dai corpi caduti da oltre la neve, sempre meno andando verso la stella (regola semplice,
     // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
-    const T = (280 * Math.pow(D.L, 0.25)) / Math.sqrt(r), ferroRoccia = Math.min(0.75, (P.ferro * (1 + (T / 600) ** 2)) / (1 + (170 / 600) ** 2)); // (sulla linea della neve, a 170 K, il ferro è quello del Sole)
-    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : P.ghiaccio;
-    corpi.push({ id: corpi.length, a: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false,
+    // (LA CATENA DEGLI ELEMENTI: la roccia è quella che lì condensa, alla temperatura del luogo; il suo metallo — ferro non
+    // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
+    const T = D.Tcond(r), ferroRoccia = D.solidi.metallo(T) / Math.max(1e-30, D.solidi.roccia(T));
+    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
+    corpi.push({ id: corpi.length, a: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
       lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
   }
 
@@ -204,7 +222,7 @@ export function formaPianeti(st, seme = 1) {
     b.nucleo = b.m; b.tGas = t0; b.gas = mGas; gasRimasto -= mGas;
     // gli embrioni dentro la sua nuova striscia (C raggi di Hill del gigante) gli cadono addosso
     const rh = P.C * hill(b.m + mGas, b.a);
-    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.alGas += o.alGas; o.morto = true; }
+    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.alGas += o.alGas; o.morto = true; o.in = b.id; }
     b.m += mGas;
   }
   // i nuclei tardivi: l'involucro cresce piano (in proporzione al tempo che resta), e quando il disco svanisce resta
@@ -249,7 +267,7 @@ export function formaPianeti(st, seme = 1) {
           grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
           if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; grande.e = Math.min(P.eMax, ((P.mescola * vf) / v) * (0.7 + 0.6 * c(`embrione ${grande.id}/fusione con ${piccolo.id}`))); } // l'urto strappa il velo di gas
           else { grande.m = m; grande.gas += piccolo.gas; }
-          grande.fe += piccolo.fe; grande.h2o += piccolo.h2o; grande.urti += 1 + piccolo.urti; grande.misto ||= piccolo.misto || grande.freddo !== piccolo.freddo;
+          grande.fe += piccolo.fe; grande.h2o += piccolo.h2o; grande.urti += 1 + piccolo.urti; grande.misto ||= piccolo.misto || grande.freddo !== piccolo.freddo; piccolo.in = grande.id;
         } else { // la fionda: chi parte verso l'infinito lo fa con energia nulla, e il grande paga il conto scendendo
           if (piccolo.a > grande.a) grande.a = Math.max(D.rIn, 1 / (1 / grande.a + piccolo.m / grande.m / piccolo.a));
           grande.e = Math.min(P.eMax, Math.hypot(grande.e, (0.4 * piccolo.m) / grande.m)); grande.scacciati++;
@@ -268,15 +286,45 @@ export function formaPianeti(st, seme = 1) {
   // la luce della stella OGGI (Sole di oggi = 1): il velo di gas di un pianeta si gonfia con il flusso che riceve adesso
   // (Lopez e Fortney 2014: la legge del raggio è data con il flusso di oggi e l'età); è la stessa luce che cosmo.js dà al clima
   const Loggi = stellaVera(D.massaStella, { Z: D.Z, eta }).L;
+  // LA CATENA DEGLI ELEMENTI: di quali embrioni è fatto ogni pianeta (chi è caduto su chi: «in»), e quindi di quale roccia
+  // (quella del luogo e della temperatura di ciascuno: elementi.js tabellaSolidi) e di quali ghiacci (la ricetta della
+  // stella: acqua, e il carbonio e l'azoto gelati con lei; l'acqua portata dentro la neve dai corpi venuti da fuori ha la
+  // stessa ricetta: sono ghiacci di comete). Il gas (giganti, veli) è il gas della stella, elemento per elemento.
+  const radice = (o) => { let q = o; while (q.in != null) q = corpi[q.in]; return q; }, membri = new Map();
+  for (const o of corpi) { const r = radice(o); if (!r.morto) { let l = membri.get(r.id); if (!l) membri.set(r.id, (l = [])); l.push(o); } }
+  const ricettaGhiaccio = Object.fromEntries(Object.entries(D.solidi.ghiacci || {}).map(([k, v]) => [k, D.solidi.ghiaccio > 0 ? v / D.solidi.ghiaccio : 0]));
   const pianeti = vivi.filter((b) => b.m >= P.minimo * MTERRA && b.a >= 0.02).map((b) => {
-    const solidi = b.m - b.gas, gas = b.gas / b.m, ghiaccio = b.h2o / solidi, ferro = b.fe / solidi;
-    const tipo = gas > 0.5 ? 'gassoso' : ghiaccio > 0.2 ? 'ghiacciato' : 'roccioso', involucro = tipo === 'gassoso' || gas < 0.005 ? 0 : gas;
+    const sol = vettore(), ghi = vettore(), aria = vettore(); let Tm = 0, mm = 0;
+    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0; D.solidi.aggiungi(sol, roccia, o.T); for (const k in ricettaGhiaccio) ghi[IDX[k]] += g * ricettaGhiaccio[k]; Tm += o.T * o.m0; mm += o.m0; }
+    if (b.gas > 0) for (let i = 0; i < SIMBOLI.length; i++) aria[i] = b.gas * (D.miscela[SIMBOLI[i]] || 0);
+    let Mr = 0; for (let i = 0; i < SIMBOLI.length; i++) Mr += sol[i];
+    // IL PIANETA SI SEPARA (elementi.js differenzia): metallo e silicato all'equilibrio sul fondo dell'oceano di magma; il
+    // nucleo che ne esce è il «ferro» del pianeta (per i giganti la roccia resta il loro nucleo, senza separarsi)
+    const solidi = b.m - b.gas, gas = b.gas / b.m, ghiaccio = b.h2o / solidi;
+    const sep = gas > 0.5 || !(Mr > 0) ? null : differenzia(sol, { M: Mr, R: raggioPianeta({ massaKg: Mr, ferro: b.fe / solidi }), rhoNucleo: STORIA.rhoNucleo });
+    let Mc = 0; if (sep) for (let i = 0; i < SIMBOLI.length; i++) Mc += sep.nucleo[i];
+    // I VOLATILI DEI GHIACCI: la parte che il pianeta ha liberato in superficie (leggi.js PARTE_FUORI; nei mondi di ghiaccio
+    // tutta) e quella rimasta dentro; di questa il CARBONIO, che è siderofilo, si divide tra metallo e silicato come gli altri
+    // (D in massa, elementi.js D_MASSA.C): la parte nel nucleo non tornerà mai fuori coi vulcani
+    const fuori = tipoDi(gas, ghiaccio) === 'ghiacciato' ? 1 : PARTE_FUORI, ghiFuori = vettore(), ghiDentro = vettore();
+    for (let i = 0; i < SIMBOLI.length; i++) { ghiFuori[i] = ghi[i] * fuori; ghiDentro[i] = ghi[i] - ghiFuori[i]; }
+    if (sep && Mc > 0) { const Ms = Mr - Mc, q = (D_MASSA.C * Mc) / Math.max(Ms, 1e-30), c = (ghiDentro[IDX.C] * q) / (1 + q); ghiDentro[IDX.C] -= c; sep.nucleo[IDX.C] += c; Mc += c; }
+    const ferro = sep ? Mc / solidi : b.fe / solidi;
+    const tipo = tipoDi(gas, ghiaccio), involucro = tipo === 'gassoso' || gas < 0.005 ? 0 : gas;
     const raggioM = raggioPianeta({ massaKg: b.m, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: Loggi / (b.a * b.a), eta });
     // di che cosa è fatto. Il gas di un gigante è quello della stella: idrogeno ed elio (71 a 27, la miscela misurata
     // del Sole) con i suoi metalli; i «pesanti» sono quelli più il nucleo
-    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * P.metalliSole * D.Z) : 0;
-    const composizione = tipo === 'gassoso' ? { idrogeno: (1 - pesanti) * P.idrogeno, elio: (1 - pesanti) * (1 - P.idrogeno), pesanti }
+    const metGas = 1 - D.miscela.H - D.miscela.He, h = D.miscela.H / (D.miscela.H + D.miscela.He); // (i metalli e l'idrogeno del gas di QUESTA stella)
+    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * metGas) : 0;
+    const composizione = tipo === 'gassoso' ? { idrogeno: (1 - pesanti) * h, elio: (1 - pesanti) * (1 - h), pesanti }
       : tipo === 'ghiacciato' ? { ghiaccio, roccia: 1 - ghiaccio - ferro, ferro } : { ferro, roccia: 1 - ferro - ghiaccio, acqua: ghiaccio };
+    // (gli elementi del pianeta, non enumerabili: viaggiano con la composizione — chimica.js, mare.js, il libro dei conti di
+    // elementi.js li leggono — e chi la elenca o la somma vede le tre parti di sempre). Masse in kg.
+    Object.defineProperty(composizione, 'elementi', { value: Object.freeze({ solidi: sol, acqua: ghi, acquaFuori: ghiFuori, acquaDentro: ghiDentro, involucro: b.gas > 0 ? aria : null, nucleo: sep ? sep.nucleo : sol, silicato: sep ? sep.silicato : vettore(),
+      separazione: sep ? { P: sep.P, T: sep.T, deltaIW: sep.deltaIW } : null, stella: D.miscela, Tformazione: mm > 0 ? Tm / mm : null, simboli: SIMBOLI,
+      // (quanta parte della massa dei ghiacci è acqua: il resto è il CO e l'NH3 gelati con lei. leggi.js e chimica.js contano
+      // l'acqua del pianeta con questa: prima la massa intera dei ghiacci passava per acqua, e il mare ne aveva un terzo di troppo)
+      quotaAcqua: D.solidi.quotaAcqua, ghiaccioPerAcqua: D.solidi.perAcqua }), enumerable: false });
     // l'eccentricità di oggi: quella presa negli urti, smorzata dai detriti rimasti (che frenano chi corre fuori dal coro)
     const oggi = c.serie(`embrione ${b.id}/eccentricità`), eccentricita = tipo === 'gassoso' ? b.e + 0.01 + 0.05 * oggi(0) : b.e * (0.15 + 0.35 * oggi(0)) + 0.002 + 0.01 * oggi(1);
     const dopo = b.scacciati ? `; ha scacciato ${b.scacciati === 1 ? 'un vicino' : `${b.scacciati} vicini`}` : '';
@@ -284,7 +332,7 @@ export function formaPianeti(st, seme = 1) {
       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`
         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
-    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas };
+    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto };
     return Object.defineProperty({ aUA: b.a, massaKg: b.m, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
   });
   // le orbite di oggi non si incrociano: se due si toccassero, i detriti le avrebbero già arrotondate

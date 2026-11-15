@@ -104,7 +104,9 @@
 //     stelle solo se in un passo non arriva a farne una (una massa media di Kroupa) [D];
 //   · le rese: metalli nuovi di una supernova da collasso m_Z = (0,0118 + 0,00548·m)·m M☉ (Bailin & Harris 2009,
 //     ApJ 695, 1082; Bailin 2018, ApJ 863, 99, app. B: segue le tabelle di Nomoto et al. 2013 fino a 40 M☉);
-//     energia 10⁴⁴ J per supernova; una Ia brucia in metalli tutta la nana bianca (la massa di Chandrasekhar);
+//     energia 10⁴⁴ J per supernova; una Ia brucia in metalli tutta la nana bianca (la massa di Chandrasekhar); le
+//     giganti asintotiche danno carbonio e azoto nuovi (Karakas 2010 [R], elementi.js); la ricetta di ogni canale, elemento per
+//     elemento, è in elementi.js (Kobayashi et al. 2006, tabella 3 [V]: collasso e W7);
 //   · le Ia: ritardi ∝ t^−1,1, in tutto 1,3 ogni 1000 M☉ di stelle nate (Maoz & Graur 2017, ApJ 848, 25), a
 //     partire dalla morte della più grande stella che lascia una nana bianca (da stelle.js);
 //   · le fusioni: «maggiore» se i barioni del compagno sono più di 0,3 di quelli della galassia (Hopkins et al.
@@ -146,8 +148,11 @@
 //   · lo scoppio di una fusione avviene nell'anello centrale, qualunque sia la sua larghezza (0,079 scale del disco);
 //     il gas del compagno che non cade al centro prende la scala del disco di qui (il suo momento angolare non è seguito);
 //   · la pressione che fa le molecole conta le stelle del disco, non quelle dello sferoide;
-//   · niente migrazione radiale delle stelle, niente flussi radiali del gas; un solo numero Z per tutti i metalli
-//     (ossigeno e ferro insieme), e le giganti asintotiche restituiscono solo i metalli con cui sono nate;
+//   · niente migrazione radiale delle stelle, niente flussi radiali del gas; Z è la somma dei metalli, e accanto a ogni
+//     serbatoio di metalli c'è il suo vettore di CANALI (chi li ha fatti: le supernove da collasso di quattro metallicità, le Ia,
+//     il carbonio e l'azoto delle giganti asintotiche; elementi.js), che si muove con lui nella stessa proporzione: da lì la
+//     miscela di nascita di ogni stella (miscelaDiNascita), elemento per elemento. Le giganti restituiscono, oltre ai metalli
+//     con cui sono nate, il carbonio e l'azoto nuovi (Karakas 2010, ricordati: elementi.js reseGigante);
 //   · la curva di rotazione: alone di Navarro-Frenk-White non contratto dai barioni, disco esponenziale sottile
 //     (Freeman) con la massa e il raggio medio degli anelli, sferoide di Hernquist;
 //   · la galassia è disegnata di faccia; uno sferoide ha uno schiacciamento apparente estratto (0,7 ± 0,15);
@@ -190,6 +195,7 @@
 import { COSTANTI, COSMO, ANNO, MSOLE, LSOLE, etaUniverso, massaNascita, massaChandrasekhar } from './leggi.js';
 import * as ST from './stelle.js';
 import { sorgente } from './eventi.js';
+import { reseGigante, CANALI, abbondanzeDaCanali } from './elementi.js'; // (i canali dei metalli: chi li ha fatti, per la catena degli elementi)
 
 // ---------- LE LEGGI E I PARAMETRI (vedi l'intestazione)
 export const LEGGI = {
@@ -348,29 +354,36 @@ export function popolazione() {
   for (let i = 0; i < N; i++) { const s = (i + 0.5) * ds; m[i] = massaNascita(1 - Math.exp(-s)); w[i] = Math.exp(-s) * ds; ww += w[i]; }
   for (let i = 0; i < N; i++) { w[i] /= ww; mm += w[i] * m[i]; }
   const tab = Z_TAB.map((Z) => {
-    const vita = new Float64Array(N), reso = new Float64Array(N), metalli = new Float64Array(N), sn = new Uint8Array(N); let tIa = Infinity, nSN = 0, uSN = 1;
+    const vita = new Float64Array(N), reso = new Float64Array(N), metalli = new Float64Array(N), sn = new Uint8Array(N), agbC = new Float64Array(N), agbN = new Float64Array(N); let tIa = Infinity, nSN = 0, uSN = 1;
     for (let i = 0; i < N; i++) {
       vita[i] = ST.stella(m[i], { Z }).vita / 1e9; if (!(vita[i] < 1e4)) { vita[i] = Infinity; continue; }
       const f = ST.fine(m[i], 1e-4, { Z }); reso[i] = Math.max(0, m[i] - f.massa); sn[i] = f.supernova ? 1 : 0;
       // i metalli nuovi escono solo se l'esplosione riesce (resta una stella di neutroni); se il nucleo ricade in un
       // buco nero (stelle.js) si porta dietro tutto ciò che ha fuso, e torna al gas solo l'involucro
       if (f.supernova && f.tipo === 'stella di neutroni') metalli[i] = Math.min(resaCollasso(m[i]), 0.9 * reso[i]);
+      // LE GIGANTI ASINTOTICHE (le stelle che lasciano una nana bianca): il carbonio del terzo dragaggio e l'azoto della
+      // combustione alla base dell'involucro, nuovi (elementi.js reseGigante: Karakas 2010, ricordato). Il carbonio che
+      // una gigante calda brucia in azoto non è nuovo: lo si toglie dall'azoto che fa, e la somma resta ≥ 0
+      if (!f.supernova && f.tipo === 'nana bianca') { const y = reseGigante(m[i], Z); agbN[i] = Math.max(0, y.N + Math.min(0, y.C)); agbC[i] = Math.max(0, y.C); metalli[i] = Math.min(agbC[i] + agbN[i], 0.9 * reso[i]); const k = agbC[i] + agbN[i] > 0 ? metalli[i] / (agbC[i] + agbN[i]) : 0; agbC[i] *= k; agbN[i] *= k; }
       if (f.supernova) { nSN += w[i]; if (uSN === 1) uSN = 1 - Math.exp(-i * ds); } else if (f.tipo === 'nana bianca') tIa = Math.min(tIa, vita[i]);
     }
     // per ritardo L (la generazione nata nel passo j, vista alla fine del passo j + L): le frazioni cumulate
-    const cR = new Float64Array(PASSI + 2), cP = new Float64Array(PASSI + 2), cN = new Float64Array(PASSI + 2), cI = new Float64Array(PASSI + 2);
+    // (cP: i metalli nuovi in tutto; cPcc, cPc, cPn: quelli delle supernove da collasso, il carbonio e l'azoto delle giganti)
+    const cR = new Float64Array(PASSI + 2), cP = new Float64Array(PASSI + 2), cN = new Float64Array(PASSI + 2), cI = new Float64Array(PASSI + 2), cPcc = new Float64Array(PASSI + 2), cPc = new Float64Array(PASSI + 2), cPn = new Float64Array(PASSI + 2);
     const [nIa, pIa] = LEGGI.Ia, R1 = nIa / ((Math.pow(tIa, pIa + 1) - Math.pow(T0, pIa + 1)) / -(pIa + 1)), Ia = (t) => (t <= tIa ? 0 : (R1 * (Math.pow(tIa, pIa + 1) - Math.pow(t, pIa + 1))) / -(pIa + 1));
     for (let L = 0; L <= PASSI; L++) {
-      let r = 0, p = 0, n = 0, ia = 0;
-      for (let i = 0; i < N; i++) { const f = stringi(L + 1 - vita[i] / DT, 0, 1); if (f > 0) { r += w[i] * reso[i] * f; p += w[i] * metalli[i] * f; n += w[i] * sn[i] * f; } }
+      let r = 0, p = 0, n = 0, ia = 0, pc = 0, pn = 0;
+      for (let i = 0; i < N; i++) { const f = stringi(L + 1 - vita[i] / DT, 0, 1); if (f > 0) { r += w[i] * reso[i] * f; p += w[i] * metalli[i] * f; n += w[i] * sn[i] * f; pc += w[i] * agbC[i] * f; pn += w[i] * agbN[i] * f; } }
       for (let q = 0; q < 12; q++) ia += Ia((L + (q + 0.5) / 12) * DT) / 12;
-      cR[L + 1] = r / mm; cP[L + 1] = p / mm; cN[L + 1] = n / mm; cI[L + 1] = ia; // (l'indice è L + 1: cX[0] = 0 è «prima di nascere»)
+      cR[L + 1] = r / mm; cP[L + 1] = p / mm; cN[L + 1] = n / mm; cI[L + 1] = ia; cPc[L + 1] = pc / mm; cPn[L + 1] = pn / mm; cPcc[L + 1] = (p - pc - pn) / mm; // (l'indice è L + 1: cX[0] = 0 è «prima di nascere»)
     }
     // ciò che una generazione restituisce NEL passo di ritardo L (tra L − 1 e L), per M☉ nata: [gas in tutto, la parte che porta i
-    // metalli di nascita, i metalli nuovi, le supernove da collasso, le Ia]
-    const k5 = new Float64Array(5 * (PASSI + 1));
-    for (let L = 0; L <= PASSI; L++) { const g = cR[L + 1] - cR[L], p = cP[L + 1] - cP[L], ia = cI[L + 1] - cI[L]; k5[5 * L] = g + ia * MCH; k5[5 * L + 1] = g - p; k5[5 * L + 2] = p + ia * MCH; k5[5 * L + 3] = cN[L + 1] - cN[L]; k5[5 * L + 4] = ia; }
-    return { Z, vita, reso, sn, cR, cP, cN, cI, k5, tIa, nSN: nSN / mm, uSN };
+    // metalli di nascita, i metalli nuovi, le supernove da collasso, le Ia]; e i metalli nuovi per canale (kc: collasso, Ia,
+    // carbonio delle giganti, azoto delle giganti)
+    const k5 = new Float64Array(5 * (PASSI + 1)), kc = new Float64Array(4 * (PASSI + 1));
+    for (let L = 0; L <= PASSI; L++) { const g = cR[L + 1] - cR[L], p = cP[L + 1] - cP[L], ia = cI[L + 1] - cI[L]; k5[5 * L] = g + ia * MCH; k5[5 * L + 1] = g - p; k5[5 * L + 2] = p + ia * MCH; k5[5 * L + 3] = cN[L + 1] - cN[L]; k5[5 * L + 4] = ia;
+      kc[4 * L] = cPcc[L + 1] - cPcc[L]; kc[4 * L + 1] = ia * MCH; kc[4 * L + 2] = cPc[L + 1] - cPc[L]; kc[4 * L + 3] = cPn[L + 1] - cPn[L]; }
+    return { Z, vita, reso, sn, cR, cP, cN, cI, cPcc, cPc, cPn, k5, kc, tIa, nSN: nSN / mm, uSN };
   });
   // LA LUCE E IL COLORE DI UNA GENERAZIONE, per ogni M☉ nata (a metà della vita di ogni stella, metalli del Sole; solo la
   // sequenza principale). Di ogni massa: L1 la luce in tutto (L☉), V1 quella che l'occhio vede (in unità di quella del Sole:
@@ -543,6 +556,17 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   const lnGas = Math.log(MSOLE / KPC ** 2 / (2 * LEGGI.spessoreGas * KPC) / (1.4 * COSTANTI.mp) / 1e6), LN_RADO = Math.log(1e-3), cResta = (LEGGI.momentoSN[0] * LEGGI.sigmaGas) / (2 * ESN);
   // (le stelle nate nel disco, anello per anello; e, passo per passo e per tabella di metalli, tutte le nate qui e i loro metalli)
   const nd = new Float64Array(NR), natiQ = new Float64Array(4 * NE), natiQZ = new Float64Array(4 * NE), NK = 5 * (nt + 1), K5 = new Float64Array(4 * NK); for (let q = 0; q < 4; q++) K5.set(P.tab[q].k5.subarray(0, NK), q * NK);
+  // I CANALI DEI METALLI (elementi.js CANALI: le supernove da collasso delle quattro tabelle, le Ia, il carbonio e l'azoto
+  // delle giganti): ogni serbatoio di metalli ha accanto il suo vettore di canali, che si muove con lui nella stessa
+  // proporzione e la cui somma è il serbatoio (metC con met, caldoC con caldoZ, fuoriC con fuoriZ, natiQZC con natiQZ, estZC
+  // con estZ); ZnC è la miscela di nascita (in parti dei metalli) di ogni generazione. Nessun conto di prima cambia.
+  const NC = CANALI.length, IA = 4, AGC = 5, AGN = 6, metC = new Float64Array(NR * NC), caldoC = new Float64Array(NC), fuoriC = new Float64Array(NC), ZnC = new Float64Array((nt + 1) * NR * NC);
+  const natiQZC = new Float64Array(4 * NE * NC), estZC = new Float64Array(4 * NE * NC), NKC = 4 * (nt + 1), KC = new Float64Array(4 * NKC), tR = new Float64Array(NC), tE = new Float64Array(NC), frC = new Float64Array(NC);
+  for (let q = 0; q < 4; q++) KC.set(P.tab[q].kc.subarray(0, NKC), q * NKC);
+  // i metalli NUOVI per canale di una generazione (massa m, tabella q) tra i ritardi L0 e L1, in dest[off…]; e con loro quelli di
+  // nascita restituiti, zb·(gas − nuovi) come in rende(), nella miscela di nascita fa[fo…] (normalizzata)
+  const nuoviC = (dest, off, m, q, L0, L1) => { const T = P.tab[q]; dest[off + q] += m * (T.cPcc[L1 + 1] - T.cPcc[L0 + 1]); dest[off + IA] += m * (T.cI[L1 + 1] - T.cI[L0 + 1]) * P.MCH; dest[off + AGC] += m * (T.cPc[L1 + 1] - T.cPc[L0 + 1]); dest[off + AGN] += m * (T.cPn[L1 + 1] - T.cPn[L0 + 1]); };
+  const rendeC = (dest, off, m, q, L0, L1, zb, fa, fo) => { const T = P.tab[q], g = m * (T.cR[L1 + 1] - T.cR[L0 + 1]), nuovi = m * (T.cP[L1 + 1] - T.cP[L0 + 1]), b = zb * (g - nuovi); let sf = 0; for (let c = 0; c < NC; c++) sf += fa[fo + c]; if (sf > 0 && b !== 0) for (let c = 0; c < NC; c++) dest[off + c] += (b * fa[fo + c]) / sf; nuoviC(dest, off, m, q, L0, L1); };
   let caldo = 0, caldoZ = 0, caldoJ = 0, fuori = 0, fuoriZ = 0, fuoriJ = 0, sferoideFino = 0, Mdisco = 0, Msfer = 0, Rsfer = 0, Rd = 0.05 * Rg, ultimaMaggiore = 0, Jprima = 0;
   const arrivi = fusioni.filter((f) => f.passoArrivo <= nt), entrate = fusioni.filter((f) => f.passo <= nt);
   // ciò che una generazione di massa m nata al passo i (tabella q) restituisce tra il ritardo L0 e il ritardo L1
@@ -557,11 +581,11 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     // lontano, ne ha di più della media): è la crescita del disco dall'interno verso l'esterno
     const Jh = momento(Mh[j], a), dMh = Mh[j] - Mh[j - 1], jGuscio = dMh > 0 ? (Jh - Jprima) / dMh : 0; Jprima = Jh;
     let dM = dMh;
-    for (const f of entrate) if (f.passo === j) { const { s, scala } = satellite(f.massaAlone, j); dM -= f.massaAlone; caldo += (s.caldo + s.fuori) * scala; caldoZ += (s.caldoZ + s.fuoriZ) * scala; caldoJ += ((s.caldo + s.fuori) * scala * Jh) / Mh[j]; }
+    for (const f of entrate) if (f.passo === j) { const { s, scala } = satellite(f.massaAlone, j); dM -= f.massaAlone; caldo += (s.caldo + s.fuori) * scala; caldoZ += (s.caldoZ + s.fuoriZ) * scala; for (let c = 0; c < NC; c++) caldoC[c] += (s.caldoC[c] + s.fuoriC[c]) * scala; caldoJ += ((s.caldo + s.fuori) * scala * Jh) / Mh[j]; }
     dM = Math.max(0, dM);
     caldo += fb * dM; caldoJ += fb * dM * jGuscio;
     // il gas soffiato fuori dall'alone ci ricade, tanto prima quanto più l'alone è grande (Henriques et al. 2013)
-    { const torna = 1 - Math.exp((-DT * Mh[j]) / (LEGGI.ritorno * 1e10)); caldo += fuori * torna; caldoZ += fuoriZ * torna; caldoJ += fuoriJ * torna; fuori *= 1 - torna; fuoriZ *= 1 - torna; fuoriJ *= 1 - torna; }
+    { const torna = 1 - Math.exp((-DT * Mh[j]) / (LEGGI.ritorno * 1e10)); caldo += fuori * torna; caldoZ += fuoriZ * torna; caldoJ += fuoriJ * torna; fuori *= 1 - torna; fuoriZ *= 1 - torna; fuoriJ *= 1 - torna; for (let c = 0; c < NC; c++) { caldoC[c] += fuoriC[c] * torna; fuoriC[c] *= 1 - torna; } }
     // 2. le fusioni che arrivano al centro in questo passo
     for (const f of arrivi) {
       if (f.passoArrivo !== j) continue;
@@ -572,6 +596,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
         const m = s.natiQ[q * (f.passo + 1) + i] * scala; if (m <= 0) continue;
         const zb = (s.natiQZ[q * (f.passo + 1) + i] * scala) / m, La = f.passo - i, Lb = j - 1 - i, vive = 1 - P.tab[q].cR[Lb + 1] - P.tab[q].cI[Lb + 1] * P.MCH;
         est[q * NE + i] += m; estZ[q * NE + i] += m * zb; haEst[i] = 1; if (Lb > La) { rende(m, q, La, Lb, zb); caldo += R[0]; caldoZ += R[1]; }
+        { const so = (q * (f.passo + 1) + i) * NC; for (let c = 0; c < NC; c++) estZC[(q * NE + i) * NC + c] += s.natiQZC[so + c] * scala; if (Lb > La) rendeC(caldoC, 0, m, q, La, Lb, zb, s.natiQZC, so); }
         ms += m * vive; msZ += m * zb * vive;
       }
       const mg = s.gasTot * scala, barioni = Mdisco + Msfer + gas.reduce((x, y) => x + y, 0), rb = (ms + mg) / Math.max(barioni, 1e-9);
@@ -585,6 +610,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
         const M1 = Mdisco + Msfer, R1 = M1 > 0 ? (Mdisco * metaMassa(nd) + Msfer * Rsfer) / M1 : Rs;
         Rsfer = M1 > 0 ? unisci(M1, Math.max(R1, 1e-3), Math.max(ms, 1e-9), Rs) : Rs; Msfer += Mdisco + ms; Mdisco = 0; sferoideFino = j + 1; ultimaMaggiore = t; f.tipo = 'maggiore'; nd.fill(0);
         let g = mg, z = s.gasZ * scala; for (let k = 0; k < NR; k++) { g += gas[k]; z += met[k]; gas[k] = 0; met[k] = 0; } gas[0] = g; met[0] = z;
+        for (let c = 0; c < NC; c++) { let zc = s.gasZC[c] * scala; for (let k = 0; k < NR; k++) { zc += metC[k * NC + c]; metC[k * NC + c] = 0; } metC[c] = zc; }
       } else {
         // MINORE: il disco resta. Le stelle del compagno vanno nello sferoide. IL GAS (Hopkins et al. 2009): perde il momento
         // angolare, e cade al centro, solo quello dentro R_gas = α·F·(1 − f_gas)·f_disco·G(μ)·R_d (f_gas: la parte del disco che è
@@ -593,9 +619,9 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
         // G = 2/(1 + μ)); il gas del compagno che non cade si posa sul disco di qui, con la sua scala
         Rsfer = Msfer > 0 ? unisci(Msfer, Rsfer, Math.max(ms, 1e-9), Rs) : Rs; Msfer += ms; f.tipo = 'minore';
         const [aH, fH] = LEGGI.scoppio, mu = rb, dT = barioni - (Msfer - ms), gT = dT - Mdisco;
-        if (gT > 0) { const Rgas = aH * fH * (1 - gT / dT) * (dT / barioni) * ((2 * mu) / (1 + mu)) * Rd; for (let k = 1; k < NR && bordo[k] < Rgas; k++) { if (!(gas[k] > 0)) continue; const w = Math.min(1, (Rgas * Rgas - bordo[k] ** 2) / (bordo[k + 1] ** 2 - bordo[k] ** 2)), m = w * gas[k], mz = w * met[k]; gas[k] -= m; met[k] -= mz; gas[0] += m; met[0] += mz; } }
-        if (mg > 0) { const x = aH * fH * (1 - mg / (mg + ms)) * (2 / (1 + mu)), giu = 1 - (1 + x) * Math.exp(-x), zc = (s.gasZ * scala) / mg; let prima = 0; gas[0] += mg * giu; met[0] += mg * giu * zc;
-          for (let k = 0; k < NR; k++) { const y = bordo[k + 1] / Rd, Fk = k === NR - 1 ? 1 : 1 - Math.exp(-y) * (1 + y), m = mg * (1 - giu) * (Fk - prima); gas[k] += m; met[k] += m * zc; prima = Fk; } }
+        if (gT > 0) { const Rgas = aH * fH * (1 - gT / dT) * (dT / barioni) * ((2 * mu) / (1 + mu)) * Rd; for (let k = 1; k < NR && bordo[k] < Rgas; k++) { if (!(gas[k] > 0)) continue; const w = Math.min(1, (Rgas * Rgas - bordo[k] ** 2) / (bordo[k + 1] ** 2 - bordo[k] ** 2)), m = w * gas[k], mz = w * met[k]; gas[k] -= m; met[k] -= mz; gas[0] += m; met[0] += mz; for (let c = 0; c < NC; c++) { const x = w * metC[k * NC + c]; metC[k * NC + c] -= x; metC[c] += x; } } }
+        if (mg > 0) { const x = aH * fH * (1 - mg / (mg + ms)) * (2 / (1 + mu)), giu = 1 - (1 + x) * Math.exp(-x), zc = (s.gasZ * scala) / mg; let prima = 0; gas[0] += mg * giu; met[0] += mg * giu * zc; for (let c = 0; c < NC; c++) metC[c] += giu * s.gasZC[c] * scala;
+          for (let k = 0; k < NR; k++) { const y = bordo[k + 1] / Rd, Fk = k === NR - 1 ? 1 : 1 - Math.exp(-y) * (1 + y), m = mg * (1 - giu) * (Fk - prima); gas[k] += m; met[k] += m * zc; for (let c = 0; c < NC; c++) metC[k * NC + c] += s.gasZC[c] * scala * (1 - giu) * (Fk - prima); prima = Fk; } }
       }
     }
     // 3. il gas restituito dalle generazioni passate: agli anelli dov'erano nate, o all'alone caldo se ora sono nello sferoide
@@ -603,13 +629,18 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     // (le somme su tutta la galassia si fanno per passo di nascita e tabella di metalli; anello per anello solo il gas e i suoi
     // metalli, e solo per le generazioni del disco. Intanto si tiene il conto di ciò che resta in stelle e resti: Mdisco, Msfer)
     for (let i = 1; i < j; i++) {
-      const L = j - i, o = i * NR, b = 5 * L; let rG = 0, rZ = 0, eG = 0, eZ = 0;
+      const L = j - i, o = i * NR, b = 5 * L, bc = 4 * L; let rG = 0, rZ = 0, eG = 0, eZ = 0; tR.fill(0); tE.fill(0);
       for (let q = 0; q < 4; q++) {
-        const m = natiQ[q * NE + i], a = q * NK + b; if (m > 0) { const mz = natiQZ[q * NE + i]; rG += m * K5[a]; rZ += mz * K5[a + 1] + m * K5[a + 2]; B.prodotti += (m - mz) * K5[a + 2]; ncc += m * K5[a + 3]; nia += m * K5[a + 4]; }
-        if (haEst[i]) { const me = est[q * NE + i]; if (me > 0) { const mz = estZ[q * NE + i]; eG += me * K5[a]; eZ += mz * K5[a + 1] + me * K5[a + 2]; B.prodotti += (me - mz) * K5[a + 2]; ncc += me * K5[a + 3]; nia += me * K5[a + 4]; } }
+        const m = natiQ[q * NE + i], a = q * NK + b, ac = q * NKC + bc; if (m > 0) { const mz = natiQZ[q * NE + i]; rG += m * K5[a]; rZ += mz * K5[a + 1] + m * K5[a + 2]; B.prodotti += (m - mz) * K5[a + 2]; ncc += m * K5[a + 3]; nia += m * K5[a + 4];
+          for (let c = 0; c < NC; c++) tR[c] += natiQZC[(q * NE + i) * NC + c] * K5[a + 1]; tR[q] += m * KC[ac]; tR[IA] += m * KC[ac + 1]; tR[AGC] += m * KC[ac + 2]; tR[AGN] += m * KC[ac + 3]; }
+        if (haEst[i]) { const me = est[q * NE + i]; if (me > 0) { const mz = estZ[q * NE + i]; eG += me * K5[a]; eZ += mz * K5[a + 1] + me * K5[a + 2]; B.prodotti += (me - mz) * K5[a + 2]; ncc += me * K5[a + 3]; nia += me * K5[a + 4];
+          for (let c = 0; c < NC; c++) tE[c] += estZC[(q * NE + i) * NC + c] * K5[a + 1]; tE[q] += me * KC[ac]; tE[IA] += me * KC[ac + 1]; tE[AGC] += me * KC[ac + 2]; tE[AGN] += me * KC[ac + 3]; } }
       }
-      if (i >= sferoideFino) { Mdisco -= rG; for (let k = 0; k < NR; k++) { const m = nati[o + k]; if (m > 0) { const a = iz[o + k] * NK + b; gas[k] += m * K5[a]; met[k] += m * (Zn[o + k] * ZSOLE * K5[a + 1] + K5[a + 2]); } } } else { eG += rG; eZ += rZ; }
-      if (eG > 0) { Msfer -= eG; caldo += eG; caldoZ += eZ; B.alCaldo += eG; B.alCaldoZ += eZ; }
+      if (i >= sferoideFino) { Mdisco -= rG; for (let k = 0; k < NR; k++) { const m = nati[o + k]; if (m > 0) { const q = iz[o + k], a = q * NK + b, ac = q * NKC + bc, zb = Zn[o + k] * ZSOLE * K5[a + 1]; gas[k] += m * K5[a]; met[k] += m * (Zn[o + k] * ZSOLE * K5[a + 1] + K5[a + 2]);
+        const oc = k * NC, zo = (o + k) * NC, w = m * zb; // (la miscela di nascita ZnC somma a 1: i sette canali scritti uno per uno, è il giro più caldo)
+        metC[oc] += w * ZnC[zo]; metC[oc + 1] += w * ZnC[zo + 1]; metC[oc + 2] += w * ZnC[zo + 2]; metC[oc + 3] += w * ZnC[zo + 3]; metC[oc + 4] += w * ZnC[zo + 4] + m * KC[ac + 1]; metC[oc + 5] += w * ZnC[zo + 5] + m * KC[ac + 2]; metC[oc + 6] += w * ZnC[zo + 6] + m * KC[ac + 3]; metC[oc + q] += m * KC[ac]; } } }
+      else { eG += rG; eZ += rZ; for (let c = 0; c < NC; c++) tE[c] += tR[c]; }
+      if (eG > 0) { Msfer -= eG; caldo += eG; caldoZ += eZ; B.alCaldo += eG; B.alCaldoZ += eZ; for (let c = 0; c < NC; c++) caldoC[c] += tE[c]; }
       B.resi += i >= sferoideFino ? rG + eG : eG;
     }
     // 4. il raffreddamento: quanto gas caldo cade sul disco in questo passo
@@ -622,9 +653,9 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
       cade = Math.min(caldo, Math.max(0, (caldo * x) / (2 * t) - scalda) * DT);
     }
     if (cade > 0) {
-      const zc = caldoZ / caldo, jc = caldoJ / caldo, md = stringi((Mdisco + Msfer) / Mh[j], 0.005, 0.1), Ra = cadutaDi(jc, Rv, Vv, c, md); let prima = 0;
-      for (let k = 0; k < NR && prima < 1; k++) { const y = bordo[k + 1] / Ra, F = k === NR - 1 || y > 40 ? 1 : 1 - Math.exp(-y) * (1 + y); gas[k] += cade * (F - prima); met[k] += cade * zc * (F - prima); prima = F; }
-      caldo -= cade; caldoZ -= cade * zc; caldoJ -= cade * jc; B.caduto += cade; B.cadutoZ += cade * zc;
+      const zc = caldoZ / caldo, jc = caldoJ / caldo, md = stringi((Mdisco + Msfer) / Mh[j], 0.005, 0.1), Ra = cadutaDi(jc, Rv, Vv, c, md), fc = cade / caldo; let prima = 0;
+      for (let k = 0; k < NR && prima < 1; k++) { const y = bordo[k + 1] / Ra, F = k === NR - 1 || y > 40 ? 1 : 1 - Math.exp(-y) * (1 + y); gas[k] += cade * (F - prima); met[k] += cade * zc * (F - prima); for (let cc = 0; cc < NC; cc++) metC[k * NC + cc] += caldoC[cc] * fc * (F - prima); prima = F; }
+      caldo -= cade; caldoZ -= cade * zc; caldoJ -= cade * jc; B.caduto += cade; B.cadutoZ += cade * zc; for (let cc = 0; cc < NC; cc++) caldoC[cc] -= caldoC[cc] * fc;
     }
     // 5. la curva di rotazione di adesso, anello per anello
     let mg = 0, mr = 0, ms = 0; for (let k = 0; k < NR; k++) { mg += gas[k]; mr += gas[k] * rc[k]; ms += nd[k]; }
@@ -656,10 +687,13 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
           const tolto = gas[k] * -Math.expm1(-kk), z = met[k] / gas[k]; formate = tolto / (1 + eta);
           if (formate < mUna) formate = 0; // (meno di una stella in un passo: niente)
           else {
+            { let sc = 0; for (let c = 0; c < NC; c++) sc += metC[k * NC + c]; for (let c = 0; c < NC; c++) frC[c] = sc > 0 ? metC[k * NC + c] / sc : 0; } // (la miscela dei metalli del gas di quell'anello: le parti, che sommano a 1)
             gas[k] -= tolto; met[k] -= tolto * z; B.vento += tolto - formate; B.ventoZ += (tolto - formate) * z; fuori += tolto - formate; fuoriZ += (tolto - formate) * z; fuoriJ += (tolto - formate) * r * Math.sqrt(V2[k]);
             nati[o] = formate; Sg[o] = sig; Zn[o] = z / ZSOLE; iz[o] = tabellaZ(z / ZSOLE); if (j >= sferoideFino) nd[k] += formate; natiQ[iz[o] * NE + j] += formate; natiQZ[iz[o] * NE + j] += formate * Zn[o] * ZSOLE;
+            for (let c = 0; c < NC; c++) { metC[k * NC + c] -= tolto * z * frC[c]; fuoriC[c] += (tolto - formate) * z * frC[c]; ZnC[o * NC + c] = frC[c]; natiQZC[(iz[o] * NE + j) * NC + c] += formate * Zn[o] * ZSOLE * frC[c]; }
             // ciò che la generazione appena nata restituisce già in questo passo (le stelle massicce)
             rende(formate, iz[o], -1, 0, z); gas[k] += R[0]; met[k] += R[1]; B.prodotti += R[4]; B.resi += R[0]; ncc += R[2]; nia += R[3]; if (j >= sferoideFino) Mdisco += formate - R[0]; else Msfer += formate - R[0];
+            rendeC(metC, k * NC, formate, iz[o], -1, 0, z, ZnC, o * NC);
           }
         }
       }
@@ -668,18 +702,19 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     S.sfr[j] = sfr / DT / 1e9; S.gas[j] = gasOra; S.stelle[j] = Mdisco + Msfer; S.caldo[j] = caldo; S.collasso[j] = ncc / DT / 1e9; S.Ia[j] = nia / DT / 1e9;
   }
   // ---------- com'è oggi
-  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE); let nateTutte = 0, metStelle = 0;
+  const sigStelle = new Float64Array(NR), sigGas = new Float64Array(NR), natiTot = new Float64Array(nt + 1), natiZ = new Float64Array(nt + 1), venute = new Float64Array(NE), venuteZ = new Float64Array(NE), venuteZC = new Float64Array(NE * NC); let nateTutte = 0, metStelle = 0;
   for (let i = 1; i <= nt; i++) {
     const L = nt - i; let m1 = 0, z1 = 0;
     for (let k = 0; k < NR; k++) { const m = nati[i * NR + k]; if (!(m > 0)) continue; const T = P.tab[iz[i * NR + k]], v = m * (1 - T.cR[L + 1] - T.cI[L + 1] * P.MCH); m1 += m; z1 += m * Zn[i * NR + k] * ZSOLE; metStelle += Zn[i * NR + k] * ZSOLE * v; if (i >= sferoideFino) sigStelle[k] += v / area[k]; }
-    for (let q = 0; q < 4 && haEst[i]; q++) { metStelle += estZ[q * NE + i] * (1 - P.tab[q].cR[L + 1] - P.tab[q].cI[L + 1] * P.MCH); venute[i] += est[q * NE + i]; venuteZ[i] += estZ[q * NE + i]; }
+    for (let q = 0; q < 4 && haEst[i]; q++) { metStelle += estZ[q * NE + i] * (1 - P.tab[q].cR[L + 1] - P.tab[q].cI[L + 1] * P.MCH); venute[i] += est[q * NE + i]; venuteZ[i] += estZ[q * NE + i]; for (let c = 0; c < NC; c++) venuteZC[i * NC + c] += estZC[(q * NE + i) * NC + c]; }
     natiTot[i] = m1; natiZ[i] = m1 > 0 ? z1 / m1 : 0; nateTutte += m1 + venute[i];
   }
   let gasTot = 0, gasZ = 0; for (let k = 0; k < NR; k++) { sigGas[k] = gas[k] / area[k]; gasTot += gas[k]; gasZ += met[k]; dove[k] = sigStelle[k] * area[k] + gas[k]; }
   const aO = U.scala(nt * DT), RvO = raggioViriale(M0, aO), mod = { Mh: M0, c: concentrazione(M0, aO), Rv: RvO, Md: gasTot + Mdisco, Rd, Ms: Msfer, as: Math.max(Rsfer, 1e-3) / 2.414 };
   const raggioMeta = Mdisco + Msfer > 0 ? ((Mdisco + gasTot) * metaMassa(dove) + Msfer * Rsfer) / (Mdisco + gasTot + Msfer) : Rd;
-  if (compagno) return { natiTot, natiZ, natiQ, natiQZ, gasTot, gasZ, caldo, caldoZ, fuori, fuoriZ, raggioMeta, massaStelle: Mdisco + Msfer };
-  return { M0, spin, nt, Mh, inizio: Mh.inizio, bordo, rc, area, nati, Sg, Zn, iz, est: venute, estZ: venuteZ, Zt, S, B, gas, met, sigStelle, sigGas, caldo, caldoZ, fuori, fuoriZ, sferoideFino, ultimaMaggiore, Mdisco, Msfer, Rsfer, mod, gasTot, gasZ, nateTutte, metStelle, fusioni };
+  const gasZC = new Float64Array(NC); for (let k = 0; k < NR; k++) for (let c = 0; c < NC; c++) gasZC[c] += metC[k * NC + c];
+  if (compagno) return { natiTot, natiZ, natiQ, natiQZ, natiQZC, gasTot, gasZ, gasZC, caldo, caldoZ, caldoC, fuori, fuoriZ, fuoriC, raggioMeta, massaStelle: Mdisco + Msfer };
+  return { M0, spin, nt, Mh, inizio: Mh.inizio, bordo, rc, area, nati, Sg, Zn, ZnC, iz, est: venute, estZ: venuteZ, estZC: venuteZC, Zt, S, B, gas, met, metC, gasZC, caldoC, fuoriC, sigStelle, sigGas, caldo, caldoZ, fuori, fuoriZ, sferoideFino, ultimaMaggiore, Mdisco, Msfer, Rsfer, mod, gasTot, gasZ, nateTutte, metStelle, fusioni };
 }
 
 // ---------- LA FORMA DI UNA GALASSIA, dal suo alone e dai suoi vicini.
@@ -795,6 +830,17 @@ export function formaDaAlone(alone, caso = sorgente('galassia')) {
 // ---------- I RISCONTRI
 // le supernove all'anno, oggi: { collasso, Ia, totale }
 export const ritmoSupernove = (forma) => forma.ritmoSN;
+// LA MISCELA DI NASCITA di una stella (la catena degli elementi): le parti dei suoi metalli per canale (elementi.js CANALI),
+// quelle del gas dell'anello e del passo in cui è nata (o, per le stelle venute con le fusioni, della loro generazione), e la
+// miscela in massa di tutti gli elementi che ne viene. → { canali: Float64Array (somma 1, o tutti 0 se il gas non aveva
+// metalli), abbondanze: { simbolo: frazione in massa } }. Senza «nascita» (una stella fatta a mano): null.
+export function miscelaDiNascita(forma, stella) {
+  const nas = stella?.nascita, e = forma?.interno; if (!nas || !e?.ZnC) return null;
+  const NC = CANALI.length, f = new Float64Array(NC), { passo: i, anello: k } = nas;
+  if (k < ANELLI) { const o = (i * ANELLI + k) * NC; for (let c = 0; c < NC; c++) f[c] = e.ZnC[o + c]; }
+  else { let t = 0; for (let c = 0; c < NC; c++) { f[c] = e.estZC[i * NC + c]; t += f[c]; } if (t > 0) for (let c = 0; c < NC; c++) f[c] /= t; }
+  return { canali: f, abbondanze: abbondanzeDaCanali(stella.Z ?? 1, f) };
+}
 // la metallicità del gas (in unità solari) al tempo t (ANNI dall'inizio) e al raggio r (kpc): è la Z con cui nasce una stella lì e allora
 export function metallicita(forma, t, r) {
   const e = forma.interno, NR = ANELLI, x = stringi(t / 1e9 / DT, 1, e.nt), j = Math.min(e.nt - 1, Math.floor(x)), u = x - j;
@@ -919,6 +965,9 @@ export function galassiaAlTempo(forma, tGa) {
 const MU0 = 4e-7 * Math.PI, POTENZA = 1e31; // le potenze delle sorgenti sono in unità di 10³¹ W (10³⁸ erg/s: un resto giovane)
 export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 2500 } = {}) {
   const P = popolazione(), e = forma.interno, NR = ANELLI, nt = e.nt, U1 = forma.unitaKpc, B = forma.bracci;
+  // (dove e quando è nata: il passo e l'anello — NR per le stelle venute con le fusioni —, non enumerabili: servono a
+  // miscelaDiNascita, la catena degli elementi; chi elenca, stampa o confronta le stelle vede quelle di sempre)
+  const nata = (st, passo, anello) => Object.defineProperty(st, 'nascita', { value: Object.freeze({ passo, anello }), enumerable: false });
   // le celle da cui si estrae: (passo, anello) delle stelle nate qui, più le stelle portate dalle fusioni, in massa
   const celle = new Float64Array(nt * (NR + 1) + 1); let tot = 0;
   for (let i = 1; i <= nt; i++) { for (let k = 0; k < NR; k++) { tot += e.nati[i * NR + k]; celle[(i - 1) * (NR + 1) + k + 1] = tot; } tot += e.est[i]; celle[(i - 1) * (NR + 1) + NR + 1] = tot; }
@@ -964,7 +1013,7 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
   for (let s = 0; s < quante; s++) {
     const rs = s >= quante - RESTI ? riservati.find((r) => r.k === s - (quante - RESTI)) : null;
     if (rs) { // la stella di una delle ultime supernove da collasso: una stella vera, non un campione
-      const f = rs.f; stelle.push({ id: s, pos: [rs.pos[0] / U1, rs.pos[1] / U1], massa: f.massa, massaNascita: rs.m0, eta: rs.vita + rs.t, T: 0, colore: f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta: rs.t, Z: rs.Z, peso: 1, componente: 'disco', supernova: rs.k + 1 });
+      const f = rs.f; stelle.push(nata({ id: s, pos: [rs.pos[0] / U1, rs.pos[1] / U1], massa: f.massa, massaNascita: rs.m0, eta: rs.vita + rs.t, T: 0, colore: f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255], stato: f.tipo, raggioM: f.raggio, B: f.B, morta: rs.t, Z: rs.Z, peso: 1, componente: 'disco', supernova: rs.k + 1 }, nt, rs.anello));
       continue;
     }
     const c = caso.sotto(`stella ${s}`);
@@ -977,13 +1026,13 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
     const m0 = massaNascita(c('massa')), B0 = campo0(c('campo')), vita = ST.stella(m0, { Z }).vita;
     if (eta < vita) {
       const adesso = ST.stella(m0, { Z, eta }), gigante = eta > 0.9 * vita, T = gigante ? Math.min(adesso.T, 4200) : adesso.T;
-      stelle.push({ id: s, pos, massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta, B: B0, Z, peso, componente, ...(esterna ? { venuta: true } : {}) });
+      stelle.push(nata({ id: s, pos, massa: m0, T, colore: colorePerTemperatura(T), stato: gigante ? 'gigante rossa' : 'in vita', eta, B: B0, Z, peso, componente, ...(esterna ? { venuta: true } : {}) }, i, k));
     } else {
       const f = ST.fine(m0, B0, { Z }), morta = eta - vita; let T = 0, colore = f.tipo === 'buco nero' ? [20, 20, 30] : [150, 200, 255];
       if (f.tipo === 'nana bianca') { // si raffredda irradiando il calore dei suoi ioni (Mestel 1952): L ∝ M·t^−7/5
         const L = LSOLE * Math.pow((8.8e6 * Math.pow(f.massa, 5 / 7)) / Math.max(morta, 1e4), 7 / 5); T = Math.min(1.5e5, Math.pow(L / (PI4 * f.raggio ** 2 * COSTANTI.sigma), 0.25)); colore = [225, 230, 255];
       }
-      stelle.push({ id: s, pos, massa: f.massa, massaNascita: m0, eta, T, colore, stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z, peso, componente, ...(esterna ? { venuta: true } : {}) });
+      stelle.push(nata({ id: s, pos, massa: f.massa, massaNascita: m0, eta, T, colore, stato: f.tipo, raggioM: f.raggio, B: f.B, morta, Z, peso, componente, ...(esterna ? { venuta: true } : {}) }, i, k));
     }
   }
   // ---- le sorgenti dei raggi cosmici: il getto del buco nero, i resti delle ultime supernove, le loro pulsar

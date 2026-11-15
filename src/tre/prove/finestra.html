@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: la finestra a ogni distanza (il mare)</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e4da; font: 12px ui-monospace, monospace; }
+  canvas { display: block; width: 400px; height: 300px; image-rendering: auto; }
+  #scritta { position: absolute; left: 6px; bottom: 4px; font: 11px ui-monospace, monospace; color: #f4f0e6; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+</style>
+</head>
+<body>
+<canvas id="tela" width="400" height="300"></canvas><div id="scritta"></div>
+<script type="module">
+// La pagina che test/test_vista.mjs guida per il LAVORO 9 di PROGETTO.md («la finestra a ogni distanza»), sul primo mare con
+// il vento del catalogo (test/mare_col_vento.mjs: nessun seme scelto), nel mare aperto con le onde più alte.
+//   pronta()                 la superficie, il clima, il mare (come superficieDi senza fili), e il punto
+//   tre({ quota })           lo spazio in 3D (pianeta.js) sopra quel punto, a quella quota, guardando giù → ms per fotogramma
+//   finestra({ latoM })      la finestra di quel lato (il livello 5 dello zoom: finestra.js), sulla tela → ms
+//   atomi({ latoM })         la finestra dei nanometri in 3D (atomi3d.js, scenaNano), sulla tela
+import { creaNucleo } from '../nucleo.js';
+import { sistema } from '../../camera/cosmo.js';
+import { mareColVento } from '../../../test/mare_col_vento.mjs';
+import * as FI from '../../camera/finestra.js';
+import { conMoto, periodica, creaVista3D } from '../../camera/atomi3d.js';
+
+let M = null, S = null, N = null, Pi = null, quale = null, VA = null;
+const aspetta = (f, ms = 120000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto')); else { if (N) N.fotogramma(); setTimeout(p, 30); } }; p(); });
+const pulito = (o) => { if (!o || typeof o !== 'object' || ArrayBuffer.isView(o)) return o; if (Array.isArray(o)) return o.map(pulito); const r = {}; for (const q in o) if (typeof o[q] !== 'function') r[q] = pulito(o[q]); return r; };
+const scrivi = (t) => { document.getElementById('scritta').textContent = t; };
+
+async function pronta() {
+  if (M) return info(); M = mareColVento();
+  S = { k: JSON.stringify(M.via), P: M.P, cl: pulito(M.cl), se: pulito(M.se), seme: M.P.origine, mare: pulito(M.st) };
+  return info();
+}
+function info() { return { via: M.via, punto: { lon: M.aperto.lon, lat: M.aperto.lat, fondoM: M.aperto.fondoM, onde: M.aperto.onde }, salinita: M.st.salinitaMedia, pressione: M.st.pressioneAria }; }
+function nuovaTela() { const v = document.getElementById('tela'), t = v.cloneNode(); v.replaceWith(t); return t; }
+function libera() { try { VA?.ferma?.(); VA?.libera?.(); } catch { /* */ } VA = null; if (N) { try { N.libera(); } catch { /* */ } } N = null; Pi = null; quale = null; }
+async function tre({ quota = 2, fotogrammi = 30 } = {}) {
+  const p = M.aperto, RAD = Math.PI / 180, chi = '3d';
+  if (quale !== chi) { libera(); const mod = await import('../pianeta.js'); N = creaNucleo(nuovaTela(), { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = false; const Sis = sistema(1, M.via.galassia, M.via.stella); Pi = mod.creaPianeta(N, { P: M.P, stella: Sis.stella, via: M.via, superficie: () => S }); N.attacca(Pi.corpo, { distanza: 3 * M.P.raggioM }); quale = chi; }
+  N.vai({ lon: p.lon * RAD, lat: p.lat * RAD, quota, direzione: 0, alza: -1.54 });
+  await aspetta(() => { const s = Pi.statistiche?.(); return s && s.inAttesa === 0 && s.tessere > 0; }, 90000).catch(() => null);
+  for (let i = 0; i < 20; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 15)); }
+  const gl = N.gl, px = new Uint8Array(4), ms = [];
+  for (let i = 0; i < fotogrammi; i++) { const t0 = performance.now(); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ms.push(performance.now() - t0); await new Promise((r) => setTimeout(r, 5)); }
+  ms.sort((a, b) => a - b); scrivi(`${quota >= 1000 ? `${(quota / 1000).toLocaleString('it-IT')} km` : `${quota} m`} sopra il mare (3D, pianeta.js)`);
+  return { quota, msMediana: ms[ms.length >> 1], statistiche: Pi.statistiche?.() };
+}
+// la finestra del livello 5 (come mappa.js: finestraAcqua + immagineFinestra), disegnata sulla tela alla grandezza dello schermo
+async function finestra({ latoM = 1, t = 2 } = {}) {
+  libera(); const tela = nuovaTela(), ctx = tela.getContext('2d'), p = M.aperto;
+  let t0 = performance.now(); const f = FI.finestraAcqua(M.st, { lon: p.lon, lat: p.lat, latoM, fondoM: p.fondoM, P: M.P }); const crea = performance.now() - t0;
+  const ms = []; let px = null; for (let k = 0; k < 6; k++) { t0 = performance.now(); px = FI.immagineFinestra(f, t + 0.05 * k); ms.push(performance.now() - t0); }
+  const cv = new OffscreenCanvas(f.N, f.N); cv.getContext('2d').putImageData(new ImageData(px, f.N, f.N), 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 400, 300); ctx.imageSmoothingEnabled = true; ctx.drawImage(cv, 50, 0, 300, 300);
+  const lato = latoM >= 1 ? `${latoM} m` : latoM >= 0.01 ? `${latoM * 100} cm` : latoM >= 1e-3 ? `${latoM * 1000} mm` : latoM >= 1e-6 ? `${latoM * 1e6} µm` : `${latoM * 1e9} nm`;
+  scrivi(`finestra di ${lato} (finestra.js): ${f.popolazioni.particelle.length} particelle, schiuma ${(100 * f.ultima.schiuma).toFixed(1)}%`);
+  ms.sort((a, b) => a - b); return { latoM, N: f.N, msCrea: crea, msFotogramma: ms[ms.length >> 1], schiuma: f.ultima.schiuma, descrizione: f.descrizione, bande: f.bande.length };
+}
+// i nanometri in 3D: la scena di finestra.js (scenaNano), col moto di atomi3d.js e le copie periodiche, come scenaAtomi di mappa.js
+async function atomi({ latoM = 1e-8 } = {}) {
+  libera(); const tela = nuovaTela(), p = M.aperto; let t0 = performance.now();
+  const sc = FI.scenaNano(M.st, { lon: p.lon, lat: p.lat, latoM, fondoM: p.fondoM }), crea = performance.now() - t0;
+  VA = creaVista3D(tela, { conserva: true }); VA.carica(periodica(conMoto(sc), [3, 3, 1])); VA.avvia?.();
+  await new Promise((r) => setTimeout(r, 1500)); const ms = []; for (let i = 0; i < 10; i++) { const a = performance.now(); VA.disegna?.(); ms.push(performance.now() - a); await new Promise((r) => setTimeout(r, 30)); }
+  scrivi(`${sc.latoNm.toFixed(1)} nm (finestra.js, scenaNano): ${sc.conteggi.acqua} molecole d'acqua, ${Object.entries(sc.messi).filter(([, x]) => x > 0).map(([f, x]) => `${x} ${f}`).join(', ')}`);
+  ms.sort((a, b) => a - b); return { msCrea: crea, msFotogramma: ms[ms.length >> 1], atomi: sc.atomi.elemento.length, descrizione: sc.descrizione };
+}
+window.prova = { pronta, tre, finestra, atomi };
+window.prova.caricata = true;
+</script>
+</body>
+</html>

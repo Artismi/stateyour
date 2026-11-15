@@ -94,6 +94,7 @@ import { COSTANTI as TETTONICA } from './tettonica.js';
 import { maree as mareaDi } from './lune.js';
 export { rocceDelPianeta, rilascio, MINERALI_ROCCIA };
 import { sorgente, numero } from './eventi.js';
+import { tracceDelMare } from './elementi.js'; // la catena degli elementi: le tracce sciolte, dalla crosta di QUESTO pianeta
 
 const NA = 6.022e23, KB = COSTANTI.kB, E0 = 8.854e-12, QE = COSTANTI.e, RAD = Math.PI / 180;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -506,6 +507,16 @@ export function mare(P, sf, cl, se = null, caso = null) {
     carbonioAria: { pCO2Aria, pCO2Ciclo, nonRegge, usata: ariaSenzaCiclo ? 'ciclo' : 'aria', vulcani: bs.flussi.CO2vulcani, consumo: ceduto.cariche }, pressioneAria: pAria, aria: { ...aria.gas },
     gas: gasSciolti(aria.gas, pAria, Tmare, eq.I), Tmedia: Tmare, congela: congelamento(moli), bilancio: bs.bilancio, fiume: bs.fiume, fondoDiSale: bs.fondoDiSale, flussi: bs.flussi,
     fine: { W: FW, H: FH, tipo, fondo: fondoF, lago: new Int16Array(FN).fill(-1) }, bagnato, fondo, ghiaccio, vento: { u: vu, v: vv }, radice: c0.radice };
+  // LE TRACCE (elementi.js tracceDelMare: Li, B, F, Br, I, Sr, U, Mo, Fe, Mn, P, Rb, Ba e la silice, con la loro specie): dalla
+  // crosta di QUESTO pianeta (cosmo.js la mette accanto alla composizione) che la pioggia consuma, nella parte che rilascio()
+  // scioglie del minerale ospite, e dai vulcani; escono come escono i sali di bilancioSali. Un pianeta senza la sua catena
+  // degli elementi (fatto a mano) non le ha. (Un campo a parte: «totali» resta quello dei sali di sempre.)
+  try { const cr = P.composizione?.crosta, el = P.composizione?.elementi;
+    if (cr && el?.simboli) { const S = el.simboli, perKg = (v, M) => { const o = {}; if (M > 0) for (let i = 0; i < S.length; i++) if (v[i] > 0) o[S[i]] = v[i] / M; return o; };
+      let Ms = 0; for (const v of el.silicato) Ms += v; const T = Math.max(272, cl.Tglobale || Tmare), ril = (r) => { const x = rilascio(r, T, pCO2, denudazione); return { Na: x.Na, K: x.K, Ca: x.Ca, Mg: x.Mg }; };
+      out.tracce = tracceDelMare(out, { crosta: { granito: cr.Mgranito > 0 ? perKg(cr.granito, cr.Mgranito) : perKg(cr.basalto, cr.Mbasalto), basalto: cr.Mbasalto > 0 ? perKg(cr.basalto, cr.Mbasalto) : perKg(cr.granito, cr.Mgranito) },
+        rilascio: { granito: ril(rocce.granito), basalto: ril(rocce.basalto) }, consumata, granito: consumata > 0 ? massaCont / consumata : 0, mantello: perKg(el.silicato, Ms), eta: P.interno?.eta ?? 4.5e9,
+        Ca: ioni.Ca, solfato: eq.liberi?.['SO4(2-)'] ?? ioni.S, carbonato: eq.liberi?.['CO3(2-)'] ?? 0, calcareMoliAnno: bs.bilancio?.esce?.Ca?.calcare ?? 0, ossigeno: pO2 }); } } catch { /* senza le tracce */ }
   // l'acqua dei fiumi in equilibrio con l'aria
   { const f = bs.fiume, ef = acqua({ ...f, Ca: f.Ca || 0 }, Math.max(274, cl.Tglobale || 285), { pCO2 }); out.fiume = { ...f, pH: ef.pH, salinita: grammiPerKg(f, ef), portataKgAnno: fiumi, sedimentoKgAnno: sedimento, argillaKgAnno: argilla, sabbiaKgAnno: sabbia }; }
   // la lista delle foci, con la loro acqua e il loro fango

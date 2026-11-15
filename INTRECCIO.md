@@ -34,6 +34,12 @@ storia potrà mai costruire una proteina). Quindi:
 - il costo vero sta nel giocare, non nello scrivere le regole: per questo si gioca solo dove si guarda (regola 8),
   ma le regole ci sono tutte, ovunque.
 - Fatto: intestazioni dei moduli; «NON TORNA» nelle prove.
+- Fatto (lavoro 8): nessun inventario degli elementi scelto a priori: quanto c'è di ogni elemento in ogni serbatoio viene
+  dalla storia della galassia (rese di Kobayashi et al. 2006 lette sulla fonte), della stella e del pianeta (`elementi.js`).
+- Manca (lavoro 8): i numeri ancora RICORDATI e non riletti, dichiarati in `elementi.js`: le rese delle giganti di Karakas
+  2010 (le tabelle sono in linea), le temperature di condensazione di Lodders 2003, i parametri della ripartizione metallo/
+  silicato (Fischer et al. 2015, Wade e Wood 2005: la tabella S2 di Rubie et al. 2015 non è aperta), i coefficienti
+  minerale/fuso delle tracce, le solubilità del mare; le tracce pesanti senza rese, tarate sul Sole per canale (r e s).
 - Manca: i parametri liberi rimasti (elencati nei moduli); un elenco unico generato dal codice. Regole ancora ad
   elenco invece che chiuse: le molecole (41 in `chimica.js`), i minerali, le particelle del catalogo, i tipi di
   roccia, i tipi di pianeta. La chimica generale (qualsiasi molecola dai suoi atomi e dai suoi legami) è il primo
@@ -66,9 +72,22 @@ sopra e contate da sotto. Gli eventi del dettaglio hanno indirizzi sotto quello 
   bilanci di massa e metalli; `test_coerenza` (47 prove).
 - Fatto: `test_coerenza_scale` stampa la tabella di conservazione M∘μ = I per ogni passaggio, dal campo cosmico ai quark,
   con tolleranze dal modello, e i difetti di commutazione misurati.
+- Fatto: **gli elementi, uno per uno, dalla galassia al mare** (`elementi.js`, lavoro 8; `test_elementi`): i metalli di ogni
+  serbatoio della galassia divisi per canale (chi li ha fatti) e mossi con lui (Σ canali = metalli entro 10⁻¹⁴); la miscela di
+  ogni stella è quella del suo gas di nascita; il disco condensa ogni elemento alla sua temperatura; ogni pianeta sa di quali
+  embrioni è fatto; nucleo e mantello si dividono conservando ogni elemento e l'ossigeno; la crosta fonde dal mantello; il mare
+  e l'aria prendono dal pianeta. **Il libro dei conti** (`libroDeiConti`) somma i serbatoi elemento per elemento contro ciò che
+  il disco ha dato (scarto 10⁻¹⁵) e segnala chi chiede più di quanto il suo fornitore ha: è una riga di `test_coerenza_scale`.
+  Trovate e corrette facendolo: l'acqua dei ghiacci contava anche il CO e l'NH3 (il mare aveva un terzo d'acqua in più di
+  quella che c'era), l'aria contava il carbonio come CO2 e lo zolfo come SO2 con un ossigeno che l'inventario non aveva e la
+  massa dell'idrogeno fuggito restava agli altri gas, il CO dei ghiacci prendeva un ossigeno già dato all'acqua, e una roccia
+  senza zolfo né acqua dava zolfo e carbonio all'aria (il pavimento di 0,001).
 - Manca: il riassunto M sotto gli atomi e per la magnetosfera; μ per le galassie vere nel toro e per i pianeti delle stelle
   vere; la quota media delle tessere (la costa condizionata non la conserva e la tessera si erode due volte); la neutralità
-  delle celle di feldspati e biotite; il terreno fine non eredita ancora tutto (i fiumi tra tessere).
+  delle celle di feldspati e biotite; il terreno fine non eredita ancora tutto (i fiumi tra tessere). Per gli elementi: il
+  decadimento radioattivo (U, Th, K: il libro conta le masse della nascita; l'argon e l'elio radiogenici dell'aria a parte);
+  i sedimenti e il calcare come serbatoi propri (oggi stanno nei «ghiacci», ciò che è uscito e non è aria né mare); la
+  crosta riciclata dalle placche (la crosta è quella di oggi, il residuo della seconda fusione torna nel mantello).
 
 ## 5. Dal piccolo al grande: il mondo compatibile
 Questa è la direzione che conta di più. Si può partire da un punto qualsiasi, anche piccolissimo: un cristallo, una
@@ -144,6 +163,13 @@ verso il basso le **condizioni** in un punto, verso l'alto i **flussi** e le med
   entro un millesimo); il ghiaccio si conta con la curva dell'albedo; i giganti hanno un livello di riferimento
   dichiarato; la gravità di superficie ha una funzione. Tutto ciò che non torna sta in `reports/Mappa delle
   grandezze.md`, che la prova riscrive (`--rapporto`).
+- Fatto (lavoro 8): la miscela degli elementi ha una fonte sola per ogni stella (`elementi.js`: quella del suo gas di
+  nascita, da `galassie.js`), e disco, nucleo, mantello, crosta, aria e mare dei suoi pianeti la leggono da lì; `chimica.js`
+  legge mantello, crosta e ghiacci del pianeta (`delPianeta`, `crostaDiPianeta`) e `leggi.js` l'acqua dei suoi ghiacci.
+- Manca (lavoro 8): due miscele del Sole — quella fotosferica di `chimica.js` (15 elementi) resta per i pianeti fatti a mano
+  delle prove —; due curve di fusione dei silicati ad alta pressione (`storia.js`, Simon di Zhang e Rogers, per la partenza
+  calda; `elementi.js`, Andrault 2011, per la base dell'oceano di magma: a 90 GPa la prima sta 900 K più su); la linea della
+  neve vede solo la luce della stella, la roccia anche il calore del gas che cade.
 - Manca: le incoerenze che `test_coerenza` stampa; il calore che il mare riporta al clima; l'aria e il mare come un
   solo serbatoio di carbonio. E ciò che `test_grandezze` stampa: la temperatura del clima e quella a cui è stata fatta
   l'aria distano più di un grado in 142 mondi su 624 (il termostato fa l'aria a 275 K per costruzione; la ricerca a giri
@@ -298,14 +324,28 @@ dichiarati, e da togliere.
   schermo, dove si guarda) e la porta al grigio medio della
   percezione (L* = 50), non sotto la soglia assoluta della visione (10⁻⁶ cd/m²), con le candele dal corpo nero della stella
   del luogo; di notte i colori sfumano nella luminanza scotopica (CIE 191; Larson 1997); l'adattamento al colore è quello di
-  CIECAM02. L'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 128 costanti con riga e classe; 8 tolte:
+  CIECAM02. L'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 144 costanti con riga e classe; 9 tolte, più la schiuma al largo:
   l'esposizione, il colore della luce «adattato» a mano, i colori dei batuffoli, il terminatore, la luce di notte, il bordo
-  della stella, la luce minima dei corpi lontani). La convergenza (C12, `test_vista`): i passi dei volumi, dell'aria, delle tabelle del cielo e l'accumulo
+  della stella, la luce minima dei corpi lontani, e nel lavoro 9 l'increspatura minima del mare). La convergenza (C12, `test_vista`): i passi dei volumi, dell'aria, delle tabelle del cielo e l'accumulo
   convergono, con l'ordine stimato, e i valori dell'app stanno sotto la soglia dell'occhio (ΔE*ab = 2,3) — tranne la
   ragnatela in moto; l'aria spessa, che non convergeva, è stata corretta.
-- Manca: le 64 scelte a mano rimaste — le più grandi: la curva di tonalità (servirebbe la risposta dei fotorecettori),
+- Fatto (lavoro 9, `src/camera/finestra.js`): LA FINESTRA A OGNI DISTANZA per l'acqua. A ogni distanza si calcola con la
+  legge di quella grana solo ciò che si inquadra, come campione condizionato della grana sopra, e riassunto ridà il padre
+  (M∘μ = I, provato in `test_finestre` e in `test_coerenza_scale`). Da lontano lo spettro delle onde del vento (Elfouhaily e
+  altri 1997, Mitsuyasu, la tensione superficiale di quell'acqua), che dà anche al 3D le sue onde, l'increspatura e la
+  schiuma (Monahan, Koepke) al posto di tre costanti a mano; a metri e centimetri il campo delle onde di quel quadrato
+  (tessere di Tessendorf con indirizzo nel tratto: due finestre sovrapposte vedono le stesse onde), il riflesso della stella
+  (Cox e Munk) e il cielo di Rayleigh, la schiuma dove le onde lunghe frangono, la zattera di bolle di Deane e Stokes; i
+  granelli, i fiocchi e le bolle nel loro numero (Poisson cella per cella) e con le taglie della loro legge; a nanometri
+  l'acqua liquida fitta (potenziale mW) alla sua densità con ogni ione nel suo numero e col suo guscio, mai un cristallo
+  solo nel vuoto. Le grane non sono soglie: ogni popolazione si vede dove la sua taglia sta tra un punto e il lato della
+  finestra; ciò che è più piccolo di un punto è il colore dell'acqua (la nebbia, regola 9).
+- Manca: le 67 scelte a mano rimaste — le più grandi: la curva di tonalità (servirebbe la risposta dei fotorecettori),
   l'abbagliamento e le soglie di visibilità dei punti, le forme e la luce delle nuvole, la foschia, le popolazioni di stelle
   della galassia (4300 K, 9500 K, «tre volte la luce»), gli anelli e i corpi lontani —; la convergenza delle griglie dei
   volumi, della riduzione, del salto del vuoto, della luce zodiacale e del rilievo; la ragnatela in moto; uno strumento
   dichiarato accanto all'occhio (una lunga esposizione: con l'occhio una galassia da fuori è grigia e la ragnatela sta alla
-  soglia); la prova su una scheda grafica vera.
+  soglia); la prova su una scheda grafica vera. Della finestra: la roccia, l'aria e il suolo (PROGETTO.md, punto 9: la stessa
+  struttura); il cielo con la diffusione multipla e le nuvole (guardando giù, senza il riflesso della stella, le
+  increspature si vedono appena); la schiuma che dura e che la corrente trascina; l'istante del 3D nella finestra (oggi la
+  stella è a mezzogiorno dell'equinozio); il guscio degli ioni riordinato (4 vicine invece di 6).

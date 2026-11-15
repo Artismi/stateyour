@@ -16,7 +16,9 @@
 //     tessere figlie di geologia.js (che interpola il segno delle celle madri). Il colore dell'acqua è la riflettanza di
 //     mare.js (coloraMare: assorbimento e diffusione dell'acqua, del fango, del ferro, il fondo dove si vede; tolta
 //     l'esposizione della carta: tessere.worker.js); le onde sono le sue (le stesse lunghezze, direzioni e fasi, alte
-//     quanto dice lo spettro di quel punto: ondeNelPunto), come spostamento della superficie e come pendenza per i riflessi.
+//     quanto dice lo spettro di quel punto: finestra.js, dal vento e dalle onde di mare.js), come spostamento della superficie e
+//     come pendenza per i riflessi (il cielo riflesso nella direzione speculare: la forma di Rayleigh, la media della tabella
+//     del cielo); la coda capillare allarga il riflesso, la schiuma copre la parte che dice Monahan.
 //   · I MATERIALI: le riflettanze delle rocce per classe, del sedimento, della neve e del ghiaccio (tessere.worker.js).
 //   · LA LUCE: quella della stella, attenuata e arrossata dall'aria che attraversa per arrivare lì (di più al tramonto),
 //     sul pendio vero (le normali dalle pendenze della tessera, punto per punto), tolta dove la stella sta dietro
@@ -220,9 +222,18 @@ void main() {
     vec3 hv = normalize(u_sole + occhio); float nh = max(dot(n, hv), 0.0), a2 = max(u_mare.y, 2e-4), d = nh * nh * (a2 - 1.0) + 1.0;
     float lampo = a2 / (3.14159 * d * d) * 0.25 / max(0.05, max(dot(occhio, hv), 0.0));
     // (il cielo riflesso: la sua radianza media, che sullo schermo vale quanto la sua irradianza)
-    colA = base * (arriva * max(muS, 0.0) + ambiente) * (1.0 - fres) + u_luce * cieloSu(muS) * fres + arriva * min(lampo * (0.02 + 0.98 * pow(1.0 - max(dot(occhio, hv), 0.0), 5.0)), 40.0);
-    float spuma = (1.0 - smoothstep(0.0, 0.6, fondo)) * 0.5 + u_mare.z * smoothstep(0.35, 1.0, length(pend) * 2.5); // la schiuma: sulla riva e dove le onde sono ripide
-    colA = mix(colA, vec3(0.8) * (arriva * max(muS, 0.0) + ambiente), clamp(spuma, 0.0, 1.0));
+    // il cielo riflesso nella direzione speculare: la sua forma è quella di un'aria di Rayleigh a diffusione semplice
+    // (Chandrasekhar: L ∝ P(γ)·μ₀/(μ₀ − μ)·(e^(−τ/μ₀) − e^(−τ/μ)), τ = β_R·H di quest'aria), la sua media quella della tabella
+    // del cielo (diffusione multipla): prima il cielo riflesso era uniforme, e le onde da sopra non si vedevano
+    vec3 rif = reflect(-occhio, n); float muR = max(dot(rif, suM), 1e-3), mu0 = max(muS, 0.02), cg = dot(rif, u_sole);
+    vec3 tauR = u_betaR * u_atm.y, eR = exp(-tauR / muR), e0 = exp(-tauR / mu0);
+    vec3 forma = abs(mu0 - muR) > 1e-4 ? (mu0 / (mu0 - muR)) * (e0 - eR) : (tauR / mu0) * e0;
+    vec3 cieloRif = u_luce * cieloSu(muS) * (0.25 * 0.75 * (1.0 + cg * cg) * forma) / max(0.5 * mu0 * (1.0 - e0), vec3(1e-6)) * step(0.0, dot(rif, suM));
+    colA = base * (arriva * max(muS, 0.0) + ambiente) * (1.0 - fres) + cieloRif * fres + arriva * min(lampo * (0.02 + 0.98 * pow(1.0 - max(dot(occhio, hv), 0.0), 5.0)), 40.0);
+    // la schiuma: sulla riva (a mano) e, al largo, la parte del punto coperta dalle creste che frangono (Monahan), con la
+    // riflettanza efficace misurata della schiuma (0,22: Koepke 1984); quella risolta, a forma di cresta, sta nella finestra (finestra.js)
+    float spuma = (1.0 - smoothstep(0.0, 0.6, fondo)) * 0.5 + u_mare.z;
+    colA = mix(colA, vec3(spuma > u_mare.z ? 0.8 : 0.22) * (arriva * max(muS, 0.0) + ambiente), clamp(spuma, 0.0, 1.0));
   }
   if (asciutto > 0.0) { // TERRA (o ghiaccio)
     vec3 p = texture(u_pend, v_uv).rgb, base = lineare(texture(u_terra, v_uv).rgb); vec4 o1 = texture(u_oriz1, v_uv), o2 = texture(u_oriz2, v_uv);
@@ -604,21 +615,23 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       onde.lam[q] = lam; onde.k[q] = (2 * Math.PI) / lam; onde.cx[q] = Math.cos(az); onde.cy[q] = Math.sin(az); onde.fase[q] = 2 * Math.PI * ev(`fase ${j}/${a}`); onde.om[q] = Math.sqrt(g * onde.k[q] + 7.4e-5 * onde.k[q] ** 3); }
     return onde;
   }
-  // le ampiezze in un punto: lo spettro di Pierson e Moskowitz col picco dal periodo e la somma dall'altezza, sparso
-  // attorno al vento (cos²) e, per il mare lungo, stretto attorno alla sua direzione (lo stesso conto di mare.js)
+  // le ampiezze in un punto: dallo SPETTRO di finestra.js (Elfouhaily e altri 1997 con la direzione di Mitsuyasu e altri
+  // 1975, l'energia della parte lunga quella di campoOnde, il mare lungo a parte): ogni componente prende la varianza della
+  // sua cella (un terzo di decade in λ per un dodicesimo di giro), a = √(2·F·k²·Δln k·Δφ); corre con la ω di quell'acqua
+  // (la tensione superficiale e la densità di lì). La coda più corta delle componenti (sotto i 2 cm: le onde capillari)
+  // va nell'increspatura media (la pendenza quadratica media dello spettro oltre l'ultima: prima 0,0012 a mano)
   function ampiezzeOnde(m) {
-    const co = onde, out = co.amp; out.fill(0);
-    for (const [Hs, Tp, dx, dy, punta] of [[m.H, m.T, m.ax, m.ay, 2], [m.Hl, m.Tl, m.lx, m.ly, 10]]) { if (!(Hs > 1e-4) || !(Tp > 0)) continue; const kp = (2 * Math.PI / Tp) ** 2 / co.g, D = new Float64Array(12);
-      for (let j = 0; j < 16; j++) { let somma = 0; for (let a = 0; a < 12; a++) { const q = j * 12 + a, cs = Math.max(0, co.cx[q] * dx + co.cy[q] * dy); D[a] = Math.pow(cs, punta); somma += D[a]; }
-        const r = kp / co.k[j * 12], E = ((Hs * Hs) / 16) * 5 * r * r * Math.exp(-1.25 * r * r) * (Math.LN10 / 3); if (!(somma > 0)) continue;
-        for (let a = 0; a < 12; a++) { const q = j * 12 + a; out[q] = Math.sqrt(out[q] * out[q] + (2 * E * D[a]) / somma); } } }
+    const co = onde, out = co.amp; out.fill(0); const P = m.padre, sp = P && FI.spettro(P); if (!sp) return out;
+    const dLn = Math.LN10 / 3, dPhi = (2 * Math.PI) / 12;
+    for (let q = 0; q < co.n; q++) { const k = co.k[q], F = sp.F(k * co.cx[q], k * co.cy[q]); out[q] = Math.sqrt(Math.max(0, 2 * F * k * k * dLn * dPhi)); co.om[q] = FI.omega({ ...P, d: Infinity }, k); }
+    const kc = ((2 * Math.PI) / 0.02) * Math.pow(10, 1 / 6); m.mssCoda = sp.mss(kc, Math.max(kc * 1e3, 40 * P.km));
     return out;
   }
-  let ondeNelPunto = null; import('../camera/mare.js').then((m) => { ondeNelPunto = m.ondeNelPunto; }).catch(() => {});
+  let ondeNelPunto = null, FI = null; import('../camera/mare.js').then((m) => { ondeNelPunto = m.ondeNelPunto; }).catch(() => {}); import('../camera/finestra.js').then((m) => { FI = m; }).catch(() => {});
   function aggiornaOnde(lon, lat) {
-    if (!componentiOnde() || !ondeNelPunto || !O.onde) { ondeQui = null; return; }
+    if (!componentiOnde() || !ondeNelPunto || !FI || !O.onde) { ondeQui = null; return; }
     if (ondeDove && Math.abs(ondeDove[0] - lon) < 2e-4 && Math.abs(ondeDove[1] - lat) < 2e-4 && ondeQui) return;
-    ondeDove = [lon, lat]; const m = ondeNelPunto(S0.mare, lon / RAD, lat / RAD); ampiezzeOnde(m); ondeQui = m;
+    ondeDove = [lon, lat]; const m = ondeNelPunto(S0.mare, lon / RAD, lat / RAD); m.padre = FI.padreMare(S0.mare, lon / RAD, lat / RAD, { acqua: true }); ampiezzeOnde(m); ondeQui = m;
   }
 
   // ---------- le nuvole: la copertura e i venti di meteo.js in un'immagine (rifatta quando la stagione cambia)
@@ -632,7 +645,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   }
 
   // ---------- quali pezze disegnare: si scende nell'albero finché le maglie sono abbastanza piccole sullo schermo
-  let lista = [], pezze = 0, triangoli = 0, fotogramma = 0;
+  let lista = [], pezze = 0, triangoli = 0, fotogramma = 0, ondeUsate = 0, vertUsate = 0;
   const stato = { A: null, Ap: null, versoC: [0, 0, 0], occhioCorpo: [0, 0, 0], assi: null, sole: [1, 0, 0], dStella: 1, E: 1, quota: 0 };
   const Lstella = () => corpoStella.luminosita || P.Lw || 3.8e26, espo = (S) => (N.opzioni.esposizione > 0 ? N.opzioni.esposizione : S.espo(stato.E));
   // quanto il terreno di una pezza si scosta dal piano tra i suoi angoli (m): 5 × 5 punti letti dalla tessera
@@ -727,7 +740,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         const passo = (R * z.dLat) / MY; gl.uniform3f(u.u_orlo, Math.max(2, passo * 3 + (z.d < 3 ? R * 0.02 : 0)), O.rilievo, tOnde);
         // le onde di questa pezza: quelle che le sue maglie risolvono muovono i vertici; quelle più corte, fino a ciò
         // che un punto dello schermo distingue, piegano solo la luce; ciò che è ancora più piccolo allarga il riflesso
-        let nV = 0, nF = 0, fine = 0.0012, schiuma = 0;
+        let nV = 0, nF = 0, fine = m && m.mssCoda > 0 ? m.mssCoda : 0, schiuma = 0;
         if (t.haAcqua && co && m) {
           const pxM = z.dist / S.fuoco, X0 = R * cf * z.lon0, Y0 = R * z.lat0, scelteF = [];
           for (let q = 0; q < co.n; q++) { const a = co.amp[q]; if (a * co.k[q] < 2e-3) continue; const lam = co.lam[q];
@@ -740,10 +753,10 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
             // (la fase al centro della pezza si conta in doppia precisione: X = R·cos(lat)·lon, Y = R·lat, come in mare.js; dentro la pezza conta lo scarto in metri)
             if (lam > 4 * passo && nV < N_ONDE && z.dist < 4e5) { ondaV.set([ke, kn, a, f0], 4 * nV); pulsaV[nV++] = co.om[q]; }
             if (nF < N_ONDE) { ondaF.set([ke, kn, a, f0], 4 * nF); pulsaF[nF++] = co.om[q]; } else fine += 0.5 * (a * co.k[q]) ** 2; }
-          schiuma = Math.min(1, (m.creste || 0) * 30);
+          schiuma = m.padre ? m.padre.copertura : m.creste || 0; // (la parte di mare coperta dalla schiuma: Monahan e O'Muircheartaigh 1980; prima ×30 a mano)
         }
         gl.uniform1i(u.u_nOnde, nV); if (nV) { gl.uniform4fv(u.u_onda, ondaV); gl.uniform1fv(u.u_pulsa, pulsaV); }
-        gl.uniform1i(u.u_nOndeF, nF); if (nF) { gl.uniform4fv(u.u_ondaF, ondaF); gl.uniform1fv(u.u_pulsaF, pulsaF); }
+        ondeUsate = Math.max(ondeUsate, nF); vertUsate = Math.max(vertUsate, nV); gl.uniform1i(u.u_nOndeF, nF); if (nF) { gl.uniform4fv(u.u_ondaF, ondaF); gl.uniform1fv(u.u_pulsaF, pulsaF); }
         gl.uniform4f(u.u_mare, tOnde, fine, schiuma, z.lon0 * sf); gl.uniform1f(u.u_lon0, z.lon0);
         gl.drawElements(gl.TRIANGLES, griglia.n, gl.UNSIGNED_SHORT, 0);
       }
@@ -852,6 +865,6 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     // che cosa c'è in un punto: quota del terreno (m), se c'è acqua e quanto è profonda
     info: (lon, lat) => { const [h, l] = leggi(lon, lat); return { quota: h, acqua: l > h, profondita: l > h ? l - h : 0, livello: l }; },
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,
-    statistiche: () => { let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; return { pezze, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
+    statistiche: () => { const ondeF = ondeUsate, ondeV = vertUsate; ondeUsate = 0; vertUsate = 0; let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; return { pezze, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, ondeF, ondeV, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
   };
 }

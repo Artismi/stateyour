@@ -185,10 +185,11 @@ export const FONTI = {
 // specie (solo per chi non ha ingressi): 'evento' (esce dalla fonte unica del caso) .
 // ciò da cui dipende ogni gas dell'aria: che cosa c'è (l'acqua e i ghiacci arrivati con lei, i metalli della stella), che
 // cosa la gravità tiene, e che cosa a quella temperatura gela, piove o finisce nel calcare
-// (I METALLI DELLA STELLA non stanno tra questi, e non è un filo staccato: nel modello i metalli scalano tutti insieme
-// con un solo Z, quindi carbonio, azoto e zolfo PER UNITÀ D'ACQUA sono gli stessi per ogni stella — atmosfera() li
-// prende da abbondanze(1), e con abbondanze(Z) verrebbe lo stesso numero —; Z entra da quanta acqua il disco ha dato al
-// pianeta (pianeta.acqua). Conta direttamente solo per chi ha tenuto il velo di idrogeno del disco: lo misura la prova.)
+// (I METALLI DELLA STELLA non stanno tra questi. Prima non era un filo staccato: i metalli scalavano tutti insieme con un solo
+// Z, e carbonio, azoto e zolfo PER UNITÀ D'ACQUA erano gli stessi per ogni stella. Con la catena degli elementi (elementi.js,
+// lavoro 8) la miscela di nascita della stella — C/O, N/O che cambiano con la sua età e la sua galassia — decide quanti ne
+// portano i ghiacci di ogni suo pianeta: QUESTO FILO MANCA al grafo, perché la miscela non è ancora una grandezza dichiarata
+// qui. Z entra da quanta acqua il disco ha dato al pianeta (pianeta.acqua) e, per chi ha il velo di idrogeno, direttamente.)
 const ARIA_DA = ['clima.temperatura', 'acqua.stato', 'aria.gasTenuti', 'pianeta.acqua'];
 const gasDellAria = (formula, nome, intervallo = [1e-8, 1]) => ({ nome: `aria.${formula}`, descrizione: `la parte di ${nome} nell'aria (in volume)`, unita: '1', livello: 'pianeta', gruppo: 'aria', leggi: `P.atmosfera.gas.${formula}`, seManca: 0,
   fonte: 'atmosfera', esce: `gas.${formula}`, dipende: [...ARIA_DA, ...(formula === 'CO2' ? ['aria.co2Ciclo'] : formula === 'H2' ? ['pianeta.involucro'] : [])], intervallo, passo: 'rel', trascurabile: 1e-6, vale: { 'pianeta.tipo': SOLIDI } });

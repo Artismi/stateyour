@@ -68,9 +68,9 @@ Conseguenze:
 |---|---|---|---|
 | 1 Lingua | grammatica unica, andata e ritorno, HEALPix, peso per livello, punto a caso, impronta; una forma sola in tutto il programma, anche nei cosmi paralleli (lavoro 3) | — | C1 |
 | 2 Caso | fonte unica, ordine indifferente; Threefry‑4×32‑20 con chiave a 128 bit (vettori noti Random123, SmallCrush e Crush di TestU01 passati); il registro annota la legge di ogni tiro (`bernoulli`, `discreta`, …) | i moduli che dichiarano la legge dei loro tiri (oggi quasi tutti leggono tiri nudi e pesano 1); BigCrush | C2, C3 |
-| 3 Leggi | cosmo senza bordo; galassie, stelle, pianeti, storia termica, clima, erosione, mare, chimica, grani, atomi, scala quantistica; zoom senza salti; la coerenza tra le scale provata passaggio per passaggio, dal campo del cosmo ai quark (`test_coerenza_scale`: C6 su 15 passaggi, C8 misurata dove ci sono due grane; lavoro 5) | M (o μ) dove la tabella dice «manca»: il posto delle galassie vere, il sistema delle stelle vere, le regioni della magnetosfera, un'evoluzione a due grane sotto gli atomi; le incoerenze note della tabella (la quota media delle tessere, le celle non neutre di feldspati e biotite); un limite dal modello al difetto delle soglie di comodo (la gigante, il clima: oggi solo misurato); lo stato a un istante diverso da «adesso» sopra le particelle; la vita | C6, C7, C8, C14 |
+| 3 Leggi | cosmo senza bordo; galassie, stelle, pianeti, storia termica, clima, erosione, mare, chimica, grani, atomi, scala quantistica; zoom senza salti; la coerenza tra le scale provata passaggio per passaggio, dal campo del cosmo ai quark (`test_coerenza_scale`: C6 su 15 passaggi, C8 misurata dove ci sono due grane; lavoro 5); la catena degli elementi, dalla galassia al mare, con il libro dei conti elemento per elemento (lavoro 8) | M (o μ) dove la tabella dice «manca»: il posto delle galassie vere, il sistema delle stelle vere, le regioni della magnetosfera, un'evoluzione a due grane sotto gli atomi; le incoerenze note della tabella (la quota media delle tessere, le celle non neutre di feldspati e biotite); per gli elementi: le perdite di volatili durante l'accrescimento (il cloro), le rese delle giganti rilette, il decadimento nel libro dei conti; un limite dal modello al difetto delle soglie di comodo (la gigante, il clima: oggi solo misurato); lo stato a un istante diverso da «adesso» sopra le particelle; la vita | C6, C7, C8, C14 |
 | 4 Misura | indice del cosmo (Elias γ, libero), galassia per massa, stella per peso, pianeta per area, luogo per area, tempo sulla vita della stella | pesi degli esiti (in corso); dal campione al vero (in corso); fusioni (in corso); cervelli di Boltzmann contati (in corso); momenti d'osservatore (serve la vita) | C4, C5, C11, C13 |
-| 5 Vista | trasporto di luce: aria, polvere, nebulose, buco nero, galassia e ragnatela come volumi, accumulo nel tempo; **l'occhio** come rivelatore (si adatta alla luminanza misurata nella fovea, 2° attorno al centro, soglia assoluta, visione crepuscolare, adattamento al colore di CIECAM02); l'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 128 righe, 20 dal modello, 36 discretizzazioni, 72 a mano di cui 8 tolte); la convergenza dei passi dei volumi, dell'aria, delle tabelle del cielo e dell'accumulo (`test_vista`, lavoro 7) | le 64 scelte a mano rimaste (la curva di tonalità, l'abbagliamento e le soglie di visibilità, le nuvole, la foschia, le popolazioni della galassia, gli anelli…); la convergenza delle griglie dei volumi, della riduzione, del salto del vuoto, della luce zodiacale, del rilievo; la ragnatela in moto (non torna); la prova su scheda grafica vera; uno strumento dichiarato accanto all'occhio (la lunga esposizione) | C12 |
+| 5 Vista | trasporto di luce: aria, polvere, nebulose, buco nero, galassia e ragnatela come volumi, accumulo nel tempo; **l'occhio** come rivelatore (si adatta alla luminanza misurata nella fovea, 2° attorno al centro, soglia assoluta, visione crepuscolare, adattamento al colore di CIECAM02); l'elenco delle scelte a mano (`reports/Scelte a mano nella vista.md`: 144 righe, 27 dal modello, 41 discretizzazioni, 76 a mano di cui 9 tolte); la finestra a ogni distanza per l'acqua (lavoro 9); la convergenza dei passi dei volumi, dell'aria, delle tabelle del cielo e dell'accumulo (`test_vista`, lavoro 7) | le 67 scelte a mano rimaste (la curva di tonalità, l'abbagliamento e le soglie di visibilità, le nuvole, la foschia, le popolazioni della galassia, gli anelli…); la convergenza delle griglie dei volumi, della riduzione, del salto del vuoto, della luce zodiacale, del rilievo; la ragnatela in moto (non torna); la prova su scheda grafica vera; uno strumento dichiarato accanto all'occhio (la lunga esposizione) | C12 |
 | Bolle | campo condizionato esatto, antenato comune nel punto e nel tempo; l'impronta di bordo (O11: armoniche dei campi sulla sfera, ℓmax dalla grana), l'incollamento sul bordo comune e la ricostruzione dal bordo, l'antenato tra luoghi e istanti diversi in tempo conforme (η_c), il cono di luce dei rami del campo (lavoro 6: `bordo.js`) | le impronte nel cosmo con le sue galassie (insieme in `vincola`); temperatura, campo magnetico e radianza sul bordo; Gauss e Dirichlet con i nuclei troncati; l'antenato di più di due eventi quando non lo sostiene una coppia; il cono di luce sopra il campo (i rami di stelle e pianeti hanno ancora solo il contenitore); le distanze tra contenuti («una stella a un metro da un fiocco di neve») | C9, C10, C15 |
 | Passo | «pianeta parallelo», «ramo parallelo più pulito» | il nucleo P(a′\|a) nel tempo e di lato, con Chapman–Kolmogorov | C16 |
 
@@ -138,11 +138,85 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    galassia (supernove II e Ia, giganti, con i loro tempi), il disco per temperature di condensazione, il pianeta che si
    separa (coefficienti di ripartizione metallo/silicato), la crosta per fusione parziale (elementi incompatibili), aria e
    mare da ciò che si libera e si scioglie. *Fatto quando:* il libro dei conti torna elemento per elemento in ogni
-   serbatoio, ed è una riga della tabella di coerenza.
+   serbatoio, ed è una riga della tabella di coerenza. (Fatto: `src/camera/elementi.js`, `test_elementi`, 11 prove in ~10 s,
+   e due righe di `test_coerenza_scale`. GALASSIA → STELLA: in `galassie.js` ogni serbatoio di metalli (il gas di ogni anello,
+   l'alone caldo, il vento, le generazioni di stelle, i compagni) ha accanto i suoi sette CANALI — le supernove da collasso di
+   quattro metallicità, le Ia, il carbonio e l'azoto delle giganti — che si muovono con lui: Σ canali = metalli entro 10⁻¹⁴; ogni
+   canale ha la sua ricetta, elemento per elemento (Kobayashi et al. 2006, tab. 3, letta su arXiv: collasso e ipernove, e la W7;
+   le rese nuove sono il totale meno l'ejecta per la composizione iniziale; le giganti da Karakas 2010, RICORDATE), con i tempi
+   delle vite e dei ritardi delle Ia che la galassia usava già; le giganti ora danno anche C e N nuovi, che entrano in Z. Ogni
+   stella del catalogo porta il passo e l'anello di nascita, e `miscelaDiNascita` dà la miscela del suo gas: in tutte le 57
+   galassie con stelle abbastanza le nate nel primo terzo della storia sono più ricche di α (½[O/Fe]+½[Mg/Fe]) di quelle
+   nell'ultimo terzo, o mai meno oltre 4 scarti; in tutto +0,09 dex (errore 7·10⁻⁴; il vero 0,2–0,3: le stelle si fanno
+   presto e il gas che ricade porta i metalli vecchi); [Na/Fe] cresce con Z. DISCO → PIANETA: la miscela protosolare di Wang
+   et al. 2019 (tab. 1, letta), o quella della stella; ogni elemento condensa alla sua temperatura del 50% (Lodders 2003,
+   RICORDATE) con Clausius–Clapeyron e l'entropia di Trouton; il ferro si ossida nel gas freddo (Fe + H2O ⇌ FeO + H2, la
+   tabella di `chimica.js`); la temperatura è la più alta tra la luce della stella e il gas che cade (la legge del bordo
+   interno). Ogni pianeta somma la roccia degli embrioni di cui è fatto (chi è caduto su chi): i rocciosi nati sopra il
+   T50 hanno Na 0,08, K 0,12, Cl 0,03, Zn e S 0 di quelli nati sotto. SEPARAZIONE: metallo e silicato all'equilibrio
+   (log K_D = a + b/T + c·P/T; Ni, Co, V, Cr, Mn, Si, W, Mo, P; O con il suo K_D; D misurati per S, Cu, Zn, Ag, Sn, As,
+   Pt, Au, C), a 3/5 della pressione del nucleo finale (la crescita) e a metà tra solidus e liquidus (Rubie et al. 2015;
+   Andrault et al. 2011): fO2 esce dall'ossigeno conservato. Il nucleo è il «ferro» del pianeta (raggio, interno). CROSTA:
+   fusione d'equilibrio del mantello con la frazione fusa media della storia di quel pianeta (`storia.js`), il basalto di oggi
+   e i continenti di `tettonica.js` come seconda fusione: il fattore di K, U, Th è esattamente quello dei coefficienti.
+   ARIA E MARE: `chimica.js` e `leggi.js` leggono mantello, crosta, ghiacci e zolfo del pianeta; `mare.js` scioglie la SUA
+   crosta, e le tracce (Li, B, F, Br, I, Sr, U, Mo, Fe, Mn, P, Rb, Ba, Si) entrano dai fiumi e dai vulcani, escono sepolte, nel
+   calcare o al limite di fluorite, celestina, apatite, uraninite, ruggine, rodocrosite (campo `tracce`, a parte da `totali`).
+   IL LIBRO DEI CONTI: per ogni elemento nucleo, mantello, crosta, mare, aria, ghiacci, involucro; la somma è ciò che il disco
+   ha dato (scarto 2·10⁻¹⁶ sul pianeta come la Terra con il suo mare, 7·10⁻¹⁵ su 69 pianeti) e nessuno è scoperto. Facendolo
+   sono uscite quattro non-conservazioni vecchie, corrette: l'acqua dei ghiacci che contava anche il CO e l'NH3 (il mare aveva
+   un terzo d'acqua di troppo), la colonna dell'aria con il carbonio come CO2 e lo zolfo come SO2 (e la massa dell'idrogeno
+   fuggito data agli altri gas), il CO dei ghiacci che prendeva un ossigeno già dato all'acqua, lo zolfo e il carbonio dati
+   all'aria da una roccia che non ne aveva. Il pianeta come la Terra (il primo del catalogo: stella 0,8–1,2 M☉ viva, roccioso
+   di 0,5–2 masse terrestri, placche, mare): nucleo 0,373 della massa (Terra 0,325), FeO del mantello 8,6% (8,1), Si nel nucleo
+   2,7% (5), crosta 0,8% (0,5). NON TORNA, dichiarati: a quelle temperature la condensazione tiene tutto il cloro (365 ppm nel
+   mantello contro 16: mancano le perdite durante l'accrescimento) e il mare diventa una salamoia (330 g/kg); [C/O] (−0,44
+   dex) e [K/Fe] (−1,1) delle stelle sotto il Sole (le rese di Kobayashi ne fanno poco: per il potassio è un difetto noto); la crosta dei continenti ha K ×16 il mantello (vera ~60: la
+   F media di `storia.js`, 0,3, è alta); Pt e Au restano poveri nel mantello (manca l'ultima vernice); oltre ~100 GPa le leggi di
+   ripartizione sono estrapolate (le super-Terre fanno nuclei grandi, ricchi di silicio). Il costo di `sistema()`: vedi il
+   rapporto del lavoro; `cosmo()` costa ~1,6 volte, per i canali dei metalli.)
 9. **La finestra a ogni distanza** — cominciando dall'acqua: da lontano lo spettro delle onde dal vento; a metri il campo
    delle onde di quel tratto, la schiuma, la corrente; a centimetri increspature, bolle, granelli; a micron fiocchi di
    argilla; a nanometri l'acqua liquida con ogni specie disciolta nel suo numero. Poi la roccia, l'aria, il suolo.
    *Fatto quando:* a ogni distanza si vede ciò che c'è (mai un cristallo solo nel vuoto) e la finestra riassunta ridà il padre.
+   (Fatto per l'acqua: `src/camera/finestra.js`, `test_finestre` (11 prove; ~38 s, di cui ~28 per costruire il pianeta con la sua circolazione) e
+   9 righe nuove di `test_coerenza_scale`. Il padre è lo stato del mare in quel punto, letto solo dalle funzioni di mare.js
+   (vento di meteo.js, Hs e periodo di campoOnde col tratto libero, corrente, temperatura, salinità, ioni, torbidità): chi
+   cambia la chimica del bilancio dei sali cambia da sé ciò che si vede. Le grane non sono soglie: ogni popolazione si
+   mostra dove la sua taglia sta tra un punto dell'immagine e il lato della finestra. DA LONTANO lo spettro di Elfouhaily e
+   altri 1997 (la parte lunga con l'energia di campoOnde, la coda capillare dalla velocità d'attrito), la direzione di
+   Mitsuyasu, la dispersione gravità-capillarità con la tensione superficiale di quell'acqua (IAPWS, Sharqawy) e la
+   durata del vento contro il tratto (CEM): anche il 3D (pianeta.js) prende da lì le sue componenti, l'increspatura sotto lo
+   schermo (prima 0,0012 a mano) e la schiuma (Monahan, riflettanza di Koepke; prima «creste × 30»), e riflette il cielo secondo la pendenza (prima la sua media: da sopra, le onde si vedevano solo per la schiuma a mano). A METRI E CENTIMETRI il
+   campo delle onde di quel quadrato soltanto: ottave di tessere periodiche di Tessendorf sovrapposte a metà, ampiezze dagli
+   eventi del tratto (due finestre sovrapposte: scarto 0 su 8364 punti), ogni onda con la sua ω e il Doppler della corrente;
+   la varianza della banda di 1 m e di 1 cm è l'integrale dello spettro su quelle corone (entro 4 scarti su 24 finestre); la
+   schiuma dove l'accelerazione delle onde lunghe di vento supera la soglia che dà W (⟨Y²⟩ = 1,0 ± 0,15); il riflesso della
+   stella con Cox e Munk e il cielo di Rayleigh. Le BOLLE di Deane e Stokes sotto la schiuma (mediate sulla copertura sono
+   quelle di mare.js, esatte; contate: 3702 contro 3680 ± 243), i GRANELLI e i FIOCCHI con le taglie di Stokes e la massa
+   della torbidità (esatta), i gas delle bollicine dall'aria del pianeta; il plancton no (la vita non c'è, e lo si dice). A
+   NANOMETRI l'acqua liquida fitta dal potenziale mW (`acqua_mw.js`, generata da `strumenti/acqua_mw.mjs` col Monte Carlo:
+   −10,05 kcal/mol come Molinero e Moore, vicine entro 3,3 Å 4,3 come i raggi X) alla densità di quell'acqua, ogni ione
+   Poisson sul volume e la scatola neutra: al posto del cristallo di sale su un reticolo cubico. I costi: la finestra si
+   crea in 20–100 ms quando la si guarda, poi 10–25 ms per immagine, rifatta al più 20 volte al secondo. Non torna: la
+   schiuma istantanea, il cielo senza diffusione multipla né nuvole (da sopra, senza riflesso della stella, le increspature
+   si vedono appena), il guscio degli ioni con 4 vicine invece di 6, la stella della finestra a mezzogiorno dell'equinozio.)
+   COME PASSERÀ ALLA ROCCIA, ALL'ARIA E AL SUOLO (la stessa struttura, non ancora fatta): (1) un PADRE letto dalle funzioni
+   di chi lo calcola, mai copiato — per la roccia la tessera di geologia.js e il suo materiale (rocce.js, grani.js,
+   materia.js), per l'aria la colonna di meteo.js e di pianeta.js (vento, umidità, nuvole, aerosol), per il suolo
+   l'erosione e il deposito di geologia.js col clima; (2) per ogni grana una LEGGE STATISTICA del contenuto — il rilievo
+   come spettro di potenza della quota (la rugosità frattale della tessera, condizionata alla media della madre), i grani
+   della roccia dalla nascita e crescita dei cristalli (Johnson-Mehl di grani.js) e le fratture; nell'aria la turbolenza di
+   Kolmogorov (E(k) ∝ ε^⅔·k^−5/3, con ε dal vento e dallo strato limite), le gocce e i cristalli di nube con la loro
+   distribuzione dall'acqua liquida di meteo.js; nel suolo la granulometria (Sheldon o Rosin-Rammler dall'erosione), i pori
+   e l'acqua che contengono; (3) le TESSERE e le CELLE con indirizzo nel tratto (la cella della griglia del padre): ottave
+   sovrapposte a metà per i campi continui (quota, velocità del vento, umidità), celle di lato n^(−1/3) per le
+   popolazioni (grani, gocce, aggregati), così che due finestre sovrapposte concordino; (4) le PROVE nella forma di
+   test_finestre: sovrapposte uguali, la varianza della banda uguale all'integrale dello spettro (la quota della roccia, la
+   velocità dell'aria), i conteggi di Poisson, la massa (la composizione modale della roccia, l'acqua liquida della nube, la
+   porosità del suolo) — e la quota media della finestra di roccia che ridà la tessera, oggi una NON TORNA nota; (5) la
+   VISTA: lo stesso livello 5 di mappa.js (rocciaDi), dove oggi la roccia è un'immagine fatta prima (cristallizza) e non un
+   campione della finestra.)
 10. **La chimica che si muove da sé** (era «la vita in potenza») — la regola zero applicata alla chimica del pianeta, con
    la rilevazione di ciò che emerge e la stima degli eventi rari; da qui i momenti d'osservatore. Base:
    `reports/Regole per la vita in potenza.md`, riletta come elenco di prove, non di passi.

@@ -28,7 +28,8 @@ import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
 import { sorgente, numero, contatore } from './eventi.js';
-import { formaGalassia, stelleGalassia } from './galassie.js';
+import { formaGalassia, stelleGalassia, miscelaDiNascita } from './galassie.js';
+import { crostaDelPianeta } from './elementi.js'; // la catena degli elementi: la crosta
 import { motiRegione } from './spazio3d.js'; // (i due moduli si chiamano a vicenda, ma solo dentro le funzioni) // le galassie come conseguenza: alone → gas → stelle → metalli
 import { anelli } from './anelli.js';
 import { lune, tempoBlocco } from './lune.js';
@@ -203,7 +204,11 @@ export const sistemaPigro = memo((n, gid, sid) => {
   // e diventa un gigante. Numero, posizione, massa, tipo e composizione vengono da lì. Le stelle di neutroni
   // e i buchi neri non hanno pianeti: la supernova li ha dispersi.
   const morta = S.stato === 'stella di neutroni' || S.stato === 'buco nero';
-  const nascita = { massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta }, semeDisco = casoDisco(n, gid, sid);
+  // LA CATENA DEGLI ELEMENTI (elementi.js): il gas da cui la stella è nata ha la miscela che la storia della sua galassia gli
+  // ha dato in quell'anello a quel passo (galassie.js miscelaDiNascita: i metalli per canale, cioè chi li ha fatti); da lì il
+  // disco e i pianeti, elemento per elemento
+  const miscela = miscelaDiNascita(galassia(n, gid).forma, S);
+  const nascita = { massa: S.massaNascita || S.massa, Z: S.Z ?? 1, eta: S.eta, ...(miscela ? { abbondanze: miscela.abbondanze } : {}) }, semeDisco = casoDisco(n, gid, sid);
   const nati = morta ? [] : formaPianeti(nascita, semeDisco).slice(0, PIANETI_MAX);
   const pianeti = nati.map((q, k) => {
     const a = q.aUA / 30, fase = tra(0, 2 * Math.PI);
@@ -249,6 +254,9 @@ export const sistemaPigro = memo((n, gid, sid) => {
     // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
     p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
     p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
+    // LA CROSTA di questo pianeta (elementi.js: la fusione del SUO mantello con la frazione fusa della SUA storia), accanto alla
+    // composizione, non enumerabile come gli elementi: chimica.js ne fa le rocce che la pioggia consuma, mare.js le tracce
+    if (p.composizione?.elementi) Object.defineProperty(p.composizione, 'crosta', { value: crostaDelPianeta(p, { stella: S }), enumerable: false, configurable: true, writable: true });
     // l'acqua alla superficie: la stessa per il mare, per il clima e per l'interno (leggi.js)
     const acqua = acquaInSuperficie(p);
     p.interno.acquaKg = acqua.kg;

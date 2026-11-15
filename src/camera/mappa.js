@@ -23,6 +23,7 @@ import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRAN
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
+import { finestraAcqua, immagineFinestra, scenaNano } from './finestra.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
 import { campoGrani, granoGhiaccio, popolazioneTracce } from './grani.js';
@@ -569,19 +570,17 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
     if (cam.eventoAcqua) return eventoNellAcqua(cam, S, k, u, v, profondo);
     const lato = cam.latoAcqua ?? 1, ka = `${k}|acqua|${lato}`; let A = rocceFatte.get(ka);
     if (!A) {
-      const camp = campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
-      const NA = 192, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
-      // ciò che c'è davvero in questo campione ma a questa scala non si distingue (troppo piccolo: fa da velo), con i numeri veri
-      const velo = (camp.velo || []).slice().sort((p, q) => q.quanteDavvero - p.quanteDavvero).slice(0, 3).map((x) => `${fmtGrande(x.quanteDavvero)} ${x.tipo === x.materiale ? x.tipo : `${x.tipo} di ${x.materiale}`} da ${fmtLunghezza(x.diametroM)}`);
-      const ioni = Object.entries(camp.ioni || {}).map(([f, x]) => [f, x?.nelCampione ?? 0]).filter(([, n]) => n >= 1).sort((p, q) => q[1] - p[1]).slice(0, 3).map(([f, n]) => `${fmtGrande(n)} ${f}`);
-      const dentro = [...velo, ...ioni].length ? ` In questo campione ci sono davvero: ${[...velo, ...ioni].join('; ')}${lato > 1e-7 ? ' (troppo piccoli per vedersi a questa scala: avvicinati ancora)' : ''}.` : '';
-      A = { cv: cvA, camp, acqua: true, N: NA, nome: `acqua (un campione largo ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${camp.descrizione}${dentro}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: tempoMappa(), punto: { u, v, profondo } };
+      // LA FINESTRA (finestra.js, PROGETTO.md lavoro 9): a ogni lato si calcola con la legge di quella grana solo il quadrato
+      // inquadrato, come campione del mare di sopra: le onde di quel tratto (dallo spettro del vento, con le fasi degli eventi
+      // del tratto), la schiuma, la corrente, le bolle, i granelli e i fiocchi nel loro numero
+      const fin = finestraAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, P: S.P }), camp = fin.popolazioni?.campione || campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
+      const NA = fin.N || 128, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
+      A = { cv: cvA, camp, fin, acqua: true, N: NA, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${fin.descrizione || camp.descrizione}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo } };
       rocceFatte.set(ka, A); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
     }
-    // l'acqua si muove: il campione ridisegnato all'istante di adesso (il tempo del campione è rallentato o accelerato
-    // perché l'attraversamento duri qualche secondo di schermo)
-    const tt = (((tempoMappa() - A.t0) / ACCELERA) * (A.camp.tempoAttraversamento || 1)) / 6;
-    A.cv.getContext('2d').putImageData(new ImageData(immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0);
+    // il mare si muove nel tempo vero (le onde corrono con la loro ω); la finestra si ridisegna al più venti volte al secondo
+    const tt = performance.now() / 1000 - A.t0;
+    if (tt - A.ultimo >= 0.05 || A.ultimo < 0) { A.ultimo = tt; A.cv.getContext('2d').putImageData(new ImageData(A.fin && !A.fin.asciutto ? immagineFinestra(A.fin, tt) : immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0); }
     return A;
   }
   const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
@@ -794,7 +793,8 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
     const lato = cam.latoAcqua ?? 1; if (cam.eventoAcqua || lato > 1.0001e-8 || !r.punto || cam.z < 0.85 * m) return null; const { u, v, profondo } = r.punto;
     return { acqua: true, chiave: `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, che: `le molecole e gli ioni di quest'acqua in un cubetto di ${fmtLunghezza(lato)}`,
       // (l'acqua attorno: le copie periodiche del cubetto, otto attorno a quello del punto, nel piano che si guarda)
-      crea: () => periodica(conMoto(scenaMolecolare(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]) };
+      // (finestra.js scenaNano: l'acqua liquida alla sua densità e con la sua struttura, ogni ione nel suo numero e nel suo guscio)
+      crea: () => periodica(conMoto(scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]) };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
   return { acqua: false, chiave: `${r.luogo.indirizzo}|atomi3d|${r.minerale}`, che: `tre nanometri di ${r.minerale.replace(" d'acqua", '')}`,

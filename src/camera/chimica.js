@@ -11,8 +11,10 @@
 //              · la pressione del vapore sull'acqua e sul ghiaccio, l'anidride carbonica che il mare lascia
 //                nell'aria (equilibrio di Urey), quale ossido di ferro è stabile: tutte dalla stessa tabella;
 //              · l'atmosfera di un pianeta: ciò che c'era, meno ciò che fugge, lasciato reagire e condensare;
-//              · la roccia: il mantello ha le proporzioni del Sole, la crosta è ciò che ne fonde per primo
-//                (legge della fusione parziale), i minerali sono quelli che gli atomi permettono (norma);
+//              · la roccia: il mantello è quello del pianeta (la catena degli elementi, elementi.js: la roccia del suo
+//                disco separata dal suo nucleo; per i pianeti fatti a mano le proporzioni del Sole), la crosta è ciò che
+//                ne fonde per primo (legge della fusione parziale; quella del pianeta, se cosmo.js gliel'ha data), i
+//                minerali sono quelli che gli atomi permettono (norma);
 //              · il colore di una miscela di polveri (legge di Kubelka-Munk).
 //   MISURATO   · la tavola degli elementi (masse, elettronegatività, abbondanze nel Sole, legami semplici);
 //              · entalpie ed entropie di formazione; calori di evaporazione e punti di ebollizione;
@@ -64,6 +66,31 @@ export const abbondanze = (Z = 1, { tracce = false } = {}) => Object.fromEntries
 // tabella, calcolata una volta per ogni Z (chiave esatta) e congelata. Chi le vuole per scriverci chiama abbondanze())
 const ABBONDANZE_FISSE = new Map();
 const abbondanzeFisse = (Z = 1) => { let a = ABBONDANZE_FISSE.get(Z); if (!a) { a = Object.freeze(abbondanze(Z)); if (ABBONDANZE_FISSE.size > 256) ABBONDANZE_FISSE.clear(); ABBONDANZE_FISSE.set(Z, a); } return a; };
+// LA CATENA DEGLI ELEMENTI (elementi.js): un pianeta di sistema() porta nella composizione (non enumerabili) i suoi elementi —
+// la miscela della stella da cui è nato, la roccia, il nucleo e il silicato dopo la separazione, i ghiacci —. Dove ci sono,
+// questo modulo legge quelli invece della tavola del Sole: la miscela della stella (atomi per idrogeno, sui quindici elementi
+// della tavola), il mantello (atomi per atomo di silicio dei sette che fanno i minerali; il ferro è quello rimasto nel silicato
+// come FeO), il cloro e lo zolfo del mantello (mol per kg di silicato) e il carbonio che l'acqua gli ha portato e che non è
+// uscito né è finito nel nucleo (disco.js: la parte dentro dei ghiacci, divisa col metallo). Un pianeta fatto a mano (le prove) resta con la tavola del Sole.
+const DEL_PIANETA = new WeakMap();
+export function delPianeta(comp) {
+  const el = comp?.elementi; if (!el || !el.simboli) return null; let d = DEL_PIANETA.get(el); if (d) return d;
+  const S = el.simboli, kg = (v, e) => { const i = S.indexOf(e); return i >= 0 ? v[i] || 0 : 0; }, X = el.stella, nH = X.H / ELEMENTI.H.massa, stella = {};
+  for (const e in TAVOLA) stella[e] = (X[e] || 0) / ELEMENTI[e].massa / nH;
+  let Msil = 0; for (const v of el.silicato) Msil += v;
+  const mol = (e) => kg(el.silicato, e) / ELEMENTI[e].massa, si = mol('Si');
+  const mantello = si > 0 ? { Si: 1, Mg: mol('Mg') / si, Fe: mol('Fe') / si, Al: mol('Al') / si, Ca: mol('Ca') / si, Na: mol('Na') / si, K: mol('K') / si } : null;
+  const rimasto = Msil > 0 ? { Cl: (1000 * mol('Cl')) / Msil, S: (1000 * mol('S')) / Msil, C: (1000 * kg(el.acquaDentro, 'C')) / ELEMENTI.C.massa / Msil } : null;
+  d = Object.freeze({ stella: Object.freeze(stella), mantello: mantello && Object.freeze(mantello), rimasto: rimasto && Object.freeze(rimasto), zolfoMoli: mol('S') }); DEL_PIANETA.set(el, d); return d;
+}
+// la crosta di QUEL pianeta (elementi.js crostaDelPianeta, che cosmo.js mette accanto alla composizione): basalto e granito in
+// atomi per atomo di silicio, come il mantello; null dove non c'è (e allora le rocce si fanno dal mantello, come prima)
+const CROSTA_DEL_PIANETA = new WeakMap();
+export function crostaDiPianeta(comp) {
+  const c = comp?.crosta, el = comp?.elementi; if (!c || !el?.simboli) return null; let d = CROSTA_DEL_PIANETA.get(c); if (d) return d;
+  const S = el.simboli, perSi = (v, M) => { if (!(M > 0)) return null; const mol = (e) => (v[S.indexOf(e)] || 0) / ELEMENTI[e].massa, si = mol('Si'); return si > 0 ? { Si: 1, Mg: mol('Mg') / si, Fe: mol('Fe') / si, Al: mol('Al') / si, Ca: mol('Ca') / si, Na: mol('Na') / si, K: mol('K') / si } : null; };
+  d = Object.freeze({ basalto: perSi(c.basalto, c.Mbasalto), granito: perSi(c.granito, c.Mgranito) }); CROSTA_DEL_PIANETA.set(c, d); return d;
+}
 
 // ---------- 2. I LEGAMI (calcolati)
 // Pauling: un legame tra atomi diversi è più forte della media (geometrica) dei due legami tra atomi
@@ -299,7 +326,7 @@ export function potereRiducente(gas = {}) { const { rid, oss } = redox(gas); ret
 // e si prende 300 K (semplificazione dichiarata). La pressione totale è quella di clima(), non ricalcolata.
 // → { gas: { formula: frazione }, riducente, potere (0…1), pressione (Pa: quella del clima, o meno se quasi
 //     tutto è gelato), pO2 (bar), ferro (la forma stabile, da ferroStabile), fuliggine (parte del carbonio) }
-const NEI_GHIACCI = { C: 0.3, N: 0.1, S: 0.3 }, ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
+export const NEI_GHIACCI = Object.freeze({ C: 0.3, N: 0.1, S: 0.3 }); const ZOLFO_IN_ARIA = 1e-3, FE_NEI_SILICATI = 0.15;
 const ossigenoNellaRoccia = (ab) => ab.Mg + 2 * ab.Si + 1.5 * ab.Al + ab.Ca + (ab.Na + ab.K) / 2 + FE_NEI_SILICATI * ab.Fe;
 // LA MISCELA DEL SOLE, in massa, dalla tavola degli elementi: è la fonte unica per chi fa i conti con la materia di una
 // stella (il disco da cui nascono i pianeti, disco.js; i giganti di gas). X idrogeno, Y elio, Z tutto il resto (dei
@@ -324,7 +351,7 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
   if (!gigante && (!tenuti.length || !(conInventario || cl.pressione > 0))) return niente; // un sasso nudo, come la Luna
   // un gigante È il suo idrogeno; per gli altri decide la gravità
   const tieneH = gigante || tenuti.includes('idrogeno'), massaMinima = gigante ? 0 : Math.min(...tenuti.map((g) => GAS_DEL_CLIMA[g] ?? Infinity));
-  const z = Z ?? P.Z ?? P.metallicita ?? (comp.pesanti ? comp.pesanti / 0.02 : 1), sole = abbondanzeFisse(z), Oacqua = Math.max(0, sole.O - ossigenoNellaRoccia(sole));
+  const dp = delPianeta(comp), z = Z ?? P.Z ?? P.metallicita ?? (comp.pesanti ? comp.pesanti / 0.02 : 1), sole = dp ? dp.stella : abbondanzeFisse(z), Oacqua = Math.max(0, sole.O - ossigenoNellaRoccia(sole)); // (la miscela della stella di QUESTO pianeta, se la si sa)
   // L'INVENTARIO di un pianeta solido. I gas arrivano con il ghiaccio (C, N, S in proporzione all'acqua, come nelle
   // comete) e ne esce in superficie la stessa parte che esce dell'acqua (PARTE_FUORI di leggi.js: il resto è nel
   // mantello). In più, se il disco gli ha lasciato un velo di idrogeno ed elio («involucro») e la gravità trattiene
@@ -336,13 +363,20 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
     // acqua W, e i volatili in proporzione, la stessa per ogni metallicità: il ghiaccio è fatto degli
     // stessi atomi pesanti (anche una roccia asciutta ne porta un poco); il carbonio
     // arriva in media come CO (nei ghiacci: CO, CO2, metanolo, composti organici)
-    const W = comp.acqua ?? comp.ghiaccio ?? 0, sol = abbondanzeFisse(1), V = Math.max(W, 0.001) / (sol.O - ossigenoNellaRoccia(sol));
-    const C = NEI_GHIACCI.C * sol.C * V, N = NEI_GHIACCI.N * sol.N * V, S = ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, secco = String(cl.acqua || '').startsWith('vapore');
+    // (con la catena degli elementi: W è la parte d'acqua dei ghiacci, e il carbonio e l'azoto per molecola d'acqua sono quelli dei
+    // ghiacci di QUESTO pianeta, elementi.js: la stessa ricetta, la miscela della sua stella)
+    // (con la catena degli elementi non c'è il pavimento di 0,001 — «anche una roccia asciutta ne porta un poco» —: quanto ne porta
+    // lo dice il pianeta; e lo zolfo che esce non supera quello del suo mantello)
+    const W = (comp.acqua ?? comp.ghiaccio ?? 0) * (comp.elementi?.quotaAcqua ?? 1), Wm = dp ? Math.max(W, 1e-15) : Math.max(W, 0.001), sol = dp ? dp.stella : abbondanzeFisse(1), V = Wm / (sol.O - ossigenoNellaRoccia(sol)), pa = comp.elementi?.ghiaccioPerAcqua;
+    const C = pa ? pa.C * Wm : NEI_GHIACCI.C * sol.C * V, N = pa ? pa.N * Wm : NEI_GHIACCI.N * sol.N * V, S = Math.min(ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, dp && P.massaKg > 0 ? (dp.zolfoMoli * 0.018015) / P.massaKg : Infinity), secco = String(cl.acqua || '').startsWith('vapore');
     const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
     // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente)
     el = conInventario && tieneH ? { H: 2 * W, C, N, O, S } : { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
     // la massa di quei volatili per ogni chilo d'acqua (acqua 18, e il resto contato come CO2, N2, SO2), e quanta ne sta fuori
-    if (conInventario) colonna = (PARTE_FUORI * P.massaKg * Math.max(W, 0.001) * ((secco ? 0 : 18.015 * W) + 44.01 * C + 14.007 * N + 64.06 * S)) / (18.015 * Math.max(W, 0.001)) / (4 * Math.PI * P.raggioM ** 2);
+    // (la massa è quella degli ATOMI che restano, elemento per elemento — el, nelle unità di W, cioè moli d'acqua per 18 g —: prima
+    // si contavano il carbonio come CO2 e lo zolfo come SO2, con un ossigeno che l'inventario non ha, e la massa dell'idrogeno
+    // fuggito restava agli altri gas; il libro dei conti di elementi.js lo ha visto: l'azoto dell'aria superava quello portato)
+    if (conInventario) { let m = 0; for (const e in el) m += el[e] * ELEMENTI[e].massa; colonna = (PARTE_FUORI * P.massaKg * m) / 18.015 / (4 * Math.PI * P.raggioM ** 2); }
   }
   const gSup = conInventario ? gravitaDiSuperficie(P.massaKg, P.raggioM) : 0;
   const T = cl.T ?? 288, Tr = Math.min(3000, Math.max(300, T)), Pr = conInventario ? Math.max(colonna * gSup, 1) : isFinite(cl.pressione) ? Math.max(cl.pressione, 1) : cl.livello ?? LIVELLO_GIGANTI; // nei giganti: il livello di riferimento (leggi.js)
@@ -553,7 +587,8 @@ export function climaEAria(dati, { Z } = {}) {
 }
 
 // ---------- 6. I MINERALI DELLA SUPERFICIE E IL LORO COLORE
-// LA ROCCIA. Il mantello ha gli atomi nelle proporzioni del Sole (magnesio, silicio, alluminio, calcio;
+// LA ROCCIA. (Un pianeta di sistema() ha il SUO mantello e la SUA crosta, dalla catena degli elementi: delPianeta e
+// crostaDiPianeta qui sopra. Ciò che segue vale per i pianeti fatti a mano.) Il mantello ha gli atomi nelle proporzioni del Sole (magnesio, silicio, alluminio, calcio;
 // sodio e potassio, volatili, in parte persi; il ferro quasi tutto sceso nel nucleo). La crosta è ciò che
 // fonde per primo: nel fuso ogni elemento si concentra secondo la legge della fusione parziale,
 //     nel fuso / nella roccia = 1 / (D + F·(1 − D)),
@@ -572,8 +607,8 @@ export function climaEAria(dati, { Z } = {}) {
 // basalto dei fondali e questo il granito), F = 10% e 20%, sodio e potassio rimasti
 // (un quarto), la copertura di mari, ghiacci e sali (stima semplice, tarata sui mari della Terra),
 // i sali dei mari terrestri (85% salgemma, 15% gesso), i colori dei minerali in polvere (sRGB).
-const D_MANTELLO = { Si: 0.88, Mg: 5.4, Fe: 0.75, Al: 0.21, Ca: 0.24, Na: 0.05, K: 0.002 }, F_BASALTO = 0.1;
-const D_BASALTO = { Si: 0.63, Mg: 13, Fe: 4.6, Al: 1.08, Ca: 7.6, Na: 0.70, K: 0.01 }, F_GRANITO = 0.2;
+export const D_MANTELLO = Object.freeze({ Si: 0.88, Mg: 5.4, Fe: 0.75, Al: 0.21, Ca: 0.24, Na: 0.05, K: 0.002 }), F_BASALTO = 0.1;
+export const D_BASALTO = Object.freeze({ Si: 0.63, Mg: 13, Fe: 4.6, Al: 1.08, Ca: 7.6, Na: 0.70, K: 0.01 }), F_GRANITO = 0.2;
 const VOLATILI_RIMASTI = 0.25, FERRO_TERRA = 0.33, CONTINENTI = 0.3;
 const fondi = (roccia, D, F) => Object.fromEntries(Object.entries(roccia).map(([e, v]) => [e, v / (D[e] + F * (1 - D[e]))]));
 // i colori: per olivina e pirosseno dal termine di magnesio (chiaro) a quello di ferro (scuro)
@@ -616,7 +651,7 @@ export function minerali({ composizione = {}, T = 288, ossidato = false, acqua, 
   const ce = w > 0 && acqua !== false && stato !== 'assente', evaporata = w > 0 && T >= 170 && (acqua === false || stato === 'evaporata' || stato.startsWith('vapore'));
   const o = ossidato === true ? 1 : !ossidato ? 0.4 : Math.min(1, Math.max(0, +ossidato));
   const fe = composizione.ferro ?? 0.32, sassi = composizione.roccia ?? 1 - fe, sole = abbondanzeFisse(1), su = (e) => sole[e] / sole.Si;
-  const mantello = { Si: 1, Mg: composizione.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
+  const mantello = delPianeta(composizione)?.mantello ?? { Si: 1, Mg: composizione.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') }; // (quello di QUESTO pianeta, se lo si sa)
   const basalto = fondi(mantello, D_MANTELLO, Math.min(1, Math.max(0.01, fusione))), cont = Math.min(1, Math.max(0, continente ?? (w > 0.005 ? CONTINENTI : 0)));
   const copre = Math.min(0.95, w / (w + 0.01)), ghiaccio = ce && (T < 170 || stato === 'ghiaccio') ? copre : 0, sali = evaporata ? 0.25 * copre : 0;
   const parti = {}, metti = (nome, f, colore) => { if (f > 1e-9) { parti[nome] ??= { f: 0, c: [0, 0, 0] }; const p = parti[nome]; p.c = p.c.map((v, i) => (v * p.f + colore[i] * f) / (p.f + f)); p.f += f; } };
@@ -676,7 +711,7 @@ export function prebiotica({ atmosfera: atm = {}, T = 288, energia = 1, pression
 // LA ROCCIA. Mantello, basalto e granito sono quelli del §6 (stessi coefficienti), in moli per chilo; ogni elemento sta
 // nel minerale che la norma gli assegna. In più ciò che il mantello ha tenuto di cloro, zolfo e carbonio rispetto alle
 // proporzioni del Sole: DATI MISURATI sul mantello primitivo della Terra (McDonough e Sun 1995: Cl 17 ppm, S 250 ppm,
-// C 120 ppm).
+// C 120 ppm). (Per un pianeta di sistema() quelli del SUO silicato: delPianeta.)
 // QUANTO SE NE SCIOGLIE. LEGGE EMPIRICA: nei suoli veri i silicati (plagioclasio, feldspato potassico, anfibolo, mica),
 // invecchiando, si sciolgono tutti alla stessa velocità entro un fattore tre, e sempre più piano:
 // v = 3,1·10⁻¹³·t^−0,61 mol/m²/s, con t l'età del suolo in anni (White e Brantley 2003, da suoli tra dieci e tre milioni
@@ -705,14 +740,14 @@ export const MINERALI_ROCCIA = Object.freeze({ albite: [-12.56, 69.8, 0.262, -10
 const OSSIDI = { Si: 60.08, Mg: 40.30, Fe: 71.84, Al: 50.98, Ca: 56.08, Na: 30.99, K: 47.10 };
 export function rocceDelPianeta(P = {}) {
   const comp = P.composizione || {}, fe = comp.ferro ?? 0.32, sassi = comp.roccia ?? 1 - fe, sole = abbondanzeFisse(1), su = (e) => sole[e] / sole.Si;
-  const mantello = { Si: 1, Mg: comp.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
-  const basalto = fondi(mantello, D_MANTELLO, F_BASALTO), granito = fondi(basalto, D_BASALTO, F_GRANITO);
+  const dp = delPianeta(comp), mantello = dp?.mantello ?? { Si: 1, Mg: comp.MgSi ?? su('Mg'), Fe: (FE_NEI_SILICATI * su('Fe') * (fe / (fe + sassi))) / FERRO_TERRA, Al: su('Al'), Ca: su('Ca'), Na: VOLATILI_RIMASTI * su('Na'), K: VOLATILI_RIMASTI * su('K') };
+  const cr = crostaDiPianeta(comp), basalto = cr?.basalto ?? fondi(mantello, D_MANTELLO, F_BASALTO), granito = cr?.granito ?? fondi(basalto, D_BASALTO, F_GRANITO); // (la crosta di QUESTO pianeta, se la si sa)
   const perKg = (r) => { let m = 0; for (const e in r) m += r[e] * OSSIDI[e]; const o = {}; for (const e in r) o[e] = (1000 * r[e]) / m; return o; };
   // chi ospita che cosa (la norma): potassio e sodio nei feldspati con l'alluminio, il calcio nell'anortite finché c'è
   // alluminio e poi nel pirosseno, il magnesio nel pirosseno o, se la silice non basta, nell'olivina
   const ospiti = (r) => { const or = Math.min(r.K, r.Al), ab = Math.min(r.Na, r.Al - or), an = Math.min(r.Ca, (r.Al - or - ab) / 2), M = r.Mg + r.Fe, Si = r.Si - 3 * or - 3 * ab - 2 * an - (r.Ca - an);
     return { anortite: r.Ca > 0 ? an / r.Ca : 0, olivina: Si >= M ? 0 : Math.min(1, (2 * Math.min(M - Si, Math.max(Si, 0))) / M) }; };
-  return { mantello: { ...perKg(mantello), ...ROCCE.rimasto }, basalto: { ...perKg(basalto), ospiti: ospiti(basalto) }, granito: { ...perKg(granito), ospiti: ospiti(granito) }, fusione: F_BASALTO };
+  return { mantello: { ...perKg(mantello), ...(dp?.rimasto ?? ROCCE.rimasto) }, basalto: { ...perKg(basalto), ospiti: ospiti(basalto) }, granito: { ...perKg(granito), ospiti: ospiti(granito) }, fusione: F_BASALTO };
 }
 // l'acidità dell'acqua del suolo sotto una pressione di CO2 (bar): [H⁺] (mol/kg). È il bilancio delle cariche dell'acqua
 // in equilibrio con la CO2, [H⁺] = [HCO3⁻] + [OH⁻]: [H⁺]² = K·pCO2 + Kw, con Kw = 10⁻¹⁴ (l'acqua pura: [H⁺] = 10⁻⁷, a 25 °C;
@@ -758,7 +793,7 @@ export function rilascio(roccia, T, pCO2 = 2.8e-4, denudazione = ROCCE.denudazio
 // fatto a mano in una prova — resta la legge di riserva: il magma porta un decimo del calore dell'interno)
 export function vulcani({ calore, raggioM, composizione, magma: dato = null, fuso: fusoDato = null }) {
   const magma = dato ?? (ROCCE.magma * Math.max(0, calore) * 4 * Math.PI * raggioM * raggioM * 3.156e7) / ROCCE.caloreMagma, fuso = fusoDato ?? magma / F_BASALTO;
-  return { magma, fuso, CO2: fuso * ROCCE.rimasto.C, rocce: rocceDelPianeta({ composizione }) };
+  const rocce = rocceDelPianeta({ composizione }); return { magma, fuso, CO2: fuso * rocce.mantello.C, rocce }; // (il carbonio del mantello di QUESTO pianeta, se lo si sa)
 }
 // la pressione di CO2 (bar) a cui le rocce consumate ne prendono quanta i vulcani ne emettono. «terre»: la parte della
 // superficie emersa e bagnata dalla pioggia; «continenti»: quanta di quella è granito (il resto basalto). Si può dare

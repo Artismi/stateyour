@@ -21,7 +21,7 @@ riga che ne raccoglie parecchie dello stesso pezzo (le nuvole, gli anelli) è co
 
 ## I numeri
 
-**128 righe: 20 (a), 36 (b), 72 (c) — di cui 8 sostituite in questo lavoro e 64 rimaste.**
+**144 righe: 27 (a), 41 (b), 76 (c) — di cui 9 sostituite (8 nel lavoro 7, 1 nel lavoro 9: l'increspatura minima del mare; e la schiuma al largo in parte) e 67 rimaste.** Le 16 righe del lavoro 9 («la finestra a ogni distanza», il mare: `src/camera/finestra.js`) sono in fondo alla tabella e nella sezione qui sotto.
 
 - (a) 20, di cui 7 nuove (le leggi dell'occhio di `nucleo.js`, con la fovea, e la luce della galassia per la notte).
 - (b) 36 (con due tetti che erano scritti come scelte: la superficie delle stelle al più quanto l'immagine a 16 bit tiene). Provate per convergenza in `test/test_vista.mjs`: i passi dei volumi della galassia (da fuori e da dentro il
@@ -76,7 +76,7 @@ riga che ne raccoglie parecchie dello stesso pezzo (le nuvole, gli anelli) è co
   popolazioni di `stelle.js`.
 - **Gli anelli, le lune del pianeta da solo, i corpi lontani** (macchie, fasce, ombra 0,03, colori di ripiego): la diffusione
   nei grani con l'albedo e la fase dei dati, la mappa vera del corpo, la funzione di fase di Lambert all'angolo vero.
-- **La schiuma e l'increspatura minima del mare**: la frazione di schiuma dal vento e la coda capillare dello spettro.
+- **La schiuma e l'increspatura minima del mare**: FATTO nel lavoro 9 al largo (la copertura di Monahan con la riflettanza efficace misurata della schiuma, Koepke 1984; l'increspatura dalla coda capillare dello spettro di Elfouhaily e altri 1997, con la tensione superficiale di quell'acqua). Resta a mano la schiuma sulla riva (0,5 e 0,8: servirebbe la zona dei frangenti dal fondale).
 - **Il campo visivo** (0,75 rad): dall'angolo che lo schermo sottende all'occhio di chi guarda.
 
 ## La convergenza (C12)
@@ -165,6 +165,35 @@ descrizioni) da 1; il cosmo da 1 in tutti e due. Lo dice ora la nota del punto a
 invasiva: i nomi passati alla fonte del caso e la grammatica di `lingua.js` restano com'erano).
 
 Nota: `src/tre/rete.js` (con `rete.worker.js`) non è più usato da nessuno (la ragnatela è il volume di `volumi.js`).
+
+## Il lavoro 9: la finestra a ogni distanza (il mare)
+
+`src/camera/finestra.js` calcola, a ogni lato della finestra del livello 5 dello zoom (mappa.js: da 1 m in giù, di dieci in
+dieci) e a nanometri (la scena degli atomi), solo il quadrato inquadrato, come campione condizionato del mare di sopra. Le
+leggi sono dichiarate nella sua testa; qui le costanti che decidono l'aspetto, con la classe:
+- (a) sette nuove dal modello (sei in finestra.js, una in pianeta.js: il cielo riflesso secondo la pendenza, al posto della sua media): lo spettro delle onde (Elfouhaily e altri 1997, direzione di Mitsuyasu e altri 1975) anche nel
+  3D al posto di Pierson-Moskowitz con cos² e «punta 10» a mano; il riflesso della stella con la pendenza sotto il punto
+  (Cox e Munk 1954); il cielo riflesso di Rayleigh a diffusione semplice con lo spessore ottico della colonna d'aria del
+  pianeta (al posto del «cielo» costante di coloreMare); la copertura di schiuma di Monahan e la sua riflettanza efficace
+  (Koepke 1984); la zattera di bolle della schiuma (Deane e Stokes 2002); la struttura dell'acqua liquida (potenziale mW,
+  Molinero e Moore 2009) al posto del reticolo cubico spostato a caso di `scenaMolecolare`.
+- (b) cinque discretizzazioni, quattro provate in `test/test_finestre.mjs`: le tessere delle onde (4 lunghezze d'onda, 8
+  campioni per onda: la griglia dell'app dista dalla legge esatta 0,13%, con 16 campioni 0,015%, ordine 3; le ottave più lunghe del lato si sommano esatte su 9×9 o 4×4 nodi del tratto e si interpolano con Lagrange cubica); la quadratura delle
+  celle dei modi (Gauss-Legendre 4×4 contro 8×8: dentro la tolleranza della varianza); le ottave oltre 8 picchi non
+  calcolate (lo spettro vale meno di e⁻⁸⁰); la scatola periodica dell'acqua mW di 3,1 nm (trenta passate di Monte Carlo in
+  più non ne spostano l'energia); l'immagine della finestra rifatta al più venti volte al secondo (non provata: il moto delle
+  onde più svelte, sotto il centimetro, salta di un ventesimo di secondo).
+- (c) quattro a mano: l'esposizione 3,5 ereditata da coloreMare (e il suo «cielo» 0,008; 0,012; 0,018, che qui si toglie per
+  avere la luce che l'acqua rimanda); la stella a mezzogiorno dell'equinozio quando chi chiama non dice l'istante (la finestra
+  non sa ancora l'ora del 3D); la dispersione dei fiocchi (lognormale 0,5 attorno alla scala di Kolmogorov); gli idrogeni
+  dell'acqua girati verso le vicine più vicine (non da una dinamica).
+- NON TORNA, dichiarati: la schiuma è istantanea (nessuna schiuma vecchia trascinata dalla corrente); le bolle del pennacchio
+  stanno solo sotto la schiuma (e quindi non si vedono); il cielo non ha la diffusione multipla né le nuvole (guardando
+  giù, dove la stella non dà il riflesso, le increspature si vedono appena: è il cielo che manca, non le onde); il guscio
+  degli ioni ha le vicine del liquido (4 per il Na⁺ invece di 5–6 misurate); lo spettro è quello del centro del tratto (tra
+  un tratto e l'altro c'è un bordo).
+- Non più usata dall'app per il mare: l'onda a mano di `mare.js` `immagineAcqua` (0,045·sin(x/0,3)…, il «campione visto di
+  lato»): resta solo dove la finestra non c'è (terra asciutta).
 
 ## La tabella
 
@@ -264,8 +293,8 @@ Nota: `src/tre/rete.js` (con `rete.worker.js`) non è più usato da nessuno (la 
 | `src/tre/pianeta.js:216` | colore dell'acqua senza tessera: (0,004; 0,012; 0,03) | (c) a mano | ripiego finché la tessera non arriva; servirebbe coloraMare sul livello 0 |
 | `src/tre/pianeta.js:218` | Fresnel dell'acqua F₀ = 0,02 | (a) dal modello / legge | ((n − 1)/(n + 1))², n = 1,33; Schlick |
 | `src/tre/pianeta.js:221` | il riflesso della stella: GGX con la pendenza delle onde, tetto 40 | (c) a mano | GGX è legge; il tetto 40 è a mano (limite dei 16 bit) |
-| `src/tre/pianeta.js:730` | increspatura minima del mare 0,0012 | (c) a mano | servirebbe la coda dello spettro delle onde capillari |
-| `src/tre/pianeta.js:224` | la schiuma: 0,5 sulla riva, ripide sopra 0,35, bianca 0,8, creste × 30 | (c) a mano | servirebbe la frazione di schiuma dal vento (p. es. Monahan) e la sua riflettanza misurata |
+| `src/tre/pianeta.js:735` | increspatura minima del mare 0,0012 | (c) → **sostituita** | SOSTITUITA (lavoro 9): la pendenza quadratica media dello spettro oltre l'ultima componente (la coda capillare di Elfouhaily e altri 1997, con la tensione superficiale e la densità di quell'acqua: finestra.js) |
+| `src/tre/pianeta.js:224` | la schiuma: 0,5 sulla riva, ripide sopra 0,35, bianca 0,8, creste × 30 | (c) a mano, **in parte sostituita** | AL LARGO SOSTITUITA (lavoro 9): la parte del punto coperta dalle creste che frangono, W = 3,84·10⁻⁶·U^3,41 (Monahan e O'Muircheartaigh 1980), con la riflettanza efficace misurata 0,22 (Koepke 1984); la schiuma risolta, a forma di cresta, è nella finestra. Restano a mano 0,5 e 0,8 sulla riva (servirebbe la zona dei frangenti dal fondale) |
 | `src/tre/pianeta.js:212` | un'onda conta se è lunga 3–9 punti dello schermo | (b) discretizzazione | risoluzione (sotto va nell'increspatura media) |
 | `src/tre/pianeta.js:233` | la parte di cielo vista da un pendio (1 + cos)/2 | (a) dal modello / legge | cielo uguale da ogni parte |
 | `src/tre/pianeta.js:363` | il bordo della stella: 0,4 + 0,6·μ^0,6, senza conservare il flusso | (c) → **sostituita** | SOSTITUITO: Eddington (atmosfera grigia) I(μ) ∝ 2 + 3μ, con il flusso uscente uguale al vero |
@@ -298,3 +327,19 @@ Nota: `src/tre/rete.js` (con `rete.worker.js`) non è più usato da nessuno (la 
 | `src/tre/accumulo.js:62` | lo sfasamento dei fotogrammi: Kronecker col rapporto aureo, R2 di Roberts | (b) discretizzazione | provato (test_vista, accumulo) |
 | `src/camera/laboratorio.js:279` | il punto a caso si guarda dall'alto, dalla quota a cui il suolo è largo quanto la scala | (c) a mano | scelta di chi guarda (non della luce) |
 | `src/camera/laboratorio.js:38` | i colori dell'interfaccia e dei diagrammi 2D (ACCENTO, veli, tracce) | (c) a mano | SEGNI dell'interfaccia: non dicono luce, e non vanno tolti |
+| `src/camera/finestra.js:spettro` | lo spettro delle onde: Elfouhaily e altri 1997 (parte lunga con l'energia di campoOnde, coda capillare dalla velocità d'attrito e dalla tensione superficiale), direzione di Mitsuyasu e altri 1975 | (a) dal modello / legge | nuova (lavoro 9); anche nel 3D (pianeta.js) al posto di Pierson-Moskowitz con cos² e «punta 10» |
+| `src/camera/finestra.js:immagineFinestra` | il riflesso della stella: distribuzione delle pendenze sotto il punto (Cox e Munk 1954) dalla coda dello spettro, più il disco della stella | (a) dal modello / legge | nuova (lavoro 9) |
+| `src/camera/finestra.js:cieloDi` | il cielo riflesso: Rayleigh a diffusione semplice, τ(λ) = 4,6·10⁻³¹ m²·(550/λ)⁴ × la colonna d'aria del pianeta | (a) dal modello / legge | nuova (lavoro 9); manca la diffusione multipla, la foschia, le nuvole |
+| `src/camera/finestra.js:SCHIUMA` | la copertura di schiuma W = 3,84·10⁻⁶·U^3,41 e la sua riflettanza efficace 0,22 | (a) dal modello / legge | Monahan e O'Muircheartaigh 1980; Koepke 1984 |
+| `src/camera/finestra.js:leggeBolle` | le bolle della schiuma: Deane e Stokes 2002 (a^−3/2, a^−10/3, scala di Hinze), la più piccola da Epstein e Plesset | (a) dal modello / legge | nuova (lavoro 9) |
+| `src/tre/pianeta.js:224` | il cielo riflesso dal mare nella direzione speculare: la forma di Rayleigh a diffusione semplice, la media della tabella del cielo | (a) dal modello / legge | nuova (lavoro 9): prima il cielo riflesso era uniforme (la sua irradianza), e da sopra le onde si vedevano solo per la schiuma a mano |
+| `src/camera/acqua_mw.js` | la struttura dell'acqua liquida a nanometri: potenziale mW (Molinero e Moore 2009), Monte Carlo a 298,15 K | (a) dal modello / legge | nuova (lavoro 9): sostituisce il reticolo cubico spostato di 0,5 Å di scenaMolecolare |
+| `src/camera/finestra.js:ONDE` | le tessere delle onde: 4 lunghezze d'onda, 8 campioni per onda | (b) discretizzazione | provata (test_finestre: 0,13% dalla legge esatta, 0,015% con 16; ordine 3) |
+| `src/camera/finestra.js:bandaDi` | la varianza di ogni modo: Gauss-Legendre 4×4 sulla sua cella della corona | (b) discretizzazione | provata (test_finestre, test_coerenza_scale: contro 8×8) |
+| `src/camera/finestra.js:ONDE.dalPicco` | le ottave più lunghe di 8 picchi non si calcolano | (b) discretizzazione | lo spettro lì vale meno di e⁻⁸⁰ (il fattore di Pierson-Moskowitz) |
+| `src/camera/acqua_mw.js` | la scatola periodica di 1000 molecole (3,1 nm), ripetuta | (b) discretizzazione | provata (test_finestre: l'energia non si sposta con trenta passate in più); la ripetizione ogni 3,1 nm si vede guardando di taglio |
+| `src/camera/mappa.js:583` | la finestra dell'acqua rifatta al più venti volte al secondo | (b) discretizzazione | non provata |
+| `src/camera/finestra.js:ESPOSIZIONE` | l'esposizione 3,5 e il cielo (0,008; 0,012; 0,018) di coloreMare, ereditati | (c) a mano | li tiene coloreMare (mare.js); servirebbe l'occhio di nucleo.js anche nell'immagine piatta |
+| `src/camera/finestra.js:soleDiMezzogiorno` | la stella a mezzogiorno dell'equinozio, se chi chiama non dice l'istante | (c) a mano | servirebbe passare alla finestra l'istante (e la stella) del 3D da cui si scende |
+| `src/camera/finestra.js:taglie` | i fiocchi: lognormale 0,5 attorno alla scala di Kolmogorov | (c) a mano | servirebbe l'equilibrio tra aggregazione e rottura (Winterwerp 1998) per la distribuzione intera |
+| `src/camera/finestra.js:scenaNano` | gli idrogeni dell'acqua verso le vicine più vicine (e gli ioni che non riordinano il guscio) | (c) a mano | servirebbe una dinamica (o un Monte Carlo) con l'acqua a tre siti e gli ioni |

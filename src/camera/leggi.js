@@ -129,8 +129,10 @@ export function statoAcqua(T, P) {
 export const PARTE_FUORI = 0.04; // la parte dell'acqua (e dei gas arrivati con lei) che un pianeta di roccia ha liberato in superficie
 export function acquaInSuperficie({ tipo, massaKg = 0, composizione = {} } = {}) {
   if (tipo === 'gassoso') return { frazione: 0, kg: 0 };
-  const frazione = composizione.acqua ?? composizione.ghiaccio ?? 0;
-  return { frazione, kg: massaKg * frazione * (tipo === 'ghiacciato' ? 1 : PARTE_FUORI) };
+  // (la catena degli elementi: dei ghiacci di un pianeta di sistema() è acqua solo la parte quotaAcqua — il resto è CO e NH3
+  // gelati con lei, elementi.js —; un pianeta fatto a mano, senza elementi, conta come acqua tutta la sua frazione, come prima)
+  const frazione = composizione.acqua ?? composizione.ghiaccio ?? 0, quota = composizione.elementi?.quotaAcqua ?? 1;
+  return { frazione, kg: massaKg * frazione * quota * (tipo === 'ghiacciato' ? 1 : PARTE_FUORI) };
 }
 // ---------- IL CLIMA: UNA LEGGE SOLA, A DUE RISOLUZIONI. Il bilancio di energia di un pianeta (modello di
 // Budyko-Sellers): in ogni punto  C·∂T/∂t = luce assorbita − luce irradiata + calore portato dai vicini.

@@ -31,8 +31,12 @@ import * as GR from '../src/camera/grani.js';
 import * as MA from '../src/camera/materia.js';
 import * as A3 from '../src/camera/atomi3d.js';
 import * as Q from '../src/camera/quanti.js';
+import * as EL from '../src/camera/elementi.js';
+import { mare as mareDi } from '../src/camera/mare.js';
 import { probabilitaChi2 } from '../src/camera/bolle.js';
 import { sorgente, contatore } from '../src/camera/eventi.js';
+import * as FI from '../src/camera/finestra.js';
+import { mareColVento } from './mare_col_vento.mjs';
 
 const T0 = performance.now(), EPS = 2 ** -52, MPC = 3.0857e22, { UA, MSOLE } = LG;
 const P4 = probabilitaChi2(16, 1); // il livello di quattro scarti per un χ²: 6,3·10⁻⁵
@@ -166,6 +170,12 @@ const CAMPIONI = tempo('galassie del campione', () => GAL.map((gid) => ({ gid, G
 }
 manca('C6', 'stella del campione → stelle vere', 'il sistema dei pianeti, il luogo', 'μ', 'le N stelle vere hanno il sistema e il posto del campione (LINGUA.md § 2, «non torna»: il modello ne calcola uno per stella del campione)');
 
+{ // C6: la catena degli elementi (elementi.js, galassie.js): i metalli del gas di ogni galassia divisi per canale (chi li ha
+  // fatti) sommano ai metalli del gas; la miscela di ogni generazione somma a 1
+  let peggio = 0; for (const G of C.galassie) { const e = G.forma.interno, z = e.gasZ; if (z > 0) peggio = Math.max(peggio, Math.abs(somma(Array.from(e.gasZC)) - z) / z); }
+  riga({ c: 'C6', passaggio: `galassia → canali dei metalli (${NG} galassie, galassie.js)`, grandezza: 'Σ canali / metalli del gas − 1 (il peggiore)', padre: 0, figli: peggio, tol: 1e4 * EPS, da: 'precisione: ~10⁴ operazioni per serbatoio (46 passi × 20 anelli × i flussi)·ε' });
+}
+
 // =====================================================================================================
 // 3. LA STELLA, IL SUO DISCO, I PIANETI (disco.js)
 // =====================================================================================================
@@ -206,7 +216,13 @@ if (!MONDO) {
   for (const [nome, m] of [['superficie', sf], ['superficie erosa', se]]) { const v = volume(m), acqua = p.interno.acquaKg / 1000;
     riga({ c: nome === 'superficie' ? 'C6' : 'C8', passaggio: `pianeta → ${nome} (geologia.js)`, grandezza: 'acqua in superficie (m³)', padre: acqua, figli: v.V, tol: v.A * (v.hi - v.lo) * 2 ** -44 + 4 * v.N * EPS * acqua, da: 'precisione: la bisezione del livello del mare (44 passi) + n·ε' }); }
   // C8: il clima per fasce (la grana del pianeta: clima()) e quello della mappa (64 × 32 celle, terre e mari veri, senza i venti)
-  riga({ c: 'C8', passaggio: 'pianeta → superficie: il clima', grandezza: `temperatura media (K): fasce contro mappa (mare ${num(100 * p.clima.mare, 2)}% atteso)`, padre: p.clima.T, figli: cl.Tglobale, esito: 'misurato', da: 'le due grane hanno geografie diverse (la mappa vede dove sono le terre): nessun limite dal modello' });
+  riga({ c: 'C8', passaggio: 'pianeta → superficie: il clima', grandezza: `temperatura media (K): fasce contro mappa (mare ${num(100 * p.clima.mare, 2)}% atteso)`, padre: p.clima.T, figli: cl.Tglobale, esito: 'misurato', da: 'le due grane hanno geografie diverse (la mappa vede dove sono le terre): nessun limite dal modello' })
+  // C6: IL LIBRO DEI CONTI (elementi.js, lavoro 8): per ogni elemento la somma dei serbatoi (nucleo, mantello, crosta, mare,
+  // aria, ghiacci, involucro) contro ciò che il disco ha dato al pianeta; un serbatoio che chiede più di quanto il suo
+  // fornitore ha è uno «scoperto»: non torna anche se la somma torna
+  { const st = tempo('mare (per il libro dei conti)', () => mareDi(p, sf, cl, se)), L = EL.libroDeiConti(p, { mare: st });
+    if (!L) manca('C6', 'pianeta → serbatoi (elementi.js)', 'massa per elemento', 'μ', 'il pianeta non porta la sua catena degli elementi');
+    else riga({ c: 'C6', passaggio: `pianeta → serbatoi (elementi.js, ${Object.keys(L.disco).length} elementi)`, grandezza: `Σ serbatoi / disco − 1, il peggiore${L.peggiore ? ` (${L.peggiore})` : ''}; scoperti ${L.scoperti.length}`, padre: 0, figli: L.scoperti.length ? Infinity : L.scarto, tol: 1e6 * EPS, da: 'precisione: ≤ 6000 embrioni × 50 elementi sommati, più le sottrazioni del libro: 10⁶·ε (uno scoperto non torna mai)' }); };
   // C6: le tessere (L = 1) contro la madre erosa letta come la legge la legge (bilineare sulle celle)
   const { W, H } = se, n = 4, f1 = W / 9, f2 = W / 3.1, N1 = f1 * (f1 / 2), N2 = f2 * (f2 / 2), amp = 260 * 0.36;
   const bil = (fx, fy) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0, ix = (x) => ((x % W) + W) % W, iy = (y) => Math.max(0, Math.min(H - 1, y)), a = iy(y0) * W, b = iy(y0 + 1) * W, P0 = ix(x0), P1 = ix(x0 + 1); return se.alt[a + P0] * (1 - u) * (1 - v) + se.alt[a + P1] * u * (1 - v) + se.alt[b + P0] * (1 - u) * v + se.alt[b + P1] * u * v; };
@@ -316,6 +332,50 @@ const ACQUA = tempo('scena d\'acqua', () => A3.scenaAcqua({ latoNm: 4, salinita:
   }
 }
 manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi della scena (atomi3d.js scena.tempo) e quello degli elettroni', 'M', 'la scena trema attorno a posti fissi (non è una dinamica), la scala quantistica prepara ogni misura uguale: nessuna evoluzione a due grane da confrontare');
+
+// =====================================================================================================================================
+// 8. LA FINESTRA A OGNI DISTANZA (finestra.js, PROGETTO.md lavoro 9): il mare, dal suo spettro ai nanometri
+// =====================================================================================================================================
+// Il mondo: il primo mare con il vento del catalogo (mare_col_vento.mjs: il primo roccioso con acqua liquida, il mare tra il
+// 15 e l'85% e l'aria che circola), nel mare aperto con le onde più alte; il fango nel punto più torbido.
+{
+  const MV = tempo('il primo mare con il vento', () => mareColVento());
+  if (!MV) for (const g of ['varianza delle onde', 'copertura di schiuma', 'torbidità', 'ioni']) manca('C6', 'mare → finestra (finestra.js)', g, 'μ', 'nessun mare con il vento nei primi pianeti del catalogo');
+  else {
+    const { st: SM, aperto: A0, torbido: TB, P: PM } = MV, opz = { lon: A0.lon, lat: A0.lat, fondoM: A0.fondoM, P: PM }, tr = FI.trattoDi(SM, A0.lon, A0.lat), [xc, yc] = FI.nelTratto(tr, A0.lon, A0.lat), sp = tr.sp;
+    // C6: la varianza dell'altezza delle onde che la finestra aggiunge (le ottave da 4 punti al suo lato) = l'integrale dello
+    // spettro del padre su quelle corone; K finestre indipendenti (lontane più di una tessera dell'ottava più lunga), legge esatta
+    for (const [L, K] of [[1, 24], [0.01, 24]]) tempo(`finestra di ${L} m`, () => {
+      const f0 = FI.finestraAcqua(SM, { ...opz, latoM: L }), b1 = Math.floor(Math.log2(L)), bande = f0.bande.filter((B) => B.b <= b1), passo = 4 * 2 ** (b1 + 2), n = 20, Q = [];
+      const continuo = bande.reduce((a, B) => a + sp.varianza((2 * Math.PI) / 2 ** B.b, (4 * Math.PI) / 2 ** B.b), 0), discreto = bande.reduce((a, B) => a + B.varianza, 0);
+      for (let q = 0; q < K; q++) { const x0 = xc + (q % 8) * passo, y0 = yc + Math.floor(q / 8) * passo; let s2 = 0; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const e = FI.ondeEsatte(tr, x0 + ((i + 0.5) * L) / n, y0 + ((j + 0.5) * L) / n, 1.7 * q, bande).eta; s2 += e * e; } Q.push(s2 / (n * n)); }
+      const m = somma(Q) / K, sd = Math.sqrt(somma(Q.map((x) => (x - m) ** 2)) / (K - 1));
+      FI.ONDE.quadratura = 8; const t8 = FI.trattoDi(SM, A0.lon, A0.lat), d8 = FI.bandeDelTratto(t8).filter((B) => B.b >= bande[0].b && B.b <= b1).reduce((a, B) => a + B.varianza, 0); FI.ONDE.quadratura = 4; FI.bandeDelTratto(t8);
+      riga({ c: 'C6', passaggio: `mare (spettro del vento) → finestra di ${L >= 1 ? `${L} m` : `${L * 100} cm`} (finestra.js)`, grandezza: `varianza dell'altezza (m²) nelle ottave ${bande[0].b}…${b1}: ∫S contro le finestre`, padre: continuo, figli: m, tol: (4 * sd) / Math.sqrt(K) + 4 * Math.abs(d8 - discreto), da: `campionamento: 4·sd/√${K} finestre indipendenti, più la quadratura dei modi (Gauss-Legendre 4×4 contro 8×8 sulle celle)` });
+    });
+    // C6: la copertura della schiuma (Monahan) contro i punti coperti, su punti indipendenti; e la varianza 1 dell'accelerazione normalizzata
+    tempo('schiuma', () => { const bande = FI.bandeDelTratto(tr), K = 1500, passo = 4 * 2 ** (bande[bande.length - 1].b + 1); let s2 = 0, sopra = 0;
+      for (let q = 0; q < K; q++) { const X = FI.ondeEsatte(tr, xc + (q % 40) * passo - 20 * passo, yc + Math.floor(q / 40) * passo - 20 * passo, 0.37 * q, bande).X; s2 += X * X; if (X > tr.sogliaSchiuma) sopra++; }
+      const W = tr.P.copertura;
+      riga({ c: 'C6', passaggio: 'mare (Monahan) → finestra (finestra.js)', grandezza: `copertura di schiuma (vento ${num(tr.P.U, 3)} m/s): W contro la parte dei punti coperti`, padre: W, figli: sopra / K, tol: 4 * Math.sqrt((W * (1 - W)) / K), da: `binomiale: 4·√(W(1 − W)/${K}) su punti indipendenti` });
+      riga({ c: 'C6', passaggio: 'mare (Monahan) → finestra (finestra.js)', grandezza: 'varianza dell\'accelerazione che frange, normalizzata (ciò che fa P(schiuma) = W)', padre: 1, figli: s2 / K, tol: 4 * Math.sqrt(2 / K), da: `χ²: 4·√(2/${K})` }); });
+    // C6: la torbidità (massa dei granelli e dei fiocchi con la loro legge delle taglie) e le bolle sotto la schiuma
+    tempo('popolazioni', () => { const f = FI.finestraAcqua(SM, { lon: TB.lon, lat: TB.lat, fondoM: TB.fondoM, P: PM, latoM: 1e-3 }), c = f.popolazioni.campione; let tot = 0, n = 0; for (const x of f.popolazioni.classi) if (x.kgPerM3 != null && (x.tipo === 'granello' || x.tipo === 'fiocco')) { tot += x.kgPerM3; n++; }
+      const pad = c.sospeso.sabbia + c.sospeso.limo + c.sospeso.argilla + c.sospeso.fiocchi;
+      riga({ c: 'C6', passaggio: 'mare (torbidità) → finestra di 1 mm (finestra.js)', grandezza: `fango sospeso (kg/m³): mare.js contro le classi con le taglie di Stokes (${n} classi)`, padre: pad, figli: tot, tol: 64 * EPS * pad, da: 'esatto (il numero di ogni classe è quello che dà la massa di mare.js: n·ε)' });
+      const g = FI.finestraAcqua(SM, { ...opz, latoM: 1e-2 }), B = g.popolazioni.bolle, cl = g.popolazioni.campione.classi.find((x) => x.tipo === 'bolla'), tutta = new Uint8Array(g.N * g.N).fill(1); let nb = 0, att = 0;
+      for (let q = 0; q < 6; q++) { const [lo, la] = FI.dalTratto(tr, xc + q * 0.05, yc), h = FI.finestraAcqua(SM, { ...opz, lon: lo, lat: la, latoM: 1e-2 }); nb += FI.bolleSottoSchiuma(h, tutta).filter((p) => !p.zattera).length; att += h.popolazioni.bolle.n * h.L ** 3; }
+      riga({ c: 'C6', passaggio: 'mare (bolle) → finestra di 1 cm sotto la schiuma', grandezza: 'bolle visibili in 6 finestre (Deane e Stokes): attese contro contate', padre: att, figli: nb, tol: 4 * Math.sqrt(att), da: '4·√N (Poisson)' });
+      riga({ c: 'C6', passaggio: 'mare (bolle) → finestra (mediata sulla copertura)', grandezza: 'bolle per m³: mare.js contro n sotto la schiuma × W', padre: cl ? cl.perM3 : 0, figli: B ? (B.n * g.padre.copertura) / B.legge.parteSopra(B.dVis) : 0, tol: 64 * EPS * (cl ? cl.perM3 : 0), da: 'esatto (n·ε)' }); });
+    // C6: a nanometri, l'acqua alla densità di mare.js e ogni ione nel numero della sua concentrazione (Poisson, scatola neutra)
+    tempo('nanometri', () => { const somme = {}, attese = {}; let agg = 0, dens = 0;
+      for (let q = 0; q < 6; q++) { const sc = FI.scenaNano(SM, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); agg += sc.aggiustati; dens = Math.max(dens, Math.abs(sc.ripetizioni ** 3 * sc.modello.N / sc.latoNm ** 3 - sc.densitaNm3) / sc.densitaNm3);
+        for (const f in sc.messi) { somme[f] = (somme[f] || 0) + sc.messi[f]; attese[f] = (attese[f] || 0) + (sc.attesi[f] || 0); } }
+      riga({ c: 'C6', passaggio: 'mare (densità) → finestra di 6 nm (finestra.js, acqua mW)', grandezza: 'molecole d\'acqua per nm³: (messe + tolte dagli ioni) contro mare.js (lo scarto relativo)', padre: 0, figli: dens, tol: 1e3 * EPS, da: 'esatto (la scatola mW portata alla densità: n·ε)' });
+      const f0 = Object.keys(attese).sort((a, b) => attese[b] - attese[a])[0];
+      riga({ c: 'C6', passaggio: 'mare (concentrazioni) → finestra di 6 nm (6 scatole)', grandezza: `ioni ${f0} (il più abbondante: liberi e in coppia) contati contro attesi`, padre: attese[f0], figli: somme[f0], tol: 4 * Math.sqrt(attese[f0]) + agg, da: `4·√N (Poisson) + ${agg} ioni aggiunti o tolti per la neutralità` }); });
+  }
+}
 manca('C6', 'pianeta → regioni della magnetosfera (cosmo.js regione)', 'campo, particelle', 'M', 'le 12 regioni non hanno un riassunto che ridia il pianeta (le bolle dello zoom leggono il dipolo, non lo sommano)');
 
 // =====================================================================================================

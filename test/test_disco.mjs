@@ -3,11 +3,18 @@ import assert from 'node:assert/strict';
 import { formaPianeti, disco, raggioPianeta, DISCO, MTERRA, RTERRA, MGIOVE, RGIOVE } from '../src/camera/disco.js';
 import { MSOLE, UA } from '../src/camera/leggi.js';
 import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
+import * as EL from '../src/camera/elementi.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 
 const SEMI = Array.from({ length: 60 }, (_, i) => i + 1), SOLE = { massa: 1, Z: 1, eta: 4.6e9 };
+// il salto dei solidi alla linea della neve, atomo per atomo dalla miscela protosolare (elementi.js): sotto i 20 K tutto ciò che
+// ha un ossido condensa (il ferro come FeO: nel gas freddo è ossidato), poi il CO dei ghiacci, poi l'acqua con l'ossigeno che resta
+const saltoNeve = (() => { const X = EL.PROTOSOLARE, m = (s) => EL.ELEMENTI[s].massa; let roccia = 0, Ob = 0;
+  for (const s of EL.SIMBOLI) { const e = EL.ELEMENTI[s]; if (s === 'H' || s === 'He' || e.sede === 'atmo' || e.sede === 'ghiaccio') continue; roccia += X[s]; Ob += (X[s] / m(s)) * (s === 'Fe' ? 1 : e.ossigeno); }
+  roccia += Ob * m('O'); const Olib = X.O / m('O') - Ob, C = Math.min(0.3 * X.C / m('C'), Olib), H2O = Olib - C, N = 0.1 * X.N / m('N');
+  return 1 + (H2O * (m('O') + 2 * m('H')) + C * (m('C') + m('O')) + N * (m('N') + 3 * m('H'))) / roccia; })();
 const terre = (p) => p.massaKg / MTERRA, perc = (x) => `${Math.round(100 * x)}%`;
 // in quanti semi, su 60, c'è almeno un gigante di gas oltre la linea della neve
 const giganti = (st) => SEMI.filter((s) => { const neve = disco(st, s).neve; return formaPianeti(st, s).some((p) => p.tipo === 'gassoso' && p.aUA > neve); }).length / SEMI.length;
@@ -22,8 +29,12 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
     const D = disco(SOLE, s);
     assert.ok(Math.abs(D.neve - 2.7) < 0.1, `neve a ${D.neve}`); // (la luce è quella al tempo del disco, in unità di quella del Sole di allora: per il Sole la neve è a 2,7 UA esatti)
     assert.ok(Math.abs(D.sigmaGas(1) / D.sigmaGas(4) - 8) < 1e-9, 'la densità del gas cala come r^(3/2)');
-    // (le proporzioni sono quelle della miscela del Sole di chimica.js: roccia e ferro 0,35 dei metalli, i ghiacci 0,56)
-    assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - DISCO.solidiFreddi / DISCO.roccia) < 0.02 && DISCO.solidiFreddi / DISCO.roccia > 2.3 && DISCO.solidiFreddi / DISCO.roccia < 2.9, 'oltre la neve anche il ghiaccio è solido');
+    // (le proporzioni sono quelle della miscela protosolare di elementi.js: la roccia fredda 0,35 dei metalli; il salto alla neve
+    // è 1 + ghiacci/roccia, contato qui atomo per atomo dalla miscela — l'acqua è l'ossigeno che non sta negli ossidi né nel CO
+    // dei ghiacci —: prima la soglia era 2,3–2,9, la ricetta di chimica.js SOLE, che dava al CO un ossigeno già dato all'acqua.
+    // In un disco vero il salto è 1 + ghiacci/roccia ALLA TEMPERATURA del luogo: in un disco pesante la neve sta a 380 K, e il
+    // ferro non è ancora tutto ossidato: la roccia è un poco meno della fredda)
+    assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - (1 + D.solidi.ghiaccio / D.solidi.roccia(D.Tcond(D.neve)))) < 0.02 && Math.abs(DISCO.solidiFreddi / DISCO.roccia - saltoNeve) < 1e-9, `oltre la neve anche il ghiaccio è solido (salto ${DISCO.solidiFreddi / DISCO.roccia}, atteso ${saltoNeve})`);
     assert.ok(Math.abs(D.sigmaSolidi(5) / D.sigmaGas(5) - DISCO.metalliSole * DISCO.solidiFreddi) < 1e-9 && Math.abs(DISCO.metalliSole * DISCO.solidiFreddi - 0.0109) < 3e-4, 'i solidi sono i metalli del gas che lì condensano');
     assert.ok(D.frazione >= 0.01 && D.frazione <= 0.12 && Math.abs(D.massaKg - D.frazione * MSOLE) < 1e-6 * MSOLE);
     // la somma di Σ·2πr·dr fino al bordo esterno ridà la massa del disco
@@ -43,7 +54,7 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
 // migrano, e il pianeta tipico (la mediana) è di taglia terrestre. Chi sta fuori dall'intervallo sta tutto sopra: sono le
 // super-Terre dei dischi pesanti. Il confronto con l'85% chiesto prima resta scritto, e se non torna lo dice senza fermare.
 prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di taglia terrestre (misurato su 3000 dischi)', () => {
-  const N = 3000, masse = [], dischiGrossi = [], dischi = []; let con = 0, quanti = 0, colmo = 0;
+  const N = 3000, masse = [], dischiGrossi = [], dischi = []; let con = 0, quanti = 0, colmo = 0, misti = 0;
   for (let s = 1; s <= N; s++) {
     const D = disco(SOLE, s), neve = D.neve, P = formaPianeti(SOLE, s), r = P.filter((p) => p.tipo === 'roccioso' && p.aUA < neve);
     quanti += P.length; if (r.length) con++;
@@ -51,7 +62,10 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di
     if (!r.length) continue;
     // i solidi che condensano dentro la neve: la somma di Σ_solidi·2πr·dr dal bordo interno alla neve
     let solidi = 0; const passi = 400; for (let i = 0; i < passi; i++) { const x = D.rIn + ((i + 0.5) / passi) * (neve - D.rIn); solidi += D.sigmaSolidi(x) * 2 * Math.PI * x * ((neve - D.rIn) / passi) * UA * UA; }
-    const somma = r.reduce((a, p) => a + p.massaKg, 0); colmo = Math.max(colmo, somma / solidi);
+    // (i rocciosi fatti anche di embrioni nati oltre la neve — «a cavallo della linea della neve» — portano dentro solidi di fuori:
+    // la disuguaglianza vale per gli altri. Con la catena degli elementi il seme 2672 ne ha uno di 14 Terre a 2 UA, 1,27 volte i
+    // solidi di dentro: prima la prova lo contava, e passava solo perché nessun seme ne faceva uno così grosso)
+    const dentro = r.filter((p) => !p.formazione.misto), somma = dentro.reduce((a, p) => a + p.massaKg, 0); colmo = Math.max(colmo, somma / solidi); misti += r.length - dentro.length;
     assert.ok(somma <= solidi * 1.01, `seme ${s}: i rocciosi dentro la neve pesano ${somma / solidi} volte i solidi che lì condensano`);
     for (const p of r) { masse.push(terre(p)); dischi.push(D.frazione); if (terre(p) > 6) dischiGrossi.push(D.frazione); }
   }
@@ -60,7 +74,7 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di
   // il margine: i pianeti di uno stesso disco non sono indipendenti (≈ 3 a disco), quindi si conta sui dischi
   const margine = Math.sqrt((fr * (1 - fr)) / con);
   console.log(`      rocciosi dentro la neve in ${perc(con / N)} dei ${N} dischi; ${giusti} su ${masse.length} tra 0,03 e 6 Terre: ${(100 * fr).toFixed(1)}% ± ${(100 * margine).toFixed(1)}; ${sotto} sotto, ${sopra} sopra (fino a ${masse.at(-1).toFixed(1)} Terre)`);
-  console.log(`      masse (Terre; 5% · 25% · mediana · 75% · 95%): ${[0.05, 0.25, 0.5, 0.75, 0.95].map((x) => q(x).toFixed(2)).join(' · ')}; le super-Terre nascono nei dischi pesanti: ${med(dischiGrossi).toFixed(3)} M☉ contro ${med(dischi).toFixed(3)} (mediane); in media ${(quanti / N).toFixed(1)} pianeti per stella; i rocciosi prendono fino al ${perc(colmo)} dei solidi`);
+  console.log(`      masse (Terre; 5% · 25% · mediana · 75% · 95%): ${[0.05, 0.25, 0.5, 0.75, 0.95].map((x) => q(x).toFixed(2)).join(' · ')}; le super-Terre nascono nei dischi pesanti: ${med(dischiGrossi).toFixed(3)} M☉ contro ${med(dischi).toFixed(3)} (mediane); in media ${(quanti / N).toFixed(1)} pianeti per stella; i rocciosi prendono fino al ${perc(colmo)} dei solidi (${misti} rocciosi a cavallo della neve, contati a parte)`);
   assert.ok(con / N >= 0.9, `rocciosi dentro la neve solo in ${con} dischi su ${N}`);
   assert.ok(q(0.5) >= 0.03 && q(0.5) <= 6 && q(0.25) >= 0.03, `il roccioso tipico non è di taglia terrestre: mediana ${q(0.5)} Terre`);
   assert.ok(med(dischiGrossi) > med(dischi), 'le super-Terre vengono dai dischi più pesanti');
@@ -123,20 +137,36 @@ prova('di che cosa sono fatti: i campi che il resto del cosmo si aspetta, e le f
   assert.equal(visti.size, 3, 'ci sono rocciosi, ghiacciati e gassosi');
 });
 
-prova('il ferro cresce verso la stella, e non con i suoi metalli; l\'acqua dei rocciosi è poca, e di più verso la neve', () => {
-  const rocciosi = (Z) => SEMI.map((s) => formaPianeti({ ...SOLE, Z }, s).filter((p) => p.tipo === 'roccioso'));
-  const media = (v) => v.reduce((a, b) => a + b, 0) / v.length, ferro = (Z) => media(rocciosi(Z).flat().map((p) => p.composizione.ferro));
-  // (il ferro NON cresce con i metalli della stella: ferro e roccia crescono insieme, come in chimica.js; conta solo dove nasce il pianeta)
-  assert.ok(Math.abs(ferro(0.5) / ferro(1) - 1) < 0.2 && Math.abs(ferro(2) / ferro(1) - 1) < 0.2, `ferro: ${ferro(0.5)} → ${ferro(1)} → ${ferro(2)}`);
+// (PRIMA: «il ferro cresce verso la stella». Era la regola semplice di disco.js — il ferro della polvere ∝ T² —, che la catena
+// degli elementi ha tolto: con le temperature di condensazione di Lodders il ferro e i silicati condensano insieme (1334 e 1310 K),
+// e il nucleo non è più il ferro della polvere ma ciò che la separazione mette nel metallo. Le prove sono ora ciò che la fisica
+// nuova dice, contate su 300 dischi: il ferro della roccia non segue i metalli della stella; lontano dalla stella, al freddo, il
+// gas ossida il ferro e il mantello è più ricco di FeO; i pianeti più pesanti si separano più a fondo e più caldi, e il silicio
+// va nel nucleo: il nucleo cresce con la massa.)
+prova('il ferro della roccia non segue i metalli della stella; lontano il mantello è più ossidato; il nucleo cresce con la massa; l\'acqua dei rocciosi è poca, e di più verso la neve', () => {
+  const rocciosi = (Z, n = 60) => Array.from({ length: n }, (_, i) => formaPianeti({ ...SOLE, Z }, i + 1).filter((p) => p.tipo === 'roccioso'));
+  const media = (v) => v.reduce((a, b) => a + b, 0) / v.length, iFe = EL.SIMBOLI.indexOf('Fe'), iMg = EL.SIMBOLI.indexOf('Mg');
+  const feRoccia = (p) => { const v = p.composizione.elementi.solidi; let t = 0; for (const x of v) t += x; return v[iFe] / t; }, ferro = (Z) => media(rocciosi(Z).flat().map(feRoccia));
+  // (il ferro NON cresce con i metalli della stella: ferro e roccia crescono insieme; la stessa tolleranza di prima, sul ferro della roccia)
+  assert.ok(Math.abs(ferro(0.5) / ferro(1) - 1) < 0.2 && Math.abs(ferro(2) / ferro(1) - 1) < 0.2, `ferro della roccia: ${ferro(0.5)} → ${ferro(1)} → ${ferro(2)}`);
+  // le correlazioni di rango su 300 dischi, oltre 4 scarti di quella di due variabili indipendenti (1/√(n − 1))
+  const tutti = rocciosi(1, 300).flat(), rango = (v) => { const o = v.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]), r = new Array(v.length); o.forEach(([, i], k) => { r[i] = k; }); return r; };
+  const spearman = (a, b) => { const ra = rango(a), rb = rango(b), ma = media(ra), mb = media(rb); let c = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { c += (ra[i] - ma) * (rb[i] - mb); x += (ra[i] - ma) ** 2; y += (rb[i] - mb) ** 2; } return c / Math.sqrt(x * y); };
+  const feNum = (p) => { const s = p.composizione.elementi.silicato, fe = s[iFe] / 55.845, mg = s[iMg] / 24.305; return fe / (fe + mg); }, soglia = 4 / Math.sqrt(tutti.length - 1);
+  const rOss = spearman(tutti.map((p) => p.composizione.elementi.Tformazione), tutti.map(feNum)), rNuc = spearman(tutti.map((p) => p.massaKg), tutti.map((p) => p.composizione.ferro));
+  console.log(`      ${tutti.length} rocciosi: ferro della roccia ${ferro(1).toFixed(3)}; rango(T di formazione, Fe/(Fe+Mg) del mantello) ${rOss.toFixed(2)}; rango(massa, nucleo) ${rNuc.toFixed(2)} (4 scarti: ${soglia.toFixed(3)})`);
+  assert.ok(rOss < -soglia, 'più freddo, più ossidato'); assert.ok(rNuc > soglia, 'più pesante, più nucleo');
   const acque = [];
   for (const r of rocciosi(1)) {
-    if (r.length > 1) { assert.ok(r[0].composizione.ferro > r.at(-1).composizione.ferro, 'più ferro vicino alla stella'); assert.ok(r[0].composizione.acqua < r.at(-1).composizione.acqua, 'più acqua lontano'); }
+    if (r.length > 1) assert.ok(r[0].composizione.acqua < r.at(-1).composizione.acqua, 'più acqua lontano');
     for (const p of r) { acque.push(p.composizione.acqua); assert.ok(p.composizione.acqua > 1e-4 && p.composizione.acqua <= 0.2, `acqua ${p.composizione.acqua}`); }
   }
   acque.sort((a, b) => a - b); const mediana = acque[acque.length >> 1];
   assert.ok(mediana > 0.001 && mediana < 0.03, `acqua tipica di un roccioso: ${mediana}`);
-  // la Terra di casa nostra: un roccioso attorno a 1 UA ha circa un terzo di ferro
-  const terreVere = rocciosi(1).flat().filter((p) => p.aUA > 0.8 && p.aUA < 1.2);
+  // la Terra di casa nostra: un roccioso di massa terrestre (0,5–2) attorno a 1 UA ha circa un terzo di nucleo (prima si
+  // prendevano tutti i rocciosi lì: ora il nucleo dipende dalla massa, e le super-Terre del disco ne hanno di più)
+  const terreVere = tutti.filter((p) => p.aUA > 0.8 && p.aUA < 1.2 && p.massaKg > 0.5 * MTERRA && p.massaKg < 2 * MTERRA);
+  console.log(`      ${terreVere.length} Terre a 0,8–1,2 UA: nucleo medio ${media(terreVere.map((p) => p.composizione.ferro)).toFixed(3)} (la Terra 0,325)`);
   assert.ok(terreVere.length > 10 && Math.abs(media(terreVere.map((p) => p.composizione.ferro)) - 0.32) < 0.05);
 });
 

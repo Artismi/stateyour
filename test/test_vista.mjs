@@ -3,7 +3,8 @@
 //   B. le tabelle del cielo di pianeta.js (la luce diffusa più volte, l'irradianza del cielo): direzioni e passi;
 //   C. sulla scheda grafica (Chromium senza finestre, la pagina src/tre/prove/vista.html): i passi dei volumi della
 //      galassia (da fuori e da dentro il disco) e della ragnatela, i passi dell'aria, l'accumulo nel tempo;
-//   D. il 3D nero del punto a caso: l'aria a camera ferma, dal primo fotogramma, è il conto pieno.
+//   D. il 3D nero del punto a caso: l'aria a camera ferma, dal primo fotogramma, è il conto pieno;
+//   E. la finestra a ogni distanza (lavoro 9): il mare dal 3D ai nanometri, con le schermate e i ms per fotogramma.
 // C12: per ogni discretizzazione, dimezzare il passo (o raddoppiare i campioni) cambia l'immagine sempre meno — l'ORDINE
 // p è la pendenza di log(scarto) su log(n) tra raddoppi successivi —, e il valore che l'app usa sta nella zona convergente.
 // LA TOLLERANZA viene dall'occhio, dichiarata prima: la differenza appena percepibile di colore, ΔE*ab = 2,3 (Mahy, Van
@@ -129,6 +130,23 @@ await prova('i passi del volume della ragnatela: convergono; a camera ferma, con
   if (u.dE.p99 > JND) nonTorna.push(`la ragnatela IN MOTO (un fotogramma, 24 passi, prima che la storia si riempia): ΔE*ab 99° centile ${num(u.dE.p99, 2)} > ${num(JND)} — la grana dei passi si vede finché la camera si muove (dichiarato: è il prezzo dell'accumulo; accumulo.js)`);
   assert.ok(c.scarto < EPS && c.dE.p99 <= JND, `ΔE ${c.dE.p99}`);
 });
+// ---------- E. LA FINESTRA A OGNI DISTANZA (PROGETTO.md, lavoro 9): il primo mare con il vento del catalogo, dal 3D ai
+// nanometri; le schermate guardate (deviceScaleFactor 1) in src/tre/prove/schermate/finestra_*.png, e i ms per fotogramma
+console.log('E. la finestra a ogni distanza (src/tre/prove/finestra.html: il mare)');
+{
+  const pF = await browser.newPage({ viewport: { width: 400, height: 300 }, deviceScaleFactor: 1 }); pF.on('pageerror', (e) => errori.push(e.message)); pF.on('console', (m) => { if (m.type() === 'error') errori.push(m.text().slice(0, 300)); });
+  await pF.goto(`http://127.0.0.1:${server.address().port}/src/tre/prove/finestra.html`); await pF.waitForFunction(() => window.prova && window.prova.caricata);
+  const info = await pF.evaluate(() => window.prova.pronta()), cartella = path.join(RADICE, 'src/tre/prove/schermate');
+  console.log(`    il mare: stella ${info.via.stella}, pianeta ${info.via.pianeta} della galassia ${info.via.galassia}; il punto ${num(info.punto.lon)}°, ${num(info.punto.lat)}°, vento ${num(info.punto.onde.U)} m/s, onde ${num(info.punto.onde.H)} m`);
+  const scatta = async (nome) => { const f = path.join(cartella, `finestra_${nome}.png`); await pF.screenshot({ path: f }); return f; };
+  await prova('dal 3D alla finestra e agli atomi: ogni distanza ha la sua immagine, e i costi per fotogramma (grafica simulata)', async () => {
+    for (const [q, nome] of [[2e6, '1_lontano_2000km'], [20, '2_vicino_20m']]) { const r = await pF.evaluate((q) => window.prova.tre({ quota: q }), q); await scatta(nome); console.log(`      3D a ${num(q)} m: ${num(r.msMediana)} ms per fotogramma (mediana)`); }
+    for (const [L, nome] of [[1, '3_metri_1m'], [0.01, '4_centimetri_1cm'], [1e-4, '5_micron_100um']]) { const r = await pF.evaluate((L) => window.prova.finestra({ latoM: L }), L); await scatta(nome); console.log(`      finestra di ${num(L)} m (${r.N}×${r.N}, ${r.bande} ottave): creata in ${num(r.msCrea)} ms, ${num(r.msFotogramma)} ms per immagine; schiuma ${num(100 * r.schiuma)}%`); }
+    const a = await pF.evaluate(() => window.prova.atomi({ latoM: 1e-8 })); await scatta('6_nanometri_10nm'); console.log(`      i nanometri: ${a.atomi} atomi, scena in ${num(a.msCrea)} ms, ${num(a.msFotogramma)} ms per fotogramma; ${a.descrizione.slice(0, 160)}…`);
+    assert.ok(a.atomi > 1000);
+  });
+  await pF.close();
+}
 assert.equal(errori.length, 0, errori.join('\n'));
 await browser.close(); server.close();
 for (const n of nonTorna) console.log('  ≠ NON TORNA (dichiarato):', n);
