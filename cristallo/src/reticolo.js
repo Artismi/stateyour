@@ -122,7 +122,8 @@ export function creaCristallo(opzioni) {
   const primitiva = PRIMITIVA[par.centratura].map((f) => combina(f, A));
   const piano = !!par.piano;
   // la base ripetuta dalla centratura: gli atomi della cella convenzionale (frazionari in [0, 1))
-  const base = (opzioni.atomi ?? [{ p: [0, 0, 0], s: 1 }]).map((x) => ({ p: [...x.p], s: x.s < 0 ? -1 : 1 }));
+  // (s è il segno, ±1; un'«ampiezza» facoltativa, reale, ne fa un'altezza qualunque: la usa il passo inverso)
+  const base = (opzioni.atomi ?? [{ p: [0, 0, 0], s: 1 }]).map((x) => ({ p: [...x.p], s: x.ampiezza ?? (x.s < 0 ? -1 : 1) }));
   const atomi = [];
   base.forEach((at, i) => centri.forEach((cc, j) => {
     const f = [0, 1, 2].map((k) => { const x = at.p[k] + cc[k]; return x - Math.floor(x); });

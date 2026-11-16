@@ -1,0 +1,141 @@
+[
+ {
+  "nome": "1-quadrati-fig19",
+  "distanza": 0.0455,
+  "cella": "obliquo",
+  "classi": [
+   [],
+   [],
+   []
+  ],
+  "m": [
+   0,
+   0
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 464,
+  "vicini": 429,
+  "indirizzo": "reticolo=piano.obliquo.P a=1 b=1.1155585380277302 c=10 alfa=90 beta=90 gamma=63.93098802154355 atomi=-0.17929840931814756,0.1465202510915411,0 U0=1 w=0.2563081230202893 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.6749986932213977,0.7378647256811017,0.47219613649716824,0.07476970732609337,12.72310180024576,1007"
+ },
+ {
+  "nome": "2-esagoni-fig27",
+  "distanza": 0.0489,
+  "cella": "esagonale",
+  "classi": [
+   [
+    [
+     1,
+     0
+    ]
+   ]
+  ],
+  "m": [
+   1,
+   0
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 401,
+  "vicini": 452,
+  "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=+0.700611386910871,0.707113449310083,0 U0=1 w=0.12456049669554384 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.25731558688761724,0.28965796429272483,0.31677636647417806,0.18721527852116832,3.1251049103622153,579"
+ },
+ {
+  "nome": "3-stelle-fig30",
+  "distanza": 0.0363,
+  "cella": "esagonale",
+  "classi": [
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ],
+  "m": [
+   0,
+   0
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 369,
+  "vicini": 336,
+  "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=-0.6064168563335421,0.10011284093198869,0 U0=1 w=0.23028266867325048 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.27432852469610386,0.41280401838641345,0.24452665914779773,0.030271889156887995,15.024260959845346,1219"
+ },
+ {
+  "nome": "5-intreccio-fig33",
+  "distanza": 0.0369,
+  "cella": "quadrato",
+  "classi": [
+   [
+    [
+     1,
+     0
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  ],
+  "m": [
+   4,
+   4
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 419,
+  "vicini": 946,
+  "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.902051441154887,0.057238907889934465,0 U0=1 w=0.11497422869165227 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.9180949242280875,0.047064629721460145,0.668301422405984,0.6601029536536916,3.678514121894426,832"
+ },
+ {
+  "nome": "7-geometrico-fig185",
+  "distanza": 0.0401,
+  "cella": "quadrato",
+  "classi": [
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ],
+  "m": [
+   0,
+   0
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 503,
+  "vicini": 408,
+  "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=-0.9408344644249951,0.9052951490764329,0 U0=1 w=0.23333851099151737 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.5103725036959019,0.9796121129759142,0.02414412946878316,-0.41315893527223496,8.440282073599152,669"
+ },
+ {
+  "nome": "8-giro-fig153",
+  "distanza": 0.03,
+  "cella": "quadrato",
+  "classi": [
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ],
+  "m": [
+   0,
+   0
+  ],
+  "sorelle": 1,
+  "atomi": 1,
+  "cristalli": 484,
+  "vicini": 816,
+  "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.43706688257778215,0.6549358681101598,0 U0=1 w=0.21264405812707668 r0=0.5,0.5,0.5 v0=2.2,0.9,0.4 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 orbite=0.2505820546320853,0.5397010977658979,0.8776094089304765,0.03405035226704953,7.640285159252692,898"
+ }
+]

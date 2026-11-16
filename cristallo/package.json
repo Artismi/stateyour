@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node test/test_caso.mjs && node test/test_reticoli.mjs && node test/test_moto.mjs && node test/test_finestra.mjs && node test/test_pattern.mjs && node test/test_zona.mjs && node test/test_sorgente.mjs && node test/test_orbite.mjs",
+    "test": "node test/test_caso.mjs && node test/test_reticoli.mjs && node test/test_moto.mjs && node test/test_finestra.mjs && node test/test_pattern.mjs && node test/test_zona.mjs && node test/test_sorgente.mjs && node test/test_orbite.mjs && node test/test_decodifica_cella.mjs",
     "simmetria": "node test/test_simmetria.mjs",
     "start": "node servi.mjs"
   }

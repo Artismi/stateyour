@@ -32,8 +32,8 @@ export function tesseraDelleOrbite(p) {
 // IL CONTROCAMPO: su un'immagine a linee (1 dove c'è una linea, 0 altrove) le regioni connesse dello sfondo si
 // colorano in due colori, con la regola pari/dispari: due regioni separate da una linea hanno colori diversi (un
 // colore per BFS sul grafo delle regioni vicine attraverso una linea, partendo dalla più grande). Restituisce per ogni
-// punto 0 (linea), 1 o 2.
-export function controcampo(linee, W, H) {
+// punto 0 (linea, o regione più piccola di «minimo» punti), 1 o 2.
+export function controcampo(linee, W, H, minimo = Math.round(0.0004 * W * H)) {
   const lab = new Int32Array(W * H).fill(-1), coda = new Int32Array(W * H);
   let n = 0;
   for (let i = 0; i < W * H; i++) {
@@ -63,6 +63,7 @@ export function controcampo(linee, W, H) {
     while (q.length) { const a = q.shift(); for (const b of vicini[a]) if (!colore[b]) { colore[b] = 3 - colore[a]; q.push(b); } }
   }
   const out = new Uint8Array(W * H);
-  for (let i = 0; i < W * H; i++) out[i] = lab[i] >= 0 ? colore[lab[i]] : 0;
+  // le regioni minuscole (un rombino dove due linee spesse si incrociano) vanno col colore delle linee
+  for (let i = 0; i < W * H; i++) out[i] = lab[i] >= 0 && dim[lab[i]] >= minimo ? colore[lab[i]] : 0;
   return out;
 }

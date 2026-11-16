@@ -13,7 +13,7 @@
 // LA STABILITÀ: la matrice di monodromia (4 × 4, per differenze centrali sullo stato x, y, vx, vy dopo un periodo) ha
 // due autovalori 1 e la coppia λ, 1/λ; la traccia meno 2 è λ + 1/λ: sotto 2 in modulo l'orbita è stabile (ellittica),
 // sopra è instabile.
-// IL CATALOGO: dai semi della fonte del caso (punto e direzione a caso nella cella, dove V < E), si segue la
+// IL CATALOGO (senza le librazioni, i tratti avanti e indietro: velocità minima sotto un decimo della media): dai semi della fonte del caso (punto e direzione a caso nella cella, dove V < E), si segue la
 // traiettoria per al più «celle» celle; dove torna vicino a sé stessa a meno di un vettore del reticolo (entro 0,1 in
 // posizione e 0,2 rad in direzione) si tenta il tiro. Si tengono le orbite distinte (periodo diverso oltre 10⁻⁶),
 // ordinate dal periodo più corto, con il loro (m₁, m₂) e la loro stabilità.
@@ -112,6 +112,8 @@ export function catalogo(cr, E, B = [0, 0, 0], { semi = 40, celle = 6, radice = 
     let o = null, migliore = null;
     for (const r of ritorni) { o = tiro(cr, E, B, x0, th0, r.T, r.M, r.n); if (o && o.T <= 1.2 * Tmax && !trovate.some((t) => Math.abs(t.T - o.T) < 1e-6)) { migliore = r; break; } o = null; }
     if (!o) continue;
+    // via le librazioni: i tratti avanti e indietro tra due punti d'arresto (la velocità vi scende quasi a zero)
+    { let vmin = Infinity, vsum = 0, nv = 0; mappa(cr, o.x0, o.v0, o.T, o.n, B, (x, v) => { const q = Math.hypot(v[0], v[1]); vmin = Math.min(vmin, q); vsum += q; nv++; }); if (vmin < 0.1 * (vsum / nv)) continue; }
     o.m = migliore.m; o.E = E; o.traccia = stabilita(cr, o, B); o.stabile = Math.abs(o.traccia) < 2;
     trovate.push(o);
   }
