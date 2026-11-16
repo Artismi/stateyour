@@ -34,8 +34,8 @@
 //                  mare si rinnova per diffusione in L²/6D = 0,17 ms) quella specie è una concentrazione fissa, come l'acqua;
 //                  ciò che nasce nella scatola esce col ricambio (passi senza ritorno, contati a parte).
 // I LUOGHI: la finestra del mare (luogoDelMare: il campione di mare.js, la resa prebiotica dell'aria), la pozza che
-// evapora e il camino (le pozze e le sorgenti calde di mare.js prebiotica), i PORI DELLA CROSTA (luogoDellaCrosta: Athy, il
-// gradiente geotermico, l'H₂ della serpentinizzazione e della radiolisi, il CO₂ disciolto; vedi lì).
+// evapora e il camino (le pozze e le sorgenti calde di mare.js prebiotica), i PORI DELLA CROSTA (luogoDellaCrosta: Athy e il
+// tempo di residenza dell'acqua dalla colonna di suolo.js, il gradiente geotermico, l'H₂ della serpentinizzazione e della radiolisi, il CO₂ disciolto; vedi lì).
 //   GILLESPIE      l'algoritmo diretto (Gillespie 1977) su questo volume: il tempo d'attesa Δt = −ln(1 − u)/a₀ (legge
 //                  ESPONENZIALE da un tiro uniforme, col logaritmo esatto di eventi.js) e quale reazione (legge DISCRETA sui
 //                  pesi a_j, la stessa di sceltaDiscreta, cercata in un albero di somme parziali). I tiri sono le estrazioni
@@ -80,6 +80,7 @@ import { catalisiDa } from './molecole_incontri.js';
 import { campioneAcqua } from './mare.js';
 import { crostaDelPianeta, comeOggetto } from './elementi.js';
 import { STORIA } from './storia.js';
+import { colonnaDelPianeta } from './suolo.js'; // la porosità di Athy e il tempo di residenza dell'acqua nei pori: dal suolo
 
 export const NA = 6.02214076e23;
 export const SCALA_PREBIOTICA = 1e-3, DIFFUSIONE = 1e-9, BRONSTED_PKA = 1.5;
@@ -454,10 +455,12 @@ export function luogoDelMare(stato, { lon = 0, lat = 0, latoM = 1e-6, fondoM = n
 
 // ---------- IL LUOGO NEI PORI DELLA CROSTA: l'acqua nelle crepe dei primi chilometri (dove sulla Terra vive la maggior
 // parte dei microbi). Lo stesso luogo, la stessa regola; cambiano il padre e i flussi.
-//   POROSITÀ    la legge di Athy (1930), φ = φ₀·e^(−z/L). φ₀ e L sono DATI per tipo di roccia [R, ricordati, da rileggere]:
-//               basalto della crosta oceanica superiore φ₀ 0,10, L 1 km (Carlson e Herrick 1990, strati 2A–2B); granito
-//               fratturato φ₀ 0,02, L 2 km (Stober e Bucher 2007). Il tipo è quello della crosta del pianeta (elementi.js
-//               crostaDelPianeta: basalto, e granito se ci sono i continenti). Il modello non ha una porosità sua: dichiarato.
+//   POROSITÀ    la legge di Athy (1930), φ = φ₀·e^(−z/L), con φ₀ e L DALLA ROCCIA DI QUEL PIANETA (suolo.js rocciaDelPianeta:
+//               φ₀ la contrazione termica dei suoi minerali dal fuso alla superficie, L la chiusura delle sue crepe sotto il peso
+//               della colonna con la gravità del pianeta; prima erano dati per tipo, 0,10 e 1 km per il basalto, 0,02 e 2 km per
+//               il granito [R], ora stampati accanto come confronto). Il tipo è quello della crosta del pianeta (elementi.js
+//               crostaDelPianeta: basalto, e granito se ci sono i continenti). La colonna è suolo.js colonnaDelPianeta, o
+//               quella che chi chiama passa («colonna»: la colonna del punto, padreSuolo(...).colonna).
 //   TEMPERATURA il gradiente geotermico del pianeta: T(z) = T_superficie + (q/k)·z, con q il flusso di calore dell'interno di
 //               oggi (geologia.js interno, dalla storia termica) e k la conducibilità della roccia in alto di storia.js
 //               (STORIA.kSu). Senza il calore prodotto dentro la crosta (dichiarato: a 1-3 km sposta di pochi kelvin).
@@ -470,16 +473,16 @@ export function luogoDelMare(stato, { lon = 0, lat = 0, latoM = 1e-6, fondoM = n
 //               semplificazione di Lin e altri 2005 [R]), G(H₂) = 0,45 molecole per 100 eV (alfa: Spinks e Woods 1990 [R]);
 //               (3) il CO₂ DISCIOLTO: il carbonio inorganico del mare sopra (mare.js), o l'aria del pianeta con la costante
 //               di Henry (0,034 mol/L/bar a 25 °C, ΔH/R = 2400 K [R]). L'H₂ a regime è produzione × tempo di residenza
-//               dell'acqua nei pori, RESIDENZA = 10⁴ anni [PARAMETRO LIBERO: le acque profonde datate vanno da 10³ a 10⁹ anni].
+//               dell'acqua nei pori a quella profondità: la colonna di suolo.js (Darcy con la ricarica, la partizione di Dupuit
+//               tra gli strati, τ(z) = ∫φ/q dz, al più l'età della crosta). Prima era un parametro libero, 10⁴ anni.
 //   Il limite di temperatura della vita conosciuta (122 °C: Takai e altri 2008) NON entra in niente: la riga lo stampa
 //   accanto, come confronto.
-export const ATHY = Object.freeze({ basalto: { phi0: 0.10, L: 1000 }, granito: { phi0: 0.02, L: 2000 } });
-export const RADIOGENICO = Object.freeze({ U: [9.81e-5, 4.468], Th: [2.64e-5, 14.05], K: [3.48e-9, 1.248] }), G_H2 = 0.45, RESIDENZA = 1e4 * 3.156e7;
+export const RADIOGENICO = Object.freeze({ U: [9.81e-5, 4.468], Th: [2.64e-5, 14.05], K: [3.48e-9, 1.248] }), G_H2 = 0.45;
 export const SERPENTINO = Object.freeze({ k300: 3e-8, Ea: 80, parte: 1 / 3 });
-export function luogoDellaCrosta(pianeta, { profonditaM = 1000, latoM = 1e-6, roccia = null, stella = null, mare = null, kRoccia = STORIA.kSu, eta = null } = {}) {
+export function luogoDellaCrosta(pianeta, { profonditaM = 1000, latoM = 1e-6, roccia = null, stella = null, mare = null, kRoccia = STORIA.kSu, eta = null, colonna = null } = {}) {
   const P = pianeta, q = P?.interno?.q, crosta = P ? crostaDelPianeta(P, { stella }) : null; if (!(q > 0) || !crosta) return null;
   const tipo = roccia || (crosta.Mbasalto > 0 ? 'basalto' : 'granito'), ogg = comeOggetto(crosta[tipo]), frazioni = {}; let tot = 0; for (const s in ogg) if (Number.isFinite(ogg[s]) && ogg[s] > 0) tot += ogg[s];
-  const z = profonditaM, at = ATHY[tipo], phi = at.phi0 * Math.exp(-z / at.L), Ts = P.clima?.T ?? 288, T = Ts + (q / kRoccia) * z, rhoR = 2900, rhoW = 1000;
+  const z = profonditaM, col = colonna || colonnaDelPianeta(P, { tipo, kRoccia, eta: eta ?? P.interno?.eta }), phi = col.porosita(z), residenza = Math.max(1, col.residenza(z) * 3.156e7), Ts = P.clima?.T ?? 288, T = Ts + (q / kRoccia) * z, rhoR = 2900, rhoW = 1000;
   for (const s of ['Fe', 'U', 'Th', 'K', 'Mg', 'Si']) { const v = ogg[s]; frazioni[s] = Number.isFinite(v) && tot > 0 ? v / tot : null; }
   const anni = eta ?? P.interno?.eta ?? 4.5e9, ora = (s) => RADIOGENICO[s][0] * Math.pow(2, (4.5e9 - anni) / 1e9 / RADIOGENICO[s][1]); // (U e Th all'età del pianeta: più giovane, più caldo)
   let A = 0; const mancano = []; for (const s of ['U', 'Th', 'K']) { if (frazioni[s] == null) { mancano.push(s); continue; } A += frazioni[s] * ora(s); } // W per kg di roccia
@@ -487,15 +490,15 @@ export function luogoDellaCrosta(pianeta, { profonditaM = 1000, latoM = 1e-6, ro
   const radiolisi = ((A * rhoR * (1 - phi) * wAcqua) / (100 * 1.602176634e-19)) * G_H2 / NA / Lpori; // mol di H2 per litro d'acqua al secondo
   const kSerp = SERPENTINO.k300 * Math.exp((-SERPENTINO.Ea / R) * (1 / T - 1 / 573.15)), FeMol = (frazioni.Fe ?? 0) / 0.055845; // mol di ferro per kg di roccia
   const serpentinizzazione = ((kSerp * FeMol * SERPENTINO.parte * rhoR * (1 - phi)) / 3) / Lpori; // mol H2 / L / s
-  const H2 = (radiolisi + serpentinizzazione) * RESIDENZA;
+  const H2 = (radiolisi + serpentinizzazione) * residenza;
   // il carbonio inorganico: dal mare sopra, o dall'aria con Henry
   const pCO2 = (P.atmosfera?.gas?.CO2 ?? 0) * ((P.clima?.pressione ?? 1e5) / 1e5), henry = 0.034 * Math.exp(2400 * (1 / T - 1 / 298.15));
   const CO2 = mare?.carbonio > 0 ? mare.carbonio : henry * pCO2, pH = mare?.pH ?? 7;
   const molecole = {}; if (H2 > 0) molecole['[HH]'] = H2; if (CO2 > 0) molecole['OC(=O)O'] = CO2;
   const minerali = ['magnetite', ...(tipo === 'basalto' ? ['olivina', 'pirosseno', 'plagioclasio'] : ['feldspato potassico', 'quarzo'])];
   return { indirizzo: `${P.id ?? 'pianeta'}/crosta/${tipo}/${z.toFixed(0)} m/${latoM.toExponential(2)}`, tipo: 'pori della crosta', T, pH, attivitaAcqua: 1, molecole, spettatori: {}, ioni: {}, minerali, cibo: Object.keys(molecole),
-    flussi: { tenute: { ...molecole }, ricambio: 1 / RESIDENZA }, latoM, V: latoM ** 3,
-    padre: { profonditaM: z, porosita: phi, roccia: tipo, gradienteKkm: (q / kRoccia) * 1000, q, radiolisi, serpentinizzazione, H2, CO2, pCO2, frazioni, mancano, profondita122: ((395.15 - Ts) * kRoccia) / q },
+    flussi: { tenute: { ...molecole }, ricambio: 1 / residenza }, latoM, V: latoM ** 3,
+    padre: { profonditaM: z, porosita: phi, phi0: col.roccia.phi0, L: col.roccia.L, confrontoAthy: col.roccia.confronto, residenzaAnni: residenza / 3.156e7, ricarica: col.ricarica, ricaricaDa: col.ricaricaDa, roccia: tipo, gradienteKkm: (q / kRoccia) * 1000, q, radiolisi, serpentinizzazione, H2, CO2, pCO2, frazioni, mancano, profondita122: ((395.15 - Ts) * kRoccia) / q },
     manca: [...mancano.map((s) => `${s} della crosta non è un numero in elementi.js: la radiolisi non lo conta`), 'la pressione dei pori nelle energie', 'il calore prodotto dentro la crosta nel gradiente'] };
 }
 

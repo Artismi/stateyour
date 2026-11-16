@@ -15,7 +15,8 @@
 //   F. RAF: un caso costruito con la risposta nota (Hordijk e Steel); il formosio con il seme di glicolaldeide (il ciclo di
 //      Breslow è un RAF di ciò che la rete fa); la sola formaldeide (nessun legame C–C nelle regole: nessun RAF);
 //   G. EVENTI RARI: forward flux sampling contro il tempo di primo passaggio esatto di una nascita-e-morte;
-//   H. I PORI DELLA CROSTA (il primo pianeta roccioso del catalogo con calore e crosta): Athy, il gradiente geotermico,
+//   H. I PORI DELLA CROSTA (il primo pianeta roccioso del catalogo con calore e crosta): Athy e il tempo di residenza dalla
+//      colonna di suolo.js (la roccia di quel pianeta, la ricarica della pioggia attesa), il gradiente geotermico,
 //      l'H₂ della serpentinizzazione e della radiolisi, il CO₂; la chimica che si muove lì e che cosa la rilevazione vede;
 //   I. IL COSTO.
 // LE TOLLERANZE, dichiarate prima: 4 scarti (p = 6,3·10⁻⁵, come test_coerenza_scale) per le medie nel tempo (scarto delle
@@ -165,7 +166,7 @@ prova('il primo pianeta roccioso del catalogo con calore dall\'interno: porosit�
     const st = X.storia(S, { V: L.V, tempo: 3.156e9, massimo: 2e5, flussi: L.flussi, adatta: true }), r = X.rileva(S, st, { tempoCicli: 500 }), ms = performance.now() - t1;
     const ins = st.motore.ins, diPartenza = new Set(Object.keys(S.luogo.molecole).filter((k) => S.idx.has(k)).map((k) => ins.di[S.idx.get(k)])), nuove = S.chiavi.filter((k, i) => !diPartenza.has(ins.di[i]) && st.medieSpecie[i] >= 0.5).map((k) => `${k} ${num(st.medieSpecie[S.idx.get(k)])}`);
     assert.ok(L.padre.porosita > 0 && L.T > 0 && st.eventi > 0);
-    console.log(`      ${z} m (${L.padre.roccia}): φ ${num(L.padre.porosita)}, ${num(L.T - 273.15)} °C (${num(L.padre.gradienteKkm)} K/km), H₂ ${num(L.padre.H2)} mol/L (serpentinizzazione ${num(L.padre.serpentinizzazione)}, radiolisi ${num(L.padre.radiolisi)} mol/L/s), CO₂ ${num(L.padre.CO2)}; ${S.chiavi.length} specie, ${S.reazioni.length} reazioni, in ${num(st.t / 3.156e7)} anni ${st.eventi} eventi, nate: ${nuove.join(', ') || 'niente'}; RAF ${r.emerso.raf ? 'sì' : 'no'}, cicli ${r.cicli.length}, membrane ${r.emerso.membrane ? 'sì' : 'no'}; ${num(ms)} ms`);
+    console.log(`      ${z} m (${L.padre.roccia}): φ ${num(L.padre.porosita)} (Athy della roccia del pianeta, suolo.js: φ₀ ${num(L.padre.phi0)}, L ${num(L.padre.L)} m; per tipo [R] erano ${num(L.padre.confrontoAthy.phi0)} e ${num(L.padre.confrontoAthy.L)} m), l'acqua ci resta ${num(L.padre.residenzaAnni)} anni (era 10⁴, libero), ${num(L.T - 273.15)} °C (${num(L.padre.gradienteKkm)} K/km), H₂ ${num(L.padre.H2)} mol/L (serpentinizzazione ${num(L.padre.serpentinizzazione)}, radiolisi ${num(L.padre.radiolisi)} mol/L/s), CO₂ ${num(L.padre.CO2)}; ${S.chiavi.length} specie, ${S.reazioni.length} reazioni, in ${num(st.t / 3.156e7)} anni ${st.eventi} eventi, nate: ${nuove.join(', ') || 'niente'}; RAF ${r.emerso.raf ? 'sì' : 'no'}, cicli ${r.cicli.length}, membrane ${r.emerso.membrane ? 'sì' : 'no'}; ${num(ms)} ms`);
     if (L.padre.mancano.length && !nonTorna.includes(`crosta: ${L.manca[0]}`)) nonTorna.push(`crosta: ${L.manca[0]}`); }
   const L = X.luogoDellaCrosta(P, { profonditaM: 1000, stella });
   console.log(`      (stella ${crosta.sid}, pianeta ${crosta.p.id}, flusso di calore ${num(P.interno.q)} W/m²; confronto, non nel codice: la vita conosciuta arriva a 122 °C — Takai e altri 2008 —, qui a ${num(L.padre.profondita122 / 1000)} km col gradiente di questo pianeta)`);

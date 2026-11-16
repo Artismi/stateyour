@@ -24,7 +24,8 @@ import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tesse
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
 import { finestraAcqua, immagineFinestra, scenaNano } from './finestra.js';
-import { chimicaDellaFinestra } from './reazioni.js';
+import { chimicaDellaFinestra, luogoDellaCrosta, sistema as sistemaChimico, storia as storiaChimica, rileva } from './reazioni.js';
+import { finestraSuolo, immagineSuolo, scenaSuolo } from './suolo.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
 import { campoGrani, granoGhiaccio, popolazioneTracce } from './grani.js';
@@ -62,8 +63,23 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   cam.z *= k; cam.cx = ax - (fx - W / 2) / cam.z; cam.cy = ay - (fy - H / 2) / cam.z;
   const m = minimo(W, H);
   // LA ROCCIA (livello 5): in fondo alla superficie, avvicinandosi ancora, si guarda di che cosa è fatto quel punto
-  if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; cam.passoRoccia = 0; cam.eventoAcqua = false; return null; }
+  if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.latoSuolo = undefined; return null; }
   if (cam.livello === 5) {
+    // SUL SUOLO (suolo.js, PROGETTO.md lavoro 9): prima della roccia, le finestre del suolo di quel punto, di dieci in dieci
+    // (LATI_SUOLO), come per l'acqua; sotto l'ultima, la roccia del punto alla sua grandezza vera. «latoSuolo» non detto è la
+    // prima finestra; null è la roccia
+    if (cam.latoSuolo !== null && !cam.suAcqua) {
+      const r = rocciaDi(cam);
+      if (r?.suolo) {
+        const L = r.larghezzaM, i = LATI_SUOLO.indexOf(L);
+        if (cam.z > 9 * m) { if (i + 1 < LATI_SUOLO.length) { cam.latoSuolo = LATI_SUOLO[i + 1]; cam.z /= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+          const b = rocciaDi({ ...cam, latoSuolo: null, passoRoccia: 0 }); cam.latoSuolo = null; cam.passoRoccia = 0; cam.ancore = {}; cam.z = Math.max(0.5 * m, (cam.z * (b?.larghezzaM || L)) / L); cam.cx = 0.5; cam.cy = 0.5; return null; }
+        if (cam.z < 0.8 * m && i > 0) { cam.latoSuolo = LATI_SUOLO[i - 1]; cam.z *= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+        if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.latoSuolo = undefined; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
+        cam.z = Math.min(cam.z, 12 * m); return null;
+      }
+      if (!cam.suAcqua) cam.latoSuolo = null; // (niente suolo lì: la roccia)
+    }
     // DENTRO LA ROCCIA si continua a scendere (materia.js) in UNA SCALA SOLA: ogni livello è grande quanto è (latoPasso), e
     // sta dentro quello di sopra nel punto che si guarda (cam.ancore[passo]: il centro del livello sotto, nelle coordinate di
     // questo). Passare all'uno o all'altro non cambia la grandezza a schermo: cambia solo in quali coordinate si conta.
@@ -80,7 +96,8 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
         if (Lc && zc >= m) { const b = cam.ancore[p]; cam.cx = 0.5 + ((cam.cx - b[0]) * L) / Lc; cam.cy = 0.5 + ((cam.cy - b[1]) * L) / Lc; cam.z = zc; cam.passoRoccia = c; return null; }
       }
       if (i > 0 && cam.z < 0.5 * m) { const q = seq[i - 1], Lq = latoPasso(cam, q), a = cam.ancore[q] || [0.5, 0.5]; cam.cx = a[0] + ((cam.cx - 0.5) * L) / Lq; cam.cy = a[1] + ((cam.cy - 0.5) * L) / Lq; cam.z = (cam.z * Lq) / L; cam.passoRoccia = q; return null; }
-      if (i === 0 && cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
+      if (i === 0 && cam.z < 0.45 * m && rocciaDi({ ...cam, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1], passoRoccia: 0 })?.suolo) { const Ls = LATI_SUOLO[LATI_SUOLO.length - 1]; cam.z = (cam.z * Ls) / L; cam.latoSuolo = Ls; cam.passoRoccia = 0; cam.cx = 0.5; cam.cy = 0.5; return null; }
+      if (i === 0 && cam.z < 0.45 * m) { cam.livello = 4; cam.latoSuolo = undefined; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
       if (i === seq.length - 1) cam.z = Math.min(cam.z, 12 * m); // (in fondo: gli atomi; sotto, in tre dimensioni, la scala quantistica)
       return null;
     }
@@ -558,7 +575,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
 
   const S = superficieDi(cam.via); if (!S) return null;
   const u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)), k = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}`;
-  if (rocceFatte.has(k)) { const base = rocceFatte.get(k); return cam.passoRoccia > 0 && !cam.suAcqua ? passoRoccia(cam, S, base, k) : base; }
+  if (rocceFatte.has(k)) { const base = rocceFatte.get(k); if (!cam.suAcqua && !(cam.passoRoccia > 0) && cam.latoSuolo !== null) { const w = suoloDelPunto(cam, S, base, k); if (w) return w; } return cam.passoRoccia > 0 && !cam.suAcqua ? passoRoccia(cam, S, base, k) : base; }
   // il punto, letto alla risoluzione più fine già calcolata (o sulla mappa intera)
   let t = S.se; for (let L = 7; L >= 1; L--) { const n = 4 ** L, q = tessereFatte.get(`${S.k}|${L}|${Math.floor(u * n)}|${Math.floor(v * n)}`); if (q) { t = q.sf; break; } }
   const [u0, v0, u1, v1] = t.rett || [0, 0, 1, 1], i = Math.min(t.W - 1, Math.floor(((u - u0) / (u1 - u0)) * t.W)), j = Math.min(t.H - 1, Math.floor(((v - v0) / (v1 - v0)) * t.H)), c = j * t.W + i;
@@ -629,13 +646,39 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   const mineraleIn = alPosto ? (x, y) => campo.granoIn(x * larghezzaM, y * larghezzaM)?.minerale ?? null : (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
   const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : '';
   const out = { specCampo, campo, alPosto, cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
-  rocceFatte.set(k, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+  out.punto = { u, v, t }; rocceFatte.set(k, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+  if (!(cam.passoRoccia > 0) && cam.latoSuolo !== null) { const w = suoloDelPunto(cam, S, out, k); if (w) return w; }
   return cam.passoRoccia > 0 ? passoRoccia(cam, S, out, k) : out;
+}
+// ---------- IL SUOLO DI UN PUNTO (suolo.js, PROGETTO.md lavoro 9): la finestra del suolo di lato «latoSuolo», calcolata con la
+// legge di quella grana solo quando la si guarda, come campione della cella della mappa (il padre: la tessera più fine già
+// calcolata in quel punto; dal 3D, la mappa intera). A metri il rilievo fine, il suolo, la falda; nella finestra più piccola
+// la riga dei granelli, dei pori, dell'acqua dei pori e della chimica che si muove lì (reazioni.js luogoDellaCrosta a quella
+// profondità, con il pH e il carbonio di quell'acqua). → null dove non c'è suolo (l'acqua, la neve, il sale), o
+// { cv, nome, larghezzaM, frase, suolo: true, fin, base, luogo, memoria }
+export const LATI_SUOLO = [10, 1, 0.1];
+function suoloDelPunto(cam, S, base, k) {
+  if (base.neve || base.sale || base.acqua) return null; const lato = cam.latoSuolo ?? LATI_SUOLO[0], ks = `${k}|suolo|${lato}`; let w = rocceFatte.get(ks); if (w !== undefined) return w;
+  const { u, v, t } = base.punto || {}; w = null;
+  try {
+    const t0 = performance.now(), Ssu = { k: S.k, P: S.P, se: S.se, cl: S.cl, seme: S.seme }, fin = finestraSuolo(Ssu, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null });
+    if (fin && !fin.acqua) {
+      const px = immagineSuolo(fin), N = fin.N, cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
+      let frase = fin.descrizione;
+      if (lato === LATI_SUOLO[LATI_SUOLO.length - 1]) { try { // la chimica dei pori a quella profondità: il luogo della crosta col padre del suolo
+        const t1 = performance.now(), A = fin.acquaPori, Sis = sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella), L = luogoDellaCrosta(S.P, { profonditaM: fin.profonditaM, latoM: 1e-6, stella: Sis.stella, colonna: fin.padre.colonna, mare: { carbonio: A.neutri['CO2(aq)'] + A.ioni['HCO3-'] + A.ioni['CO3(2-)'], pH: A.pH } });
+        if (L) { const Sc = sistemaChimico(L, { profondita: 3, atomiMassimi: 4 }), st = storiaChimica(Sc, { V: L.V, tempo: Math.min(3.156e9, Math.max(1, L.padre.residenzaAnni * 3.156e7)), massimo: 2e4, flussi: L.flussi, adatta: true }), ri = rileva(Sc, st, { tempoCicli: 200 });
+          frase += ` La chimica dei pori lì (1 µm, ${Math.round(fin.profonditaM * 100)} cm sotto, ${Math.round(L.T - 273.15)} °C): H₂ ${L.padre.H2.toExponential(1)} mol/L dalla roccia, ${Sc.chiavi.length} specie possibili, ${st.eventi} reazioni in ${(st.t / 3.156e7).toPrecision(2)} anni, ${ri.emerso.raf ? 'un RAF' : 'nessun RAF'} (calcolata in ${Math.round(performance.now() - t1)} ms).`; } } catch (err) { console.warn(err); } }
+      frase += ` (la finestra calcolata in ${Math.round(performance.now() - t0)} ms)`;
+      w = { cv, nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase, liscio: false, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn };
+    }
+  } catch (err) { console.warn('il suolo non si è potuto calcolare:', err); w = null; }
+  rocceFatte.set(ks, w); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value); return w;
 }
 // ---------- LA SCALA DENTRO LA ROCCIA: quali livelli ci sono in quel punto, dal più grande al più piccolo, e quanto è grande
 // ognuno (in metri). Il passo della memoria c'è solo dove qualcosa tiene memoria.
-export function sequenzaRoccia(cam) { const b = rocciaDi({ ...cam, passoRoccia: 0 }); return b?.acqua ? [0] : b?.memoria?.tipo ? [0, 1, 2, 4, 3] : [0, 2, 4, 3]; }
-export const latoPasso = (cam, p) => rocciaDi({ ...cam, passoRoccia: p })?.larghezzaM || null;
+export function sequenzaRoccia(cam) { const b = rocciaDi({ ...cam, passoRoccia: 0, latoSuolo: null }); return b?.acqua ? [0] : b?.memoria?.tipo ? [0, 1, 2, 4, 3] : [0, 2, 4, 3]; }
+export const latoPasso = (cam, p) => rocciaDi({ ...cam, passoRoccia: p, latoSuolo: null })?.larghezzaM || null;
 // un'immagine quadrata (N×N) messa sullo schermo in o + x·zz (x da 0 a 1): se ne disegna solo il pezzo che si vede, tagliato
 // sui suoi pixel (così anche ingrandita un milione di volte resta giusta, e i pixel restano dove sono)
 function pezzo(ctx, cv, ox, oy, zz, W, H, liscio) {
@@ -661,7 +704,8 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
     }
     return;
   }
-  const seq = sequenzaRoccia(cam), i = Math.max(0, seq.indexOf(cam.passoRoccia ?? 0)), m = minimo(W, H), lato = (p) => latoPasso(cam, p), img = (p) => rocciaDi({ ...cam, passoRoccia: p });
+  if (r0.suolo) { cam.nebbiaGrani = null; pezzo(ctx, r0.cv, W / 2 - cam.cx * cam.z, H / 2 - cam.cy * cam.z, cam.z, W, H, r0.liscio); return; } // (il suolo: la finestra al suo posto)
+  const seq = sequenzaRoccia(cam), i = Math.max(0, seq.indexOf(cam.passoRoccia ?? 0)), m = minimo(W, H), lato = (p) => latoPasso(cam, p), img = (p) => rocciaDi({ ...cam, passoRoccia: p, latoSuolo: null });
   const pos = []; pos[i] = { ox: W / 2 - cam.cx * cam.z, oy: H / 2 - cam.cy * cam.z, zz: cam.z };
   for (let j = i - 1; j >= 0; j--) { const a = cam.ancore?.[seq[j]] || [0.5, 0.5], f = pos[j + 1], zz = (f.zz * lato(seq[j])) / lato(seq[j + 1]); pos[j] = { ox: f.ox + f.zz * 0.5 - zz * a[0], oy: f.oy + f.zz * 0.5 - zz * a[1], zz }; }
   const copre = (q) => q.ox <= 0 && q.oy <= 0 && q.ox + q.zz >= W && q.oy + q.zz >= H;
@@ -801,12 +845,17 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
       crea: () => periodica(conMoto(scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]) };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
+  // (sul suolo: la superficie del minerale con sopra l'acqua dei pori a metà del suolo, ogni ione nel suo numero: suolo.js)
+  const w = rocciaDi({ ...cam, passoRoccia: 0, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1] });
+  if (w?.suolo && w.fin?.padre) { const pad = w.fin.padre; return { acqua: true, chiave: `${r.luogo.indirizzo}|pori3d|${r.minerale}|${pad.I},${pad.J}`, che: `la superficie ${del3(r.minerale)} e l'acqua dei pori sopra, in un cubetto di 6 nm`,
+    crea: () => { const sc = scenaSuolo(pad, { latoM: 6e-9, minerale: r.minerale }, sorgente(`${r.luogo.indirizzo}/pori`, ramiCosmo(cam.via.cosmo))); return periodica(conMoto(sc), [3, 3, 1]); } }; }
   return { acqua: false, chiave: `${r.luogo.indirizzo}|atomi3d|${r.minerale}`, che: `tre nanometri di ${r.minerale.replace(" d'acqua", '')}`,
     // (il reticolo continua oltre lo schermo: una fetta nove volte più larga dei tre nanometri che si guardano, atomi veri)
     crea: () => { const a = atomiDelReticolo(r.minerale, { latoM: 9e-9, spessoreM: 3e-9, T: r.luogo.T ?? 288, massimo: 120000, fermi: true }, sorgente(r.luogo.indirizzo, ramiCosmo(cam.via.cosmo))), sc = scenaDaElenco(a.atomi, { unita: 'm', nome: r.nome });
       // l'agitazione vera di ogni atomo (in metri, come le posizioni): la vista li fa tremare attorno al loro posto
       sc.atomi.agitazione = Float32Array.from(a.atomi, (q) => (a.agitazione[q.el] || 0) * 1e-10); sc.descrizione = a.descrizione; return sc; } };
 }
+const del3 = (n) => (/^[aeiou]/.test(n) ? `dell'${n}` : n === 'zircone' ? `dello ${n}` : ['biotite', 'calcite', 'monazite', 'olivina'].includes(n) ? `della ${n}` : `del ${n}`);
 // che cosa si apre con un clic in fondo allo zoom: il luogo e il modo di guardarlo (laboratorio.js, entraMateria)
 function materiaDelPunto(cam) {
   const r = rocciaDi(cam); if (!r) return null;

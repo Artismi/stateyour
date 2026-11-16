@@ -21,7 +21,7 @@ import * as MA from '../src/camera/mare.js';
 import { vaporeSaturo } from '../src/camera/leggi.js';
 import { creaSistema, rifaiListe, energiaTotale, montecarlo, generatoreMC } from '../strumenti/acqua_mw.mjs';
 
-const T0 = performance.now(); let ok = 0; const confronti = [], tempi = [];
+const T0 = performance.now(); let ok = 0; const confronti = [], tempi = [], nonTorna = [];
 const prova = (nome, f) => { const t = performance.now(); f(); ok++; tempi.push([nome.slice(0, 50), performance.now() - t]); console.log('  ✓', nome); };
 const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : x === 0 ? '0' : Math.abs(x) >= 1e4 || Math.abs(x) < 1e-2 ? x.toExponential(c - 1).replace('.', ',') : String(+x.toPrecision(c)).replace('.', ','));
 const EPS = 2 ** -52;
@@ -62,18 +62,21 @@ prova('due finestre sovrapposte vedono le stesse onde (le tessere sono eventi de
   console.log(`      ${n} punti in comune: scarto massimo ${num(d)} m (rms del campo ${num(Math.sqrt(s / n))} m)`);
   assert.ok(n > 1000 && d <= 1e3 * EPS * Math.sqrt(s / n) * 64, `scarto ${d}`);
 });
-// la varianza della banda della finestra (le ottave che la finestra aggiunge: lunghezze d'onda da 4 punti al suo lato), legge esatta
-function varianzaFinestre(L, K) {
+// la varianza della banda della finestra (le ottave che la finestra aggiunge: lunghezze d'onda da 4 punti al suo lato), legge esatta.
+// K finestre indipendenti (lontane più di una tessera dell'ottava più lunga), n×n punti in ciascuna: la tolleranza è il
+// campionamento, 4·sd/√K. (Prima 24 finestre di 20×20 punti: ±29% a 1 cm. I punti di una finestra sono vicini e si somigliano:
+// a parità di conti rendono di più tante finestre con pochi punti — qui 256 di 5×5, 6400 punti.)
+function varianzaFinestre(L, K, n = 5) {
   const f0 = FI.finestraAcqua(st, { ...opz, latoM: L }), b1 = Math.floor(Math.log2(L)), bande = f0.bande.filter((B) => B.b <= b1), atteso = bande.reduce((a, B) => a + B.varianza, 0);
-  const continuo = bande.reduce((a, B) => a + SP.varianza((2 * Math.PI) / 2 ** B.b, (4 * Math.PI) / 2 ** B.b), 0), Q = [], n = 20, passo = 4 * 2 ** (b1 + 2);
-  for (let q = 0; q < K; q++) { const x0 = xc + (q % 8) * passo, y0 = yc + Math.floor(q / 8) * passo; let s = 0;
+  const continuo = bande.reduce((a, B) => a + SP.varianza((2 * Math.PI) / 2 ** B.b, (4 * Math.PI) / 2 ** B.b), 0), Q = [], passo = 4 * 2 ** (b1 + 2);
+  for (let q = 0; q < K; q++) { const x0 = xc + (q % 16) * passo, y0 = yc + Math.floor(q / 16) * passo; let s = 0;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const e = FI.ondeEsatte(t, x0 + ((i + 0.5) * L) / n, y0 + ((j + 0.5) * L) / n, 1.7 * q, bande).eta; s += e * e; } Q.push(s / (n * n)); }
   const m = Q.reduce((a, b) => a + b, 0) / K, sd = Math.sqrt(Q.reduce((a, b) => a + (b - m) ** 2, 0) / (K - 1));
   return { L, bande: bande.map((B) => B.b), atteso, continuo, m, tol: (4 * sd) / Math.sqrt(K), K };
 }
 const VAR = [];
 prova('la varianza dell\'altezza nella finestra è l\'integrale dello spettro sulla banda della finestra (1 m e 1 cm, finestre indipendenti)', () => {
-  for (const [L, K] of [[1, 24], [0.01, 24]]) { const r = varianzaFinestre(L, K); VAR.push(r);
+  for (const [L, K] of [[1, 256], [0.01, 256]]) { const r = varianzaFinestre(L, K); VAR.push(r);
     // (i modi della banda: la loro varianza Σs è l'integrale dello spettro sulle corone, cella per cella con Gauss-Legendre 4×4; con 8×8 la stima del suo errore)
     FI.ONDE.quadratura = 8; const t8 = FI.trattoDi(st, A0.lon, A0.lat), s8 = FI.bandeDelTratto(t8).filter((B) => r.bande.includes(B.b)).reduce((a, B) => a + B.varianza, 0); FI.ONDE.quadratura = 4; FI.bandeDelTratto(t8);
     const tolQ = 4 * Math.abs(s8 - r.atteso) + 1e-6 * r.continuo;
@@ -81,8 +84,11 @@ prova('la varianza dell\'altezza nella finestra è l\'integrale dello spettro su
     assert.ok(Math.abs(r.m - r.atteso) <= r.tol, `varianza ${r.m} contro ${r.atteso}`); assert.ok(Math.abs(r.atteso - r.continuo) <= tolQ, `Σs ${r.atteso} contro l'integrale ${r.continuo}`); }
 });
 prova('la schiuma: l\'accelerazione che frange, normalizzata, ha varianza 1 in ogni punto (quindi copre W di Monahan); conteggio su punti indipendenti', () => {
-  const bande = FI.bandeDelTratto(t), K = 1500, passo = 4 * 2 ** (bande[bande.length - 1].b + 1); let s2 = 0, sopra = 0; const c = t.sogliaSchiuma;
-  for (let q = 0; q < K; q++) { const x = xc + (q % 40) * passo - 20 * passo, y = yc + Math.floor(q / 40) * passo - 20 * passo, X = FI.ondeEsatte(t, x, y, 0.37 * q, bande).X; s2 += X * X; if (X > c) sopra++; }
+  // K punti indipendenti (lontani più di una tessera dell'ottava più lunga che porta l'accelerazione): la tolleranza del conteggio
+  // è binomiale, 4·√(K·W(1 − W)), e perché stia sotto W/3 serve K ≳ 144/W (prima K = 1500: ±150% di W). Le ottave senza
+  // accelerazione (varX sotto 10⁻⁹ di σX², lo stesso criterio di finestra.js aggiungiBanda) non entrano: pesano meno di 10⁻⁹.
+  const bande = FI.bandeDelTratto(t).filter((B) => B.varX > 1e-9 * t.sigmaX ** 2), W0 = t.P.copertura, lato = Math.ceil(Math.sqrt(Math.min(40000, Math.max(1500, 144 / Math.max(W0, 1e-9))))), K = lato * lato, passo = 4 * 2 ** (bande[bande.length - 1].b + 1); let s2 = 0, sopra = 0; const c = t.sogliaSchiuma;
+  for (let q = 0; q < K; q++) { const x = xc + ((q % lato) - (lato >> 1)) * passo, y = yc + (Math.floor(q / lato) - (lato >> 1)) * passo, X = FI.ondeEsatte(t, x, y, 0.37 * q, bande).X; s2 += X * X; if (X > c) sopra++; }
   const m = s2 / K, tol = 4 * Math.sqrt(2 / K), W = t.P.copertura, tolW = 4 * Math.sqrt(K * W * (1 - W));
   console.log(`      ⟨Y²⟩ = ${num(m, 4)} (atteso 1 ± ${num(tol)}); soglia ${num(c)} scarti; coperti ${sopra} su ${K} (attesi ${num(K * W)} ± ${num(tolW)}; W = ${num(W)})`);
   assert.ok(Math.abs(m - 1) <= tol && Math.abs(sopra - K * W) <= tolW + 1);
@@ -144,12 +150,19 @@ prova('il plancton: nessuno — il modello non ha la vita, e la finestra lo dice
 console.log('D. a nanometri: l\'acqua liquida, fitta, con ogni ione');
 prova('la densità di quell\'acqua, ogni ione nel numero della sua concentrazione (Poisson, scatola neutra), ogni ione col suo guscio', () => {
   const somme = {}, attese = {}; let K = 0, aggiustati = 0; const gusci = {};
-  for (let q = 0; q < 8; q++) { const sc = FI.scenaNano(st, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); K++;
+  // (100 scatole: la tolleranza è Poisson, 4·√N, sul numero che la concentrazione dà — gli ioni prima della neutralità —; quelli
+  // che la neutralità aggiunge o toglie, specie per specie, si contano a parte. Prima: 8 scatole e la tolleranza col totale degli
+  // aggiustati, che cresce con le scatole quanto il numero atteso: non si stringeva mai)
+  const aggiunti = {};
+  for (let q = 0; q < 100; q++) { const sc = FI.scenaNano(st, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); K++; for (const f in sc.aggiunti) aggiunti[f] = (aggiunti[f] || 0) + sc.aggiunti[f];
     assert.equal(sc.carica, 0, 'la scatola non è neutra');
     const tolti = sc.ripetizioni ** 3 * sc.modello.N - sc.conteggi.acqua; assert.ok(tolti >= 0 && Math.abs(sc.ripetizioni ** 3 * sc.modello.N - sc.densitaNm3 * sc.latoNm ** 3) < 1e-6 * sc.modello.N, 'densità');
     for (const f in sc.messi) { somme[f] = (somme[f] || 0) + sc.messi[f]; attese[f] = (attese[f] || 0) + (sc.attesi[f] || 0); }
     for (const f in sc.gusci) (gusci[f] ||= []).push(...sc.gusci[f]); aggiustati += sc.aggiustati || 0; }
-  for (const f of Object.keys(attese).filter((x) => attese[x] >= 4)) { const tol = 4 * Math.sqrt(attese[f]) + aggiustati; console.log(`      ${f}: ${somme[f]} in ${K} scatole di 6 nm (attesi ${num(attese[f])} ± ${num(tol)})`); assert.ok(Math.abs(somme[f] - attese[f]) <= tol, f); }
+  for (const f of Object.keys(attese).filter((x) => attese[x] >= 4)) { const tol = 4 * Math.sqrt(attese[f]), n = somme[f] - (aggiunti[f] || 0); console.log(`      ${f}: ${n} in ${K} scatole di 6 nm prima della neutralità (attesi ${num(attese[f])} ± ${num(tol)}); la neutralità ${aggiunti[f] ? `ne ha ${aggiunti[f] > 0 ? 'aggiunti' : 'tolti'} ${Math.abs(aggiunti[f])}` : 'non li ha toccati'}`); assert.ok(Math.abs(n - attese[f]) <= tol, f); }
+  console.log(`      la neutralità: ${aggiustati} ioni aggiunti o tolti in ${K} scatole`);
+  // (ciò che la scena mostra è il conteggio DOPO la neutralità: se esce dai 4 scarti di Poisson lo si dice)
+  for (const f of Object.keys(attese).filter((x) => attese[x] >= 4)) if (Math.abs(somme[f] - attese[f]) > 4 * Math.sqrt(attese[f])) nonTorna.push(`la scena di 6 nm mostra ${somme[f]} ${f} in ${K} scatole contro ${num(attese[f])} ± ${num(4 * Math.sqrt(attese[f]))}: la neutralità aggiunge sempre allo ione più abbondante del segno che manca (${aggiunti[f] > 0 ? '+' : ''}${aggiunti[f]}), invece di condizionare tutte le specie`);
   const misurate = { 'Na+': '5–6', 'Ca2+': '6–8', 'Mg2+': '6', 'K+': '6–7', 'Cl-': '6–7' }; for (const f of Object.keys(gusci).filter((x) => misurate[x])) confronti.push(`molecole nel primo guscio di ${f}: ${num(gusci[f].reduce((a, b) => a + b, 0) / gusci[f].length)} (misurate ${misurate[f]}: gli ioni prendono il posto d'una molecola del liquido e non riordinano le vicine)`);
 });
 prova('il liquido mW è all\'equilibrio (trenta passate di Monte Carlo in più non spostano l\'energia) e ha la struttura dell\'acqua', () => {
@@ -173,5 +186,6 @@ prova('i costi per lato: creazione, onde e immagine per fotogramma', () => {
 });
 
 for (const c of confronti) console.log('  ≈ confronto con la natura:', c);
+for (const c of nonTorna) console.log('  ≠ NON TORNA:', c);
 console.log(`\n${ok} prove superate in ${num((performance.now() - T0) / 1000)} s (il pianeta: ${num(tPianeta / 1000)} s)`);
 for (const [n, ms] of tempi.sort((a, b) => b[1] - a[1]).slice(0, 4)) console.log(`    ${n}: ${(ms / 1000).toFixed(1)} s`);

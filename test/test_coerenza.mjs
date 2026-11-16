@@ -459,14 +459,15 @@ prova('il clima e l\'aria si tengono: il mare c\'è dove può, il termostato del
     // (Prima: «ogni mondo sotto 300 K», un tetto scelto a mano; con la catena degli elementi un mondo su trecento stava a 300,3 K.)
     if (c.termostato) { assert.equal(c.acqua, 'liquida'); tra(c.T, 273.15, Infinity, 'temperatura al termostato'); termostati.push(c.T); assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= c.termostato * 1.01, 'più CO2 di quella che il termostato lascia');
       assert.ok(c.termostatoGelo < c.termostato && c.termostato <= c.termostatoGelo * c.termostatoForchetta * c.termostatoPasso * (1 + 1e-9), `la CO2 del termostato (${c.termostato} Pa) non è la minima: gelo a ${c.termostatoGelo} Pa, forchetta ${c.termostatoForchetta}`);
-      forchette.push(c.termostatoForchetta); if (c.termostatoGeloT != null) salti.push([c.T - c.termostatoGeloT, c.T, p]); }
+      assert.equal(c.termostatoGeloAcqua, 'ghiaccio', `al capo di sotto della ricerca (${c.termostatoGelo} Pa di CO2) il mare non gela: la CO2 lasciata non è la minima`);
+      forchette.push(c.termostatoForchetta); salti.push([c.T - c.termostatoGeloT, c.T, p]); }
     else if (c.acqua === 'liquida') assert.ok((p.atmosfera.gas.CO2 || 0) * c.pressione <= Math.max(CH.pressioneCO2Urey(c.T) * 3, (c.co2Ciclo || 0) * 1.01) + 1e-9 || p.clima.tenuti.includes('idrogeno'), 'CO2 sopra un mare senza termostato'); // (la CO2 è quella a cui le rocce consumano quanto i vulcani emettono: il ciclo del carbonio di chimica.js, quando c'è)
     if (c.acqua.startsWith('vapore') && p.tipo === 'roccioso' && (p.atmosfera.gas.CO2 || 0) > 0.9 && c.pressione > 1e6) venere++;
     if (c.acqua === 'ghiaccio') assert.ok(c.T < 273.15);
   }
   console.log(`      ${Object.entries(conta).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}; ${venere} come Venere (vapore, CO2, più di 10 bar)`);
-  termostati.sort((a, b) => a - b); salti.sort((a, b) => b[0] - a[0]); const caldo = salti.reduce((m, s) => (s[1] > m[1] ? s : m), salti[0] || [0, 0, null]);
-  console.log(`      ${termostati.length} mondi al termostato: ${termostati[0].toFixed(1)}–${termostati.at(-1).toFixed(1)} K, tutti con la CO2 minima che tiene il mare aperto (forchetta della ricerca fino a ×${Math.max(...forchette).toFixed(2)}, passo ×1,33); il salto dal gelo al mare aperto fino a ${salti[0]?.[0].toFixed(1)} K (mediana ${salti[salti.length >> 1]?.[0].toFixed(1)} K); il più caldo, ${caldo[1].toFixed(1)} K: ${caldo[2] ? `${caldo[2].tipo} di ${(caldo[2].massaKg / 5.972e24).toFixed(2)} Terre a ${caldo[2].aUA.toFixed(2)} UA, salto ${caldo[0].toFixed(1)} K` : ''}`);
+  termostati.sort((a, b) => a - b); salti.sort((a, b) => b[0] - a[0]); const caldo = salti.reduce((m, s) => (s[1] > m[1] ? s : m), salti[0]);
+  console.log(`      ${termostati.length} mondi al termostato: ${termostati[0].toFixed(1)}–${termostati.at(-1).toFixed(1)} K, tutti con la CO2 minima che tiene il mare aperto (forchetta della ricerca fino a ×${Math.max(...forchette).toFixed(2)}, passo ×1,33); il salto dal gelo al mare aperto fino a ${salti[0]?.[0].toFixed(1)} K (mediana ${salti[salti.length >> 1]?.[0].toFixed(1)} K); il più caldo, ${caldo[1].toFixed(1)} K: ${caldo[2] ? `${caldo[2].tipo} di ${(caldo[2].massaKg / 5.972e24).toFixed(2)} Terre a ${(caldo[2].a * 30).toFixed(2)} UA, salto ${caldo[0].toFixed(1)} K` : ''}`);
   assert.ok(Object.keys(conta).some((k) => k.includes('termostato')) && venere >= 3 && (conta['ghiacciato ghiacci'] || 0) > 300);
 });
 prova('sopra un mare aria e clima sono una coppia sola (stessa temperatura); il ciclo del carbonio c\'è dove ci sono vulcani; prebiotica vede il mare', () => {

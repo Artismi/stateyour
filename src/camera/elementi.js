@@ -23,6 +23,10 @@
 //     nebulosa dove l'equilibrio Fe + H2O ⇌ FeO + H2 lo vuole (freddo: lontano dalla stella). La temperatura è quella che
 //     disco.js conosce già: la più alta tra la luce della stella (280 K·L^¼/√r) e il calore del gas che cade (la stessa
 //     legge del bordo interno). Il pianeta prende i solidi del luogo di ogni embrione che lo ha fatto (sommati negli urti).
+//  2b. LE PERDITE DURANTE L'ACCRESCIMENTO (perditeAccrescimento, sezione 4b): gli embrioni fusi (alluminio 26) e i corpi fusi
+//     dagli urti giganti mandano fuori, solidificando, gli alogeni e una parte dell'acqua; gli urti (Schlichting et al. 2015) e
+//     la fuga (limitata dall'energia della luce dura della stella giovane) ne portano via una parte, nello SPAZIO. Dipende dalla
+//     storia di quel pianeta: la sua massa, quando sono nati i suoi embrioni, chi è caduto su chi e quando.
 //  3. IL PIANETA SI SEPARA (differenzia): metallo e silicato fusi all'equilibrio alla base dell'oceano di magma,
 //     log K_D = a + b/T + c·P/T con l'ossigeno conservato (il silicio che va nel nucleo dà due FeO al mantello: Javoy 1995,
 //     Rubie et al. 2011): fO2 non è dato, esce. P e T: crescita continua, ogni strato si separa sul fondo del pianeta di
@@ -33,7 +37,7 @@
 //  5. ARIA E MARE: l'aria è ciò che chimica.js lascia fuori dall'inventario di QUESTO pianeta; il mare prende dalla crosta
 //     di questo pianeta le rocce che la pioggia scioglie (chimica.rocceDelPianeta legge composizione.elementi), e le tracce
 //     (tracceDelMare: Li, B, F, Br, I, Sr, U, Mo, Fe, Mn, P, Si) con la loro specie semplice.
-//  6. IL LIBRO DEI CONTI (libroDeiConti): per ogni elemento la massa in nucleo, mantello, crosta, mare, aria, ghiacci;
+//  6. IL LIBRO DEI CONTI (libroDeiConti): per ogni elemento la massa in nucleo, mantello, crosta, mare, aria, ghiacci, spazio;
 //     ogni serbatoio prende da quello sotto (il mare dalla crosta e dal mantello, l'aria dal mantello), e se qualcuno
 //     chiede più di quanto c'è il libro lo dice (scoperto). La somma è quella che il disco ha dato.
 //
@@ -55,8 +59,18 @@
 //     Workman e Hart 2005 i valori tipici); per i maggiori quelli di chimica.js (una fonte sola);
 //   · il mare: costanti di equilibrio a 25 °C [R] (fluorite, celestina, apatite, rodocrosite, boro, silice, fosfato);
 //     ripartizione dello stronzio nella calcite D = 0,1 [R].
+//   · perdite durante l'accrescimento [R]: Hevey e Sanders 2006 (l'alluminio 26 fonde i corpi nati presto); Jacobsen et al.
+//     2008 (²⁶Al/²⁷Al iniziale); Stewart e Leinhardt 2012 (l'energia specifica dell'urto); Nakajima et al. 1992, Goldblatt et
+//     al. 2013 (il limite dell'aria di vapore); Hamano et al. 2013 (i due tipi di oceano di magma); Elkins-Tanton 2008 (il fuso
+//     intrappolato; la solubilità dell'acqua; l'opacità del vapore); Schlichting, Sari e Yalinewich 2015 (l'aria tolta dagli urti
+//     giganti); Watson et al. 1981 (la fuga limitata dall'energia); Ribas et al. 2005 (la luce dura del Sole giovane); Kuwahara
+//     et al. 2017 (gli alogeni tra metallo e silicato). Nessuna di queste è stata riletta qui.
 // NON TORNA (stampato da test/test_elementi.mjs): equilibrio di condensazione a quelle temperature lascia a 1 UA il
-// cloro e gli alcalini del Sole (la Terra ne ha 40 e 7 volte meno: mancano le perdite durante l'accrescimento); il nucleo
+// cloro e gli alcalini del Sole; le perdite durante l'accrescimento (2b) tolgono al pianeta come la Terra i tre quarti del
+// cloro (365 → 90 ppm nel mantello: Cl/Na diventa quello della Terra) ma non il sodio e il potassio, che non escono dal fuso:
+// resta l'eccesso di TUTTI i moderatamente volatili (Na ×5,7 la Terra), che la Terra vera ha perso nel disco (la sua fase
+// calda: il disco di disco.js a 1 UA non supera ~570 K, e la condensazione incompleta lì non agisce); il mare di quel
+// pianeta resta una salamoia, ora di soda (il sodio dei fiumi non ha in mare.js un'uscita che lo pareggi); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese
 // (oltre lo zinco) seguono l'ossigeno o il carbonio nella proporzione r/s del Sistema Solare [R]: è una taratura sul Sole,

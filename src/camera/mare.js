@@ -127,6 +127,7 @@ export const DATI = {
   taglie: { sabbia: 2e-4, limo: 2e-5, argilla: 2e-6 }, densitaGrani: 2650, densitaFiocchi: 1150, fiocco: 6e-5,
   pennacchio: 5, // (m) lo spessore dello strato d'acqua dolce che un fiume stende sul mare
   bolle: 1e9, profonditaBolle: 1, // bolle per m³ sotto una cresta che frange (per unità di copertura; Medwin e Breitz 1989); fin dove scendono (m)
+  ventoCheFrange: 3, // (m/s) sotto, le creste non frangono: niente schiuma né bolle (l'inizio delle creste bianche, ~3–4 m/s [R])
   coagula: 0.08, // (mol/kg) la concentrazione di ioni a una carica a cui l'argilla coagula (per z cariche: diviso z⁶)
 };
 
@@ -146,6 +147,8 @@ const TERMO = { // specie neutre in acqua e i solidi che chimica.js non ha: ΔH,
   'CaSO4·2H2O': [-2022.6, 194.1], KCl: [-436.5, 82.6], 'SiO2(am)': [-903.5, 46.9],
 };
 const gibbs = (f, T) => { const x = IONI[f] || TERMO[f]; if (x) return 1000 * x[0] - T * x[1]; const m = MOLECOLE[f]; if (!m) throw new Error(`mare: specie sconosciuta ${f}`); return 1000 * m.dH - T * m.S; };
+// (per suolo.js: la stessa tabella, una fonte sola, per l'acqua dei pori)
+export const gibbsSpecie = (f, T) => gibbs(f, T);
 const kEq = (reag, prod, T) => { let g = 0; for (const f in prod) g += prod[f] * gibbs(f, T); for (const f in reag) g -= reag[f] * gibbs(f, T); return Math.exp(-g / (R_GAS * T)); };
 const memoK = new Map();
 // tutte le costanti a una temperatura (mol/kg, bar): si calcolano una volta per decimo di grado
@@ -1064,7 +1067,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
       cristallo('solfuro di ferro', x, 1.82e-5, d, 'granello', `il ferro e il solfuro del camino, ${omFeS.toExponential(0)} volte oltre la solubilità nell'acqua fredda`, 4840); note.push('fumo nero'); }
     if (stato.pO2 > 1e-6) metti('colloide', 'ruggine', 1e-7, perMassa(ferro * kgAcqua * 0.0558 * 0.3, 1e-7, 3800), { perche: 'il ferro sciolto incontra l\'ossigeno: ruggine' }); }
   // le bolle: sotto le creste che frangono (copertura misurata in funzione del vento); più giù la pressione le schiaccia e le scioglie
-  if (qui.tipo !== 'piana di sale' && qui.vento > 3 && qui.profondita < 12 * DATI.profonditaBolle && !(qui.ghiaccio > 0.8)) { const creste = 3.84e-6 * Math.pow(qui.vento, 3.41); metti('bolla', 'bolla', 1e-4, DATI.bolle * creste * Math.exp(-qui.profondita / DATI.profonditaBolle), { rho: 1.2, forma: 'bolla', sigma: 0.7, perche: `aria trascinata sotto dalle onde che frangono (vento ${qui.vento.toFixed(0)} m/s)` }); }
+  if (qui.tipo !== 'piana di sale' && qui.vento > DATI.ventoCheFrange && qui.profondita < 12 * DATI.profonditaBolle && !(qui.ghiaccio > 0.8)) { const creste = 3.84e-6 * Math.pow(qui.vento, 3.41); metti('bolla', 'bolla', 1e-4, DATI.bolle * creste * Math.exp(-qui.profondita / DATI.profonditaBolle), { rho: 1.2, forma: 'bolla', sigma: 0.7, perche: `aria trascinata sotto dalle onde che frangono (vento ${qui.vento.toFixed(0)} m/s)` }); }
   // la pomice: vicino a un vulcano, in superficie, se di recente ha eruttato (un evento di quel vulcano)
   if (qui.vulcano && qui.profondita < 0.5) { const recente = c0evento(stato, `vulcano ${gradi(qui.vulcano.lon, 2)}/${gradi(qui.vulcano.lat, 2)}/ha eruttato da poco`) < 0.35; if (recente) { metti('granello', 'pomice', 6e-3, 40 * Math.exp(-qui.vulcano.distanzaM / 2e5), { rho: 700, forma: 'pomice', sigma: 0.6, perche: 'lava piena di bolle: galleggia, e la corrente la porta via dal vulcano' }); note.push('pomice che galleggia'); } }
   // --- GLI IONI E LE MOLECOLE (numeri veri): moli per kg d'acqua × kg d'acqua per m³ × numero di Avogadro

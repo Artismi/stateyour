@@ -417,12 +417,15 @@ prova('le bolle salvate nella forma di prima (i rami nel nome del cosmo) si riap
   }
   console.log(`    ${n} bolle nella forma di prima riaperte; nel cosmo di base il testo scritto è lo stesso di prima`);
 });
-prova('i nomi per la fonte del caso non cambiano: nomeFonte (src/tre) è il testo di prima, anche in un cosmo parallelo', () => {
+// (nomeFonte dà il nome col cosmo di BASE: nel cosmo di base è il testo di prima, e i mondi non cambiano; in un cosmo parallelo
+// i rami vanno passati a `sorgente` a parte — sistema.js e universo.js danno al buco `rami: ramiCosmo(via.cosmo)` —, così un
+// ramo cambia solo l'evento che nomina. Prima i rami stavano dentro il nome e il disco del buco cambiava in ogni cosmo parallelo)
+prova('i nomi per la fonte del caso: nomeFonte (src/tre) è il testo di prima nel cosmo di base, e col cosmo di base in un cosmo parallelo', () => {
   let n = 0; const vie = [];
   for (const numero of [1, 2, 13, 4321, 96e6 + 17]) { const v = CO.indirizzoDi(numero); vie.push(v, { ...v, cosmo: CO.cosmoCon(v.cosmo, RAMI_I) }); }
   for (const v of vie) {
-    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia }, 'buco'), `cosmo ${v.cosmo}/galassia ${v.galassia}/buco`); // universo.js, il buco al centro della galassia
-    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia, stella: v.stella }, 'buco'), `cosmo ${v.cosmo}/galassia ${v.galassia}/stella ${v.stella}/buco`); n += 2; // sistema.js, una stella che è un buco nero
+    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia }, 'buco'), `cosmo ${CO.cosmoBase(v.cosmo)}/galassia ${v.galassia}/buco`); // universo.js, il buco al centro della galassia
+    assert.equal(TB.nomeFonte({ cosmo: v.cosmo, galassia: v.galassia, stella: v.stella }, 'buco'), `cosmo ${CO.cosmoBase(v.cosmo)}/galassia ${v.galassia}/stella ${v.stella}/buco`); n += 2; // sistema.js, una stella che è un buco nero
   }
   console.log(`    ${n} nomi uguali al testo di prima (la prova sull'insieme dei nomi dati alla fonte, prima e dopo: l'impronta nel rapporto del lavoro 3)`);
 });

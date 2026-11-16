@@ -193,10 +193,12 @@ for (const { gid, Gx } of CAMPIONI) for (let k = 0; k < 12; k++) { const sid = (
     for (const q of DI.formaPianeti(st, seme)) { const f = q.formazione, k = (S0.Z ?? 1) * DI.DISCO.metalliSole;
       const solidi = q.tipo === 'gassoso' ? (q.composizione.pesanti < 0.5 ? (q.massaKg * (q.composizione.pesanti - k)) / (1 - k) : NaN) : q.massaKg * (1 - (q.involucro || 0));
       if (!Number.isFinite(solidi)) { saltati++; continue; } pianeti++;
-      const r = Math.abs(solidi + f.cibo - f.mIso) / f.mIso; if (r > peggioPianeti) peggioPianeti = r; }
+      // (più ciò che è partito nello spazio durante l'accrescimento: elementi.js perditeAccrescimento, un serbatoio del libro dei conti)
+      let partito = 0; for (const x of q.composizione.elementi?.spazio || []) partito += x;
+      const r = Math.abs(solidi + partito + f.cibo - f.mIso) / f.mIso; if (r > peggioPianeti) peggioPianeti = r; }
     tolPianeti = 6000 * 4 * EPS; } });
   riga({ c: 'C6', passaggio: `stella → disco (${SISTEMI.length} sistemi)`, grandezza: 'massa del gas: ∫2πrΣ dr / massa del disco − 1 (il peggiore)', padre: 0, figli: peggioDisco, tol: tolDisco, da: 'precisione: 4·n·ε (punto medio esatto in √r)' });
-  riga({ c: 'C6', passaggio: `disco (strisce) → pianeti (${pianeti}${saltati ? `, ${saltati} giganti col tetto ai pesanti saltati` : ''})`, grandezza: '(solidi + cibo non mangiato) / massa di isolamento − 1 (il peggiore)', padre: 0, figli: peggioPianeti, tol: tolPianeti, da: 'precisione: al più 6000 corpi sommati (il tetto di formaPianeti), 4ε per somma' });
+  riga({ c: 'C6', passaggio: `disco (strisce) → pianeti (${pianeti}${saltati ? `, ${saltati} giganti col tetto ai pesanti saltati` : ''})`, grandezza: '(solidi + partiti nello spazio + cibo non mangiato) / massa di isolamento − 1 (il peggiore)', padre: 0, figli: peggioPianeti, tol: tolPianeti, da: 'precisione: al più 6000 corpi sommati (il tetto di formaPianeti), 4ε per somma' });
 }
 
 // =====================================================================================================
@@ -345,18 +347,26 @@ manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi d
   else {
     const { st: SM, aperto: A0, torbido: TB, P: PM } = MV, opz = { lon: A0.lon, lat: A0.lat, fondoM: A0.fondoM, P: PM }, tr = FI.trattoDi(SM, A0.lon, A0.lat), [xc, yc] = FI.nelTratto(tr, A0.lon, A0.lat), sp = tr.sp;
     // C6: la varianza dell'altezza delle onde che la finestra aggiunge (le ottave da 4 punti al suo lato) = l'integrale dello
-    // spettro del padre su quelle corone; K finestre indipendenti (lontane più di una tessera dell'ottava più lunga), legge esatta
-    for (const [L, K] of [[1, 24], [0.01, 24]]) tempo(`finestra di ${L} m`, () => {
-      const f0 = FI.finestraAcqua(SM, { ...opz, latoM: L }), b1 = Math.floor(Math.log2(L)), bande = f0.bande.filter((B) => B.b <= b1), passo = 4 * 2 ** (b1 + 2), n = 20, Q = [];
+    // spettro del padre su quelle corone, in due passaggi: (1) le finestre contro Σs dei modi (la loro varianza esatta: il campo è
+    // fatto di quei modi), K finestre indipendenti (lontane più di una tessera dell'ottava più lunga) di 5×5 punti, tolleranza
+    // il campionamento, 4·sd/√K; (2) i modi contro lo spettro continuo: la quadratura delle celle (Gauss-Legendre 4×4 contro 8×8).
+    // (Prima una riga sola con 24 finestre di 20×20 punti e le due tolleranze sommate: ±55% a 1 cm. I punti di una finestra si
+    // somigliano: a parità di conti rendono di più tante finestre con pochi punti.)
+    for (const [L, K] of [[1, 256], [0.01, 256]]) tempo(`finestra di ${L} m`, () => {
+      const f0 = FI.finestraAcqua(SM, { ...opz, latoM: L }), b1 = Math.floor(Math.log2(L)), bande = f0.bande.filter((B) => B.b <= b1), passo = 4 * 2 ** (b1 + 2), n = 5, Q = [];
       const continuo = bande.reduce((a, B) => a + sp.varianza((2 * Math.PI) / 2 ** B.b, (4 * Math.PI) / 2 ** B.b), 0), discreto = bande.reduce((a, B) => a + B.varianza, 0);
-      for (let q = 0; q < K; q++) { const x0 = xc + (q % 8) * passo, y0 = yc + Math.floor(q / 8) * passo; let s2 = 0; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const e = FI.ondeEsatte(tr, x0 + ((i + 0.5) * L) / n, y0 + ((j + 0.5) * L) / n, 1.7 * q, bande).eta; s2 += e * e; } Q.push(s2 / (n * n)); }
+      for (let q = 0; q < K; q++) { const x0 = xc + (q % 16) * passo, y0 = yc + Math.floor(q / 16) * passo; let s2 = 0; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const e = FI.ondeEsatte(tr, x0 + ((i + 0.5) * L) / n, y0 + ((j + 0.5) * L) / n, 1.7 * q, bande).eta; s2 += e * e; } Q.push(s2 / (n * n)); }
       const m = somma(Q) / K, sd = Math.sqrt(somma(Q.map((x) => (x - m) ** 2)) / (K - 1));
       FI.ONDE.quadratura = 8; const t8 = FI.trattoDi(SM, A0.lon, A0.lat), d8 = FI.bandeDelTratto(t8).filter((B) => B.b >= bande[0].b && B.b <= b1).reduce((a, B) => a + B.varianza, 0); FI.ONDE.quadratura = 4; FI.bandeDelTratto(t8);
-      riga({ c: 'C6', passaggio: `mare (spettro del vento) → finestra di ${L >= 1 ? `${L} m` : `${L * 100} cm`} (finestra.js)`, grandezza: `varianza dell'altezza (m²) nelle ottave ${bande[0].b}…${b1}: ∫S contro le finestre`, padre: continuo, figli: m, tol: (4 * sd) / Math.sqrt(K) + 4 * Math.abs(d8 - discreto), da: `campionamento: 4·sd/√${K} finestre indipendenti, più la quadratura dei modi (Gauss-Legendre 4×4 contro 8×8 sulle celle)` });
+      const nome = L >= 1 ? `${L} m` : `${L * 100} cm`;
+      riga({ c: 'C6', passaggio: `mare (i modi del vento) → finestra di ${nome} (finestra.js)`, grandezza: `varianza dell'altezza (m²) nelle ottave ${bande[0].b}…${b1}: Σs dei modi contro le finestre`, padre: discreto, figli: m, tol: (4 * sd) / Math.sqrt(K), da: `campionamento: 4·sd/√${K} finestre indipendenti di 5×5 punti` });
+      riga({ c: 'C6', passaggio: `mare (spettro del vento) → i modi delle ottave ${bande[0].b}…${b1} (finestra.js)`, grandezza: 'varianza (m²): ∫S sulle corone contro Σs dei modi', padre: continuo, figli: discreto, tol: 4 * Math.abs(d8 - discreto), da: 'quadratura dei modi: 4·|Gauss-Legendre 4×4 − 8×8| sulle celle' });
     });
-    // C6: la copertura della schiuma (Monahan) contro i punti coperti, su punti indipendenti; e la varianza 1 dell'accelerazione normalizzata
-    tempo('schiuma', () => { const bande = FI.bandeDelTratto(tr), K = 1500, passo = 4 * 2 ** (bande[bande.length - 1].b + 1); let s2 = 0, sopra = 0;
-      for (let q = 0; q < K; q++) { const X = FI.ondeEsatte(tr, xc + (q % 40) * passo - 20 * passo, yc + Math.floor(q / 40) * passo - 20 * passo, 0.37 * q, bande).X; s2 += X * X; if (X > tr.sogliaSchiuma) sopra++; }
+    // C6: la copertura della schiuma (Monahan) contro i punti coperti, su punti indipendenti; e la varianza 1 dell'accelerazione
+    // normalizzata. K ≳ 144/W perché la tolleranza binomiale stia sotto W/3 (prima K = 1500: ±150% di W); le ottave senza
+    // accelerazione (varX sotto 10⁻⁹ σX², il criterio di finestra.js aggiungiBanda) non entrano
+    tempo('schiuma', () => { const bande = FI.bandeDelTratto(tr).filter((B) => B.varX > 1e-9 * tr.sigmaX ** 2), W0 = tr.P.copertura, lato = Math.ceil(Math.sqrt(Math.min(40000, Math.max(1500, 144 / Math.max(W0, 1e-9))))), K = lato * lato, passo = 4 * 2 ** (bande[bande.length - 1].b + 1); let s2 = 0, sopra = 0;
+      for (let q = 0; q < K; q++) { const X = FI.ondeEsatte(tr, xc + ((q % lato) - (lato >> 1)) * passo, yc + (Math.floor(q / lato) - (lato >> 1)) * passo, 0.37 * q, bande).X; s2 += X * X; if (X > tr.sogliaSchiuma) sopra++; }
       const W = tr.P.copertura;
       riga({ c: 'C6', passaggio: 'mare (Monahan) → finestra (finestra.js)', grandezza: `copertura di schiuma (vento ${num(tr.P.U, 3)} m/s): W contro la parte dei punti coperti`, padre: W, figli: sopra / K, tol: 4 * Math.sqrt((W * (1 - W)) / K), da: `binomiale: 4·√(W(1 − W)/${K}) su punti indipendenti` });
       riga({ c: 'C6', passaggio: 'mare (Monahan) → finestra (finestra.js)', grandezza: 'varianza dell\'accelerazione che frange, normalizzata (ciò che fa P(schiuma) = W)', padre: 1, figli: s2 / K, tol: 4 * Math.sqrt(2 / K), da: `χ²: 4·√(2/${K})` }); });
@@ -369,12 +379,16 @@ manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi d
       riga({ c: 'C6', passaggio: 'mare (bolle) → finestra di 1 cm sotto la schiuma', grandezza: 'bolle visibili in 6 finestre (Deane e Stokes): attese contro contate', padre: att, figli: nb, tol: 4 * Math.sqrt(att), da: '4·√N (Poisson)' });
       riga({ c: 'C6', passaggio: 'mare (bolle) → finestra (mediata sulla copertura)', grandezza: 'bolle per m³: mare.js contro n sotto la schiuma × W', padre: cl ? cl.perM3 : 0, figli: B ? (B.n * g.padre.copertura) / B.legge.parteSopra(B.dVis) : 0, tol: 64 * EPS * (cl ? cl.perM3 : 0), da: 'esatto (n·ε)' }); });
     // C6: a nanometri, l'acqua alla densità di mare.js e ogni ione nel numero della sua concentrazione (Poisson, scatola neutra)
-    tempo('nanometri', () => { const somme = {}, attese = {}; let agg = 0, dens = 0;
-      for (let q = 0; q < 6; q++) { const sc = FI.scenaNano(SM, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); agg += sc.aggiustati; dens = Math.max(dens, Math.abs(sc.ripetizioni ** 3 * sc.modello.N / sc.latoNm ** 3 - sc.densitaNm3) / sc.densitaNm3);
+    // (100 scatole; gli ioni contati PRIMA della neutralità, che è Poisson della concentrazione, tolleranza 4·√N; quelli che la
+    // neutralità aggiunge o toglie si dicono a parte. Prima: 6 scatole e la tolleranza col totale degli aggiustati, che cresce con
+    // le scatole quanto il numero atteso: non si stringeva mai)
+    tempo('nanometri', () => { const somme = {}, attese = {}, aggiunti = {}; let agg = 0, dens = 0;
+      for (let q = 0; q < 100; q++) { const sc = FI.scenaNano(SM, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); agg += sc.aggiustati; for (const f in sc.aggiunti) aggiunti[f] = (aggiunti[f] || 0) + sc.aggiunti[f]; dens = Math.max(dens, Math.abs(sc.ripetizioni ** 3 * sc.modello.N / sc.latoNm ** 3 - sc.densitaNm3) / sc.densitaNm3);
         for (const f in sc.messi) { somme[f] = (somme[f] || 0) + sc.messi[f]; attese[f] = (attese[f] || 0) + (sc.attesi[f] || 0); } }
       riga({ c: 'C6', passaggio: 'mare (densità) → finestra di 6 nm (finestra.js, acqua mW)', grandezza: 'molecole d\'acqua per nm³: (messe + tolte dagli ioni) contro mare.js (lo scarto relativo)', padre: 0, figli: dens, tol: 1e3 * EPS, da: 'esatto (la scatola mW portata alla densità: n·ε)' });
       const f0 = Object.keys(attese).sort((a, b) => attese[b] - attese[a])[0];
-      riga({ c: 'C6', passaggio: 'mare (concentrazioni) → finestra di 6 nm (6 scatole)', grandezza: `ioni ${f0} (il più abbondante: liberi e in coppia) contati contro attesi`, padre: attese[f0], figli: somme[f0], tol: 4 * Math.sqrt(attese[f0]) + agg, da: `4·√N (Poisson) + ${agg} ioni aggiunti o tolti per la neutralità` }); });
+      riga({ c: 'C6', passaggio: 'mare (concentrazioni) → finestra di 6 nm (100 scatole)', grandezza: `ioni ${f0} (il più abbondante: liberi e in coppia), prima della neutralità, contro attesi`, padre: attese[f0], figli: somme[f0] - (aggiunti[f0] || 0), tol: 4 * Math.sqrt(attese[f0]), da: `4·√N (Poisson); la neutralità ne ha poi ${(aggiunti[f0] || 0) >= 0 ? 'aggiunti' : 'tolti'} ${Math.abs(aggiunti[f0] || 0)} (${agg} ioni aggiustati in tutto)` });
+      if (Math.abs(somme[f0] - attese[f0]) > 4 * Math.sqrt(attese[f0])) riga({ c: 'C6', passaggio: 'mare (concentrazioni) → la scena di 6 nm (dopo la neutralità)', grandezza: `ioni ${f0} mostrati contro attesi`, padre: attese[f0], figli: somme[f0], tol: 4 * Math.sqrt(attese[f0]), da: 'Poisson 4·√N sul conteggio mostrato', nota: { perche: 'la neutralità della scatola aggiunge sempre allo ione più abbondante del segno che manca, invece di condizionare tutte le specie: quello ione esce gonfiato di ~E[Q⁺] per scatola', dove: 'finestra.js scenaNano (la neutralità)' } }); });
     // C6 (lavoro 10): la chimica della finestra (reazioni.js). Sei scatole chiuse di 100 nm col padre di finestra.js
     // (campioneAcqua) e le molecole della resa prebiotica, ognuna lasciata andare con Gillespie: gli atomi di carbonio
     // contati dopo la storia contro Ω·Σ ν_C·c del padre (Poisson di ogni specie: varianza Σ ν_C²·Ω·c)

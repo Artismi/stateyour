@@ -585,7 +585,8 @@ export function climaEAria(dati, { Z } = {}) {
     // (resta scritto anche il capo gelato della ricerca: la CO2 più alta provata a cui il mare gela, con la sua temperatura, e
     // la larghezza della forchetta: la legge del termostato dice che la CO2 lasciata sta tra il gelo e gelo·forchetta·1,33, e
     // il salto di temperatura tra i due capi è quello del ghiaccio che sparisce, che scalda da sé)
-    if (scelto) { const sopra = prova(scelto.co2 * TERMOSTATO.passo); if (sopra.c.acqua === 'liquida') scelto = sopra; return esce(scelto, { termostato: scelto.co2, termostatoGelo: Math.exp(lo), termostatoForchetta: Math.exp(hi - lo), termostatoPasso: TERMOSTATO.passo, termostatoGeloT: gelo ? gelo.c.T : null }); }
+    if (scelto) { const sopra = prova(scelto.co2 * TERMOSTATO.passo); if (sopra.c.acqua === 'liquida') scelto = sopra; gelo ||= prova(Math.exp(lo)); // (il capo di sotto, se la ricerca non l'ha provato: la CO2 dell'equilibrio di Urey)
+      return esce(scelto, { termostato: scelto.co2, termostatoGelo: Math.exp(lo), termostatoForchetta: Math.exp(hi - lo), termostatoPasso: TERMOSTATO.passo, termostatoGeloT: gelo.c.T, termostatoGeloAcqua: gelo.c.acqua }); }
   }
   // 4. gelato: nemmeno tutta la sua anidride carbonica (che al freddo gela anche lei) lo scioglie
   return esce(cerca('ghiaccio', Math.min(mare.c.T, 270)));

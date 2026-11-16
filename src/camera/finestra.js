@@ -623,9 +623,10 @@ export function liquidoMW() {
   const pos = new Float64Array(n); for (let i = 0; i < n; i++) pos[i] = ((q[i] + 32768) / 65536) * T.latoNm;
   return (modello = { ...T, pos, N: n / 3 });
 }
-export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null, profondita = 0 } = {}, caso = null) {
+// («campione»: un'acqua già nota, nella forma di campioneAcqua — l'acqua dei pori di suolo.js —; se manca, quella del mare)
+export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null, profondita = 0, campione = null } = {}, caso = null) {
   const radiceCaso = caso || sorgente(`${stato?.radice || 'mare'}/nano/${lon.toFixed(5)}/${lat.toFixed(5)}`);
-  const camp = campioneAcqua(stato, { lon, lat, profondita, latoM, acqua: true, fondoM, massimo: 0 }, radiceCaso);
+  const camp = campione || campioneAcqua(stato, { lon, lat, profondita, latoM, acqua: true, fondoM, massimo: 0 }, radiceCaso);
   if (camp.asciutto) return { atomi: { pos: new Float32Array(0), raggio: new Float32Array(0), elemento: new Uint8Array(0) }, legami: new Uint32Array(0), legamiH: new Uint32Array(0), scatola: [0, 0, 0], parti: [], etichette: [], campione: camp, asciutto: true };
   // sotto il ghiaccio marino (la finestra dentro la lastra) il solido c'è davvero: la scena del ghiaccio e della salamoia di mare.js
   if (camp.luogo?.salamoia) return scenaMolecolare(stato, { lon, lat, profondita, latoM, acqua: true, fondoM }, radiceCaso);
@@ -648,11 +649,11 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
   for (const f in quanti) Q += quanti[f] * carica[f];
   for (const c of coppie) Q += c.m * (IONI[c.ca][2] + IONI[c.an][2]);
   // la neutralità: si aggiunge uno ione a una carica del segno che manca (il più abbondante), o se non c'è se ne toglie uno del segno in più
-  let aggiustati = 0;
+  let aggiustati = 0; const aggiunti = {}; // (per specie: +1 per ogni ione aggiunto, −1 per ogni tolto: ciò che la neutralità cambia rispetto a Poisson)
   for (let giro = 0; Q !== 0 && giro < 1000; giro++, aggiustati++) {
     const segno = Q > 0 ? -1 : 1, uno = Object.keys(quanti).filter((f) => carica[f] === segno).sort((x, y) => quanti[y] - quanti[x])[0] || Object.keys(IONI).find((f) => IONI[f][2] === segno && SIMBOLI[f]);
     const togli = Object.keys(quanti).filter((f) => Math.sign(carica[f]) === -segno && quanti[f] > 0 && Math.abs(carica[f]) <= Math.abs(Q)).sort((x, y) => quanti[y] - quanti[x])[0];
-    if (uno && Math.abs(Q) >= 1) { quanti[uno] = (quanti[uno] || 0) + 1; carica[uno] = segno; Q += segno; } else if (togli) { quanti[togli]--; Q -= carica[togli]; } else break;
+    if (uno && Math.abs(Q) >= 1) { quanti[uno] = (quanti[uno] || 0) + 1; carica[uno] = segno; Q += segno; aggiunti[uno] = (aggiunti[uno] || 0) + 1; } else if (togli) { quanti[togli]--; Q -= carica[togli]; aggiunti[togli] = (aggiunti[togli] || 0) - 1; } else break;
   }
   const gas = {}; for (const f in camp.gas || {}) gas[f] = poisson(r, camp.gas[f].perM3 * V);
   // --- ogni ione al posto di una molecola (scelta per evento), via le molecole troppo vicine ai suoi atomi
@@ -701,7 +702,7 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
   const attesi = { acqua: nW * Lb ** 3 }; for (const f in camp.ioni) attesi[f] = (camp.ioni[f].perM3 || 0) * V;
   const messi = {}; for (const f in quanti) messi[f] = (messi[f] || 0) + (conteggi[f] || 0); for (const c of coppie) { const k = conteggi[`${c.ca} ${c.an}`] || 0; messi[c.ca] = (messi[c.ca] || 0) + k; messi[c.an] = (messi[c.an] || 0) + k; }
   return { atomi: { pos: Float32Array.from(P), raggio: Float32Array.from(Rr), elemento: Uint8Array.from(El) }, legami: Uint32Array.from(legami), legamiH: Uint32Array.from(legamiH), scatola: [Lb, Lb, Lb], unita: 'nm', parti, etichette, agitazione, conteggi, attesi,
-    gusci, messi, carica: Q, aggiustati, latoNm: Lb, volumeM3: V, solido: null, campione: camp, nuclei: camp.nuclei, densitaNm3: nW, ripetizioni: rip, modello: { nome: M.nome, T: M.T, N: M.N, latoNm: M.latoNm, fonte: M.fonte },
+    gusci, messi, carica: Q, aggiustati, aggiunti, latoNm: Lb, volumeM3: V, solido: null, campione: camp, nuclei: camp.nuclei, densitaNm3: nW, ripetizioni: rip, modello: { nome: M.nome, T: M.T, N: M.N, latoNm: M.latoNm, fonte: M.fonte },
     descrizione: `l'acqua di questo mare in un cubetto di ${Lb.toFixed(1)} nm: ${nAcqua} molecole d'acqua alla sua densità (${(nW).toFixed(2)} per nm³, struttura del liquido dal potenziale mW), ${Object.entries(conteggi).filter(([f, x]) => f !== 'acqua' && x > 0).map(([f, x]) => `${x} ${f}`).join(', ') || 'nessuno ione (in questo volume se ne aspettano meno di uno)'}; ogni ione col suo guscio d'acqua.` };
 }
 function molecolaIone(f, c, r, metti, legami) {
