@@ -21,8 +21,10 @@ export const CASI = {
   conche: config({ reticolo: piano('quadrato'), atomi: [{ p: [0, 0, 0], s: -1 }], w: 0.15, r0: [0.06, 0, 0], v0: [0, 0.55, 0], finestra: giu, tempo: 120 }),
   // L2 da sola: cerchi (raggio v/Ω = 0,5)
   magnete: config({ reticolo: piano('quadrato'), atomi: [], r0: [0, 0, 0], v0: [1, 0, 0], B: [0, 0, 2], finestra: giu, tempo: 60 }),
-  // L1 + L2: cerchi che toccano le colline
+  // L1 + L2: il cerchio attorno al centro della cella, tra quattro colline: una rosetta
   rosette: config({ reticolo: piano('quadrato'), atomi: [{ p: [0, 0, 0], s: 1 }], w: 0.12, r0: [0.5, 0.5, 0], v0: [1.4, 0, 0], B: [0, 0, 4], finestra: giu, tempo: 120 }),
+  // L1 + L2: il cerchio (raggio 0,35) col centro a metà tra due colline: passa a 0,15 da ognuna e ne viene spinto
+  salti: config({ reticolo: piano('quadrato'), atomi: [{ p: [0, 0, 0], s: 1 }], w: 0.12, r0: [0.5, 0.35, 0], v0: [1.4, 0, 0], B: [0, 0, 4], finestra: giu, tempo: 120 }),
   // nello spazio: cubico a facce centrate, colline, lancio obliquo
   spazio: config({ reticolo: { sistema: 'cubico', centratura: 'F' }, atomi: [{ p: [0, 0, 0], s: 1 }], w: 0.15, r0: [0.25, 0.25, 0.1], v0: [2.2, 0.9, 0.4], tempo: 100 }),
   // nello spazio, caldo

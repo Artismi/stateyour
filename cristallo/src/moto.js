@@ -101,11 +101,12 @@ export function creaTessera(cristallo) {
     }
     t.vel[t.n] = sp; t.n++;
   };
-  const fr = (p) => [p[0] * Ar[0][0] + p[1] * Ar[0][1] + p[2] * Ar[0][2], p[0] * Ar[1][0] + p[1] * Ar[1][1] + p[2] * Ar[1][2], p[0] * Ar[2][0] + p[1] * Ar[2][1] + p[2] * Ar[2][2]];
+  const R0 = Ar[0], R1 = Ar[1], R2 = Ar[2], f = [0, 0, 0], d = [0, 0, 0], g = [0, 0, 0];
   // aggiunge il tratto p→q (punti 3D del viaggio)
   t.aggiungi = (p, q, sp) => {
-    const a = fr(p), b = fr(q), cella = a.map(Math.floor);
-    let f = a.map((x, k) => x - cella[k]), d = b.map((x, k) => x - a[k]);
+    const a0 = p[0] * R0[0] + p[1] * R0[1] + p[2] * R0[2], a1 = p[0] * R1[0] + p[1] * R1[1] + p[2] * R1[2], a2 = p[0] * R2[0] + p[1] * R2[1] + p[2] * R2[2];
+    d[0] = q[0] * R0[0] + q[1] * R0[1] + q[2] * R0[2] - a0; d[1] = q[0] * R1[0] + q[1] * R1[1] + q[2] * R1[2] - a1; d[2] = q[0] * R2[0] + q[1] * R2[1] + q[2] * R2[2] - a2;
+    f[0] = a0 - Math.floor(a0); f[1] = a1 - Math.floor(a1); f[2] = a2 - Math.floor(a2);
     for (let giri = 0; giri < 8; giri++) {
       // fin dove il tratto resta nella cella [0, 1]³
       let tf = 1, faccia = -1, verso = 0;
@@ -113,12 +114,12 @@ export function creaTessera(cristallo) {
         if (d[k] > 0) { const s = (1 - f[k]) / d[k]; if (s < tf) { tf = s; faccia = k; verso = 1; } }
         else if (d[k] < 0) { const s = -f[k] / d[k]; if (s < tf) { tf = s; faccia = k; verso = -1; } }
       }
-      const g = f.map((x, k) => x + tf * d[k]);
+      g[0] = f[0] + tf * d[0]; g[1] = f[1] + tf * d[1]; g[2] = f[2] + tf * d[2];
       if (faccia >= 0) g[faccia] = verso > 0 ? 1 : 0; // esattamente sulla faccia
       metti(f, g, sp);
       if (faccia < 0) return;
-      d = d.map((x) => x * (1 - tf));
-      f = g; f[faccia] = verso > 0 ? 0 : 1;
+      d[0] *= 1 - tf; d[1] *= 1 - tf; d[2] *= 1 - tf;
+      f[0] = g[0]; f[1] = g[1]; f[2] = g[2]; f[faccia] = verso > 0 ? 0 : 1;
     }
   };
   return t;

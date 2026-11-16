@@ -177,6 +177,24 @@ export function creaCristallo(opzioni) {
     return QT;
   }
 
+  // LE SCATOLE: la cella si divide in 4 × 4 × 4 scatole (nel piano 4 × 4 × 1); per ognuna si tengono solo le immagini
+  // che possono stare entro 4w da un suo punto (più 6σ per le vibrazioni: uno spostamento più grande capita a un
+  // atomo su 10⁹). È solo un modo più svelto di fare la stessa somma.
+  const SB = 4, SBz = piano ? 1 : 4, extra = 6 * sigma, indici = [], inizio = new Int32Array(SB * SB * SBz + 1);
+  for (let a = 0; a < SB; a++) for (let b = 0; b < SB; b++) for (let c = 0; c < SBz; c++) {
+    const centro = combina([(a + 0.5) / SB, (b + 0.5) / SB, (c + 0.5) / SBz], A);
+    let raggio = 0;
+    for (const sa of [0, 1]) for (const sb of [0, 1]) for (const sc of [0, 1]) {
+      const v = combina([(a + sa) / SB, (b + sb) / SB, (c + sc) / SBz], A);
+      raggio = Math.max(raggio, Math.hypot(v[0] - centro[0], v[1] - centro[1], v[2] - centro[2]));
+    }
+    const lim = rc + raggio + extra, k = (a * SB + b) * SBz + c;
+    inizio[k] = indici.length;
+    for (let q = 0; q < nI; q++) if (Math.hypot(Q[4 * q] - centro[0], Q[4 * q + 1] - centro[1], Q[4 * q + 2] - centro[2]) < lim) indici.push(4 * q);
+    inizio[k + 1] = indici.length;
+  }
+  const lista = Int32Array.from(indici);
+
   const a0 = Ar[0], a1 = Ar[1], a2 = Ar[2], A0 = A[0], A1 = A[1], A2 = A[2];
   const g9 = 9 * w2, g16 = 16 * w2, g7 = 7 * w2, mezzoW2 = 1 / (2 * w2);
   // V e −∇V in r; se F è dato vi scrive la forza. Il punto si porta nella cella (r mod reticolo), poi si somma.
@@ -186,8 +204,11 @@ export function creaCristallo(opzioni) {
     f0 -= I; f1 -= J; f2 -= K;
     const px = f0 * A0[0] + f1 * A1[0] + f2 * A2[0], py = f0 * A0[1] + f1 * A1[1] + f2 * A2[1], pz = f0 * A0[2] + f1 * A1[2] + f2 * A2[2];
     const q = caldo ? immaginiPer(I, J, K) : Q;
+    const ka = Math.min(SB - 1, Math.floor(f0 * SB)), kb = Math.min(SB - 1, Math.floor(f1 * SB)), kc = Math.min(SBz - 1, Math.floor(f2 * SBz));
+    const kk = (ka * SB + kb) * SBz + kc, fine = inizio[kk + 1];
     let Vt = 0, Fx = 0, Fy = 0, Fz = 0;
-    for (let i = 0; i < 4 * nI; i += 4) {
+    for (let t = inizio[kk]; t < fine; t++) {
+      const i = lista[t];
       const dx = px - q[i], dy = py - q[i + 1], dz = pz - q[i + 2], r2 = dx * dx + dy * dy + dz * dz;
       if (r2 >= g16) continue;
       const g = q[i + 3] * Math.exp(-r2 * mezzoW2);
@@ -206,7 +227,7 @@ export function creaCristallo(opzioni) {
 
   return {
     parametri: par, A, Ar, V, U0, w, T, difetti, piano, base, atomi, centri, primitiva,
-    immagini: nI, campo, frazionarie, nome: `${piano ? 'piano ' : ''}${par.sistema} ${par.centratura}`,
+    immagini: nI, perScatola: lista.length / (SB * SB * SBz), campo, frazionarie, nome: `${piano ? 'piano ' : ''}${par.sistema} ${par.centratura}`,
   };
 }
 

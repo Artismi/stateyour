@@ -117,33 +117,35 @@ export function creaSessione(p, opzioni = {}) {
     p, cristallo: vero, perfetto, dt, scelta, ogni, passiTotali, passi: 0, pallina, gemella, viaggio, tessera, tratti, d,
     zona: { celle: 0, finita: false, tempo: 0 }, finito: false, magnete: haMagnete(B),
   };
-  let cellaPrima = vero.frazionarie(pallina.x).map(Math.floor);
+  const Ar = vero.Ar, cella = vero.frazionarie(pallina.x).map(Math.floor);
   // avanza di (circa) n passi; restituisce quanti tratti nuovi ci sono nella tessera e nel viaggio
   S.avanza = (n) => {
     const t0 = tessera.n, v0 = tratti.n;
     const blocchi = Math.max(1, Math.round(n / ogni));
+    const prima = [0, 0, 0];
     for (let b = 0; b < blocchi && !S.finito; b++) {
-      const m = Math.min(ogni, passiTotali - S.passi);
-      const prima = [...pallina.x];
+      const m = Math.min(ogni, passiTotali - S.passi), x = pallina.x;
+      prima[0] = x[0]; prima[1] = x[1]; prima[2] = x[2];
       avanza(vero, pallina, dt, m, B, null);
       if (!S.zona.finita) avanza(perfetto, gemella, dt, m, B, null);
       S.passi += m;
       const sp = velocita(pallina.v);
-      viaggio.aggiungi(pallina.x, sp);
-      tessera.aggiungi(prima, pallina.x, sp);
+      viaggio.aggiungi(x, sp);
+      tessera.aggiungi(prima, x, sp);
       if (tratti.n * 6 + 6 > tratti.s.length) {
         const s = new Float64Array(tratti.s.length * 2); s.set(tratti.s); tratti.s = s;
         const q = new Float32Array(tratti.vel.length * 2); q.set(tratti.vel); tratti.vel = q;
       }
-      tratti.s.set([...prima, ...pallina.x], 6 * tratti.n); tratti.vel[tratti.n++] = sp;
+      const o = 6 * tratti.n, ts = tratti.s;
+      ts[o] = prima[0]; ts[o + 1] = prima[1]; ts[o + 2] = prima[2]; ts[o + 3] = x[0]; ts[o + 4] = x[1]; ts[o + 5] = x[2]; tratti.vel[tratti.n++] = sp;
       // le celle attraversate e la zona pulita
-      const cella = vero.frazionarie(pallina.x).map(Math.floor);
       if (!S.zona.finita) {
-        S.zona.celle += Math.abs(cella[0] - cellaPrima[0]) + Math.abs(cella[1] - cellaPrima[1]) + Math.abs(cella[2] - cellaPrima[2]);
-        const dx = pallina.x[0] - gemella.x[0], dy = pallina.x[1] - gemella.x[1], dz = pallina.x[2] - gemella.x[2];
+        const c0 = Math.floor(x[0] * Ar[0][0] + x[1] * Ar[0][1] + x[2] * Ar[0][2]), c1 = Math.floor(x[0] * Ar[1][0] + x[1] * Ar[1][1] + x[2] * Ar[1][2]), c2 = Math.floor(x[0] * Ar[2][0] + x[1] * Ar[2][1] + x[2] * Ar[2][2]);
+        S.zona.celle += Math.abs(c0 - cella[0]) + Math.abs(c1 - cella[1]) + Math.abs(c2 - cella[2]);
+        cella[0] = c0; cella[1] = c1; cella[2] = c2;
+        const dx = x[0] - gemella.x[0], dy = x[1] - gemella.x[1], dz = x[2] - gemella.x[2];
         if (dx * dx + dy * dy + dz * dz > d * d) { S.zona.finita = true; S.zona.tempo = pallina.t; }
       }
-      cellaPrima = cella;
       if (S.passi >= passiTotali) S.finito = true;
     }
     return { tessera: [t0, tessera.n], viaggio: [v0, tratti.n] };

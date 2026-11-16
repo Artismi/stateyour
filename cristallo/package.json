@@ -1,0 +1,12 @@
+{
+  "name": "cristallo",
+  "version": "0.1.0",
+  "description": "Pattern da una pallina in un cristallo: reticoli di Bravais, finestra in prospettiva, indirizzo.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node test/test_caso.mjs && node test/test_reticoli.mjs && node test/test_moto.mjs && node test/test_finestra.mjs && node test/test_pattern.mjs && node test/test_zona.mjs",
+    "simmetria": "node test/test_simmetria.mjs",
+    "start": "node servi.mjs"
+  }
+}
