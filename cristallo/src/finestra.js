@@ -26,7 +26,7 @@ import { punto, vettore, versore, combina } from './reticolo.js';
 
 export const PROFONDITA = 3;      // D, in celle
 export const MAX_COPIE = 4000;    // le copie della tessera, al più, ordinate per distanza dall'occhio
-export const MAX_TRATTI = 1500000; // i tratti disegnati, al più: oltre, le copie più lontane si lasciano fuori
+export const MAX_TRATTI = 1000000; // i tratti disegnati, al più: oltre, le copie più lontane si lasciano fuori
 
 // i due versori nel piano: e₁ viene dall'asse x (o y, se n gli è quasi parallela), ruotato di ψ attorno all'asse
 export function assiFinestra(n, psi) {
@@ -113,8 +113,11 @@ export function copieVisibili(finestra, cristallo, max = MAX_COPIE) {
   const o0 = finestra.aFinestra([0, 0, 0]), piani = finestra.piani, lista = [];
   const volume = (hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1);
   if (volume > 4e6) return lista; // (una finestra assurda: niente copie)
-  for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let kk = lo[2]; kk <= hi[2]; kk++) {
-    const T = combina([i, j, kk], A), o = finestra.aFinestra(T);
+  // la tessera è ripiegata nella cella convenzionale; le sue copie stanno nei nodi del reticolo vero, cioè nelle celle
+  // e, per i reticoli centrati, anche nei punti di centratura di ogni cella
+  for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let kk = lo[2]; kk <= hi[2]; kk++) for (const cc of cristallo.centri) {
+    if (cristallo.piano && cc[2] !== 0) continue;
+    const fT = [i + cc[0], j + cc[1], kk + cc[2]], T = combina(fT, A), o = finestra.aFinestra(T);
     let fuori = false;
     for (const a of piani) {
       let tutti = true;
@@ -122,9 +125,9 @@ export function copieVisibili(finestra, cristallo, max = MAX_COPIE) {
       if (tutti) { fuori = true; break; }
     }
     if (fuori) continue;
-    const centro = finestra.aFinestra(combina([i + 0.5, j + 0.5, kk + 0.5], A));
+    const centro = finestra.aFinestra(combina([fT[0] + 0.5, fT[1] + 0.5, fT[2] + 0.5], A));
     const dist = finestra.parallela ? Math.abs(centro[2]) : (finestra.R + centro[2]);
-    lista.push({ T, cella: [i, j, kk], o: [o[0] - o0[0], o[1] - o0[1], o[2] - o0[2]], dist });
+    lista.push({ T, cella: fT, o: [o[0] - o0[0], o[1] - o0[1], o[2] - o0[2]], dist });
   }
   lista.sort((p, q) => p.dist - q.dist);
   return lista.slice(0, max);
@@ -132,7 +135,7 @@ export function copieVisibili(finestra, cristallo, max = MAX_COPIE) {
 
 // IL PROIETTORE: tiene la finestra, le copie e i tratti (della tessera o del viaggio) già portati nel riferimento della
 // finestra; a ogni chiamata proietta i tratti nuovi su tutte le copie e restituisce i tratti dell'immagine,
-// [X1, Y1, X2, Y2, luminosità, velocità] per tratto. Con «copie: false» c'è una copia sola, quella con T = 0 (il viaggio).
+// [X1, Y1, X2, Y2, luminosità, velocità] per tratto, in doppia precisione (la polilinea resta esatta). Con «copie: false» c'è una copia sola, quella con T = 0 (il viaggio).
 export function creaProiettore(finestra, cristallo, conCopie = true, maxTratti = MAX_TRATTI) {
   const o0 = finestra.aFinestra([0, 0, 0]);
   const copie = conCopie ? copieVisibili(finestra, cristallo) : [{ T: [0, 0, 0], o: [0, 0, 0], dist: 0 }];
@@ -140,7 +143,7 @@ export function creaProiettore(finestra, cristallo, conCopie = true, maxTratti =
   const P = { finestra, copie, fatti: 0, emessi: 0, pieno: false, maxTratti };
   // proietta i tratti [da, a) di s (6 numeri per tratto, nel mondo) con le loro velocità; scrive in un Float32Array
   P.proietta = (s, vel, da, a) => {
-    const n = a - da; if (n <= 0 || P.pieno) return new Float32Array(0);
+    const n = a - da; if (n <= 0 || P.pieno) return new Float64Array(0);
     // nel riferimento della finestra, rispetto all'origine del mondo
     const w = new Float64Array(6 * n);
     for (let i = 0; i < n; i++) {
@@ -162,9 +165,9 @@ export function creaProiettore(finestra, cristallo, conCopie = true, maxTratti =
       }
       box.set([m0, m1, m2, M0, M1, M2], 6 * b);
     }
-    let out = new Float32Array(6 * Math.min(n * 4 + 64, 1 << 20)), m = 0;
+    let out = new Float64Array(6 * Math.min(n * 4 + 64, 1 << 20)), m = 0;
     const metti = (X1, Y1, X2, Y2, l, v) => {
-      if (m + 6 > out.length) { const q = new Float32Array(out.length * 2); q.set(out); out = q; }
+      if (m + 6 > out.length) { const q = new Float64Array(out.length * 2); q.set(out); out = q; }
       out[m] = X1; out[m + 1] = Y1; out[m + 2] = X2; out[m + 3] = Y2; out[m + 4] = l; out[m + 5] = v; m += 6;
     };
     const proietta = finestra.proietta;

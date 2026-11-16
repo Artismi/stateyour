@@ -48,8 +48,19 @@ export function passiBoris(cristallo, s, dt, n, B, traccia = null) {
 // resta quello del lancio all'ultimo bit.
 
 export const haMagnete = (B) => !!B && (B[0] !== 0 || B[1] !== 0 || B[2] !== 0);
+// (col magnete, al primo passo la velocità del lancio v₀ si porta a metà passo prima: v_{−½} = v₀ − (dt/2)·(F + v₀×B),
+// così il metodo resta del secondo ordine anche nella condizione iniziale)
 export function avanza(cristallo, s, dt, n, B, traccia = null) {
-  if (haMagnete(B)) passiBoris(cristallo, s, dt, n, B, traccia); else passiVerlet(cristallo, s, dt, n, traccia);
+  if (n <= 0) return;
+  if (haMagnete(B)) {
+    if (!s.mezzo) {
+      const v = s.v, F = s.F, h = dt / 2;
+      const c = [v[1] * B[2] - v[2] * B[1], v[2] * B[0] - v[0] * B[2], v[0] * B[1] - v[1] * B[0]];
+      for (let k = 0; k < 3; k++) v[k] -= h * (F[k] + c[k]);
+      s.mezzo = true;
+    }
+    passiBoris(cristallo, s, dt, n, B, traccia);
+  } else passiVerlet(cristallo, s, dt, n, traccia);
 }
 
 export function energia(cristallo, s) {

@@ -80,8 +80,8 @@ export function descriviDirezione(n, cristallo, d = 0.01, M = 9) {
   let esatto = null;
   const candidati = [];
   for (const hkl of piani(M)) {
-    const G = normaleDi(hkl, cristallo), c = Math.abs(punto(G, nn)), eps = Math.sqrt(Math.max(0, 1 - c * c));
-    if (eps < 1e-12 && !esatto) esatto = hkl;
+    const G = normaleDi(hkl, cristallo), eps = norma(vettore(G, nn)); // sin ε, senza cancellazioni
+    if (eps < 1e-12 && !esatto) esatto = hkl; // (eps è sin ε)
     candidati.push({ hkl, eps });
   }
   if (esatto) {
@@ -91,7 +91,7 @@ export function descriviDirezione(n, cristallo, d = 0.01, M = 9) {
   let migliore = null;
   for (const c of candidati) {
     if (c.eps > 0.2) continue;
-    const r = reticoloDelPiano(c.hkl, cristallo), zona = d / Math.sin(Math.asin(Math.min(1, c.eps))), volte = zona / r.periodo;
+    const r = reticoloDelPiano(c.hkl, cristallo), zona = d / c.eps, volte = zona / r.periodo;
     if (volte >= 2 && (!migliore || volte > migliore.volte)) migliore = { ...c, ...r, zona, volte };
   }
   if (!migliore) return { esatta: false, hkl: null, frase: 'finestra di sbieco: non si ripete' };
