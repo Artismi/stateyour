@@ -20,6 +20,15 @@
 //     come pendenza per i riflessi (il cielo riflesso nella direzione speculare: la forma di Rayleigh, la media della tabella
 //     del cielo); la coda capillare allarga il riflesso, la schiuma copre la parte che dice Monahan.
 //   · I MATERIALI: le riflettanze delle rocce per classe, del sedimento, della neve e del ghiaccio (tessere.worker.js).
+//   · IL SUOLO FINE (suolo.js, PROGETTO.md lavoro 9): a pochi metri dal suolo, sotto l'occhio, la finestra del suolo di quel
+//     punto (10 m sotto i 4 m di quota, 100 m sotto i 40), calcolata solo lì con la legge di suolo.js e con lo stesso indirizzo
+//     della finestra del livello 5 della mappa: il padre è la tessera di geologia.js che il 3D sta disegnando lì (i suoi campi
+//     grezzi li manda il filo delle tessere, e suolo.js li ricorda per mappa.js: la stessa cella, lo stesso tratto, gli stessi
+//     punti). La finestra è una pezza sua di N×N vertici sui punti della finestra: la quota è quella della tessera più il
+//     RILIEVO AUTO-AFFINE di suolo.js (scala vera); la luce sul pendio fine e la tinta del suolo (immagineSuolo senza la sua
+//     luce, riportata alla riflettanza media della tessera lì: la luminosità resta quella della carta, il suolo ne dà le
+//     variazioni). Le pezze attorno hanno un buco al suo posto; l'orlo della finestra scende. Calcolata quando ci si sposta di
+//     un quarto della finestra (o cambia la tessera): qualche decina di ms fuori dal fotogramma (statistiche().msSuoloFine).
 //   · LA LUCE: quella della stella, attenuata e arrossata dall'aria che attraversa per arrivare lì (di più al tramonto),
 //     sul pendio vero (le normali dalle pendenze della tessera, punto per punto), tolta dove la stella sta dietro
 //     l'orizzonte del punto (otto orizzonti per punto calcolati nel filo delle tessere: le ombre proprie del rilievo, con la
@@ -116,7 +125,9 @@ uniform vec2 u_sfuma;     // tra queste due distanze dall'occhio i dati passano 
 uniform vec4 u_onda[${N_ONDE}];   // le onde che muovono la superficie: numero d'onda verso est e verso nord (1/m), ampiezza (m), fase al centro della pezza
 uniform float u_pulsa[${N_ONDE}]; // la loro pulsazione (rad/s)
 uniform int u_nOnde;
-out vec3 v_su; out vec3 v_est; out vec3 v_rel; out vec4 v_dati; out vec2 v_uv; out vec3 v_uvM; out vec2 v_en; out float v_w;
+uniform vec4 u_fine;      // IL SUOLO FINE: x 0 niente, 1 una pezza col buco della finestra, 2 la finestra (u_altM è allora la quota fine); y il suo N
+uniform vec4 u_fineG;     // dove sta la pezza nelle coordinate della finestra (0…1, da sud-ovest): origine del centro e ampiezza
+out vec3 v_su; out vec3 v_est; out vec3 v_rel; out vec4 v_dati; out vec2 v_uv; out vec3 v_uvM; out vec2 v_en; out float v_w; out vec2 v_fw;
 vec2 quote(sampler2D u_img, vec2 f) { // interpolazione a mano tra i quattro punti vicini (le immagini a 32 bit non si interpolano da sole)
   vec2 p = f * vec2(${TW}.0, ${TH}.0) + 0.5; ivec2 i = ivec2(floor(p)); vec2 w = p - vec2(i); ivec2 a = clamp(i, ivec2(0), ivec2(${TWB - 1}, ${THB - 1})), b = clamp(i + 1, ivec2(0), ivec2(${TWB - 1}, ${THB - 1}));
   return mix(mix(texelFetch(u_img, a, 0).rg, texelFetch(u_img, ivec2(b.x, a.y), 0).rg, w.x), mix(texelFetch(u_img, ivec2(a.x, b.y), 0).rg, texelFetch(u_img, b, 0).rg, w.x), w.y);
@@ -136,7 +147,9 @@ void main() {
   if (u_sfuma.y > 0.0) { // quanto è lontano il punto (contato con la quota della tessera: basta)
     float h0 = max(q.x, q.y) * u_orlo.y; sfuma = smoothstep(u_sfuma.x, u_sfuma.y, length(u_C + u_base * vec3((R + h0) * su.x, (R + h0) * su.y, (R + h0) * (su.z - 1.0) + h0)));
     if (sfuma > 0.0) { vec2 qm = quote(u_altM, fM); q = vec2(mix(q.x, qm.x, sfuma), (q.y > -9e4 && qm.y > -9e4) ? mix(q.y, qm.y, sfuma) : (sfuma < 0.5 ? q.y : qm.y)); } }
-  float terra = q.x * u_orlo.y, livello = q.y > -9e4 ? q.y * u_orlo.y : -1e5, h = max(terra, livello);
+  v_fw = u_fineG.xy + vec2((g.x - 0.5) * u_fineG.z, (0.5 - g.y) * u_fineG.w);
+  float hFine = 0.0; if (u_fine.x > 1.5) { int n = int(u_fine.y); hFine = texelFetch(u_altM, clamp(ivec2(round(v_fw * (u_fine.y - 1.0))), ivec2(0), ivec2(n - 1)), 0).r; }
+  float terra = q.x * u_orlo.y + hFine, livello = q.y > -9e4 ? q.y * u_orlo.y : -1e5, h = max(terra, livello);
   vec2 en = vec2(R * (cf * dl - u_lon0 * 2.0 * sin(fi0 + 0.5 * df) * sf2), R * df); // X e Y delle onde, contati dal centro della pezza
   if (livello > terra && a_griglia.z < 0.5) { // l'acqua si muove: la somma delle onde che questa pezza risolve
     float fondo = clamp((livello - terra) * 0.5, 0.0, 1.0);
@@ -149,7 +162,8 @@ void main() {
   gl_Position = u_proj * vec4(u_vista * rel, 1.0);${GLSL_PROFONDITA_V}
 }`;
 const F_SUOLO = `
-in vec3 v_su; in vec3 v_est; in vec3 v_rel; in vec4 v_dati; in vec2 v_uv; in vec3 v_uvM; in vec2 v_en; in float v_w;
+in vec3 v_su; in vec3 v_est; in vec3 v_rel; in vec4 v_dati; in vec2 v_uv; in vec3 v_uvM; in vec2 v_en; in float v_w; in vec2 v_fw;
+uniform vec4 u_fine; uniform vec3 u_fineMedia; // il suolo fine (vedi V_SUOLO): nella finestra u_pendM è il pendio fine, u_terraM la tinta del suolo, u_fineMedia la sua media
 uniform float u_fc; uniform mat3 u_normali; // dal riferimento della pezza agli assi del mondo, per le normali
 uniform sampler2D u_alt, u_altM;               // quota e livello dell'acqua (per la riva, punto per punto)
 uniform sampler2D u_pend, u_terra, u_acqua, u_pendM, u_terraM, u_acquaM; // della tessera e di sua madre
@@ -190,6 +204,7 @@ float rilievo(vec3 s, vec4 a, vec4 b) {
 out vec4 o_col;
 vec3 lineare(vec3 c) { return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878); }
 void main() {
+  if (u_fine.x > 0.5 && u_fine.x < 1.5 && all(greaterThanEqual(v_fw, vec2(0.0))) && all(lessThanEqual(v_fw, vec2(1.0)))) discard; // (lì c'è la pezza della finestra)
   vec3 su = normalize(v_su), est = normalize(v_est - su * dot(v_est, su)), nord = cross(su, est);
   vec3 suM = normalize(u_normali * su), occhio = normalize(-v_rel);
   float muS = dot(suM, u_sole), r = v_dati.z;
@@ -237,7 +252,8 @@ void main() {
   }
   if (asciutto > 0.0) { // TERRA (o ghiaccio)
     vec3 p = texture(u_pend, v_uv).rgb, base = lineare(texture(u_terra, v_uv).rgb); vec4 o1 = texture(u_oriz1, v_uv), o2 = texture(u_oriz2, v_uv);
-    if (v_uvM.z > 0.002) { p = mix(p, texture(u_pendM, v_uvM.xy).rgb, v_uvM.z); base = mix(base, lineare(texture(u_terraM, v_uvM.xy).rgb), v_uvM.z); o1 = mix(o1, texture(u_oriz1M, v_uvM.xy), v_uvM.z); o2 = mix(o2, texture(u_oriz2M, v_uvM.xy), v_uvM.z); }
+    if (u_fine.x > 1.5) { vec2 tc = (clamp(v_fw, 0.0, 1.0) * (u_fine.y - 1.0) + 0.5) / u_fine.y; p.xy += texture(u_pendM, tc).xy; base *= lineare(texture(u_terraM, tc).rgb) / max(u_fineMedia, vec3(1e-4)); }
+    else if (v_uvM.z > 0.002) { p = mix(p, texture(u_pendM, v_uvM.xy).rgb, v_uvM.z); base = mix(base, lineare(texture(u_terraM, v_uvM.xy).rgb), v_uvM.z); o1 = mix(o1, texture(u_oriz1M, v_uvM.xy), v_uvM.z); o2 = mix(o2, texture(u_oriz2M, v_uvM.xy), v_uvM.z); }
     vec3 n = normalize(u_normali * (su - est * p.x - nord * p.y));
     vec3 sp = transpose(u_normali) * u_sole, sLoc = vec3(dot(sp, est), dot(sp, nord), dot(sp, su));
     // la stella sul pendio (se non è dietro l'orizzonte), e il cielo che il punto vede (p.z), su un pendio che ne guarda una parte
@@ -485,7 +501,7 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 48 }
 }
 
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {}, corpi = null } = {}) {
-  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 48, nuvole: 1, onde: 1, rilievo: 1, lune: true, anelli: true, ...opzioni };
+  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 48, nuvole: 1, onde: 1, rilievo: 1, suoloFine: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
@@ -535,7 +551,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const quanti = O.fili || Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
     for (let i = 0; i < quanti; i++) {
       const w = new Worker(new URL('./tessere.worker.js', import.meta.url), { type: 'module' }), f = { w, libero: true };
-      w.onmessage = (e) => { f.libero = true; arrivata(e.data); distribuisci(); };
+      w.onmessage = (e) => { if (e.data?.tipo === 'campi') { campiArrivati(e.data); return; } f.libero = true; arrivata(e.data); distribuisci(); };
       w.onerror = (e) => { console.error('mondo3d: il filo delle tessere si è fermato:', e.message); f.libero = true; };
       w.postMessage({ tipo: 'base', k: S0.k, se: S0.se, cl: S0.cl, mare: S0.mare, seme: S0.seme, T: P.clima.T, raggioM: R }); fili.push(f);
     }
@@ -588,6 +604,52 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     return Infinity;
   }
 
+
+  // ---------- IL SUOLO FINE (suolo.js): la finestra del suolo sotto l'occhio, a pochi metri (vedi in cima)
+  let SU = null; import('../camera/suolo.js').then((m) => { SU = m; }).catch(() => {});
+  const fine = { campi: new Map(), chiesti: new Set(), fin: null, attiva: false, inCorso: false, ms: 0, quante: 0, tex: null, griglia: null };
+  function campiArrivati(d) { if (d.k !== base.k) return; if (d.errore) { console.error('mondo3d: i campi della tessera non sono arrivati:', d.errore); return; } fine.campi.set(d.n, d); if (fine.campi.size > 6) fine.campi.delete(fine.campi.keys().next().value); N.cambia(); }
+  // la griglia della finestra: n × n vertici sui suoi punti (g = i/(n − 1)), più l'orlo
+  function grigliaFine(n) {
+    if (fine.griglia?.n0 === n) return fine.griglia; const v = [], idx = [];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) v.push(i / (n - 1), j / (n - 1), 0);
+    for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) { const a = j * n + i; idx.push(a, a + n, a + 1, a + 1, a + n, a + n + 1); }
+    const orlo = (lista) => { const da = v.length / 3; for (const [i, j] of lista) v.push(i / (n - 1), j / (n - 1), 1); for (let k = 0; k + 1 < lista.length; k++) { const a = lista[k][1] * n + lista[k][0], b = lista[k + 1][1] * n + lista[k + 1][0]; idx.push(a, da + k, b, b, da + k, da + k + 1, a, b, da + k, b, da + k + 1, da + k); } };
+    const riga = (f) => Array.from({ length: n }, (_, k) => f(k)); orlo(riga((k) => [k, 0])); orlo(riga((k) => [k, n - 1])); orlo(riga((k) => [0, k])); orlo(riga((k) => [n - 1, k]));
+    const vao = gl.createVertexArray(), bv = gl.createBuffer(), bi = gl.createBuffer(); gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bv); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bi); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW); gl.bindVertexArray(null);
+    if (fine.griglia) { gl.deleteVertexArray(fine.griglia.vao); gl.deleteBuffer(fine.griglia.bv); gl.deleteBuffer(fine.griglia.bi); }
+    return (fine.griglia = { vao, bv, bi, n: idx.length, n0: n });
+  }
+  // a ogni fotogramma: serve una finestra? quella che c'è basta ancora? (il calcolo, se serve, si fa fuori dal fotogramma)
+  function aggiornaFine() {
+    if (fotogramma % 20 === 0) console.warn('DBG fine', !!SU, O.suoloFine, base.pronta, !!S0, fili.length, stato.quota, fine.campi.size, fine.chiesti.size, fine.inCorso, !!fine.fin, fine.attiva);
+    if (!SU || !O.suoloFine || !base.pronta || !S0 || !fili.length || !(stato.quota < 40) || !(stato.quota > 0)) { fine.attiva = false; return; }
+    let u = stato.lon / (2 * Math.PI) + 0.5; u -= Math.floor(u); const v = Math.max(0, Math.min(0.999999, 0.5 - stato.lat / Math.PI)), t = migliore(u, v, LMAX);
+    if (!t || t.L < 1) { fine.attiva = false; return; } // (senza una tessera la cella sarebbe di ~100 km: non si fa)
+    const lato = stato.quota < 4 ? 10 : 100, kc = t.k, campi = fine.campi.get(kc);
+    if (!campi) { if (!fine.chiesti.has(kc)) { fine.chiesti.add(kc); fili[0].w.postMessage({ tipo: 'campi', n: kc, L: t.L, tx: t.tx, ty: t.ty }); } return; }
+    const f = fine.fin; if (f && f.kc === kc && f.lato === lato) { const [x, y] = SU.nelTrattoSuolo(f.fin.tratto, stato.lon / RAD, stato.lat / RAD), cx = f.fin.x0 + f.fin.L / 2, cy = f.fin.y0 + f.fin.L / 2; if (Math.abs(x - cx) < lato / 4 && Math.abs(y - cy) < lato / 4) { fine.attiva = !!fine.tex; return; } }
+    if (fine.inCorso) return; fine.inCorso = true; const lon = stato.lon / RAD, lat = stato.lat / RAD;
+    setTimeout(() => { try { faiFine(campi, lon, lat, lato, kc); } catch (err) { console.warn('mondo3d: il suolo fine non si è potuto calcolare:', err); fine.fin = { kc, lato, fin: null }; } finally { fine.inCorso = false; } }, 0);
+  }
+  function faiFine(campi, lon, lat, lato, kc) {
+    const t0 = performance.now(); SU.ricordaTessera(S0.k, campi);
+    const fin = SU.finestraSuolo(S0, { lon, lat, latoM: lato, livello: campi.livello, tessera: campi });
+    if (!fin || fin.acqua) { fine.fin = { kc, lato, fin: null }; fine.attiva = false; liberaFine(); return; }
+    const n = fin.N, Z = fin.campo.Z, h = fin.h, z2 = new Float32Array(2 * n * n), g4 = new Float32Array(4 * n * n), a4 = new Uint8Array(4 * n * n), px = SU.immagineSuolo(fin, { luce: false }), media = [0, 0, 0], lin = (c) => Math.pow(c / 255, 2.2);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const q = j * n + i, ia = Math.max(0, i - 1), ib = Math.min(n - 1, i + 1), ja = Math.max(0, j - 1), jb = Math.min(n - 1, j + 1);
+      z2[2 * q] = Z[q]; g4[4 * q] = (Z[j * n + ib] - Z[j * n + ia]) / ((ib - ia) * h); g4[4 * q + 1] = (Z[jb * n + i] - Z[ja * n + i]) / ((jb - ja) * h);
+      const o = 4 * ((n - 1 - j) * n + i); for (let c = 0; c < 3; c++) { a4[4 * q + c] = px[o + c]; media[c] += lin(px[o + c]); } a4[4 * q + 3] = 255; } // (l'immagine ha il nord in alto: qui la riga j è quella del tratto, da sud)
+    // dove sta: i punti estremi della finestra in longitudine e latitudine (lineari nel tratto)
+    const tr = fin.tratto, [lonA, latA] = SU.dalTrattoSuolo(tr, (fin.gx0 + 0.5) * h, (fin.gy0 + 0.5) * h), [lonB, latB] = SU.dalTrattoSuolo(tr, (fin.gx0 + n - 0.5) * h, (fin.gy0 + n - 0.5) * h);
+    liberaFine(); fine.tex = { Z: N.immagine(n, n, 'rg32f', z2, { filtro: gl.NEAREST }), G: N.immagine(n, n, 'rgba16fDaFloat', g4), A: N.immagine(n, n, 'rgba8', a4) };
+    let rms = 0; for (let q = 0; q < n * n; q++) rms += Z[q] * Z[q]; rms = Math.sqrt(rms / (n * n));
+    fine.fin = { kc, lato, fin, n, lonA: lonA * RAD, latA: latA * RAD, dLon: (lonB - lonA) * RAD, dLat: (latB - latA) * RAD, media: media.map((x) => x / (n * n)), rms, lon, lat };
+    fine.attiva = true; fine.ms = performance.now() - t0; fine.quante++; N.cambia();
+  }
+  function liberaFine() { if (fine.tex) { for (const k of ['Z', 'G', 'A']) gl.deleteTexture(fine.tex[k]); fine.tex = null; } }
   // ---------- la griglia di una pezza (uguale per tutte): 33 × 17 vertici più l'orlo
   const griglia = (() => {
     const v = [], idx = [], nx = MX + 1, ny = MY + 1; for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) v.push(i / MX, j / MY, 0);
@@ -708,7 +770,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       stato.quota = V.lungo(stato.occhioCorpo) - quotaLungo(V.norma(stato.occhioCorpo));
       lista = []; visita(0, 0, 0, S); distribuisci();
       lista.sort((a, b) => (a.t.k || 0) - (b.t.k || 0) || a.dist - b.dist); pezze = lista.length; triangoli = pezze * (griglia.n / 3);
-      const [lon, lat] = lonLat(stato.occhioTondo); stato.lon = lon; stato.lat = lat; aggiornaOnde(lon, lat);
+      const [lon, lat] = lonLat(stato.occhioTondo); stato.lon = lon; stato.lat = lat; aggiornaOnde(lon, lat); aggiornaFine();
       const vs = N.tra(corpoPianeta, corpoStella, S.t); stato.dStella = V.lungo(vs); stato.sole = V.norma(vs); stato.E = Lstella() / (4 * Math.PI * stato.dStella ** 2);
       // quanta luce c'è dove si è: in orbita quella del giorno; vicino al suolo quella del posto (di notte l'occhio si apre)
       const sole = V.tv(A, stato.sole), mu = V.scal(V.norma(stato.occhioCorpo), sole), giorno = Math.max(0, Math.min(1, (mu + 0.12) / 0.3)), vicino = Math.max(0, Math.min(1, 1 - stato.quota / (0.25 * R)));
@@ -723,6 +785,8 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       impostaAria(u); impostaNuvole(u, S);
       { const At = V.trasposta(A), M = At.slice(); for (let j = 0; j < 3; j++) M[3 + j] /= schiaccia; gl.uniformMatrix3fv(u.u_tondo, false, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]); gl.uniform3f(u.u_centro, stato.versoC[0], stato.versoC[1], stato.versoC[2]); const sc = V.norma(tondo(V.mv(At, stato.sole))); gl.uniform3f(u.u_soleC, sc[0], sc[1], sc[2]); }
       let tess = null, madre = null; const tOnde = S.t % 3600, co = onde, m = ondeQui;
+      // (il suolo fine: c'è, e c'è la tessera su cui sta? allora le pezze hanno il buco e la finestra si disegna dopo)
+      const FF = fine.attiva && fine.tex && fine.fin?.fin && tessere.get(fine.fin.kc)?.pronta ? fine.fin : null; gl.uniform4f(u.u_fine, FF ? 1 : 0, FF ? FF.n : 0, 0, 0); if (!FF) gl.uniform4f(u.u_fineG, 0, 0, 0, 0);
       for (const z of lista) {
         const t = z.t;
         if (t !== tess) { tess = t; madre = t.L > 0 ? tessere.get(chiave(t.L - 1, t.tx >> 2, t.ty >> 2)) : null; if (madre && !madre.pronta) madre = null; const m2 = madre || t;
@@ -758,11 +822,29 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         gl.uniform1i(u.u_nOnde, nV); if (nV) { gl.uniform4fv(u.u_onda, ondaV); gl.uniform1fv(u.u_pulsa, pulsaV); }
         ondeUsate = Math.max(ondeUsate, nF); vertUsate = Math.max(vertUsate, nV); gl.uniform1i(u.u_nOndeF, nF); if (nF) { gl.uniform4fv(u.u_ondaF, ondaF); gl.uniform1fv(u.u_pulsaF, pulsaF); }
         gl.uniform4f(u.u_mare, tOnde, fine, schiuma, z.lon0 * sf); gl.uniform1f(u.u_lon0, z.lon0);
+        if (FF) { let dl = z.lon0 - FF.lonA - FF.dLon / 2; dl -= 2 * Math.PI * Math.round(dl / (2 * Math.PI)); gl.uniform4f(u.u_fineG, 0.5 + dl / FF.dLon, 0.5 + (z.lat0 - FF.latA - FF.dLat / 2) / FF.dLat, z.dLon / FF.dLon, z.dLat / FF.dLat); }
         gl.drawElements(gl.TRIANGLES, griglia.n, gl.UNSIGNED_SHORT, 0);
       }
+      if (FF) disegnaFine(S, u, FF, tOnde);
       gl.disable(gl.CULL_FACE); gl.bindVertexArray(null);
     },
   };
+  // la pezza della finestra: la stessa luce delle altre, la quota della sua tessera più il rilievo fine, il pendio e la tinta del suolo
+  function disegnaFine(S, u, F, tOnde) {
+    const t = tessere.get(F.kc), A = stato.A, gF = grigliaFine(F.n), lon0 = F.lonA + F.dLon / 2, lat0 = F.latA + F.dLat / 2, n = 4 ** t.L;
+    S.lega(0, t.alt, u.u_alt); S.lega(1, t.pend, u.u_pend); S.lega(2, t.terra, u.u_terra); S.lega(3, t.acqua || trasparente, u.u_acqua); S.lega(4, t.oriz1, u.u_oriz1); S.lega(10, t.oriz2, u.u_oriz2);
+    S.lega(6, fine.tex.Z, u.u_altM); S.lega(7, fine.tex.G, u.u_pendM); S.lega(8, fine.tex.A, u.u_terraM); S.lega(9, t.acqua || trasparente, u.u_acquaM); S.lega(11, t.oriz1, u.u_oriz1M); S.lega(12, t.oriz2, u.u_oriz2M);
+    gl.uniform4f(u.u_espo, espo(S), t.acqua ? 1 : 0, t.acqua ? 1 : 0, (S.luceGalassia || 0) / 4 / stato.E); gl.uniform2f(u.u_sfuma, 0, 0);
+    const sl = Math.sin(lon0), cl = Math.cos(lon0), sf = Math.sin(lat0), cf = Math.cos(lat0), c0 = [cf * cl, sf, -cf * sl], E = [-sl, 0, -cl], Nn = [-sf * cl, cf, sf * sl];
+    const C = V.mv(A, [c0[0] * R, c0[1] * R * schiaccia, c0[2] * R]); gl.uniform3f(u.u_C, C[0] + stato.versoC[0], C[1] + stato.versoC[1], C[2] + stato.versoC[2]);
+    const sq = (w) => V.mv(A, [w[0], w[1] * schiaccia, w[2]]), nq = (w) => V.mv(A, [w[0], w[1] / schiaccia, w[2]]);
+    gl.uniformMatrix3fv(u.u_base, false, mat3([sq(E), sq(Nn), sq(c0)])); gl.uniformMatrix3fv(u.u_normali, false, mat3([nq(E), nq(Nn), nq(c0)]));
+    gl.uniform4f(u.u_geo, F.dLon, F.dLat, lat0, R);
+    const uA = F.lonA / (2 * Math.PI) + 0.5 - Math.floor(F.lonA / (2 * Math.PI) + 0.5), vN = 0.5 - (F.latA + F.dLat) / Math.PI; gl.uniform4f(u.u_tess, uA * n - t.tx, vN * n - t.ty, (F.dLon / (2 * Math.PI)) * n, (F.dLat / Math.PI) * n);
+    gl.uniform3f(u.u_orlo, Math.max(0.5, 6 * F.rms), O.rilievo, tOnde); gl.uniform1i(u.u_nOnde, 0); gl.uniform1i(u.u_nOndeF, 0); gl.uniform4f(u.u_mare, tOnde, 2e-4, 0, lon0 * sf); gl.uniform1f(u.u_lon0, lon0);
+    gl.uniform4f(u.u_fine, 2, F.n, 0, 0); gl.uniform4f(u.u_fineG, 0.5, 0.5, 1, 1); gl.uniform3f(u.u_fineMedia, F.media[0], F.media[1], F.media[2]);
+    gl.bindVertexArray(gF.vao); gl.drawElements(gl.TRIANGLES, gF.n, gl.UNSIGNED_SHORT, 0); gl.bindVertexArray(griglia.vao); gl.uniform4f(u.u_fine, 0, 0, 0, 0); triangoli += gF.n / 3;
+  }
   // (il rumore delle nuvole è trascinato dal vento per un periodo e poi ricomincia sfumando: il periodo dura almeno sei
   // secondi di chi guarda, anche quando il tempo corre)
   function impostaNuvole(u, S) {
@@ -856,7 +938,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
 
   function libera() {
     for (const f of fili) f.w.terminate(); fili.length = 0; coda.length = 0;
-    for (const t of [...tessere.values()]) if (t.pronta) butta(t); tessere.clear(); gl.deleteTexture(texMS); gl.deleteTexture(texCielo);
+    for (const t of [...tessere.values()]) if (t.pronta) butta(t); tessere.clear(); gl.deleteTexture(texMS); gl.deleteTexture(texCielo); liberaFine();
     for (const s of [lontani, suolo, cielo3d]) N.togli(s);
     if (corpi) for (const k of Object.keys(terreno)) corpoPianeta[k] = null;
   }
@@ -865,6 +947,8 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     // che cosa c'è in un punto: quota del terreno (m), se c'è acqua e quanto è profonda
     info: (lon, lat) => { const [h, l] = leggi(lon, lat); return { quota: h, acqua: l > h, profondita: l > h ? l - h : 0, livello: l }; },
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,
-    statistiche: () => { const ondeF = ondeUsate, ondeV = vertUsate; ondeUsate = 0; vertUsate = 0; let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; return { pezze, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, ondeF, ondeV, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
+    // il suolo fine che si vede ora (per le prove: la finestra di suolo.js con la sua griglia, e quanto è costata)
+    suoloFine: () => { const F = fine.fin; if (!fine.attiva || !F?.fin) return null; const f = F.fin; return { lato: F.lato, N: f.N, h: f.h, gx0: f.gx0, gy0: f.gy0, livello: f.padre.livello, I: f.padre.I, J: f.padre.J, lon: F.lon, lat: F.lat, rms: F.rms, Z: Array.from(f.campo.Z), ms: fine.ms, quante: fine.quante, chiaveTratto: f.tratto.chiave }; },
+    statistiche: () => { const ondeF = ondeUsate, ondeV = vertUsate; ondeUsate = 0; vertUsate = 0; let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; return { pezze, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, ondeF, ondeV, suoloFine: fine.attiva ? { lato: fine.fin?.lato, msCalcolo: fine.ms, quante: fine.quante } : null, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
   };
 }

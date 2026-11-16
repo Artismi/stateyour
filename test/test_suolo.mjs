@@ -136,9 +136,9 @@ prova('la scena: il reticolo del minerale sotto, l\'acqua liquida fitta (mW) all
 
 // =====================================================================================================================
 console.log('H. il costo');
-prova('il padre (la tessera e la cella), le finestre dai 10 m al decimo di millimetro (create quando le si guarda, con l\'immagine), la sezione, l\'acqua dei pori', () => {
+prova('il padre (la tessera e la cella), le finestre dai 10 m ai 10 µm dell\'app (LATI_SUOLO di mappa.js: create quando le si guarda, con l\'immagine), la sezione, l\'acqua dei pori', () => {
   const righe = [`il padre ${num(tPadre)} ms (con le tessere fino al livello ${PA.livello})`];
-  for (const L of [10, 1, 0.1, 0.01, 1e-3, 1e-4]) { const t = performance.now(), f = SU.finestraSuolo(S, { lon: PT.lon + 1e-7, lat: PT.lat, latoM: L }), t2 = performance.now(); const px = SU.immagineSuolo(f); assert.equal(px.length, 4 * f.N * f.N); righe.push(`${num(L)} m ${num(t2 - t)} + ${num(performance.now() - t2)} ms`); }
+  for (const L of [10, 1, 0.1, 0.01, 1e-3, 1e-4, 1e-5]) { const t = performance.now(), f = SU.finestraSuolo(S, { lon: PT.lon + 1e-7, lat: PT.lat, latoM: L }), t2 = performance.now(); const px = SU.immagineSuolo(f); assert.equal(px.length, 4 * f.N * f.N); righe.push(`${num(L)} m ${num(t2 - t)} + ${num(performance.now() - t2)} ms`); }
   console.log(`      ${righe.join('; ')}`);
 });
 

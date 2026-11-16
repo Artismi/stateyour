@@ -19,7 +19,8 @@
 //   · acqua   Uint8Array(4 · 256 · 128) o null: la riflettanza dell'acqua vista da sopra (col fondo dove è bassa e
 //             limpida), cioè il colore di coloraMare senza la sua esposizione, la luce della stella e il cielo che ci mette
 //             (qui li mettono la luce vera e il riflesso vero).
-// Messaggi: { tipo: 'base', k, se, cl, mare, seme, T, raggioM } una volta; poi { tipo: 'tessera', n, L, tx, ty }.
+// Messaggi: { tipo: 'base', k, se, cl, mare, seme, T, raggioM } una volta; poi { tipo: 'tessera', n, L, tx, ty }; e
+// { tipo: 'campi', n, L, tx, ty }: i campi grezzi della tessera (quota, laghi, portata, litologia…) per il suolo fine.
 //
 // LE RIFLETTANZE DELLE ROCCE (albedo nel visibile; la tinta viene dai minerali veri della crosta di geologia.js, mescolati
 // da chimica.js `coloreRoccia` con Kubelka-Munk: qui se ne tiene solo la tinta, la luminosità è quella misurata della roccia
@@ -165,6 +166,10 @@ function prepara(L, tx, ty) {
 self.onmessage = (e) => {
   const d = e.data;
   if (d.tipo === 'base') { B = d; B.zero = zeroDi(d.se); return; }
+  // (i campi grezzi di una tessera di geologia.js, per il padre del suolo fine: pianeta.js li passa a suolo.js — la stessa tessera
+  // che il livello 5 della mappa userà in quel punto, così la finestra del 3D e quella del livello 5 hanno lo stesso padre)
+  if (d.tipo === 'campi' && B) { try { const sf = tessera(B.k, B.se, B.cl, d.L, d.tx, d.ty, B.seme), out = { tipo: 'campi', n: d.n, k: B.k, W: sf.W, H: sf.H, rett: sf.rett, mare: sf.mare, livello: sf.livello }, tr = [];
+    for (const nome of ['alt', 'lago', 'flusso', 'litologia', 'cont', 'etaCrosta', 'sciolto']) if (sf[nome]) { out[nome] = sf[nome].slice(); tr.push(out[nome].buffer); } self.postMessage(out, tr); } catch (err) { self.postMessage({ tipo: 'campi', n: d.n, k: B.k, errore: String((err && err.stack) || err) }); } return; }
   if (d.tipo !== 'tessera' || !B) return;
   try { const t0 = performance.now(), r = prepara(d.L, d.tx, d.ty);
     self.postMessage({ n: d.n, k: B.k, L: d.L, tx: d.tx, ty: d.ty, ...r, ms: performance.now() - t0 }, [r.altLiv.buffer, r.pend.buffer, r.terra.buffer, r.oriz1.buffer, r.oriz2.buffer, ...(r.acqua ? [r.acqua.buffer] : [])]);

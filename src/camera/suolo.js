@@ -357,6 +357,18 @@ export function trattoSuolo(S, lon, lat, opz = {}) {
 }
 export const nelTrattoSuolo = (t, lon, lat) => { let dl = lon - t.lon; dl -= 360 * Math.round(dl / 360); return [t.R * t.coslat * dl * RAD, t.R * (lat - t.lat) * RAD]; };
 export const dalTrattoSuolo = (t, x, y) => [t.lon + x / (t.R * t.coslat * RAD), t.lat + y / (t.R * RAD)];
+// LE TESSERE GIÀ CALCOLATE DA ALTRI (la vista 3D: pianeta.js le fa nel suo filo e ne manda qui i campi): chi apre una finestra
+// in quel punto (mappa.js, il livello 5) prende la più fine che c'è, così la finestra del 3D e quella del livello 5 hanno lo
+// stesso padre, la stessa cella, lo stesso indirizzo. Si tengono le ultime otto.
+const TESSERE_NOTE = new Map();
+export function ricordaTessera(k, t) { if (!t?.livello || !t.rett) return; TESSERE_NOTE.set(`${k}|${t.livello}|${t.rett.join(',')}`, { k, t }); if (TESSERE_NOTE.size > 8) TESSERE_NOTE.delete(TESSERE_NOTE.keys().next().value); }
+export function tesseraNota(k, u, v) { let best = null; for (const { k: kk, t } of TESSERE_NOTE.values()) { if (kk !== k) continue; const [u0, v0, u1, v1] = t.rett; if (u >= u0 && u < u1 && v >= v0 && v < v1 && (!best || t.livello > best.livello)) best = t; } return best; }
+// il granello che sta sopra in un punto (x, y del tratto) della finestra: l'ultimo del modello booleano che lo copre → minerale o null (un poro)
+export function granoNelPunto(fin, x, y) {
+  const gr = fin._granelli || (fin._granelli = granelli(fin)); let chi = null;
+  for (const g of gr.lista) { const r = g.d / 2, dx = x - g.x, dy = y - g.y; if (Math.abs(dx) > r || Math.abs(dy) > r) continue; const ca = Math.cos(g.angolo), sa = Math.sin(g.angolo), u = (dx * ca + dy * sa) / r, w = (-dx * sa + dy * ca) / (r * g.schiaccia); if (u * u + w * w <= 1) chi = g; }
+  return chi ? chi.minerale : null;
+}
 export const RILIEVO = { M: 4, campioniPerOnda: 8, quadratura: 4 };
 const nodiGL = (n) => { const x = [], w = []; for (let i = 1; i <= n; i++) { let z = Math.cos((Math.PI * (i - 0.25)) / (n + 0.5)), dp = 0; for (let it = 0; it < 100; it++) { let p0 = 1, p1 = z; for (let k = 2; k <= n; k++) { const p2 = ((2 * k - 1) * z * p1 - (k - 1) * p0) / k; p0 = p1; p1 = p2; } dp = (n * (z * p1 - p0)) / (z * z - 1); const dz = p1 / dp; z -= dz; if (Math.abs(dz) < 1e-15) break; } x.push(z); w.push(2 / ((1 - z * z) * dp * dp)); } return { x, w }; };
 const GLQ = new Map(), gl = (n) => { let g = GLQ.get(n); if (!g) GLQ.set(n, (g = nodiGL(n))); return g; };
@@ -578,7 +590,8 @@ export function acquaDelPunto(padre, z) {
 // i granelli e i pori pieni d'acqua o d'aria, sotto il millimetro la superficie del grano con l'argilla e il velo d'acqua
 // ======================================================================================================================
 const GAMMA = (x) => Math.round(255 * Math.pow(limita(x, 0, 1), 1 / 2.2)), LIN = (c) => Math.pow(c / 255, 2.2);
-export function immagineSuolo(fin) {
+// («luce: false»: senza la luce da nord-ovest, la sola riflettanza — per la vista 3D, che mette sul rilievo la luce vera)
+export function immagineSuolo(fin, { luce = true } = {}) {
   const N = fin.N, px = new Uint8ClampedArray(N * N * 4), P = fin.padre, su = P.suolo, R = P.roccia;
   const cR = coloreRoccia(R.minerali.map((m) => ({ frazione: m.frazione, colore: m.colore || [150, 150, 150] }))).map(LIN), cS = coloreRoccia(su.gsd.classi.map((c) => ({ frazione: c.massa, colore: c.colore }))).map(LIN);
   const scrivi = (q, c, ombra = 1) => { px[4 * q] = GAMMA(c[0] * ombra); px[4 * q + 1] = GAMMA(c[1] * ombra); px[4 * q + 2] = GAMMA(c[2] * ombra); px[4 * q + 3] = 255; };
@@ -586,7 +599,7 @@ export function immagineSuolo(fin) {
   const F = fin.campo, Z = F.Z, l = SUOLO.rugositaLuce, ln = Math.hypot(...l), sx = P.S / Math.SQRT2, lume = new Float32Array(N * N);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * N + Math.max(0, i - 1), b = j * N + Math.min(N - 1, i + 1), c = Math.max(0, j - 1) * N + i, d = Math.min(N - 1, j + 1) * N + i;
     const gx = sx + (Z[b] - Z[a]) / ((Math.min(N - 1, i + 1) - Math.max(0, i - 1)) * fin.h), gy = sx + (Z[d] - Z[c]) / ((Math.min(N - 1, j + 1) - Math.max(0, j - 1)) * fin.h), nn = Math.hypot(gx, gy, 1);
-    lume[j * N + i] = 0.25 + 0.95 * Math.max(0.08, (-gx * l[0] - gy * l[1] + l[2]) / (nn * ln)); }
+    lume[j * N + i] = luce ? 0.25 + 0.95 * Math.max(0.08, (-gx * l[0] - gy * l[1] + l[2]) / (nn * ln)) : 1; }
   const fluido = (dentro) => (dentro ? [LIN(38), LIN(66), LIN(92)] : [LIN(16), LIN(14), LIN(12)]), umido = fin.profonditaM >= su.falda || su.falda <= 0;
   const grandi = su.gsd.classi.some((c) => c.d50 >= 2 * fin.h);
   if (!grandi) { // ---- a metri: il suolo (o la roccia nuda dove il suolo è più sottile di qualche grano), ombreggiato; le crepe dove affiora

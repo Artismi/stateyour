@@ -148,22 +148,35 @@ prova('il plancton: nessuno — il modello non ha la vita, e la finestra lo dice
 
 // =====================================================================================================================
 console.log('D. a nanometri: l\'acqua liquida, fitta, con ogni ione');
-prova('la densità di quell\'acqua, ogni ione nel numero della sua concentrazione (Poisson, scatola neutra), ogni ione col suo guscio', () => {
-  const somme = {}, attese = {}; let K = 0, aggiustati = 0; const gusci = {};
-  // (100 scatole: la tolleranza è Poisson, 4·√N, sul numero che la concentrazione dà — gli ioni prima della neutralità —; quelli
-  // che la neutralità aggiunge o toglie, specie per specie, si contano a parte. Prima: 8 scatole e la tolleranza col totale degli
-  // aggiustati, che cresce con le scatole quanto il numero atteso: non si stringeva mai)
-  const aggiunti = {};
-  for (let q = 0; q < 100; q++) { const sc = FI.scenaNano(st, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); K++; for (const f in sc.aggiunti) aggiunti[f] = (aggiunti[f] || 0) + sc.aggiunti[f];
+prova('la densità di quell\'acqua, ogni ione nel numero della sua concentrazione (Poisson condizionato alla scatola neutra), ogni ione col suo guscio', () => {
+  // LA LEGGE: i Poisson indipendenti delle concentrazioni (λ = perM3 × volume), condizionati alla carica zero. La media di
+  // ogni specie è allora E[n | Q = 0] = λ·P(Q = −z)/P(Q = 0) (FI.medieNeutre: la legge di Q per convoluzione), la sua varianza
+  // non supera λ. TOLLERANZA, dichiarata prima: 4·√(Σλ) sulla somma di 100 scatole (4 scarti di Poisson: più larga dello scarto
+  // vero del condizionato, mai allargata). Si guarda ciò che la scena mostra (gli ioni messi, liberi e nelle coppie). Prima la
+  // neutralità aggiungeva sempre lo ione più abbondante del segno che mancava: HCO₃⁻ 554 contro 426 ± 83 (NON TORNA).
+  const somme = {}, attese = {}, neutre = {}, lam = {}; let K = 0, aggiustati = 0, tentativi = 0; const gusci = {};
+  for (let q = 0; q < 100; q++) { const sc = FI.scenaNano(st, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 6e-9, fondoM: A0.fondoM }); K++;
     assert.equal(sc.carica, 0, 'la scatola non è neutra');
     const tolti = sc.ripetizioni ** 3 * sc.modello.N - sc.conteggi.acqua; assert.ok(tolti >= 0 && Math.abs(sc.ripetizioni ** 3 * sc.modello.N - sc.densitaNm3 * sc.latoNm ** 3) < 1e-6 * sc.modello.N, 'densità');
-    for (const f in sc.messi) { somme[f] = (somme[f] || 0) + sc.messi[f]; attese[f] = (attese[f] || 0) + (sc.attesi[f] || 0); }
-    for (const f in sc.gusci) (gusci[f] ||= []).push(...sc.gusci[f]); aggiustati += sc.aggiustati || 0; }
-  for (const f of Object.keys(attese).filter((x) => attese[x] >= 4)) { const tol = 4 * Math.sqrt(attese[f]), n = somme[f] - (aggiunti[f] || 0); console.log(`      ${f}: ${n} in ${K} scatole di 6 nm prima della neutralità (attesi ${num(attese[f])} ± ${num(tol)}); la neutralità ${aggiunti[f] ? `ne ha ${aggiunti[f] > 0 ? 'aggiunti' : 'tolti'} ${Math.abs(aggiunti[f])}` : 'non li ha toccati'}`); assert.ok(Math.abs(n - attese[f]) <= tol, f); }
-  console.log(`      la neutralità: ${aggiustati} ioni aggiunti o tolti in ${K} scatole`);
-  // (ciò che la scena mostra è il conteggio DOPO la neutralità: se esce dai 4 scarti di Poisson lo si dice)
-  for (const f of Object.keys(attese).filter((x) => attese[x] >= 4)) if (Math.abs(somme[f] - attese[f]) > 4 * Math.sqrt(attese[f])) nonTorna.push(`la scena di 6 nm mostra ${somme[f]} ${f} in ${K} scatole contro ${num(attese[f])} ± ${num(4 * Math.sqrt(attese[f]))}: la neutralità aggiunge sempre allo ione più abbondante del segno che manca (${aggiunti[f] > 0 ? '+' : ''}${aggiunti[f]}), invece di condizionare tutte le specie`);
+    for (const f in sc.messi) somme[f] = (somme[f] || 0) + sc.messi[f]; for (const f in sc.attesi) attese[f] = (attese[f] || 0) + sc.attesi[f];
+    const mn = FI.medieNeutre(sc.classiIoni).medie, da = (f, x, l) => { neutre[f] = (neutre[f] || 0) + x; lam[f] = (lam[f] || 0) + l; };
+    sc.classiIoni.forEach((c, i) => { if (c.tipo === 'ione') da(c.f, mn[i], c.lam); else { da(c.ca, mn[i], c.lam); da(c.an, mn[i], c.lam); } });
+    for (const f in sc.gusci) (gusci[f] ||= []).push(...sc.gusci[f]); aggiustati += sc.aggiustati || 0; tentativi += sc.tentativi || 0; }
+  assert.equal(aggiustati, 0, 'il condizionamento non è riuscito in qualche scatola (si è dovuto aggiustare a mano)');
+  for (const f of Object.keys(lam).filter((x) => lam[x] >= 4)) { const tol = 4 * Math.sqrt(lam[f]), n = somme[f] || 0, torna = Math.abs(n - neutre[f]) <= tol;
+    console.log(`      ${f}: ${n} in ${K} scatole di 6 nm, attesi ${num(neutre[f])} ± ${num(tol)} con la scatola neutra (Poisson senza vincolo ${num(lam[f])}; dalla concentrazione ${num(attese[f] || 0)}) ${torna ? 'TORNA' : '≠ NON TORNA'}`); assert.ok(torna, f); }
+  console.log(`      il condizionamento: ${num(tentativi / K)} tentativi per scatola (rigetto esatto sul perno), nessuno ione aggiunto o tolto a mano`);
   const misurate = { 'Na+': '5–6', 'Ca2+': '6–8', 'Mg2+': '6', 'K+': '6–7', 'Cl-': '6–7' }; for (const f of Object.keys(gusci).filter((x) => misurate[x])) confronti.push(`molecole nel primo guscio di ${f}: ${num(gusci[f].reduce((a, b) => a + b, 0) / gusci[f].length)} (misurate ${misurate[f]}: gli ioni prendono il posto d'una molecola del liquido e non riordinano le vicine)`);
+});
+prova('il campionatore dei Poisson condizionati alla carica zero è esatto: su 20 000 scatole finte le medie sono E[n | Q = 0] della convoluzione', () => {
+  // (classi con la carica media lontana da zero, perché il condizionamento sposti le medie; una coppia carica; lo ione perno
+  // con media sopra 10, dove il Poisson esatto è PTRS. TOLLERANZA dichiarata prima: 4 scarti della media campionaria, sd/√K)
+  const classi = [{ tipo: 'ione', f: 'Na+', lam: 14, z: 1 }, { tipo: 'ione', f: 'Ca2+', lam: 3, z: 2 }, { tipo: 'ione', f: 'Cl-', lam: 9, z: -1 }, { tipo: 'ione', f: 'SO4(2-)', lam: 2.5, z: -2 }, { tipo: 'coppia', ca: 'Na+', an: 'SO4(2-)', lam: 1.2, z: -1 }];
+  const r = FI.generatore(0x5eed), K = 20000, s = classi.map(() => 0), s2 = classi.map(() => 0); let t = 0;
+  for (let q = 0; q < K; q++) { const c = FI.campioniNeutri(r, classi); assert.ok(c.riuscito); t += c.tentativi; let Q = 0; c.n.forEach((x, i) => { s[i] += x; s2[i] += x * x; Q += x * classi[i].z; }); assert.equal(Q, 0); }
+  const m = FI.medieNeutre(classi); const righe = [];
+  classi.forEach((c, i) => { const mu = s[i] / K, sd = Math.sqrt(Math.max(0, s2[i] / K - mu * mu)), tol = (4 * sd) / Math.sqrt(K); righe.push(`${c.f || `${c.ca} ${c.an}`} ${num(mu, 4)} contro ${num(m.medie[i], 4)} ± ${num(tol)} (λ ${c.lam})`); assert.ok(Math.abs(mu - m.medie[i]) <= tol, righe[i]); });
+  console.log(`      carica media senza vincolo ${num(m.mediaQ)}, P(Q = 0) ${num(m.pZero)}; ${righe.join('; ')}; ${num(t / K)} tentativi per scatola`);
 });
 prova('il liquido mW è all\'equilibrio (trenta passate di Monte Carlo in più non spostano l\'energia) e ha la struttura dell\'acqua', () => {
   const L = FI.liquidoMW(), S = creaSistema(Float64Array.from(L.pos, (x) => x * 10), L.latoNm * 10); rifaiListe(S); const E0 = energiaTotale(S), r = generatoreMC('prova della finestra/monte carlo'), E = [];

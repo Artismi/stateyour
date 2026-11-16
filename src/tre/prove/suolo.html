@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>prova: il suolo a ogni distanza (l'app e il 3D)</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e4da; font: 12px ui-monospace, monospace; }
+  canvas { display: block; width: 400px; height: 300px; image-rendering: auto; }
+  #scritta { position: absolute; left: 6px; bottom: 4px; right: 6px; font: 11px ui-monospace, monospace; color: #f4f0e6; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+</style>
+</head>
+<body>
+<canvas id="tela" width="400" height="300"></canvas><div id="scritta"></div>
+<script type="module">
+// La pagina che test/test_vista.mjs (parte F) guida per IL SUOLO del lavoro 9 di PROGETTO.md, sul primo mare con il vento del
+// catalogo (test/mare_col_vento.mjs) e la sua terra asciutta più ripida (test/terra_asciutta.mjs): nessun seme scelto.
+//   pronta()                  la superficie (data a mappa.js: ricordaSuperficie) e il punto; la tessera del padre (suolo.js ricordaTessera)
+//   zoom()                    lo zoom dell'app (mappa.js zoomMappa) dal suolo di 10 m alla scena dei nanometri e ritorno, al centro
+//                             dello schermo: a ogni passo i pixel per metro devono crescere esattamente del passo (nessun salto)
+//   mostra(i)                 il fotogramma i ricordato dallo zoom (mappa.js disegnaMappa), sulla tela
+//   nano()                    la scena dei nanometri in 3D che lo zoom apre in fondo (mappa.js scenaAtomi), sulla tela
+//   tre({ quota, suoloFine }) il 3D (pianeta.js) sopra il punto, guardando giù → ms per fotogramma e il suolo fine che si vede
+//   livello5({ lon, lat, lato }) la finestra del livello 5 (mappa.js rocciaDi) in quel punto → la sua griglia, per il confronto
+import { creaNucleo } from '../nucleo.js';
+import { sistema } from '../../camera/cosmo.js';
+import { mareColVento } from '../../../test/mare_col_vento.mjs';
+import { terraAsciutta } from '../../../test/terra_asciutta.mjs';
+import * as SU from '../../camera/suolo.js';
+import * as MP from '../../camera/mappa.js';
+import { creaVista3D } from '../../camera/atomi3d.js';
+
+let M = null, S = null, PT = null, N = null, Pi = null, quale = null, VA = null, foto = [], fondo = null;
+const W = 400, H = 300, m = Math.min(W, H);
+const aspetta = (f, ms = 120000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto')); else { if (N) N.fotogramma(); setTimeout(p, 30); } }; p(); });
+const pulito = (o) => { if (!o || typeof o !== 'object' || ArrayBuffer.isView(o)) return o; if (Array.isArray(o)) return o.map(pulito); const r = {}; for (const q in o) if (typeof o[q] !== 'function') r[q] = pulito(o[q]); return r; };
+const scrivi = (t) => { document.getElementById('scritta').textContent = t; };
+const lung = (x) => (x >= 1 ? `${+x.toPrecision(3)} m` : x >= 0.01 ? `${+(x * 100).toPrecision(3)} cm` : x >= 1e-3 ? `${+(x * 1000).toPrecision(3)} mm` : x >= 1e-6 ? `${+(x * 1e6).toPrecision(3)} µm` : `${+(x * 1e9).toPrecision(3)} nm`);
+function nuovaTela() { const v = document.getElementById('tela'), t = v.cloneNode(); v.replaceWith(t); return t; }
+function libera() { try { VA?.ferma?.(); VA?.libera?.(); } catch { /* */ } VA = null; if (N) { try { N.libera(); } catch { /* */ } } N = null; Pi = null; quale = null; }
+
+async function pronta() {
+  if (!M) { M = mareColVento(); S = { k: JSON.stringify(M.via), P: M.P, cl: pulito(M.cl), se: pulito(M.se), seme: M.P.origine, mare: pulito(M.st) }; MP.ricordaSuperficie(M.via, S); PT = terraAsciutta(S); SU.ricordaTessera(S.k, PT.tessera); }
+  return { via: M.via, punto: { lon: PT.lon, lat: PT.lat, livello: PT.livello } };
+}
+const camDi = (lon, lat) => ({ livello: 5, via: M.via, roccia: { cx: (lon + 180) / 360, cy: ((90 - lat) / 180) * 0.5 }, cx: 0.5, cy: 0.5, z: 0.8 * m, passoRoccia: 0, eventoAcqua: false });
+const quale5 = (c) => (c.latoSuolo === null || c.passoRoccia > 0 ? `roccia, passo ${c.passoRoccia}` : `suolo ${lung(c.latoSuolo ?? MP.LATI_SUOLO[0])}`);
+// i pixel per metro di adesso (la grandezza a schermo di ciò che si guarda) e il livello
+function stato(c) { const r = MP.rocciaDi(c); return { ppm: c.z / r.larghezzaM, lato: r.larghezzaM, livello: quale5(c), nome: r.nome }; }
+async function zoom({ k = 1.25, massimo = 600 } = {}) {
+  const cam = camDi(PT.lon, PT.lat), passi = [], visti = []; foto = []; let peggio = 0, scena = null, t0 = performance.now();
+  const passo = (kk) => { const a = stato(cam); MP.zoomMappa(cam, W / 2, H / 2, kk, W, H); const b = stato(cam), sc = Math.abs(b.ppm / a.ppm / kk - 1); peggio = Math.max(peggio, sc);
+    if (b.livello !== a.livello) { visti.push({ da: a.livello, a: b.livello, ppm: b.ppm, scarto: sc, lato: b.lato }); foto.push({ cam: structuredClone(cam), nome: `${b.livello}: ${b.nome}`, dopo: 0 }); }
+    for (const f of foto) if (f.dopo >= 0 && ++f.dopo === 5) { f.cam = structuredClone(cam); f.dopo = -1; } passi.push(sc); return b; };
+  // giù: fino agli atomi, finché la scena dei nanometri in 3D c'è
+  for (let i = 0; i < massimo; i++) { passo(k); scena = MP.scenaAtomi(cam, m); if (scena) break; }
+  for (const f of foto) f.dopo = -1; fondo = structuredClone(cam); foto.push({ cam: fondo, nome: 'in fondo', dopo: -1 });
+  const giu = { passi: passi.length, livelli: visti.map((x) => x.a), scena: scena ? { chiave: scena.chiave, che: scena.che } : null, minerale: cam.mineraleRoccia, ms: performance.now() - t0 };
+  // su: fino alla prima finestra del suolo, intera sullo schermo
+  const n0 = passi.length; t0 = performance.now();
+  for (let i = 0; i < massimo; i++) { const b = passo(1 / k); if (cam.livello !== 5 || (b.livello === `suolo ${lung(MP.LATI_SUOLO[0])}` && cam.z < m)) break; }
+  return { peggio, giu, su: { passi: passi.length - n0, livelli: visti.slice(giu.livelli.length).map((x) => x.a), ms: performance.now() - t0, fine: quale5(cam), livello: cam.livello }, transizioni: visti.map((x) => ({ ...x, ppm: +x.ppm.toPrecision(4) })) };
+}
+function mostra(i) {
+  libera(); const f = foto[i]; if (!f) return null; const tela = nuovaTela(), ctx = tela.getContext('2d'); MP.disegnaMappa(ctx, W, H, f.cam, { nudo: true }); const r = MP.rocciaDi(f.cam);
+  scrivi(`${quale5(f.cam)} — a schermo ${lung((W / f.cam.z) * r.larghezzaM)}: ${r.nome}`.slice(0, 150)); return { nome: f.nome, quante: foto.length };
+}
+async function nano() {
+  libera(); const sc = fondo && MP.scenaAtomi(fondo, m); if (!sc) return null;
+  const tela = nuovaTela(); let t0 = performance.now(); const s = sc.crea(), crea = performance.now() - t0; VA = creaVista3D(tela, { conserva: true }); VA.carica(s); VA.avvia?.();
+  await new Promise((r) => setTimeout(r, 1500)); scrivi(sc.che); return { che: sc.che, chiave: sc.chiave, msCrea: crea, atomi: s.atomi.elemento.length };
+}
+async function tre({ quota = 2, suoloFine = 1, fotogrammi = 30 } = {}) {
+  const RAD = Math.PI / 180, chi = `3d|${suoloFine}`;
+  if (quale !== chi) { libera(); const mod = await import('../pianeta.js'); N = creaNucleo(nuovaTela(), { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = true; const Sis = sistema(1, M.via.galassia, M.via.stella); Pi = mod.creaPianeta(N, { P: M.P, stella: Sis.stella, via: M.via, superficie: () => S, opzioni: { suoloFine } }); N.attacca(Pi.corpo, { distanza: 3 * M.P.raggioM }); quale = chi; }
+  N.vai({ lon: PT.lon * RAD, lat: PT.lat * RAD, quota, direzione: 0, alza: -1.54 });
+  await aspetta(() => { const s = Pi.statistiche?.(); return s && s.inAttesa === 0 && s.tessere > 0; }, 120000).catch(() => null);
+  if (suoloFine) await aspetta(() => Pi.suoloFine(), 60000).catch(() => null);
+  for (let i = 0; i < 20; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 15)); }
+  const gl = N.gl, px = new Uint8Array(4), ms = [];
+  for (let i = 0; i < fotogrammi; i++) { const t0 = performance.now(); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ms.push(performance.now() - t0); await new Promise((r) => setTimeout(r, 5)); }
+  ms.sort((a, b) => a - b); const F = Pi.suoloFine();
+  scrivi(`${quota} m sopra il suolo (3D, pianeta.js)${F ? `: il suolo fine, una finestra di ${F.lato} m (livello ${F.livello})` : suoloFine ? ': il suolo fine non c\'è' : ', senza il suolo fine'}`);
+  return { quota, msMediana: ms[ms.length >> 1], statistiche: Pi.statistiche?.(), fine: F };
+}
+function livello5({ lon, lat, lato }) {
+  const r = MP.rocciaDi({ ...camDi(lon, lat), latoSuolo: lato }); if (!r?.suolo) return null; const f = r.fin;
+  return { lato: f.L, N: f.N, h: f.h, gx0: f.gx0, gy0: f.gy0, livello: f.padre.livello, I: f.padre.I, J: f.padre.J, Z: Array.from(f.campo.Z), chiaveTratto: f.tratto.chiave };
+}
+window.prova = { pronta, zoom, mostra, nano, tre, livello5 };
+window.prova.caricata = true;
+</script>
+</body>
+</html>

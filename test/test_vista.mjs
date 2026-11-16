@@ -4,7 +4,9 @@
 //   C. sulla scheda grafica (Chromium senza finestre, la pagina src/tre/prove/vista.html): i passi dei volumi della
 //      galassia (da fuori e da dentro il disco) e della ragnatela, i passi dell'aria, l'accumulo nel tempo;
 //   D. il 3D nero del punto a caso: l'aria a camera ferma, dal primo fotogramma, è il conto pieno;
-//   E. la finestra a ogni distanza (lavoro 9): il mare dal 3D ai nanometri, con le schermate e i ms per fotogramma.
+//   E. la finestra a ogni distanza (lavoro 9): il mare dal 3D ai nanometri, con le schermate e i ms per fotogramma;
+//   F. il suolo (lavoro 9): lo zoom dell'app dal suolo di 10 m ai nanometri, il 3D a pochi metri col suolo fine, e lo stesso
+//      rilievo nel 3D e nel livello 5.
 // C12: per ogni discretizzazione, dimezzare il passo (o raddoppiare i campioni) cambia l'immagine sempre meno — l'ORDINE
 // p è la pendenza di log(scarto) su log(n) tra raddoppi successivi —, e il valore che l'app usa sta nella zona convergente.
 // LA TOLLERANZA viene dall'occhio, dichiarata prima: la differenza appena percepibile di colore, ΔE*ab = 2,3 (Mahy, Van
@@ -146,6 +148,46 @@ console.log('E. la finestra a ogni distanza (src/tre/prove/finestra.html: il mar
     assert.ok(a.atomi > 1000);
   });
   await pF.close();
+}
+// ---------- F. IL SUOLO A OGNI DISTANZA (PROGETTO.md, lavoro 9): la terra asciutta più ripida del primo mare con il vento
+// (terra_asciutta.mjs: nessun seme). Lo zoom dell'app (mappa.js) dalla finestra del suolo di 10 m alla scena dei nanometri e
+// ritorno; il 3D (pianeta.js) a pochi metri col suolo fine e senza; la finestra del livello 5 nello stesso punto. Le schermate
+// guardate in src/tre/prove/schermate/suolo_app_*.png e suolo_3d_*.png. TOLLERANZE, dichiarate prima: lo zoom è continuo se a
+// ogni passo i pixel per metro crescono esattamente del passo (scarto relativo ≤ 10⁻¹²: i cambi di livello moltiplicano e
+// dividono per i rapporti dei lati, l'aritmetica); il rilievo del 3D è quello del livello 5 con scarto ZERO sui punti comuni
+// (lo stesso padre, la stessa cella, le stesse tessere: la stessa aritmetica). I ms per fotogramma si stampano.
+console.log('F. il suolo a ogni distanza (src/tre/prove/suolo.html: la terra)');
+{
+  const pS = await browser.newPage({ viewport: { width: 400, height: 300 }, deviceScaleFactor: 1 }); pS.on('pageerror', (e) => errori.push(e.message)); pS.on('console', (m) => { if (m.type() === 'error') errori.push(m.text().slice(0, 300)); });
+  await pS.goto(`http://127.0.0.1:${server.address().port}/src/tre/prove/suolo.html`); await pS.waitForFunction(() => window.prova && window.prova.caricata);
+  const info = await pS.evaluate(() => window.prova.pronta()), cartella = path.join(RADICE, 'src/tre/prove/schermate');
+  console.log(`    la terra: stella ${info.via.stella}, pianeta ${info.via.pianeta} della galassia ${info.via.galassia}; il punto ${num(info.punto.lon, 6)}°, ${num(info.punto.lat, 5)}° (la tessera del padre: livello ${info.punto.livello})`);
+  const scatta = async (nome) => { await pS.screenshot({ path: path.join(cartella, `suolo_${nome}.png`) }); };
+  await prova('lo zoom dell\'app è continuo dalla finestra del suolo di 10 m alla scena dei nanometri, e ritorno (i pixel per metro crescono del passo esatto)', async () => {
+    const z = await pS.evaluate(() => window.prova.zoom());
+    console.log(`      giù in ${z.giu.passi} passi da ×1,25 (${num(z.giu.ms)} ms): ${z.giu.livelli.join(' → ')}; in fondo «${z.giu.scena?.che}»`);
+    console.log(`      su in ${z.su.passi} passi (${num(z.su.ms)} ms): ${z.su.livelli.join(' → ')}; scarto più grande dei pixel per metro dal passo ${num(z.peggio, 2)} (tolleranza 10⁻¹²)`);
+    assert.ok(z.peggio <= 1e-12, `salto di scala ${z.peggio}`);
+    for (const L of ['1 m', '10 cm', '1 cm', '1 mm', '100 µm', '10 µm']) assert.ok(z.giu.livelli.includes(`suolo ${L}`), `manca la finestra di ${L}`);
+    assert.equal(z.giu.livelli[z.giu.livelli.length - 1], 'roccia, passo 3'); assert.ok(z.giu.scena && z.giu.scena.chiave.includes('|pori3d|'), 'in fondo non c\'è la scena dei pori'); assert.equal(z.su.fine, 'suolo 10 m');
+    const nomi = ['app_1_1m', 'app_2_10cm', 'app_3_1cm', 'app_4_1mm', 'app_5_100um', 'app_6_10um', 'app_7_reticolo30nm', 'app_8_atomi3nm'];
+    for (let i = 0; i < nomi.length; i++) { await pS.evaluate((i) => window.prova.mostra(i), i); await scatta(nomi[i]); }
+    const n = await pS.evaluate(() => window.prova.nano()); await scatta('app_9_pori6nm'); console.log(`      la scena dei nanometri: ${n.atomi} atomi, creata in ${num(n.msCrea)} ms`);
+  });
+  let F = null;
+  await prova('il 3D a pochi metri: il rilievo auto-affine e il suolo del punto, calcolati solo lì; i ms per fotogramma senza e con (grafica simulata)', async () => {
+    for (const q of [20, 2]) { const r0 = await pS.evaluate((q) => window.prova.tre({ quota: q, suoloFine: 0 }), q); await scatta(`3d_${q}m_senza`); const r1 = await pS.evaluate((q) => window.prova.tre({ quota: q, suoloFine: 1 }), q); await scatta(`3d_${q}m_con`);
+      console.log(`      a ${q} m: ${num(r0.msMediana)} ms per fotogramma senza, ${num(r1.msMediana)} con; ${r1.fine ? `la finestra di ${r1.fine.lato} m (tessera di livello ${r1.fine.livello}, rilievo fine ${num(r1.fine.rms * 1000)} mm rms) calcolata in ${num(r1.fine.ms)} ms, fuori dal fotogramma` : 'niente suolo fine'}`);
+      assert.ok(r1.fine && r1.fine.livello >= 1, `a ${q} m il suolo fine non c'è`); F = r1.fine; }
+  });
+  await prova('il rilievo che il 3D mostra è quello della finestra del livello 5 nello stesso punto: lo stesso padre, scarto zero sui punti comuni', async () => {
+    const L5 = await pS.evaluate((F) => window.prova.livello5({ lon: F.lon, lat: F.lat, lato: F.lato }), { lon: F.lon, lat: F.lat, lato: F.lato });
+    assert.ok(L5, 'il livello 5 non ha il suolo lì'); assert.equal(L5.chiaveTratto, F.chiaveTratto, 'non è lo stesso padre'); assert.equal(L5.h, F.h);
+    let d = 0, n = 0; for (let j = 0; j < F.N; j++) for (let i = 0; i < F.N; i++) { const a = i + F.gx0 - L5.gx0, b = j + F.gy0 - L5.gy0; if (a < 0 || b < 0 || a >= L5.N || b >= L5.N) continue; d = Math.max(d, Math.abs(F.Z[j * F.N + i] - L5.Z[b * L5.N + a])); n++; }
+    console.log(`      la cella ${F.I},${F.J} della tessera di livello ${F.livello} in tutti e due; ${n} punti in comune, scarto massimo ${num(d)} m (tolleranza 0)`);
+    assert.ok(n > F.N * F.N * 0.9 && d === 0);
+  });
+  await pS.close();
 }
 assert.equal(errori.length, 0, errori.join('\n'));
 await browser.close(); server.close();

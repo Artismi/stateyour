@@ -638,18 +638,23 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
   for (let kz = 0; kz < rip; kz++) for (let ky = 0; ky < rip; ky++) for (let kx = 0; kx < rip; kx++) for (let i = 0; i < M.N; i++) { O[w++] = M.pos[3 * i] * scala + kx * a0; O[w++] = M.pos[3 * i + 1] * scala + ky * a0; O[w++] = M.pos[3 * i + 2] * scala + kz * a0; }
   // le vicine (celle di 0,35 nm, periodiche): le quattro più vicine di ogni molecola
   const vicine = quattroVicine(O, NS, Lb);
-  // --- gli ioni: Poisson di ciascuno sul volume vero della scatola, poi la neutralità
-  const V = (Lb * 1e-9) ** 3, quanti = {}, carica = {}; let Q = 0;
+  // --- gli ioni: Poisson di ciascuno sul volume vero della scatola, CONDIZIONATI alla carica totale zero (la scatola è neutra:
+  // la lunghezza di Debye è sotto il nanometro). La legge giusta è quella dei Poisson indipendenti condizionati a Σ z·n = 0
+  // (campioniNeutri, sotto: esatta, per rigetto). Prima si aggiungeva sempre lo ione più abbondante del segno che mancava, e
+  // quello si gonfiava (HCO₃⁻ 554 contro 426 ± 83 nelle prove): ora la media di ogni specie è E[n | Q = 0] = λ·P(Q = −z)/P(Q = 0)
+  const V = (Lb * 1e-9) ** 3, quanti = {}, carica = {};
   // (gli ioni liberi e le coppie, come le classi di campioneAcqua: perM3 di ciascuno)
-  const coppie = [];
+  const classiIoni = [];
   for (const cl of camp.classi) {
-    if (cl.tipo === 'ione' && IONI[cl.materiale] && (SIMBOLI[cl.materiale] || ['SO4(2-)', 'HCO3-', 'CO3(2-)'].includes(cl.materiale))) { const f = cl.materiale; quanti[f] = (quanti[f] || 0) + poisson(r, cl.perM3 * V); carica[f] = IONI[f][2]; }
-    if (cl.tipo === 'coppia') { const [ca, an] = cl.materiale.split(' '); if (IONI[ca] && IONI[an]) { const m = poisson(r, cl.perM3 * V); if (m > 0) coppie.push({ ca, an, m }); } }
+    if (cl.tipo === 'ione' && IONI[cl.materiale] && (SIMBOLI[cl.materiale] || ['SO4(2-)', 'HCO3-', 'CO3(2-)'].includes(cl.materiale))) classiIoni.push({ tipo: 'ione', f: cl.materiale, lam: cl.perM3 * V, z: IONI[cl.materiale][2] });
+    if (cl.tipo === 'coppia') { const [ca, an] = cl.materiale.split(' '); if (IONI[ca] && IONI[an]) classiIoni.push({ tipo: 'coppia', ca, an, lam: cl.perM3 * V, z: IONI[ca][2] + IONI[an][2] }); }
   }
-  for (const f in quanti) Q += quanti[f] * carica[f];
-  for (const c of coppie) Q += c.m * (IONI[c.ca][2] + IONI[c.an][2]);
-  // la neutralità: si aggiunge uno ione a una carica del segno che manca (il più abbondante), o se non c'è se ne toglie uno del segno in più
-  let aggiustati = 0; const aggiunti = {}; // (per specie: +1 per ogni ione aggiunto, −1 per ogni tolto: ciò che la neutralità cambia rispetto a Poisson)
+  const neutri = campioniNeutri(r, classiIoni), coppie = [];
+  classiIoni.forEach((c, i) => { const m = neutri.n[i]; if (c.tipo === 'ione') { quanti[c.f] = (quanti[c.f] || 0) + m; carica[c.f] = c.z; } else if (m > 0) coppie.push({ ca: c.ca, an: c.an, m }); });
+  let Q = 0; for (const f in quanti) Q += quanti[f] * carica[f]; for (const c of coppie) Q += c.m * (IONI[c.ca][2] + IONI[c.an][2]);
+  // (se il condizionamento non riesce — nessuno ione di un segno, o la carica zero troppo improbabile —, come prima: si aggiunge
+  // uno ione a una carica del segno che manca, o se ne toglie uno del segno in più; si conta in «aggiustati», e le prove lo dicono)
+  let aggiustati = 0; const aggiunti = {};
   for (let giro = 0; Q !== 0 && giro < 1000; giro++, aggiustati++) {
     const segno = Q > 0 ? -1 : 1, uno = Object.keys(quanti).filter((f) => carica[f] === segno).sort((x, y) => quanti[y] - quanti[x])[0] || Object.keys(IONI).find((f) => IONI[f][2] === segno && SIMBOLI[f]);
     const togli = Object.keys(quanti).filter((f) => Math.sign(carica[f]) === -segno && quanti[f] > 0 && Math.abs(carica[f]) <= Math.abs(Q)).sort((x, y) => quanti[y] - quanti[x])[0];
@@ -702,7 +707,7 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
   const attesi = { acqua: nW * Lb ** 3 }; for (const f in camp.ioni) attesi[f] = (camp.ioni[f].perM3 || 0) * V;
   const messi = {}; for (const f in quanti) messi[f] = (messi[f] || 0) + (conteggi[f] || 0); for (const c of coppie) { const k = conteggi[`${c.ca} ${c.an}`] || 0; messi[c.ca] = (messi[c.ca] || 0) + k; messi[c.an] = (messi[c.an] || 0) + k; }
   return { atomi: { pos: Float32Array.from(P), raggio: Float32Array.from(Rr), elemento: Uint8Array.from(El) }, legami: Uint32Array.from(legami), legamiH: Uint32Array.from(legamiH), scatola: [Lb, Lb, Lb], unita: 'nm', parti, etichette, agitazione, conteggi, attesi,
-    gusci, messi, carica: Q, aggiustati, aggiunti, latoNm: Lb, volumeM3: V, solido: null, campione: camp, nuclei: camp.nuclei, densitaNm3: nW, ripetizioni: rip, modello: { nome: M.nome, T: M.T, N: M.N, latoNm: M.latoNm, fonte: M.fonte },
+    gusci, messi, carica: Q, aggiustati, aggiunti, classiIoni, tentativi: neutri.tentativi, condizionati: neutri.riuscito, latoNm: Lb, volumeM3: V, solido: null, campione: camp, nuclei: camp.nuclei, densitaNm3: nW, ripetizioni: rip, modello: { nome: M.nome, T: M.T, N: M.N, latoNm: M.latoNm, fonte: M.fonte },
     descrizione: `l'acqua di questo mare in un cubetto di ${Lb.toFixed(1)} nm: ${nAcqua} molecole d'acqua alla sua densità (${(nW).toFixed(2)} per nm³, struttura del liquido dal potenziale mW), ${Object.entries(conteggi).filter(([f, x]) => f !== 'acqua' && x > 0).map(([f, x]) => `${x} ${f}`).join(', ') || 'nessuno ione (in questo volume se ne aspettano meno di uno)'}; ogni ione col suo guscio d'acqua.` };
 }
 function molecolaIone(f, c, r, metti, legami) {
@@ -745,6 +750,43 @@ export function distribuzioneRadiale(O, NS, Lb, { rMax = 0.8, nb = 80 } = {}) {
 // (un evento per cella o per tessera — il suo seme — e da lì una successione: mulberry32)
 export function generatore(seme) { let a = seme >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (((t ^ (t >>> 14)) >>> 0) + 0.5) / 4294967296; }; }
 export function gaussiane(r) { const u = r(), v = r(), m = Math.sqrt(-2 * Math.log(u)); return [m * Math.cos(DUE_PI * v), m * Math.sin(DUE_PI * v)]; }
+// I POISSON CONDIZIONATI ALLA CARICA ZERO. Classi c con media λ_c e carica z_c (ioni liberi e coppie); la legge è quella dei
+// Poisson indipendenti condizionati a Q = Σ z_c·n_c = 0. Esatta, per rigetto: si tirano tutte le classi tranne il PERNO (lo ione
+// a una carica più abbondante), il perno è allora fissato a n_p = −Q'/z_p, e lo si accetta con probabilità p(n_p)/p(moda)
+// (p la legge di Poisson del perno: l'inviluppo è la sua moda). Senza ioni a una carica: rigetto semplice su tutto. Poisson
+// esatto anche per le medie grandi (PTRS, Hörmann 1993; la «poisson» qui sotto approssima con una normale sopra 60).
+// → { n: [conteggi per classe], riuscito, tentativi }
+const LNF = [0]; for (let i = 1; i < 32; i++) LNF[i] = LNF[i - 1] + Math.log(i);
+export const lnFattoriale = (n) => (n < 32 ? LNF[n] : (n + 0.5) * Math.log(n + 1) - (n + 1) + 0.5 * Math.log(DUE_PI) + 1 / (12 * (n + 1)) - 1 / (360 * (n + 1) ** 3) + 1 / (1260 * (n + 1) ** 5));
+export function poissonEsatto(r, lam) {
+  if (!(lam > 0)) return 0; if (lam < 10) { const L = Math.exp(-lam); let k = 0, p = r(); while (p > L) { k++; p *= r(); } return k; }
+  const sl = Math.sqrt(lam), ll = Math.log(lam), b = 0.931 + 2.53 * sl, a = -0.059 + 0.02483 * b, ia = 1.1239 + 1.1328 / (b - 3.4), vr = 0.9277 - 3.6224 / (b - 2);
+  for (;;) { const U = r() - 0.5, Vv = r(), us = 0.5 - Math.abs(U), k = Math.floor(((2 * a) / us + b) * U + lam + 0.43);
+    if (us >= 0.07 && Vv <= vr) return k; if (k < 0 || (us < 0.013 && Vv > us)) continue;
+    if (Math.log(Vv) + Math.log(ia) - Math.log(a / (us * us) + b) <= -lam + k * ll - lnFattoriale(k)) return k; }
+}
+export function campioniNeutri(r, classi, { massimo = 200000 } = {}) {
+  const n = classi.map(() => 0); if (!classi.length) return { n, riuscito: true, tentativi: 0 };
+  let p = -1; classi.forEach((c, i) => { if (c.tipo !== 'coppia' && Math.abs(c.z) === 1 && c.lam > 0 && (p < 0 || c.lam > classi[p].lam)) p = i; });
+  const lp = p >= 0 ? classi[p].lam : 0, moda = Math.floor(lp), lnMax = p >= 0 ? moda * Math.log(lp) - lnFattoriale(moda) : 0;
+  for (let t = 1; t <= massimo; t++) {
+    let Q = 0; for (let i = 0; i < classi.length; i++) { if (i === p) continue; n[i] = poissonEsatto(r, classi[i].lam); Q += n[i] * classi[i].z; }
+    if (p < 0) { if (Q === 0) return { n, riuscito: true, tentativi: t }; continue; }
+    const np = -Q * classi[p].z; if (np < 0) continue; // (z_p = ±1: −Q/z_p = −Q·z_p)
+    if (r() <= Math.exp(np * Math.log(lp) - lnFattoriale(np) - lnMax)) { n[p] = np; return { n, riuscito: true, tentativi: t }; }
+  }
+  for (let i = 0; i < classi.length; i++) n[i] = poissonEsatto(r, classi[i].lam); return { n, riuscito: false, tentativi: massimo };
+}
+// le medie esatte di quella legge: E[n_c | Q = 0] = λ_c·P(Q = −z_c)/P(Q = 0) (da E[n·f(n)] = λ·E[f(n + 1)] del Poisson), con la
+// legge di Q per convoluzione delle classi (ognuna troncata dove la sua coda pesa meno di 10⁻¹⁶). Per le prove e per chi guarda.
+export function medieNeutre(classi) {
+  const pmfZ = classi.map((c) => { const nM = Math.ceil(c.lam + 12 * Math.sqrt(c.lam) + 30), p = new Float64Array(nM + 1); for (let k = 0; k <= nM; k++) p[k] = c.lam > 0 ? Math.exp(k * Math.log(c.lam) - c.lam - lnFattoriale(k)) : k === 0 ? 1 : 0; return p; });
+  let lo = 0, d = new Float64Array([1]);
+  classi.forEach((c, i) => { const p = pmfZ[i], z = c.z, nM = p.length - 1, lo2 = lo + Math.min(0, z * nM), hi2 = lo + d.length - 1 + Math.max(0, z * nM), e = new Float64Array(hi2 - lo2 + 1);
+    for (let a = 0; a < d.length; a++) { const da = d[a]; if (da < 1e-300) continue; for (let k = 0; k <= nM; k++) e[a + lo - lo2 + z * k] += da * p[k]; } d = e; lo = lo2; });
+  const PQ = (q) => (q - lo >= 0 && q - lo < d.length ? d[q - lo] : 0), p0 = PQ(0);
+  return { medie: classi.map((c) => (p0 > 0 ? (c.lam * PQ(-c.z)) / p0 : NaN)), pZero: p0, mediaQ: classi.reduce((a, c) => a + c.z * c.lam, 0), varQ: classi.reduce((a, c) => a + c.z * c.z * c.lam, 0) };
+}
 export function poisson(r, media) {
   if (!(media > 0)) return 0; if (media > 60) return Math.max(0, Math.round(media + Math.sqrt(media) * gaussiane(r)[0]));
   const L = Math.exp(-media); let k = 0, p = r(); while (p > L) { k++; p *= r(); } return k;
