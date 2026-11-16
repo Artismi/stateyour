@@ -70,8 +70,11 @@
 // cloro (365 → 90 ppm nel mantello: Cl/Na diventa quello della Terra) ma non il sodio e il potassio, che non escono dal fuso:
 // resta l'eccesso di TUTTI i moderatamente volatili (Na ×5,7 la Terra), che la Terra vera ha perso nel disco (la sua fase
 // calda: il disco di disco.js a 1 UA non supera ~570 K, e la condensazione incompleta lì non agisce; l'evaporazione dal fuso
-// — EVAPORA — non tocca gli embrioni della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20, e i loro planetesimi, uniti in ~6·10⁴
-// anni, non fanno in tempo a fondere: all'²⁶Al ne servono ~4·10⁵); il mare di quel
+// — EVAPORA — non tocca gli embrioni della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20; i loro planetesimi si uniscono in
+// ~6·10⁴ anni, prima dei ~4·10⁵ che all'²⁶Al servono per fonderli, ma quel tempo è la crescita oligarchica di Kokubo e Ida
+// (2012, eq. 4.8 [V]) per quel disco (fd·ε 1,3, fg 1,9 a 0,67 UA), non un errore; e anche con la crescita 7 volte più lenta
+// (t_iso 4·10⁵ anni, provato) il sodio non cambia: l'evaporazione qui agisce solo a gas sparito, a 8,2 milioni di anni, quando
+// all'²⁶Al restano 2·10³ J/kg contro i 2·10⁶ che fondono la roccia); il mare di quel
 // pianeta resta una salamoia, ora di soda (il sodio dei fiumi non ha in mare.js un'uscita che lo pareggi); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese

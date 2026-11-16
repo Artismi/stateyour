@@ -179,7 +179,14 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    il sodio resta 1,9·10⁸ anni invece di 10⁹, contro ~7·10⁷ del mare vero; ma il cloro, 4,1 mol/kg, basta da solo). La fase calda
    provata con un disco viscoso α (Lynden-Bell e Pringle) non basta: a 0,67 UA parte da 756 K, sotto i 958 K del sodio, e la massa
    degli embrioni arriva tardi (m ∝ t³); con l'involucro che cade (Ṁ ~ c_s³/G) il disco interno è troppo caldo per la roccia
-   mentre il modello vi fa gli embrioni in 6·10⁴ anni: serve rifare insieme la storia del disco e la crescita degli embrioni; [C/O] (−0,44
+   mentre il modello vi fa gli embrioni in 6·10⁴ anni: serve rifare insieme la storia del disco e la crescita degli embrioni.
+   Verificato: quei 6·10⁴ anni sono la crescita oligarchica di Kokubo e Ida (2012, eq. 4.8, letta: 1,3·10⁵ anni contro
+   1,2·10⁵ di `disco.js`, stessi esponenti) per quel disco (fd·ε 1,3 e fg 1,9 a 0,67 UA): non è troppo veloce. E i planetesimi
+   fusi dall'²⁶Al (Hin et al. 2017 [R]) non toglierebbero il sodio nemmeno con la crescita 7 volte più lenta (provato:
+   t_iso 4·10⁵ anni, Na del mantello identico): l'evaporazione di `perditeAccrescimento` agisce solo a gas sparito (8,2 milioni
+   di anni per quella stella), quando all'²⁶Al restano 2·10³ J/kg contro i 2,2·10⁶ che fondono la roccia; i ciottoli non sono
+   nel modello. Gli urti giganti di quel pianeta (10,2–11,5 milioni di anni) vengono prima dei 30–100 del Hf-W della Terra
+   [R] e dei ~10⁸ di Chambers 2001 [R]: NON TORNA, che però non tocca il sodio; [C/O] (−0,44
    dex) e [K/Fe] (−1,1) delle stelle sotto il Sole (le rese di Kobayashi ne fanno poco: per il potassio è un difetto noto); la crosta dei continenti ha K ×16 il mantello (vera ~60: la
    F media di `storia.js`, 0,3, è alta); Pt e Au restano poveri nel mantello (manca l'ultima vernice); oltre ~100 GPa le leggi di
    ripartizione sono estrapolate (le super-Terre fanno nuclei grandi, ricchi di silicio). Il costo di `sistema()`: vedi il

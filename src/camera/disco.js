@@ -134,6 +134,9 @@ export function raggioPianeta({ massaKg, ferro = 0.3, ghiaccio = 0, gas = 0, flu
 // LEGGE EMPIRICA (dalle simulazioni della crescita degli embrioni nel gas, Kokubo–Ida e Ida–Lin): il tempo in cui un
 // embrione di massa m raddoppia. Cresce con la distanza (lontano le orbite sono lente) e cala dove ci sono più solidi
 // (più cibo) e più gas (il gas frena i sassi, e i sassi lenti si lasciano catturare). Anni; r in UA, Σ in kg/m².
+// (Confrontata con Kokubo e Ida 2012, PTEP 01A308, eq. 4.8, letta [V]: 1,3·10⁵ fd⁻¹ fg^−2/5 ε⁻¹ (m/10¹⁸ g)^2/15 (ρp/2 g cm⁻³)^3/5
+// (a/1 UA)^27/10 (M/M⊕)^⅓ (M*/M☉)^−⅙ anni, con Σd = 10 ε fd a^−3/2 g/cm² e Σg = 2400 fg a^−3/2: gli stessi esponenti; qui
+// 1,2·10⁵ e i planetesimi della misura e della densità di riferimento. Il tempo fino all'isolamento è 3 volte questo.)
 export const tempoCrescita = (m, r, sigmaS, sigmaG, Mst) => (1.2e5 / (sigmaS / 100)) * Math.sqrt(r) * Math.cbrt(m / MTERRA) * Math.pow(Mst, -1 / 6) * Math.pow(sigmaG / 24000, -0.4) * Math.pow(r, 0.1);
 // LEGGE EMPIRICA (dai modelli degli involucri): il tempo in cui un nucleo fermo raffredda e stringe il suo involucro di
 // gas fino a pesare quanto lui: un miliardo di anni per una Terra, un milione per dieci Terre (cala come il cubo della
