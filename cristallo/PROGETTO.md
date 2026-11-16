@@ -15,13 +15,49 @@ linee si tengono come polilinee vere e non come pixel.
 
 ## 1. Il mondo
 
-- **Il piano** con un **cristallo**: una cella, cioè un parallelogramma con i lati **a** e **b**, ripetuta senza fine.
-  Ci sono quattro forme di cella: quadrata, esagonale, rettangolare e obliqua.
+- **Lo spazio** con un **cristallo tridimensionale**: una cella, cioè un parallelepipedo con i lati **a**, **b**, **c**,
+  ripetuta senza fine nelle tre direzioni.
+  - Si parte dai reticoli più comuni: cubico semplice, cubico a corpo centrato, cubico a facce centrate, esagonale.
+  - Poi si estende ai 14 reticoli di Bravais.
 - **Gli atomi**: uno o più punti nella cella. Ognuno è una collina, che respinge, o una conca, che attira.
-- **Le palline**: punti con massa e carica, lanciati da un punto in una direzione con una velocità.
+- **Le palline**: punti con massa e carica, lanciati da un punto in una direzione dello spazio con una velocità.
+- **Il piano** resta come caso particolare: un cristallo sottilissimo, comodo per imparare.
 
-La simmetria del pattern non si sceglie. Viene dalla forma della cella e da dove stanno gli atomi: le 17 simmetrie
-possibili di un motivo nel piano (i gruppi di carta da parati) escono da sole.
+La simmetria non si sceglie. Viene dal reticolo, da dove stanno gli atomi e da come la finestra taglia il cristallo
+(punto 1b).
+
+## 1b. La finestra: un piano tangente a una sfera
+
+Il pattern è ciò che si vede attraverso una **finestra piana** dentro il cristallo. La finestra si fissa così:
+- si sceglie un **centro C** nel cristallo e un **raggio R**;
+- si sceglie una **direzione n** sulla sfera di centro C e raggio R;
+- la finestra è il **piano tangente alla sfera nel punto C + R·n**.
+  - Il suo asse, la perpendicolare che passa per il baricentro della finestra, punta dritto a C.
+  - R è la distanza tra il piano della finestra e il centro della sfera.
+- **ψ** è la rotazione della finestra attorno al proprio asse;
+- **L** è il lato della finestra, **h** il suo spessore.
+
+Che cosa si vede: i tratti di traiettoria che passano nella lastra di spessore h attorno al piano, proiettati sul
+piano. Con h piccolo si vedono punti e trattini (la «sezione»); con h grande si vedono linee lunghe (la «lastra»).
+In seguito si può aggiungere una vista in prospettiva, dalla finestra verso C, con distanza focale R.
+
+**Nella creazione casuale (🎲) l'angolo fa parte del caso:**
+- n è presa uniforme sulla sfera, cioè cos θ uniforme in [−1, 1] e φ uniforme in [0, 2π);
+- ψ è uniforme in [0, 2π);
+- C viene dalla cella, R da un intervallo dichiarato;
+- tutto dalla fonte del caso con l'indirizzo, così la stessa finestra si ritrova sempre.
+
+**La ripetizione sulla finestra viene dall'angolo, ed è fisica, non scelta:**
+- **Se n è perpendicolare a un piano del reticolo** (indici di Miller (hkl) interi), la finestra taglia il cristallo
+  lungo un piano che contiene un reticolo bidimensionale. Il pattern si ripete esattamente, con una tessera tanto più
+  piccola quanto più piccoli sono h, k, l: (100) e (111) danno motivi fitti e semplici, (731) motivi larghi.
+- **Se n è «irrazionale»**, cioè non perpendicolare a nessun piano del reticolo, la sezione non si ripete mai
+  esattamente. È **quasi periodica**, come le sezioni che danno i quasicristalli e le tassellature di Penrose (metodo
+  del taglio e della proiezione).
+  - Si ripete però quasi, su zone tanto più ampie quanto più n è vicina a un piano semplice.
+  - È la stessa «zona pulita» del punto 4, che qui nasce dalla geometria del taglio.
+- Lo strumento lo dice: «finestra lungo (111): si ripete ogni 3 celle», oppure «finestra vicina a (210): si ripete
+  quasi per 25 celle».
 
 ## 2. Le leggi: tre, accendibili una alla volta
 
@@ -57,6 +93,9 @@ rapporti, che sono le vere manopole:
 - **La linea** è una polilinea vera, che resta disponibile per i vettori.
 - **Il ripiegamento**: ogni punto r si porta nella cella, con r mod reticolo. La linea ripiegata è la **tessera**;
   la linea stesa su molte celle è il **viaggio**.
+- **Nello spazio** il viaggio e la tessera restano tridimensionali. Ciò che va sullo schermo è la loro sezione o la
+  loro lastra nella finestra del punto 1b. La tessera ripiegata riempie l'intero cristallo per periodicità, quindi
+  la finestra, ovunque sia, vede la stessa tessera ripetuta, tagliata secondo il suo angolo.
 
 ## 4. La zona pulita: quanto si ripete bene, misurato
 
@@ -80,8 +119,8 @@ scelta.
 
 ## 5. L'indirizzo e la biblioteca
 
-- **Un pattern è un indirizzo corto**: forma della cella, atomi, leggi accese con le loro manopole, punto e direzione
-  di lancio, temperatura, finestra di osservazione e tempo.
+- **Un pattern è un indirizzo corto**: reticolo e cella, atomi, leggi accese con le loro manopole, punto e direzione
+  di lancio, temperatura, finestra di osservazione (C, R, n, ψ, L, h) e tempo.
   - Gli eventi (rotture, vibrazioni) vengono dalla fonte del caso con quell'indirizzo, quindi lo stesso indirizzo dà la
     stessa immagine al bit.
   - L'indirizzo si scrive come testo leggibile e si può condividere.
@@ -117,11 +156,14 @@ scelta.
 │                                                              │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
-│ 🔷 ⬡ ▭ ▱   ⚪→   🧲 ◯───●   🐢──●──🐇   ❄️──●──🔥   🎲  ❤️  💾   │
+│ 🧊 cristalli  ⚪→  🧲 ◯──●  🐢──●──🐇  ❄️──●──🔥  🌐  🎲 ❤️ 💾    │
 │  «si ripete bene per 40 celle»            🧩 tessera / 🔍 viaggio │
 └──────────────────────────────────────────────────────────────┘
 ```
 
+- **🌐 il globo**: una pallina-mondo che si gira col dito e dice da dove guardi il cristallo, cioè la direzione n
+  della finestra. Accanto, un cubetto trasparente mostra il cristallo con la finestra dentro. Quando il globo passa
+  sopra un piano «semplice» scatta leggermente, come una calamita, e il pattern diventa d'un colpo ordinato.
 - **Una sola cosa grande**, il pattern. Gli strumenti stanno in una fila in basso: pochi, con icone grandi e
   nessuna parola tecnica.
 - **Ogni gesto si vede subito**: la linea cresce mentre la guardi, come un disegno che si fa da solo.
@@ -144,6 +186,9 @@ scelta.
 | L2 + L3 | spirali che si chiudono | la frenata accorcia il raggio |
 | L3, rotture | forcelle e ventagli | la conservazione della quantità di moto |
 | cella esagonale con un atomo | motivo a simmetria 6 | viene dalla cella, non è scritto |
+| cubico, finestra lungo (100) | motivo a simmetria 4 | il piano (100) del cubo è un quadrato |
+| cubico, finestra lungo (111) | motivo a simmetria 3 o 6 | il piano (111) del cubo è esagonale |
+| finestra «irrazionale» | motivo che quasi si ripete, mai uguale | sezione quasi periodica (taglio e proiezione) |
 
 ## 9. Le prove (scritte prima del codice)
 
@@ -157,14 +202,21 @@ scelta.
   - quella caotica si sfalda dopo un tempo vicino a ln(d/δ₀)/λ;
   - la zona si accorcia al crescere di T.
 - **La conservazione nelle rotture**: quantità di moto ed energia prima e dopo, esatte.
+- **La finestra**:
+  - il suo asse passa per C e la sua distanza da C è R, all'aritmetica;
+  - con n lungo (hkl) il pattern sulla finestra si ripete con il periodo del reticolo di quel piano, calcolato dagli
+    indici;
+  - con n irrazionale nessuna traslazione lo riporta su sé stesso entro la soglia, e la zona di quasi ripetizione
+    cresce avvicinando n a un piano semplice;
+  - n casuale è uniforme sulla sfera (prova statistica su cos θ).
 - **I pattern attesi** della tabella del punto 8 si ritrovano, con misure e senza guardarli a occhio: il raggio dei
   cerchi, la simmetria, la presenza di un canale.
 - **Il costo**: la linea cresce a 60 fotogrammi al secondo, e il primo pattern compare in meno di 1 s.
 
 ## 10. Le tappe
 
-1. **Il cuore**: cristallo, L1, integratore, viaggio e tessera, zona pulita, indirizzo. Con le prove. Senza
-   interfaccia bella.
+1. **Il cuore**: cristallo in 3D, L1, integratore, viaggio e tessera, finestra sulla sfera, zona pulita, indirizzo.
+   Con le prove. Senza interfaccia bella.
 2. **Costruisci**: l'interfaccia semplice, solo con L1 e L2. È il primo prototipo da provare insieme.
 3. **L3 e la temperatura** (❄️/🔥).
 4. **Ritaglia** (spazio e tempo).
