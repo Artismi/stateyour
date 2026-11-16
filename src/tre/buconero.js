@@ -167,7 +167,8 @@ void main() {
 //   raggioEsterno    in r_g (LIBERO: 30)
 //   cielo            { w, h, dati, unita } da `cieloDa` (modo 'cielo'), o niente
 //   modo             'cielo': lo strato disegna tutto (fondo); 'scena': deforma ciò che gli altri strati hanno disegnato (dopo)
-//   macchie, grana   LIBERI (vedi sopra); radice: l'indirizzo sotto cui stanno gli eventi delle macchie
+//   macchie, grana   LIBERI (vedi sopra); radice: l'indirizzo sotto cui stanno gli eventi delle macchie (col cosmo di base),
+//                    rami: i rami del cosmo parallelo (cosmo.js ramiCosmo), passati alla fonte
 //   luce             'disco' | 'cielo' | un numero (W/m²: l'irradianza che vale 1); su che cosa si regola l'esposizione
 //   betaCamera       (S) → [βx, βy, βz] la velocità di chi guarda rispetto a chi sta fermo lì (assi del mondo), o niente
 //   sogliaPixel      nel modo 'scena': sotto tanti pixel di raggio dell'ombra lo strato non fa niente (non si calcola ciò che non si vede)
@@ -192,7 +193,7 @@ export function creaBucoNero(N, opzioni = {}) {
   mettiCielo(O.cielo); const vuoto = N.immagine(1, 1, 'rgba8', new Uint8Array([0, 0, 0, 255]));
   // LE MACCHIE: ogni posto k ha una vita lunga `giri` orbite al suo raggio; finita quella, ne nasce un'altra altrove.
   // Dove e quando è un evento con indirizzo («…/macchia k/generazione j/raggio»): lo stesso disco a ogni visita.
-  const caso = sorgente(`${O.radice}/disco`), uMacchie = new Float32Array(4 * NM), nMacchie = disco ? Math.min(NM, Math.max(0, O.macchie | 0)) : 0, rin = disco ? disco.interno / rg : 6, GIRI = 1.5;
+  const caso = sorgente(`${O.radice}/disco`, O.rami), uMacchie = new Float32Array(4 * NM), nMacchie = disco ? Math.min(NM, Math.max(0, O.macchie | 0)) : 0, rin = disco ? disco.interno / rg : 6, GIRI = 1.5;
   function macchie(t) { const tt = t / tg; // (tempo in r_g/c, in doppia precisione: alla scheda vanno solo numeri piccoli)
     for (let k = 0; k < nMacchie; k++) { const r0 = rin * Math.pow(O.raggioEsterno / rin, (k + 0.5) / nMacchie), vita = GIRI * 2 * Math.PI * r0 ** 1.5, sfasa = caso(`macchia ${k}/fase`) * vita, j = Math.floor((tt + sfasa) / vita), eta = tt + sfasa - j * vita;
       const r = r0 * (0.85 + 0.3 * caso(`macchia ${k}/generazione ${j}/raggio`)), fi0 = 2 * Math.PI * caso(`macchia ${k}/generazione ${j}/angolo`), fi = fi0 + eta / r ** 1.5;

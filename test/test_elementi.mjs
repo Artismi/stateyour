@@ -1,10 +1,12 @@
 // test_elementi.mjs — LA CATENA DEGLI ELEMENTI (PROGETTO.md, lavoro 8; elementi.js).
 //   A. galassia → stella: i canali dei metalli si conservano; le stelle vecchie sono più ricche di α delle giovani;
-//   B. disco → pianeta: la condensazione al 50% e la conservazione; i pianeti nati caldi sono poveri di volatili;
+//   B. disco → pianeta: la condensazione al 50% e la conservazione; i pianeti nati caldi sono poveri di volatili; le perdite
+//      durante l'accrescimento seguono la storia di ciascuno (embrioni fusi, urti giganti, fuga);
 //   C. il pianeta si separa: ogni elemento si conserva; il primo pianeta «come la Terra» confrontato con la Terra;
 //   D. la crosta: arricchita in K, U, Th di quanto dicono i coefficienti;
 //   E. il mare: le tracce e la loro specie;
-//   F. il libro dei conti: elemento per elemento, la somma dei serbatoi è ciò che il disco ha dato, e nessuno va scoperto.
+//   F. il libro dei conti: elemento per elemento, la somma dei serbatoi (lo spazio compreso: ciò che è partito durante
+//      l'accrescimento) è ciò che il disco ha dato, e nessuno va scoperto.
 // DISCIPLINA (come le altre prove): le soglie sono la precisione numerica (n·ε) o 4 scarti della statistica attesa, dette
 // prima; nessun seme scelto: le galassie sono tutte quelle del cosmo 1, i dischi i primi 300 numeri, il pianeta come la
 // Terra il primo del catalogo che soddisfa le condizioni scritte. Ciò che non torna con la realtà si stampa «≠ NON TORNA».
@@ -18,7 +20,7 @@ import { mare } from '../src/camera/mare.js';
 import { MTERRA } from '../src/camera/disco.js';
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], tempi = [];
-const prova = (nome, f) => { const t = performance.now(); f(); ok++; tempi.push([nome.slice(0, 44), performance.now() - t]); console.log('  ✓', nome); };
+const falliti = [], prova = (nome, f) => { const t = performance.now(); try { f(); ok++; console.log('  ✓', nome); } catch (e) { falliti.push(`${nome.slice(0, 60)}…: ${e.message}`); console.log('  ✗', nome, '\n     ', e.message); } tempi.push([nome.slice(0, 44), performance.now() - t]); };
 const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : x === 0 ? '0' : Math.abs(x) >= 1e4 || Math.abs(x) < 1e-2 ? x.toExponential(c - 1).replace('.', ',') : String(+x.toPrecision(c)).replace('.', ','));
 const EPS = 2 ** -52, I = (s) => E.SIMBOLI.indexOf(s), somma = (v) => { let s = 0; for (const x of v) s += x; return s; };
 const media = (v) => v.reduce((a, b) => a + b, 0) / v.length, varianza = (v) => { const m = media(v); return v.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, v.length - 1); };
@@ -91,6 +93,22 @@ prova('i pianeti nati più caldi sono poveri di volatili e di moderatamente vola
   console.log(`      mediane (nati sopra il T50 contro sotto, rispetto alla stella): ${righe.join('; ')}`);
 });
 
+prova('le perdite durante l\'accrescimento seguono la storia: chi non ha avuto urti giganti tiene il cloro, chi ne ha avuti lo perde; il cloro (che il fuso manda fuori) se ne va più dell\'acqua (che resta nel mantello)', () => {
+  // ATTESO dalla legge (elementi.js perditeAccrescimento), detto prima: (1) con la stessa storia ogni elemento perde la parte
+  // del suo «fuori» (u·g·pozza): u del cloro (1 − 0,05)(1 − D) ≫ u dell'acqua (PARTE_FUORI = 0,04), quindi in OGNI pianeta la
+  // parte persa del cloro è ≥ quella dell'idrogeno (entro 10⁻¹² relativo); (2) senza urti resta solo la fuga, e la mediana del
+  // cloro tenuto dai rocciosi senza urti è più alta di quella di chi ne ha avuti almeno due; (3) nulla si crea: ogni elemento
+  // tenuto + partito = ciò che gli embrioni hanno portato (lo dice il libro dei conti, F).
+  const rocciosi = PIANETI.filter((p) => p.tipo !== 'gassoso' && p.composizione.elementi.perdite), parte = (p, s) => { const el = p.composizione.elementi, i = I(s), d = el.spazio[i] + el.solidi[i] + el.acqua[i]; return d > 0 ? el.spazio[i] / d : 0; };
+  const conCloro = (p) => { const el = p.composizione.elementi, i = I('Cl'); return el.spazio[i] + el.solidi[i] > 0; }; // (chi è nato sopra i 1000 K non ha cloro da perdere)
+  let peggio = 0; for (const p of rocciosi) { if (!conCloro(p)) continue; const c = parte(p, 'Cl'), h = parte(p, 'H'); if (h > 0) peggio = Math.max(peggio, (h - c) / h); }
+  const urti = (p) => p.composizione.elementi.perdite.urti.length, senza = rocciosi.filter((p) => conCloro(p) && urti(p) === 0).map((p) => 1 - parte(p, 'Cl')), con = rocciosi.filter((p) => conCloro(p) && urti(p) >= 2).map((p) => 1 - parte(p, 'Cl'));
+  const conH = rocciosi.filter((p) => urti(p) >= 2).map((p) => 1 - parte(p, 'H'));
+  console.log(`      ${rocciosi.length} rocciosi e ghiacciati: cloro tenuto, mediana, senza urti ${num(mediana(senza))} (${senza.length}), con due urti o più ${num(mediana(con))} (${con.length}); l'acqua con due urti o più ${num(mediana(conH))}; (H − Cl)/H perso al peggio ${num(peggio)}`);
+  assert.ok(senza.length >= 10 && con.length >= 10, 'pochi pianeti per gruppo');
+  assert.ok(peggio <= 1e-12, 'in qualche pianeta l\'acqua se ne va più del cloro'); assert.ok(mediana(senza) > mediana(con));
+});
+
 console.log('C. il pianeta si separa');
 prova('nucleo + silicato = roccia, elemento per elemento (l\'ossigeno compreso: è lui che decide fO2)', () => {
   let peggio = 0; for (const p of PIANETI) { const el = p.composizione.elementi; if (!el.separazione) continue;
@@ -123,8 +141,12 @@ prova(`un pianeta come la Terra (il primo del catalogo con le condizioni dette):
   if (Math.abs(sC) > 1) nonTorna.push(`la crosta è ${num(Mc / Mtot)} della massa (Terra ~0,005)`);
   // la Terra vera è povera di volatili moderati rispetto al Sole; il modello, a ${Math.round(el.Tformazione)} K, li condensa
   const K = (el.silicato[I('K')] / Ms) * 1e6, Cl = (el.silicato[I('Cl')] / Ms) * 1e6, Na = (el.silicato[I('Na')] / Ms) * 1e6;
-  console.log(`      nel mantello: K ${num(K)} ppm (Terra 237), Na ${num(Na)} (2600), Cl ${num(Cl)} (16)`);
-  if (Cl > 4 * 16) nonTorna.push(`il cloro del mantello è ${num(Cl)} ppm (Terra 16): l'equilibrio di condensazione a ${Math.round(el.Tformazione)} K lo tiene tutto; mancano le perdite durante l'accrescimento`);
+  console.log(`      nel mantello: K ${num(K)} ppm (Terra 237), Na ${num(Na)} (2600), Cl ${num(Cl)} (16); Cl/Na ${num(Cl / Na)} (Terra 6,2e-3: 16/2600; 0,011 con 30 ppm)`);
+  // LE PERDITE della sua storia (elementi.js perditeAccrescimento): gli urti, quanto era fuori, quanto ne hanno tolto
+  { const pd = el.perdite, persa = (s) => { const i = I(s), d = el.spazio[i] + el.solidi[i] + el.acqua[i]; return d > 0 ? el.spazio[i] / d : 0; };
+    console.log(`      la storia: ${pd.urti.length} urti giganti (${pd.urti.map((u) => `${num(u.t / 1e6)} Ma: fuori ${num(u.fuori)}, tolta ${num(u.tolta)}`).join('; ')}); partiti negli urti ${num(pd.negliUrti)} kg, per la fuga ${num(pd.fuga)} kg`);
+    console.log(`      la parte partita: ${['Cl', 'Br', 'I', 'Na', 'K', 'S', 'C', 'H'].map((s) => `${s} ${num(persa(s))}`).join(', ')} (H e C: l'acqua e i gas dei ghiacci)`); }
+  if (Cl > 4 * 16) nonTorna.push(`il cloro del mantello è ${num(Cl)} ppm (Terra 16), dopo le perdite dell'accrescimento; il rapporto Cl/Na è ${num(Cl / Na)} (Terra 6e-3–0,011): resta l'eccesso di TUTTI i moderatamente volatili (Na ${num(Na / 2600)} volte la Terra), che il disco a ${Math.round(el.Tformazione)} K condensa tutti (la Terra vera li ha persi nel disco: manca la fase calda del disco giovane, disco.js)`);
   assert.ok(Mn > 0 && Mn < Mtot && Ms > 0 && Mc >= 0 && Mc < Ms);
 });
 
@@ -159,15 +181,23 @@ prova('il mare del pianeta come la Terra prende dalla SUA crosta le rocce che si
   for (const [s, v] of Object.entries(STATO_MARE.tracce)) { assert.ok(v.mol >= 0 && Number.isFinite(v.mol), s); const sp = Object.values(v.specie).reduce((a, b) => a + b, 0); assert.ok(Math.abs(sp - 1) < 1e-12, `${s}: le specie sommano a ${sp}`);
     righe.push(`${s} ${num(v.mol)}${VERO[s] ? ` (${num(VERO[s])})` : ''}${v.limite ? ` [${v.limite}]` : ''}`); }
   console.log(`      salinità ${num(STATO_MARE.salinitaMedia)} g/kg, pH ${num(STATO_MARE.pH)}; tracce in mol/kg (oceano vero): ${righe.join('; ')}`);
-  if (STATO_MARE.salinitaMedia > 2 * 35) nonTorna.push(`il mare del pianeta come la Terra ha ${num(STATO_MARE.salinitaMedia)} g/kg (vero 35): il cloro del suo mantello`);
+  // LA SALINITÀ, con l'intervallo detto prima di guardare: tra 35/3 e 35·3 g/kg (12–105). Perché: il cloro della Terra è noto
+  // entro un fattore ~2 (17–30 ppm nel mantello primitivo, McDonough e Sun 1995, Palme e O'Neill [R]), la parte che oggi sta
+  // fuori è ~½ contro il 95% che mare.js mette fuori alla nascita (un fattore ~2), e questo pianeta non è la Terra (la sua
+  // massa, il suo mare): un fattore 3 attorno al mare vero. La salinità di cloruri (Cl⁻ con il suo sodio) e il resto (la soda)
+  // si stampano a parte, per vedere da dove viene.
+  const S = STATO_MARE.salinitaMedia, Cl = STATO_MARE.totali.Cl, cloruri = Cl * (35.453 + 22.99);
+  console.log(`      salinità ${num(S)} g/kg (intervallo detto prima: 11,7–105): cloruri ${num(cloruri)} g/kg (Terra 32: Cl ${num(Cl)} mol/kg contro 0,546), il resto ${num(S - cloruri)} (Na ${num(STATO_MARE.totali.Na)} mol/kg contro 0,469; carbonio ${num(STATO_MARE.carbonio)} mol/kg contro 0,0023)`);
+  if (!(S >= 35 / 3 && S <= 35 * 3)) nonTorna.push(`il mare del pianeta come la Terra ha ${num(S)} g/kg (vero 35; intervallo 11,7–105): cloruri ${num(cloruri)} g/kg, il resto è soda (Na ${num(STATO_MARE.totali.Na)} mol/kg contro 0,47, con il carbonato): il sodio che i fiumi portano da una crosta ricca quanto il mantello resta nel mare ${num(STATO_MARE.bilancio.residenza.Na)} anni (Terra ~7·10⁷ [R]: mare.js non ha le uscite del sodio nella crosta calda e nelle argille nuove)`);
+  assert.ok(S >= 35 / 3 && S <= 35 * 3, `la salinità del mare ${num(S)} g/kg è fuori dall'intervallo detto prima (11,7–105 g/kg)`);
 });
 
 console.log('F. il libro dei conti');
-prova('elemento per elemento, nucleo + mantello + crosta + mare + aria + ghiacci + involucro = ciò che il disco ha dato, e nessun serbatoio va scoperto', () => {
+prova('elemento per elemento, nucleo + mantello + crosta + mare + aria + ghiacci + involucro + spazio = ciò che il disco ha dato, e nessun serbatoio va scoperto', () => {
   // (tolleranza: ogni serbatoio è una somma di al più 6000 embrioni × 50 elementi, più le sottrazioni del libro: 10⁶·ε relativo)
   const tol = 1e6 * EPS, L = E.libroDeiConti(TERRA.p, { mare: STATO_MARE }); assert.ok(L);
   console.log(`      la Terra del modello, con il suo mare: scarto peggiore ${num(L.scarto)}${L.peggiore ? ` (${L.peggiore})` : ''}; scoperti: ${L.scoperti.length ? L.scoperti.map((x) => `${x.elemento} nel ${x.serbatoio}`).join(', ') : 'nessuno'}`);
-  const tab = ['Fe', 'Ni', 'Si', 'O', 'Mg', 'Na', 'K', 'Cl', 'U', 'H', 'C', 'N'].map((s) => `${s}: ${L.serbatoi.filter((r) => L.conti[s]?.[r] > 0).map((r) => `${r} ${num((100 * L.conti[s][r]) / L.disco[s], 2)}%`).join(' ')}`);
+  const tab = ['Fe', 'Ni', 'Si', 'O', 'Mg', 'Na', 'K', 'Cl', 'Br', 'U', 'H', 'C', 'N'].map((s) => `${s}: ${L.serbatoi.filter((r) => L.conti[s]?.[r] > 0).map((r) => `${r} ${num((100 * L.conti[s][r]) / L.disco[s], 2)}%`).join(' ')}`);
   console.log(`      ${tab.join('\n      ')}`);
   assert.ok(L.scarto <= tol && L.scoperti.length === 0);
   // e su tutti i pianeti dei primi sistemi del cosmo (senza il mare: aria, ghiacci, crosta, mantello, nucleo)
@@ -178,5 +208,6 @@ prova('elemento per elemento, nucleo + mantello + crosta + mare + aria + ghiacci
 });
 
 const tot = (performance.now() - T0) / 1000;
-console.log(`\nelementi: ${ok} prove in ${tot.toFixed(1)} s (le più lente: ${tempi.sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, t]) => `${c} ${(t / 1000).toFixed(1)} s`).join(', ')})`);
+console.log(`\nelementi: ${ok} prove passate su ${ok + falliti.length} in ${tot.toFixed(1)} s (le più lente: ${tempi.sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, t]) => `${c} ${(t / 1000).toFixed(1)} s`).join(', ')})`);
 if (nonTorna.length) console.log(`≠ NON TORNA (con la realtà, dichiarati):\n  ${nonTorna.join('\n  ')}`);
+if (falliti.length) { console.log(`\n✗ ${falliti.length} prove non passano:\n  ${falliti.join('\n  ')}`); process.exitCode = 1; }

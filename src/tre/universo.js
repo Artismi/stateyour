@@ -51,7 +51,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
   // flusso vero). Finché la sua ombra è sotto un pixel e mezzo lo strato non fa niente. Entro duemila r_g la camera gli
   // si attacca (e non scende sotto 2,5 r_g).
   const bucoNero = (() => { try { if (!(sc.buco && sc.buco.massaKg > 0)) return null; const bc = bucoCentrale(galassiaDi(via.cosmo, via.galassia).forma), acceso = bc && bc.frazioneEddington >= 0.01;
-    const b = bucoNelMondo(N, { genitore: nodo, luogo: 'buco', massaKg: sc.buco.massaKg, accrescimento: acceso ? bc.frazioneEddington * bc.accrescimentoEddington : 0, luce: acceso ? 'disco' : null, radice: nomeFonte(via, 'buco') }); // (la radice è un nome per la fonte del caso, quello di sempre: bolla.js `nomeFonte`)
+    const b = bucoNelMondo(N, { genitore: nodo, luogo: 'buco', massaKg: sc.buco.massaKg, accrescimento: acceso ? bc.frazioneEddington * bc.accrescimentoEddington : 0, luce: acceso ? 'disco' : null, radice: nomeFonte(via, 'buco'), rami: ramiCosmo(via.cosmo) }); // (la radice è un nome per la fonte del caso, quello di sempre: bolla.js `nomeFonte`)
     b.corpo.influenza = 2000 * b.raggioGravitazionale; b.modello = bc; return b; } catch (e) { console.warn('il buco nero centrale non si è potuto montare:', e); return null; } })();
   const stelle = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n), luceV = new Float32Array(4 * n), _tr = [1, 1, 1];
   function luciStelle() { const P = sc.punti; for (let i = 0; i < n; i++) { const L = P.esiste[i] ? P.luminosita[i] / LUCE : 0; luce[4 * i] = L * lineare(P.colore[3 * i]); luce[4 * i + 1] = L * lineare(P.colore[3 * i + 1]); luce[4 * i + 2] = L * lineare(P.colore[3 * i + 2]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }

@@ -25,7 +25,7 @@ import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percor
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
-import { scriviBolla, leggiBolla, viaDi as viaDellaBolla, passoSensato, scalaDi } from '../tre/bolla.js';
+import { scriviBolla, leggiBolla, viaDi as viaDellaBolla, passoSensato, scalaDi, bolla as bollaNuova } from '../tre/bolla.js';
 import { COMPOSIZIONI, ELEMENTI, nuovoElemento, clona, storia, fmt, trasformaPosto } from './esperimento.js';
 import { creaVista3D } from '../vista3d.js';
 import { cellaMateria, luogoDaAria } from './materia.js';
@@ -1605,7 +1605,13 @@ pannello.addEventListener('click', (e) => {
   if (d.soloP) { solo = solo === d.soloP ? null : d.soloP; mostraSchede(); dove(); disegna(); mostraPannello(); return; }
   if (d.vistaP != null) { vista = 'pattern'; aggiornaVista(); return; }
   if (d.modoP) { vista = d.modoP; aggiornaVista(); return; }
-  if (d.ramoP) { const k = d.ramoP.lastIndexOf('|'), ev = d.ramoP.slice(0, k), r = +d.ramoP.slice(k + 1); camMappa.via = { ...camMappa.via, cosmo: ev ? cosmoRamo(camMappa.via.cosmo, ev, r) : cosmoBase(camMappa.via.cosmo) }; aggiornaVista(); return; }
+  if (d.ramoP) { const k = d.ramoP.lastIndexOf('|'), ev = d.ramoP.slice(0, k), r = +d.ramoP.slice(k + 1), nuovo = ev ? cosmoRamo(camMappa.via.cosmo, ev, r) : cosmoBase(camMappa.via.cosmo);
+    // NELLO SPAZIO (3D) il mondo montato è quello del cosmo di prima, e montaMondo non lo rifà: lo si smonta e lo si rimonta nel
+    // cosmo nuovo, con la camera dov'era (la stessa bolla — luogo, istante, posizione, sguardo — con i rami nuovi)
+    if (mondo3d && universo3d) { let b = null; try { const b0 = universo3d.bolla(); b = bollaNuova({ percorso: b0.indirizzo.percorso, rami: ramiCosmo(nuovo), t: b0.t, posizione: b0.posizione, assi: b0.assi, grandezza: b0.grandezza, moto: b0.moto }); } catch { b = null; }
+      camMappa.via = { ...camMappa.via, cosmo: nuovo }; if (camMappa.livello === 4) camMappa.livello = 3; // (la superficie si rimonta dalla bolla, non posandosi sul punto della mappa)
+      smontaMondo(); montaMondo(); if (b && universo3d) universo3d.vaiAllaBolla(b); mostraPannello(); return; }
+    camMappa.via = { ...camMappa.via, cosmo: nuovo }; aggiornaVista(); return; }
   if (d.copiaPosto != null) { ricorda(); const e2 = comp.elementi[+d.copiaPosto], { a, b } = comp.reticolo; e2.posti.push({ pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], rot: 0 }); scelto = { e: +d.copiaPosto, p: e2.posti.length - 1 }; return aggiorna(); }
   if (d.scegliPosto != null) { scelto = { e: +d.scegliPosto, p: 0 }; mostraPannello(); return disegna(); }
   if (d.togliPosto != null) return togliPosto(scelto.e, scelto.p);

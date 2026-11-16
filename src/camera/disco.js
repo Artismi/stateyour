@@ -28,7 +28,7 @@
 import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
-import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA } from './elementi.js'; // la catena degli elementi
+import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento } from './elementi.js'; // la catena degli elementi
 import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
@@ -241,7 +241,7 @@ export function formaPianeti(st, seme = 1) {
   //    funziona la fionda: il piccolo che sta più dentro è lanciato sulla stella, quello che sta più fuori è scacciato
   //    dal sistema, e il grande, che gli ha dato l'energia, scende un poco. Tra pari la fionda non basta: nessuno dei
   //    due ha l'energia per scacciare l'altro, e prima o poi si urtano.
-  let vivi = corpi.filter((b) => !b.morto && b.m > 0);
+  let vivi = corpi.filter((b) => !b.morto && b.m > 0); const fusioni = []; // (gli urti in ordine, per le perdite di elementi.js)
   if (eta > D.vita) {
     const raggio = (b) => raggioPianeta({ massaKg: b.m, ferro: b.fe / (b.m - b.gas), ghiaccio: b.h2o / (b.m - b.gas), gas: b.gas / b.m });
     const stato = (p, q) => { // quanto è larga la distanza tra le due orbite rispetto a quella che serve (< 1: instabile)
@@ -261,6 +261,7 @@ export function formaPianeti(st, seme = 1) {
         const mu2 = (p.m + q.m) / (2 * Mst), anno = Math.pow(am, 1.5) / Math.sqrt(D.massaStella), delta = Math.max(0, s[i] * raggiNecessari((eta - D.vita) / anno, mu2));
         const tIncrocio = Math.min(eta, Math.max(p.tUrto, q.tUrto) + giriCheRegge(delta, mu2) * anno);
         if (piccolo.m > P.pari * grande.m || c(`embrione ${grande.id}/incontro con ${piccolo.id}`) * (1 + fionda * fionda) > fionda * fionda) { // si fondono
+          fusioni.push({ g: grande.id, p: piccolo.id, t: tIncrocio, Mg: grande.m - grande.gas, Mp: piccolo.m - piccolo.gas, Rg: raggio(grande), Rp: raggio(piccolo), a: am });
           grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta, tIncrocio, aUA: am }];
           grande.tUrto = tIncrocio; grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.alGas += piccolo.alGas; grande.orfani = [...grande.orfani, ...piccolo.orfani];
           grande.a = ((p.m * Math.sqrt(p.a) + q.m * Math.sqrt(q.a)) / m) ** 2;
@@ -294,13 +295,21 @@ export function formaPianeti(st, seme = 1) {
   for (const o of corpi) { const r = radice(o); if (!r.morto) { let l = membri.get(r.id); if (!l) membri.set(r.id, (l = [])); l.push(o); } }
   const ricettaGhiaccio = Object.fromEntries(Object.entries(D.solidi.ghiacci || {}).map(([k, v]) => [k, D.solidi.ghiaccio > 0 ? v / D.solidi.ghiaccio : 0]));
   const pianeti = vivi.filter((b) => b.m >= P.minimo * MTERRA && b.a >= 0.02).map((b) => {
-    const sol = vettore(), ghi = vettore(), aria = vettore(); let Tm = 0, mm = 0;
-    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0; D.solidi.aggiungi(sol, roccia, o.T); for (const k in ricettaGhiaccio) ghi[IDX[k]] += g * ricettaGhiaccio[k]; Tm += o.T * o.m0; mm += o.m0; }
+    let sol = vettore(), ghi = vettore(), aria = vettore(), Tm = 0, mm = 0; const tutti = [], gigante = b.gas > 0.5 * b.m;
+    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0, r = vettore(), gh = vettore(); D.solidi.aggiungi(r, roccia, o.T); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
+      for (let i = 0; i < SIMBOLI.length; i++) { sol[i] += r[i]; ghi[i] += gh[i]; } Tm += o.T * o.m0; mm += o.m0;
+      if (!gigante) tutti.push({ id: o.id, roccia: r, ghiacci: gh, t: o.tIso, T: o.T, a: o.nato, R: raggioPianeta({ massaKg: o.m0, ferro: o.fe / Math.max(o.m0, 1e-30), ghiaccio: o.acqua0 }) }); }
+    // LE PERDITE DURANTE L'ACCRESCIMENTO (elementi.js perditeAccrescimento): gli embrioni fusi liberano i volatili, gli urti e la
+    // fuga portano via una parte di ciò che è fuori; ciò che parte va nello spazio (un serbatoio del libro dei conti) e il
+    // pianeta pesa di meno. (I giganti no: la roccia resta il loro nucleo, sotto il gas.)
+    const perdite = gigante ? null : perditeAccrescimento({ membri: tutti, fusioni, tGas: D.vita, eta, L: D.Lstella, radice: b.id });
+    let perso = 0, persoGhiacci = 0;
+    if (perdite) { sol = perdite.roccia; for (let i = 0; i < SIMBOLI.length; i++) { persoGhiacci += ghi[i] - perdite.ghiacci[i]; perso += perdite.spazio[i]; } ghi = perdite.ghiacci; }
     if (b.gas > 0) for (let i = 0; i < SIMBOLI.length; i++) aria[i] = b.gas * (D.miscela[SIMBOLI[i]] || 0);
     let Mr = 0; for (let i = 0; i < SIMBOLI.length; i++) Mr += sol[i];
     // IL PIANETA SI SEPARA (elementi.js differenzia): metallo e silicato all'equilibrio sul fondo dell'oceano di magma; il
     // nucleo che ne esce è il «ferro» del pianeta (per i giganti la roccia resta il loro nucleo, senza separarsi)
-    const solidi = b.m - b.gas, gas = b.gas / b.m, ghiaccio = b.h2o / solidi;
+    const massa = b.m - perso, solidi = massa - b.gas, gas = b.gas / massa, ghiaccio = (b.h2o - persoGhiacci) / solidi;
     const sep = gas > 0.5 || !(Mr > 0) ? null : differenzia(sol, { M: Mr, R: raggioPianeta({ massaKg: Mr, ferro: b.fe / solidi }), rhoNucleo: STORIA.rhoNucleo });
     let Mc = 0; if (sep) for (let i = 0; i < SIMBOLI.length; i++) Mc += sep.nucleo[i];
     // I VOLATILI DEI GHIACCI: la parte che il pianeta ha liberato in superficie (leggi.js PARTE_FUORI; nei mondi di ghiaccio
@@ -311,16 +320,16 @@ export function formaPianeti(st, seme = 1) {
     if (sep && Mc > 0) { const Ms = Mr - Mc, q = (D_MASSA.C * Mc) / Math.max(Ms, 1e-30), c = (ghiDentro[IDX.C] * q) / (1 + q); ghiDentro[IDX.C] -= c; sep.nucleo[IDX.C] += c; Mc += c; }
     const ferro = sep ? Mc / solidi : b.fe / solidi;
     const tipo = tipoDi(gas, ghiaccio), involucro = tipo === 'gassoso' || gas < 0.005 ? 0 : gas;
-    const raggioM = raggioPianeta({ massaKg: b.m, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: Loggi / (b.a * b.a), eta });
+    const raggioM = raggioPianeta({ massaKg: massa, ferro, ghiaccio, gas: tipo === 'gassoso' ? gas : involucro, flusso: Loggi / (b.a * b.a), eta });
     // di che cosa è fatto. Il gas di un gigante è quello della stella: idrogeno ed elio (71 a 27, la miscela misurata
     // del Sole) con i suoi metalli; i «pesanti» sono quelli più il nucleo
     const metGas = 1 - D.miscela.H - D.miscela.He, h = D.miscela.H / (D.miscela.H + D.miscela.He); // (i metalli e l'idrogeno del gas di QUESTA stella)
-    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / b.m + gas * metGas) : 0;
+    const pesanti = tipo === 'gassoso' ? Math.min(0.5, solidi / massa + gas * metGas) : 0;
     const composizione = tipo === 'gassoso' ? { idrogeno: (1 - pesanti) * h, elio: (1 - pesanti) * (1 - h), pesanti }
       : tipo === 'ghiacciato' ? { ghiaccio, roccia: 1 - ghiaccio - ferro, ferro } : { ferro, roccia: 1 - ferro - ghiaccio, acqua: ghiaccio };
     // (gli elementi del pianeta, non enumerabili: viaggiano con la composizione — chimica.js, mare.js, il libro dei conti di
     // elementi.js li leggono — e chi la elenca o la somma vede le tre parti di sempre). Masse in kg.
-    Object.defineProperty(composizione, 'elementi', { value: Object.freeze({ solidi: sol, acqua: ghi, acquaFuori: ghiFuori, acquaDentro: ghiDentro, involucro: b.gas > 0 ? aria : null, nucleo: sep ? sep.nucleo : sol, silicato: sep ? sep.silicato : vettore(),
+    Object.defineProperty(composizione, 'elementi', { value: Object.freeze({ solidi: sol, acqua: ghi, acquaFuori: ghiFuori, acquaDentro: ghiDentro, involucro: b.gas > 0 ? aria : null, spazio: perdite ? perdite.spazio : null, perdite: perdite ? { urti: perdite.urti, fuga: perdite.fuga, negliUrti: perdite.negliUrti, solidificato: perdite.solidificato } : null, nucleo: sep ? sep.nucleo : sol, silicato: sep ? sep.silicato : vettore(),
       separazione: sep ? { P: sep.P, T: sep.T, deltaIW: sep.deltaIW } : null, stella: D.miscela, Tformazione: mm > 0 ? Tm / mm : null, simboli: SIMBOLI,
       // (quanta parte della massa dei ghiacci è acqua: il resto è il CO e l'NH3 gelati con lei. leggi.js e chimica.js contano
       // l'acqua del pianeta con questa: prima la massa intera dei ghiacci passava per acqua, e il mare ne aveva un terzo di troppo)
@@ -333,8 +342,10 @@ export function formaPianeti(st, seme = 1) {
         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
     const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto };
-    return Object.defineProperty({ aUA: b.a, massaKg: b.m, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
+    return Object.defineProperty({ aUA: b.a, massaKg: massa, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
   });
+  // (le perdite dell'accrescimento tolgono un poco di massa: chi scende sotto il minimo resta tra i detriti)
+  for (let i = pianeti.length - 1; i >= 0; i--) if (pianeti[i].massaKg < P.minimo * MTERRA) pianeti.splice(i, 1);
   // le orbite di oggi non si incrociano: se due si toccassero, i detriti le avrebbero già arrotondate
   for (let i = 0; i + 1 < pianeti.length; i++) {
     const p = pianeti[i], q = pianeti[i + 1], spazio = 0.8 * (q.aUA - p.aUA), serve = p.aUA * p.eccentricita + q.aUA * q.eccentricita;

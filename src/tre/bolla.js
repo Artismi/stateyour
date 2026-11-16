@@ -28,6 +28,7 @@
 // luogoDi, bollaDaVia, viaDi). Ciò che va alla fonte del caso (eventi.js) NON è un indirizzo da rileggere: è un nome, e
 // deve restare quello di sempre (cambiarlo cambierebbe i mondi): lo fa `nomeFonte`, a parte.
 import { indirizzo, leggiAncheVecchia } from '../camera/intreccio.js';
+import { cosmoBase } from '../camera/cosmo.js';
 import { scrivi as scriviL, leggi as leggiL, daVia, viaDi as viaL } from '../camera/lingua.js'; // la forma scritta, una sola (LINGUA.md § 1)
 import { ANNI_OGGI, motiRegione } from '../camera/spazio3d.js'; // l'età del cosmo oggi (anni): t = 0
 import { sezioneDi, conoPassato } from '../camera/relativita.js';
@@ -65,7 +66,9 @@ export const bollaDaVia = (via, t = 0, rami = null) => { const a = daVia(finoAlB
 // IL NOME PER LA FONTE DEL CASO di ciò che sta in un luogo (il disco di un buco nero: buconero.js `radice`): «cosmo <via.cosmo>
 // /galassia g/…/<resto>», con il numero del cosmo così com'è, anche coi rami («cosmo 1#{…}/…»). Non è un indirizzo e non
 // si rilegge: è la chiave di sempre, e non deve cambiare (cambierebbe il mondo che ne esce).
-export const nomeFonte = (via, ...resto) => [...['cosmo', 'galassia', 'stella'].filter((k) => via[k] != null).map((k) => `${k} ${via[k]}`), ...resto].join('/');
+// (il cosmo vi entra col suo numero di BASE: i rami di un cosmo parallelo vanno passati a `sorgente` a parte — ramiCosmo —, così
+// un ramo cambia solo l'evento che nomina e non tutto ciò che sta sotto quel cosmo; nel cosmo di base il nome è quello di sempre)
+export const nomeFonte = (via, ...resto) => [...['cosmo', 'galassia', 'stella'].filter((k) => via[k] != null).map((k) => `${k} ${k === 'cosmo' ? cosmoBase(via[k]) : via[k]}`), ...resto].join('/');
 
 // la bolla di adesso, letta dal nucleo: il percorso risalendo i luoghi dei corpi, la posizione nel riferimento del
 // primo corpo che ha un luogo (di solito quello a cui la camera è attaccata)

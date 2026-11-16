@@ -24,6 +24,7 @@ import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tesse
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
 import { finestraAcqua, immagineFinestra, scenaNano } from './finestra.js';
+import { chimicaDellaFinestra } from './reazioni.js';
 import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
 import { campoGrani, granoGhiaccio, popolazioneTracce } from './grani.js';
@@ -576,6 +577,9 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
       const fin = finestraAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, P: S.P }), camp = fin.popolazioni?.campione || campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
       const NA = fin.N || 128, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
       A = { cv: cvA, camp, fin, acqua: true, N: NA, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${fin.descrizione || camp.descrizione}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo } };
+      // LA CHIMICA CHE SI MUOVE LÌ (reazioni.js, lavoro 10): dal micron in giù, una riga — quante specie e reazioni le regole
+      // permettono, quante si muovono nel bagno di quest'acqua, se c'è un RAF. Si calcola solo quando si guarda (decine di ms)
+      if (lato <= 1.0001e-6) { try { const ch = chimicaDellaFinestra(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, pianeta: S.P }); A.chimica = ch; A.frase += ` ${ch.riga} (calcolata in ${Math.round(ch.ms)} ms).`; } catch { /* la chimica non c'è: la finestra resta quella dell'acqua */ } }
       rocceFatte.set(ka, A); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
     }
     // il mare si muove nel tempo vero (le onde corrono con la loro ω); la finestra si ridisegna al più venti volte al secondo

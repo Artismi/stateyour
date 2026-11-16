@@ -94,7 +94,7 @@ import { COSTANTI as TETTONICA } from './tettonica.js';
 import { maree as mareaDi } from './lune.js';
 export { rocceDelPianeta, rilascio, MINERALI_ROCCIA };
 import { sorgente, numero } from './eventi.js';
-import { tracceDelMare } from './elementi.js'; // la catena degli elementi: le tracce sciolte, dalla crosta di QUESTO pianeta
+import { tracceDelMare, INTRAPPOLATO } from './elementi.js'; // la catena degli elementi: le tracce sciolte, dalla crosta di QUESTO pianeta; il fuso intrappolato (una fonte sola con le perdite dell'accrescimento)
 
 const NA = 6.022e23, KB = COSTANTI.kB, E0 = 8.854e-12, QE = COSTANTI.e, RAD = Math.PI / 180;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -103,7 +103,7 @@ export const DATI = {
   // --- le rocce, i fiumi, i vulcani: i numeri sono in ROCCE di chimica.js (la fonte unica per l'aria e per il mare)
   densitaRoccia: ROCCE.densita,
   // --- il cloro e lo zolfo
-  intrappolato: 0.05, // la parte del cloro rimasta nel mantello quando il pianeta, nato fuso, si è solidificato: il fuso tra i cristalli (Elkins-Tanton 2008: 1-5%)
+  intrappolato: INTRAPPOLATO, // la parte del cloro rimasta nel mantello quando il pianeta, nato fuso, si è solidificato: il fuso tra i cristalli (Elkins-Tanton 2008: 1-5%; elementi.js, la stessa delle perdite dell'accrescimento)
   perEruzione: { Cl: 0.35, S: 0.9 }, // quanto ne perde un magma che erutta a bassa pressione (inclusioni di fuso contro lava: Moore e Fabbi 1971; Unni e Schilling 1978)
   estrusivo: 1 / 6, pressioneSfiato: 1e7, // la parte del magma che arriva in superficie (Crisp 1984); sotto più di ~100 bar (1000 m d'acqua) il magma non perde zolfo né cloro
   solfuroSaturo: 0.0375, // (mol/kg) lo zolfo che un basalto fuso tiene sciolto prima di separare solfuro (1200 ppm: Mavrogenes e O'Neill 1999)

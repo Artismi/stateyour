@@ -482,6 +482,8 @@ export function gasDellAria(gas = {}) {
 // (entro quanto il ghiaccio messo nel ciclo del carbonio deve coincidere con quello che il clima ne dà: è la tolleranza
 // dichiarata del punto fisso, in frazione della superficie)
 export const CICLO = Object.freeze({ ghiaccio: 1e-3 });
+// (il passo sopra la soglia del termostato: un terzo di CO2 in più, punto 3 di climaEAria)
+export const TERMOSTATO = Object.freeze({ passo: 1.33 });
 export function climaEAria(dati, { Z } = {}) {
   const P = { tipo: dati.tipo, massaKg: dati.massaKg, raggioM: dati.raggioM, composizione: dati.composizione || {}, involucro: dati.involucro || 0 };
   const primo = clima(dati); // (con le leggi di riserva: dice che cosa la gravità trattiene, e da che temperatura cominciare)
@@ -577,10 +579,13 @@ export function climaEAria(dati, { Z } = {}) {
   const prova = (co2) => { const a = ariaDi(275, 'liquida', co2), c = climaDi(a, 275); return { a, c, co2 }; };
   const tutta = prova(1e12);
   if (tutta.c.acqua !== 'ghiaccio') {
-    let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null;
-    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') lo = m; else { hi = m; if (r.c.acqua === 'liquida') scelto = r; } }
+    let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null, gelo = null;
+    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') { lo = m; gelo = r; } else { hi = m; if (r.c.acqua === 'liquida') scelto = r; } }
     // (proprio sulla soglia il mare è in bilico e ci mette un'eternità ad assestarsi: il pianeta sta un passo sopra, un terzo di CO2 in più)
-    if (scelto) { const sopra = prova(scelto.co2 * 1.33); if (sopra.c.acqua === 'liquida') scelto = sopra; return esce(scelto, { termostato: scelto.co2 }); }
+    // (resta scritto anche il capo gelato della ricerca: la CO2 più alta provata a cui il mare gela, con la sua temperatura, e
+    // la larghezza della forchetta: la legge del termostato dice che la CO2 lasciata sta tra il gelo e gelo·forchetta·1,33, e
+    // il salto di temperatura tra i due capi è quello del ghiaccio che sparisce, che scalda da sé)
+    if (scelto) { const sopra = prova(scelto.co2 * TERMOSTATO.passo); if (sopra.c.acqua === 'liquida') scelto = sopra; return esce(scelto, { termostato: scelto.co2, termostatoGelo: Math.exp(lo), termostatoForchetta: Math.exp(hi - lo), termostatoPasso: TERMOSTATO.passo, termostatoGeloT: gelo ? gelo.c.T : null }); }
   }
   // 4. gelato: nemmeno tutta la sua anidride carbonica (che al freddo gela anche lei) lo scioglie
   return esce(cerca('ghiaccio', Math.min(mare.c.T, 270)));

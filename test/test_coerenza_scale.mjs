@@ -36,6 +36,7 @@ import { mare as mareDi } from '../src/camera/mare.js';
 import { probabilitaChi2 } from '../src/camera/bolle.js';
 import { sorgente, contatore } from '../src/camera/eventi.js';
 import * as FI from '../src/camera/finestra.js';
+import * as RE from '../src/camera/reazioni.js';
 import { mareColVento } from './mare_col_vento.mjs';
 
 const T0 = performance.now(), EPS = 2 ** -52, MPC = 3.0857e22, { UA, MSOLE } = LG;
@@ -374,6 +375,14 @@ manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi d
       riga({ c: 'C6', passaggio: 'mare (densità) → finestra di 6 nm (finestra.js, acqua mW)', grandezza: 'molecole d\'acqua per nm³: (messe + tolte dagli ioni) contro mare.js (lo scarto relativo)', padre: 0, figli: dens, tol: 1e3 * EPS, da: 'esatto (la scatola mW portata alla densità: n·ε)' });
       const f0 = Object.keys(attese).sort((a, b) => attese[b] - attese[a])[0];
       riga({ c: 'C6', passaggio: 'mare (concentrazioni) → finestra di 6 nm (6 scatole)', grandezza: `ioni ${f0} (il più abbondante: liberi e in coppia) contati contro attesi`, padre: attese[f0], figli: somme[f0], tol: 4 * Math.sqrt(attese[f0]) + agg, da: `4·√N (Poisson) + ${agg} ioni aggiunti o tolti per la neutralità` }); });
+    // C6 (lavoro 10): la chimica della finestra (reazioni.js). Sei scatole chiuse di 100 nm col padre di finestra.js
+    // (campioneAcqua) e le molecole della resa prebiotica, ognuna lasciata andare con Gillespie: gli atomi di carbonio
+    // contati dopo la storia contro Ω·Σ ν_C·c del padre (Poisson di ogni specie: varianza Σ ν_C²·Ω·c)
+    tempo('chimica della finestra', () => { let C = 0, att = 0, v = 0, ev = 0, sp = 0;
+      for (let q = 0; q < 6; q++) { const L = RE.luogoDelMare(SM, { lon: A0.lon + q * 1e-3, lat: A0.lat, latoM: 1e-7, fondoM: A0.fondoM, pianeta: PM }), S = RE.sistema(L, { profondita: 2, atomiMassimi: 4 }), st = RE.storia(S, { V: L.V, tempo: 1, massimo: 2e4, flussi: null, fasi: null });
+        C += RE.conservate(S, st.motore, st.N).C; ev += st.eventi; sp = Math.max(sp, S.chiavi.length); const Om = st.motore.Om; for (const k in S.luogo.molecole) { const i = S.idx.get(k); if (i == null) continue; const n = S.contenuto[i].C, mu = S.luogo.molecole[k] * Om; att += n * mu; v += n * n * mu; } }
+      riga({ c: 'C6', passaggio: 'mare → finestra chimica di 100 nm (reazioni.js, 6 scatole)', grandezza: `atomi di carbonio dopo la storia (${ev} eventi, fino a ${sp} specie) contro il padre`, padre: att, figli: C, tol: 4 * Math.sqrt(v), da: '4·√(Σ ν_C²·Ω·c) (Poisson di ogni specie; la storia conserva gli atomi)' });
+      const F = RE.chimicaDellaFinestra(SM, { lon: A0.lon, lat: A0.lat, latoM: 1e-6, fondoM: A0.fondoM, pianeta: PM }); console.log(`  la riga dell'app (1 µm, ${Math.round(F.ms)} ms): ${F.riga}`); });
   }
 }
 manca('C6', 'pianeta → regioni della magnetosfera (cosmo.js regione)', 'campo, particelle', 'M', 'le 12 regioni non hanno un riassunto che ridia il pianeta (le bolle dello zoom leggono il dipolo, non lo sommano)');

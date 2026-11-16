@@ -125,6 +125,12 @@ scendendo con la regola 4, darebbero quel punto. Sono infiniti; se ne sceglie un
   di `lingua.peso` e nella distanza tra rami; le galassie e le stelle vere hanno un indirizzo (`vera k`) e `puntoACaso` è
   uniforme sulle stelle vere; le fusioni (`lingua.fondi`) sommano i pesi delle storie decoerenti con la stessa impronta;
   una prima stima dei cervelli di Boltzmann, per mondo: la via evolutiva vince di ~10⁵¹ bit per un pianeta con acqua.
+- Fatto (lavoro 10, `src/camera/reazioni.js`, `test_reazioni`): la vita non si scrive, si guarda. In un luogo (la finestra
+  del mare, la pozza, il camino, i pori della crosta) le specie vengono dalla scala sopra, la rete dalle regole di
+  molecole_reazioni.js, le velocità dal bilancio dettagliato con una tabella sola di energie, la storia da Gillespie con
+  gli eventi del luogo (regola 1 e 3: lo stesso indirizzo, la stessa storia chimica); i rilevatori (RAF di Hordijk e
+  Steel, cicli autocatalitici, membrane sopra la CMC, polimeri che si copiano) dicono che cosa è emerso, e il forward flux
+  sampling è il metodo degli eventi rari. Riassunta, la scatola ridà il carbonio del mare (`test_coerenza_scale`).
 - Manca: le richieste degli altri livelli (roccia e cristallo verso il pianeta, molecola verso l'acqua, macchina
   molecolare verso la storia); la discesa alla superficie dentro la ricerca (oggi è a parte, `inFondo`, ~11 s a
   pianeta: le croste di sale dei mari chiusi si decidono solo lì); il peso dei livelli non lineari è una stima su
@@ -185,7 +191,10 @@ verso il basso le **condizioni** in un punto, verso l'alto i **flussi** e le med
 
 ## 8. Si calcola solo ciò che si guarda
 E alla scala a cui si guarda. Ciò che non è guardato resta una funzione.
-- Fatto: ovunque (memorie piccole, superficie in secondo piano, tessere a richiesta).
+- Fatto: ovunque (memorie piccole, superficie in secondo piano, tessere a richiesta). La chimica di una finestra del mare
+  (reazioni.js) si calcola solo quando la si guarda, dal micron in giù, in 15–120 ms; la rete delle regole cresce solo
+  dove la storia porta materia (espandi); le reazioni che nel tempo guardato non si muovono restano ferme e diventano una
+  conservazione.
 
 ## 9. La nebbia
 Quando le cose vere sono più di quante se ne possano mostrare, se ne mostra un campione che le rappresenta, e si dice

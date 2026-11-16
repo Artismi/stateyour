@@ -219,7 +219,41 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    campione della finestra.)
 10. **La chimica che si muove da sé** (era «la vita in potenza») — la regola zero applicata alla chimica del pianeta, con
    la rilevazione di ciò che emerge e la stima degli eventi rari; da qui i momenti d'osservatore. Base:
-   `reports/Regole per la vita in potenza.md`, riletta come elenco di prove, non di passi.
+   `reports/Regole per la vita in potenza.md`, riletta come elenco di prove, non di passi. (Fatto il primo passo:
+   `src/camera/reazioni.js`, `test_reazioni` (12 prove in ~8 s) e una riga di `test_coerenza_scale`. STATI: le specie di un
+   luogo dalla scala sopra — il campione di mare.js (lo stesso padre della finestra a nanometri), la resa prebiotica dell'aria,
+   le pozze e i camini di mare.js, i pori della crosta —, ognuna Poisson nel volume. LA RETE non è un elenco: è quella delle
+   regole di molecole_reazioni.js (addizioni e aldoliche del formosio, cianidrine e Strecker, condensazione e idrolisi,
+   tautomerie), pigra, potata dal flusso; le reazioni trovate da due regole sono una sola. ENERGIE: una tabella sola
+   (molecole_energia, trasformata rispetto all'acqua); k₋ dal BILANCIO DETTAGLIATO, k₊/k₋ = e^(−Δg), scarto 2·10⁻¹⁶ su 695
+   reazioni del formosio. GILLESPIE con due eventi del luogo («…/chimica/quando», «…/quale», c.serie; leggi esponenziale e
+   discreta dichiarate): stessa storia al bit per lo stesso indirizzo, i tiri annotati con conRegistro; le reazioni 1 ⇌ 1 più
+   veloci della risoluzione in insiemi all'equilibrio (SSA a scala lenta, pesi di Boltzmann); 1,3·10⁵ eventi/s sul formosio
+   intero (882 canali), 2,7·10⁶ su una rete piccola. IL TEMPO GUARDATO: le reazioni che si muovono in τ (κ·τ ≥ 1 all'equilibrio
+   vincolato), le altre ferme e la loro stechiometria una conservazione in più; l'equilibrio è il minimo di G con lo spazio
+   nullo sinistro della matrice stechiometrica (sul formosio ridà equilibrioRete). PROVE: atomi e carica esatti (chiuso, e col
+   bordo entrate − uscite); senza flussi la scatola di Strecker (Ω = 10⁴) rilassa alla media ESATTA della stazionaria di
+   Anderson, Craciun e Kurtz (23,182 ± 0,093 contro 23,194; Gibbs 23,361: l'ordine Ω⁰ è 0,17 molecole) e produce entropia
+   −0,002 ± 0,040 k_B/s; con formaldeide e ammoniaca tenute e l'emiamminale portato via 1020 ± 4,5 k_B/s (serbatoi
+   all'equilibrio: −0,005 ± 0,048); cicli di bagnato e secco (attività 1 e 0,3, fasi di 0,5 s): 42 ± 0,8 k_B/s. RILEVAZIONE:
+   massimo RAF di Hordijk e Steel (un caso con la risposta nota), con la catalisi da regole (cicli stechiometrici di Blokhuis,
+   Brønsted, ioni e minerali); il formosio col seme ha il ciclo di Breslow ed è un RAF di ciò che la rete fa (2 HCHO →
+   glicolaldeide catalizzata dai membri), la sola formaldeide no; membrane (anfifiliche sopra la CMC), polimeri che si copiano
+   (catalisiDa), forward flux sampling (contro il tempo di primo passaggio esatto di una nascita-e-morte: 3,9·10⁻⁵ contro
+   5,0·10⁻⁵ 1/s, errore 31%). DOVE SI È GUARDATO: nel primo mare con il vento, una finestra di 1 µm è un bagno (si rinnova in
+   0,17 ms) dove accadono ~24 reazioni al secondo (formaldeide e HCN a 10⁻⁹ mol/L) e nasce in media due millesimi di molecola:
+   niente RAF, niente membrane; a 10 nm niente si muove; la pozza ~44 al secondo; il camino (565 K, pH 3,5) 4·10¹⁰ al secondo
+   (a quella temperatura tutto è veloce: la finestra si guarda per mezzo microsecondo); nei pori della crosta del primo roccioso con calore (stella 2, 5,8 mW/m², 1,4 K/km) l'H₂
+   della serpentinizzazione (10⁻⁴–10⁻² mol/L tra 0,3 e 3 km) col CO₂ sulla magnetite fa formiato, metandiolo, CO e
+   formaldeide, niente di più grande. L'APP: dal micron in giù la finestra del mare ha la sua riga (mappa.js; 15–120 ms).
+   NON TORNA dichiarati: quattro condensazioni con un ΔG misurato diverso dalla tabella (vale la tabella); la sola formaldeide
+   non fa il primo C–C (manca la via lenta dell'induzione: probabilità zero per le regole); il potassio della crosta non è un
+   numero in elementi.js oggi (la radiolisi non lo conta). MANCA: la rete dei radicali (la fotolisi della luce UV c'è come
+   velocità, non come dinamica); due scatole con pH diversi come luogo solo (il camino alcalino contro il mare); i pozzi
+   misurati senza prodotti (fuori dalla dinamica chiusa: 78 nel formosio); la porosità di Athy con parametri del pianeta (φ₀ e
+   L sono dati per tipo di roccia, ricordati) e la residenza dell'acqua nei pori (libera, 10⁴ anni); la pressione dei pori
+   nelle energie; il calore prodotto nella crosta nel gradiente; le pozze che concentrano le molecole non volatili; la
+   probabilità degli eventi rari sulla chimica vera (l'FFS è provato su un caso esatto, non ancora applicato a un RAF che nasce).)
 11. **Eredità, sviluppo, evoluzione** — la stessa regola un livello sopra. *Eredità*: un polimero che si copia con errori
    (il DNA sulla Terra; altrove quello che la chimica del pianeta permette). *Sviluppo*: il genoma non disegna il corpo,
    regola una rete di geni; i tipi di cellula sono gli stati stabili di quella rete (Kauffman; il paesaggio di Waddington),
