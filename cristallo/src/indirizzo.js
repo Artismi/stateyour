@@ -22,8 +22,8 @@ export const PREDEFINITO = {
   reticolo: { sistema: 'cubico', centratura: 'P', a: 1, b: 1, c: 1, alfa: 90, beta: 90, gamma: 90, piano: false },
   atomi: [{ p: [0, 0, 0], s: 1 }], U0: 1, w: 0.15,
   r0: [0.5, 0.5, 0.5], v0: [2.2, 0.9, 0.4], B: [0, 0, 0], T: 0, difetti: 0,
-  finestra: { C: [0, 0, 0], R: 4, n: [0, 0, 1], psi: 0, L: 4, D: 3, h: 0.3, modo: 'prospettiva' },
-  vista: 'tessera', tempo: 300,
+  finestra: { C: [0, 0, 0], R: 4, n: [0, 0, 1], psi: 0, L: 4, D: 1.5, h: 0.3, modo: 'prospettiva' },
+  vista: 'tessera', tempo: 40,
 };
 
 const num = (x) => (x === Infinity ? 'inf' : x === -Infinity ? '-inf' : Object.is(x, -0) ? '-0' : String(x));
@@ -99,6 +99,6 @@ export function casuale(k) {
   const C = combina(atomi[0].p, A);
   return {
     reticolo: { ...vincola(reticolo), piano: false }, atomi, U0: 1, w, r0, v0, B, T: 0, difetti: 0,
-    finestra: { C, R, n, psi, L, D: 3, h: 0.3, modo: 'prospettiva' }, vista: 'tessera', tempo: 300,
+    finestra: { C, R, n, psi, L, D: 1.5, h: 0.3, modo: 'prospettiva' }, vista: 'tessera', tempo: 40,
   };
 }

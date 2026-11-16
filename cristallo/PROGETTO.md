@@ -17,8 +17,14 @@ linee si tengono come polilinee vere e non come pixel.
 
 - **Lo spazio** con un **cristallo tridimensionale**: una cella, cioè un parallelepipedo con i lati **a**, **b**, **c**,
   ripetuta senza fine nelle tre direzioni.
-  - Si parte dai reticoli più comuni: cubico semplice, cubico a corpo centrato, cubico a facce centrate, esagonale.
-  - Poi si estende ai 14 reticoli di Bravais.
+  - **Tutti e 14 i reticoli di Bravais**, niente reticoli scelti a mano: i parametri sono a, b, c, α, β, γ più la
+    centratura (P, I, F, C/A/B, R), con i vincoli di ogni sistema (triclino, monoclino, ortorombico, tetragonale,
+    trigonale/romboedrico, esagonale, cubico).
+  - Nel piano i reticoli sono 5: obliquo, rettangolare, rettangolare centrato, quadrato, esagonale.
+  - Nel 🎲 si sceglie anche il reticolo (sistema, centratura, parametri dentro i vincoli) dalla fonte del caso.
+  - Nell'interfaccia: i 7 sistemi come piccole forme, la centratura col secondo tocco; il nome tecnico solo in ⓘ.
+  - Prova: per ogni reticolo i vettori rispettano i vincoli del sistema, e l'ordine di simmetria rotazionale trovato
+    numericamente sta in {1, 2, 3, 4, 6} (la restrizione cristallografica).
 - **Gli atomi**: uno o più punti nella cella. Ognuno è una collina, che respinge, o una conca, che attira.
 - **Le palline**: punti con massa e carica, lanciati da un punto in una direzione dello spazio con una velocità.
 - **Il piano** resta come caso particolare: un cristallo sottilissimo, comodo per imparare.
@@ -37,9 +43,20 @@ Il pattern è ciò che si vede attraverso una **finestra piana** dentro il crist
 - **ψ** è la rotazione della finestra attorno al proprio asse;
 - **L** è il lato della finestra, **h** il suo spessore.
 
-Che cosa si vede: i tratti di traiettoria che passano nella lastra di spessore h attorno al piano, proiettati sul
-piano. Con h piccolo si vedono punti e trattini (la «sezione»); con h grande si vedono linee lunghe (la «lastra»).
-In seguito si può aggiungere una vista in prospettiva, dalla finestra verso C, con distanza focale R.
+**La vista principale è la prospettiva.** L'occhio sta nel baricentro della finestra, sulla sfera, e guarda verso C
+lungo l'asse; il piano della finestra è il piano dell'immagine. Nel riferimento della finestra, con z lungo l'asse
+verso C, le traiettorie 3D vanno sull'immagine in x' = f·x/z, y' = f·y/z, con f = R.
+- Si vede ciò che sta davanti alla finestra entro una profondità dichiarata (fino a 2R da dentro il cristallo; da
+  lontano una lastra di spessore 2D attorno a C). Il campo visivo viene da L e da f.
+- Il limite R → ∞ è la proiezione parallela: lì la ripetizione del reticolo sull'immagine è esatta, mentre in
+  prospettiva le file convergono verso i punti di fuga, come in un corridoio. È un'unica manopola fisica, la distanza
+  R, da «dentro il cristallo» (prospettiva forte) a «lontanissimo» (carta da parati).
+- Le prove su (hkl) e sul periodo valgono nel limite parallelo; in prospettiva si prova che i punti di fuga sono quelli
+  delle direzioni del reticolo.
+- Le copie della tessera si generano solo nel tronco di piramide visibile, ordinate per distanza; con la profondità le
+  linee si attenuano (luminosità (R/z)², al più 1).
+- **La sezione e la lastra** restano come modalità secondaria: i tratti nella lastra di spessore h attorno al piano,
+  proiettati sul piano. Con h piccolo si vedono punti e trattini; con h grande linee lunghe.
 
 **Nella creazione casuale (🎲) l'angolo fa parte del caso:**
 - n è presa uniforme sulla sfera, cioè cos θ uniforme in [−1, 1] e φ uniforme in [0, 2π);

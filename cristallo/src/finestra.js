@@ -44,23 +44,25 @@ export function assiFinestra(n, psi) {
 export function creaFinestra(o) {
   const n = versore(o.n), C = [...o.C], R = o.R, L = o.L ?? 4, D = o.D ?? PROFONDITA, h = o.h ?? 0.3, psi = o.psi ?? 0;
   const modo = o.modo ?? 'prospettiva', parallela = !Number.isFinite(R) || modo === 'lastra';
+  // l'aspetto (altezza/larghezza dell'immagine) serve solo allo schermo: L è la larghezza, L·aspetto l'altezza
+  const asp = o.aspetto ?? 1;
   const { e1, e2, k } = assiFinestra(n, psi);
   const P0 = Number.isFinite(R) ? [C[0] + R * n[0], C[1] + R * n[1], C[2] + R * n[2]] : null;
   // coordinate della finestra, misurate da C: u = (x − C)·e₁, v = (x − C)·e₂, z = (x − C)·k (z = 0 su C, z = −R sull'occhio)
-  const L2 = L / 2;
+  const L2 = L / 2, H2 = (L * asp) / 2;
   let piani, z1 = 0, z2 = 0;
   if (modo === 'lastra') {
     const zc = Number.isFinite(R) ? -R : 0; // il piano della finestra
-    piani = [[1, 0, 0, L2], [-1, 0, 0, L2], [0, 1, 0, L2], [0, -1, 0, L2], [0, 0, 1, zc + h / 2], [0, 0, -1, -(zc - h / 2)]];
+    piani = [[1, 0, 0, L2], [-1, 0, 0, L2], [0, 1, 0, H2], [0, -1, 0, H2], [0, 0, 1, zc + h / 2], [0, 0, -1, -(zc - h / 2)]];
   } else if (parallela) {
-    piani = [[1, 0, 0, L2], [-1, 0, 0, L2], [0, 1, 0, L2], [0, -1, 0, L2], [0, 0, 1, D], [0, 0, -1, D]];
+    piani = [[1, 0, 0, L2], [-1, 0, 0, L2], [0, 1, 0, H2], [0, -1, 0, H2], [0, 0, 1, D], [0, 0, -1, D]];
   } else {
     // profondità dall'occhio z_occhio = R + z; |u| ≤ (L/2)·z_occhio/R  →  R·u − (L/2)·z ≤ (L/2)·R
     z1 = Math.max(R / 4, R - D); z2 = Math.min(2 * R, R + D);
-    piani = [[R, 0, -L2, L2 * R], [-R, 0, -L2, L2 * R], [0, R, -L2, L2 * R], [0, -R, -L2, L2 * R], [0, 0, -1, R - z1], [0, 0, 1, z2 - R]];
+    piani = [[R, 0, -L2, L2 * R], [-R, 0, -L2, L2 * R], [0, R, -H2, H2 * R], [0, -R, -H2, H2 * R], [0, 0, -1, R - z1], [0, 0, 1, z2 - R]];
   }
   const f = {
-    C, R, n, psi, L, D, h, modo, parallela, e1, e2, k, P0, piani, z1, z2,
+    C, R, n, psi, L, D, h, modo, parallela, aspetto: asp, e1, e2, k, P0, piani, z1, z2,
     // dal mondo alle coordinate della finestra
     aFinestra: (x) => { const d = [x[0] - C[0], x[1] - C[1], x[2] - C[2]]; return [punto(d, e1), punto(d, e2), punto(d, k)]; },
     // dalle coordinate della finestra all'immagine [X, Y, luminosità]
@@ -76,9 +78,9 @@ export function creaFinestra(o) {
   // gli otto vertici del volume visibile, nel mondo
   const vert = [];
   for (const zz of modo === 'lastra' ? [(Number.isFinite(R) ? -R : 0) - h / 2, (Number.isFinite(R) ? -R : 0) + h / 2] : parallela ? [-D, D] : [z1 - R, z2 - R]) {
-    const m = parallela ? L2 : (L2 * (R + zz)) / R;
+    const m = parallela ? 1 : (R + zz) / R;
     for (const su of [-1, 1]) for (const sv of [-1, 1]) {
-      const u = su * m, v = sv * m;
+      const u = su * m * L2, v = sv * m * H2;
       vert.push([C[0] + u * e1[0] + v * e2[0] + zz * k[0], C[1] + u * e1[1] + v * e2[1] + zz * k[1], C[2] + u * e1[2] + v * e2[2] + zz * k[2]]);
     }
   }
