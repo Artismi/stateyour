@@ -21,6 +21,9 @@ Un indirizzo dopo `#` nell'URL apre quel pattern.
 - ⚪ ↔ ✴️ la sorgente simmetrica (da Lewis F. Day, «Pattern Design», 1903: ribaltamento e rotazione): il punto
   toccato scatta sul sito simmetrico più vicino, e da lì partono le palline nelle direzioni equivalenti per il gruppo
   del sito, trovato numericamente dal reticolo e dagli atomi (`src/simmetria.js`).
+- ⭕ le linee chiuse: il catalogo delle orbite periodiche del cristallo (nel piano) a quell'energia, trovate col tiro
+  di Newton (`src/orbite.js`); un tocco ne sceglie una o più, disegnate una volta a spessore costante e ripetute dal
+  reticolo (con ✴️ anche le sorelle per simmetria). 🎨 il controcampo di Day: le regioni tra le linee a scacchi.
 - 🦴 lo scheletro: la griglia del reticolo in trasparenza, in prospettiva coi suoi punti di fuga, nel limite parallelo
   la griglia del piano (hkl).
 - 🧲 il magnete (lungo la direzione da cui si guarda), 🐢/🐇 la velocità, ❄️/🔥 la temperatura.
@@ -47,6 +50,12 @@ cerchi, convergenza, determinismo), finestra (asse e R, tagli, periodo (hkl) nel
 irrazionali, 🎲 uniforme, punti di fuga), pattern attesi (canale, intreccio, fiori, rosette e salti), zona pulita, sorgente simmetrica (gruppo del sito e
 invarianza del disegno entro l'aritmetica). `node prove/sorgente.cjs '<lista json di indirizzi>'` rifà le schermate 10 e 11.
 `node prove/schermate.cjs` prova l'interfaccia in Chromium e rifà le schermate in `prove/schermate/`.
+
+## Ricerca di motivi simili a delle tavole
+
+`node strumenti/cerca_orbite.mjs <riferimenti> <uscita> [minuti]` cerca tra le orbite periodiche, con la distanza di
+chamfer dopo l'allineamento di reticolo e scala (`strumenti/cerca_riferimenti.mjs` è la prima prova, con lo spettro).
+I motivi trovati per le tavole di L. F. Day sono in `prove/day/` (le tavole no).
 
 ## Da fare
 

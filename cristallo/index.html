@@ -15,12 +15,12 @@
   #frase2 { font-size: 15px; color: #a9b8e8; margin-top: 4px; min-height: 18px; }
   #barra { position: absolute; left: 0; right: 0; bottom: 0; height: 118px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px;
     background: linear-gradient(to top, rgba(10,14,26,0.98), rgba(10,14,26,0.9)); border-top: 1px solid var(--bordo); }
-  .tasto { width: 84px; height: 84px; border-radius: 22px; border: 1px solid var(--bordo); background: var(--vetro); color: var(--testo); font-size: 42px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .08s, background .2s; padding: 0; }
+  .tasto { width: 76px; height: 76px; border-radius: 22px; border: 1px solid var(--bordo); background: var(--vetro); color: var(--testo); font-size: 42px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .08s, background .2s; padding: 0; }
   .tasto:active { transform: scale(0.93); }
   .tasto.acceso { background: rgba(70, 100, 190, 0.55); border-color: rgba(170, 200, 255, 0.6); }
-  .manopola { display: flex; align-items: center; gap: 6px; height: 84px; padding: 0 12px; border-radius: 22px; border: 1px solid var(--bordo); background: var(--vetro); }
+  .manopola { display: flex; align-items: center; gap: 4px; height: 76px; padding: 0 12px; border-radius: 22px; border: 1px solid var(--bordo); background: var(--vetro); }
   .manopola span { font-size: 34px; }
-  .manopola input { -webkit-appearance: none; appearance: none; width: 100px; height: 14px; border-radius: 7px; background: rgba(255,255,255,0.14); outline: none; }
+  .manopola input { -webkit-appearance: none; appearance: none; width: 84px; height: 14px; border-radius: 7px; background: rgba(255,255,255,0.14); outline: none; }
   .manopola input::-webkit-slider-thumb { -webkit-appearance: none; width: 42px; height: 42px; border-radius: 50%; background: #e8eeff; box-shadow: 0 0 12px rgba(160,190,255,0.8); cursor: pointer; }
   #m-magnete input::-webkit-slider-thumb { background: var(--magnete); box-shadow: 0 0 14px rgba(255,92,138,0.9); }
   #m-velocita input::-webkit-slider-thumb { background: #7fe0ff; }
@@ -32,6 +32,9 @@
   .vassoio.aperto { display: block; }
   #v-cristallo { left: 16px; }
   #v-globo { left: 50%; transform: translateX(-50%); }
+  #v-chiuse { right: 16px; }
+  .orbita { width: 96px; height: 96px; border-radius: 16px; border: 1px solid var(--bordo); background: rgba(255,255,255,0.04); cursor: pointer; }
+  .orbita.scelta { background: rgba(90,130,230,0.45); border-color: rgba(190,210,255,0.8); }
   #frase-globo { text-align: center; font-size: 17px; color: #cfe0ff; margin-top: 10px; min-height: 22px; }
   .forme { display: flex; gap: 10px; margin-bottom: 14px; }
   .forma { width: 74px; height: 74px; border-radius: 18px; border: 1px solid var(--bordo); background: rgba(255,255,255,0.04); cursor: pointer; padding: 0; }
@@ -73,6 +76,11 @@
   <div id="frase-globo"></div>
 </div>
 
+<div class="vassoio" id="v-chiuse">
+  <div class="riga" style="margin-bottom:12px"><button class="tasto" id="t-campo" title="controcampo">🎨</button><button class="tasto" id="t-pallina2" title="torna alla pallina">⚪</button><div id="chiuse-stato" style="font-size:28px"></div></div>
+  <div id="catalogo" style="display:grid;grid-template-columns:repeat(6,96px);gap:10px;max-width:640px"></div>
+</div>
+
 <div id="barra">
   <button class="tasto" id="t-cristallo" title="cristallo">🧊</button>
   <button class="tasto" id="t-pallina" title="una pallina o una sorgente simmetrica">⚪</button>
@@ -82,6 +90,7 @@
   <button class="tasto" id="t-globo" title="da dove guardi">🌐</button>
   <button class="tasto" id="t-vista" title="tessera / viaggio">🧩</button>
   <button class="tasto" id="t-scheletro" title="lo scheletro del cristallo">🦴</button>
+  <button class="tasto" id="t-chiuse" title="linee chiuse">⭕</button>
   <button class="tasto" id="t-caso" title="sorprendimi">🎲</button>
 </div>
 <script type="module" src="src/ui/app.js"></script>

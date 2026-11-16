@@ -1,0 +1,98 @@
+{
+ "cristalli": 44,
+ "motivi": 266,
+ "riferimenti": [
+  {
+   "nome": "1-quadrati-fig19",
+   "distanza": 0.122,
+   "chamfer": 0.11,
+   "forma": 0.042,
+   "sorelle": 8,
+   "stabile": true,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=1.0056862234742114,-0.21042368496729325,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.4345754259321645,0.13577456536665283,1.0056862234742114,-0.21042368496729325,4.117039357122063,755"
+  },
+  {
+   "nome": "2-esagoni-fig27",
+   "distanza": 0.077,
+   "chamfer": 0.042,
+   "forma": 0.115,
+   "sorelle": 8,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=-0.37950206400477915,-0.9653541903657606,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.0646992061505667,0.6189513382190859,-0.37950206400477915,-0.9653541903657606,4.1405409489385026,759"
+  },
+  {
+   "nome": "3-stelle-fig30",
+   "distanza": 0.05,
+   "chamfer": 0.041,
+   "forma": 0.029,
+   "sorelle": 4,
+   "stabile": true,
+   "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=+0,0.5,0;-0.5,0.5,0;+0,0,0 U0=1 w=0.2246197542665417 r0=0.5,0,0 v0=-1.0500321596919093,0.37307094942323804,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.6667973076078753,0.05537502986522036,-1.0500321596919093,0.37307094942323804,3.0320969190364857,341"
+  },
+  {
+   "nome": "4-ogive-fig51",
+   "distanza": 0.077,
+   "chamfer": 0.049,
+   "forma": 0.093,
+   "sorelle": 4,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=+0.5,0.5,0;-0,0,0;-0,0.5,0 U0=1 w=0.25873200292189447 r0=0.5,0,0 v0=-0.3051681492343208,-1.0348824373794885,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.8768399534716131,0.2146370240622405,-0.3051681492343208,-1.0348824373794885,4.55939756687753,308"
+  },
+  {
+   "nome": "5-intreccio-fig33",
+   "distanza": 0.018,
+   "chamfer": 0.018,
+   "forma": 0,
+   "sorelle": 8,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=-0.37950206400477915,-0.9653541903657606,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.0646992061505667,0.6189513382190859,-0.37950206400477915,-0.9653541903657606,4.1405409489385026,759"
+  },
+  {
+   "nome": "6-cerchi-fig46",
+   "distanza": 0.04,
+   "chamfer": 0.04,
+   "forma": 0,
+   "sorelle": 8,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=-0.37950206400477915,-0.9653541903657606,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.0646992061505667,0.6189513382190859,-0.37950206400477915,-0.9653541903657606,4.1405409489385026,759"
+  },
+  {
+   "nome": "7-geometrico-fig185",
+   "distanza": 0.016,
+   "chamfer": 0.016,
+   "forma": 0,
+   "sorelle": 8,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=-0.37950206400477915,-0.9653541903657606,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.0646992061505667,0.6189513382190859,-0.37950206400477915,-0.9653541903657606,4.1405409489385026,759"
+  },
+  {
+   "nome": "8-giro-fig153",
+   "distanza": 0.018,
+   "chamfer": 0.018,
+   "forma": 0,
+   "sorelle": 8,
+   "stabile": false,
+   "indirizzo": "reticolo=piano.quadrato.P a=1 b=1 c=10 alfa=90 beta=90 gamma=90 atomi=+0.5,0.5,0 U0=1 w=0.12243129096126608 r0=0,0,0 v0=-0.37950206400477915,-0.9653541903657606,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.0646992061505667,0.6189513382190859,-0.37950206400477915,-0.9653541903657606,4.1405409489385026,759"
+  }
+ ],
+ "perCaso": [
+  {
+   "n": 1,
+   "orbite": 12,
+   "stabile": true,
+   "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=-0,0.5,0;-0.5,0.5,0;-0.5,0,0 U0=1 w=0.2863213514920071 r0=0,0,0 v0=0.8736655109460164,-0.23756114085896002,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.7676950293898253,0.4281688897866651,0.8736655109460164,-0.23756114085896002,1.163240805056858,47"
+  },
+  {
+   "n": 2,
+   "orbite": 12,
+   "stabile": true,
+   "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=-0,0.5,0;-0.5,0.5,0;-0.5,0,0 U0=1 w=0.2863213514920071 r0=0,0,0 v0=0.6092996900652492,0.6484922211979988,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=0.5644458211089631,0.06522327355317345,0.6092996900652492,0.6484922211979988,1.163344449495187,40"
+  },
+  {
+   "n": 3,
+   "orbite": 12,
+   "stabile": true,
+   "indirizzo": "reticolo=piano.esagonale.P a=1 b=1 c=10 alfa=90 beta=90 gamma=120 atomi=-0,0.5,0;-0.5,0.5,0;-0.5,0,0 U0=1 w=0.2863213514920071 r0=0,0,0 v0=-0.8462923670954776,0.05558558856875567,0 B=0,0,0 T=0 difetti=0 C=0,0,0 R=inf n=0,0,1 psi=0 L=4 D=1.5 h=0.3 modo=prospettiva vista=tessera tempo=40 sorgente=1 orbite=-0.03687934729537364,0.38983776329919373,-0.8462923670954776,0.05558558856875567,1.16383247050186,40"
+  }
+ ]
+}

@@ -31,11 +31,11 @@ function misure() { const r = tela.getBoundingClientRect(); return { w: Math.rou
 const off = tela.transferControlToOffscreen();
 lav.postMessage({ tipo: 'tela', tela: off, ...misure(), dpr }, [off]);
 let ultimaInfo = null;
-lav.onmessage = (e) => { const m = e.data; if (m.tipo === 'stato') { $('frase').textContent = m.frase; $('frase-globo').textContent = m.finestra; ultimaInfo = m; if ($('info').classList.contains('aperto')) pannello(); } };
-let scheletro = false;
-const invia = () => { lav.postMessage({ tipo: 'pattern', p: structuredClone(p), vista: p.vista, scheletro }); disegnaCubetti(); };
+lav.onmessage = (e) => { const m = e.data; if (m.tipo === 'catalogo') { mostraCatalogo(m); return; } if (m.tipo === 'stato') { $('frase').textContent = m.frase; $('frase-globo').textContent = m.finestra; ultimaInfo = m; if ($('info').classList.contains('aperto')) pannello(); } };
+let scheletro = false, campo = false;
+const invia = () => { lav.postMessage({ tipo: 'pattern', p: structuredClone(p), vista: p.vista, scheletro, campo }); disegnaCubetti(); };
 let attesa = null;
-const inviaFinestra = () => { if (attesa) return; attesa = requestAnimationFrame(() => { attesa = null; lav.postMessage({ tipo: 'finestra', finestra: structuredClone(p.finestra), vista: p.vista, scheletro }); }); };
+const inviaFinestra = () => { if (attesa) return; attesa = requestAnimationFrame(() => { attesa = null; lav.postMessage({ tipo: 'finestra', finestra: structuredClone(p.finestra), vista: p.vista, scheletro, campo }); }); };
 window.addEventListener('resize', () => { const m = misure(); sopra.width = m.w; sopra.height = m.h; lav.postMessage({ tipo: 'misura', ...m, dpr }); });
 { const m = misure(); sopra.width = m.w; sopra.height = m.h; }
 
@@ -87,6 +87,52 @@ function vassoio(id, tasto) {
 }
 $('t-cristallo').onclick = () => vassoio('v-cristallo', 't-cristallo');
 $('t-globo').onclick = () => vassoio('v-globo', 't-globo');
+
+// ---------- ⭕ le linee chiuse: il catalogo delle orbite periodiche di questo cristallo a questa energia
+// (nel piano: un cristallo nello spazio diventa il piano del suo sistema; la vista è il limite parallelo, R = ∞)
+const PIANO_DI = { cubico: 'quadrato', tetragonale: 'quadrato', esagonale: 'esagonale', trigonale: 'esagonale', ortorombico: 'rettangolare', monoclino: 'obliquo', triclino: 'obliquo' };
+function aPiano() {
+  const r = p.reticolo;
+  if (!r.piano) {
+    const sistema = PIANO_DI[r.sistema], cent = sistema === 'rettangolare' && r.centratura !== 'P' ? 'C' : 'P';
+    p.reticolo = vincola({ sistema, centratura: cent, piano: true, a: 1, b: r.b, gamma: r.gamma });
+    p.atomi = p.atomi.filter((a) => a.p[2] === 0); if (!p.atomi.length) p.atomi = [{ p: [0, 0, 0], s: 1 }];
+    p.r0 = [p.r0[0], p.r0[1], 0]; p.v0 = [p.v0[0], p.v0[1], 0]; if (Math.hypot(p.v0[0], p.v0[1]) < 0.3) p.v0 = [1, 0.4, 0];
+    p.B = [0, 0, 0];
+  }
+  p.finestra = { ...p.finestra, R: Infinity, n: [0, 0, 1], C: [0, 0, 0] };
+}
+let catalogoOra = [];
+function mostraCatalogo(m) {
+  catalogoOra = m.orbite; const el = $('catalogo'); el.innerHTML = '';
+  $('chiuse-stato').textContent = m.orbite.length ? '' : '…';
+  m.orbite.forEach((o) => {
+    const c = document.createElement('canvas'); c.width = 192; c.height = 192; c.className = 'orbita'; c.classList.toggle('scelta', (p.orbite ?? []).includes(o.testo));
+    const x = c.getContext('2d'), P = o.punti, A = o.A;
+    // la linea ripetuta su 3 × 3 celle, centrata
+    let mx = Infinity, Mx = -Infinity, my = Infinity, My = -Infinity; for (const q of P) { mx = Math.min(mx, q[0]); Mx = Math.max(Mx, q[0]); my = Math.min(my, q[1]); My = Math.max(My, q[1]); }
+    const k = 150 / Math.max(2.2, Mx - mx + 1.2, My - my + 1.2), cx = (mx + Mx) / 2, cy = (my + My) / 2;
+    x.strokeStyle = o.stabile ? '#ffe9b0' : '#9fe3ff'; x.lineWidth = 3; x.lineJoin = 'round';
+    for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+      const tx = i * A[0][0] + j * A[1][0], ty = i * A[0][1] + j * A[1][1];
+      x.beginPath(); P.forEach((q, n) => { const X = 96 + (q[0] + tx - cx) * k, Y = 96 - (q[1] + ty - cy) * k; if (n) x.lineTo(X, Y); else x.moveTo(X, Y); }); x.stroke();
+    }
+    c.onclick = () => {
+      const l = new Set(p.orbite ?? []); if (l.has(o.testo)) l.delete(o.testo); else l.add(o.testo);
+      p.orbite = [...l]; c.classList.toggle('scelta', l.has(o.testo)); invia(); ricorda();
+    };
+    el.appendChild(c);
+  });
+}
+$('t-chiuse').onclick = () => {
+  vassoio('v-chiuse', 't-chiuse');
+  if (!$('v-chiuse').classList.contains('aperto')) return;
+  aPiano(); aggiornaManopole(); invia();
+  $('catalogo').innerHTML = ''; $('chiuse-stato').textContent = '⏳';
+  lav.postMessage({ tipo: 'catalogo', p: structuredClone(p) });
+};
+$('t-campo').onclick = () => { campo = !campo; $('t-campo').classList.toggle('acceso', campo); inviaFinestra(); };
+$('t-pallina2').onclick = () => { p.orbite = []; invia(); ricorda(); mostraCatalogo({ orbite: catalogoOra }); };
 
 // ---------- il cristallo: i 7 sistemi come piccole forme, la centratura col secondo tocco
 const FORME = {

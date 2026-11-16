@@ -9,7 +9,9 @@
 import { creaSorgente } from '../motore.js';
 import { creaFinestra, creaProiettore, copieVisibili, taglia } from '../finestra.js';
 import { descriviDirezione, reticoloDelPiano } from '../indici.js';
-import { combina } from '../reticolo.js';
+import { combina, creaCristallo, vincola } from '../reticolo.js';
+import { tesseraDelleOrbite, controcampo } from '../linee.js';
+import { catalogo, scriviOrbita, punti } from '../orbite.js';
 import { NOMI_TECNICI } from '../reticolo.js';
 
 let tela = null, ctx = null, W = 0, H = 0, dpr = 1;
@@ -21,6 +23,8 @@ const PIENO = 0.8;
 let inchiostro = 0;
 // la sorgente: una o più palline (sessioni), ognuna col suo segno di quanto è già proiettato; lo scheletro acceso o no
 let So = null, fatti = [], scheletro = false;
+// LE LINEE CHIUSE: le orbite periodiche scelte, disegnate una volta a spessore costante; il controcampo (campo) a scacchi
+let linee = null, campo = false, lineeFatte = false;
 
 const COLORI = 10; // la velocità: lenta calda (arancio), veloce fredda (azzurro)
 const tinta = (i) => { const t = i / (COLORI - 1); return `hsl(${28 + 172 * t}, ${90 - 10 * t}%, ${62 + 8 * t}%)`; };
@@ -116,21 +120,50 @@ function disegnaScheletro() {
 
 function nuovoProiettore() {
   fin = creaFinestra({ ...p.finestra, aspetto: H / W });
-  P = creaProiettore(fin, S.cristallo, vista === 'tessera');
-  inchiostro = 0; fatti = So ? So.sessioni.map(() => 0) : []; pulisci(); disegnaScheletro(); disegnaAtomi();
+  P = creaProiettore(fin, S.cristallo, linee ? true : vista === 'tessera');
+  lineeFatte = false;
+  inchiostro = 0; fatti = So ? So.sessioni.map(() => 0) : []; pulisci(); disegnaScheletro(); if (!(linee && campo)) disegnaAtomi();
 }
 
 function informa(forza = false) {
   if (!S) return;
   if (!forza && (giro++ % 8)) return;
   const d = descriviDirezione(p.finestra.n, S.cristallo, S.d);
-  self.postMessage({ tipo: 'stato', frase: S.frase(), finestra: d.frase, info: {
+  const frase = linee ? `linee chiuse: ${linee.orbite.length === 1 ? 'un\'orbita' : `${linee.orbite.length} orbite`} che tornano su sé stesse` : S.frase();
+  self.postMessage({ tipo: 'stato', frase, finestra: d.frase, info: {
     nome: NOMI_TECNICI[S.cristallo.nome] ?? S.cristallo.nome, dt: S.dt, passi: S.passi, passiTotali: S.passiTotali, tratti: P?.emessi ?? 0,
     copie: P?.copie.length ?? 0, zona: S.zona, inchiostro, finito: S.finito, primoMs: primoMostrato ? primo : null, palline: So?.sessioni.length ?? 1, ordine: So?.ordine ?? null, specchi: So?.specchi ?? null, elementi: So?.elementi ?? null, vmax: S.scelta.vmax, immagini: S.cristallo.immagini,
   } });
 }
 
+// le linee chiuse: tutte insieme, una volta; col controcampo, le regioni tra le linee in due toni (pari e dispari)
+const TINTE = ['#ffe9b0', '#9fe3ff', '#ffb0d0', '#b8ffb0', '#d0b8ff', '#ffd0a0'];
+function disegnaLinee() {
+  const t = linee.tessera, s = P.proietta(t.s, t.vel, 0, t.n), k = scala(), cx = W / 2, cy = H / 2;
+  if (campo) {
+    const w2 = Math.round(W / 2), h2 = Math.round(H / 2), oc = new OffscreenCanvas(w2, h2), o = oc.getContext('2d');
+    o.fillStyle = '#000'; o.fillRect(0, 0, w2, h2); o.strokeStyle = '#fff'; o.lineWidth = 2; o.beginPath();
+    for (let q = 0; q < s.length; q += 6) { o.moveTo((cx + s[q] * k) / 2, (cy - s[q + 1] * k) / 2); o.lineTo((cx + s[q + 2] * k) / 2, (cy - s[q + 3] * k) / 2); }
+    o.stroke();
+    const dati = o.getImageData(0, 0, w2, h2), m = new Uint8Array(w2 * h2);
+    for (let i = 0; i < w2 * h2; i++) m[i] = dati.data[4 * i] > 60 ? 1 : 0;
+    const cc = controcampo(m, w2, h2);
+    for (let i = 0; i < w2 * h2; i++) { const [r, g, b] = cc[i] === 2 ? [196, 160, 98] : [14, 20, 38]; dati.data[4 * i] = r; dati.data[4 * i + 1] = g; dati.data[4 * i + 2] = b; dati.data[4 * i + 3] = 255; }
+    o.putImageData(dati, 0, 0);
+    ctx.globalCompositeOperation = 'source-over'; ctx.imageSmoothingEnabled = true; ctx.drawImage(oc, 0, 0, W, H);
+    if (scheletro) disegnaScheletro();
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.lineWidth = 2.2 * dpr; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const per = new Map(); for (let q = 0; q < s.length; q += 6) { const i = s[q + 5] % TINTE.length; if (!per.has(i)) per.set(i, []); per.get(i).push(q); }
+  for (const [i, lista] of per) {
+    ctx.strokeStyle = campo ? '#f6ecd2' : TINTE[i]; ctx.shadowColor = campo ? 'transparent' : TINTE[i]; ctx.shadowBlur = campo ? 0 : 6 * dpr;
+    ctx.beginPath(); for (const q of lista) { ctx.moveTo(cx + s[q] * k, cy - s[q + 1] * k); ctx.lineTo(cx + s[q + 2] * k, cy - s[q + 3] * k); } ctx.stroke();
+  }
+  ctx.shadowBlur = 0; lineeFatte = true; P.emessi = s.length / 6;
+}
+
 function tic() {
+  if (linee && ctx && P) { if (!lineeFatte) { disegnaLinee(); if (!primoMostrato) { primoMostrato = true; primo = performance.now() - primo; } informa(true); } return; }
   if (!S || !ctx) return;
   const t0 = performance.now(), ss = So.sessioni;
   // prima si riproietta ciò che c'è già (dopo un cambio di sguardo), poi crescono le linee di tutte le palline
@@ -153,14 +186,23 @@ self.onmessage = (e) => {
   const m = e.data;
   if (m.tipo === 'tela') { tela = m.tela; ctx = tela.getContext('2d'); W = tela.width = m.w; H = tela.height = m.h; dpr = m.dpr; pulisci(); }
   else if (m.tipo === 'misura') { if (tela) { W = tela.width = m.w; H = tela.height = m.h; dpr = m.dpr ?? dpr; if (S) nuovoProiettore(); } }
+  else if (m.tipo === 'catalogo') {
+    // il catalogo delle orbite periodiche di questo cristallo (piano) a questa energia
+    const q = m.p, cr = creaCristallo({ ...vincola(q.reticolo), atomi: q.atomi, w: q.w, U0: q.U0 });
+    const E = 0.5 * (q.v0[0] ** 2 + q.v0[1] ** 2) + cr.campo(q.r0[0], q.r0[1], 0, null);
+    const L = catalogo(cr, E, [0, 0, 0], { semi: 60, max: 12, tempoMax: 2500, radice: `catalogo/${E}` });
+    self.postMessage({ tipo: 'catalogo', E, orbite: L.map((o) => { const P = punti(cr, o, [0, 0, 0]).P, passo = Math.max(1, Math.floor(P.length / 150)); return { testo: scriviOrbita(o), m: o.m, stabile: o.stabile, T: o.T, punti: P.filter((_, i) => i % passo === 0 || i === P.length - 1), A: cr.A }; }) });
+  }
   else if (m.tipo === 'pattern') {
     primo = performance.now(); primoMostrato = false;
     p = m.p; vista = m.vista ?? p.vista ?? 'tessera';
-    So = creaSorgente(p); S = So.sessioni[0]; scheletro = !!m.scheletro;
+    scheletro = !!m.scheletro; campo = !!m.campo;
+    linee = p.orbite?.length ? tesseraDelleOrbite(p) : null;
+    So = creaSorgente(linee ? { ...p, sorgente: 0, tempo: 0.01 } : p); S = So.sessioni[0];
     nuovoProiettore(); informa(true);
   } else if (m.tipo === 'finestra') {
     if (!S) return;
-    p = { ...p, finestra: m.finestra }; vista = m.vista ?? vista; scheletro = !!m.scheletro;
+    p = { ...p, finestra: m.finestra }; vista = m.vista ?? vista; scheletro = !!m.scheletro; campo = !!m.campo;
     nuovoProiettore(); informa(true);
   }
 };

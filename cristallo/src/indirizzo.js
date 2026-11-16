@@ -10,6 +10,8 @@
 // La fonte del caso del pattern (le vibrazioni, i difetti) ha per radice la parte FISICA dell'indirizzo (tutto tranne
 // la finestra e la vista): girare la finestra non cambia il cristallo.
 //
+// LE LINEE CHIUSE (orbite=x,y,vx,vy,T,n;…, scritte solo se ce ne sono): le orbite periodiche scelte (orbite.js),
+// disegnate una volta e ripetute dal reticolo al posto della pallina.
 // LA SORGENTE (sorgente=1, scritta solo se accesa): da r0, che è un sito speciale, partono le palline nelle direzioni
 // dell'orbita di v0 sotto il gruppo del sito (simmetria.js).
 //
@@ -46,7 +48,7 @@ export function scriviFisica(p) {
 export function scrivi(p) {
   const f = p.finestra;
   return [scriviFisica(p), `C=${vet(f.C)}`, `R=${num(f.R)}`, `n=${vet(f.n)}`, `psi=${num(f.psi)}`, `L=${num(f.L)}`, `D=${num(f.D)}`, `h=${num(f.h)}`,
-    `modo=${f.modo}`, `vista=${p.vista}`, `tempo=${num(p.tempo)}`, ...(p.sorgente ? ['sorgente=1'] : [])].join(' ');
+    `modo=${f.modo}`, `vista=${p.vista}`, `tempo=${num(p.tempo)}`, ...(p.sorgente ? ['sorgente=1'] : []), ...(p.orbite?.length ? [`orbite=${p.orbite.join(';')}`] : [])].join(' ');
 }
 
 export function leggi(testo) {
@@ -64,6 +66,7 @@ export function leggi(testo) {
       case 'R': case 'psi': case 'L': case 'D': case 'h': p.finestra[k] = leggiNum(v); break;
       case 'modo': p.finestra.modo = v; break;
       case 'vista': p.vista = v; break;
+      case 'orbite': p.orbite = v.split(';'); break;
       default: throw new Error(`chiave sconosciuta: ${k}`);
     }
   }
