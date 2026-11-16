@@ -38,6 +38,8 @@ import { sorgente, contatore } from '../src/camera/eventi.js';
 import * as FI from '../src/camera/finestra.js';
 import * as RE from '../src/camera/reazioni.js';
 import { mareColVento } from './mare_col_vento.mjs';
+import * as SU from '../src/camera/suolo.js';
+import { terraAsciutta } from './terra_asciutta.mjs';
 
 const T0 = performance.now(), EPS = 2 ** -52, MPC = 3.0857e22, { UA, MSOLE } = LG;
 const P4 = probabilitaChi2(16, 1); // il livello di quattro scarti per un χ²: 6,3·10⁻⁵
@@ -397,6 +399,27 @@ manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi d
         C += RE.conservate(S, st.motore, st.N).C; ev += st.eventi; sp = Math.max(sp, S.chiavi.length); const Om = st.motore.Om; for (const k in S.luogo.molecole) { const i = S.idx.get(k); if (i == null) continue; const n = S.contenuto[i].C, mu = S.luogo.molecole[k] * Om; att += n * mu; v += n * n * mu; } }
       riga({ c: 'C6', passaggio: 'mare → finestra chimica di 100 nm (reazioni.js, 6 scatole)', grandezza: `atomi di carbonio dopo la storia (${ev} eventi, fino a ${sp} specie) contro il padre`, padre: att, figli: C, tol: 4 * Math.sqrt(v), da: '4·√(Σ ν_C²·Ω·c) (Poisson di ogni specie; la storia conserva gli atomi)' });
       const F = RE.chimicaDellaFinestra(SM, { lon: A0.lon, lat: A0.lat, latoM: 1e-6, fondoM: A0.fondoM, pianeta: PM }); console.log(`  la riga dell'app (1 µm, ${Math.round(F.ms)} ms): ${F.riga}`); });
+    // C6 (il suolo, suolo.js; PROGETTO.md lavoro 9): la cella della mappa (il padre) e le finestre del suolo, nello stesso mondo. Il
+    // punto: la terra asciutta più ripida scendendo di tessera in tessera fino a quella del padre (terra_asciutta.mjs). Campioni
+    // indipendenti: più lontani di due tessere dell'ottava più lunga. Tolleranze: 4·sd/√K; la quadratura dei modi 4×4 contro 8×8;
+    // per Darcy il residuo vero del risolutore; per gli atomi 64·ε
+    tempo('suolo', () => { const SS = { k: JSON.stringify(MV.via), P: PM, se: MV.se, cl: MV.cl, seme: PM.origine }, PT = terraAsciutta(SS);
+      if (!PT) { for (const g of ['varianza del rilievo fine', 'porosità della colonna', 'ricarica', 'atomi dell\'acqua dei pori']) manca('C6', 'cella della mappa → finestra del suolo (suolo.js)', g, 'μ', 'nessuna terra asciutta fino alla tessera del padre'); return; }
+      const PA = SU.padreSuolo(SS, PT.lon, PT.lat), tr = SU.trattoSuolo(SS, PT.lon, PT.lat), [xs, ys] = SU.nelTrattoSuolo(tr, PT.lon, PT.lat), bs = SU.bandeSuolo(tr), passo = 2 * bs[bs.length - 1].T, K = 256, Q = [];
+      for (let q = 0; q < K; q++) { const z = SU.rilievoEsatto(tr, xs + (q % 16) * passo, ys + Math.floor(q / 16) * passo, bs).z; Q.push(z * z); }
+      const m = somma(Q) / K, sd = Math.sqrt(somma(Q.map((x) => (x - m) ** 2)) / (K - 1)), disc = bs.reduce((a, B) => a + B.varianza, 0), discK = bs.reduce((a, B) => a + B.curvatura, 0);
+      SU.RILIEVO.quadratura = 8; tr.bande.clear(); const b8 = SU.bandeSuolo(tr), d8 = b8.reduce((a, B) => a + B.varianza, 0), d8K = b8.reduce((a, B) => a + B.curvatura, 0); SU.RILIEVO.quadratura = 4; tr.bande.clear(); SU.bandeSuolo(tr);
+      riga({ c: 'C6', passaggio: `cella della mappa (${num(PA.D, 3)} m) → rilievo fine (suolo.js)`, grandezza: `varianza della quota fine (m²) nelle ottave ${bs[0].b}…${bs[bs.length - 1].b}: Σs dei modi contro ${K} punti`, padre: disc, figli: m, tol: (4 * sd) / Math.sqrt(K), da: `campionamento: 4·sd/√${K}` });
+      riga({ c: 'C6', passaggio: 'cella della mappa → i modi del rilievo fine (suolo.js)', grandezza: `varianza (m²): ∫P sotto la cella (H ${num(PA.H, 3)}, ℓ_c ${num(PA.lc, 3)} m) contro Σs`, padre: PA.spettro.sigma2, figli: disc, tol: 4 * Math.abs(d8 - disc) + 1e-8 * PA.spettro.sigma2, da: 'quadratura: 4·|Σs(4×4) − Σs(8×8)|' });
+      const P2 = []; for (let q = 0; q < 32; q++) { const f = SU.finestraSuolo(SS, { tratto: tr, centro: [xs + (q % 8) * passo, ys + Math.floor(q / 8) * passo], latoM: 10, N: 64 }); P2.push(somma(Array.from(f.campo.porosita)) / f.campo.porosita.length); }
+      const mp = somma(P2) / P2.length, sp2 = Math.sqrt(somma(P2.map((x) => (x - mp) ** 2)) / (P2.length - 1)), fC = (h) => SU.porositaColonna(PA, h, 10), pVisto = SU.mediaSuCurvatura(PA, fC, 1601, discK);
+      riga({ c: 'C6', passaggio: 'cella della mappa → finestre del suolo di 10 m (32)', grandezza: `porosità dei primi 10 m: il padre sulle curvature dei modi contro le finestre (suolo ${num(PA.suolo.h, 3)} m)`, padre: pVisto, figli: mp, tol: (4 * sp2) / Math.sqrt(P2.length) + 64 * EPS * pVisto, da: '4·sd/√32 (le finestre)' });
+      riga({ c: 'C6', passaggio: 'cella della mappa → i modi della curvatura', grandezza: 'porosità dei primi 10 m: il padre su ∫P·k⁴ contro il padre sui modi', padre: PA.suolo.porositaColonna10, figli: pVisto, tol: 4 * Math.abs(SU.mediaSuCurvatura(PA, fC, 1601, d8K) - pVisto) + 4 * Math.abs(SU.mediaSuCurvatura(PA, fC, 3201) - PA.suolo.porositaColonna10) + 64 * EPS * pVisto, da: 'quadratura: modi 4×4 contro 8×8, trapezi 1601 contro 3201' });
+      const SV = SU.sezioneVersante(PA.colonna, { ell: PA.lc });
+      riga({ c: 'C6', passaggio: 'clima (deflusso di meteo.js) → sezione del versante (Darcy)', grandezza: `acqua che esce nel fiume (m²/s) contro la ricarica × ℓ (${num(PA.ricarica * 1000, 3)} mm/anno)`, padre: SV.ricarica, figli: SV.uscita, tol: SV.residuo + 64 * EPS * SV.ricarica, da: 'il residuo vero del risolutore' });
+      riga({ c: 'C6', passaggio: 'sezione del versante → età dell\'acqua (Eriksson)', grandezza: 'età media di ciò che esce (s) contro volume dei pori / ricarica', padre: SV.tempoDiRicambio, figli: SV.etaUscita, tol: (SV.residuo * SV.etaMassima) / SV.uscita + 1e3 * EPS * SV.tempoDiRicambio, da: 'residuo × età più grande (limite rigoroso)' });
+      let peggio = 0; for (const z of [PA.suolo.h / 2, 1000]) { const A = SU.acquaDelPunto(PA, z); for (const e in A.libro.entra) peggio = Math.max(peggio, Math.abs((A.libro.esce[e] || 0) - A.libro.entra[e]) / (A.libro.entra[e] + (A.libro.esce[e] || 0))); }
+      riga({ c: 'C6', passaggio: 'roccia + CO₂ dell\'aria → acqua dei pori (suolo.js)', grandezza: 'atomi: |esce − entra|/(entra + esce), il peggiore elemento, a metà suolo e a 1 km', padre: 0, figli: peggio, tol: 64 * EPS, da: 'aritmetica: 64·ε' }); });
   }
 }
 manca('C6', 'pianeta → regioni della magnetosfera (cosmo.js regione)', 'campo, particelle', 'M', 'le 12 regioni non hanno un riassunto che ridia il pianeta (le bolle dello zoom leggono il dipolo, non lo sommano)');

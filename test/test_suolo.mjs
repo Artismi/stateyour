@@ -63,23 +63,23 @@ prova('il rilievo fine, lo spessore del suolo e i granelli nella parte in comune
   const [lo2, la2] = SU.dalTrattoSuolo(tr, xc + 0.37, yc - 0.21), F2 = SU.finestraSuolo(S, { lon: lo2, lat: la2, latoM: 1 }); assert.equal(F2.tratto, tr);
   const C1 = F1.campo, C2 = F2.campo; let d = 0, dh = 0, n = 0, s = 0;
   for (let j = 0; j < F1.N; j++) for (let i = 0; i < F1.N; i++) { const gi = F1.gx0 + i - F2.gx0, gj = F1.gy0 + j - F2.gy0; if (gi < 0 || gj < 0 || gi >= F2.N || gj >= F2.N) continue; const a = j * F1.N + i, b = gj * F2.N + gi; d = Math.max(d, Math.abs(C1.Z[a] - C2.Z[b])); dh = Math.max(dh, Math.abs(C1.h[a] - C2.h[b])); s += C1.Z[a] ** 2; n++; }
-  // i granelli di una finestra di 1 mm e di una spostata di 0,3 mm: gli stessi nella parte in comune
-  const G1f = SU.finestraSuolo(S, { lon: PT.lon, lat: PT.lat, latoM: 1e-3 }), [lo3, la3] = SU.dalTrattoSuolo(tr, xc + 3e-4, yc + 1e-4), G2f = SU.finestraSuolo(S, { lon: lo3, lat: la3, latoM: 1e-3 });
+  // i granelli di una finestra larga quattro grani della classe più grossa e di una spostata di un grano: gli stessi nella parte in comune
+  const Lg = 4 * Math.max(...su.gsd.classi.map((c) => c.d50)), G1f = SU.finestraSuolo(S, { tratto: tr, centro: [xc, yc], latoM: Lg }), G2f = SU.finestraSuolo(S, { tratto: tr, centro: [xc + Lg / 4, yc + Lg / 8], latoM: Lg });
   const dentro = (f, g) => g.x >= f.x0 && g.x < f.x0 + f.L && g.y >= f.y0 && g.y < f.y0 + f.L, G1 = SU.granelli(G1f).lista, G2 = SU.granelli(G2f).lista, chiave = (g) => `${g.minerale}|${g.x}|${g.y}|${g.d}`;
   const comuni1 = new Set(G1.filter((g) => dentro(G1f, g) && dentro(G2f, g)).map(chiave)), comuni2 = new Set(G2.filter((g) => dentro(G1f, g) && dentro(G2f, g)).map(chiave)); let diversi = 0; for (const k of comuni1) if (!comuni2.has(k)) diversi++; for (const k of comuni2) if (!comuni1.has(k)) diversi++;
-  console.log(`      1 m: ${n} punti in comune, scarto massimo della quota ${num(d)} m (rms del rilievo ${num(Math.sqrt(s / n))} m), del suolo ${num(dh)} m; 1 mm: ${comuni1.size} granelli in comune, ${diversi} diversi`);
+  console.log(`      1 m: ${n} punti in comune, scarto massimo della quota ${num(d)} m (rms del rilievo ${num(Math.sqrt(s / n))} m), del suolo ${num(dh)} m; ${num(Lg * 1000)} mm: ${comuni1.size} granelli in comune, ${diversi} diversi`);
   assert.ok(n > 1000 && d === 0 && dh === 0 && diversi === 0 && comuni1.size > 0);
 });
 
 // =====================================================================================================================
 console.log('C. lo spettro riassunto ridà la varianza della cella');
-const bande = SU.bandeSuolo(tr), Ttop = bande[bande.length - 1].T, PASSO = 2 * Ttop;
+let CURV = null; const bande = SU.bandeSuolo(tr), Ttop = bande[bande.length - 1].T, PASSO = 2 * Ttop;
 prova('la varianza della quota fine (e della curvatura lisciata) su punti indipendenti contro Σs dei modi, e Σs contro l\'integrale dello spettro sotto la cella', () => {
   const K = 256, Q = [], Kq = [];
   for (let q = 0; q < K; q++) { const r = SU.rilievoEsatto(tr, xc + (q % 16) * PASSO + 0.123, yc + Math.floor(q / 16) * PASSO - 0.071, bande); Q.push(r.z * r.z); Kq.push(r.kappa * r.kappa); }
   const discreto = bande.reduce((a, B) => a + B.varianza, 0), discretoK = bande.reduce((a, B) => a + B.curvatura, 0), m = media(Q), tol = (QUATTRO * scarto(Q)) / Math.sqrt(K), mk = media(Kq), tolk = (QUATTRO * scarto(Kq)) / Math.sqrt(K);
   SU.RILIEVO.quadratura = 8; tr.bande.clear(); const b8 = SU.bandeSuolo(tr), d8 = b8.reduce((a, B) => a + B.varianza, 0), d8k = b8.reduce((a, B) => a + B.curvatura, 0); SU.RILIEVO.quadratura = 4; tr.bande.clear(); SU.bandeSuolo(tr);
-  const tolQ = QUATTRO * Math.abs(d8 - discreto), tolQk = QUATTRO * Math.abs(d8k - discretoK);
+  const tolQ = QUATTRO * Math.abs(d8 - discreto), tolQk = QUATTRO * Math.abs(d8k - discretoK); CURV = { d4: discretoK, d8: d8k };
   console.log(`      ${bande.length} ottave (${bande[0].b}…${bande[bande.length - 1].b}); quota: ${K} punti ${num(m)} m² contro Σs ${num(discreto)} ± ${num(tol)}; Σs contro ∫P ${num(sp.sigma2)} ± ${num(tolQ)} (4×4 contro 8×8)`);
   console.log(`      curvatura lisciata: ${num(mk)} contro Σs·k⁴ ${num(discretoK)} ± ${num(tolk)}; contro ∫P·k⁴ ${num(sp.sigma2k)} ± ${num(tolQk)}`);
   assert.ok(Math.abs(m - discreto) <= tol, 'le finestre contro i modi'); assert.ok(Math.abs(discreto - sp.sigma2) <= tolQ + 1e-8 * sp.sigma2, 'i modi contro lo spettro');
@@ -90,12 +90,13 @@ prova('la varianza della quota fine (e della curvatura lisciata) su punti indipe
 console.log('D. la porosità media di una colonna ridà quella del padre');
 prova('64 finestre di 10 m indipendenti: la porosità dei primi 10 m (suolo di Heimsath sulla curvatura del punto, poi Athy) contro la media del padre sull\'insieme delle curvature', () => {
   const K = 64, Q = []; let sotto = 0, vista = 0, hMin = Infinity, hMax = 0;
-  for (let q = 0; q < K; q++) { const [lo, la] = SU.dalTrattoSuolo(tr, xc + (q % 8) * PASSO, yc + Math.floor(q / 8) * PASSO), f = SU.finestraSuolo(S, { lon: lo, lat: la, latoM: 10 }); Q.push(media(Array.from(f.campo.porosita))); sotto = Math.max(sotto, f.curvaturaSotto); vista = f.curvaturaVista; for (const h of f.campo.h) { hMin = Math.min(hMin, h); hMax = Math.max(hMax, h); } }
-  const padreVisto = SU.mediaSuCurvatura(PA, (h) => SU.porositaColonna(PA, h, 10), 1601, vista), padre = su.porositaColonna10, padre2 = SU.mediaSuCurvatura(PA, (h) => SU.porositaColonna(PA, h, 10), 3201);
-  const m = media(Q), tol = (QUATTRO * scarto(Q)) / Math.sqrt(K) || 64 * EPS * padre, tolQ = QUATTRO * (Math.abs(padreVisto - SU.mediaSuCurvatura(PA, (h) => SU.porositaColonna(PA, h, 10), 1601, bande.reduce((a, B) => a + B.curvatura, 0))) + Math.abs(padre2 - padre)) + 64 * EPS * padre;
+  for (let q = 0; q < K; q++) { const f = SU.finestraSuolo(S, { tratto: tr, centro: [xc + (q % 8) * PASSO, yc + Math.floor(q / 8) * PASSO], latoM: 10 }); Q.push(media(Array.from(f.campo.porosita))); sotto = Math.max(sotto, f.curvaturaSotto); vista = f.curvaturaVista; for (const h of f.campo.h) { hMin = Math.min(hMin, h); hMax = Math.max(hMax, h); } }
+  const phiCol = (h) => SU.porositaColonna(PA, h, 10), padreVisto = SU.mediaSuCurvatura(PA, phiCol, 1601, vista), padre = su.porositaColonna10, padre2 = SU.mediaSuCurvatura(PA, phiCol, 3201);
+  // (le tolleranze: il campionamento delle finestre; per il padre la quadratura dei modi — la curvatura 4×4 contro 8×8 di C — e i trapezi sulle curvature, 1601 contro 3201 punti)
+  const m = media(Q), tol = (QUATTRO * scarto(Q)) / Math.sqrt(K) || 64 * EPS * padre, tolQ = QUATTRO * (Math.abs(SU.mediaSuCurvatura(PA, phiCol, 1601, CURV.d4) - SU.mediaSuCurvatura(PA, phiCol, 1601, CURV.d8)) + Math.abs(padre2 - padre)) + 64 * EPS * padre;
   console.log(`      finestre ${num(m, 6)} ± ${num(tol)} contro il padre con la curvatura che le finestre vedono ${num(padreVisto, 6)}; il padre (∫P) ${num(padre, 6)} ± ${num(tolQ)} (la quadratura dei modi e delle curvature); curvatura sotto il punto ${num(sotto)} contro ${num(vista)}`);
   console.log(`      lo spessore del suolo nelle finestre va da ${num(hMin)} a ${num(hMax)} m (il padre: ${num(su.h)} m in media)`);
-  assert.ok(Math.abs(m - padreVisto) <= tol + 64 * EPS * padre, 'le finestre contro il padre'); assert.ok(Math.abs(padreVisto - padre) <= tolQ + 1e-6 * (sotto / Math.max(vista, 1e-300)) * padre, 'il padre visto contro il padre');
+  assert.ok(Math.abs(m - padreVisto) <= tol + 64 * EPS * padre, 'le finestre contro il padre'); assert.ok(sotto <= 1e-9 * vista, 'la curvatura che il suolo sente sta tutta nelle ottave della finestra'); assert.ok(Math.abs(padreVisto - padre) <= tolQ, 'il padre visto contro il padre');
 });
 
 // =====================================================================================================================

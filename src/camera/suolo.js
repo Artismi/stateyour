@@ -76,7 +76,10 @@
 // sono le concentrazioni (niente coefficienti di Debye–Hückel); i minerali si sciolgono con le velocità di laboratorio (in
 // natura 10–1000 volte più lente: cambia il tempo per arrivare all'equilibrio, non l'equilibrio); il ferro ossidato
 // (ematite, magnetite) e il ferro metallico non entrano nell'acqua; il pirosseno e l'olivina si sciolgono senza lasciare
-// argille di magnesio; le vescicole e le brecce delle lave (il basalto della Terra ha φ₀ ≈ 0,1 per questo) non ci sono.
+// argille di magnesio; le vescicole e le brecce delle lave (il basalto della Terra ha φ₀ ≈ 0,1 per questo) non ci sono; la
+// colonna usa la partizione di Dupuit (il sistema di flusso regionale): il versante da solo (sezioneVersante) manda in profondità
+// molta meno acqua, e quanto sono lunghi i sistemi regionali la mappa non lo dice; quando il padre è la mappa intera (dal 3D,
+// senza tessere calcolate) H e l'ampiezza si allungano su quattro decadi da celle di ~100 km.
 
 import { EROSIONE, tessera } from './geologia.js';
 import { STORIA } from './storia.js';
@@ -303,7 +306,8 @@ function suoloDelPadre(padre) {
   const prova = (d) => colonna(R, { h: su.h, phi: su.phi, k: su.k, theta: 1 }, { ricarica: padre.ricarica, Tsup: T, q: padre.q, falda: d, eta: padre.eta, g: padre.g });
   let d = 0, col = prova(0); for (let it = 0; it < 6; it++) { const sale = (padre.ricarica / ANNO) * ell * ell / (2 * Math.max(col.T0, 1e-30)); const dn = Math.max(0, 0.5 * (rilievo - sale)); if (Math.abs(dn - d) < 1e-3 * (1 + d)) { d = dn; break; } d = dn; col = prova(d); }
   // sopra la falda: i pori che la capillarità tiene pieni a metà strada tra il suolo e la falda (r < 2σ/(ρ·g·ψ))
-  const psi = Math.max(1e-3, d / 2), rc = (2 * sigma) / (RHO_W * padre.g * psi), theta = d > 0 ? saturazione(su.gsd, rc) : 1;
+  // (e almeno quanto serve a far passare la ricarica: la conducibilità dei pori non pieni K_s·S^3,5, Averjanov 1950 [R])
+  const psi = Math.max(1e-3, d / 2), rc = (2 * sigma) / (RHO_W * padre.g * psi), Ks = (su.k * RHO_W * padre.g) / visc, Sq = Math.min(1, Math.pow(Math.max(padre.ricarica / ANNO, 0) / Ks, 1 / 3.5)), theta = d > 0 ? Math.max(saturazione(su.gsd, rc), Sq) : 1;
   su.theta = theta; su.falda = d; su.salitaCapillare = (2 * sigma) / (RHO_W * padre.g * SUOLO.poroGrano * su.d32);
   padre.colonna = colonna(R, { h: su.h, phi: su.phi, k: su.k, theta }, { ricarica: padre.ricarica, Tsup: T, q: padre.q, falda: d, eta: padre.eta, g: padre.g });
   padre.viscosita = visc; padre.sigma = sigma;
@@ -416,9 +420,11 @@ function rilievoGriglia(t, gx0, gy0, h, nx, ny, bande) {
 // 5. LA FINESTRA: un quadrato di lato L attorno a (lon, lat), alla profondità «profonditaM» per ciò che sta sotto la superficie
 // ======================================================================================================================
 export const FINESTRA = { massimo: 40000 };
-export function finestraSuolo(S, { lon = 0, lat = 0, latoM = 1, N = 128, profonditaM = null, livello = LIVELLO_PADRE, tessera: tt = null } = {}) {
-  const t = trattoSuolo(S, lon, lat, { livello, tessera: tt }); if (!t) return { acqua: true, descrizione: 'Qui c\'è acqua: la finestra è quella del mare (finestra.js).' };
-  const P = t.padre, h = latoM / N, [xc, yc] = nelTrattoSuolo(t, lon, lat), gx0 = Math.floor((xc - latoM / 2) / h), gy0 = Math.floor((yc - latoM / 2) / h), x0 = gx0 * h, y0 = gy0 * h;
+// («tratto» e «centro»: una finestra di quel tratto col centro in quel punto delle sue coordinate, anche fuori dalla cella: la
+// stessa legge, per le prove che vogliono finestre indipendenti dello stesso padre)
+export function finestraSuolo(S, { lon = 0, lat = 0, latoM = 1, N = 128, profonditaM = null, livello = LIVELLO_PADRE, tessera: tt = null, tratto = null, centro = null } = {}) {
+  const t = tratto || trattoSuolo(S, lon, lat, { livello, tessera: tt }); if (!t) return { acqua: true, descrizione: 'Qui c\'è acqua: la finestra è quella del mare (finestra.js).' };
+  const P = t.padre, h = latoM / N, [xc, yc] = centro || nelTrattoSuolo(t, lon, lat), gx0 = Math.floor((xc - latoM / 2) / h), gy0 = Math.floor((yc - latoM / 2) / h), x0 = gx0 * h, y0 = gy0 * h;
   const tutte = bandeSuolo(t), bf = Math.floor(Math.log2(RILIEVO.campioniPerOnda * h)), bande = tutte.filter((B) => B.b >= bf);
   const fin = { S, tratto: t, padre: P, lon, lat, L: N * h, N, h, x0, y0, gx0, gy0, bf, bande, profonditaM: profonditaM ?? Math.max(0.01, P.suolo.h / 2) };
   fin.varianza = bande.reduce((a, B) => a + B.varianza, 0); fin.sottoIlPunto = tutte.filter((B) => B.b < bf).reduce((a, B) => a + B.varianza, 0);
@@ -449,20 +455,25 @@ export function fratture(fin, { lVis = null } = {}) {
   return out;
 }
 // i granelli: il modello booleano dei dischi (la copertura 1 − e^(−n·π⟨r²⟩) = 1 − φ: i vuoti hanno la porosità del suolo), per
-// ogni classe le taglie della sua log-normale (per numero: d50·e^(−3σ²)), solo quelli grandi almeno mezzo punto
+// ogni classe le taglie della sua log-normale (per numero: d50·e^(−3σ²)). Le taglie sono divise in OTTAVE (d tra 2^n e 2^(n+1)
+// metri), ognuna con le sue celle (lato 1/√n dell'ottava) e i suoi eventi: un granello è lo stesso in ogni finestra che lo
+// contiene, a qualunque distanza; una finestra genera solo le ottave che distingue (d ≥ mezzo punto)
 export function granelli(fin, { dVis = null } = {}) {
   const P = fin.padre, su = P.suolo, t = fin.tratto, L = fin.L, dv = dVis ?? 0.5 * fin.h, out = [], conta = [];
-  // la parte di superficie che ogni classe copre (in volume), e il numero per m² che dà quella copertura nel modello booleano
   const vol = su.gsd.classi.reduce((a, c) => a + c.massa / c.rho, 0), lam = -Math.log(Math.max(1e-6, su.phi));
   for (const c of su.gsd.classi) {
-    const sl = c.sigma * Math.LN2, dN = c.d50 * Math.exp(-3 * sl * sl), r2 = 0.25 * dN * dN * Math.exp(2 * sl * sl), nA = ((lam * (c.massa / c.rho)) / vol) / (Math.PI * r2), sopra = 1 - normale(Math.log(dv / dN) / sl);
-    const nVis = nA * sopra; conta.push({ nome: c.nome, perM2: nA, visibili: nVis * L * L, sottoIlPunto: 1 - sopra }); if (!(nVis * L * L >= 0.5)) continue;
-    let lato = 1 / Math.sqrt(nVis); if ((L / lato + 2) ** 2 > FINESTRA.massimo) lato = L / (Math.sqrt(FINESTRA.massimo) - 2);
-    const media = nVis * lato * lato, mar = 3 * dN * Math.exp(2 * sl), i0 = Math.floor((fin.x0 - mar) / lato), i1 = Math.floor((fin.x0 + L + mar) / lato), j0 = Math.floor((fin.y0 - mar) / lato), j1 = Math.floor((fin.y0 + L + mar) / lato);
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const r = generatore(t.caso.seme(`granelli ${c.nome} ${dv.toExponential(2)}/cella ${lato.toExponential(3)}/${i},${j}`)), quante = poisson(r, media);
-      for (let q = 0; q < quante; q++) { const x = (i + r()) * lato, y = (j + r()) * lato, pu = normale(Math.log(dv / dN) / sl) + r() * sopra, d = dN * Math.exp(sl * normaleInv(Math.min(1 - 1e-12, Math.max(1e-12, pu)))), ang = r() * Math.PI, schiaccia = c.argilla ? 0.25 : 0.75 + 0.25 * r();
-        if (x + d < fin.x0 || x - d > fin.x0 + L || y + d < fin.y0 || y - d > fin.y0 + L) continue; out.push({ x, y, d, minerale: c.minerale, colore: c.colore, angolo: ang, schiaccia, argilla: !!c.argilla }); } }
+    const sl = c.sigma * Math.LN2, dN = c.d50 * Math.exp(-3 * sl * sl), r2 = 0.25 * dN * dN * Math.exp(2 * sl * sl), nA = ((lam * (c.massa / c.rho)) / vol) / (Math.PI * r2), Fd = (d) => normale(Math.log(d / dN) / sl), sopra = 1 - Fd(dv);
+    conta.push({ nome: c.nome, perM2: nA, visibili: nA * sopra * L * L, sottoIlPunto: 1 - sopra }); if (!(sopra > 0)) continue;
+    const n0 = Math.floor(Math.log2(dv)), n1 = Math.ceil(Math.log2(dN * Math.exp(6 * sl)));
+    for (let n = n0; n <= n1; n++) { const a = 2 ** n, b = 2 ** (n + 1), Fa = Fd(a), Fb = Fd(b), nO = nA * (Fb - Fa); if (!(nO > 0) || nO * (L + 2 * b) ** 2 < 1e-3) continue;
+      let lato = 1 / Math.sqrt(nO); const mar = b; if (((L + 2 * mar) / lato + 2) ** 2 > FINESTRA.massimo) lato = (L + 2 * mar) / (Math.sqrt(FINESTRA.massimo) - 2);
+      const media = nO * lato * lato, i0 = Math.floor((fin.x0 - mar) / lato), i1 = Math.floor((fin.x0 + L + mar) / lato), j0 = Math.floor((fin.y0 - mar) / lato), j1 = Math.floor((fin.y0 + L + mar) / lato);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const r = generatore(t.caso.seme(`granelli ${c.nome}/ottava ${n}/cella ${lato.toExponential(3)}/${i},${j}`)), quante = poisson(r, media);
+        for (let q = 0; q < quante; q++) { const x = (i + r()) * lato, y = (j + r()) * lato, pu = Fa + r() * (Fb - Fa), d = dN * Math.exp(sl * normaleInv(Math.min(1 - 1e-12, Math.max(1e-12, pu)))), ang = r() * Math.PI, schiaccia = c.argilla ? 0.25 : 0.75 + 0.25 * r();
+          if (d < dv || x + d < fin.x0 || x - d > fin.x0 + L || y + d < fin.y0 || y - d > fin.y0 + L) continue; out.push({ x, y, d, minerale: c.minerale, colore: c.colore, angolo: ang, schiaccia, argilla: !!c.argilla }); } } }
   }
+  // (il modello booleano: chi arriva dopo sta sopra; l'ordine è quello delle taglie, i piccoli sopra i grandi, poi per posizione)
+  out.sort((p, q) => q.d - p.d || p.x - q.x || p.y - q.y);
   return { lista: out, classi: conta };
 }
 const normaleInv = (p) => { const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239], b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1], c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783], d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
@@ -504,7 +515,7 @@ function costantiDi(T) { const k = T.toFixed(3); let c = costanti.get(k); if (c)
 function specia(tot, c, { aperto, pCO2, CT }) {
   const cat = (tot.Na || 0) + (tot.K || 0) + 2 * ((tot.Ca || 0) + (tot.Mg || 0) + (tot.Fe || 0)), co2a = aperto ? c.KH * pCO2 : 0;
   const f = (H) => { let hc, co; if (aperto) { hc = (c.K1 * co2a) / H; co = (c.K2 * hc) / H; } else { const d = 1 + c.K1 / H + (c.K1 * c.K2) / (H * H); hc = ((CT || 0) * (c.K1 / H)) / d; co = (hc * c.K2) / H; } return H + cat - hc - 2 * co - c.Kw / H; };
-  let a = -16, b = 1; for (let it = 0; it < 200; it++) { const m = 0.5 * (a + b); if (f(10 ** m) > 0) b = m; else a = m; if (b - a < 1e-13) break; }
+  let a = -16, b = 1; for (let it = 0; it < 300; it++) { const m = 0.5 * (a + b); if (m === a || m === b) break; if (f(10 ** m) > 0) b = m; else a = m; } // (fino all'ultimo bit)
   const H = 10 ** (0.5 * (a + b)); let CO2, HCO3, CO3; if (aperto) { CO2 = co2a; HCO3 = (c.K1 * CO2) / H; CO3 = (c.K2 * HCO3) / H; } else { const d = 1 + c.K1 / H + (c.K1 * c.K2) / (H * H); CO2 = (CT || 0) / d; HCO3 = (CO2 * c.K1) / H; CO3 = (HCO3 * c.K2) / H; }
   return { H, OH: c.Kw / H, CO2, HCO3, CO3, pH: -Math.log10(H), carica: H + cat - HCO3 - 2 * CO3 - c.Kw / H };
 }
@@ -515,11 +526,12 @@ function logOmega(nome, tot, sp, c) { const M = MISCELE[nome]; let s = 0; const 
 const velocita = (nome, T, H) => { let v = 0; for (const [n, x] of MISCELE[nome].cinetica) { const M = MINERALI_ROCCIA[n], ar = (Ea) => Math.exp(((-1000 * Ea) / R_GAS) * (1 / T - 1 / 298.15)); v += x * (10 ** M[0] * ar(M[1]) + (M[3] > -90 ? 10 ** M[3] * ar(M[5]) * H ** M[4] : 0)); } return v; };
 // roccia: rocciaDelPianeta (i suoi minerali); { T, pCO2 (bar), anni (il tempo di residenza), aperto (sopra la falda), superficie
 // (m² di minerale per kg d'acqua) } → la composizione (mol/kg), il pH, i solidi nati, il libro degli atomi
-export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto = true, superficie = 100, passi = 160 } = {}) {
+// («aree»: m² per kg d'acqua minerale per minerale, se chi chiama le sa; se no «superficie» divisa per la parte in volume)
+export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto = true, superficie = 100, aree: areeDate = null, passi = 160 } = {}) {
   const c = costantiDi(Math.min(Math.max(T, 273.15), 373)), mins = roccia.minerali.filter((m) => MISCELE[m.nome] && m.v > 0), xi = {}, tot = { Na: 0, K: 0, Ca: 0, Mg: 0, Fe: 0, Si: 0 };
   for (const m of mins) xi[m.nome] = 0; let kao = 0, cc = 0, si = 0, acquaUsata = 0;
   const sp0 = specia(tot, c, { aperto: true, pCO2 }), CT0 = sp0.CO2 + sp0.HCO3 + sp0.CO3; let CT = CT0; // (la pioggia arriva in equilibrio con l'aria)
-  const stato = () => specia(tot, c, { aperto, pCO2, CT }), aree = Object.fromEntries(mins.map((m) => [m.nome, superficie * m.v]));
+  const stato = () => specia(tot, c, { aperto, pCO2, CT }), aree = Object.fromEntries(mins.map((m) => [m.nome, areeDate ? areeDate[m.nome] || 0 : superficie * m.v]));
   const sciogli = (m, dx) => { const M = MISCELE[m.nome]; xi[m.nome] += dx; for (const p in M.parti) { const R = REAZ[p], n = M.parti[p] * dx; for (const f in R.prod) { if (f === 'Na+') tot.Na += R.prod[f] * n; else if (f === 'K+') tot.K += R.prod[f] * n; else if (f === 'Ca2+') tot.Ca += R.prod[f] * n; else if (f === 'Mg2+') tot.Mg += R.prod[f] * n; else if (f === 'Fe2+') tot.Fe += R.prod[f] * n; else if (f === 'H4SiO4') tot.Si += R.prod[f] * n; else if (f === 'caolinite') kao += R.prod[f] * n; }
     acquaUsata += (R.reag['H2O(l)'] || 0) * n; } };
   let sp = stato(); const t1 = Math.max(anni, 1e-9) * ANNO, t0 = Math.min(1, t1 / 10); let tPrima = 0;
@@ -535,9 +547,10 @@ export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto 
   }
   sp = stato(); const CTfin = sp.CO2 + sp.HCO3 + sp.CO3;
   // IL LIBRO DEGLI ATOMI: entra (1 kg d'acqua, la CO₂ presa dall'aria, i minerali sciolti) contro esce (l'acqua che resta, le
-  // specie sciolte, i solidi nati). L'acqua consumata: le reazioni, l'idratazione della CO₂ (una per HCO₃⁻ e CO₃²⁻), un OH⁻
-  // per ogni molecola che si divide; la silice che precipita la restituisce
-  const H2O0 = 1 / 0.018015, co2Presa = aperto ? CTfin + cc : CT0, acquaFin = H2O0 - acquaUsata - (sp.HCO3 + sp.CO3) - sp.OH;
+  // specie sciolte, i solidi nati). L'acqua consumata: le reazioni, l'idratazione della CO₂ (una per HCO₃⁻ e CO₃²⁻, e una per
+  // ogni carbonio finito nella calcite: CO₂ + H₂O + Ca²⁺ → CaCO₃ + 2H⁺), un OH⁻ per ogni molecola che si divide; la silice che
+  // precipita la restituisce. (La prova di test_suolo ha trovato la calcite: prima mancava)
+  const H2O0 = 1 / 0.018015, co2Presa = aperto ? CTfin + cc : CT0, acquaFin = H2O0 - acquaUsata - (sp.HCO3 + sp.CO3) - sp.OH - cc;
   const entra = {}, esce = {}; somma(entra, 'H2O(l)', H2O0); somma(entra, 'CO2', co2Presa);
   for (const m of mins) { const M = MISCELE[m.nome]; for (const p in M.parti) somma(entra, Object.keys(REAZ[p].reag)[0], M.parti[p] * xi[m.nome]); }
   somma(esce, 'H2O(l)', acquaFin); somma(esce, 'H+', sp.H); somma(esce, 'OH-', sp.OH); somma(esce, 'CO2(aq)', sp.CO2); somma(esce, 'HCO3-', sp.HCO3); somma(esce, 'CO3(2-)', sp.CO3);
@@ -551,8 +564,12 @@ export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto 
 // superficie dei granelli (6/(ρ·d)) nel suolo, le pareti delle crepe (2/b per volume d'acqua) nella roccia
 export function acquaDelPunto(padre, z) {
   const col = padre.colonna, su = padre.suolo, R = padre.roccia, nelSuolo = z < su.h, T = col.temperatura(z), anni = Math.max(1e-6, col.residenza(z));
-  const sup = nelSuolo ? (6 / (su.rhoSolido * su.d32)) * (((1 - su.phi) * su.rhoSolido) / (su.phi * RHO_W)) : (2 / Math.max(1e-9, R.apertura(Math.sqrt(R.lMin * R.lMax), z - su.h))) / RHO_W;
-  const a = acquaDeiPori(R, { T, pCO2: padre.pCO2, anni, aperto: z < col.falda, superficie: sup });
+  // nel suolo la superficie di ogni minerale è quella dei suoi granelli che restano (6/(ρ·d₃₂) per la sua classe, l'argilla non
+  // conta: è un prodotto), per kg d'acqua dei pori; nella roccia le pareti delle crepe, divise per la parte in volume
+  const kgRoccia = nelSuolo ? ((1 - su.phi) * su.rhoSolido) / (su.phi * RHO_W) : 0, aree = nelSuolo ? {} : null;
+  if (nelSuolo) for (const c of su.gsd.classi) if (!c.argilla) { const sl = c.sigma * Math.LN2; aree[c.minerale] = (aree[c.minerale] || 0) + (kgRoccia * c.massa * 6) / (c.rho * c.d50 * Math.exp(-0.5 * sl * sl)); }
+  const sup = nelSuolo ? Object.values(aree).reduce((x, y) => x + y, 0) : (2 / Math.max(1e-9, R.apertura(Math.sqrt(R.lMin * R.lMax), z - su.h))) / RHO_W;
+  const a = acquaDeiPori(R, { T, pCO2: padre.pCO2, anni, aperto: z < col.falda, superficie: sup, aree });
   return { ...a, z, nelSuolo, superficie: sup };
 }
 
@@ -573,8 +590,17 @@ export function immagineSuolo(fin) {
   const fluido = (dentro) => (dentro ? [LIN(38), LIN(66), LIN(92)] : [LIN(16), LIN(14), LIN(12)]), umido = fin.profonditaM >= su.falda || su.falda <= 0;
   const grandi = su.gsd.classi.some((c) => c.d50 >= 2 * fin.h);
   if (!grandi) { // ---- a metri: il suolo (o la roccia nuda dove il suolo è più sottile di qualche grano), ombreggiato; le crepe dove affiora
+    // (LA NEBBIA DEI GRANELLI: in ogni punto cadono N granelli, Poisson classe per classe con la densità del modello booleano;
+    // il colore del punto è quello dei suoi granelli e dei pori, e ogni granello ha la sua faccia alla luce: lo scarto 0,3 di
+    // Lambert su facce a caso, diviso √N. Un evento per punto, col suo indirizzo nel tratto: «grana h/gx,gy»)
+    const vol = su.gsd.classi.reduce((a, c) => a + c.massa / c.rho, 0), lam = -Math.log(Math.max(1e-6, su.phi)), base = fin.tratto.caso.seme(`grana ${fin.h.toExponential(3)}`) >>> 0;
+    const cl = su.gsd.classi.map((c) => { const sl = c.sigma * Math.LN2, dN = c.d50 * Math.exp(-3 * sl * sl), r2 = 0.25 * dN * dN * Math.exp(2 * sl * sl), nA = ((lam * (c.massa / c.rho)) / vol) / (Math.PI * r2); return { mu: nA * fin.h * fin.h, area: r2, colore: c.colore }; });
+    const muTot = cl.reduce((a, c) => a + c.mu, 0);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i, fs = limita(F.h[j * N + i] / Math.max(4 * R.grano, 0.02), 0, 1), bagnato = su.falda <= 0 ? 0.72 : 1;
-      scrivi(q, [0, 1, 2].map((k) => (cR[k] * (1 - fs) + cS[k] * fs) * bagnato), lume[j * N + i]); }
+      const r = generatore((base ^ Math.imul(fin.gx0 + i, 0x9e3779b1) ^ Math.imul(fin.gy0 + j, 0x85ebca77)) >>> 0), g = gaussiane(r)[0], lista = [];
+      for (const c of cl) { const k = poisson(r, c.mu); if (k) lista.push({ frazione: k * c.area, colore: c.colore }); } // (i colori si mescolano come in una polvere: Kubelka-Munk, chimica.js)
+      const suolo = lista.length ? coloreRoccia(lista).map(LIN) : cS, ombra = 1 + (0.3 * g) / Math.sqrt(Math.max(1, muTot));
+      scrivi(q, [0, 1, 2].map((k) => (cR[k] * (1 - fs) + suolo[k] * fs) * bagnato), lume[j * N + i] * ombra); }
     // (si disegnano le crepe larghe almeno un centesimo di punto: le altre sono il colore della roccia, la nebbia)
     for (const f of fratture(fin, { lVis: (fin.h / (100 * R.c)) ** 2 })) { const n = Math.ceil(Math.hypot(f.x1 - f.x0, f.y1 - f.y0) / (0.5 * fin.h)); for (let s = 0; s <= n; s++) { const x = f.x0 + ((f.x1 - f.x0) * s) / n, y = f.y0 + ((f.y1 - f.y0) * s) / n, i = Math.floor((x - fin.x0) / fin.h), j = Math.floor((y - fin.y0) / fin.h); if (i < 0 || j < 0 || i >= N || j >= N) continue;
       if (F.h[j * N + i] > Math.max(f.b, 2 * R.grano)) continue; const q = (N - 1 - j) * N + i, w = limita(f.b / fin.h, 0, 1); for (let k = 0; k < 3; k++) px[4 * q + k] = Math.round(px[4 * q + k] * (1 - 0.75 * w)); } }
@@ -585,8 +611,9 @@ export function immagineSuolo(fin) {
   // più stretto del raggio che la capillarità tiene pieno (il velo che bagna i grani)
   const gr = granelli(fin), vuoto = new Float32Array(N * N).fill(1e9), pieno = new Uint8Array(N * N), rc = (2 * P.sigma) / (RHO_W * P.g * Math.max(1e-3, su.falda / 2));
   let fFini = 0; const cF = [0, 0, 0]; { let w = 0; for (const c of su.gsd.classi) { const v = c.massa / c.rho, s = gr.classi.find((x) => x.nome === c.nome)?.sottoIlPunto ?? 1; w += v; fFini += v * s; for (let k = 0; k < 3; k++) cF[k] += v * s * LIN(c.colore[k]); } for (let k = 0; k < 3; k++) cF[k] /= Math.max(fFini, 1e-30); fFini = Math.min(1, ((fFini / w) * (1 - su.phi)) / Math.max(1e-6, su.phi + (fFini / w) * (1 - su.phi))); }
+  const orlo = Math.min(64, rc / fin.h) + 2; // (fin dove il velo d'acqua può arrivare attorno a un granello)
   for (const g of gr.lista) { const r = g.d / 2, cx = (g.x - fin.x0) / fin.h, cy = (g.y - fin.y0) / fin.h, rp = r / fin.h, ca = Math.cos(g.angolo), sa = Math.sin(g.angolo), col = g.colore.map(LIN);
-    for (let j = Math.max(0, Math.floor(cy - rp - 2)); j <= Math.min(N - 1, Math.ceil(cy + rp + 2)); j++) for (let i = Math.max(0, Math.floor(cx - rp - 2)); i <= Math.min(N - 1, Math.ceil(cx + rp + 2)); i++) {
+    for (let j = Math.max(0, Math.floor(cy - rp - orlo)); j <= Math.min(N - 1, Math.ceil(cy + rp + orlo)); j++) for (let i = Math.max(0, Math.floor(cx - rp - orlo)); i <= Math.min(N - 1, Math.ceil(cx + rp + orlo)); i++) {
       const dx = i + 0.5 - cx, dy = j + 0.5 - cy, u = (dx * ca + dy * sa) / rp, v = (-dx * sa + dy * ca) / (rp * g.schiaccia), dd = Math.hypot(u, v), q = (N - 1 - j) * N + i;
       if (dd <= 1) { scrivi(q, col, (0.62 + 0.38 * Math.sqrt(Math.max(0, 1 - dd * dd)) - 0.08 * (u + v)) * lume[j * N + i]); pieno[q] = 1; vuoto[q] = 0; } else if (!pieno[q]) vuoto[q] = Math.min(vuoto[q], (dd - 1) * r * Math.min(1, g.schiaccia)); } }
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i; if (pieno[q]) continue; const fl = fluido(umido || vuoto[q] < rc); scrivi(q, [0, 1, 2].map((k) => fl[k] * (1 - fFini) + cF[k] * fFini), lume[j * N + i]); }
@@ -602,7 +629,7 @@ const NOMI_ROCCIA = { granito: 'granito', basalto: 'basalto', sedimento: 'roccia
 export function descriviSuolo(fin) {
   const P = fin.padre, su = P.suolo, R = P.roccia, col = P.colonna, A = fin.acquaPori, parti = [];
   parti.push(`Una finestra di ${lung(fin.L)} sul suolo (${fin.N}×${fin.N} punti, un punto ${lung(fin.h)}), nella cella di ${lung(P.D)} della mappa`);
-  parti.push(`la pendenza della cella ${fmt(100 * P.S)}%; il rilievo sotto la cella è autoaffine con H = ${fmt(P.H)} (dalle pendenze della cella e della mappa) e liscio sotto ${lung(P.lc)} (i pendii contro i fiumi): scarto ${lung(Math.sqrt(P.spettro.sigma2))} sotto la cella, qui ${lung(Math.sqrt(fin.varianza))}`);
+  parti.push(`la pendenza della cella ${fmt(100 * P.S)}%; il rilievo sotto la cella è autoaffine con H = ${fmt(P.H)} (dalle pendenze della cella e della mappa) e liscio sotto ${lung(P.lc)} (i pendii contro i fiumi): scarto ${lung(Math.sqrt(P.spettro.sigma2))} sotto la cella, ${lung(Math.sqrt(fin.bande.filter((B) => 2 ** B.b <= fin.L).reduce((a, B) => a + B.varianza, 0)))} nelle onde più corte della finestra (le più lunghe la inclinano)`);
   parti.push(`${NOMI_ROCCIA[P.tipo]} di questo pianeta (cristalli di ${lung(R.grano)}): φ₀ = ${fmt(R.phi0)} dalla contrazione col raffreddamento da ${fmt(R.Tfuso - 273.15)} °C, Athy L = ${lung(R.L)} dalla chiusura delle crepe (g = ${fmt(R.g)} m/s²); crepe a ogni scala, dal grano alla cella (${fmt(R.A2)} tracce per m² più lunghe di un metro, aperte ${lung(R.apertura(1))}: più sottili di un punto, si vedono solo dove sono larghe almeno un centesimo di punto)`);
   parti.push(`il suolo è spesso ${lung(su.h)} in media (Heimsath: la roccia si fa suolo al più ${fmt(EROSIONE.suolo * 1000)} mm/anno, la cella si abbassa di ${fmt(P.Ecella * 1e6)} m per milione di anni); granelli: ${su.gsd.classi.filter((c) => c.massa > 0.02).map((c) => `${c.nome} ${fmt(100 * c.massa)}% (${lung(c.d50)})`).join(', ')}; pori ${fmt(100 * su.phi)}%, permeabilità ${fmt(su.k)} m²`);
   parti.push(`la pioggia ${fmt(P.pioggia * 1000)} mm/anno, ne scende ${fmt(P.ricarica * 1000)}: la falda è a ${lung(col.falda)}${col.falda > 0 ? `, sopra i pori sono pieni al ${fmt(100 * su.theta)}%` : ''}; l'acqua resta ${tempo(col.residenza(fin.profonditaM))} a ${lung(fin.profonditaM)}, ${tempo(col.residenza(100))} a 100 m, ${tempo(col.residenza(1000))} a 1 km; ${fmt(col.temperatura(1000) - 273.15)} °C a 1 km (${fmt(col.gradiente)} K/km)`);
@@ -628,9 +655,11 @@ export function scenaSuolo(padre, { z = null, latoM = 6e-9, minerale = null } = 
   const ret = atomiDelReticolo(nome, { latoM: Lb * 1e-9, spessoreM: 1.2e-9, T: A.T, massimo: 30000, fermi: true }, c.sotto('reticolo')), dz = ret.spessoreM * 1e9 + 0.15;
   const nA = acqua.atomi.pos.length / 3, nR = ret.atomi.length, pos = new Float32Array(3 * (nA + nR)), raggio = new Float32Array(nA + nR), elemento = new Uint8Array(nA + nR);
   const Z = { O: 8, Si: 14, Al: 13, Na: 11, K: 19, Ca: 20, Mg: 12, Fe: 26, H: 1, C: 6, Cl: 17 };
-  for (let i = 0; i < nR; i++) { const a = ret.atomi[i]; pos[3 * i] = a.x * 1e9; pos[3 * i + 1] = a.y * 1e9; pos[3 * i + 2] = dz - a.z * 1e9 - 0.15; raggio[i] = a.raggio * 1e9; elemento[i] = Z[a.el] || 14; }
-  for (let i = 0; i < nA; i++) { pos[3 * (nR + i)] = acqua.atomi.pos[3 * i]; pos[3 * (nR + i) + 1] = acqua.atomi.pos[3 * i + 1]; pos[3 * (nR + i) + 2] = acqua.atomi.pos[3 * i + 2] + dz; raggio[nR + i] = acqua.atomi.raggio[i]; elemento[nR + i] = acqua.atomi.elemento[i]; }
+  // (la verticale è la seconda coordinata, come nella vista di atomi3d.js: il minerale sotto, l'acqua sopra; chi la ripete lo fa
+  // lungo la prima e la terza: periodica(scena, [3, 1, 3]))
+  for (let i = 0; i < nR; i++) { const a = ret.atomi[i]; pos[3 * i] = a.x * 1e9; pos[3 * i + 2] = a.y * 1e9; pos[3 * i + 1] = dz - a.z * 1e9 - 0.15; raggio[i] = a.raggio * 1e9; elemento[i] = Z[a.el] || 14; }
+  for (let i = 0; i < nA; i++) { pos[3 * (nR + i)] = acqua.atomi.pos[3 * i]; pos[3 * (nR + i) + 2] = acqua.atomi.pos[3 * i + 1]; pos[3 * (nR + i) + 1] = acqua.atomi.pos[3 * i + 2] + dz; raggio[nR + i] = acqua.atomi.raggio[i]; elemento[nR + i] = acqua.atomi.elemento[i]; }
   const sposta = (arr) => Uint32Array.from(arr, (x) => x + nR);
-  return { ...acqua, atomi: { pos, raggio, elemento }, legami: sposta(acqua.legami), legamiH: sposta(acqua.legamiH), scatola: [Lb, Lb, Lb + dz], parti: [{ nome: nome, da: 0, a: nR }, ...acqua.parti.map((p) => ({ ...p, da: p.da + nR, a: p.a + nR }))],
+  return { ...acqua, atomi: { pos, raggio, elemento }, legami: sposta(acqua.legami), legamiH: sposta(acqua.legamiH), scatola: [Lb, Lb + dz, Lb], ripeti: [3, 1, 3], parti: [{ nome: nome, da: 0, a: nR }, ...acqua.parti.map((p) => ({ ...p, da: p.da + nR, a: p.a + nR }))],
     acquaPori: A, minerale: nome, reticolo: ret.descrizione, descrizione: `la superficie ${/^[aeiou]/.test(nome) ? "dell'" : 'del '}${nome} con sopra l'acqua dei pori a ${lung(zz)} di profondità (pH ${fmt(A.pH)}, ${tempo(A.anni)} nei pori): ${acqua.descrizione.replace(/^l'acqua di questo mare in /, '')}` };
 }

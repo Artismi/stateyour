@@ -114,6 +114,7 @@ export const DATI = {
   conducibilita: 3.3, diffusivita: 1e-6, Tmantello: 1620, critico: 647, // della roccia; il punto critico dell'acqua (K)
   // --- i sedimenti e gli stretti
   cec: 0.25, preferenze: { 'Na+': 1, 'K+': 5, 'Mg2+': 3.4, 'Ca2+': 7.4 }, // argille: eq/kg e selettività (Sayles e Mangelsdorf 1977)
+  alluminioArgilla: 2 / 0.25816, // (mol di Al per kg) l'argilla dei fiumi come caolinite, Al2Si2O5(OH)4 [D]: le argille nuove del fondo ne prendono un sodio per alluminio (analcime, albite)
   porosita: 0.2, // l'acqua che resta nei sedimenti sepolti
   scambioStretto: 0.25, // lo scambio a due strati attraverso uno stretto: portata = 0,25·larghezza·profondità·√(g′·profondità) (controllo idraulico: Armi e Farmer 1986)
   sogliaCalcite: 20, // la sovrasaturazione a cui il calcare nasce da solo nell'acqua di mare, misurata in laboratorio a 25 °C (Morse e He 1993)
@@ -340,6 +341,13 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
       const entra = freno * entraFisso[e] + (oggi.vulcani[e] || 0) + torna - Math.min(sc, mare[e] / dt), nuovo = Math.max(0, (mare[e] + dt * entra) / (1 + dt * (tiep * piuCaldo + kSale)));
       sed[e] = (sed[e] + dt * kSale * nuovo) / (1 + dt * kTorna); mare[e] = nuovo; oggi.torna[e] = torna;
     }
+    // LE ARGILLE NUOVE (reverse weathering: Mackenzie e Garrels 1966 [R]): nei sedimenti del fondo l'argilla dei fiumi, la
+    // silice e il sodio che non ha un anione forte (quello che sta col bicarbonato: la soda) fanno silicati di sodio nuovi
+    // (Na-smectite, analcime, albite: nei laghi di soda le zeoliti nascono così, Hay 1966, Surdam e Sheppard 1978 [R]), e
+    // rendono la CO2: Na⁺ + HCO₃⁻ + argilla + silice → silicato di sodio + CO₂ + H₂O. Si prende al più un sodio per alluminio
+    // dell'argilla che arriva (la sua stechiometria: il tetto è l'alluminio, non un tempo scelto), e solo finché c'è soda; il
+    // sodio va nei sedimenti, e torna con loro quando le placche li riciclano
+    if (argilla > 0) { const soda = Math.max(0, mare.Na + mare.K - mare.Cl - 2 * mare.S), x = Math.min(soda, mare.Na, argilla * DATI.alluminioArgilla * dt); mare.Na -= x; sed.Na += x; oggi.argilleNuove = x / dt; }
     // la roccia calda del fondo: in questo passo ci passa una parte del mare, ed esce con la composizione del fluido
     // (a piccoli tratti: il fluido dipende dal mare che entra)
     if (caldo > 0) for (let tratto = 0; tratto < 3; tratto++) { const c = conc(), passa = 1 - Math.exp((-caldo * piuCaldo * dt) / (3 * M)); fluido = fluidoCaldo(c, Tcamino, rocce);
@@ -363,7 +371,7 @@ export function bilancioSali({ P, rocce, massaMare, areaMare, fiumi, apporto, ar
   for (const e of ['Na', 'K', 'Mg', 'Cl', 'S']) {
     const sc = e === 'Na' ? scambio['Na+'] : e === 'K' ? scambio['K+'] : e === 'Mg' ? scambio['Mg2+'] : 0, tiep = e === 'Mg' ? tiepido * DATI.magnesioTiepido : e === 'K' ? tiepido * DATI.potassioTiepido : 0;
     entra[e] = { fiumi: freno * (apporto[e] || 0) + (oggi.torna[e] || 0), vulcani: oggi.vulcani[e] || 0, fondo: Math.max(0, dalFondo[e] || 0) };
-    esce[e] = { fondo: Math.max(0, -(dalFondo[e] || 0)) + tiep * ioni[e], argille: Math.max(0, sc), sepolto: kSepolto * mare[e], evaporiti: evaporiti * mare[e], ...(e === 'S' ? { gesso: gesso * mare[e] } : {}) };
+    esce[e] = { fondo: Math.max(0, -(dalFondo[e] || 0)) + tiep * ioni[e], argille: Math.max(0, sc), sepolto: kSepolto * mare[e], evaporiti: evaporiti * mare[e], ...(e === 'S' ? { gesso: gesso * mare[e] } : {}), ...(e === 'Na' ? { argilleNuove: oggi.argilleNuove || 0 } : {}) };
     const tot = entra[e].fiumi + entra[e].vulcani + entra[e].fondo; residenza[e] = tot > 0 ? mare[e] / tot : Infinity;
   }
   // il calcare deposto sui bassi fondali torna in gioco quando è risollevato: i fiumi lo risciolgono

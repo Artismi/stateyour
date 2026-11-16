@@ -668,7 +668,7 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   const M = m.largo || { W: m.W, H: m.H, rett: m.rett, alt: m.alt, flusso: m.flusso, lago: m.lago, giro: true }, [mu0, mv0, mu1, mv1] = M.rett, MW = M.W, MH = M.H;
   const ix = (x) => (M.giro ? ((x % MW) + MW) % MW : Math.max(0, Math.min(MW - 1, x))), iy = (y) => Math.max(0, Math.min(MH - 1, y));
   const bil = (arr, fx, fy) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0, a = iy(y0) * MW, b = iy(y0 + 1) * MW, p = ix(x0), q = ix(x0 + 1); return arr[a + p] * (1 - u) * (1 - v) + arr[a + q] * u * (1 - v) + arr[b + p] * (1 - u) * v + arr[b + q] * u * v; };
-  const alt = new Float32Array(N), afflusso = new Float32Array(N), livelloLago = new Float32Array(N);
+  const alt = new Float32Array(N), afflusso = new Float32Array(N), livelloLago = new Float32Array(N), cellaMadre = new Int32Array(N), pfx = new Float32Array(N), pfy = new Float32Array(N);
   // la roccia della madre (copertura, lave, basamento), cella per cella: la figlia scava la stessa roccia
   const copertura = m.copertura ? new Float32Array(N) : null, sciolto = m.sciolto ? new Float32Array(N) : null, lava = m.lava ? new Float32Array(N) : null, roccia = new Uint8Array(N), [nu0, nv0, nu1, nv1] = m.rett;
   const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1, ampMax = 0.725 * amp; // (il rumore sta tra −0,5 e 0,5: la somma dei due tra ±0,725)
@@ -688,6 +688,7 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   for (let j = 0; j < Hl; j++) for (let i = 0; i < Wl; i++) {
     const gu = rettL[0] + ((i + 0.5) / Wl) * (rettL[2] - rettL[0]), gv = rettL[1] + ((j + 0.5) / Hl) * (rettL[3] - rettL[1]), c = j * Wl + i;
     const fx = ((gu - mu0) / (mu1 - mu0)) * MW - 0.5, fy = ((gv - mv0) / (mv1 - mv0)) * MH - 0.5;
+    pfx[c] = fx; pfy[c] = fy; cellaMadre[c] = iy(Math.round(fy)) * MW + ix(Math.round(fx));
     if (conMare) { const z = sulMare(fx, fy, dettaglio(gu, gv)); alt[c] = mare + z; if (z >= 0 && alt[c] < mare) alt[c] = mareSu; else if (z < 0 && !(alt[c] < mare)) alt[c] = mare + z - Math.abs(mare) * 2 ** -23; }
     else alt[c] = bil(M.alt, fx, fy) + dettaglio(gu, gv);
     { const mi = Math.floor(((gu - nu0) / (nu1 - nu0)) * W), mj = Math.max(0, Math.min(H - 1, Math.floor(((gv - nv0) / (nv1 - nv0)) * H))), q = mj * W + (L === 1 ? ((mi % W) + W) % W : Math.max(0, Math.min(W - 1, mi)));
@@ -699,7 +700,22 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
       livelloLago[c] = lev;
     }
   }
+  const alt0 = Float32Array.from(alt);
   const e = erosione(k, { W: Wl, H: Hl, raggioM: radice.raggioM, alt, mare, rett: rettL, vulcani: [], roccia, ...(copertura ? { copertura } : {}), ...(sciolto ? { sciolto } : {}), ...(lava ? { lava } : {}) }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L, durata: radice.durataErosione });
+  // L'EROSIONE FINE NON RIFÀ QUELLA DELLA MADRE. La madre è già stata erosa per la stessa durata (T_grossa): ciò che la sua
+  // erosione ha portato via da ogni sua cella, e dove l'ha posato, è già nella sua quota. L'erosione della tessera vede in più
+  // solo il rilievo sotto la cella della madre, e può soltanto ridistribuirlo DENTRO la cella: la parte del suo cambiamento
+  // che ha la scala della madre (la media su ogni cella della madre) si toglie, e la media della figlia su ogni cella ridà
+  // quella della quota interpolata (M∘μ = I, per costruzione). La correzione è liscia (bilineare sulle celle della madre, a
+  // giri: dopo quattro le medie per cella tornano entro il millimetro), così non nascono gradini al bordo delle celle.
+  // (Prima la tessera era erosa di nuovo per tutta la durata: su un mondo con il mare una tessera di livello 2 scendeva di
+  // 565 m sotto la madre; misurato: −471 m dall'erosione della tessera di livello 1, −45 da quella di livello 2.)
+  { const corr = new Float32Array(N), somme = new Map(); let giri = 0;
+    for (; giri < 6; giri++) { somme.clear(); let peggio = 0;
+      for (let c = 0; c < N; c++) { const d = e.alt[c] - alt0[c] - corr[c], q = cellaMadre[c], s = somme.get(q); if (s) { s[0] += d; s[1]++; } else somme.set(q, [d, 1]); }
+      const media = new Float32Array(MW * MH); for (const [q, [a, n]] of somme) { media[q] = a / n; peggio = Math.max(peggio, Math.abs(a / n)); }
+      if (peggio < 1e-3) break; for (let c = 0; c < N; c++) corr[c] += bil(media, pfx[c], pfy[c]); }
+    for (let c = 0; c < N; c++) e.alt[c] -= corr[c]; }
   for (let c = 0; c < N; c++) if (livelloLago[c] > e.alt[c]) e.lago[c] = Math.max(e.lago[c], livelloLago[c] - e.alt[c]);
   // ciò che si mostra: il centro, senza il bordo
   const out = { ...e, W, H, rett, livello: L, vulcani: [], materiali: m.materiali };

@@ -188,7 +188,7 @@ prova('il mare del pianeta come la Terra prende dalla SUA crosta le rocce che si
   // si stampano a parte, per vedere da dove viene.
   const S = STATO_MARE.salinitaMedia, Cl = STATO_MARE.totali.Cl, cloruri = Cl * (35.453 + 22.99);
   console.log(`      salinità ${num(S)} g/kg (intervallo detto prima: 11,7–105): cloruri ${num(cloruri)} g/kg (Terra 32: Cl ${num(Cl)} mol/kg contro 0,546), il resto ${num(S - cloruri)} (Na ${num(STATO_MARE.totali.Na)} mol/kg contro 0,469; carbonio ${num(STATO_MARE.carbonio)} mol/kg contro 0,0023)`);
-  if (!(S >= 35 / 3 && S <= 35 * 3)) nonTorna.push(`il mare del pianeta come la Terra ha ${num(S)} g/kg (vero 35; intervallo 11,7–105): cloruri ${num(cloruri)} g/kg, il resto è soda (Na ${num(STATO_MARE.totali.Na)} mol/kg contro 0,47, con il carbonato): il sodio che i fiumi portano da una crosta ricca quanto il mantello resta nel mare ${num(STATO_MARE.bilancio.residenza.Na)} anni (Terra ~7·10⁷ [R]: mare.js non ha le uscite del sodio nella crosta calda e nelle argille nuove)`);
+  if (!(S >= 35 / 3 && S <= 35 * 3)) nonTorna.push(`il mare del pianeta come la Terra ha ${num(S)} g/kg (vero 35; intervallo 11,7–105): cloruri ${num(cloruri)} g/kg, il resto soda; il sodio resta nel mare ${num(STATO_MARE.bilancio.residenza.Na)} anni (Terra ~7·10⁷ [R]), il cloro ${num(STATO_MARE.bilancio.residenza.Cl)}: il cloro da solo (${num(Cl)} mol/kg) supera l'intervallo, perché il pianeta ne ha 5–6 volte la Terra come di tutti i moderatamente volatili (manca la fase calda del disco: vedi PROGETTO.md)`);
   assert.ok(S >= 35 / 3 && S <= 35 * 3, `la salinità del mare ${num(S)} g/kg è fuori dall'intervallo detto prima (11,7–105 g/kg)`);
 });
 

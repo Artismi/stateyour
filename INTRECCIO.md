@@ -194,7 +194,8 @@ E alla scala a cui si guarda. Ciò che non è guardato resta una funzione.
 - Fatto: ovunque (memorie piccole, superficie in secondo piano, tessere a richiesta). La chimica di una finestra del mare
   (reazioni.js) si calcola solo quando la si guarda, dal micron in giù, in 15–120 ms; la rete delle regole cresce solo
   dove la storia porta materia (espandi); le reazioni che nel tempo guardato non si muovono restano ferme e diventano una
-  conservazione.
+  conservazione. Il suolo (suolo.js) lo stesso: la cella, le tessere del rilievo, i granelli e l'acqua dei pori di un punto si
+  calcolano quando lo si guarda (una finestra 3–60 ms più 70–190 ms d'immagine).
 
 ## 9. La nebbia
 Quando le cose vere sono più di quante se ne possano mostrare, se ne mostra un campione che le rappresenta, e si dice
@@ -358,3 +359,17 @@ dichiarati, e da togliere.
   struttura); il cielo con la diffusione multipla e le nuvole (guardando giù, senza il riflesso della stella, le
   increspature si vedono appena); la schiuma che dura e che la corrente trascina; l'istante del 3D nella finestra (oggi la
   stella è a mezzogiorno dell'equinozio); il guscio degli ioni riordinato (4 vicine invece di 6).
+- Fatto (lavoro 9, `src/camera/suolo.js`, `test_suolo`): LA FINESTRA A OGNI DISTANZA per IL SUOLO E LA CROSTA, con la stessa
+  struttura del mare. Il padre è la cella della mappa (la tessera di geologia.js) letta da chi la calcola (erosione, clima, storia
+  termica, minerali di quel pianeta, aria); a metri il rilievo fine come spettro auto-affine (H dalle pendenze, l'ampiezza dalla
+  pendenza della cella, liscio sotto la lunghezza dei versanti), il suolo di Heimsath sulla curvatura, le crepe a legge di
+  potenza; a millimetri i granelli (i cristalli della roccia che l'alterazione lascia, la caolinite) nel loro numero, a ottave con
+  indirizzo, e i pori; la porosità di Athy con φ₀ e L dalla roccia di quel pianeta (contrazione termica, chiusura delle crepe con
+  la sua gravità), Kozeny–Carman e la legge cubica, Darcy con la ricarica del clima e il tempo di residenza che ne viene; a micron
+  e nanometri l'acqua dei pori in equilibrio con quella roccia e quella CO₂ (gli atomi a libro) e la superficie del minerale con
+  quell'acqua sopra. Riassunte, le finestre ridanno il padre (`test_suolo`, 7 righe C6 di `test_coerenza_scale`: varianza del
+  rilievo, porosità della colonna, portata nel fiume = ricarica, età di ciò che esce = pori/ricarica, atomi). I pori della crosta di
+  `reazioni.js` prendono da qui φ₀, L e la residenza (prima dati per tipo e un parametro libero di 10⁴ anni): regola 2.
+- Manca (suolo): la vita nei pori; i sistemi di flusso regionali (la colonna usa Dupuit: in profondità manda ~13 volte l'acqua del
+  versante da solo); le finestre dal centimetro al micron nell'app (ci sono le funzioni e le schermate); il rilievo fine nel 3D;
+  le tessere di geologia.js che riempiono di laghi le conche (al primo livello resta asciutto il 9% delle terre).

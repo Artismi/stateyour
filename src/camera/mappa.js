@@ -848,7 +848,7 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
   // (sul suolo: la superficie del minerale con sopra l'acqua dei pori a metà del suolo, ogni ione nel suo numero: suolo.js)
   const w = rocciaDi({ ...cam, passoRoccia: 0, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1] });
   if (w?.suolo && w.fin?.padre) { const pad = w.fin.padre; return { acqua: true, chiave: `${r.luogo.indirizzo}|pori3d|${r.minerale}|${pad.I},${pad.J}`, che: `la superficie ${del3(r.minerale)} e l'acqua dei pori sopra, in un cubetto di 6 nm`,
-    crea: () => { const sc = scenaSuolo(pad, { latoM: 6e-9, minerale: r.minerale }, sorgente(`${r.luogo.indirizzo}/pori`, ramiCosmo(cam.via.cosmo))); return periodica(conMoto(sc), [3, 3, 1]); } }; }
+    crea: () => { const sc = scenaSuolo(pad, { latoM: 6e-9, minerale: r.minerale }, sorgente(`${r.luogo.indirizzo}/pori`, ramiCosmo(cam.via.cosmo))); return periodica(conMoto(sc), sc.ripeti); } }; }
   return { acqua: false, chiave: `${r.luogo.indirizzo}|atomi3d|${r.minerale}`, che: `tre nanometri di ${r.minerale.replace(" d'acqua", '')}`,
     // (il reticolo continua oltre lo schermo: una fetta nove volte più larga dei tre nanometri che si guardano, atomi veri)
     crea: () => { const a = atomiDelReticolo(r.minerale, { latoM: 9e-9, spessoreM: 3e-9, T: r.luogo.T ?? 288, massimo: 120000, fermi: true }, sorgente(r.luogo.indirizzo, ramiCosmo(cam.via.cosmo))), sc = scenaDaElenco(a.atomi, { unita: 'm', nome: r.nome });

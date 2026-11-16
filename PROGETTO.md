@@ -175,8 +175,11 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    tra 10 e 11,5 milioni di anni) perde il 75% del cloro (365 → 90 ppm nel mantello; Cl/Na 6·10⁻³ come la Terra), il 3,5%
    dell'acqua, del carbonio e dell'azoto, lo 0,3% di Na e K; i rocciosi senza urti giganti tengono tutto. NON TORNA, dichiarati:
    resta l'eccesso di tutti i moderatamente volatili (Na ×5,7 la Terra: il disco a 1 UA non supera ~570 K, la Terra vera li ha
-   persi nel disco caldo) e il mare resta una salamoia, ora di soda (400 g/kg: 138 di cloruri, il resto sodio dei fiumi con il
-   carbonato, che in mare.js resta ~10⁹ anni contro ~7·10⁷ del mare vero); [C/O] (−0,44
+   persi nel disco caldo) e il mare resta una salamoia (296 g/kg: con le argille nuove del fondo — `mare.js`, Mackenzie e Garrels —
+   il sodio resta 1,9·10⁸ anni invece di 10⁹, contro ~7·10⁷ del mare vero; ma il cloro, 4,1 mol/kg, basta da solo). La fase calda
+   provata con un disco viscoso α (Lynden-Bell e Pringle) non basta: a 0,67 UA parte da 756 K, sotto i 958 K del sodio, e la massa
+   degli embrioni arriva tardi (m ∝ t³); con l'involucro che cade (Ṁ ~ c_s³/G) il disco interno è troppo caldo per la roccia
+   mentre il modello vi fa gli embrioni in 6·10⁴ anni: serve rifare insieme la storia del disco e la crescita degli embrioni; [C/O] (−0,44
    dex) e [K/Fe] (−1,1) delle stelle sotto il Sole (le rese di Kobayashi ne fanno poco: per il potassio è un difetto noto); la crosta dei continenti ha K ×16 il mantello (vera ~60: la
    F media di `storia.js`, 0,3, è alta); Pt e Au restano poveri nel mantello (manca l'ultima vernice); oltre ~100 GPa le leggi di
    ripartizione sono estrapolate (le super-Terre fanno nuclei grandi, ricchi di silicio). Il costo di `sistema()`: vedi il
@@ -223,6 +226,54 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    porosità del suolo) — e la quota media della finestra di roccia che ridà la tessera, oggi una NON TORNA nota; (5) la
    VISTA: lo stesso livello 5 di mappa.js (rocciaDi), dove oggi la roccia è un'immagine fatta prima (cristallizza) e non un
    campione della finestra.)
+   (Fatto per IL SUOLO E LA CROSTA: `src/camera/suolo.js`, `test_suolo` (9 prove; ~60 s, di cui ~40 per costruire il pianeta) e
+   7 righe C6 di `test_coerenza_scale`. Il PADRE è la cella della tessera di livello 6 di geologia.js (quella che lo zoom mostra
+   quando si entra nella roccia; nell'app la tessera più fine già calcolata, dal 3D la mappa intera) letta da chi la calcola: quota,
+   pendenza, litologia, continente e portata (erosione), pioggia e deflusso del secchio di meteo.js, temperatura del clima, flusso
+   di calore della storia termica, i minerali della crosta di quel pianeta (chimica.js), la CO₂ della sua aria. A METRI il
+   RILIEVO FINE è uno spettro auto-affine sotto il numero d'onda della cella, P = C·k^(−2−2H)/(1 + (k·ℓ_c)²)²: H dalle pendenze
+   della cella e della mappa intera (S ∝ r^(H−1)), C dalla pendenza della cella (la funzione di struttura alla lag della cella vale
+   S²Δ²/2), ℓ_c = (K_d/(K·p^m))^(1/(2m+1)) dove i pendii pareggiano i fiumi (Perron e altri 2008 [R]); ottave di tessere periodiche
+   sovrapposte a metà come il mare, un evento per tessera. Il SUOLO dal bilancio di Heimsath (P₀ di geologia.js, h₀ 0,5 m [R])
+   con l'abbassamento della cella (K·A^m·S) meno K_d per la curvatura del rilievo fine lisciata sul suolo; le FRATTURE tracce a
+   legge di potenza (n ∝ l^−3, Bonnet e altri 2001 [R]) dal grano alla cella, con l'apertura della frattura elastica lineare alla
+   tenacità (Olson 2003 [R]: b ∝ √l). A MILLIMETRI i GRANELLI: i cristalli della roccia (rocce.js) consumati nel tempo che restano
+   nel suolo con le velocità di chimica.js, e la caolinite che lasciano; il modello booleano con la porosità dell'impacchettamento
+   (Desmond e Weeks 2014, Westman [R]); le taglie divise in ottave con le loro celle, così un granello è lo stesso in ogni finestra
+   a qualunque distanza; sotto il punto, la nebbia dei granelli (Poisson per punto, Kubelka-Munk). LA ROCCIA DI QUEL PIANETA dà
+   φ₀ e L di Athy senza tabelle per tipo: φ₀ = α_V·(T_fuso − T_superficie) (la contrazione termica dei suoi minerali, il fuso del
+   basalto dal solidus di storia.js), le crepe che si chiudono sotto lo sforzo efficace della colonna con la gravità del pianeta
+   (K_IC/√(πl/2)), L = ∫φ dz/φ₀; la permeabilità di Kozeny–Carman nel suolo e della legge cubica nelle crepe, k(z) = k₀(φ/φ₀)³;
+   DARCY con la ricarica del deflusso del clima: la colonna fino a 10 km con la partizione di Dupuit tra gli strati (Vogel 1967
+   generalizzato [R]) dà il TEMPO DI RESIDENZA τ(z) = ∫θ/q dz (al più l'età della crosta), e la sezione del versante (volumi finiti,
+   gradienti coniugati, l'età dell'acqua sopravvento: Goode 1996 [R]) la verifica; la falda di Dupuit sul versante, i pori sopra
+   pieni fin dove la capillarità li tiene o la ricarica lo chiede (Averjanov [R]); la temperatura col gradiente del pianeta. A
+   MICRON E NANOMETRI l'ACQUA DEI PORI: la pioggia in equilibrio con la CO₂ dell'aria (aperta sopra la falda, chiusa sotto) che
+   scioglie i minerali di quella roccia con le velocità di laboratorio di chimica.js e l'affinità 1 − Ω, nel tempo di residenza
+   di quella profondità; caolinite, calcite e silice amorfa che precipitano; le costanti da una tabella sola (mare.js gibbsSpecie e
+   chimica.js MOLECOLE, più la caolinite [R]); la scena dei nanometri: il reticolo del minerale e sopra l'acqua mW di finestra.js
+   (scenaNano ora accetta un'acqua data) con ogni ione nel suo numero. REAZIONI.JS: i pori della crosta prendono φ₀, L e il tempo
+   di residenza dalla colonna di suolo.js (colonnaDelPianeta, o quella del punto); ATHY e RESIDENZA (10⁴ anni, libero) non ci sono
+   più; sul primo roccioso con calore il basalto ha φ₀ 0,026, L 8,1 km, l'acqua resta 117–1620 anni tra 0,3 e 3 km e l'H₂ va da
+   1,7·10⁻⁵ a 5,2·10⁻⁴ mol/L (prima 10⁻⁴–10⁻²). L'APP (mappa.js): sulla terra il livello 5 comincia con le finestre del suolo di
+   10 m, 1 m e 10 cm (LATI_SUOLO, di dieci in dieci come l'acqua), con la riga di ciò che c'è e i numeri (nella più piccola anche la
+   chimica dei pori: luogoDellaCrosta a quella profondità col pH e il carbonio di quell'acqua); sotto, la roccia del punto come
+   prima; in fondo, in 3D, la superficie del minerale con l'acqua dei pori sopra. PROVE: finestre sovrapposte scarto 0 (8181 punti
+   del rilievo, 50 granelli); la varianza del rilievo fine su 256 punti ridà Σs dei modi entro 4 scarti e Σs ridà ∫P sotto la cella
+   entro la quadratura; la porosità dei primi 10 m di 64 finestre ridà quella del padre (che la media sull'insieme delle curvature)
+   entro 4 scarti; la sezione del versante manda nel fiume la ricarica × ℓ entro il residuo del risolutore (10⁻¹⁴ relativo) e
+   l'età di ciò che esce è il volume dei pori diviso la ricarica (Eriksson) entro il limite rigoroso; il libro degli atomi
+   dell'acqua dei pori torna a 10⁻¹⁶ per ogni elemento e per la carica (trovato facendolo: l'acqua che la calcite si porta via
+   mancava). COSTI: il padre ~4 s la prima volta (le sei tessere), poi 75 ms; una finestra 3–60 ms e la sua immagine 70–190 ms; la
+   sezione 70 ms; l'acqua dei pori 10 ms; la scena 3D 90 ms. NON TORNA: φ₀ e L contro la Terra per tipo [R] (granito 0,021 e
+   0,86 km contro 0,02 e 2 km; basalto 0,026 e 8,1 km contro 0,10 e 1 km: mancano vescicole e brecce, le crepe del grano fine si
+   chiudono solo a ~100 MPa); la colonna di Dupuit (il sistema regionale) manda in profondità ~13 volte più acqua del versante da
+   solo; le attività sono le concentrazioni; le velocità di laboratorio (in natura 10–1000 volte più lente); le argille impaccano
+   come sfere; niente argille di magnesio, niente vescicole; la compattazione dei sedimenti non ha una legge sua; nelle tessere di
+   geologia.js le conche diventano laghi (al primo livello resta asciutto il 9% delle terre) e lì il suolo non c'è. MANCA: la vita
+   (respirazione, radici: la CO₂ dei pori cento volte più alta); le finestre dal centimetro al micron nell'app (ci sono come
+   funzioni e schermate `suolo_*.png`, l'app passa dai 10 cm alla roccia); il rilievo fine nella vista 3D (src/tre, non toccato); i
+   sistemi di flusso regionali dalla mappa; la roccia come finestra (cristallizza resta un'immagine fatta prima).)
 10. **La chimica che si muove da sé** (era «la vita in potenza») — la regola zero applicata alla chimica del pianeta, con
    la rilevazione di ciò che emerge e la stima degli eventi rari; da qui i momenti d'osservatore. Base:
    `reports/Regole per la vita in potenza.md`, riletta come elenco di prove, non di passi. (Fatto il primo passo:
@@ -250,14 +301,15 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    0,17 ms) dove accadono ~24 reazioni al secondo (formaldeide e HCN a 10⁻⁹ mol/L) e nasce in media due millesimi di molecola:
    niente RAF, niente membrane; a 10 nm niente si muove; la pozza ~44 al secondo; il camino (565 K, pH 3,5) 4·10¹⁰ al secondo
    (a quella temperatura tutto è veloce: la finestra si guarda per mezzo microsecondo); nei pori della crosta del primo roccioso con calore (stella 2, 5,8 mW/m², 1,4 K/km) l'H₂
-   della serpentinizzazione (10⁻⁴–10⁻² mol/L tra 0,3 e 3 km) col CO₂ sulla magnetite fa formiato, metandiolo, CO e
+   della serpentinizzazione (10⁻⁴–10⁻² mol/L tra 0,3 e 3 km con la residenza libera di 10⁴ anni; ora, con la colonna di suolo.js,
+   1,7·10⁻⁵–5,2·10⁻⁴ mol/L e l'acqua che resta 117–1620 anni) col CO₂ sulla magnetite fa formiato, metandiolo, CO e
    formaldeide, niente di più grande. L'APP: dal micron in giù la finestra del mare ha la sua riga (mappa.js; 15–120 ms).
    NON TORNA dichiarati: quattro condensazioni con un ΔG misurato diverso dalla tabella (vale la tabella); la sola formaldeide
    non fa il primo C–C (manca la via lenta dell'induzione: probabilità zero per le regole); il potassio della crosta non è un
    numero in elementi.js oggi (la radiolisi non lo conta). MANCA: la rete dei radicali (la fotolisi della luce UV c'è come
    velocità, non come dinamica); due scatole con pH diversi come luogo solo (il camino alcalino contro il mare); i pozzi
-   misurati senza prodotti (fuori dalla dinamica chiusa: 78 nel formosio); la porosità di Athy con parametri del pianeta (φ₀ e
-   L sono dati per tipo di roccia, ricordati) e la residenza dell'acqua nei pori (libera, 10⁴ anni); la pressione dei pori
+   misurati senza prodotti (fuori dalla dinamica chiusa: 78 nel formosio); (fatte col suolo, punto 9: la porosità di Athy con
+   φ₀ e L della roccia del pianeta e la residenza dell'acqua nei pori dalla colonna di Darcy); la pressione dei pori
    nelle energie; il calore prodotto nella crosta nel gradiente; le pozze che concentrano le molecole non volatili; la
    probabilità degli eventi rari sulla chimica vera (l'FFS è provato su un caso esatto, non ancora applicato a un RAF che nasce).)
 11. **Eredità, sviluppo, evoluzione** — la stessa regola un livello sopra. *Eredità*: un polimero che si copia con errori
