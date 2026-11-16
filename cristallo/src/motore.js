@@ -2,7 +2,8 @@
 // viaggio, la tessera e la zona pulita (punto 4). Lo usano il worker dell'interfaccia e le prove.
 //
 // LA ZONA PULITA. Accanto alla pallina corre una gemella:
-//   · a T = 0 (cristallo perfetto e freddo) è la stessa pallina spostata di δ₀ = 10⁻⁹ celle, perpendicolarmente alla
+//   · a T = 0 (cristallo perfetto e freddo) è la stessa pallina spostata di δ₀ = 10⁻⁶ celle (un decimillesimo dello
+//     spessore della linea), perpendicolarmente alla
 //     velocità, in una direzione che viene dalla fonte del caso dell'indirizzo («gemella»). Una traiettoria regolare
 //     se ne stacca lentamente (in modo lineare), una caotica come e^(λt);
 //   · a T > 0 la pallina corre nel cristallo vero (gli atomi spostati dalle vibrazioni di ogni cella) e la gemella,
@@ -16,12 +17,12 @@
 // LA LINEA tiene un punto ogni «ogni» passi, con ogni tale che i punti distino circa un centesimo di cella: la corda
 // sbaglia di s²/8r, sotto 3·10⁻⁴ celle anche dove la curva ha raggio 0,05.
 
-import { creaCristallo, punto, norma, vettore } from './reticolo.js';
+import { creaCristallo, punto, norma } from './reticolo.js';
 import { creaPallina, avanza, creaViaggio, creaTessera, haMagnete } from './moto.js';
 import { scriviFisica, direzioneUniforme } from './indirizzo.js';
 import { sorgente } from './caso.js';
 
-export const DELTA0 = 1e-9;
+export const DELTA0 = 1e-6;
 export const sogliaDi = (finestra) => (finestra?.L ?? 4) / 400;
 
 export function cristalliDi(p) {
@@ -51,7 +52,7 @@ export function velocitaMassima(cr, r0, v0) {
     const f = [i / 6, j / 6, k / 6], r = [0, 1, 2].map((q) => f[0] * cr.A[0][q] + f[1] * cr.A[1][q] + f[2] * cr.A[2][q]);
     Vmin = Math.min(Vmin, cr.campo(r[0], r[1], r[2], null));
   }
-  Vmin = Math.min(Vmin, -Math.abs(cr.U0) * cr.atomi.filter((a) => a.s < 0).length > 0 ? -cr.U0 : 0);
+  if (cr.atomi.some((a) => a.s < 0)) Vmin = Math.min(Vmin, -cr.U0);
   const V0 = cr.campo(r0[0], r0[1], r0[2], null), v2 = punto(v0, v0) + 2 * Math.max(0, V0 - Vmin);
   return Math.sqrt(Math.max(v2, 1e-6));
 }
@@ -63,11 +64,20 @@ function corsa(cr, r0, v0, B, dt, n, ogni) {
   for (let i = 1; i <= m; i++) { avanza(cr, s, dt, ogni, B, null); out.set(s.x, 3 * i); }
   return out;
 }
-// il primo campione in cui le due corse distano più di d (o la lunghezza)
-function stacco(a, b, d) {
-  const d2 = d * d;
-  for (let i = 0; i < a.length; i += 3) { const x = a[i] - b[i], y = a[i + 1] - b[i + 1], z = a[i + 2] - b[i + 2]; if (x * x + y * y + z * z > d2) return i / 3; }
-  return a.length / 3;
+// la pallina e la gemella insieme, fino a quando si staccano più di d (o per n passi): le posizioni della pallina e
+// il numero di passi della zona pulita
+function gemelle(cr, crG, r0, r1, v0, B, dt, n, d) {
+  const s = creaPallina(cr, r0, v0), g = creaPallina(crG, r1, v0), d2 = d * d;
+  let out = new Float64Array(3 * 1024), i = 0;
+  out.set(s.x, 0);
+  for (; i < n;) {
+    avanza(cr, s, dt, 1, B, null); avanza(crG, g, dt, 1, B, null); i++;
+    if (3 * i + 3 > out.length) { const q = new Float64Array(out.length * 2); q.set(out); out = q; }
+    out.set(s.x, 3 * i);
+    const x = s.x[0] - g.x[0], y = s.x[1] - g.x[1], z = s.x[2] - g.x[2];
+    if (x * x + y * y + z * z > d2) break;
+  }
+  return { a: out, zona: i };
 }
 
 export function scegliPasso(p, cristalli = cristalliDi(p)) {
@@ -77,11 +87,10 @@ export function scegliPasso(p, cristalli = cristalliDi(p)) {
   const g = direzioneGemella(radice, p.v0, vero.piano), r1 = caldo ? p.r0 : p.r0.map((x, i) => x + DELTA0 * g[i]);
   const prove = [];
   for (let giro = 0; giro < 12; giro++) {
-    const n = Math.ceil(p.tempo / dt);
-    const a = corsa(vero, p.r0, p.v0, B, dt, n, 1), b = corsa(perfetto, r1, p.v0, B, dt, n, 1);
-    const zona = stacco(a, b, d), c = corsa(vero, p.r0, p.v0, B, dt / 2, 2 * n, 2);
+    const n = Math.ceil(p.tempo / dt), { a, zona } = gemelle(vero, perfetto, p.r0, r1, p.v0, B, dt, n, d);
+    const c = corsa(vero, p.r0, p.v0, B, dt / 2, 2 * zona, 2);
     let scarto = 0;
-    for (let i = 0; i < zona; i++) scarto = Math.max(scarto, Math.hypot(a[3 * i] - c[3 * i], a[3 * i + 1] - c[3 * i + 1], a[3 * i + 2] - c[3 * i + 2]));
+    for (let i = 0; i <= zona; i++) scarto = Math.max(scarto, Math.hypot(a[3 * i] - c[3 * i], a[3 * i + 1] - c[3 * i + 1], a[3 * i + 2] - c[3 * i + 2]));
     prove.push({ dt, zona, scarto });
     if (scarto < d / 2) return { dt, prove, vmax };
     dt /= 2;
@@ -165,4 +174,3 @@ export function lyapunov(cr, r0, v0, B, dt, tempo, tau = 0.5, delta = 1e-9, dire
   return somma / (giri * m * dt);
 }
 
-export { vettore };
