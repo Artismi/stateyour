@@ -15,6 +15,8 @@
 // LA SORGENTE (sorgente=1, scritta solo se accesa): da r0, che è un sito speciale, partono le palline nelle direzioni
 // dell'orbita di v0 sotto il gruppo del sito (simmetria.js).
 //
+// UN ATOMO si scrive ±x,y,z, e facoltativamente @altezza (reale, al posto del segno) e ~larghezza (la sua w).
+//
 // IL 🎲: casuale(k) dà un indirizzo dalla fonte del caso con l'indirizzo «🎲/k». Il reticolo (sistema, centratura,
 // parametri nei vincoli), gli atomi, il lancio, il magnete; la finestra con n uniforme sulla sfera (cos θ uniforme in
 // [−1, 1], φ uniforme in [0, 2π)), ψ uniforme in [0, 2π), C nel primo atomo della cella, R = (L/2)·10^u con u uniforme
@@ -41,7 +43,7 @@ export function scriviFisica(p) {
   return [
     `reticolo=${r.piano ? 'piano.' : ''}${r.sistema}.${r.centratura}`, `a=${num(r.a)}`, `b=${num(r.b)}`, `c=${num(r.c)}`,
     `alfa=${num(r.alfa)}`, `beta=${num(r.beta)}`, `gamma=${num(r.gamma)}`,
-    `atomi=${p.atomi.length ? p.atomi.map((a) => (a.s < 0 ? '-' : '+') + vet(a.p)).join(';') : 'nessuno'}`,
+    `atomi=${p.atomi.length ? p.atomi.map((a) => (a.s < 0 ? '-' : '+') + vet(a.p) + (a.ampiezza != null ? `@${num(a.ampiezza)}` : '') + (a.w != null ? `~${num(a.w)}` : '')).join(';') : 'nessuno'}`,
     `U0=${num(p.U0)}`, `w=${num(p.w)}`, `r0=${vet(p.r0)}`, `v0=${vet(p.v0)}`, `B=${vet(p.B)}`, `T=${num(p.T)}`, `difetti=${num(p.difetti)}`,
   ].join(' ');
 }
@@ -59,7 +61,10 @@ export function leggi(testo) {
     switch (k) {
       case 'reticolo': { const q = v.split('.'), piano = q[0] === 'piano'; if (piano) q.shift(); p.reticolo.piano = piano; p.reticolo.sistema = q[0]; p.reticolo.centratura = q[1] ?? 'P'; break; }
       case 'a': case 'b': case 'c': case 'alfa': case 'beta': case 'gamma': p.reticolo[k] = leggiNum(v); break;
-      case 'atomi': p.atomi = v === 'nessuno' ? [] : v.split(';').map((s) => ({ s: s[0] === '-' ? -1 : 1, p: leggiVet(s.slice(1)) })); break;
+      case 'atomi': p.atomi = v === 'nessuno' ? [] : v.split(';').map((s) => {
+        const m = s.slice(1).match(/^([^@~]*)(?:@([^~]*))?(?:~(.*))?$/), a = { s: s[0] === '-' ? -1 : 1, p: leggiVet(m[1]) };
+        if (m[2] != null) a.ampiezza = leggiNum(m[2]); if (m[3] != null) a.w = leggiNum(m[3]); return a;
+      }); break;
       case 'U0': case 'w': case 'T': case 'difetti': case 'tempo': case 'sorgente': p[k] = leggiNum(v); break;
       case 'r0': case 'v0': case 'B': p[k] = leggiVet(v); break;
       case 'C': case 'n': p.finestra[k] = leggiVet(v); break;

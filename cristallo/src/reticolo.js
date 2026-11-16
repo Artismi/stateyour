@@ -117,18 +117,19 @@ export function reciproci(A) {
 export function creaCristallo(opzioni) {
   const par = vincola(opzioni);
   const A = vettoriCella(par), Ar = reciproci(A), V = Math.abs(punto(A[0], vettore(A[1], A[2])));
-  const U0 = opzioni.U0 ?? 1, w = opzioni.w ?? 0.15, rc = 4 * w, rc2 = rc * rc, w2 = w * w;
+  const U0 = opzioni.U0 ?? 1, w = opzioni.w ?? 0.15, wMax = Math.max(w, ...(opzioni.atomi ?? []).map((x) => x.w ?? 0)), rc = 4 * wMax;
   const centri = [[0, 0, 0], ...CENTRI[par.centratura]];
   const primitiva = PRIMITIVA[par.centratura].map((f) => combina(f, A));
   const piano = !!par.piano;
   // la base ripetuta dalla centratura: gli atomi della cella convenzionale (frazionari in [0, 1))
   // (s è il segno, ±1; un'«ampiezza» facoltativa, reale, ne fa un'altezza qualunque: la usa il passo inverso)
-  const base = (opzioni.atomi ?? [{ p: [0, 0, 0], s: 1 }]).map((x) => ({ p: [...x.p], s: x.ampiezza ?? (x.s < 0 ? -1 : 1) }));
+  // (e una larghezza «w» facoltativa per atomo: senza, vale la w del cristallo)
+  const base = (opzioni.atomi ?? [{ p: [0, 0, 0], s: 1 }]).map((x) => ({ p: [...x.p], s: x.ampiezza ?? (x.s < 0 ? -1 : 1), w: x.w ?? null }));
   const atomi = [];
   base.forEach((at, i) => centri.forEach((cc, j) => {
     const f = [0, 1, 2].map((k) => { const x = at.p[k] + cc[k]; return x - Math.floor(x); });
     if (piano) f[2] = 0;
-    atomi.push({ f, r: combina(f, A), s: at.s, i, j });
+    atomi.push({ f, r: combina(f, A), s: at.s, i, j, w: at.w ?? w });
   }));
   // le immagini che possono stare entro 4w da un punto della cella: in coordinate frazionarie, il margine lungo
   // l'asse k è rc·|a*ₖ| (una distanza rc cambia la coordinata k al più di tanto)
@@ -140,11 +141,13 @@ export function creaCristallo(opzioni) {
       const f = [at.f[0] + i, at.f[1] + j, at.f[2] + k];
       if (f.some((x, q) => x < -margine[q] || x > 1 + margine[q])) continue;
       const r = combina(f, A);
-      imm.push({ r, s: at.s, cella: [i, j, k], atomo: atomi.indexOf(at) });
+      imm.push({ r, s: at.s, w: at.w, cella: [i, j, k], atomo: atomi.indexOf(at) });
     }
   }
   const nI = imm.length, Q = new Float64Array(4 * nI);
   imm.forEach((m, q) => { Q[4 * q] = m.r[0]; Q[4 * q + 1] = m.r[1]; Q[4 * q + 2] = m.r[2]; Q[4 * q + 3] = m.s * U0; });
+  // le costanti della gaussiana di ogni immagine (la sua w): 9w², 16w², 7w², 1/2w², per indice 4q
+  const KW = new Float64Array(4 * nI); imm.forEach((m, q) => { const w2 = m.w * m.w; KW[4 * q] = 9 * w2; KW[4 * q + 1] = 16 * w2; KW[4 * q + 2] = 7 * w2; KW[4 * q + 3] = 1 / (2 * w2); });
 
   // LE VIBRAZIONI (punto 4). Ogni atomo di ogni cella ha il suo spostamento, una campana per componente con
   // ⟨uₓ²⟩ = (T/U₀)·(0,1 a)²: alla temperatura T = U₀ lo spostamento tipico è un decimo di cella (la regola di
@@ -197,7 +200,6 @@ export function creaCristallo(opzioni) {
   const lista = Int32Array.from(indici);
 
   const a0 = Ar[0], a1 = Ar[1], a2 = Ar[2], A0 = A[0], A1 = A[1], A2 = A[2];
-  const g9 = 9 * w2, g16 = 16 * w2, g7 = 7 * w2, mezzoW2 = 1 / (2 * w2);
   // V e −∇V in r; se F è dato vi scrive la forza. Il punto si porta nella cella (r mod reticolo), poi si somma.
   function campo(x, y, z, F) {
     let f0 = x * a0[0] + y * a0[1] + z * a0[2], f1 = x * a1[0] + y * a1[1] + z * a1[2], f2 = x * a2[0] + y * a2[1] + z * a2[2];
@@ -211,6 +213,7 @@ export function creaCristallo(opzioni) {
     for (let t = inizio[kk]; t < fine; t++) {
       const i = lista[t];
       const dx = px - q[i], dy = py - q[i + 1], dz = pz - q[i + 2], r2 = dx * dx + dy * dy + dz * dz;
+      const g9 = KW[i], g16 = KW[i + 1], g7 = KW[i + 2], mezzoW2 = KW[i + 3];
       if (r2 >= g16) continue;
       const g = q[i + 3] * Math.exp(-r2 * mezzoW2);
       let v, dv; // V di questa immagine e dV/dρ²
