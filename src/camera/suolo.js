@@ -78,8 +78,9 @@
 // (ematite, magnetite) e il ferro metallico non entrano nell'acqua; il pirosseno e l'olivina si sciolgono senza lasciare
 // argille di magnesio; le vescicole e le brecce delle lave (il basalto della Terra ha φ₀ ≈ 0,1 per questo) non ci sono; la
 // colonna usa la partizione di Dupuit (il sistema di flusso regionale): il versante da solo (sezioneVersante) manda in profondità
-// molta meno acqua, e quanto sono lunghi i sistemi regionali la mappa non lo dice; quando il padre è la mappa intera (dal 3D,
-// senza tessere calcolate) H e l'ampiezza si allungano su quattro decadi da celle di ~100 km.
+// molta meno acqua, e quanto sono lunghi i sistemi regionali la mappa non lo dice; quando il padre è la mappa intera (nessuna
+// tessera calcolata in quel punto: né dalla mappa né dal 3D, che manda qui le sue con ricordaTessera) H e l'ampiezza si allungano su
+// quattro decadi da celle di ~100 km.
 
 import { EROSIONE, tessera } from './geologia.js';
 import { STORIA } from './storia.js';

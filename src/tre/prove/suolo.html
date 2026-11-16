@@ -29,7 +29,7 @@ import * as SU from '../../camera/suolo.js';
 import * as MP from '../../camera/mappa.js';
 import { creaVista3D } from '../../camera/atomi3d.js';
 
-let M = null, S = null, PT = null, N = null, Pi = null, quale = null, VA = null, foto = [], fondo = null;
+let M = null, S = null, PT = null, N = null, Pi = null, quale = null, VA = null, foto = [], fondo = null, oraScelta = null;
 const W = 400, H = 300, m = Math.min(W, H);
 const aspetta = (f, ms = 120000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto')); else { if (N) N.fotogramma(); setTimeout(p, 30); } }; p(); });
 const pulito = (o) => { if (!o || typeof o !== 'object' || ArrayBuffer.isView(o)) return o; if (Array.isArray(o)) return o.map(pulito); const r = {}; for (const q in o) if (typeof o[q] !== 'function') r[q] = pulito(o[q]); return r; };
@@ -69,18 +69,26 @@ async function nano() {
   const tela = nuovaTela(); let t0 = performance.now(); const s = sc.crea(), crea = performance.now() - t0; VA = creaVista3D(tela, { conserva: true }); VA.carica(s); VA.avvia?.();
   await new Promise((r) => setTimeout(r, 1500)); scrivi(sc.che); return { che: sc.che, chiave: sc.chiave, msCrea: crea, atomi: s.atomi.elemento.length };
 }
-async function tre({ quota = 2, suoloFine = 1, fotogrammi = 30 } = {}) {
-  const RAD = Math.PI / 180, chi = `3d|${suoloFine}`;
+async function tre({ larghezza = 12, suoloFine = 1, fotogrammi = 30 } = {}) { // (larghezza: quanti metri di suolo sono larghi i 400 punti dello schermo, guardando giù)
+  const RAD = Math.PI / 180, chi = `3d|${suoloFine}`; let quota = larghezza;
   if (quale !== chi) { libera(); const mod = await import('../pianeta.js'); N = creaNucleo(nuovaTela(), { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = true; const Sis = sistema(1, M.via.galassia, M.via.stella); Pi = mod.creaPianeta(N, { P: M.P, stella: Sis.stella, via: M.via, superficie: () => S, opzioni: { suoloFine } }); N.attacca(Pi.corpo, { distanza: 3 * M.P.raggioM }); quale = chi; }
-  N.vai({ lon: PT.lon * RAD, lat: PT.lat * RAD, quota, direzione: 0, alza: -1.54 });
-  await aspetta(() => { const s = Pi.statistiche?.(); return s && s.inAttesa === 0 && s.tessere > 0; }, 120000).catch(() => null);
-  if (suoloFine) await aspetta(() => Pi.suoloFine(), 60000).catch(() => null);
+  N.fotogramma(); quota = (larghezza * N.stato.fuoco) / W;
+  // (posarsi: le tessere che arrivano alzano o abbassano il suolo sotto la camera — qui di chilometri —, e allora ci si rimette
+  // alla quota voluta, finché il suolo non si muove più: come quotaVoluta in laboratorio.js)
+  const posati = async () => { for (let giro = 0; giro < 16; giro++) { N.vai({ lon: PT.lon * RAD, lat: PT.lat * RAD, quota, direzione: 0, alza: -1.54 });
+    await aspetta(() => { const s = Pi.statistiche?.(); return s && s.inAttesa === 0 && s.tessere > 0; }, 120000).catch(() => null);
+    for (let i = 0; i < 6; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 20)); } if (Pi.statistiche().inAttesa === 0 && Math.abs(N.dove().quota - quota) < 0.05 * quota) return true; } return false; };
+  await posati(); if (suoloFine) { await aspetta(() => Pi.suoloFine(), 60000).catch(() => null); await posati(); await aspetta(() => Pi.suoloFine(), 60000).catch(() => null); }
+  // (l'ora: la prima volta, tra sei ore del giorno di quel pianeta quella in cui il punto sotto l'occhio è più chiaro — di notte
+  // non si vedrebbe niente —, poi sempre quella: il confronto con e senza il suolo fine è alla stessa luce)
+  if (oraScelta == null) { const gl = N.gl, px = new Uint8Array(4); let best = -1; for (let k = 0; k < 6; k++) { N.tempo.t = (k * (M.P.giorno || 86400)) / 6; for (let i = 0; i < 3; i++) N.fotogramma(); gl.readPixels(200, 150, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const y = px[0] + px[1] + px[2]; if (y > best) { best = y; oraScelta = N.tempo.t; } } }
+  N.tempo.t = oraScelta;
   for (let i = 0; i < 20; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 15)); }
   const gl = N.gl, px = new Uint8Array(4), ms = [];
   for (let i = 0; i < fotogrammi; i++) { const t0 = performance.now(); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ms.push(performance.now() - t0); await new Promise((r) => setTimeout(r, 5)); }
   ms.sort((a, b) => a - b); const F = Pi.suoloFine();
-  scrivi(`${quota} m sopra il suolo (3D, pianeta.js)${F ? `: il suolo fine, una finestra di ${F.lato} m (livello ${F.livello})` : suoloFine ? ': il suolo fine non c\'è' : ', senza il suolo fine'}`);
-  return { quota, msMediana: ms[ms.length >> 1], statistiche: Pi.statistiche?.(), fine: F };
+  scrivi(`${+quota.toPrecision(3)} m sopra il suolo, lo schermo largo ${larghezza} m (3D, pianeta.js)${F ? `: il suolo fine, una finestra di ${F.lato} m (livello ${F.livello})` : suoloFine ? ': il suolo fine non c\'è' : ', senza il suolo fine'}`);
+  return { quota, larghezza, msMediana: ms[ms.length >> 1], statistiche: Pi.statistiche?.(), fine: F, alza: N.dove().alza };
 }
 function livello5({ lon, lat, lato }) {
   const r = MP.rocciaDi({ ...camDi(lon, lat), latoSuolo: lato }); if (!r?.suolo) return null; const f = r.fin;

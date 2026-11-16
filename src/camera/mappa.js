@@ -667,7 +667,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
 }
 // ---------- IL SUOLO DI UN PUNTO (suolo.js, PROGETTO.md lavoro 9): la finestra del suolo di lato «latoSuolo», calcolata con la
 // legge di quella grana solo quando la si guarda, come campione della cella della mappa (il padre: la tessera più fine già
-// calcolata in quel punto; dal 3D, la mappa intera). A metri il rilievo fine, il suolo, la falda; nella finestra più piccola
+// calcolata in quel punto, dalla mappa o dalla vista 3D: suolo.js tesseraNota). A metri il rilievo fine, il suolo, la falda; nella finestra più piccola
 // la riga dei granelli, dei pori, dell'acqua dei pori e della chimica che si muove lì (reazioni.js luogoDellaCrosta a quella
 // profondità, con il pH e il carbonio di quell'acqua). → null dove non c'è suolo (l'acqua, la neve, il sale), o
 // { cv, nome, larghezzaM, frase, suolo: true, fin, base, luogo, memoria }

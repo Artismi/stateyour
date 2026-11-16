@@ -176,16 +176,18 @@ console.log('F. il suolo a ogni distanza (src/tre/prove/suolo.html: la terra)');
   });
   let F = null;
   await prova('il 3D a pochi metri: il rilievo auto-affine e il suolo del punto, calcolati solo lì; i ms per fotogramma senza e con (grafica simulata)', async () => {
-    for (const q of [20, 2]) { const r0 = await pS.evaluate((q) => window.prova.tre({ quota: q, suoloFine: 0 }), q); await scatta(`3d_${q}m_senza`); const r1 = await pS.evaluate((q) => window.prova.tre({ quota: q, suoloFine: 1 }), q); await scatta(`3d_${q}m_con`);
-      console.log(`      a ${q} m: ${num(r0.msMediana)} ms per fotogramma senza, ${num(r1.msMediana)} con; ${r1.fine ? `la finestra di ${r1.fine.lato} m (tessera di livello ${r1.fine.livello}, rilievo fine ${num(r1.fine.rms * 1000)} mm rms) calcolata in ${num(r1.fine.ms)} ms, fuori dal fotogramma` : 'niente suolo fine'}`);
-      assert.ok(r1.fine && r1.fine.livello >= 1, `a ${q} m il suolo fine non c'è`); F = r1.fine; }
+    // (lo schermo largo 150 m sul suolo e 12 m: lì il 3D lascia il posto al livello 5, la cui prima finestra è di 10 m)
+    for (const L of [150, 12]) { const r0 = await pS.evaluate((L) => window.prova.tre({ larghezza: L, suoloFine: 0 }), L); await scatta(`3d_${L}m_senza`); const r1 = await pS.evaluate((L) => window.prova.tre({ larghezza: L, suoloFine: 1 }), L); await scatta(`3d_${L}m_con`);
+      console.log(`      lo schermo largo ${L} m (a ${num(r1.quota)} m dal suolo): ${num(r0.msMediana)} ms per fotogramma senza, ${num(r1.msMediana)} con; ${r1.fine ? `la finestra di ${r1.fine.lato} m in ${r1.fine.N} punti (tessera di livello ${r1.fine.livello}, rilievo fine ${num(r1.fine.rms * 1000)} mm rms) calcolata in ${num(r1.fine.ms)} + ${num(r1.fine.msTinta)} ms (la tinta), fuori dal fotogramma` : 'niente suolo fine'}`);
+      assert.ok(r1.fine && r1.fine.livello >= 1, `con lo schermo largo ${L} m il suolo fine non c'è`); F = r1.fine; }
   });
   await prova('il rilievo che il 3D mostra è quello della finestra del livello 5 nello stesso punto: lo stesso padre, scarto zero sui punti comuni', async () => {
-    const L5 = await pS.evaluate((F) => window.prova.livello5({ lon: F.lon, lat: F.lat, lato: F.lato }), { lon: F.lon, lat: F.lat, lato: F.lato });
+    // (la finestra del 3D è lunga il doppio di quella del livello 5 con la stessa griglia: 20 m in 256 punti contro 10 m in 128)
+    const L5 = await pS.evaluate((F) => window.prova.livello5({ lon: F.lon, lat: F.lat, lato: F.lato / 2 }), { lon: F.lon, lat: F.lat, lato: F.lato });
     assert.ok(L5, 'il livello 5 non ha il suolo lì'); assert.equal(L5.chiaveTratto, F.chiaveTratto, 'non è lo stesso padre'); assert.equal(L5.h, F.h);
     let d = 0, n = 0; for (let j = 0; j < F.N; j++) for (let i = 0; i < F.N; i++) { const a = i + F.gx0 - L5.gx0, b = j + F.gy0 - L5.gy0; if (a < 0 || b < 0 || a >= L5.N || b >= L5.N) continue; d = Math.max(d, Math.abs(F.Z[j * F.N + i] - L5.Z[b * L5.N + a])); n++; }
     console.log(`      la cella ${F.I},${F.J} della tessera di livello ${F.livello} in tutti e due; ${n} punti in comune, scarto massimo ${num(d)} m (tolleranza 0)`);
-    assert.ok(n > F.N * F.N * 0.9 && d === 0);
+    assert.ok(n >= 0.9 * L5.N * L5.N && d === 0);
   });
   await pS.close();
 }

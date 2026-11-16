@@ -610,8 +610,8 @@ function descrivi(fin) {
 // densità di QUELL'acqua (mare.js: densità a quella temperatura e salinità) e ripetuta per riempire la finestra (condizioni
 // periodiche: la scatola ripete ogni 3 nm). Gli idrogeni: verso due delle quattro vicine più vicine (la rete dei legami a
 // idrogeno), O–H 0,9572 Å e 104,52° (misurati).
-// GLI IONI: quanti ne dice la concentrazione di mare.js (campioneAcqua: perM3 × volume), Poisson ione per ione, e la scatola
-// neutra (la lunghezza di Debye dell'acqua di mare è 0,3 nm: in pochi nanometri la carica non fluttua); ognuno al posto di
+// GLI IONI: quanti ne dice la concentrazione di mare.js (campioneAcqua: perM3 × volume), Poisson ione per ione CONDIZIONATI alla
+// scatola neutra (la lunghezza di Debye dell'acqua di mare è 0,3 nm: in pochi nanometri la carica non fluttua; campioniNeutri); ognuno al posto di
 // una molecola, con le vicine del primo guscio girate verso di lui (l'ossigeno verso un catione, un idrogeno verso un anione).
 // → la stessa forma di scena di mare.js scenaMolecolare (atomi, legami, legamiH, scatola, parti, etichette, agitazione)
 const ELEMENTO = { H: [1, 0.11], C: [6, 0.17], N: [7, 0.155], O: [8, 0.152], Na: [11, 0.102], Mg: [12, 0.072], S: [16, 0.18], Cl: [17, 0.181], K: [19, 0.138], Ca: [20, 0.1], Fe: [26, 0.078], Ar: [18, 0.188] };

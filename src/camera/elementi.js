@@ -69,7 +69,9 @@
 // cloro e gli alcalini del Sole; le perdite durante l'accrescimento (2b) tolgono al pianeta come la Terra i tre quarti del
 // cloro (365 → 90 ppm nel mantello: Cl/Na diventa quello della Terra) ma non il sodio e il potassio, che non escono dal fuso:
 // resta l'eccesso di TUTTI i moderatamente volatili (Na ×5,7 la Terra), che la Terra vera ha perso nel disco (la sua fase
-// calda: il disco di disco.js a 1 UA non supera ~570 K, e la condensazione incompleta lì non agisce); il mare di quel
+// calda: il disco di disco.js a 1 UA non supera ~570 K, e la condensazione incompleta lì non agisce; l'evaporazione dal fuso
+// — EVAPORA — non tocca gli embrioni della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20, e i loro planetesimi, uniti in ~6·10⁴
+// anni, non fanno in tempo a fondere: all'²⁶Al ne servono ~4·10⁵); il mare di quel
 // pianeta resta una salamoia, ora di soda (il sodio dei fiumi non ha in mare.js un'uscita che lo pareggi); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese
@@ -530,7 +532,16 @@ function xuvIntegrata(t1, t2) {
 const massaDi = (v) => { let s = 0; for (let i = 0; i < v.length; i++) s += v[i]; return s; };
 // (PRESTAZIONI: si muovono solo gli elementi che possono uscire — gli alogeni, Na e K come contro-ioni, e quelli dei ghiacci —:
 // lo stato di ogni corpo tiene solo loro, per la roccia e per i ghiacci; il resto si somma una volta alla fine)
-const MOBILI_R = [...ALOGENI, IDX.Na, IDX.K], MOBILI_G = DEI_GHIACCI, NR = MOBILI_R.length, NG = MOBILI_G.length;
+const MOBILI_R = [...ALOGENI, IDX.Na, IDX.K, IDX.Zn, IDX.Mg, IDX.Si], MOBILI_G = DEI_GHIACCI, NR = MOBILI_R.length, NG = MOBILI_G.length, KALO = ALOGENI.map((i) => MOBILI_R.indexOf(i));
+// L'EVAPORAZIONE DAL FUSO (Hin et al. 2017 [R]: la perdita di vapore dei corpi fusi durante l'accrescimento). Un corpo fuso senza
+// gas attorno (sparito il disco) ha sopra il fuso il vapore di ogni elemento alla sua pressione, quella della stessa legge della
+// condensazione (Clausius–Clapeyron con l'entropia di Trouton, fissata dal T50 di Lodders: una fonte sola), proporzionale a quanto
+// ne resta nel fuso (Henry, rispetto alla roccia condensata tutta). Il vapore sfugge con il flusso di Jeans dalla superficie,
+// p·√(m/2πkT)·(1 + λ)·e^(−λ), λ = GMm/(kTR) (Chamberlain; Hunten 1973 [R]): un corpo piccolo, di poca gravità, lo perde quasi
+// tutto, uno grande quasi niente. Dura quanto il fuso resta aperto (la stessa solidificazione di sopra), alla temperatura del
+// liquidus in superficie. Per Na, K, Cl, Zn e, molto meno, Mg e Si (le specie del vapore sono contate come atomi: NaCl, SiO, KCl
+// non ci sono — dichiarato; il frazionamento degli isotopi di Mg e Si che questa perdita lascia non è modellato).
+const EVAPORA = [IDX.Na, IDX.K, IDX.Cl, IDX.Zn, IDX.Mg, IDX.Si].map((i) => MOBILI_R.indexOf(i));
 const UR = Float64Array.from(MOBILI_R, (i) => U_ROCCIA[i]), UG = Float64Array.from(MOBILI_G, (i) => U_GHIACCI[i]), KH = MOBILI_G.indexOf(IDX.H);
 const KNA = MOBILI_R.indexOf(IDX.Na), KK = MOBILI_R.indexOf(IDX.K), MASSA_R = Float64Array.from(MOBILI_R, (i) => MASSA[i]);
 // membri: gli embrioni del pianeta [{ id, roccia, ghiacci (Float64Array NE, kg), t (anni: quando è fatto), T (K: il disco lì),
@@ -539,9 +550,14 @@ const KNA = MOBILI_R.indexOf(IDX.Na), KK = MOBILI_R.indexOf(IDX.K), MASSA_R = Fl
 //   della stella; L: la luce della stella (in L☉); radice: l'id del pianeta.
 // → { roccia, ghiacci (ciò che resta), spazio (kg per elemento: ciò che è partito), urti: [{ t, x, tolta, tolta2, fusa, fuori }],
 //     fuga, negliUrti (kg partiti per le due vie), solidificato (la parte del fuso solida all'età della stella) }
-export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice }) {
-  const G = COSTANTI.G, stato = new Map(), spR = new Float64Array(NR), spG = new Float64Array(NG), urti = []; let fuga = 0, negliUrti = 0;
-  const nuovo = (t0, T, a, R, M) => ({ R_: new Float64Array(NR), G_: new Float64Array(NG), pR: new Float64Array(NR), pG: new Float64Array(NG), sR: new Float64Array(NR), sG: new Float64Array(NG), tR: new Float64Array(NR), tG: new Float64Array(NG), t0, T, a, R, M, energia: 0, tFine: t0, tFuga: -Infinity });
+export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice, miscela = PROTOSOLARE }) {
+  const G = COSTANTI.G, stato = new Map(), spR = new Float64Array(NR), spG = new Float64Array(NG), urti = []; let fuga = 0, negliUrti = 0, evaporato = 0;
+  // (per l'evaporazione: la pressione di vapore di ogni elemento al liquidus in superficie, in Pa, per la miscela di questa stella,
+  // e la sua parte in massa nella roccia condensata tutta, a cui quella pressione si riferisce)
+  const Ts = liquidusPeridotite(0), freddo = tabellaSolidi(miscela).rocciaFredda, PV = new Float64Array(NR), C0 = new Float64Array(NR);
+  for (const k of EVAPORA) { const sm = SIMBOLI[MOBILI_R[k]], e = ELEMENTI[sm], pi = pressioneParziale(miscela, sm); if (!(pi > 0)) continue; const dH = e.T50 * (TROUTON / R_GAS - Math.log(pi / 2));
+    PV[k] = 1e5 * (pi / 2) * Math.exp(-dH * (1 / Ts - 1 / e.T50)); C0[k] = miscela[sm] / freddo; }
+  const nuovo = (t0, T, a, R, M) => ({ R_: new Float64Array(NR), G_: new Float64Array(NG), pR: new Float64Array(NR), pG: new Float64Array(NG), sR: new Float64Array(NR), sG: new Float64Array(NG), tR: new Float64Array(NR), tG: new Float64Array(NG), t0, T, a, R, M, energia: 0, tFine: t0, tFuga: -Infinity, tEvap: -Infinity, psi: 0 });
   // il raffreddamento del fuso: quanta energia esce per m² e secondo, a t (nebulosa o stella), per un corpo a «a» UA in un disco a T
   const flussoNetto = (c, t) => {
     const colonna = (UG[KH] * c.pG[KH] * ((ELEMENTI.O.massa + 2 * ELEMENTI.H.massa) / (2 * ELEMENTI.H.massa))) / (4 * Math.PI * c.R * c.R);
@@ -566,7 +582,7 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice }) 
   // toglie la parte q del fuori al corpo e la manda nello spazio; con il mare già liquido (il fuso solido) gli alogeni portano via
   // i loro contro-ioni, Na e K nella proporzione del corpo (a fuso aperto l'aria porta HCl). → kg partiti
   const togli = (c, oR, oG, q, mare) => { if (!(q > 0)) return 0; let alo = 0, kg = 0;
-    for (let k = 0; k < NR; k++) { const r = Math.min(c.R_[k], q * oR[k]); c.R_[k] -= r; spR[k] += r; c.tR[k] += r; kg += r; if (k !== KNA && k !== KK) alo += r / MASSA_R[k]; }
+    for (let k = 0; k < NR; k++) { const r = Math.min(c.R_[k], q * oR[k]); c.R_[k] -= r; spR[k] += r; c.tR[k] += r; kg += r; if (KALO.includes(k)) alo += r / MASSA_R[k]; }
     for (let k = 0; k < NG; k++) { const g = Math.min(c.G_[k], q * oG[k]); c.G_[k] -= g; spG[k] += g; c.tG[k] += g; kg += g; }
     if (mare && alo > 0) { const n = c.R_[KNA] / MASSA_R[KNA] + c.R_[KK] / MASSA_R[KK]; if (n > 0) { const q2 = Math.min(1, alo / n); for (const k of [KNA, KK]) { const v = c.R_[k] * q2; c.R_[k] -= v; spR[k] += v; kg += v; } } }
     c.M -= kg; return kg; };
@@ -577,17 +593,30 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice }) 
     const E = xuvIntegrata(t1, t2) * (L / (c.a * c.a)), via = Math.min(1, (PERDITE.epsilon * Math.PI * E * c.R ** 3) / (G * c.M) / mAria);
     fuga += togli(c, oR, oG, via, false);
   };
+  // l'evaporazione dal fuso aperto senza gas attorno, fino a t (vedi EVAPORA): ogni elemento cala come e^(−βΔt), con
+  // β = A·√(m/2πkT)·(1 + λ)e^(−λ)·p₀/(c₀·M_fuso)
+  const evapora = (c, t) => {
+    const t1 = Math.max(c.t0, tGas, c.tEvap), t2 = Math.min(t, c.tFine, eta); if (!(t2 > t1)) return; c.tEvap = t2; const Mf = c.psi * c.M; if (!(Mf > 0)) return;
+    // (sotto un'aria di vapore d'acqua il fuso non vede il vuoto: la superficie da cui il vapore sfugge è coperta come la finestra
+    // da cui esce il calore, e^(−κ·colonna) — la stessa colonna d'acqua di flussoNetto —; il vapore che entra in quell'aria se ne va
+    // con lei, con la fuga limitata dall'energia: fuggi)
+    const colonna = (UG[KH] * c.pG[KH] * ((ELEMENTI.O.massa + 2 * ELEMENTI.H.massa) / (2 * ELEMENTI.H.massa))) / (4 * Math.PI * c.R * c.R), scoperto = Math.exp(-PERDITE.kappa * colonna); if (!(scoperto > 1e-30)) return;
+    const A = 4 * Math.PI * c.R * c.R * scoperto, dt = (t2 - t1) * ANNO_S; let kg = 0;
+    for (const k of EVAPORA) { if (!(PV[k] > 0) || !(c.pR[k] > 0)) continue; const m = MASSA_R[k] / 1000 / NA_AVO, lam = (G * c.M * m) / (COSTANTI.kB * Ts * c.R);
+      const beta = (A * Math.sqrt(m / (2 * Math.PI * COSTANTI.kB * Ts)) * (1 + lam) * Math.exp(-lam) * PV[k]) / (C0[k] * Mf), via = Math.min(c.R_[k], c.pR[k] * -Math.expm1(-beta * dt));
+      c.R_[k] -= via; c.pR[k] -= via; spR[k] += via; kg += via; }
+    c.M -= kg; evaporato += kg; };
   // la partenza: ogni embrione, fuso o no dall'alluminio
   const ids = new Set(), rocciaTutta = new Float64Array(NE), ghiacciTutti = new Float64Array(NE);
   for (const o of membri) {
     let Mr = 0, Mg = 0; for (let i = 0; i < NE; i++) { Mr += o.roccia[i]; Mg += o.ghiacci[i]; rocciaTutta[i] += o.roccia[i]; ghiacciTutti[i] += o.ghiacci[i]; }
     const xAl = Mr > 0 ? o.roccia[IDX.Al] / Mr : 0, Ef = energiaFusione(o.T), psi = Ef > 0 ? Math.min(1, caloreAl26(xAl, o.t) / Ef) : 0, c = nuovo(o.t, o.T, o.a, o.R, Mr + Mg);
     for (let k = 0; k < NR; k++) { c.R_[k] = o.roccia[MOBILI_R[k]]; c.pR[k] = psi * c.R_[k]; } for (let k = 0; k < NG; k++) { c.G_[k] = o.ghiacci[MOBILI_G[k]]; c.pG[k] = psi * c.G_[k]; }
-    c.energia = psi * Ef * c.M; c.tFine = fine(c); stato.set(o.id, c); ids.add(o.id);
+    c.psi = psi; c.energia = psi * Ef * c.M; c.tFine = fine(c); stato.set(o.id, c); ids.add(o.id);
   }
   for (const u of fusioni) {
     if (!ids.has(u.p) || !ids.has(u.g)) continue; const cg = stato.get(u.g), cp = stato.get(u.p);
-    fuggi(cg, u.t); fuggi(cp, u.t);
+    evapora(cg, u.t); evapora(cp, u.t); fuggi(cg, u.t); fuggi(cp, u.t);
     const v = Math.sqrt((2 * G * (u.Mg + u.Mp)) / (u.Rg + u.Rp)), vg = Math.sqrt((2 * G * u.Mg) / u.Rg), vp = Math.sqrt((2 * G * u.Mp) / u.Rp);
     const x = (v / vg) * (u.Mp / u.Mg), Xg = parteTolta(x), Xp = parteTolta((v / vp) * (u.Mg / u.Mp));
     const fg = fuori(cg, u.t), fp = fuori(cp, u.t); negliUrti += togli(cg, fg.oR, fg.oG, Xg, fg.g >= 1) + togli(cp, fp.oR, fp.oG, Xp, fp.g >= 1);
@@ -597,18 +626,18 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice }) 
     const c = nuovo(u.t, T, u.a, Math.cbrt(u.Rg ** 3 + u.Rp ** 3), cg.M + cp.M);
     for (let k = 0; k < NR; k++) { c.R_[k] = cg.R_[k] + cp.R_[k]; const s0 = Math.min(c.R_[k], (1 - Xg) * fg.oR[k] + (1 - Xp) * fp.oR[k]); c.pR[k] = psi * c.R_[k]; c.sR[k] = (1 - psi) * s0; }
     for (let k = 0; k < NG; k++) { c.G_[k] = cg.G_[k] + cp.G_[k]; const s0 = Math.min(c.G_[k], (1 - Xg) * fg.oG[k] + (1 - Xp) * fp.oG[k]); c.pG[k] = psi * c.G_[k]; c.sG[k] = (1 - psi) * s0; }
-    c.energia = psi * Ef * c.M; c.tFine = fine(c);
+    c.psi = psi; c.energia = psi * Ef * c.M; c.tFine = fine(c);
     urti.push({ t: u.t, x, tolta: Xg, tolta2: Xp, fusa: psi, fuori: fg.g });
     stato.set(u.g, c); stato.delete(u.p); ids.delete(u.p);
   }
   // la fine: il pianeta (l'ultimo corpo rimasto) finisce di solidificare; la fuga fino a lì
   const c = stato.get(radice) ?? [...stato.values()][0];
-  fuggi(c, eta);
+  evapora(c, eta); fuggi(c, eta);
   // ciò che resta: tutto ciò che gli embrioni hanno portato meno ciò che è partito
   const spazio = new Float64Array(NE);
   for (let k = 0; k < NR; k++) { const i = MOBILI_R[k]; rocciaTutta[i] = Math.max(0, rocciaTutta[i] - spR[k]); spazio[i] += spR[k]; }
   for (let k = 0; k < NG; k++) { const i = MOBILI_G[k]; ghiacciTutti[i] = Math.max(0, ghiacciTutti[i] - spG[k]); spazio[i] += spG[k]; }
-  return { roccia: rocciaTutta, ghiacci: ghiacciTutti, spazio, urti, fuga, negliUrti, solidificato: solidificato(c, eta) };
+  return { roccia: rocciaTutta, ghiacci: ghiacciTutti, spazio, urti, fuga, negliUrti, evaporato, solidificato: solidificato(c, eta) };
 }
 
 // ---------- 6. L'ACQUA DEL MARE: le tracce

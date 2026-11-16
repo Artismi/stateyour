@@ -188,7 +188,7 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    delle onde di quel tratto, la schiuma, la corrente; a centimetri increspature, bolle, granelli; a micron fiocchi di
    argilla; a nanometri l'acqua liquida con ogni specie disciolta nel suo numero. Poi la roccia, l'aria, il suolo.
    *Fatto quando:* a ogni distanza si vede ciò che c'è (mai un cristallo solo nel vuoto) e la finestra riassunta ridà il padre.
-   (Fatto per l'acqua: `src/camera/finestra.js`, `test_finestre` (11 prove; ~38 s, di cui ~28 per costruire il pianeta con la sua circolazione) e
+   (Fatto per l'acqua: `src/camera/finestra.js`, `test_finestre` (12 prove; ~38 s, di cui ~28 per costruire il pianeta con la sua circolazione) e
    9 righe nuove di `test_coerenza_scale`. Il padre è lo stato del mare in quel punto, letto solo dalle funzioni di mare.js
    (vento di meteo.js, Hs e periodo di campoOnde col tratto libero, corrente, temperatura, salinità, ioni, torbidità): chi
    cambia la chimica del bilancio dei sali cambia da sé ciò che si vede. Le grane non sono soglie: ogni popolazione si
@@ -206,7 +206,9 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    della torbidità (esatta), i gas delle bollicine dall'aria del pianeta; il plancton no (la vita non c'è, e lo si dice). A
    NANOMETRI l'acqua liquida fitta dal potenziale mW (`acqua_mw.js`, generata da `strumenti/acqua_mw.mjs` col Monte Carlo:
    −10,05 kcal/mol come Molinero e Moore, vicine entro 3,3 Å 4,3 come i raggi X) alla densità di quell'acqua, ogni ione
-   Poisson sul volume e la scatola neutra: al posto del cristallo di sale su un reticolo cubico. I costi: la finestra si
+   Poisson sul volume CONDIZIONATO alla scatola neutra (campioniNeutri: rigetto esatto sullo ione perno, PTRS per le medie grandi;
+   prima si aggiungeva sempre lo ione più abbondante del segno che mancava, e HCO₃⁻ era 554 contro 426 ± 83: ora 378 contro
+   E[n | Q = 0] = 392 ± 83 in 100 scatole, TORNA; su 20 000 scatole finte le medie sono quelle della convoluzione): al posto del cristallo di sale su un reticolo cubico. I costi: la finestra si
    crea in 20–100 ms quando la si guarda, poi 10–25 ms per immagine, rifatta al più 20 volte al secondo. Non torna: la
    schiuma istantanea, il cielo senza diffusione multipla né nuvole (da sopra, senza riflesso della stella, le increspature
    si vedono appena), il guscio degli ioni con 4 vicine invece di 6, la stella della finestra a mezzogiorno dell'equinozio.)
@@ -256,9 +258,19 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    di residenza dalla colonna di suolo.js (colonnaDelPianeta, o quella del punto); ATHY e RESIDENZA (10⁴ anni, libero) non ci sono
    più; sul primo roccioso con calore il basalto ha φ₀ 0,026, L 8,1 km, l'acqua resta 117–1620 anni tra 0,3 e 3 km e l'H₂ va da
    1,7·10⁻⁵ a 5,2·10⁻⁴ mol/L (prima 10⁻⁴–10⁻²). L'APP (mappa.js): sulla terra il livello 5 comincia con le finestre del suolo di
-   10 m, 1 m e 10 cm (LATI_SUOLO, di dieci in dieci come l'acqua), con la riga di ciò che c'è e i numeri (nella più piccola anche la
-   chimica dei pori: luogoDellaCrosta a quella profondità col pH e il carbonio di quell'acqua); sotto, la roccia del punto come
-   prima; in fondo, in 3D, la superficie del minerale con l'acqua dei pori sopra. PROVE: finestre sovrapposte scarto 0 (8181 punti
+   10 m, 1 m, 10 cm, 1 cm, 1 mm, 100 µm e 10 µm (LATI_SUOLO, di dieci in dieci come l'acqua), con la riga di ciò che c'è e i numeri
+   (nella più piccola anche la chimica dei pori: luogoDellaCrosta a quella profondità col pH e il carbonio di quell'acqua); sotto
+   l'ultima si continua nella scala sola della roccia dal primo livello più piccolo di lei (il reticolo di 30 nm e gli atomi del
+   granello che sta nel punto guardato, granoNelPunto; in un poro il minerale più abbondante), fino alla scena 3D dei pori. Lo zoom è
+   continuo (test_vista F: a ogni passo i pixel per metro crescono del passo esatto, scarto 2·10⁻¹⁶ su 200 passi, giù e su); la roccia
+   grande (4 cm) e il cristallo con la sua memoria non sono più sulla via dello zoom dove c'è il suolo. IL 3D (pianeta.js): a pochi
+   metri, nelle pezze sotto l'occhio, la finestra del suolo di quel punto (20 m in 256 punti, la griglia della finestra di 10 m del
+   livello 5; 200 m fino allo schermo largo 200 m), col padre nella tessera che il 3D disegna lì (tessere.worker.js ne manda i campi
+   grezzi, suolo.js ricordaTessera li dà anche a mappa.js): il rilievo che il 3D mostra è quello del livello 5 nello stesso punto con
+   scarto 0 su 16 384 punti; entra come luce (il gradiente esatto) e tinta del suolo riportata alla riflettanza della tessera, non
+   sposta i vertici (dichiarato). Costi: 108–122 ms per fotogramma senza e 116–118 con (schermo largo 150 m), 201–212 senza e 198–204 con (12 m),
+   grafica simulata, due misure: nel rumore; la finestra 255–357 ms più 70–162 ms la tinta, fuori dal fotogramma, quando ci si sposta di un quarto di finestra. Sul
+   punto della prova ℓ_c = 240 m liscia il rilievo sotto la cella: 2 µm rms, non si vede; si vede la tinta. PROVE: finestre sovrapposte scarto 0 (8181 punti
    del rilievo, 50 granelli); la varianza del rilievo fine su 256 punti ridà Σs dei modi entro 4 scarti e Σs ridà ∫P sotto la cella
    entro la quadratura; la porosità dei primi 10 m di 64 finestre ridà quella del padre (che la media sull'insieme delle curvature)
    entro 4 scarti; la sezione del versante manda nel fiume la ricarica × ℓ entro il residuo del risolutore (10⁻¹⁴ relativo) e
@@ -271,8 +283,8 @@ Due alla volta. Ogni lavoro finisce con una prova che verifica la sua condizione
    solo; le attività sono le concentrazioni; le velocità di laboratorio (in natura 10–1000 volte più lente); le argille impaccano
    come sfere; niente argille di magnesio, niente vescicole; la compattazione dei sedimenti non ha una legge sua; nelle tessere di
    geologia.js le conche diventano laghi (al primo livello resta asciutto il 9% delle terre) e lì il suolo non c'è. MANCA: la vita
-   (respirazione, radici: la CO₂ dei pori cento volte più alta); le finestre dal centimetro al micron nell'app (ci sono come
-   funzioni e schermate `suolo_*.png`, l'app passa dai 10 cm alla roccia); il rilievo fine nella vista 3D (src/tre, non toccato); i
+   (respirazione, radici: la CO₂ dei pori cento volte più alta); il rilievo fine del 3D come geometria (oggi è luce); la tinta del
+   livello 5 (immagineSuolo, chiara) e quella del 3D (la riflettanza della carta) non combaciano in assoluto; i
    sistemi di flusso regionali dalla mappa; la roccia come finestra (cristallizza resta un'immagine fatta prima).)
 10. **La chimica che si muove da sé** (era «la vita in potenza») — la regola zero applicata alla chimica del pianeta, con
    la rilevazione di ciò che emerge e la stima degli eventi rari; da qui i momenti d'osservatore. Base:
