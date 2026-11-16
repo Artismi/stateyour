@@ -6,9 +6,10 @@
 // · { tipo: 'finestra', finestra, vista } (cambia solo lo sguardo: si riproietta ciò che c'è) · { tipo: 'misura', w, h }.
 // Messaggi verso l'interfaccia: { tipo: 'stato', frase, finestra, info }.
 
-import { creaSessione } from '../motore.js';
-import { creaFinestra, creaProiettore, copieVisibili } from '../finestra.js';
-import { descriviDirezione } from '../indici.js';
+import { creaSorgente } from '../motore.js';
+import { creaFinestra, creaProiettore, copieVisibili, taglia } from '../finestra.js';
+import { descriviDirezione, reticoloDelPiano } from '../indici.js';
+import { combina } from '../reticolo.js';
 import { NOMI_TECNICI } from '../reticolo.js';
 
 let tela = null, ctx = null, W = 0, H = 0, dpr = 1;
@@ -18,6 +19,8 @@ let S = null, p = null, fin = null, P = null, vista = 'tessera', primo = 0, prim
 // crescere: oltre, il disegno diventa una nebbia uniforme e non si vede più il motivo.
 const PIENO = 0.8;
 let inchiostro = 0;
+// la sorgente: una o più palline (sessioni), ognuna col suo segno di quanto è già proiettato; lo scheletro acceso o no
+let So = null, fatti = [], scheletro = false;
 
 const COLORI = 10; // la velocità: lenta calda (arancio), veloce fredda (azzurro)
 const tinta = (i) => { const t = i / (COLORI - 1); return `hsl(${28 + 172 * t}, ${90 - 10 * t}%, ${62 + 8 * t}%)`; };
@@ -78,12 +81,43 @@ function disegna(s) {
 }
 
 // la pallina, dov'è adesso (solo nella vista del viaggio, o se è nel volume visibile)
-function sorgente() { return vista === 'tessera' ? S.tessera : S.tratti; }
+const sorgenteDi = (X) => (vista === 'tessera' ? X.tessera : X.tratti);
+
+// LO SCHELETRO 🦴: la griglia del reticolo nella stessa vista, in trasparenza sotto il motivo. In prospettiva sono gli
+// spigoli delle celle visibili (tagliati esattamente sul volume visibile), che convergono da soli ai punti di fuga;
+// nel limite parallelo, se la finestra è lungo un piano (hkl), la griglia di quel piano (i vettori t₁, t₂).
+function disegnaScheletro() {
+  if (!scheletro || !S || !fin) return;
+  const cr = S.cristallo, k = scala();
+  ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(190,210,255,1)'; ctx.lineWidth = 1 * dpr;
+  const d = descriviDirezione(p.finestra.n, cr, S.d);
+  if (fin.parallela && d.esatta) {
+    const { t1, t2 } = reticoloDelPiano(d.hkl, cr), a = [t1, t2].map((t) => [t[0] * fin.e1[0] + t[1] * fin.e1[1] + t[2] * fin.e1[2], t[0] * fin.e2[0] + t[1] * fin.e2[1] + t[2] * fin.e2[2]]);
+    const o = fin.aFinestra([0, 0, 0]), M = Math.ceil(fin.L / Math.min(Math.hypot(...a[0]), Math.hypot(...a[1])) * 1.5) + 2;
+    ctx.globalAlpha = 0.35; ctx.beginPath();
+    for (const [u, v] of [[a[0], a[1]], [a[1], a[0]]]) for (let j = -M; j <= M; j++) {
+      const x0 = o[0] + j * v[0] - M * u[0], y0 = o[1] + j * v[1] - M * u[1], x1 = o[0] + j * v[0] + M * u[0], y1 = o[1] + j * v[1] + M * u[1];
+      const [p0, p1] = [aTela(x0, y0), aTela(x1, y1)]; ctx.moveTo(...p0); ctx.lineTo(...p1);
+    }
+    ctx.stroke(); ctx.globalAlpha = 1; return;
+  }
+  const copie = copieVisibili(fin, cr, 1500).filter((c) => c.cella.every((x) => Number.isInteger(x)));
+  const gruppi = [[], [], [], []];
+  for (const c of copie) for (const ax of [0, 1, 2]) {
+    if (cr.piano && ax === 2) continue;
+    const a = fin.aFinestra(c.T), b = fin.aFinestra(c.T.map((x, i) => x + cr.A[ax][i])), t = taglia(fin.piani, ...a, ...b);
+    if (!t) continue;
+    const P0 = a.map((x, i) => x + t[0] * (b[i] - x)), P1 = a.map((x, i) => x + t[1] * (b[i] - x)), A0 = fin.proietta(...P0), A1 = fin.proietta(...P1);
+    gruppi[Math.min(3, Math.floor(((A0[2] + A1[2]) / 2) * 4))].push([aTela(A0[0], A0[1]), aTela(A1[0], A1[1])]);
+  }
+  gruppi.forEach((g, i) => { ctx.globalAlpha = 0.1 + 0.1 * i; ctx.beginPath(); for (const [u, v] of g) { ctx.moveTo(...u); ctx.lineTo(...v); } ctx.stroke(); });
+  ctx.globalAlpha = 1;
+}
 
 function nuovoProiettore() {
   fin = creaFinestra({ ...p.finestra, aspetto: H / W });
   P = creaProiettore(fin, S.cristallo, vista === 'tessera');
-  inchiostro = 0; pulisci(); disegnaAtomi();
+  inchiostro = 0; fatti = So ? So.sessioni.map(() => 0) : []; pulisci(); disegnaScheletro(); disegnaAtomi();
 }
 
 function informa(forza = false) {
@@ -92,21 +126,23 @@ function informa(forza = false) {
   const d = descriviDirezione(p.finestra.n, S.cristallo, S.d);
   self.postMessage({ tipo: 'stato', frase: S.frase(), finestra: d.frase, info: {
     nome: NOMI_TECNICI[S.cristallo.nome] ?? S.cristallo.nome, dt: S.dt, passi: S.passi, passiTotali: S.passiTotali, tratti: P?.emessi ?? 0,
-    copie: P?.copie.length ?? 0, zona: S.zona, inchiostro, finito: S.finito, primoMs: primoMostrato ? primo : null, vmax: S.scelta.vmax, immagini: S.cristallo.immagini,
+    copie: P?.copie.length ?? 0, zona: S.zona, inchiostro, finito: S.finito, primoMs: primoMostrato ? primo : null, palline: So?.sessioni.length ?? 1, ordine: So?.ordine ?? null, specchi: So?.specchi ?? null, elementi: So?.elementi ?? null, vmax: S.scelta.vmax, immagini: S.cristallo.immagini,
   } });
 }
 
 function tic() {
   if (!S || !ctx) return;
-  const t0 = performance.now(), src = sorgente();
-  // prima si riproietta ciò che c'è già (dopo un cambio di sguardo), poi si fa crescere la linea
-  while (performance.now() - t0 < 12) {
-    if (P.fatti < src.n && !P.pieno) {
-      disegna(P.proietta(src.s, src.vel, P.fatti, Math.min(src.n, P.fatti + 3000)));
-    } else if (!S.finito && inchiostro < PIENO) {
-      S.avanza(Math.max(S.ogni, 400));
-      const s2 = sorgente(); disegna(P.proietta(s2.s, s2.vel, P.fatti, s2.n));
-    } else break;
+  const t0 = performance.now(), ss = So.sessioni;
+  // prima si riproietta ciò che c'è già (dopo un cambio di sguardo), poi crescono le linee di tutte le palline
+  while (performance.now() - t0 < 12 && !P.pieno) {
+    let lavoro = false;
+    for (let i = 0; i < ss.length; i++) {
+      const src = sorgenteDi(ss[i]);
+      if (fatti[i] < src.n) { const a = Math.min(src.n, fatti[i] + 3000); disegna(P.proietta(src.s, src.vel, fatti[i], a)); fatti[i] = a; lavoro = true; }
+    }
+    if (lavoro) continue;
+    if (inchiostro >= PIENO || ss.every((x) => x.finito)) break;
+    for (const x of ss) if (!x.finito) x.avanza(Math.max(x.ogni, Math.ceil(400 / ss.length)));
   }
   if (!primoMostrato && P.emessi > 0) { primoMostrato = true; primo = performance.now() - primo; informa(true); }
   informa();
@@ -120,11 +156,11 @@ self.onmessage = (e) => {
   else if (m.tipo === 'pattern') {
     primo = performance.now(); primoMostrato = false;
     p = m.p; vista = m.vista ?? p.vista ?? 'tessera';
-    S = creaSessione(p);
+    So = creaSorgente(p); S = So.sessioni[0]; scheletro = !!m.scheletro;
     nuovoProiettore(); informa(true);
   } else if (m.tipo === 'finestra') {
     if (!S) return;
-    p = { ...p, finestra: m.finestra }; vista = m.vista ?? vista;
+    p = { ...p, finestra: m.finestra }; vista = m.vista ?? vista; scheletro = !!m.scheletro;
     nuovoProiettore(); informa(true);
   }
 };

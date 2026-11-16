@@ -6,6 +6,7 @@ import { PREDEFINITO, scrivi, leggi, casuale, POSTI } from '../indirizzo.js';
 import { creaCristallo, vincola, vettoriCella, combina, SISTEMI, NOMI_TECNICI, punto, versore, vettore } from '../reticolo.js';
 import { creaFinestra } from '../finestra.js';
 import { direzioniSemplici, scriviIndici } from '../indici.js';
+import { sitoVicino } from '../simmetria.js';
 
 const $ = (id) => document.getElementById(id);
 const tela = $('tela'), sopra = $('sopra'), octx = sopra.getContext('2d');
@@ -31,9 +32,10 @@ const off = tela.transferControlToOffscreen();
 lav.postMessage({ tipo: 'tela', tela: off, ...misure(), dpr }, [off]);
 let ultimaInfo = null;
 lav.onmessage = (e) => { const m = e.data; if (m.tipo === 'stato') { $('frase').textContent = m.frase; $('frase-globo').textContent = m.finestra; ultimaInfo = m; if ($('info').classList.contains('aperto')) pannello(); } };
-const invia = () => { lav.postMessage({ tipo: 'pattern', p: structuredClone(p), vista: p.vista }); disegnaCubetti(); };
+let scheletro = false;
+const invia = () => { lav.postMessage({ tipo: 'pattern', p: structuredClone(p), vista: p.vista, scheletro }); disegnaCubetti(); };
 let attesa = null;
-const inviaFinestra = () => { if (attesa) return; attesa = requestAnimationFrame(() => { attesa = null; lav.postMessage({ tipo: 'finestra', finestra: structuredClone(p.finestra), vista: p.vista }); }); };
+const inviaFinestra = () => { if (attesa) return; attesa = requestAnimationFrame(() => { attesa = null; lav.postMessage({ tipo: 'finestra', finestra: structuredClone(p.finestra), vista: p.vista, scheletro }); }); };
 window.addEventListener('resize', () => { const m = misure(); sopra.width = m.w; sopra.height = m.h; lav.postMessage({ tipo: 'misura', ...m, dpr }); });
 { const m = misure(); sopra.width = m.w; sopra.height = m.h; }
 
@@ -50,6 +52,8 @@ function aggiornaManopole() {
   manopola('m-caldo').value = Math.round(1000 * Math.min(1, sT(p.T)));
   manopola('m-distanza').value = Math.round(1000 * Math.min(1, sR(p.finestra.R)));
   $('t-vista').textContent = p.vista === 'tessera' ? '🧩' : '🔍';
+  $('t-pallina').textContent = p.sorgente ? '✴️' : '⚪'; $('t-pallina').classList.toggle('acceso', !!p.sorgente);
+  $('t-scheletro').classList.toggle('acceso', scheletro);
 }
 function suManopola(id, fare, soloFinestra = false) {
   const el = manopola(id);
@@ -62,7 +66,13 @@ suManopola('m-caldo', (s) => { p.T = Tdi(s); });
 suManopola('m-distanza', (s) => { p.finestra.R = Rdi(s); disegnaCubetti(); }, true);
 
 // ---------- i tasti
-$('t-pallina').onclick = () => { invia(); suggerisci(); };
+// ⚪ ↔ ✴️: una pallina sola, o la sorgente sul sito simmetrico più vicino (che manda le palline in tutte le direzioni
+// equivalenti per la simmetria del sito)
+let memoCr = null;
+const cristalloOra = () => { const k = JSON.stringify([p.reticolo, p.atomi]); if (!memoCr || memoCr.k !== k) memoCr = { k, cr: creaCristallo({ ...vincola(p.reticolo), atomi: p.atomi, w: p.w }) }; return memoCr.cr; };
+const scatta = (x) => sitoVicino(cristalloOra(), x).x;
+$('t-pallina').onclick = () => { p.sorgente = p.sorgente ? 0 : 1; if (p.sorgente) p.r0 = scatta(p.r0); aggiornaManopole(); invia(); ricorda(); suggerisci(); };
+$('t-scheletro').onclick = () => { scheletro = !scheletro; aggiornaManopole(); inviaFinestra(); };
 $('t-vista').onclick = () => { p.vista = p.vista === 'tessera' ? 'viaggio' : 'tessera'; aggiornaManopole(); inviaFinestra(); ricorda(); };
 $('t-caso').onclick = () => { p = casuale(Math.floor(Math.random() * 1e9)); aggiornaManopole(); invia(); ricorda(); };
 $('t-indietro').onclick = () => { if (qui > 0) { qui--; p = leggi(storia[qui]); aggiornaManopole(); invia(); tastiStoria(); } };
@@ -269,9 +279,11 @@ sopra.addEventListener('pointerup', () => {
   if (!freccia) return;
   const { x0, y0, x1, y1 } = freccia, dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy), r = sopra.getBoundingClientRect();
   freccia = null;
-  if (l < 12) return;
   const f = creaFinestra({ ...p.finestra, aspetto: r.height / r.width }), k = r.width / f.L;
-  p.r0 = f.dallImmagine((x0 - r.width / 2) / k, -(y0 - r.height / 2) / k);
+  const punto0 = f.dallImmagine((x0 - r.width / 2) / k, -(y0 - r.height / 2) / k);
+  // con la sorgente, un tocco la sposta sul sito simmetrico più vicino
+  if (l < 12) { if (p.sorgente) { p.r0 = scatta(punto0); invia(); ricorda(); } return; }
+  p.r0 = p.sorgente ? scatta(punto0) : punto0;
   const s = Math.min(1, l / (0.32 * r.width)), v = Math.sqrt(2 * KE(0.15 + 0.85 * s));
   p.v0 = f.e1.map((x, i) => ((dx * x - dy * f.e2[i]) / l) * v);
   aggiornaManopole(); invia(); ricorda();
@@ -288,6 +300,13 @@ function frecciaDa(x0, y0, x1, y1, alfa) {
 function suggerisci() { aiuto = performance.now(); }
 function anima(t) {
   octx.clearRect(0, 0, sopra.width, sopra.height);
+  if (p.sorgente) { // la sorgente: una stellina dove sta il sito, vista dalla finestra
+    const r = sopra.getBoundingClientRect(), f = creaFinestra({ ...p.finestra, aspetto: r.height / r.width }), w = f.aFinestra(p.r0);
+    if (!f.piani.some((a) => a[0] * w[0] + a[1] * w[1] + a[2] * w[2] > a[3] + 1e-9)) {
+      const [X, Y] = f.proietta(...w), k = (r.width / f.L) * dpr, x = sopra.width / 2 + X * k, y = sopra.height / 2 - Y * k;
+      octx.fillStyle = 'rgba(255,255,255,0.95)'; octx.font = `${26 * dpr}px system-ui`; octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillText('✴️', x, y);
+    }
+  }
   if (freccia) frecciaDa(freccia.x0 * dpr, freccia.y0 * dpr, freccia.x1 * dpr, freccia.y1 * dpr, 0.95);
   else if (aiuto && t - aiuto < 5000) {
     const a = 0.5 * Math.sin(((t - aiuto) / 5000) * Math.PI) * (0.6 + 0.4 * Math.sin(t / 220)), W = sopra.width, H = sopra.height;
@@ -311,7 +330,7 @@ function pannello() {
     <h3>La finestra</h3>C = (${f.C.map((x) => fmt(x, 3)).join(', ')}), R = ${fmt(f.R)}, n = (${f.n.map((x) => fmt(x, 3)).join(', ')}), ψ = ${fmt(f.psi, 3)}, L = ${fmt(f.L)}, profondità D = ${fmt(f.D)}<br>
     prospettiva: X = R·u/z, Y = R·v/z, luminosità (R/z)² (al più 1); R = ∞ è la proiezione parallela<br>
     ${ultimaInfo ? ultimaInfo.finestra : ''}
-    <h3>Il calcolo</h3>${i ? `passo dt = ${fmt(i.dt)} (scelto per convergenza) · passi ${i.passi} di ${i.passiTotali} · tratti disegnati ${i.tratti} · copie della tessera ${i.copie} · immagini ${i.immagini}<br>zona pulita: ${i.zona.celle} celle ${i.zona.finita ? '' : '(non ancora sfaldata)'} · primo disegno in ${i.primoMs != null ? Math.round(i.primoMs) + ' ms' : '…'}` : '…'}
+    <h3>Il calcolo</h3>${i ? `passo dt = ${fmt(i.dt)} (scelto per convergenza) · passi ${i.passi} di ${i.passiTotali} · tratti disegnati ${i.tratti} · copie della tessera ${i.copie} · immagini ${i.immagini}<br>palline ${i.palline}${i.ordine ? ` · gruppo del sito: ${i.elementi} operazioni, rotazione di ordine ${i.ordine}, ${i.specchi} specchi` : ''}<br>zona pulita: ${i.zona.celle} celle ${i.zona.finita ? '' : '(non ancora sfaldata)'} · primo disegno in ${i.primoMs != null ? Math.round(i.primoMs) + ' ms' : '…'}` : '…'}
     <h3>L'indirizzo</h3><textarea id="testo">${scrivi(p)}</textarea><button id="apri">apri questo indirizzo</button>`;
   $('apri').onclick = () => { try { p = leggi($('testo').value); aggiornaManopole(); invia(); ricorda(); } catch (err) { alert(err.message); } };
 }

@@ -17,7 +17,12 @@ Un indirizzo dopo `#` nell'URL apre quel pattern.
 
 - 🧊 i 7 sistemi cristallini come piccole forme; un secondo tocco cambia la centratura (i 14 reticoli di Bravais).
   Nel cubetto si tocca un posto: vuoto → collina ▲ → conca ▼ → vuoto.
-- Trascinando una freccia sul disegno si lancia la pallina (la lunghezza è la velocità). ⚪ la rilancia.
+- Trascinando una freccia sul disegno si lancia la pallina (la lunghezza è la velocità).
+- ⚪ ↔ ✴️ la sorgente simmetrica (da Lewis F. Day, «Pattern Design», 1903: ribaltamento e rotazione): il punto
+  toccato scatta sul sito simmetrico più vicino, e da lì partono le palline nelle direzioni equivalenti per il gruppo
+  del sito, trovato numericamente dal reticolo e dagli atomi (`src/simmetria.js`).
+- 🦴 lo scheletro: la griglia del reticolo in trasparenza, in prospettiva coi suoi punti di fuga, nel limite parallelo
+  la griglia del piano (hkl).
 - 🧲 il magnete (lungo la direzione da cui si guarda), 🐢/🐇 la velocità, ❄️/🔥 la temperatura.
 - 🌐 il globo: si gira col dito, scatta sui piani semplici; accanto, il cubetto con la finestra dentro e la manopola
   🚇/🖼️ della distanza R (da dentro il cristallo alla carta da parati, R = ∞).
@@ -39,7 +44,8 @@ copie · `src/indici.js` (hkl), reticolo del piano, frasi · `src/motore.js` pas
 
 `npm test` (circa mezzo minuto): caso, reticoli (vincoli e simmetria in {1, 2, 3, 4, 6}), moto (energia, Boris,
 cerchi, convergenza, determinismo), finestra (asse e R, tagli, periodo (hkl) nel limite parallelo, direzioni
-irrazionali, 🎲 uniforme, punti di fuga), pattern attesi (canale, intreccio, fiori, rosette e salti), zona pulita.
+irrazionali, 🎲 uniforme, punti di fuga), pattern attesi (canale, intreccio, fiori, rosette e salti), zona pulita, sorgente simmetrica (gruppo del sito e
+invarianza del disegno entro l'aritmetica). `node prove/sorgente.cjs '<lista json di indirizzi>'` rifà le schermate 10 e 11.
 `node prove/schermate.cjs` prova l'interfaccia in Chromium e rifà le schermate in `prove/schermate/`.
 
 ## Da fare

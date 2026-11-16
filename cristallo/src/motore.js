@@ -21,6 +21,7 @@ import { creaCristallo, punto, norma } from './reticolo.js';
 import { creaPallina, avanza, creaViaggio, creaTessera, haMagnete } from './moto.js';
 import { scriviFisica, direzioneUniforme } from './indirizzo.js';
 import { sorgente } from './caso.js';
+import { gruppoDelSito, orbita, descriviGruppo } from './simmetria.js';
 
 export const DELTA0 = 1e-6;
 export const sogliaDi = (finestra) => (finestra?.L ?? 4) / 400;
@@ -176,3 +177,11 @@ export function lyapunov(cr, r0, v0, B, dt, tempo, tau = 0.5, delta = 1e-9, dire
   return somma / (giri * m * dt);
 }
 
+
+// ---------- la sorgente simmetrica: una sessione per ogni direzione dell'orbita, tutte con lo stesso passo
+export function creaSorgente(p) {
+  if (!p.sorgente) { const S = creaSessione(p); return { sessioni: [S], gruppo: null, direzioni: [p.v0] }; }
+  const cristalli = cristalliDi(p), gruppo = gruppoDelSito(cristalli.vero, p.r0), direzioni = orbita(gruppo, p.v0, cristalli.vero.piano);
+  const { dt } = scegliPasso(p, cristalli);
+  return { sessioni: direzioni.map((v) => creaSessione({ ...p, v0: v }, { dt })), gruppo, direzioni, ...descriviGruppo(gruppo) };
+}

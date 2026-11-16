@@ -10,6 +10,9 @@
 // La fonte del caso del pattern (le vibrazioni, i difetti) ha per radice la parte FISICA dell'indirizzo (tutto tranne
 // la finestra e la vista): girare la finestra non cambia il cristallo.
 //
+// LA SORGENTE (sorgente=1, scritta solo se accesa): da r0, che è un sito speciale, partono le palline nelle direzioni
+// dell'orbita di v0 sotto il gruppo del sito (simmetria.js).
+//
 // IL 🎲: casuale(k) dà un indirizzo dalla fonte del caso con l'indirizzo «🎲/k». Il reticolo (sistema, centratura,
 // parametri nei vincoli), gli atomi, il lancio, il magnete; la finestra con n uniforme sulla sfera (cos θ uniforme in
 // [−1, 1], φ uniforme in [0, 2π)), ψ uniforme in [0, 2π), C nel primo atomo della cella, R = (L/2)·10^u con u uniforme
@@ -23,7 +26,7 @@ export const PREDEFINITO = {
   atomi: [{ p: [0, 0, 0], s: 1 }], U0: 1, w: 0.15,
   r0: [0.5, 0.5, 0.5], v0: [2.2, 0.9, 0.4], B: [0, 0, 0], T: 0, difetti: 0,
   finestra: { C: [0, 0, 0], R: 4, n: [0, 0, 1], psi: 0, L: 4, D: 1.5, h: 0.3, modo: 'prospettiva' },
-  vista: 'tessera', tempo: 40,
+  vista: 'tessera', tempo: 40, sorgente: 0,
 };
 
 const num = (x) => (x === Infinity ? 'inf' : x === -Infinity ? '-inf' : Object.is(x, -0) ? '-0' : String(x));
@@ -43,7 +46,7 @@ export function scriviFisica(p) {
 export function scrivi(p) {
   const f = p.finestra;
   return [scriviFisica(p), `C=${vet(f.C)}`, `R=${num(f.R)}`, `n=${vet(f.n)}`, `psi=${num(f.psi)}`, `L=${num(f.L)}`, `D=${num(f.D)}`, `h=${num(f.h)}`,
-    `modo=${f.modo}`, `vista=${p.vista}`, `tempo=${num(p.tempo)}`].join(' ');
+    `modo=${f.modo}`, `vista=${p.vista}`, `tempo=${num(p.tempo)}`, ...(p.sorgente ? ['sorgente=1'] : [])].join(' ');
 }
 
 export function leggi(testo) {
@@ -55,7 +58,7 @@ export function leggi(testo) {
       case 'reticolo': { const q = v.split('.'), piano = q[0] === 'piano'; if (piano) q.shift(); p.reticolo.piano = piano; p.reticolo.sistema = q[0]; p.reticolo.centratura = q[1] ?? 'P'; break; }
       case 'a': case 'b': case 'c': case 'alfa': case 'beta': case 'gamma': p.reticolo[k] = leggiNum(v); break;
       case 'atomi': p.atomi = v === 'nessuno' ? [] : v.split(';').map((s) => ({ s: s[0] === '-' ? -1 : 1, p: leggiVet(s.slice(1)) })); break;
-      case 'U0': case 'w': case 'T': case 'difetti': case 'tempo': p[k] = leggiNum(v); break;
+      case 'U0': case 'w': case 'T': case 'difetti': case 'tempo': case 'sorgente': p[k] = leggiNum(v); break;
       case 'r0': case 'v0': case 'B': p[k] = leggiVet(v); break;
       case 'C': case 'n': p.finestra[k] = leggiVet(v); break;
       case 'R': case 'psi': case 'L': case 'D': case 'h': p.finestra[k] = leggiNum(v); break;
