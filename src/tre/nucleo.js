@@ -277,10 +277,15 @@ export function creaNucleo(tela, opzioni = {}) {
     if (!c.solido) return Infinity; const b = -V.scal(o, d), q = b * b - V.scal(o, o) + c.raggio * c.raggio; return q < 0 || b - Math.sqrt(q) < 0 ? Infinity : b - Math.sqrt(q);
   }
   // il bersaglio (tra quelli detti dagli strati nell'ultimo fotogramma) più vicino al raggio dato, negli assi del mondo
-  function bersaglioLungo(dW) {
-    let meglio = null, vm = Infinity; const tol = (18 * 2 * Math.tan(cam.fov / 2)) / Math.max(1, tela.clientHeight);
-    for (const b of S.bersagli) { const lungo = V.scal(b.p, dW); if (lungo <= 0) continue; const fuori = Math.hypot(b.p[0] - dW[0] * lungo, b.p[1] - dW[1] * lungo, b.p[2] - dW[2] * lungo), largo = Math.max(b.raggio, tol * lungo); if (fuori > largo) continue; const v = fuori / largo + (b.raggio > tol * lungo ? -1 : 0) + 1e-3 * Math.log10(lungo); if (v < vm) { vm = v; meglio = b; } }
-    return meglio;
+  // la cosa sotto il cursore (entro 18 pixel, o grande abbastanza da coprirlo). Con `vicina` (avvicinandosi), se sotto il
+  // cursore non c'è niente: la cosa più vicina al cursore sullo schermo, entro il campo visivo — nello spazio vuoto tra le
+  // galassie il raggio del cursore non tocca quasi mai niente, e senza questo la rotella volerebbe dritta senza arrivare mai
+  // a una galassia. `salta`: una cosa da non prendere (quella al cui bordo si è già arrivati)
+  function bersaglioLungo(dW, { vicina = false, salta = null } = {}) {
+    let meglio = null, vm = Infinity, prossima = null, am = Math.tan(cam.fov * 0.75); const tol = (18 * 2 * Math.tan(cam.fov / 2)) / Math.max(1, tela.clientHeight);
+    for (const b of S.bersagli) { if (b === salta || (salta && b.p[0] === salta.p[0] && b.p[1] === salta.p[1] && b.p[2] === salta.p[2])) continue; const lungo = V.scal(b.p, dW); if (lungo <= 0) continue; const fuori = Math.hypot(b.p[0] - dW[0] * lungo, b.p[1] - dW[1] * lungo, b.p[2] - dW[2] * lungo), largo = Math.max(b.raggio, tol * lungo);
+      if (fuori > largo) { if (vicina && fuori / lungo < am) { am = fuori / lungo; prossima = b; } continue; } const v = fuori / largo + (b.raggio > tol * lungo ? -1 : 0) + 1e-3 * Math.log10(lungo); if (v < vm) { vm = v; meglio = b; } }
+    return meglio || prossima;
   }
   const quota = () => (cam.corpo ? V.lungo(cam.pos) - quotaSuolo(cam.corpo, V.norma(nelCorpo(tempo.t).p)) : 0);
 
@@ -290,7 +295,9 @@ export function creaNucleo(tela, opzioni = {}) {
     const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = suDi(c.p), corpo0 = cam.corpo;
     if (isFinite(s)) { const Q = V.somma(c.p, V.per(d, s)); c.p = V.somma(Q, V.per(V.meno(c.p, Q), k)); cam.perno = null; }
     else {
-      const A = assettoDi(cam.corpo, tempo.t), dW = V.mv(A, d), b = bersaglioLungo(dW);
+      const A = assettoDi(cam.corpo, tempo.t), dW = V.mv(A, d); let b = bersaglioLungo(dW, { vicina: k < 1 });
+      // (arrivati al bordo di una cosa — una galassia vista da fuori — si continua verso ciò che c'è dentro, sotto il cursore)
+      if (b && k < 1 && V.lungo(b.p) <= b.raggio * 1.26) b = bersaglioLungo(dW, { vicina: true, salta: b });
       if (b) { // verso la cosa sotto il cursore: mai più vicino del suo bordo
         const dist = V.lungo(b.p), nuova = Math.max(dist * k, b.raggio * 1.25), passo = dist - nuova, dir = V.tv(A, V.per(b.p, 1 / dist));
         c.p = V.somma(c.p, V.per(dir, passo)); cam.perno = V.somma(c.p, V.per(dir, nuova));

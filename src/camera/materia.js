@@ -1144,7 +1144,10 @@ export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM 
 export function immagineAtomi(campione, N = 192) {
   const px = new Uint8ClampedArray(N * N * 4), k = N / campione.latoM, zmax = Math.max(1e-12, campione.spessoreM);
   for (let i = 0; i < N * N; i++) { px[i * 4] = 10; px[i * 4 + 1] = 12; px[i * 4 + 2] = 18; px[i * 4 + 3] = 255; }
-  for (const a of campione.atomi) { const r = Math.max(1, a.raggio * k), cx = a.x * k, cy = a.y * k, lume = 0.45 + 0.55 * (1 - a.z / zmax);
+  // (il campione si ripete oltre i lati — mappa.js lo posa con le condizioni periodiche —: un atomo a cavallo di un lato si
+  // disegna anche dall'altra parte, se no lungo le cuciture resta una riga scura dove manca la sua metà)
+  const copie = []; for (const a of campione.atomi) { const r = Math.max(1, a.raggio * k), x = a.x * k, y = a.y * k; for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) if (x + dx + r >= 0 && x + dx - r <= N && y + dy + r >= 0 && y + dy - r <= N) copie.push([a, x + dx, y + dy, r]); }
+  for (const [a, cx, cy, r] of copie) { const lume = 0.45 + 0.55 * (1 - a.z / zmax);
     for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(N - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(N - 1, Math.ceil(cx + r)); x++) { const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r; if (d > 1) continue; const o = (y * N + x) * 4, s = lume * (1 - 0.45 * d * d); px[o] = a.colore[0] * s; px[o + 1] = a.colore[1] * s; px[o + 2] = a.colore[2] * s; } }
   return px;
 }

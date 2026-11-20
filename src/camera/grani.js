@@ -208,6 +208,11 @@ export function campoGrani(spec, caso) {
 // «processo/cella ix iy»/k, in celle cubiche larghe quanto la sua traccia più lunga (al più un metro): si guarda la
 // proiezione di uno strato spesso una cella, come nella finestra delle particelle.
 export const PRESENTE_S = 0.1;
+// LA LARGHEZZA DI UNA TRACCIA: la colonna di materia danneggiata (o ionizzata) attorno al percorso, una decina di nanometri
+// (le tracce latenti: Fleischer, Price e Walker 1975; si vedono al microscopio solo dopo l'attacco chimico). Il principio della
+// nebbia: una traccia più sottile di un punto dell'immagine ne prende la sua parte (la frazione del punto che copre), non un
+// punto intero; altrimenti a ogni scala le tracce sarebbero righe larghe un punto, cioè sparse e sempre visibili.
+export const LARGHEZZA_TRACCIA_M = 1e-8;
 // una spezzata (x0, y0, x1, y1, …) passa per il rettangolo [0, W] × [0, H]? (Liang-Barsky, tratto per tratto)
 function tocca(p, W, H) {
   for (let i = 2; i < p.length; i += 2) {
@@ -257,7 +262,7 @@ export function popolazioneTracce(luogo, { minerale = null } = {}, caso) {
         const celle = (i1 - i0 + 1) * (j1 - j0 + 1); if (celle > 40000 || budget < 0.5) { voci.push({ id: P.id, vere: nVere, disegnate: 0, memoria: P.memoria }); return; }
         // (se il posto è meno delle celle, si guarda una cella su 1/quota, scelta dal suo evento «scelta»: lo stesso campione a ogni scala)
         const perCella = Math.max(1, Math.floor(budget / celle)), quota = Math.min(1, budget / celle); let n = 0;
-        ctx.globalAlpha = alfa;
+        ctx.globalAlpha = alfa * Math.min(1, (LARGHEZZA_TRACCIA_M * k) / dpr);
         // (si guarda uno strato spesso una cella: di una traccia lunga si vede il pezzo dentro lo strato. Quante sono
         // davvero quelle che passano per lo schermo: in ogni cella se ne provano fino a qualche migliaio, e il conteggio vero
         // per la parte delle provate che ci passa; se ne disegnano al più quante ne regge lo schermo)
@@ -279,7 +284,7 @@ export function popolazioneTracce(luogo, { minerale = null } = {}, caso) {
             if (!linee.some((l) => tocca(l.pts, W, H))) continue; // non passa per lo schermo
             colpite++; if (qui >= perCella) continue; qui++;
             for (const { pt, pts } of linee) {
-              ctx.strokeStyle = `rgba(${COLORE_TRACCIA(pt.nome)},${pt.nome === 'elettrone' ? 0.8 : 0.9})`; ctx.lineWidth = Math.max(1, dpr * (pt.nome === 'alfa' || pt.nome.startsWith('frammento') || pt.nome === 'rinculo' ? 1.4 : 1));
+              ctx.strokeStyle = `rgba(${COLORE_TRACCIA(pt.nome)},${pt.nome === 'elettrone' ? 0.8 : 0.9})`; ctx.lineWidth = Math.max(dpr * (pt.nome === 'alfa' || pt.nome.startsWith('frammento') || pt.nome === 'rinculo' ? 1.4 : 1), LARGHEZZA_TRACCIA_M * k);
               ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let t = 2; t < pts.length; t += 2) ctx.lineTo(pts[t], pts[t + 1]); ctx.stroke();
             }
           }

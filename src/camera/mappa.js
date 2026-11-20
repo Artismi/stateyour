@@ -80,12 +80,13 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
           if (Lc) { const zc = (cam.z * Lc) / L;
             if (!cam.ancoraSuolo || (k > 1 && zc < 0.03 * m)) { cam.ancoraSuolo = [ax, ay]; const g = granoNelPunto(r.fin, r.fin.x0 + ax * r.fin.L, r.fin.y0 + (1 - ay) * r.fin.L); cam.mineraleRoccia = g && RETICOLI[g] ? g : null; }
             if (zc >= m) { const b = cam.ancoraSuolo; cam.cx = 0.5 + ((cam.cx - b[0]) * L) / Lc; cam.cy = 0.5 + ((cam.cy - b[1]) * L) / Lc; cam.z = zc; cam.latoSuolo = null; cam.passoRoccia = c; cam.dalSuolo = c; cam.ancore = {}; return null; }
-            if (cam.z < 0.8 * m) { cam.latoSuolo = LATI_SUOLO[i - 1]; cam.z *= 10; cam.cx = 0.5; cam.cy = 0.5; cam.ancoraSuolo = undefined; return null; }
+            if (cam.z < 0.8 * m) { cam.latoSuolo = LATI_SUOLO[i - 1]; tieniIlPunto(cam, m); dentroDieci(cam, 0.1); cam.ancoraSuolo = undefined; return null; }
             return null; }
         }
-        if (cam.z > 9 * m) { if (i + 1 < LATI_SUOLO.length) { cam.latoSuolo = LATI_SUOLO[i + 1]; cam.z /= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+        tieniIlPunto(cam, m);
+        if (cam.z > 9 * m) { if (i + 1 < LATI_SUOLO.length) { cam.latoSuolo = LATI_SUOLO[i + 1]; dentroDieci(cam, 10); return null; }
           const b = rocciaDi({ ...cam, latoSuolo: null, passoRoccia: 0 }); cam.latoSuolo = null; cam.passoRoccia = 0; cam.ancore = {}; cam.z = Math.max(0.5 * m, (cam.z * (b?.larghezzaM || L)) / L); cam.cx = 0.5; cam.cy = 0.5; return null; }
-        if (cam.z < 0.8 * m && i > 0) { cam.latoSuolo = LATI_SUOLO[i - 1]; cam.z *= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+        if (cam.z < 0.8 * m && i > 0) { cam.latoSuolo = LATI_SUOLO[i - 1]; dentroDieci(cam, 0.1); return null; }
         if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
         cam.z = Math.min(cam.z, 12 * m); return null;
       }
@@ -117,13 +118,29 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
     // dentro l'acqua si continua a scendere: ogni volta che il campione riempie dieci schermi se ne guarda uno dieci volte più
     // piccolo, alla stessa grandezza a schermo (z diviso dieci). L'evento vero di quell'acqua non sta in fondo: sta alla sua
     // scala (millimetri), sovrapposto al campione quando lo si attraversa (finestraDelPunto, laboratorio.js)
-    cam.eventoAcqua = false;
-    if (cam.z > 9 * m && (cam.latoAcqua ?? 1) > 2e-9) { cam.latoAcqua = (cam.latoAcqua ?? 1) / 10; cam.z /= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
-    if (cam.z < 0.8 * m && (cam.latoAcqua ?? 1) < 0.5) { cam.latoAcqua *= 10; cam.z *= 10; cam.cx = 0.5; cam.cy = 0.5; return null; }
+    cam.eventoAcqua = false; tieniIlPunto(cam, m);
+    if (cam.z > 9 * m && (cam.latoAcqua ?? 1) > 2e-9) { cam.latoAcqua = dieci((cam.latoAcqua ?? 1) / 10); dentroDieci(cam, 10); return null; }
+    if (cam.z < 0.8 * m && (cam.latoAcqua ?? 1) < 0.5) { cam.latoAcqua = dieci(cam.latoAcqua * 10); dentroDieci(cam, 0.1); return null; }
     if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.latoAcqua = undefined; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.mineraleRoccia = null; return null; }
     cam.z = Math.min(cam.z, 12 * m); return null;
   }
   return passaggi(cam, W, H, k > 1, { fx, fy, k });
+}
+// (le finestre dell'acqua e del suolo stanno tutte centrate nel punto: passando a quella dieci volte più piccola, o più grande,
+// lo schermo resta com'è — le coordinate si contano nella finestra nuova —, e il punto non esce dallo schermo, se no le
+// finestre più fini non si vedrebbero mai: la rotella va verso il cursore finché il punto sta entro un terzo dello schermo)
+const dieci = (x) => 10 ** Math.round(Math.log10(x));
+function dentroDieci(cam, f) { cam.cx = 0.5 + (cam.cx - 0.5) * f; cam.cy = 0.5 + (cam.cy - 0.5) * f; cam.z /= f; }
+function tieniIlPunto(cam, m) { const d = (0.35 * m) / cam.z; cam.cx = Math.max(0.5 - d, Math.min(0.5 + d, cam.cx)); cam.cy = Math.max(0.5 - d, Math.min(0.5 + d, cam.cy)); }
+// le finestre attorno a quella di adesso, centrate nello stesso punto: la dieci volte più grande, lei, la dieci volte più
+// piccola (disegnaFinestre). → [{ L, r }] o null (dove non c'è una catena di finestre: la roccia)
+export function finestreDelPunto(cam) {
+  const r0 = rocciaDi(cam); if (!r0) return null;
+  // (le finestre si calcolano solo quando si disegnano davvero: r è pigra)
+  const pigra = (L, fai) => { let r; return { L, get r() { if (r === undefined) r = fai() || null; return r; } }; };
+  if (cam.suAcqua) { const l = dieci(cam.latoAcqua ?? 1); return [l * 10, l, l / 10].map(dieci).filter((L) => L >= 1e-9).map((L) => pigra(L, () => (L === l ? r0 : rocciaDi({ ...cam, latoAcqua: L, secondaria: true })))); }
+  if (r0.suolo) { const l = r0.larghezzaM; return [l * 10, l, l / 10].map(dieci).filter((L) => L >= LATI_SUOLO[LATI_SUOLO.length - 1] * 0.999).map((L) => pigra(L, () => { const r = Math.abs(L / l - 1) < 1e-9 ? r0 : rocciaDi({ ...cam, latoSuolo: L }); return r?.suolo ? r : null; })); }
+  return null;
 }
 // LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
 // (per il passaggio di livello si conta fino a 70 raggi: le lune lontanissime, catturate, restano fuori dallo schermo)
@@ -608,15 +625,18 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
       // del tratto), la schiuma, la corrente, le bolle, i granelli e i fiocchi nel loro numero
       const fin = finestraAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, P: S.P }), camp = fin.popolazioni?.campione || campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
       const NA = fin.N || 128, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
-      A = { cv: cvA, camp, fin, acqua: true, N: NA, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${fin.descrizione || camp.descrizione}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo } };
+      A = { cv: cvA, camp, fin, acqua: true, liscio: true, N: NA, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${fin.descrizione || camp.descrizione}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo } };
       // LA CHIMICA CHE SI MUOVE LÌ (reazioni.js, lavoro 10): dal micron in giù, una riga — quante specie e reazioni le regole
       // permettono, quante si muovono nel bagno di quest'acqua, se c'è un RAF. Si calcola solo quando si guarda (decine di ms)
       if (lato <= 1.0001e-6) { try { const ch = chimicaDellaFinestra(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, pianeta: S.P }); A.chimica = ch; A.frase += ` ${ch.riga} (calcolata in ${Math.round(ch.ms)} ms).`; } catch { /* la chimica non c'è: la finestra resta quella dell'acqua */ } }
       rocceFatte.set(ka, A); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
     }
-    // il mare si muove nel tempo vero (le onde corrono con la loro ω); la finestra si ridisegna al più venti volte al secondo
-    const tt = performance.now() / 1000 - A.t0;
-    if (tt - A.ultimo >= 0.05 || A.ultimo < 0) { A.ultimo = tt; A.cv.getContext('2d').putImageData(new ImageData(A.fin && !A.fin.asciutto ? immagineFinestra(A.fin, tt) : immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0); }
+    // il mare si muove nel tempo vero (le onde corrono con la loro ω); la finestra si ridisegna al più venti volte al secondo,
+    // e mai per più di un quarto del tempo (un'immagine costa 20–60 ms: a venti al secondo era quasi tutto il filo principale);
+    // le finestre attorno a quella di adesso (secondaria: sopra e sotto, disegnaFinestre) al più due volte al secondo e per un
+    // ventesimo del tempo
+    const tt = performance.now() / 1000 - A.t0, passo = cam.secondaria ? Math.max(0.5, 20 * (A.costo || 0)) : Math.max(0.05, 4 * (A.costo || 0));
+    if (tt - A.ultimo >= passo || A.ultimo < 0) { const t0 = performance.now(); A.ultimo = tt; A.cv.getContext('2d').putImageData(new ImageData(A.fin && !A.fin.asciutto ? immagineFinestra(A.fin, tt) : immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0); A.costo = (performance.now() - t0) / 1000; }
     return A;
   }
   const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
@@ -712,20 +732,18 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
   // liquido: ciò che esce da un lato rientra dall'altro); il campione del punto è quello al centro
   // (il campione è una sezione verticale che prende la superficie: si ripete solo di lato; sopra continua l'aria della sua
   // prima riga, sotto l'acqua della sua ultima)
+  // (l'acqua si guarda dall'alto: la finestra dieci volte più grande sta sotto e riempie lo schermo, quella di adesso e quella
+  // dieci volte più piccola ci si fondono sopra, ognuna secondo la sua grandezza a schermo: disegnaFinestre)
+  const m = minimo(W, H), Ls = LATI_SUOLO[LATI_SUOLO.length - 1];
   if (cam.suAcqua) {
-    cam.nebbiaGrani = null; const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z, zz = cam.z, N = r0.cv.width; if (!(zz > 2)) return;
-    const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz); if (i1 - i0 > 40) return;
-    for (let i = i0; i <= i1; i++) {
-      const x = ox + i * zz; pezzo(ctx, r0.cv, x, oy, zz, W, H, r0.liscio); ctx.imageSmoothingEnabled = !!r0.liscio;
-      if (oy > 0) ctx.drawImage(r0.cv, 0, 0, N, 1, x, 0, zz, oy);
-      if (oy + zz < H) ctx.drawImage(r0.cv, 0, N - 1, N, 1, x, oy + zz, zz, H - oy - zz);
-      ctx.imageSmoothingEnabled = true;
-    }
+    cam.nebbiaGrani = null; const zz = cam.z; if (!(zz > 2)) return;
+    if (r0.evento) { pezzo(ctx, r0.cv, W / 2 - cam.cx * zz, H / 2 - cam.cy * zz, zz, W, H, r0.liscio); return; }
+    const F = finestreDelPunto(cam); if (F) disegnaFinestre(ctx, { W, H, px: W / 2 + (0.5 - cam.cx) * zz, py: H / 2 + (0.5 - cam.cy) * zz, pxm: zz / r0.larghezzaM, m, finestre: F });
     return;
   }
-  const m = minimo(W, H), Ls = LATI_SUOLO[LATI_SUOLO.length - 1];
-  if (r0.suolo) { // (il suolo: la finestra al suo posto; nell'ultima, nel punto guardato, il primo livello della roccia sotto, alla sua grandezza)
-    cam.nebbiaGrani = null; const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z; pezzo(ctx, r0.cv, ox, oy, cam.z, W, H, r0.liscio);
+  if (r0.suolo) { // (il suolo: le finestre una dentro l'altra; nell'ultima, nel punto guardato, il primo livello della roccia sotto, alla sua grandezza)
+    cam.nebbiaGrani = null; const ox = W / 2 - cam.cx * cam.z, oy = H / 2 - cam.cy * cam.z, F = finestreDelPunto(cam);
+    if (F) disegnaFinestre(ctx, { W, H, px: ox + cam.z / 2, py: oy + cam.z / 2, pxm: cam.z / r0.larghezzaM, m, finestre: F }); else pezzo(ctx, r0.cv, ox, oy, cam.z, W, H, r0.liscio);
     const c = Math.abs(r0.larghezzaM / Ls - 1) < 1e-9 && cam.ancoraSuolo ? sottoIlSuolo(cam)[0] : null, Lc = c != null ? latoPasso(cam, c) : null; if (!Lc) return;
     const zz = (cam.z * Lc) / r0.larghezzaM, a = Math.max(0, Math.min(1, Math.log(zz / (0.02 * m)) / Math.log(5))); if (!(zz >= 3 * dpr) || !(a > 0)) return;
     const r = rocciaDi({ ...cam, passoRoccia: c, latoSuolo: null }); if (!r) return; const cx = ox + cam.ancoraSuolo[0] * cam.z, cy = oy + cam.ancoraSuolo[1] * cam.z;
@@ -760,6 +778,55 @@ function periodico(ctx, cv, ox, oy, zz, W, H, liscio) {
     const N = cv.width, m = ctx.createPattern(cv, 'repeat'); m.setTransform(new DOMMatrix([zz / N, 0, 0, zz / N, ox, oy])); ctx.imageSmoothingEnabled = !!liscio; ctx.fillStyle = m; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingEnabled = true; return;
   }
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(ctx, cv, ox + i * zz, oy + j * zz, zz, W, H, liscio);
+}
+// ---------- LE FINESTRE UNA DENTRO L'ALTRA (l'acqua e il suolo, di dieci in dieci): ogni finestra si fonde con quella sopra.
+// Quanto si vede una finestra lo dice solo la sua grandezza a schermo (non il tempo, non quale finestra è «quella di adesso»):
+// così avvicinandosi e allontanandosi si passa per gli stessi stati, e il cambio di finestra nello zoom non si vede.
+// LA FINESTRA DI FONDO (e ognuna del suolo) RIEMPIE LO SCHERMO: il campione si ripete oltre i suoi lati (condizioni periodiche, come nella scena
+// degli atomi), ma senza cuciture — le copie si sovrappongono per una fascia di un quinto del lato in cui l'una sfuma nell'altra con
+// pesi che sommano a uno (smoothstep(u) + smoothstep(1 − u) = 1, sommati in luce: 'lighter'), così non c'è né un bordo né una
+// riga dove si vede quella sotto. A MANO (dichiarate): la finestra compare tra 0,3 e 0,9 volte il lato corto dello schermo
+// (0,9 è la grandezza a cui lo zoom passa alla finestra dieci volte più piccola, così in quel momento è già piena); la fascia
+// in cui le copie sfumano l'una nell'altra è un quinto del lato.
+const FINESTRA_COMPARE = [0.3, 0.9], BORDO_SFUMATO = 0.2;
+export const alfaFinestra = (s, m) => Math.max(0, Math.min(1, Math.log(s / (FINESTRA_COMPARE[0] * m)) / Math.log(FINESTRA_COMPARE[1] / FINESTRA_COMPARE[0])));
+// (la fascia in pixel dell'immagine, intera: così le copie sono spostate di un numero intero di pixel e i pesi, letti nei
+// centri dei pixel, sommano a uno esattamente)
+const fasciaDi = (N) => Math.max(1, Math.round(BORDO_SFUMATO * N));
+const maschere = new Map();
+function mascheraBordo(N) {
+  let c = maschere.get(N); if (c) return c; c = telaN(N); const px = new Uint8ClampedArray(4 * N * N), R = fasciaDi(N), liscio = (x) => { const t = Math.max(0, Math.min(1, x / R)); return t * t * (3 - 2 * t); };
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = 4 * (j * N + i); px[q] = px[q + 1] = px[q + 2] = 255; px[q + 3] = Math.round(255 * liscio(Math.min(i + 0.5, N - i - 0.5)) * liscio(Math.min(j + 0.5, N - j - 0.5))); }
+  c.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0); maschere.set(N, c); return c;
+}
+// la copia sfumata dell'immagine di una finestra (rifatta solo quando l'immagine cambia: l'acqua si ridisegna col tempo)
+function sfumata(r) {
+  const N = r.cv.width, quando = r.ultimo ?? 0; if (r.sfumata && r.sfumata.width === N && r.sfumataDi === quando) return r.sfumata;
+  const s = r.sfumata && r.sfumata.width === N ? r.sfumata : telaN(N), x = s.getContext('2d');
+  x.globalCompositeOperation = 'copy'; x.drawImage(r.cv, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mascheraBordo(N), 0, 0); x.globalCompositeOperation = 'source-over';
+  r.sfumata = s; r.sfumataDi = quando; return s;
+}
+// il mosaico senza cuciture di una finestra larga s pixel, con la copia del punto centrata in (px, py), su una tela grande
+// quanto lo schermo (riusata)
+let telaMosaico = null;
+function mosaico(r, s, px, py, W, H) {
+  if (!telaMosaico || telaMosaico.width !== W || telaMosaico.height !== H) telaMosaico = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
+  const x = telaMosaico.getContext('2d'), N = r.cv.width, P = (s * (N - fasciaDi(N))) / N, img = sfumata(r);
+  x.globalCompositeOperation = 'copy'; x.clearRect(0, 0, W, H); x.globalCompositeOperation = 'lighter';
+  const i0 = Math.floor((-px - s / 2) / P), i1 = Math.ceil((W - px + s / 2) / P), j0 = Math.floor((-py - s / 2) / P), j1 = Math.ceil((H - py + s / 2) / P);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) <= 900) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(x, img, px + i * P - s / 2, py + j * P - s / 2, s, W, H, r.liscio);
+  x.globalCompositeOperation = 'source-over'; return telaMosaico;
+}
+// le finestre [{ L (metri), r (rocciaDi) }], dalla più grande, centrate nel punto (px, py) dello schermo, a pxm pixel per metro.
+// fondo: la più grande sta sotto a tutto, piena; se no anche lei si fonde secondo la sua grandezza (sopra il 3D).
+// peso: quanto pesano tutte insieme (nello spazio: quanto lo sguardo è verso il basso)
+export function disegnaFinestre(ctx, { W, H, px, py, pxm, m, finestre, fondo = true, peso = 1 }) {
+  finestre.forEach((f, q) => {
+    const s = f.L * pxm, a = q === 0 && fondo ? 1 : alfaFinestra(s, m) * peso; if (!(a > 0) || !(s > 2)) return; const r = f.r; if (!r?.cv) return;
+    // (si ripetono la finestra che fa da fondo e quelle del suolo; quelle dell'acqua stanno una volta sola nel punto, sfumate:
+    // ripetute mostrerebbero a righe ciò che dentro la finestra cambia da un lato all'altro, il riflesso della stella)
+    ctx.globalAlpha = a; if ((q === 0 && fondo) || r.suolo) ctx.drawImage(mosaico(r, s, px, py, W, H), 0, 0); else pezzo(ctx, sfumata(r), px - s / 2, py - s / 2, s, W, H, r.liscio); ctx.globalAlpha = 1;
+  });
 }
 // I GRANI ATTORNO AL PUNTO (grani.js): l'aggregato di cui il campione è un pezzo, con lo zero nell'angolo del campione e
 // i metri come unità. → { campo, L0 } o null (nell'acqua: niente grani)
