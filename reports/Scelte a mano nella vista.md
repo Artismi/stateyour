@@ -257,7 +257,9 @@ leggi sono dichiarate nella sua testa; qui le costanti che decidono l'aspetto, c
 | `src/tre/volume.worker.js:31` | il volume finisce a 1,15 Rg e ±0,8 Rg | (b) discretizzazione | troncamento del dominio; non provato |
 | `src/tre/volume.worker.js:45` | tre medie 1-2-1 lungo il raggio (contro i cerchi degli anelli) | (c) a mano | toglie un difetto della griglia di galassie.js: servirebbe il disco continuo |
 | `src/tre/volume.worker.js:47` | sfumatura al bordo della griglia (0,35 in quota, 0,2 in raggio) | (c) a mano | taglia lo sferoide senza spigolo: servirebbe un dominio che lo contenga |
-| `src/tre/volume.worker.js:34` | κ della polvere da vuoto.js | (a) dal modello / legge |  |
+| `src/tre/volume.worker.js:41` | κ della polvere da vuoto.js | (a) dal modello / legge | letto nel primo anello con gas (prima quattro raggi fissi: con il gas solo al centro κ = 0, la galassia senza polvere) |
+| `src/tre/volume.worker.js:42` | lo strato della polvere: h_g = z₀·(σ_g/σ_z)², al più 0,1 kpc; la colonna del modello, media sulla cella | (a) dal modello / legge | il disco isotermo di Spitzer (1942) con σ_g = 10 km/s di galassie.js. Prima la polvere aveva sempre la mezza altezza fissa di galassie.js (0,1 kpc) e dove il disco è denso le stelle (z₀ di pochi pc) ci stavano dentro tutte: di taglio un muro, da dentro un pavimento. La colonna di faccia non cambia (Via Lattea a 0,5 Rg: A_V = 0,8). Resta il difetto di galassie.js (vuoto.js:86): le nubi e il gas di vuoto.js stanno ancora in 0,1 kpc |
+| `src/tre/volume.worker.js:71` | tetto della polvere 6·10⁴ A_V per Rg | (b) discretizzazione | la griglia è a mezza precisione (65504): sopra sarebbe infinito; la cella più sottile ne fa già decine di magnitudini |
 | `src/tre/volume.worker.js:89` | 10 fasce di massa d'alone, 64 elementi campione per la legge della luce | (b) discretizzazione | non provata |
 | `src/tre/mezzo.js:33` | profilo di una nube oscura (1 − q²)^1,5 | (c) a mano | SCELTO (dichiarato): i dati danno raggio ed estinzione al centro, non il profilo |
 | `src/tre/mezzo.js:36` | emissione per la corda, ×1,5 perché la media resti la brillanza | (a) dal modello / legge | geometria |

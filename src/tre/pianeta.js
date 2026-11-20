@@ -464,6 +464,7 @@ export function ariaDi(P, R, grav) {
 // dal mare. Gli stessi coefficienti, la stessa funzione di Chapman, la stessa foschia del conto sulla scheda.
 // (ND, NC: direzioni per la luce diffusa due volte e per l'irradianza del cielo; NS: passi lungo ogni raggio — le
 // discretizzazioni di cui test_vista prova la convergenza)
+export const TABELLE_GREZZE = { ND: 16, NC: 32, NS: 16 };
 export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 48 } = {}) {
   const NM = 32, ms = new Float32Array(4 * NM * NM), cieloT = new Float32Array(4 * NM); if (!aria) return { ms, cieloT };
   const { H, HM, cima, betaR, betaM } = aria, Rt = R + cima, albedo = Math.max(0.02, Math.min(0.9, albedoClima ?? 0.3)), g = 0.76;
@@ -533,8 +534,17 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const d = decl(t), x = Math.asin(Math.max(-1, Math.min(1, d / eps))) / (2 * Math.PI), sale = decl(t + anno / 400) > d, f = sale ? x : 0.5 - x; return f - Math.floor(f);
   }
   const aria = ariaDi(P, R, grav);
-  const tabelle = tabelleAria(aria, R, P.clima?.albedo);
-  const texMS = N.immagine(32, 32, 'rgba16fDaFloat', tabelle.ms), texCielo = N.immagine(32, 1, 'rgba16fDaFloat', tabelle.cieloT);
+  // (le tabelle costano un secondo e mezzo: sul filo dell'interfaccia se ne fanno subito di GREZZE — 16 direzioni, 32 per
+  // il cielo, 16 passi: 80 ms, ~8% dalle fini —, le FINI le fa volume.worker.js e arrivano dopo; `ariaFine` dice quando)
+  let texMS = null, texCielo = null, ariaFine = !aria, filoAria = null;
+  const metti = (t) => { if (texMS) { gl.deleteTexture(texMS); gl.deleteTexture(texCielo); } texMS = N.immagine(32, 32, 'rgba16fDaFloat', t.ms); texCielo = N.immagine(32, 1, 'rgba16fDaFloat', t.cieloT); };
+  if (aria && typeof Worker !== 'undefined') {
+    metti(tabelleAria(aria, R, P.clima?.albedo, TABELLE_GREZZE));
+    try { filoAria = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
+      filoAria.onmessage = (e) => { const d = e.data; if (filoAria) filoAria.terminate(); filoAria = null; if (d.errore) { console.error('le tabelle fini dell\'aria non si sono potute fare:', d.errore); metti(tabelleAria(aria, R, P.clima?.albedo)); } else metti(d); ariaFine = true; cielo3d.libera?.(); N.cambia(); };
+      filoAria.postMessage({ tipo: 'aria', aria, R, albedo: P.clima?.albedo });
+    } catch (e) { filoAria = null; metti(tabelleAria(aria, R, P.clima?.albedo)); ariaFine = true; } }
+  else { metti(tabelleAria(aria, R, P.clima?.albedo)); ariaFine = true; }
   // il raggio angolare della stella vista dal pianeta: la penombra delle ombre del rilievo
   const discoStella = () => Math.max(1e-3, Math.min(0.2, (corpoStella.raggio || raggioStella) / Math.max(1, stato.dStella)));
 
@@ -920,12 +930,12 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
 
   function libera() {
     for (const f of fili) f.w.terminate(); fili.length = 0; coda.length = 0;
-    for (const t of [...tessere.values()]) if (t.pronta) butta(t); tessere.clear(); gl.deleteTexture(texMS); gl.deleteTexture(texCielo); liberaFine();
+    for (const t of [...tessere.values()]) if (t.pronta) butta(t); tessere.clear(); if (filoAria) { filoAria.terminate(); filoAria = null; } gl.deleteTexture(texMS); gl.deleteTexture(texCielo); liberaFine();
     for (const s of [lontani, suolo, cielo3d]) N.togli(s);
     if (corpi) for (const k of Object.keys(terreno)) corpoPianeta[k] = null;
   }
   return {
-    corpo: corpoPianeta, stella: corpoStella, lune, aria, cielo3d, coloreLuce, anello: !!anello, opzioni: O, libera, stagione,
+    corpo: corpoPianeta, stella: corpoStella, lune, aria, cielo3d, coloreLuce, anello: !!anello, opzioni: O, libera, stagione, get ariaFine() { return ariaFine; }, // (ariaFine: le tabelle fini dell'aria sono arrivate)
     // che cosa c'è in un punto: quota del terreno (m), se c'è acqua e quanto è profonda
     info: (lon, lat) => { const [h, l] = leggi(lon, lat); return { quota: h, acqua: l > h, profondita: l > h ? l - h : 0, livello: l }; },
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,

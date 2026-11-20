@@ -1334,10 +1334,14 @@ function superficie(v) {
   const P = sistemaDi(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta], q = P.interno.q, g = P.clima.g; // il calore che esce dall'interno: quello di interno(), lo stesso scritto nel pannello
   let lo = 1e-4, hi = 1; for (let i = 0; i < 50; i++) { const m = Math.sqrt(lo * hi); if (convezione({ g, q, d: m }).epsilon < 0) lo = m; else hi = m; }
   let sd = (semeEvento('pozza', v.cosmo, v.galassia, v.stella, v.pianeta) % 2147483646) + 1; const caso = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-  const d = hi * (1.03 + 0.35 * caso()), c = convezione({ g, q, d }), r = c.epsilon > 0 ? celle(c, { seme: sd }) : null;
-  let url = null;
-  if (r) { const cv = document.createElement('canvas'); cv.width = cv.height = r.N; const x = cv.getContext('2d'), im = x.createImageData(r.N, r.N); let mx = 1e-9; for (const w of r.u) mx = Math.max(mx, Math.abs(w)); for (let i = 0; i < r.N * r.N; i++) { const t = 0.5 + 0.5 * (r.u[i] / mx); im.data[4 * i] = 40 + 150 * t; im.data[4 * i + 1] = 80 + 140 * t; im.data[4 * i + 2] = 120 + 120 * t; im.data[4 * i + 3] = 255; } x.putImageData(im, 0, 0); url = cv.toDataURL(); }
-  const out = { P, q, d, c, url }; superfici.set(k, out); return out;
+  const d = hi * (1.03 + 0.35 * caso()), c = convezione({ g, q, d }), out = { P, q, d, c, url: null }; superfici.set(k, out);
+  // (le celle sono 600 passi di Swift-Hohenberg su 128²: quasi due secondi. Le fa volume.worker.js; quando arrivano il
+  // pannello si rifà con l'immagine. Senza filo, qui)
+  const disegnaPozza = (r) => { const cv = document.createElement('canvas'); cv.width = cv.height = r.N; const x = cv.getContext('2d'), im = x.createImageData(r.N, r.N); let mx = 1e-9; for (const w of r.u) mx = Math.max(mx, Math.abs(w)); for (let i = 0; i < r.N * r.N; i++) { const t = 0.5 + 0.5 * (r.u[i] / mx); im.data[4 * i] = 40 + 150 * t; im.data[4 * i + 1] = 80 + 140 * t; im.data[4 * i + 2] = 120 + 120 * t; im.data[4 * i + 3] = 255; } x.putImageData(im, 0, 0); out.url = cv.toDataURL(); };
+  if (c.epsilon > 0) { let w = null; try { w = new Worker(new URL('../tre/volume.worker.js', import.meta.url), { type: 'module' }); } catch { w = null; }
+    if (!w) disegnaPozza(celle(c, { seme: sd }));
+    else { w.onmessage = (e) => { w.terminate(); if (e.data.errore) { console.error('la pozza non si è potuta fare:', e.data.errore); return; } disegnaPozza(e.data); if (superfici.get(k) === out) mostraPannello(); }; w.postMessage({ tipo: 'pozza', c, seme: sd }); } }
+  return out;
 }
 function pannelloCosmo(h) {
   const a = indirizzoOra(), c = el()?.cella;

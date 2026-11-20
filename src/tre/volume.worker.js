@@ -15,14 +15,19 @@
 //   di tutta la galassia: l'integrale sul volume, in Rg³, fa 1); la polvere è A_V per Rg.
 //   z non è uniforme: z = zmax·s·|s| con s da −1 a 1 (fitto vicino al piano, dove stanno disco e polvere).
 // { tipo: 'ragnatela', … } → vedi sotto.
+// { tipo: 'aria', aria, R, albedo } → le tabelle fini della luce diffusa più volte di un pianeta (pianeta.js `tabelleAria`:
+//   un secondo e mezzo; il pianeta intanto usa quelle grezze).
+// { tipo: 'pozza', c, seme } → le celle di convezione della pozza del pannello (fluidi.js `celle`: quasi due secondi).
 import { scenaGalassia } from '../camera/spazio3d.js';
-import { densitaGalassia } from '../camera/galassie.js';
+import { densitaGalassia, cinematica, LEGGI as LEGGI_GALASSIE } from '../camera/galassie.js';
 import { galassia } from '../camera/cosmo.js';
 import { coloreCorpoNero } from './nucleo.js';
 import { classiSuGriglia, campoDi, raffina, ondeDi, aloniAttesi } from '../camera/ragnatela.js';
 import { galassiaAlTempo } from '../camera/galassie.js';
 import { cosmo as cosmoDi } from '../camera/cosmo.js';
 import { ANNI_OGGI } from '../camera/spazio3d.js';
+import { tabelleAria } from './pianeta.js';
+import { celle } from '../camera/fluidi.js';
 
 const KPC = 3.0857e19, MSOLE = 1.989e30, GIOVANI = 3, lin = (c) => (c / 255) ** 2.2;
 
@@ -31,12 +36,26 @@ function volumeGalassia(d, manda) {
   const { nf, nr, nz } = d, Rmax = 1.15, zmax = 0.8, dati = new Float32Array(4 * nf * nr * nz), vecchio = coloreCorpoNero(4300), giovane = coloreCorpoNero(9500);
   const sf = D.sferoide, sferoide = (R, z) => { const r3 = Math.hypot(R, z) || 1e-6; return sf.massa > 0 ? (sf.massa * sf.scala) / (2 * Math.PI * (sf.schiacciata || 1) * r3 * (r3 + sf.scala) ** 3) : 0; };
   // κ: A_V per metro per kg/m³ di polvere, da vuoto.js (in un punto del piano dove c'è polvere)
-  let kappa = 0; try { const pv = sg.vuoto({ centro: [0, 0, 0], raggio: 0.2 }).polvere; for (const r of [0.3, 0.15, 0.5, 0.05]) { const q = pv.in(r * Rg, 0, 0); if (q.densita > 0) { kappa = q.AVperMetro / q.densita; break; } } } catch { kappa = 0; }
+  // (κ non dipende dal posto — polvere/gas va coi metalli come in galassie.js —: lo si legge nel primo anello del modello
+  // che ha gas; prima si provavano quattro raggi fissi e in una galassia col gas solo al centro κ restava zero: niente polvere)
+  let kappa = 0; try { const pv = sg.vuoto({ centro: [0, 0, 0], raggio: 0.2 }).polvere; for (const r of D.colonne.r) { const q = pv.in(r * KPC, 0, 0); if (q.densita > 0) { kappa = q.AVperMetro / q.densita; break; } } } catch { kappa = 0; }
+  // LO STRATO DELLA POLVERE. galassie.js dà al gas una mezza altezza fissa (LEGGI.spessoreGas, 0,1 kpc: quella del gas
+  // vicino al Sole); le stelle invece hanno quella dell'equilibrio, z₀ = σ_z²/(πGΣ). Dove il disco è denso (il centro, le
+  // galassie piccole) z₀ scende a pochi parsec e la polvere, dieci o cento volte più spessa delle stelle, le avvolgeva
+  // tutte: da fuori il disco diventava un muro scuro, da dentro un pavimento. Il gas sta nello stesso campo con la sua
+  // dispersione σ_g (LEGGI.sigmaGas): h_g = σ_g²/(πGΣ) = z₀·(σ_g/σ_z)² [D: il disco isotermo, Spitzer 1942], al più quella
+  // del modello (dove il disco è rado resta 0,1 kpc: niente svasatura). La colonna resta quella del modello (la densità sul
+  // piano per 2·0,1 kpc), distribuita come sech²(z/h_g) e MEDIATA sulla cella (∫sech² = h·tanh): uno strato più sottile
+  // della cella non si perde né si moltiplica.
+  const Cm = cinematica(F), hM = LEGGI_GALASSIE.spessoreGas, bordi = D.colonne.bordo, NA = D.colonne.r.length, hStrato = new Float64Array(nr), colonna = new Float64Array(nr * nf);
+  for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk); let k = 0; while (k < NA - 1 && bordi[k + 1] < R) k++; hStrato[jr] = Math.min(hM, Cm.z0[k] * (LEGGI_GALASSIE.sigmaGas / Cm.sigZ[k]) ** 2) || hM;
+    for (let jf = 0; jf < nf; jf++) colonna[jr * nf + jf] = D.in3d(R, 0, ((jf + 0.5) / nf) * 2 * Math.PI, tG).polvere * 2 * hM; }
+  const strato = (jr, jz) => { const h = hStrato[jr], z0 = zmax * Rk * ((jz / nz) * 2 - 1) * Math.abs((jz / nz) * 2 - 1), z1 = zmax * Rk * (((jz + 1) / nz) * 2 - 1) * Math.abs(((jz + 1) / nz) * 2 - 1); return (0.5 * (Math.tanh(z1 / h) - Math.tanh(z0 / h))) / (z1 - z0); }; // (per kpc: la parte della colonna nella cella, su quanto è alta)
   const u = MSOLE / KPC ** 3, riga = new Float64Array(nf), volCella = (jr, jz) => { const r0 = (jr / nr) * Rmax, r1 = ((jr + 1) / nr) * Rmax, s0 = (jz / nz) * 2 - 1, s1 = ((jz + 1) / nz) * 2 - 1; return (Math.PI * (r1 * r1 - r0 * r0) / nf) * Math.abs(zmax * (s1 * Math.abs(s1) - s0 * Math.abs(s0))); };
   let somma = 0;
   for (let jz = 0; jz < nz; jz++) { const s = ((jz + 0.5) / nz) * 2 - 1, z = zmax * s * Math.abs(s) * Rk;
-    for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk), sfe = sferoide(R, z); let media = 0;
-      for (let jf = 0; jf < nf; jf++) { const q = D.in3d(R, z, ((jf + 0.5) / nf) * 2 * Math.PI, tG); riga[jf] = q.stelle - sfe; media += riga[jf]; const o = 4 * ((jz * nr + jr) * nf + jf); dati[o + 3] = kappa * q.polvere * u * Rg; }
+    for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk), sfe = sferoide(R, z), fz = strato(jr, jz); let media = 0;
+      for (let jf = 0; jf < nf; jf++) { const q = D.in3d(R, z, ((jf + 0.5) / nf) * 2 * Math.PI, tG); riga[jf] = q.stelle - sfe; media += riga[jf]; const o = 4 * ((jz * nr + jr) * nf + jf); dati[o + 3] = kappa * colonna[jr * nf + jf] * fz * u * Rg; }
       media /= nf; const v = volCella(jr, jz);
       for (let jf = 0; jf < nf; jf++) { const disco = Math.max(0, riga[jf]), nuove = Math.max(0, disco - media), o = 4 * ((jz * nr + jr) * nf + jf), a = sfe + disco - nuove, b = GIOVANI * nuove;
         for (let c = 0; c < 3; c++) dati[o + c] = a * vecchio[c] + b * giovane[c]; somma += (a + b) * v; } } }
@@ -47,6 +66,9 @@ function volumeGalassia(d, manda) {
   for (let jz = 0; jz < nz; jz++) { const s = Math.abs(((jz + 0.5) / nz) * 2 - 1), fz = Math.min(1, (1 - s * s) / 0.35); for (let jr = 0; jr < nr; jr++) { const fr = Math.min(1, (1 - (jr + 0.5) / nr) / 0.2), f = fz * fr; if (f >= 1) continue; for (let jf = 0; jf < nf; jf++) { const o = 4 * ((jz * nr + jr) * nf + jf); dati[o] *= f; dati[o + 1] *= f; dati[o + 2] *= f; } } }
   // (la somma sul volume della luce deve fare 1)
   const k = somma > 0 ? 1 / somma : 0; for (let o = 0; o < dati.length; o += 4) { dati[o] *= k; dati[o + 1] *= k; dati[o + 2] *= k; }
+  // (la griglia va alla scheda in mezza precisione: oltre 65504 diventerebbe infinito. Un tetto di 6·10⁴ A_V per Rg è
+  // comunque una parete: la cella più sottile, sul piano, ne fa decine di magnitudini)
+  const tetto = () => { for (let o = 3; o < dati.length; o += 4) if (dati[o] > 6e4) dati[o] = 6e4; }; tetto();
   const meta = { nf, nr, nz, Rmax, zmax, raggioM: Rg, luce: sg.daLontano.luminosita, kappa, t: d.t };
   manda({ n: d.n, tipo: 'galassia', dati: dati.slice(), ...meta, nebulose: 0 });
   // secondo messaggio: con le nebulose e le nubi di vuoto.js depositate nelle loro celle
@@ -55,7 +77,7 @@ function volumeGalassia(d, manda) {
       const jf = Math.min(nf - 1, Math.floor(fi * nf)), jr = Math.min(nr - 1, Math.floor((R / Rmax) * nr)), s = Math.sign(z) * Math.sqrt(Math.abs(z) / zmax), jz = Math.min(nz - 1, Math.floor(((s + 1) / 2) * nz)), o = 4 * ((jz * nr + jr) * nf + jf), vc = volCella(jr, jz);
       if (x.brillanza > 0 && x.colore) { const L = (x.brillanza * 4 * Math.PI * Math.PI * x.raggio * x.raggio) / sg.daLontano.luminosita / vc, m = Math.max(lin(x.colore[0]), lin(x.colore[1]), lin(x.colore[2])) || 1; for (let c = 0; c < 3; c++) dati[o + c] += (L * lin(x.colore[c])) / m; messe++; }
       if (x.estinzione > 0) { dati[o + 3] += (x.estinzione * (2 / 3) * Math.PI * (x.raggio / Rg) ** 2) / vc; messe++; } }
-    manda({ n: d.n, tipo: 'galassia', dati, ...meta, nebulose: messe });
+    tetto(); manda({ n: d.n, tipo: 'galassia', dati, ...meta, nebulose: messe });
   } catch (e) { /* senza vuoto.js resta il volume delle stelle e della polvere */ }
 }
 
@@ -106,6 +128,8 @@ function volumeRagnatela(d, manda) {
 
 self.onmessage = (e) => {
   const d = e.data, t0 = performance.now(), manda = (m) => self.postMessage({ ...m, ms: performance.now() - t0 }, [m.dati.buffer]);
-  try { if (d.tipo === 'galassia') volumeGalassia(d, manda); else if (d.tipo === 'ragnatela') volumeRagnatela(d, manda); }
+  try { if (d.tipo === 'galassia') volumeGalassia(d, manda); else if (d.tipo === 'ragnatela') volumeRagnatela(d, manda);
+    else if (d.tipo === 'pozza') { const r = celle(d.c, { seme: d.seme }); self.postMessage({ tipo: 'pozza', N: r.N, u: r.u }, [r.u.buffer]); }
+    else if (d.tipo === 'aria') { const T = tabelleAria(d.aria, d.R, d.albedo); self.postMessage({ tipo: 'aria', ms: T.ms, cieloT: T.cieloT, tempo: performance.now() - t0 }, [T.ms.buffer, T.cieloT.buffer]); } }
   catch (err) { self.postMessage({ n: d.n, tipo: d.tipo, errore: String((err && err.stack) || err) }); }
 };

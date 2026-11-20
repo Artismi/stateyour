@@ -6,8 +6,8 @@
 //   i pianeti → le lune. La camera è una sola: entrando nell'influenza di una cosa si attacca a lei senza muoversi
 //   (nucleo.js: `influenza`, `riattacca`), e ciò che serve a quel livello si prepara quando ci si avvicina.
 // · IL COSMO: le galassie del campione sono punti con la loro luce e la loro tinta (luci.js); la rete di filamenti è
-//   la densità della materia (campi.densita, una griglia 64³ che si richiude) resa come una nebbia leggera di batuffoli,
-//   più fitti dove c'è più materia; col tempo tutto si allontana (il fattore di scala) e la rete cresce.
+//   la densità della materia (il volume di volumi.js, che volume.worker.js fa dal campo del cosmo) resa come una nebbia,
+//   più chiara dove c'è più materia; col tempo tutto si allontana (il fattore di scala) e la rete cresce.
 // · LA GALASSIA: le stelle del campione sono punti con luminosità e colore veri (ognuna ne rappresenta milioni: la
 //   luce di tutte le altre è la luce diffusa); la luce diffusa viene dalla forma continua (gli anelli del disco col loro
 //   spessore, i bracci dove la densità di stelle è più alta, la barra, lo sferoide), resa come batuffoli luminosi che
@@ -159,7 +159,9 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
 // giovane (galassie.js `galassiaAlTempo`: meno stelle, un'altra tinta, o non ancora nata), e più debole di (1 + z)²;
 // la nebbia allo stesso modo (rete.js). Con N.vista.cono = false tutto è disegnato allo stesso istante.
 export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
-  const O = { rete: 1, puntiLuce: 6e-4, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t), tScena = N.tempo.t;
+  // (senza la griglia 64³ della densità di scenaCosmo: tre secondi di trasformate sul filo dell'interfaccia all'avvio, e qui
+  // non la legge nessuno — la nebbia è il volume di volumi.js, che si fa la sua in volume.worker.js)
+  const O = { rete: 1, puntiLuce: 6e-4, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t, { griglia: false }), tScena = N.tempo.t;
   const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: luogoDi({ cosmo }), raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
   let lato = sc.riferimento.periodico[0]; const nascosta = new Set(), forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
   // la luce di ogni galassia come la si vede: [watt, r, g, b (0…255), c'è]; col cono, quella di quando la luce è partita

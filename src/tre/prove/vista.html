@@ -61,6 +61,7 @@ async function scena(quale) {
     let tm = 0, dm = Infinity; for (let k = 0; k < 720; k++) { const tt = (k / 720) * g, m = mu(tt); if (mu(tt + g / 720) > m && Math.abs(m - 0.5) < dm) { dm = Math.abs(m - 0.5); tm = tt; } } N.tempo.t = tm;
     N.vai({ lon, lat, quota: 1500, direzione: Math.PI, alza: 0.04 });
   }
+  if (Pi) await aspetta(() => Pi.ariaFine); // (le tabelle fini dell'aria le fa un filo a parte: le immagini si confrontano con quelle)
   return adatta(quale);
 }
 async function adatta(quale) {
