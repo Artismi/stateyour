@@ -64,9 +64,9 @@ function costruisci() {
   // finestra ridimensionata, lo schermo pieno) le tele si rifanno alla misura nuova. La camera ascolta `resize` della
   // finestra (laboratorio.js: disegna, atomi, mondo 3D): glielo si manda anche quando cambia solo la scena. (Era un difetto:
   // il buffer 3D restava a 1840 × 1338 su una tela di 1280 × 790, e il pianeta usciva schiacciato.)
-  let misura = '', giroMisura = 0;
-  const ricalcola = () => { giroMisura = 0; const k = `${tele.clientWidth}×${tele.clientHeight}`; if (k === misura) return; misura = k; window.dispatchEvent(new Event('resize')); };
-  new ResizeObserver(() => { if (!giroMisura) giroMisura = requestAnimationFrame(ricalcola); }).observe(tele);
+  let misura = '';
+  const ricalcola = () => { const k = `${tele.clientWidth}×${tele.clientHeight}`; if (k === misura) return; misura = k; window.dispatchEvent(new Event('resize')); };
+  new ResizeObserver(() => ricalcola()).observe(tele); // (subito, prima del prossimo disegno: niente fotogramma schiacciato)
   // (e le tele montate dopo — il mondo 3D, gli atomi, i quanti — se nascono con un buffer che non è della loro misura)
   setInterval(() => { for (const cv of tele.querySelectorAll('canvas')) { if (!cv.clientWidth || !cv.clientHeight || cv.hidden) continue; const r = cv.width / cv.height, s = cv.clientWidth / cv.clientHeight; if (cv.width > 1 && Math.abs(r / s - 1) > 0.02) { misura = ''; ricalcola(); break; } } }, 1000);
 
@@ -131,7 +131,8 @@ function costruisci() {
   // R · A CASO: un punto a caso dell'universo (lingua.js); l'avviso dice dove
   azioni.caso = () => {
     const b = $('puntoACaso'); if (!b) return; b.click();
-    setTimeout(() => { const t = $('dove')?.textContent || '', m = t.match(/«([^»]+)»/); hud.avvisa(m ? `Un punto a caso: ${m[1]}` : t.split(' · ')[0]); }, 60);
+    setTimeout(() => { const t = $('dove')?.textContent || '', n = (k) => { const x = t.match(new RegExp(`${k} (\\d+)`)); return x ? +x[1] + 1 : null; }, g = n('galassia'), st = n('stella'), pi = n('pianeta');
+      hud.avvisa(pi ? `Un punto a caso: il pianeta ${pi} della stella ${st}, nella galassia ${g}` : t.split(' · ')[0]); }, 60); // (nell'indirizzo si conta da 0, nei nomi da 1)
   };
   azioni.schermoPieno = () => { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => hud.avvisa('Lo schermo pieno qui non si può: F11')); };
   azioni.menu = () => { if (menu.taccuinoAperto) menu.chiudiTaccuino(); menu.toggle(); };

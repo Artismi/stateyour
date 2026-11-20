@@ -124,7 +124,7 @@ input[type=range] { accent-color: var(--v-accento); }
 .v-righello .lettura { position: absolute; left: 58px; transform: translateY(-50%); white-space: nowrap; padding: 6px 10px; border-radius: 10px; background: rgba(24,6,12,.62); border: 1px solid rgba(255,90,120,.30); backdrop-filter: blur(10px); pointer-events: none; transition: top .15s linear; }
 .v-righello .lettura b { display: block; font: 600 14px/1.1 var(--cifre); color: var(--avorio); font-variant-numeric: tabular-nums; }
 .v-righello .lettura small { display: block; margin-top: 3px; font: 500 9.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--avorio-50); }
-.v-barra { position: absolute; z-index: 10; left: calc(var(--m) + 4px); bottom: calc(var(--m) - 2px); display: flex; align-items: center; gap: 9px; font: 500 11.5px/1 var(--cifre); color: var(--avorio-70); pointer-events: none; text-shadow: 0 0 3px #000; }
+.v-barra { position: absolute; z-index: 10; left: var(--m); bottom: calc(var(--m) - 8px); display: flex; align-items: center; gap: 9px; padding: 6px 10px 7px 6px; border-radius: 10px; background: rgba(24,6,12,.42); backdrop-filter: blur(8px); font: 500 11.5px/1 var(--cifre); color: var(--avorio-70); pointer-events: none; }
 .v-barra i { display: block; height: 7px; border: 1.5px solid var(--avorio-70); border-top: 0; }
 /* il mirino sul bersaglio */
 .v-mirino { position: absolute; left: 0; top: 0; z-index: 5; overflow: visible; pointer-events: none; }
