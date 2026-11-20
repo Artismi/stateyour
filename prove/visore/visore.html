@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stateyour · il visore (prototipo visivo)</title>
+<!--
+  Prototipo statico del «visore da ricercatore» (PROGETTO_VISORE.md).
+  ?v=A  palmare: il dispositivo intero, la cornice intorno a tutta l'app
+  ?v=B  schermo pieno con cornice sottile (Electron a tutto schermo)
+  La finestra 3D è uno scatto vero dell'app (finestra_pianeta.jpg); tutto il resto è CSS e SVG.
+-->
+<style>
+  :root {
+    --bordeaux-950: #2a0710; --bordeaux-900: #3d0d18; --bordeaux-800: #521221; --bordeaux-700: #6b1a2c; --bordeaux-600: #82243a; --bordeaux-500: #9a3049;
+    --rosa-400: #d98a9b; --rosa-300: #e9a9b6; --rosa-200: #f2c4cd; --rosa-100: #f8dfe3;
+    --avorio: #f4ecdf; --avorio-70: rgba(244,236,223,.72); --avorio-50: rgba(244,236,223,.52); --avorio-30: rgba(244,236,223,.30); --avorio-15: rgba(244,236,223,.14);
+    --accento: #ff5a78; --accento-glow: rgba(255,90,120,.55);
+    --freddo: #8ecfe0; --caldo: #f2a65a;
+    --ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --titolo: "Inter Display", "Inter", system-ui, sans-serif;
+    --cifre: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --rumore: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  .9 0 0 0 -.25'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1600px; height: 1000px; overflow: hidden; }
+  body { font-family: var(--ui); color: var(--avorio); -webkit-font-smoothing: antialiased; }
+  svg.ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .A .devB, .B .devA, .B .fondo, .B .ombra-terra { display: none; }
+
+  /* ───────────── il fondo: le piastrelle soffici di Artismi, fuori fuoco ───────────── */
+  .fondo { position: absolute; inset: -20px; background-color: #d897a5;
+    background-image:
+      radial-gradient(120% 90% at 50% 45%, transparent 35%, rgba(61,13,24,.55) 100%),
+      linear-gradient(90deg, rgba(110,26,46,.38) 0 3px, transparent 3px),
+      linear-gradient(0deg, rgba(110,26,46,.38) 0 3px, transparent 3px),
+      radial-gradient(circle at 32% 28%, rgba(255,240,242,.55), transparent 58%),
+      radial-gradient(circle at 72% 78%, rgba(120,30,52,.32), transparent 62%);
+    background-size: 100% 100%, 150px 150px, 150px 150px, 150px 150px, 150px 150px;
+    background-position: 0 0, -40px 0, 0 -60px, -40px -60px, -40px -60px;
+    filter: blur(2.2px) saturate(1.05); }
+  .fondo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,230,235,.18), transparent 40%, rgba(42,7,16,.25)); }
+  .ombra-terra { position: absolute; left: 110px; right: 110px; top: 880px; height: 90px; border-radius: 50%; background: radial-gradient(closest-side, rgba(42,7,16,.55), rgba(42,7,16,.25) 55%, transparent); filter: blur(10px); }
+
+  /* ───────────── il materiale: plastica soft-touch bordeaux ───────────── */
+  .scocca { position: absolute; background:
+      radial-gradient(140% 120% at 18% 0%, rgba(255,190,205,.20), transparent 55%),
+      linear-gradient(160deg, var(--bordeaux-600) 0%, var(--bordeaux-700) 38%, var(--bordeaux-800) 78%, var(--bordeaux-900) 100%);
+    box-shadow:
+      inset 0 2px 1px rgba(255,214,222,.30), inset 0 -4px 8px rgba(20,2,8,.55), inset 3px 0 6px rgba(255,200,212,.08), inset -3px 0 8px rgba(20,2,8,.35),
+      0 2px 2px rgba(20,2,8,.35), 0 14px 28px rgba(40,6,16,.40), 0 46px 90px rgba(40,6,16,.42); }
+  .scocca::before { /* la grana soft-touch */ content: ''; position: absolute; inset: 0; border-radius: inherit; background-image: var(--rumore); opacity: .07; mix-blend-mode: overlay; pointer-events: none; }
+  .scocca::after { /* lo smusso: un anello di luce appena dentro il bordo */ content: ''; position: absolute; inset: 5px; border-radius: inherit; pointer-events: none;
+    box-shadow: inset 0 1.5px 0 rgba(255,214,222,.16), inset 0 -1px 0 rgba(0,0,0,.25); }
+  .inciso { font: 600 10px/1 var(--ui); letter-spacing: .32em; text-transform: uppercase; color: rgba(248,223,227,.50); text-shadow: 0 -1px 0 rgba(20,2,8,.6), 0 1px 0 rgba(255,214,222,.10); }
+
+  /* ───────────── lo schermo: vetro incassato ───────────── */
+  .schermo { position: absolute; overflow: hidden; background: #000; isolation: isolate; }
+  .schermo .scena { position: absolute; left: var(--img-l); top: var(--img-t); height: var(--img-h); width: auto; z-index: 0; }
+  .schermo::before { /* vignettatura del vetro */ content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(130% 110% at 40% 45%, transparent 55%, rgba(0,0,0,.45) 100%); }
+  .vetro { position: absolute; inset: 0; z-index: 50; pointer-events: none; border-radius: inherit;
+    background:
+      linear-gradient(118deg, rgba(255,255,255,.075) 0%, rgba(255,255,255,.03) 22%, transparent 22.3%, transparent 100%),
+      radial-gradient(70% 40% at 22% -8%, rgba(255,235,240,.10), transparent 70%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 40px rgba(0,0,0,.55), inset 0 0 6px rgba(0,0,0,.8); }
+  .vetro::after { /* un filo di riflesso lungo il bordo alto */ content: ''; position: absolute; left: 6%; right: 30%; top: 3px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent); }
+
+  /* ───────────── l'HUD: vetro scuro tinto bordeaux ───────────── */
+  .chip { position: absolute; z-index: 10; display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 40px; border-radius: 20px;
+    background: linear-gradient(180deg, rgba(58,14,26,.62), rgba(24,6,12,.58)); border: 1px solid rgba(248,223,227,.13);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 10px 26px rgba(0,0,0,.38); backdrop-filter: blur(14px) saturate(1.2); }
+
+  .catena { left: var(--m); top: var(--m); padding: 0 8px 0 6px; gap: 2px; }
+  .catena .anello { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px 0 7px; border-radius: 15px; color: var(--avorio-50); font: 500 12px/1 var(--cifre); }
+  .catena .anello svg.ico { width: 17px; height: 17px; stroke-width: 1.5; color: var(--rosa-300); opacity: .75; }
+  .catena .sep { width: 12px; height: 12px; color: var(--avorio-30); }
+  .catena .anello.qui { background: rgba(255,90,120,.13); box-shadow: inset 0 0 0 1px rgba(255,90,120,.35); color: var(--avorio); font: 600 13px/1 var(--ui); letter-spacing: .01em; }
+  .catena .anello.qui svg.ico { color: var(--accento); opacity: 1; filter: drop-shadow(0 0 4px var(--accento-glow)); }
+
+  .tempo { right: var(--m); top: var(--m); gap: 12px; padding: 0 16px 0 12px; }
+  .tempo .ico { width: 18px; height: 18px; color: var(--rosa-300); }
+  .tempo b { font: 600 12.5px/1 var(--ui); color: var(--avorio); letter-spacing: .01em; }
+  .tempo .vel { display: flex; gap: 3px; } .tempo .vel i { width: 4px; height: 12px; border-radius: 2px; background: var(--avorio-15); } .tempo .vel i.on { background: var(--rosa-300); }
+  .tempo small { font: 500 11px/1 var(--cifre); color: var(--avorio-50); }
+
+  /* il righello della scala: un altimetro logaritmico, dal cosmo (in alto) alle particelle (in basso) */
+  .righello { position: absolute; z-index: 10; left: var(--m); top: var(--r-top); bottom: var(--r-bot); width: 46px; border-radius: 23px;
+    background: linear-gradient(90deg, rgba(58,14,26,.55), rgba(24,6,12,.50)); border: 1px solid rgba(248,223,227,.12); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 26px rgba(0,0,0,.35); backdrop-filter: blur(14px); }
+  .righello .tacca { position: absolute; left: 0; height: 1px; background: var(--avorio-30); }
+  .righello .vista { position: absolute; left: 3px; right: 3px; border-radius: 10px; background: linear-gradient(180deg, rgba(233,169,182,.28), rgba(233,169,182,.10)); box-shadow: inset 0 0 0 1px rgba(233,169,182,.25); }
+  .righello .liv { position: absolute; left: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; color: var(--avorio-50); }
+  .righello .liv svg.ico { width: 18px; height: 18px; stroke-width: 1.5; }
+  .righello .liv.qui { color: var(--accento); filter: drop-shadow(0 0 5px var(--accento-glow)); }
+  .righello .ago { position: absolute; left: -6px; width: 58px; height: 2px; margin-top: -1px; background: var(--accento); box-shadow: 0 0 8px var(--accento-glow), 0 0 2px var(--accento); border-radius: 1px; }
+  .righello .ago::before, .righello .ago::after { content: ''; position: absolute; top: -4px; border: 5px solid transparent; }
+  .righello .ago::before { left: -4px; border-left-color: var(--accento); }
+  .righello .ago::after { right: -4px; border-right-color: var(--accento); }
+  .righello .lettura { position: absolute; left: 58px; transform: translateY(-50%); white-space: nowrap; padding: 6px 10px 6px 10px; border-radius: 10px; background: rgba(24,6,12,.62); border: 1px solid rgba(255,90,120,.30); backdrop-filter: blur(10px); }
+  .righello .lettura b { display: block; font: 600 14px/1.1 var(--cifre); color: var(--avorio); }
+  .righello .lettura small { display: block; margin-top: 3px; font: 500 9.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--avorio-50); }
+  .barra-lineare { position: absolute; z-index: 10; left: calc(var(--m) + 4px); bottom: var(--m); display: flex; align-items: center; gap: 9px; font: 500 11.5px/1 var(--cifre); color: var(--avorio-70); }
+  .barra-lineare i { display: block; height: 7px; border: 1.5px solid var(--avorio-70); border-top: 0; }
+
+  /* il mirino sul bersaglio */
+  .mirino { position: absolute; z-index: 5; left: calc(var(--cx) - var(--r) - 30px); top: calc(var(--cy) - var(--r) - 30px); width: calc(2 * var(--r) + 60px); height: calc(2 * var(--r) + 60px); overflow: visible; }
+  .mirino .ang { fill: none; stroke: var(--accento); stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--accento-glow)); }
+  .mirino .giro { fill: none; stroke: rgba(233,169,182,.35); stroke-width: 1; stroke-dasharray: 2 6; }
+  .mirino .card { fill: none; stroke: rgba(233,169,182,.55); stroke-width: 1.2; }
+  .etichetta { position: absolute; z-index: 6; left: calc(var(--cx) + var(--r) + 44px); top: calc(var(--cy) - var(--r) - 92px); display: flex; flex-direction: column; gap: 6px; }
+  .etichetta .riga1 { display: flex; align-items: center; gap: 8px; font: 700 11px/1 var(--ui); letter-spacing: .2em; text-transform: uppercase; color: var(--avorio); }
+  .etichetta .riga1 svg.ico { width: 16px; height: 16px; color: var(--accento); filter: drop-shadow(0 0 4px var(--accento-glow)); }
+  .etichetta .riga2 { font: 500 12px/1 var(--cifre); color: var(--avorio-70); }
+  .etichetta .tasto-a { display: inline-flex; align-items: center; gap: 7px; margin-top: 3px; font: 500 11px/1 var(--ui); color: var(--avorio-70); }
+  .tasto-a kbd { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font: 700 10px/1 var(--ui); color: var(--bordeaux-900); background: var(--rosa-200); box-shadow: 0 0 8px rgba(242,196,205,.45); }
+  .guida { position: absolute; z-index: 6; overflow: visible; pointer-events: none; }
+  .guida path { fill: none; stroke: rgba(255,90,120,.75); stroke-width: 1.2; }
+  .guida circle { fill: var(--accento); }
+
+  /* un avviso alla volta, in basso */
+  .avviso { left: 50%; bottom: var(--m); transform: translateX(-50%); height: 34px; gap: 9px; padding: 0 14px 0 11px; font: 500 12px/1 var(--ui); color: var(--avorio-70); }
+  .avviso .ico { width: 16px; height: 16px; color: var(--rosa-300); }
+  .avviso .punto { width: 6px; height: 6px; border-radius: 50%; background: var(--rosa-300); box-shadow: 0 0 6px var(--rosa-300); }
+
+  /* ───────────── la scheda: il pianeta ───────────── */
+  .scheda { position: absolute; z-index: 20; right: var(--m); top: var(--s-top); bottom: var(--s-bot); width: var(--s-w); border-radius: 22px; display: flex; flex-direction: column; overflow: hidden;
+    background: linear-gradient(180deg, rgba(56,13,25,.80), rgba(22,6,12,.84)); border: 1px solid rgba(248,223,227,.13);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 18px 50px rgba(0,0,0,.5); backdrop-filter: blur(20px) saturate(1.2); }
+  .testa { display: flex; align-items: center; gap: 14px; padding: 16px 16px 12px 16px; }
+  .testa .stemma { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: var(--accento);
+    background: radial-gradient(circle at 40% 35%, rgba(255,90,120,.22), rgba(255,90,120,.05) 70%); box-shadow: inset 0 0 0 1.5px rgba(255,90,120,.55), 0 0 18px rgba(255,90,120,.25); }
+  .testa .stemma svg.ico { width: 24px; height: 24px; }
+  .testa h2 { margin: 0; font: 600 22px/1.05 var(--titolo); letter-spacing: -.005em; color: var(--avorio); }
+  .testa p { margin: 5px 0 0; font: 400 12px/1.25 var(--ui); color: var(--avorio-50); }
+  .testa .chiudi { margin-left: auto; align-self: flex-start; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--avorio-50); background: rgba(244,236,223,.06); box-shadow: inset 0 0 0 1px rgba(244,236,223,.12); position: relative; }
+  .testa .chiudi svg { width: 14px; height: 14px; }
+  .testa .chiudi kbd { position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center; font: 700 8px/1 var(--ui); color: var(--bordeaux-900); background: var(--rosa-300); }
+  .linguette { display: grid; grid-template-columns: repeat(6, 1fr); margin: 0 12px; border-bottom: 1px solid rgba(244,236,223,.09); }
+  .linguette div { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 0 10px; color: var(--avorio-30); font: 600 8.5px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; position: relative; }
+  .linguette div svg.ico { width: 19px; height: 19px; color: var(--avorio-50); }
+  .linguette div.on { color: var(--avorio); } .linguette div.on svg.ico { color: var(--accento); filter: drop-shadow(0 0 4px var(--accento-glow)); }
+  .linguette div.on::after { content: ''; position: absolute; left: 22%; right: 22%; bottom: -1px; height: 2px; border-radius: 1px; background: var(--accento); box-shadow: 0 0 8px var(--accento-glow); }
+  .corpo { flex: 1; padding: 2px 18px 0; display: flex; flex-direction: column; }
+  .sez { padding: 10px 0 11px; border-bottom: 1px solid rgba(244,236,223,.07); }
+  .sez:last-of-type { border-bottom: 0; }
+  .sez h3 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; font: 600 9.5px/1 var(--ui); letter-spacing: .2em; text-transform: uppercase; color: var(--rosa-300); opacity: .85; }
+  .sez h3 svg.ico { width: 14px; height: 14px; }
+  .sez h3 span { margin-left: auto; font: 500 10.5px/1 var(--cifre); letter-spacing: 0; text-transform: none; color: var(--avorio-50); }
+  /* temperatura */
+  .temp-num { display: flex; align-items: baseline; gap: 4px; margin: 0 0 8px; }
+  .temp-num b { font: 300 46px/0.9 var(--titolo); letter-spacing: -.03em; color: var(--avorio); }
+  .temp-num i { font: 400 20px/1 var(--titolo); font-style: normal; color: var(--avorio-70); }
+  .temp-num small { margin-left: 12px; font: 400 11.5px/1.3 var(--ui); color: var(--avorio-50); max-width: 150px; }
+  .termo { display: block; width: 100%; height: 64px; overflow: visible; }
+  .termo text { font: 500 9.5px var(--cifre); fill: rgba(244,236,223,.45); }
+  .termo .lab { font: 600 9px var(--ui); letter-spacing: .08em; fill: rgba(244,236,223,.62); }
+  /* aria */
+  .aria { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; }
+  .aria svg.ciambella { width: 96px; height: 96px; overflow: visible; }
+  .aria .leg { display: flex; flex-direction: column; gap: 8px; }
+  .aria .leg > div:not(.etichette) { display: grid; grid-template-columns: 10px 38px 1fr 40px; align-items: center; gap: 8px; font: 500 12px/1 var(--cifre); color: var(--avorio-70); }
+  .aria .leg > div i { width: 10px; height: 10px; border-radius: 3px; }
+  .aria .leg > div em { font-style: normal; height: 4px; border-radius: 2px; background: rgba(244,236,223,.08); position: relative; overflow: hidden; }
+  .aria .leg > div em::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--c); border-radius: 2px; }
+  .aria .leg > div b { font-weight: 500; text-align: right; color: var(--avorio); }
+  .etichette { display: flex; gap: 6px; margin-top: 2px; }
+  .etichette span { font: 600 9px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; padding: 5px 8px; border-radius: 9px; color: var(--rosa-200); box-shadow: inset 0 0 0 1px rgba(233,169,182,.35); }
+  /* acqua */
+  .acqua { display: grid; grid-template-columns: 58px 1fr; gap: 16px; align-items: center; }
+  .acqua .goccia { width: 58px; height: 66px; }
+  .misurino { margin: 2px 0 12px; }
+  .misurino:last-child { margin-bottom: 0; }
+  .misurino .t { display: flex; justify-content: space-between; font: 500 11px/1 var(--ui); color: var(--avorio-50); margin-bottom: 7px; }
+  .misurino .t b { font: 500 12px/1 var(--cifre); color: var(--avorio); }
+  .misurino .pista { position: relative; height: 6px; border-radius: 3px; background: rgba(244,236,223,.08); }
+  .misurino .pieno { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+  .misurino .rif { position: absolute; top: -4px; bottom: -4px; width: 1.5px; background: var(--avorio-50); }
+  .misurino .rif::after { content: attr(data-t); position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font: 500 8.5px/1 var(--ui); letter-spacing: .06em; color: var(--avorio-30); white-space: nowrap; }
+  .misurino .seg { position: absolute; top: -4px; width: 12px; height: 14px; margin-left: -6px; border-radius: 4px; background: var(--avorio); box-shadow: 0 0 0 2px rgba(22,6,12,.9); }
+  /* tre tessere */
+  .tessere { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .tessere > div { display: grid; grid-template-columns: 18px 1fr; column-gap: 7px; align-items: center; padding: 10px 10px 9px; border-radius: 12px; background: rgba(244,236,223,.045); box-shadow: inset 0 0 0 1px rgba(244,236,223,.07); }
+  .tessere svg.ico { width: 18px; height: 18px; color: var(--rosa-300); grid-row: 1 / 3; }
+  .tessere b { font: 500 14px/1 var(--cifre); color: var(--avorio); white-space: nowrap; }
+  .tessere small { margin-top: 4px; font: 400 10px/1.1 var(--ui); color: var(--avorio-50); white-space: nowrap; }
+  .tessere .mini { margin-top: 8px; height: 3px; border-radius: 2px; background: rgba(244,236,223,.08); position: relative; }
+  .tessere .mini::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); border-radius: 2px; background: var(--rosa-300); }
+  /* spettro della stella */
+  .spettro { display: block; width: 100%; height: 50px; border-radius: 8px; overflow: hidden; }
+  .piede { margin-top: auto; padding: 8px 16px 16px; }
+  .ramo { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px; border-radius: 14px; font: 500 12.5px/1 var(--ui); color: var(--avorio);
+    background: linear-gradient(180deg, rgba(244,236,223,.07), rgba(244,236,223,.03)); box-shadow: inset 0 0 0 1px rgba(244,236,223,.12); }
+  .ramo svg.ico { width: 18px; height: 18px; color: var(--rosa-300); }
+  .ramo small { margin-left: auto; font: 400 11px/1 var(--ui); color: var(--avorio-50); }
+
+  /* ───────────── VARIANTE A: il palmare ───────────── */
+  .devA { position: absolute; left: 50px; top: 60px; width: 1500px; height: 860px; border-radius: 60px; }
+  .devA .incasso { position: absolute; left: 26px; top: 26px; width: 1270px; height: 808px; border-radius: 34px;
+    background: linear-gradient(180deg, #14040a, #1e0710); box-shadow: inset 0 3px 6px rgba(0,0,0,.75), inset 0 -1px 0 rgba(255,214,222,.10), 0 1px 0 rgba(255,214,222,.12); }
+  .devA .schermo { left: 36px; top: 36px; width: 1250px; height: 788px; border-radius: 26px;
+    --m: 18px; --r-top: 74px; --r-bot: 56px; --s-top: 70px; --s-bot: 18px; --s-w: 372px;
+    --img-h: 900px; --img-l: -169px; --img-t: -50px; --cx: 450px; --cy: 400px; --r: 218px; }
+  .devA .led { position: absolute; top: 12px; left: 50%; width: 5px; height: 5px; margin-left: -150px; border-radius: 50%; background: var(--accento); box-shadow: 0 0 6px var(--accento), 0 0 14px var(--accento-glow); }
+  .colonna { position: absolute; left: 1296px; top: 0; width: 204px; height: 100%; }
+  .marchio { position: absolute; top: 56px; left: 0; right: 0; text-align: center; }
+  .marchio .nome { font: 600 15px/1 var(--titolo); letter-spacing: .46em; margin-right: -.46em; color: var(--rosa-100); text-shadow: 0 -1px 0 rgba(20,2,8,.65), 0 1px 0 rgba(255,214,222,.18); opacity: .92; }
+  .marchio .modello { margin-top: 9px; }
+  /* la ghiera della scala */
+  .ghiera { position: absolute; left: 50%; top: 128px; width: 164px; height: 164px; margin-left: -82px; border-radius: 50%;
+    background: repeating-conic-gradient(from 0deg, #4a0f1d 0deg 2.2deg, #7a2236 2.2deg 4.5deg);
+    box-shadow: 0 10px 18px rgba(20,2,8,.55), 0 2px 3px rgba(20,2,8,.6), inset 0 0 0 1px rgba(255,214,222,.12); }
+  .ghiera::before { /* luce sulla zigrinatura */ content: ''; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 35% 25%, rgba(255,220,228,.35), transparent 55%), radial-gradient(circle at 70% 85%, rgba(0,0,0,.45), transparent 60%); }
+  .ghiera .faccia { position: absolute; inset: 13px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #2a0912, #12030a 70%); box-shadow: inset 0 2px 5px rgba(0,0,0,.85), 0 0 0 2px rgba(20,2,8,.6), 0 -1px 0 2px rgba(255,214,222,.10); overflow: hidden; }
+  .ghiera .faccia::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(135deg, rgba(255,255,255,.14), transparent 45%); }
+  .ghiera svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ghiera .val { position: absolute; left: 0; right: 0; top: 52px; text-align: center; font: 500 22px/1 var(--cifre); color: var(--avorio); }
+  .ghiera .val sup { font-size: 12px; } .ghiera .val small { display: block; margin-top: 7px; font: 600 8px/1 var(--ui); letter-spacing: .24em; color: var(--avorio-50); }
+  .etich-ghiera { position: absolute; top: 308px; left: 0; right: 0; text-align: center; }
+  /* la pulsantiera trasparente: vetro fumé con il circuito dentro */
+  .pulsantiera { position: absolute; left: 14px; right: 24px; top: 352px; height: 452px; border-radius: 30px; overflow: hidden;
+    background: linear-gradient(170deg, rgba(40,8,16,.80), rgba(16,3,8,.88)); box-shadow: inset 0 2px 5px rgba(0,0,0,.7), inset 0 -1px 0 rgba(255,214,222,.10), 0 1px 0 rgba(255,214,222,.14); }
+  .pulsantiera::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(160deg, rgba(255,235,240,.10), transparent 32%); }
+  .pulsantiera svg.circuito { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tasto { position: absolute; display: grid; place-items: center; color: var(--avorio); }
+  .tasto.tondo { width: 58px; height: 58px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 30%, #f6d4db, #d98a9b 72%, #b8667a); box-shadow: inset 0 -3px 5px rgba(90,20,38,.45), inset 0 2px 2px rgba(255,255,255,.55), 0 4px 8px rgba(0,0,0,.55), 0 0 0 4px rgba(10,2,5,.55), 0 0 22px rgba(255,140,165,.25); color: var(--bordeaux-800); }
+  .tasto.tondo svg.ico { width: 24px; height: 24px; stroke-width: 2; }
+  .tasto.tondo.primario { box-shadow: inset 0 -3px 5px rgba(90,20,38,.45), inset 0 2px 2px rgba(255,255,255,.55), 0 4px 8px rgba(0,0,0,.55), 0 0 0 4px rgba(10,2,5,.55), 0 0 0 5.5px rgba(255,90,120,.85), 0 0 26px rgba(255,90,120,.55); }
+  .tasto.quadro { width: 70px; height: 44px; border-radius: 14px; background: linear-gradient(180deg, rgba(70,18,32,.95), rgba(40,9,18,.95)); box-shadow: inset 0 1px 0 rgba(255,214,222,.18), inset 0 -2px 3px rgba(0,0,0,.5), 0 3px 6px rgba(0,0,0,.6), 0 0 0 3px rgba(10,2,5,.5); }
+  .tasto.quadro svg.ico { width: 20px; height: 20px; color: var(--rosa-200); filter: drop-shadow(0 0 5px rgba(242,196,205,.65)); }
+  .bilanciere { position: absolute; left: 50%; top: 172px; width: 150px; height: 46px; margin-left: -75px; border-radius: 23px; display: grid; grid-template-columns: 1fr 1fr 1fr;
+    background: linear-gradient(180deg, rgba(70,18,32,.95), rgba(40,9,18,.95)); box-shadow: inset 0 1px 0 rgba(255,214,222,.18), inset 0 -2px 3px rgba(0,0,0,.5), 0 3px 6px rgba(0,0,0,.6), 0 0 0 3px rgba(10,2,5,.5); }
+  .bilanciere div { display: grid; place-items: center; color: var(--rosa-200); }
+  .bilanciere div + div { box-shadow: -1px 0 0 rgba(0,0,0,.45), -2px 0 0 rgba(255,214,222,.06); }
+  .bilanciere svg { width: 16px; height: 16px; fill: currentColor; filter: drop-shadow(0 0 4px rgba(242,196,205,.7)); }
+  .bilanciere div.on { color: #fff; } .bilanciere div.on svg { filter: drop-shadow(0 0 5px rgba(255,255,255,.8)) drop-shadow(0 0 10px var(--accento-glow)); }
+  .sotto-tasto { position: absolute; transform: translateX(-50%); font: 600 8px/1 var(--ui); letter-spacing: .22em; text-transform: uppercase; color: rgba(248,223,227,.42); white-space: nowrap; }
+
+  /* ───────────── VARIANTE B: schermo pieno, cornice sottile ───────────── */
+  .devB { position: absolute; inset: 0; border-radius: 0; }
+  .devB .schermo { left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 18px;
+    --m: 22px; --r-top: 84px; --r-bot: 66px; --s-top: 78px; --s-bot: 22px; --s-w: 400px;
+    --img-h: 1040px; --img-l: -95px; --img-t: -50px; --cx: 620px; --cy: 470px; --r: 252px; }
+  .devB .avviso { bottom: 92px; }
+  .devB .scheda { bottom: auto; }
+  .devB .piede { margin-top: 4px; }
+  .devB .finestrella { position: absolute; top: 4px; right: 34px; display: flex; gap: 7px; z-index: 60; }
+  .devB .finestrella i { width: 6px; height: 6px; border-radius: 50%; background: rgba(248,223,227,.28); box-shadow: inset 0 1px 1px rgba(0,0,0,.5); }
+  .linguetta { position: absolute; z-index: 70; left: 50%; bottom: 0; width: 760px; height: 80px; margin-left: -380px; border-radius: 30px 30px 0 0; }
+  .linguetta::before { box-shadow: none; }
+  .linguetta .raccordo { position: absolute; bottom: 14px; width: 22px; height: 22px; }
+  .linguetta .raccordo.s { left: -22px; background: radial-gradient(circle at 0 0, transparent 21.5px, var(--bordeaux-800) 22px); }
+  .linguetta .raccordo.d { right: -22px; background: radial-gradient(circle at 100% 0, transparent 21.5px, var(--bordeaux-800) 22px); }
+  .linguetta .fila { position: absolute; left: 0; right: 0; top: 14px; height: 48px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .linguetta .nome { font: 600 12px/1 var(--titolo); letter-spacing: .42em; color: var(--rosa-100); opacity: .8; text-shadow: 0 -1px 0 rgba(20,2,8,.65); margin-right: 8px; }
+  .linguetta .tasto { position: relative; }
+  .linguetta .tasto.quadro { width: 50px; height: 40px; border-radius: 13px; }
+  .linguetta .tasto.tondo { width: 46px; height: 46px; }
+  .linguetta .tasto.tondo svg.ico { width: 20px; height: 20px; }
+  .linguetta .bilanciere { position: relative; left: auto; top: auto; margin: 0; width: 132px; height: 40px; }
+  .linguetta .divisore { width: 1px; height: 26px; background: rgba(0,0,0,.35); box-shadow: 1px 0 0 rgba(255,214,222,.08); }
+  .linguetta kbd { position: absolute; right: -4px; top: -5px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 5px; display: grid; place-items: center; font: 600 8.5px/1 var(--cifre); color: var(--avorio-70); background: rgba(20,4,9,.92); box-shadow: inset 0 0 0 1px rgba(248,223,227,.18); }
+</style>
+</head>
+<body>
+<!-- ───────────── le icone: 20, un solo tratto, griglia 24 ───────────── -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- i livelli della scala (8) -->
+    <symbol id="i-cosmo" viewBox="0 0 24 24"><circle cx="5" cy="6" r="1.7"/><circle cx="18.5" cy="5" r="1.7"/><circle cx="12" cy="12.5" r="2"/><circle cx="5.5" cy="18.5" r="1.7"/><circle cx="19" cy="18" r="1.7"/><path d="M6.4 7.1 10.4 11M17.2 6.2 13.5 11M10.3 13.7 6.8 17.3M13.8 13.6 17.6 17M6.7 6 16.8 5.1"/></symbol>
+    <symbol id="i-galassia" viewBox="0 0 24 24"><path d="M12 12.2c.9-.9 2.6-.6 3 .8.6 2-1.3 3.9-3.6 3.9-3 0-5-2.6-4.4-5.6.8-3.7 5-5.6 8.5-4.4"/><path d="M12 11.8c-.9.9-2.6.6-3-.8-.6-2 1.3-3.9 3.6-3.9 3 0 5 2.6 4.4 5.6-.8 3.7-5 5.6-8.5 4.4"/><circle cx="12" cy="12" r=".9" fill="currentColor"/></symbol>
+    <symbol id="i-stella" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+    <symbol id="i-pianeta" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5c-3 2-3.9 5-3.9 7.5s.9 5.5 3.9 7.5" opacity=".55"/><path d="M4.6 10.4c2.5 1 5.4 1.3 8 .9M5 14.6c2.8.6 5.8.5 8.6-.4" opacity=".55"/></symbol>
+    <symbol id="i-terreno" viewBox="0 0 24 24"><path d="M2.5 18.5 8 10.5l3.2 4.4L14.5 9l7 9.5z"/><path d="M6 21h12" opacity=".55"/><path d="M13.2 11.3l1.3 1.4 1-1.3" opacity=".7"/></symbol>
+    <symbol id="i-materia" viewBox="0 0 24 24"><path d="M12 2.8 19.8 7.3v9.4L12 21.2 4.2 16.7V7.3z"/><path d="M12 12.1 19.8 7.3M12 12.1 4.2 7.3M12 12.1v9.1" opacity=".6"/></symbol>
+    <symbol id="i-atomo" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(30 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-particella" viewBox="0 0 24 24"><path d="M3 20.5c3.6-1.2 6.8-3.8 8.6-7.6"/><path d="M11.6 12.9 19.2 8" /><path d="M11.6 12.9c1.2 2.4 3.6 4 6.4 4.4" stroke-dasharray="1.5 2.2"/><circle cx="20" cy="7.4" r="1.6" fill="currentColor"/></symbol>
+    <!-- le azioni (6) -->
+    <symbol id="i-mirino" viewBox="0 0 24 24"><path d="M3.5 8.5v-5h5M15.5 3.5h5v5M20.5 15.5v5h-5M8.5 20.5h-5v-5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-entra" viewBox="0 0 24 24"><path d="M4 12.5a8 8 0 0 0 16 0"/><path d="M12 2.5v11M7.8 9.4 12 13.6l4.2-4.2"/></symbol>
+    <symbol id="i-esci" viewBox="0 0 24 24"><path d="M4 12.5a8 8 0 0 0 16 0"/><path d="M12 13.6v-11M7.8 6.7 12 2.5l4.2 4.2"/></symbol>
+    <symbol id="i-tempo" viewBox="0 0 24 24"><circle cx="12" cy="12.5" r="8.5"/><path d="M12 7.5v5l3.5 2.2M9.5 2.5h5"/></symbol>
+    <symbol id="i-inquadra" viewBox="0 0 24 24"><path d="M3.5 8V3.5H8M16 3.5h4.5V8M20.5 16v4.5H16M8 20.5H3.5V16"/><path d="M12 7.2l1.3 3.5 3.5 1.3-3.5 1.3L12 16.8l-1.3-3.5L7.2 12l3.5-1.3z"/></symbol>
+    <symbol id="i-dado" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/></symbol>
+    <!-- le schede (5) e il menu (1) -->
+    <symbol id="i-aria" viewBox="0 0 24 24"><path d="M3 9h11.5a2.8 2.8 0 1 0-2.7-3.4"/><path d="M3 13.5h16a2.8 2.8 0 1 1-2.7 3.4"/><path d="M3 18h7"/></symbol>
+    <symbol id="i-clima" viewBox="0 0 24 24"><path d="M10 14.6V5a2 2 0 1 1 4 0v9.6a4 4 0 1 1-4 0z"/><path d="M12 9.5v7.2" stroke-width="2.2"/><path d="M17.5 6h2.5M17.5 9.5h2.5" opacity=".55"/></symbol>
+    <symbol id="i-acqua" viewBox="0 0 24 24"><path d="M12 2.8c3.4 4.4 6.3 8 6.3 11.6a6.3 6.3 0 0 1-12.6 0C5.7 10.8 8.6 7.2 12 2.8z"/><path d="M8.8 14.6a3.3 3.3 0 0 0 2.6 3.1" opacity=".6"/></symbol>
+    <symbol id="i-interno" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12z"/><path d="M12 7.5a4.5 4.5 0 1 0 4.5 4.5" opacity=".6"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-ramo" viewBox="0 0 24 24"><path d="M7 21V9.5M7 13c0-3 2.2-4.3 5.2-4.6 3-.3 5-1.6 5.6-4.4"/><circle cx="7" cy="7" r="2.3"/><circle cx="18" cy="3.8" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="5.5" cy="6.5" r="1.3" fill="currentColor"/><circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="5.5" cy="17.5" r="1.3" fill="currentColor"/><path d="M10 6.5h9.5M10 12h9.5M10 17.5h6"/></symbol>
+    <!-- glifi universali (non contano): chiudi, freccia, riproduci -->
+    <symbol id="g-chiudi" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="g-sep" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="g-indietro" viewBox="0 0 24 24"><path d="M11.5 5v14L2.5 12zM21.5 5v14l-9-7z"/></symbol>
+    <symbol id="g-pausa" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
+    <symbol id="g-avanti" viewBox="0 0 24 24"><path d="M2.5 5v14l9-7zM12.5 5v14l9-7z"/></symbol>
+    <linearGradient id="gr-termo" x1="0" x2="1"><stop offset="0" stop-color="#6fb7d4"/><stop offset=".42" stop-color="#cfe6ea"/><stop offset=".56" stop-color="#f4ecdf"/><stop offset=".8" stop-color="#f2a65a"/><stop offset="1" stop-color="#e2683f"/></linearGradient>
+    <linearGradient id="gr-goccia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ecfe0" stop-opacity=".15"/><stop offset=".42" stop-color="#8ecfe0" stop-opacity=".15"/><stop offset=".43" stop-color="#8ecfe0" stop-opacity=".85"/><stop offset="1" stop-color="#4f9fbf" stop-opacity=".95"/></linearGradient>
+  </defs>
+</svg>
+
+<!-- ───────────── lo schermo: uguale nelle due varianti ───────────── -->
+<template id="hud">
+  <img class="scena" src="finestra_pianeta.jpg" alt="la finestra 3D: il pianeta 1 della stella 72">
+  <!-- 1 · dove sono: la catena dell'indirizzo -->
+  <div class="chip catena">
+    <div class="anello"><svg class="ico"><use href="#i-cosmo"/></svg>1</div><svg class="ico sep"><use href="#g-sep"/></svg>
+    <div class="anello"><svg class="ico"><use href="#i-galassia"/></svg>34</div><svg class="ico sep"><use href="#g-sep"/></svg>
+    <div class="anello"><svg class="ico"><use href="#i-stella"/></svg>72</div><svg class="ico sep"><use href="#g-sep"/></svg>
+    <div class="anello qui"><svg class="ico"><use href="#i-pianeta"/></svg>Pianeta 1</div>
+  </div>
+  <!-- 2 · quando: il tempo -->
+  <div class="chip tempo"><svg class="ico"><use href="#i-tempo"/></svg><b>tempo vero</b><span class="vel"><i class="on"></i><i></i><i></i><i></i></span><small>1 s = 1 s</small></div>
+  <!-- 3 · quanto è grande: l'altimetro della scala -->
+  <div class="righello" id="righello"></div>
+  <div class="barra-lineare"><i style="width:30px"></i>1000 km</div>
+  <!-- 4 · che cosa guardo: il mirino -->
+  <svg class="mirino" id="mirino"></svg>
+  <svg class="guida" id="guida"></svg>
+  <div class="etichetta">
+    <div class="riga1"><svg class="ico"><use href="#i-pianeta"/></svg>Pianeta 1</div>
+    <div class="riga2">Ø 10.411 km</div>
+    <div class="tasto-a"><kbd>A</kbd>entra</div>
+  </div>
+  <!-- un avviso alla volta -->
+  <div class="chip avviso"><span class="punto"></span>Superficie pronta: clima ed erosione</div>
+
+  <!-- la scheda aperta: il pianeta -->
+  <section class="scheda">
+    <div class="testa">
+      <div class="stemma"><svg class="ico"><use href="#i-pianeta"/></svg></div>
+      <div><h2>Pianeta 1</h2><p>roccioso · volge sempre la stessa faccia alla stella</p></div>
+      <div class="chiudi"><svg class="ico"><use href="#g-chiudi"/></svg><kbd>B</kbd></div>
+    </div>
+    <nav class="linguette">
+      <div class="on"><svg class="ico"><use href="#i-pianeta"/></svg>Sintesi</div>
+      <div><svg class="ico"><use href="#i-aria"/></svg>Aria</div>
+      <div><svg class="ico"><use href="#i-clima"/></svg>Clima</div>
+      <div><svg class="ico"><use href="#i-acqua"/></svg>Mare</div>
+      <div><svg class="ico"><use href="#i-interno"/></svg>Interno</div>
+      <div><svg class="ico"><use href="#i-ramo"/></svg>Origine</div>
+    </nav>
+    <div class="corpo">
+      <div class="sez">
+        <h3><svg class="ico"><use href="#i-clima"/></svg>Temperatura in superficie</h3>
+        <div class="temp-num"><b>11</b><i>°C</i><small>media in superficie</small></div>
+        <svg class="termo" id="termo"></svg>
+      </div>
+      <div class="sez">
+        <h3><svg class="ico"><use href="#i-aria"/></svg>Aria<span>3,0 bar · 3 × Terra</span></h3>
+        <div class="aria">
+          <svg class="ciambella" id="ciambella"></svg>
+          <div class="leg">
+            <div style="--c:#f4ecdf;--p:56%"><i style="background:#f4ecdf"></i>N₂<em></em><b>56 %</b></div>
+            <div style="--c:#e9a9b6;--p:44%"><i style="background:#e9a9b6"></i>CO₂<em></em><b>44 %</b></div>
+            <div style="--c:#8ecfe0;--p:2%"><i style="background:#8ecfe0"></i>H₂O<em></em><b>0,2 %</b></div>
+            <div class="etichette"><span>ossidata</span><span>niente vita</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sez">
+        <h3><svg class="ico"><use href="#i-acqua"/></svg>Acqua<span>liquida · mare salmastro</span></h3>
+        <div class="acqua">
+          <svg class="goccia" viewBox="0 0 24 27"><path d="M12 1.5c3.8 5 7.2 9.1 7.2 13.3a7.2 7.2 0 0 1-14.4 0C4.8 10.6 8.2 6.5 12 1.5z" fill="url(#gr-goccia)" stroke="#8ecfe0" stroke-width=".9"/><path d="M7.6 15.6a4.2 4.2 0 0 0 3.3 3.9" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width=".9" stroke-linecap="round"/></svg>
+          <div>
+            <div class="misurino"><div class="t">salinità<b>8,8 g/kg</b></div><div class="pista"><div class="pieno" style="width:22%;background:linear-gradient(90deg,#4f9fbf,#8ecfe0)"></div><div class="rif" style="left:87.5%" data-t="Terra"></div></div></div>
+            <div class="misurino" style="margin-top:20px"><div class="t">pH<b>6,5 · acido</b></div><div class="pista" style="background:linear-gradient(90deg,#e9a9b6 0%,#f4ecdf 50%,#8ecfe0 100%);opacity:.9"><div class="seg" style="left:46.4%"></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="sez spettro-sez">
+        <h3><svg class="ico"><use href="#i-stella"/></svg>La luce che riceve<span>stella 72 · 4.900 K</span></h3>
+        <svg class="spettro" id="spettro" viewBox="0 0 360 46" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="sez">
+        <div class="tessere">
+          <div style="--p:25%"><svg class="ico"><path d="M12 3v11M7.5 10 12 14.5 16.5 10M4 20h16"/></svg><b>0,25 g</b><small>gravità</small></div>
+          <div><svg class="ico"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" fill-opacity=".35" stroke="none"/><path d="M2 12h2.5M19.5 12H22"/></svg><b>53 g</b><small>giorno = anno</small></div>
+          <div style="--p:4%"><svg class="ico"><path d="M7 4v8a5 5 0 0 0 10 0V4"/><path d="M4.5 4h5M14.5 4h5" stroke-width="2.4"/></svg><b>615 nT</b><small>campo · 1 % Terra</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="piede"><div class="ramo"><svg class="ico"><use href="#i-ramo"/></svg>Un pianeta parallelo<small>un impatto diverso</small></div></div>
+  </section>
+  <div class="vetro"></div>
+</template>
+
+<!-- ───────────── A · il palmare ───────────── -->
+<div class="fondo"></div>
+<div class="ombra-terra devA-ombra"></div>
+<div class="devA scocca">
+  <div class="incasso"></div>
+  <div class="schermo"></div>
+  <div class="colonna">
+    <div class="marchio"><div class="nome">STATEYOUR</div><div class="modello inciso">visore di ricerca</div></div>
+    <div class="ghiera"><div class="faccia"><svg id="quadrante" viewBox="0 0 138 138"></svg><div class="val">10<sup>7</sup> m<small>SCALA</small></div></div></div>
+    <div class="pulsantiera">
+      <svg class="circuito" id="circuito" viewBox="0 0 166 452"></svg>
+      <div class="tasto tondo" style="left:20px;top:64px"><svg class="ico"><use href="#i-esci"/></svg></div>
+      <div class="tasto tondo primario" style="left:90px;top:34px"><svg class="ico"><use href="#i-entra"/></svg></div>
+      <div class="sotto-tasto" style="left:49px;top:132px">B · esci</div>
+      <div class="sotto-tasto" style="left:119px;top:102px">A · entra</div>
+      <div class="bilanciere"><div><svg><use href="#g-indietro"/></svg></div><div class="on"><svg><use href="#g-pausa"/></svg></div><div><svg><use href="#g-avanti"/></svg></div></div>
+      <div class="sotto-tasto" style="left:83px;top:228px">tempo</div>
+      <div class="tasto quadro" style="left:10px;top:268px"><svg class="ico"><use href="#i-inquadra"/></svg></div>
+      <div class="tasto quadro" style="left:86px;top:268px"><svg class="ico"><use href="#i-dado"/></svg></div>
+      <div class="sotto-tasto" style="left:45px;top:322px">inquadra</div>
+      <div class="sotto-tasto" style="left:121px;top:322px">a caso</div>
+      <div class="tasto quadro" style="left:10px;top:356px"><svg class="ico"><use href="#i-mirino"/></svg></div>
+      <div class="tasto quadro" style="left:86px;top:356px"><svg class="ico"><use href="#i-menu"/></svg></div>
+      <div class="sotto-tasto" style="left:45px;top:410px">scheda</div>
+      <div class="sotto-tasto" style="left:121px;top:410px">menu</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── B · schermo pieno, cornice sottile ───────────── -->
+<div class="devB scocca">
+  <div class="finestrella"><i></i><i></i><i></i></div>
+  <div class="schermo"></div>
+  <div class="linguetta scocca">
+    <div class="raccordo s"></div><div class="raccordo d"></div>
+    <div class="fila">
+      <span class="nome">STATEYOUR</span>
+      <div class="tasto quadro"><svg class="ico"><use href="#i-menu"/></svg><kbd>M</kbd></div>
+      <div class="divisore"></div>
+      <div class="bilanciere"><div><svg><use href="#g-indietro"/></svg></div><div class="on"><svg><use href="#g-pausa"/></svg></div><div><svg><use href="#g-avanti"/></svg></div></div>
+      <div class="divisore"></div>
+      <div class="tasto tondo"><svg class="ico"><use href="#i-esci"/></svg><kbd>B</kbd></div>
+      <div class="tasto tondo primario"><svg class="ico"><use href="#i-entra"/></svg><kbd>A</kbd></div>
+      <div class="divisore"></div>
+      <div class="tasto quadro"><svg class="ico"><use href="#i-mirino"/></svg><kbd>I</kbd></div>
+      <div class="tasto quadro"><svg class="ico"><use href="#i-inquadra"/></svg><kbd>F</kbd></div>
+      <div class="tasto quadro"><svg class="ico"><use href="#i-dado"/></svg><kbd>R</kbd></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const V = (new URLSearchParams(location.search).get('v') || 'A').toUpperCase() === 'B' ? 'B' : 'A';
+document.body.className = V;
+const NS = 'http://www.w3.org/2000/svg';
+const schermo = document.querySelector(`.dev${V} .schermo`);
+schermo.append(document.getElementById('hud').content.cloneNode(true));
+if (V === 'A') document.querySelector('.spettro-sez').remove();
+const css = (k) => parseFloat(getComputedStyle(schermo).getPropertyValue(k));
+
+/* l'altimetro della scala: 10^26 m in alto, 10^-15 m in basso */
+const R = document.getElementById('righello'), H = R.clientHeight, D0 = 26, D1 = -15, pad = 16;
+const y = (d) => pad + (D0 - d) / (D0 - D1) * (H - 2 * pad);
+let h = '';
+for (let d = D0; d >= D1; d--) h += `<i class="tacca" style="top:${y(d).toFixed(1)}px;width:${d % 5 === 0 ? 9 : 5}px;opacity:${d % 5 === 0 ? 1 : .55}"></i>`;
+const visto = [3.9, 7.17];   // dal dettaglio più fine (un pixel) alla larghezza dello schermo
+h += `<div class="vista" style="top:${(y(visto[1]) - 9).toFixed(1)}px;height:${(y(visto[0]) - y(visto[1]) + 18).toFixed(1)}px"></div>`;
+for (const [id, d] of [['cosmo', 25.2], ['galassia', 20.8], ['stella', 12.5], ['pianeta', 7.17], ['terreno', 1.8], ['materia', -3.5], ['atomo', -9.8], ['particella', -14.2]])
+  h += `<div class="liv${id === 'pianeta' ? ' qui' : ''}" style="top:${y(d).toFixed(1)}px"><svg class="ico"><use href="#i-${id}"/></svg></div>`;
+h += `<div class="ago" style="top:${y(7.17).toFixed(1)}px"></div><div class="lettura" style="top:${y(7.17).toFixed(1)}px"><b>14.687 km</b><small>largo lo schermo</small></div>`;
+R.innerHTML = h;
+// il pianeta sul righello è coperto dall'ago: lo si sposta dentro la banda, sopra l'ago
+R.querySelector('.liv.qui').style.top = (y(7.17) + 22) + 'px';
+
+/* il mirino */
+const r = css('--r'), M = document.getElementById('mirino'), S = 2 * r + 60, c = S / 2, L = 30, k = r + 20;
+M.setAttribute('viewBox', `0 0 ${S} ${S}`);
+M.innerHTML = `<circle class="giro" cx="${c}" cy="${c}" r="${r + 12}"/>`
+  + [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => `<path class="ang" d="M${c + sx * k} ${c + sy * (k - L)}V${c + sy * k}H${c + sx * (k - L)}"/>`).join('')
+  + [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([sx, sy]) => `<path class="card" d="M${c + sx * (r + 6)} ${c + sy * (r + 6)}L${c + sx * (r + 16)} ${c + sy * (r + 16)}"/>`).join('');
+/* la guida dall'angolo del mirino all'etichetta */
+const G = document.getElementById('guida'), cx = css('--cx'), cy = css('--cy');
+const x0 = cx + r + 20, y0 = cy - r - 20, x1 = cx + r + 34, y1 = cy - r - 92;
+G.style.left = '0px'; G.style.top = '0px'; G.setAttribute('width', schermo.clientWidth); G.setAttribute('height', schermo.clientHeight);
+G.innerHTML = `<path d="M${x0 + 2} ${y0 - 2}L${x1} ${y0 - 16 - (x1 - x0)}V${y1 + 2}"/><circle cx="${x0 + 2}" cy="${y0 - 2}" r="2.6"/>`;
+
+/* il termometro: da −150 a +150 °C; la banda dell'acqua liquida (0–100 a 1 bar, qui 3 bar: 0–134); senza aria −116; vero 11 */
+const T = document.getElementById('termo'), W = T.getBoundingClientRect().width, tx = (t) => 6 + (t + 150) / 300 * (W - 12);
+T.setAttribute('viewBox', `0 0 ${W} 64`);
+T.innerHTML = `
+  <rect x="${tx(0)}" y="10" width="${tx(134) - tx(0)}" height="22" rx="5" fill="#8ecfe0" fill-opacity=".10" stroke="#8ecfe0" stroke-opacity=".35" stroke-dasharray="2 3"/>
+  <text class="lab" x="${tx(0) + 6}" y="6" style="fill:#8ecfe0">ACQUA LIQUIDA</text>
+  <rect x="6" y="18" width="${W - 12}" height="6" rx="3" fill="url(#gr-termo)" opacity=".9"/>
+  <path d="M${tx(-116)} 34 C ${tx(-116)} 50, ${tx(11)} 50, ${tx(11)} 36" fill="none" stroke="rgba(244,236,223,.55)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <path d="M${tx(11) - 4} 40 L${tx(11)} 35 L${tx(11) + 4} 40" fill="none" stroke="rgba(244,236,223,.7)" stroke-width="1.2"/>
+  <text class="lab" x="${(tx(-116) + tx(11)) / 2}" y="58" text-anchor="middle">+127° DALL'ARIA</text>
+  <circle cx="${tx(-116)}" cy="21" r="6" fill="#1a050b" stroke="#8ecfe0" stroke-width="1.6"/>
+  <text x="${tx(-116)}" y="6" text-anchor="middle">−116° senz'aria</text>
+  <circle cx="${tx(11)}" cy="21" r="8" fill="#ff5a78" opacity=".35"/><circle cx="${tx(11)}" cy="21" r="5.5" fill="#f4ecdf" stroke="#ff5a78" stroke-width="2"/>
+  <text x="6" y="44">−150</text><text x="${W - 6}" y="44" text-anchor="end">+150</text>`;
+
+/* la ciambella dell'aria */
+const C = document.getElementById('ciambella'), rr = 40, circ = 2 * Math.PI * rr;
+let a0 = -90, ci = `<circle cx="52" cy="52" r="${rr}" fill="none" stroke="rgba(244,236,223,.06)" stroke-width="13"/>`;
+for (const [p, col] of [[55.8, '#f4ecdf'], [44, '#e9a9b6'], [0.2, '#8ecfe0']]) {
+  const gap = p < 1 ? 0 : 1.4, len = Math.max(p / 100 * 360 - gap, 1.6);
+  ci += `<circle cx="52" cy="52" r="${rr}" fill="none" stroke="${col}" stroke-width="13" stroke-dasharray="${len / 360 * circ} ${circ}" transform="rotate(${a0 + gap / 2} 52 52)" ${p < 1 ? 'style="filter:drop-shadow(0 0 3px #8ecfe0)"' : ''}/>`;
+  a0 += p / 100 * 360;
+}
+ci += `<text x="52" y="52" text-anchor="middle" style="font:500 17px var(--cifre);fill:#f4ecdf">3,0</text><text x="52" y="66" text-anchor="middle" style="font:600 8.5px var(--ui);letter-spacing:.18em;fill:rgba(244,236,223,.5)">BAR</text>`;
+C.setAttribute('viewBox', '0 0 104 104'); C.innerHTML = ci;
+
+/* lo spettro della stella (solo B): corpo nero a 4.900 K, con le righe di assorbimento */
+const SP = document.getElementById('spettro');
+if (SP) {
+  const lam = (x) => 380 + x / 360 * 370, col = (l) => { const t = (l - 380) / 370; const st = [[0, [110, 70, 190]], [.18, [70, 110, 230]], [.32, [80, 200, 220]], [.45, [120, 210, 120]], [.58, [235, 225, 110]], [.72, [245, 160, 70]], [.88, [230, 70, 60]], [1, [150, 30, 40]]]; for (let i = 1; i < st.length; i++) if (t <= st[i][0]) { const u = (t - st[i - 1][0]) / (st[i][0] - st[i - 1][0]); return st[i - 1][1].map((v, j) => Math.round(v + (st[i][1][j] - v) * u)); } return st.at(-1)[1]; };
+  const planck = (l) => { const x = l * 1e-9; return 1 / (x ** 5 * (Math.exp(1.4388e-2 / (x * 4900)) - 1)); }, pm = planck(591);
+  let s = '<defs><linearGradient id="arc" x1="0" x2="1">';
+  for (let i = 0; i <= 36; i++) { const l = lam(i * 10), [R_, G_, B_] = col(l), v = planck(l) / pm; s += `<stop offset="${i / 36}" stop-color="rgb(${R_},${G_},${B_})" stop-opacity="${(.25 + .75 * v).toFixed(2)}"/>`; }
+  s += '</linearGradient></defs><rect width="360" height="46" fill="#0d0306"/><rect y="20" width="360" height="26" fill="url(#arc)"/>';
+  for (const [l, w, o] of [[393.4, 1.6, .9], [396.8, 1.6, .9], [410, .6, .5], [430.8, 1, .7], [434, .6, .5], [438.4, .6, .5], [486.1, 1, .7], [495.8, .5, .4], [516.7, .9, .7], [518.4, .7, .6], [527, .7, .6], [589, .9, .85], [589.6, .9, .85], [612, .5, .4], [656.3, 1.1, .75], [686.7, .7, .5], [718.5, .6, .45]]) s += `<rect x="${((l - 380) / 370 * 360).toFixed(1)}" y="20" width="${w}" height="26" fill="#0d0306" opacity="${o}"/>`;
+  s += ['400', '500', '600', '700'].map((t) => `<text x="${((+t - 380) / 370 * 360).toFixed(1)}" y="9" text-anchor="middle" style="font:500 7.5px var(--cifre);fill:rgba(244,236,223,.4)">${t}</text>`).join('') + `<text x="356" y="9" text-anchor="end" style="font:500 7.5px var(--cifre);fill:rgba(244,236,223,.4)">nm</text>`;
+  let d = 'M0 46'; for (let x = 0; x <= 360; x += 6) d += `L${x} ${(44 - 30 * planck(lam(x)) / pm).toFixed(1)}`;
+  s += `<path d="${d}" fill="none" stroke="#f4ecdf" stroke-opacity=".75" stroke-width="1.2"/><line x1="${(591 - 380) / 370 * 360}" x2="${(591 - 380) / 370 * 360}" y1="12" y2="46" stroke="#ff5a78" stroke-width="1" stroke-dasharray="2 2"/>`;
+  SP.innerHTML = s;
+}
+
+/* il quadrante della ghiera (solo A): 270°, gli 8 livelli, l'ago sul pianeta */
+const Q = document.getElementById('quadrante');
+if (Q && V === 'A') {
+  const cc = 69, rq = 54, ang = (d) => (-225 + (D0 - d) / (D0 - D1) * 270) * Math.PI / 180, p = (d, rad) => [cc + rad * Math.cos(ang(d)), cc + rad * Math.sin(ang(d))];
+  let q = '';
+  for (let d = D0; d >= D1; d--) { const [a, b] = p(d, rq), [e, f] = p(d, rq - (d % 5 === 0 ? 7 : 3.5)); q += `<line x1="${a}" y1="${b}" x2="${e}" y2="${f}" stroke="rgba(244,236,223,${d % 5 === 0 ? .55 : .25})" stroke-width="1"/>`; }
+  const [s0x, s0y] = p(D0, rq + 5), [s1x, s1y] = p(7.17, rq + 5);
+  q += `<path d="M${s0x} ${s0y}A${rq + 5} ${rq + 5} 0 0 1 ${s1x} ${s1y}" fill="none" stroke="#ff5a78" stroke-width="2" stroke-linecap="round" style="filter:drop-shadow(0 0 3px #ff5a78)"/>`;
+  const [nx, ny] = p(7.17, rq - 12), [mx, my] = p(7.17, rq + 2);
+  q += `<line x1="${nx}" y1="${ny}" x2="${mx}" y2="${my}" stroke="#ff5a78" stroke-width="2.4" stroke-linecap="round" style="filter:drop-shadow(0 0 4px #ff5a78)"/>`;
+  Q.innerHTML = q;
+}
+
+/* il circuito dentro la pulsantiera trasparente (solo A) */
+const CI = document.getElementById('circuito');
+if (CI) {
+  const tr = ['M20 8V40H49V64', 'M146 8V30H119', 'M49 122V150H40V196', 'M119 92V120H150V300', 'M8 160H40', 'M83 196V240H45V268', 'M126 196V230H121V268', 'M45 312V340', 'M121 312V356', 'M8 420H45V400', 'M158 420H121V400', 'M83 240V440'];
+  CI.innerHTML = tr.map((d) => `<path d="${d}" fill="none" stroke="rgba(233,169,182,.16)" stroke-width="1.4"/>`).join('')
+    + [[20, 8], [146, 8], [8, 160], [150, 300], [8, 420], [158, 420], [83, 440]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.6" fill="none" stroke="rgba(233,169,182,.30)" stroke-width="1.2"/>`).join('')
+    + `<circle cx="119" cy="63" r="44" fill="url(#alone)"/><defs><radialGradient id="alone"><stop offset="0" stop-color="#ff5a78" stop-opacity=".22"/><stop offset="1" stop-color="#ff5a78" stop-opacity="0"/></radialGradient></defs>`;
+}
+</script>
+</body>
+</html>
