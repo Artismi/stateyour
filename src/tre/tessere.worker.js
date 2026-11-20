@@ -36,6 +36,9 @@
 import { tessera } from '../camera/geologia.js';
 import { coloraMare } from '../camera/mare.js';
 import { CLIMA } from '../camera/leggi.js';
+import { ricorda } from '../camera/deposito.js';
+import { sistema } from '../camera/cosmo.js';
+import { finestraSuolo, immagineSuolo } from '../camera/suolo.js';
 
 let B = null; // la superficie intera del pianeta (il livello 0) e ciò che serve per le tessere
 const W = 256, H = 128, WB = W + 2, HB = H + 2;
@@ -170,8 +173,26 @@ self.onmessage = (e) => {
   // che il livello 5 della mappa userà in quel punto, così la finestra del 3D e quella del livello 5 hanno lo stesso padre)
   if (d.tipo === 'campi' && B) { try { const sf = tessera(B.k, B.se, B.cl, d.L, d.tx, d.ty, B.seme), out = { tipo: 'campi', n: d.n, k: B.k, W: sf.W, H: sf.H, rett: sf.rett, mare: sf.mare, livello: sf.livello }, tr = [];
     for (const nome of ['alt', 'lago', 'flusso', 'litologia', 'cont', 'etaCrosta', 'sciolto']) if (sf[nome]) { out[nome] = sf[nome].slice(); tr.push(out[nome].buffer); } self.postMessage(out, tr); } catch (err) { self.postMessage({ tipo: 'campi', n: d.n, k: B.k, errore: String((err && err.stack) || err) }); } return; }
+  // (il SUOLO FINE del 3D, pianeta.js faiFine: il campo della finestra di 256 punti — il rilievo fine, ~1 s — e la tinta da
+  // quella di 128, con gli stessi argomenti che pianeta.js darebbe sul filo principale: gli stessi bit)
+  if (d.tipo === 'fine' && B) { try { const t0 = performance.now();
+    if (!B.S) { const v = JSON.parse(B.k), P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; B.S = { k: B.k, P, se: B.se, cl: B.cl, seme: B.seme }; }
+    const fin = finestraSuolo(B.S, { lon: d.lon, lat: d.lat, latoM: d.lato, N: 256, livello: d.campi.livello, tessera: d.campi });
+    if (!fin || fin.acqua) { self.postMessage({ tipo: 'fine', n: d.n, k: B.k, acqua: true }); return; }
+    const c = fin.campo, f2 = finestraSuolo(B.S, { lon: d.lon, lat: d.lat, latoM: d.lato, N: 128, livello: d.campi.livello, tessera: d.campi }), px = immagineSuolo(f2, { luce: false });
+    const tr = fin.tratto, pa = fin.padre;
+    self.postMessage({ tipo: 'fine', n: d.n, k: B.k, lato: d.lato, lon: d.lon, lat: d.lat, N: fin.N, h: fin.h, gx0: fin.gx0, gy0: fin.gy0, x0: fin.x0, y0: fin.y0, L: fin.L, padre: { livello: pa.livello, I: pa.I, J: pa.J }, tratto: { lon: tr.lon, lat: tr.lat, R: tr.R, coslat: tr.coslat, chiave: tr.chiave }, campo: c, px, m: f2.N, ms: performance.now() - t0 }, [px.buffer]); // (il campo si copia: i suoi array possono stare in un buffer solo)
+  } catch (err) { self.postMessage({ tipo: 'fine', n: d.n, k: B.k, errore: String((err && err.stack) || err) }); } return; }
   if (d.tipo !== 'tessera' || !B) return;
-  try { const t0 = performance.now(), r = prepara(d.L, d.tx, d.ty);
-    self.postMessage({ n: d.n, k: B.k, L: d.L, tx: d.tx, ty: d.ty, ...r, ms: performance.now() - t0 }, [r.altLiv.buffer, r.pend.buffer, r.terra.buffer, r.oriz1.buffer, r.oriz2.buffer, ...(r.acqua ? [r.acqua.buffer] : [])]);
-  } catch (err) { self.postMessage({ n: d.n, k: B.k, L: d.L, tx: d.tx, ty: d.ty, errore: String((err && err.stack) || err) }); }
+  tesseraDallaMemoria(d);
 };
+// LA MEMORIA (camera/deposito.js): la tessera è funzione dell'indirizzo del pianeta, del livello e della posizione, e del codice
+// (questo e quello della superficie da cui viene): calcolata una volta si tiene, alla visita dopo si legge (gli stessi bit).
+// (la base B arriva una volta sola per filo: le tessere chieste nel frattempo aspettano la stessa B)
+const CODICE = [import.meta.url, new URL('../camera/superficie.worker.js', import.meta.url).href];
+async function tesseraDallaMemoria(d) {
+  const b = B;
+  try { const t0 = performance.now(), r = await ricorda('tessera3d', `${b.k}|${d.L}|${d.tx}|${d.ty}`, () => prepara(d.L, d.tx, d.ty), { codice: CODICE });
+    self.postMessage({ n: d.n, k: b.k, L: d.L, tx: d.tx, ty: d.ty, ...r, ms: performance.now() - t0 }, [r.altLiv.buffer, r.pend.buffer, r.terra.buffer, r.oriz1.buffer, r.oriz2.buffer, ...(r.acqua ? [r.acqua.buffer] : [])]);
+  } catch (err) { self.postMessage({ n: d.n, k: b.k, L: d.L, tx: d.tx, ty: d.ty, errore: String((err && err.stack) || err) }); }
+}

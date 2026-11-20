@@ -60,8 +60,11 @@ async function zoom({ k = 1.25, massimo = 600 } = {}) {
   for (let i = 0; i < massimo; i++) { const b = passo(1 / k); if (cam.livello !== 5 || (b.livello === `suolo ${lung(MP.LATI_SUOLO[0])}` && cam.z < m)) break; }
   return { peggio, giu, su: { passi: passi.length - n0, livelli: visti.slice(giu.livelli.length).map((x) => x.a), ms: performance.now() - t0, fine: quale5(cam), livello: cam.livello }, transizioni: visti.map((x) => ({ ...x, ppm: +x.ppm.toPrecision(4) })) };
 }
-function mostra(i) {
-  libera(); const f = foto[i]; if (!f) return null; const tela = nuovaTela(), ctx = tela.getContext('2d'); MP.disegnaMappa(ctx, W, H, f.cam, { nudo: true }); const r = MP.rocciaDi(f.cam);
+async function mostra(i) {
+  libera(); const f = foto[i]; if (!f) return null; const tela = nuovaTela(), ctx = tela.getContext('2d'); MP.disegnaMappa(ctx, W, H, f.cam, { nudo: true });
+  // (le finestre si calcolano in secondo piano, mappa.js: si aspetta che arrivino e che la dissolvenza finisca, poi si ridisegna)
+  const F = MP.statoFinestre; for (let g = 0; g < 600 && (F.inCoda || F.inCorso); g++) { await new Promise((r) => setTimeout(r, 50)); MP.disegnaMappa(ctx, W, H, f.cam, { nudo: true }); }
+  for (let g = 0; g < 10; g++) { await new Promise((r) => setTimeout(r, 50)); MP.disegnaMappa(ctx, W, H, f.cam, { nudo: true }); } const r = MP.rocciaDi(f.cam);
   scrivi(`${quale5(f.cam)} — a schermo ${lung((W / f.cam.z) * r.larghezzaM)}: ${r.nome}`.slice(0, 150)); return { nome: f.nome, quante: foto.length };
 }
 async function nano() {

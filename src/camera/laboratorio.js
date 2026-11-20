@@ -21,7 +21,7 @@ import { conteggioVero, fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione } from './geologia.js';
 import { fascia as fasciaDi, sistema as sistemaDi, pianeta as pianetaDi, galassia as galassiaDi, FASCIA_MAX } from './cosmo.js';
-import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto, finestreDelPunto, disegnaFinestre } from './mappa.js';
+import { disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, quandoFinestraPronta, preparaVolo, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto, finestreDelPunto, disegnaFinestre } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { creaUniverso } from '../tre/universo.js';
@@ -603,6 +603,7 @@ function montaMondo() {
     let tenuta = null; try { tenuta = L === 4 || primoMondo ? null : leggiBolla(localStorage.getItem(CHIAVE_BOLLA)); } catch { tenuta = null; } primoMondo = false;
     if (tenuta) { const vb = viaDellaBolla(tenuta), chiavi = ['cosmo', 'galassia', 'stella', 'pianeta'].slice(0, Math.min(L, 3) + 1); if (!tenuta.posizione || vb.luna != null || chiavi.some((k) => vb[k] !== via[k]) || (L < 3 && vb[['galassia', 'stella', 'pianeta'][L]] != null)) tenuta = null; }
     universo3d = creaUniverso(mondo3d, { via, livello: ['cosmo', 'galassia', 'sistema', 'pianeta', 'pianeta'][L], bolla: tenuta, superficie: (v) => superficieDi(v) });
+    { const vaiA = universo3d.vaiA, U = universo3d; if (vaiA) U.vaiA = (meta, o) => { preparaVolo(meta, U); return vaiA(meta, o); }; } // (la superficie della meta si prepara durante il volo: mappa.js preparaVolo)
     // sulla superficie (livello 4): sopra lo stesso punto della mappa, alla quota da cui si vede la stessa larghezza
     // (risalendo dalla roccia: camMappa.quota3d, la quota da cui il suolo è largo quanto la roccia era a schermo, guardando giù)
     const dallaRoccia = camMappa.quota3d > 0 ? camMappa.quota3d : 0; delete camMappa.quota3d;
@@ -2012,6 +2013,8 @@ if (!indirizzoOra()) comp = compBiblioteca(15853643);
 apriCosmo();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
+// (le finestre del livello 5 si calcolano in secondo piano, mappa.js: quando una arriva la sua frase è nuova)
+quandoFinestraPronta(() => { if (vista === 'cosmo' && camMappa?.livello === 5) dove(); });
 // ---------- CIÒ CHE C'È A OGNI SCALA, SOVRAPPOSTO: una tela sopra tutte le viste, che non prende la mano. A ogni grandezza ci si
 // mette ciò che il modello ha a quella grandezza nel punto che si guarda, alla sua grandezza vera, centrato:
 //   · LA FINESTRA DELLE PARTICELLE di quel punto (regola 10: è un luogo e una scala): le tracce, larghe quanto la cella

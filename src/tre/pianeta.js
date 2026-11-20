@@ -559,7 +559,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const quanti = O.fili || Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
     for (let i = 0; i < quanti; i++) {
       const w = new Worker(new URL('./tessere.worker.js', import.meta.url), { type: 'module' }), f = { w, libero: true };
-      w.onmessage = (e) => { if (e.data?.tipo === 'campi') { campiArrivati(e.data); return; } f.libero = true; arrivata(e.data); distribuisci(); };
+      w.onmessage = (e) => { if (e.data?.tipo === 'campi') { campiArrivati(e.data); return; } if (e.data?.tipo === 'fine') { fineArrivato(e.data); return; } f.libero = true; arrivata(e.data); distribuisci(); };
       w.onerror = (e) => { console.error('mondo3d: il filo delle tessere si è fermato:', e.message); f.libero = true; };
       w.postMessage({ tipo: 'base', k: S0.k, se: S0.se, cl: S0.cl, mare: S0.mare, seme: S0.seme, T: P.clima.T, raggioM: R }); fili.push(f);
     }
@@ -631,16 +631,38 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     if (!campi) { if (!fine.chiesti.has(kc)) { fine.chiesti.add(kc); fili[0].w.postMessage({ tipo: 'campi', n: kc, L: t.L, tx: t.tx, ty: t.ty }); } return; }
     const f = fine.fin; if (f && f.kc === kc && f.lato === lato && !f.fin) { fine.attiva = false; if (f.lon === undefined || Math.hypot(f.lonC - stato.lon, f.latC - stato.lat) * R < lato / 4) return; } // (lì è acqua: si riprova solo spostandosi)
     if (f && f.kc === kc && f.lato === lato && f.fin) { const [x, y] = SU.nelTrattoSuolo(f.fin.tratto, stato.lon / RAD, stato.lat / RAD), cx = f.fin.x0 + f.fin.L / 2, cy = f.fin.y0 + f.fin.L / 2; if (Math.abs(x - cx) < lato / 4 && Math.abs(y - cy) < lato / 4) { fine.attiva = !!fine.tex; return; } }
+    if (fine.inCorso && fine.attesa && performance.now() - fine.t0 > 20000) { fine.attesa = null; fine.inCorso = false; } // (il filo non ha risposto)
     if (fine.inCorso) return; fine.inCorso = true; const lon = stato.lon / RAD, lat = stato.lat / RAD;
-    setTimeout(() => { try { faiFine(campi, lon, lat, lato, kc); } catch (err) { console.warn('mondo3d: il suolo fine non si è potuto calcolare:', err); fine.fin = { kc, lato, fin: null, lon, lat, lonC: lon * RAD, latC: lat * RAD }; } finally { fine.inCorso = false; } }, 0);
+    setTimeout(() => { let fuori = false; try { fuori = faiFine(campi, lon, lat, lato, kc); } catch (err) { console.warn('mondo3d: il suolo fine non si è potuto calcolare:', err); fine.fin = { kc, lato, fin: null, lon, lat, lonC: lon * RAD, latC: lat * RAD }; } finally { if (!fuori) fine.inCorso = false; } }, 0); // (nel filo: inCorso finché non torna)
   }
-  // in due tempi, ognuno fuori dal fotogramma: (1) il padre e il rilievo (la finestra di 256 punti, la griglia del livello 5); (2) la
-  // tinta del suolo, da una finestra dello stesso lato in 128 punti (immagineSuolo costa ~1 ms ogni cento punti: quella di 256 costerebbe
-  // il quadruplo; la tinta è la nebbia dei granelli, la statistica di ogni punto, e le crepe)
+  // FUORI DAL FILO PRINCIPALE (tessere.worker.js, { tipo: 'fine' }): il padre e il rilievo (la finestra di 256 punti, la griglia del
+  // livello 5: il campo fine costa ~1 s) e la tinta del suolo, da una finestra dello stesso lato in 128 punti (immagineSuolo costa
+  // ~1 ms ogni cento punti; la tinta è la nebbia dei granelli, la statistica di ogni punto, e le crepe). Il filo usa le stesse
+  // funzioni con gli stessi argomenti (gli stessi bit); qui restano le pendenze, la posizione e le immagini per la scheda grafica.
+  // Se il filo non risponde (o non c'è) si fa qui come prima, fuori dal fotogramma.
   function faiFine(campi, lon, lat, lato, kc) {
-    const t0 = performance.now(); SU.ricordaTessera(S0.k, campi);
+    SU.ricordaTessera(S0.k, campi); fine.t0 = performance.now();
+    if (fili.length) { fine.attesa = { kc, lato, lon, lat, campi }; fili[0].w.postMessage({ tipo: 'fine', n: kc, lon, lat, lato, campi }); return true; }
+    faiFineQui(campi, lon, lat, lato, kc); return false;
+  }
+  function fineArrivato(d) {
+    const a = fine.attesa; fine.attesa = null; fine.inCorso = false; if (!a || d.k !== base.k || d.n !== a.kc || d.lato !== a.lato || d.lon !== a.lon || d.lat !== a.lat) return;
+    if (d.errore) { console.warn('mondo3d: il suolo fine nel filo non è riuscito, lo si fa qui:', d.errore); try { faiFineQui(a.campi, a.lon, a.lat, a.lato, a.kc); } catch (err) { console.warn(err); } return; }
+    const { kc, lato, lon, lat } = a;
+    if (d.acqua) { fine.fin = { kc, lato, fin: null, lon, lat, lonC: lon * RAD, latC: lat * RAD }; fine.attiva = false; liberaFine(); return; }
+    // (la finestra, leggera: ciò che di lei si usa qui e in suoloFine; il campo è quello calcolato nel filo)
+    const fin = { N: d.N, h: d.h, gx0: d.gx0, gy0: d.gy0, x0: d.x0, y0: d.y0, L: d.L, padre: d.padre, tratto: d.tratto, campo: d.campo };
+    mettiFine(fin, kc, lato, lon, lat); const F = fine.fin; fine.ms = performance.now() - fine.t0;
+    mettiTinta(F, d.px, d.m, performance.now());
+  }
+  function faiFineQui(campi, lon, lat, lato, kc) {
+    const t0 = performance.now();
     const fin = SU.finestraSuolo(S0, { lon, lat, latoM: lato, N: 256, livello: campi.livello, tessera: campi });
     if (!fin || fin.acqua) { fine.fin = { kc, lato, fin: null, lon, lat, lonC: lon * RAD, latC: lat * RAD }; fine.attiva = false; liberaFine(); return; }
+    mettiFine(fin, kc, lato, lon, lat); const F = fine.fin; fine.ms = performance.now() - t0;
+    setTimeout(() => { if (fine.fin !== F || !fine.tex) return; try { const t1 = performance.now(), f2 = SU.finestraSuolo(S0, { lon, lat, latoM: lato, N: 128, livello: campi.livello, tessera: campi }); mettiTinta(F, SU.immagineSuolo(f2, { luce: false }), f2.N, t1); } catch (err) { console.warn('mondo3d: la tinta del suolo fine non si è potuta calcolare:', err); } }, 0);
+  }
+  function mettiFine(fin, kc, lato, lon, lat) {
     const n = fin.N, Z = fin.campo.Z, h = fin.h, g4 = new Float32Array(4 * n * n);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const q = j * n + i, ia = Math.max(0, i - 1), ib = Math.min(n - 1, i + 1), ja = Math.max(0, j - 1), jb = Math.min(n - 1, j + 1);
       g4[4 * q] = (Z[j * n + ib] - Z[j * n + ia]) / ((ib - ia) * h); g4[4 * q + 1] = (Z[jb * n + i] - Z[ja * n + i]) / ((jb - ja) * h); }
@@ -648,11 +670,13 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const tr = fin.tratto, [lonA, latA] = SU.dalTrattoSuolo(tr, (fin.gx0 + 0.5) * h, (fin.gy0 + 0.5) * h), [lonB, latB] = SU.dalTrattoSuolo(tr, (fin.gx0 + n - 0.5) * h, (fin.gy0 + n - 0.5) * h);
     liberaFine(); fine.tex = { G: N.immagine(n, n, 'rgba16fDaFloat', g4), A: null };
     let rms = 0; for (let q = 0; q < n * n; q++) rms += Z[q] * Z[q]; rms = Math.sqrt(rms / (n * n));
-    const F = (fine.fin = { kc, lato, fin, n, lonA: lonA * RAD, latA: latA * RAD, dLon: (lonB - lonA) * RAD, dLat: (latB - latA) * RAD, media: [1, 1, 1], rms, lon, lat });
-    fine.attiva = true; fine.ms = performance.now() - t0; fine.quante++; N.cambia();
-    setTimeout(() => { if (fine.fin !== F || !fine.tex) return; try { const t1 = performance.now(), f2 = SU.finestraSuolo(S0, { lon, lat, latoM: lato, N: 128, livello: campi.livello, tessera: campi }), m = f2.N, px = SU.immagineSuolo(f2, { luce: false }), a4 = new Uint8Array(4 * m * m), media = [0, 0, 0], lin = (c) => Math.pow(c / 255, 2.2);
-      for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) { const q = j * m + i, o = 4 * ((m - 1 - j) * m + i); for (let c = 0; c < 3; c++) { a4[4 * q + c] = px[o + c]; media[c] += lin(px[o + c]); } a4[4 * q + 3] = 255; } // (l'immagine ha il nord in alto: qui la riga j è quella del tratto, da sud)
-      fine.tex.A = N.immagine(m, m, 'rgba8', a4); F.media = media.map((x) => x / (m * m)); fine.msTinta = performance.now() - t1; N.cambia(); } catch (err) { console.warn('mondo3d: la tinta del suolo fine non si è potuta calcolare:', err); } }, 0);
+    fine.fin = { kc, lato, fin, n, lonA: lonA * RAD, latA: latA * RAD, dLon: (lonB - lonA) * RAD, dLat: (latB - latA) * RAD, media: [1, 1, 1], rms, lon, lat };
+    fine.attiva = true; fine.quante++; N.cambia();
+  }
+  function mettiTinta(F, px, m, t1) {
+    if (fine.fin !== F || !fine.tex) return; const a4 = new Uint8Array(4 * m * m), media = [0, 0, 0], lin = (c) => Math.pow(c / 255, 2.2);
+    for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) { const q = j * m + i, o = 4 * ((m - 1 - j) * m + i); for (let c = 0; c < 3; c++) { a4[4 * q + c] = px[o + c]; media[c] += lin(px[o + c]); } a4[4 * q + 3] = 255; } // (l'immagine ha il nord in alto: qui la riga j è quella del tratto, da sud)
+    fine.tex.A = N.immagine(m, m, 'rgba8', a4); F.media = media.map((x) => x / (m * m)); fine.msTinta = performance.now() - t1; N.cambia();
   }
   function liberaFine() { if (fine.tex) { for (const k of ['G', 'A']) if (fine.tex[k]) gl.deleteTexture(fine.tex[k]); fine.tex = null; } }
   // ---------- la griglia di una pezza (uguale per tutte): 33 × 17 vertici più l'orlo

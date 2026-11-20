@@ -21,7 +21,7 @@ import { sorgente } from './eventi.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
-import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
+import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, coloreMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
 import { finestraAcqua, immagineFinestra, scenaNano } from './finestra.js';
 import { chimicaDellaFinestra, luogoDellaCrosta, sistema as sistemaChimico, storia as storiaChimica, rileva } from './reazioni.js';
@@ -59,6 +59,10 @@ export function camSuRegione(a, W, H) {
 // ---------- lo zoom: k > 1 avvicina, intorno al punto (fx, fy) dello schermo.
 // Restituisce { entra: indirizzo } quando si entra in una regione.
 export function zoomMappa(cam, fx, fy, k, W, H) {
+  // (la direzione del moto: le finestre dei livelli dopo, in quella direzione, si preparano in anticipo — preparaAvanti)
+  cam.verso = k > 1 ? 1 : k < 1 ? -1 : 0; const esito = zoomMappaQui(cam, fx, fy, k, W, H); if (cam.livello === 5) preparaAvanti(cam); return esito;
+}
+function zoomMappaQui(cam, fx, fy, k, W, H) {
   const ax = cam.cx + (fx - W / 2) / cam.z, ay = cam.cy + (fy - H / 2) / cam.z;
   cam.z *= k; cam.cx = ax - (fx - W / 2) / cam.z; cam.cy = ay - (fy - H / 2) / cam.z;
   const m = minimo(W, H);
@@ -139,7 +143,7 @@ export function finestreDelPunto(cam) {
   // (le finestre si calcolano solo quando si disegnano davvero: r è pigra)
   const pigra = (L, fai) => { let r; return { L, get r() { if (r === undefined) r = fai() || null; return r; } }; };
   if (cam.suAcqua) { const l = dieci(cam.latoAcqua ?? 1); return [l * 10, l, l / 10].map(dieci).filter((L) => L >= 1e-9).map((L) => pigra(L, () => (L === l ? r0 : rocciaDi({ ...cam, latoAcqua: L, secondaria: true })))); }
-  if (r0.suolo) { const l = r0.larghezzaM; return [l * 10, l, l / 10].map(dieci).filter((L) => L >= LATI_SUOLO[LATI_SUOLO.length - 1] * 0.999).map((L) => pigra(L, () => { const r = Math.abs(L / l - 1) < 1e-9 ? r0 : rocciaDi({ ...cam, latoSuolo: L }); return r?.suolo ? r : null; })); }
+  if (r0.suolo) { const l = r0.larghezzaM; return [l * 10, l, l / 10].map(dieci).filter((L) => L >= LATI_SUOLO[LATI_SUOLO.length - 1] * 0.999).map((L) => pigra(L, () => { const r = Math.abs(L / l - 1) < 1e-9 ? r0 : rocciaDi({ ...cam, latoSuolo: L, secondaria: true }); return r?.suolo ? r : null; })); }
   return null;
 }
 // LE LUNE: fin dove arrivano (in raggi del pianeta), e dove sta ognuna adesso lungo la sua orbita
@@ -603,6 +607,129 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
 // ---------- la roccia di un punto della superficie (rocce.js): che cosa c'è lì lo decide il posto
 // (crosta continentale o vulcanica, fiume o lago, ghiaccio), e la sua tessitura nasce da come si è formata
 const rocceFatte = new Map();
+// ---------- LE FINESTRE IN SECONDO PIANO (finestre.worker.js). Prima il padre, poi il figlio: la finestra che non c'è ancora
+// si mostra subito col livello di sopra (il decimo centrale della finestra dieci volte più grande, ingrandito, o il colore del
+// mare in quel punto), il figlio si calcola in un filo e quando arriva vi si sfuma (SFUMA ms). Le richieste stanno in una coda
+// con priorità: prima la finestra che si guarda, poi le sue immagini che si muovono, poi le vicine in scala (dieci volte più
+// grandi e più piccole: disegnaFinestre), poi quelle preparate in anticipo nella direzione dello zoom (cam.verso); ciò che
+// nessuno chiede più da 1,5 s esce dalla coda. Il calcolo è lo stesso di prima, con gli stessi argomenti: gli stessi bit.
+const SFUMA = 400, FILI_FINESTRE = 2, filiF = [], richiesteF = new Map(), scenePronte = new Map(); let codaF = [], baseF = null, avvisaFinestra = null;
+const conFili = () => typeof Worker !== 'undefined' && typeof document !== 'undefined' && !senzaFiliFinestre;
+let senzaFiliFinestre = false;
+export function quandoFinestraPronta(f) { avvisaFinestra = f; }
+export const statoFinestre = { chieste: 0, arrivate: 0, msFilo: 0, scartate: 0, get inCoda() { return codaF.length; }, get inCorso() { return filiF.filter((f) => !f.libero).length; } };
+function filiPer(S) {
+  if (baseF === S.k) return filiF;
+  for (const f of filiF) f.w.terminate(); filiF.length = 0; codaF = []; richiesteF.clear(); baseF = S.k;
+  try {
+    for (let i = 0; i < FILI_FINESTRE; i++) {
+      const w = new Worker(new URL('./finestre.worker.js', import.meta.url), { type: 'module' }), f = { w, libero: true, tessere: new Set() };
+      w.onmessage = (e) => { f.libero = true; arrivataF(e.data); distribuisciF(); };
+      w.onerror = (e) => { console.error('finestre.worker.js:', e.message); f.libero = true; distribuisciF(); };
+      w.postMessage({ tipo: 'base', k: S.k, v: JSON.parse(S.k), mare: S.mare, se: S.se, cl: S.cl, seme: S.seme }); filiF.push(f);
+    }
+  } catch (err) { console.warn('le finestre restano sul filo principale:', err); senzaFiliFinestre = true; }
+  return filiF;
+}
+// rid: la chiave della richiesta; dest: il filo che tiene già quella finestra (le immagini seguenti vanno a lui)
+function chiediF(S, rid, msg, pri, A, dest = null) {
+  filiPer(S); const ora = performance.now(); let r = richiesteF.get(rid);
+  if (r) { r.uso = ora; r.pri = Math.min(r.pri, pri); return r; }
+  r = { rid, msg, pri, uso: ora, A, dest, t: ora }; richiesteF.set(rid, r); codaF.push(r); statoFinestre.chieste++; distribuisciF(); return r;
+}
+function distribuisciF() {
+  const ora = performance.now();
+  codaF = codaF.filter((r) => { if (ora - r.uso < 1500) return true; richiesteF.delete(r.rid); if (r.A && r.msg.tipo === 'immagine') r.A.inVolo = false; statoFinestre.scartate++; return false; }); // (nessuno la guarda più)
+  for (const f of filiF) {
+    if (!f.libero || !codaF.length) continue; let m = -1;
+    for (let i = 0; i < codaF.length; i++) { const r = codaF[i]; if (r.dest && r.dest !== f) continue; if (m < 0 || r.pri < codaF[m].pri) m = i; }
+    if (m < 0) continue; const r = codaF.splice(m, 1)[0]; f.libero = false; r.f = f; r.inviata = ora; if (r.A && !r.dest) r.A.filo = f;
+    let msg = r.msg; if (msg.tipo === 'suolo' && msg.tessera) { const T = msg.tessera, kt = `${S_K(T)}`; msg = { ...msg, tessera: f.tessere.has(kt) ? { gia: kt } : { ...soloDati(T), gia: kt } }; f.tessere.add(kt); }
+    f.w.postMessage(msg);
+  }
+}
+const S_K = (T) => `${T.livello}|${T.rett}`;
+// (i dati di una tessera senza le funzioni: ciò che un messaggio può portare)
+function soloDati(o, visti = new Map()) {
+  if (o === null || typeof o !== 'object') return typeof o === 'function' ? undefined : o; if (ArrayBuffer.isView(o)) return o; if (visti.has(o)) return visti.get(o);
+  if (Array.isArray(o)) { const a = []; visti.set(o, a); for (const x of o) a.push(soloDati(x, visti)); return a; }
+  const r = {}; visti.set(o, r); for (const k of Object.keys(o)) { const x = soloDati(o[k], visti); if (x !== undefined) r[k] = x; } return r;
+}
+function arrivataF(d) {
+  const rid = d.tipo === 'immagine' ? `${d.id}|immagine` : d.id, r = richiesteF.get(rid); richiesteF.delete(rid); if (!r || d.k !== baseF) return;
+  statoFinestre.arrivate++; statoFinestre.msFilo += d.ms || 0;
+  if (d.tipo === 'nano') { if (d.scena) { scenePronte.set(d.id, d.scena); if (scenePronte.size > 3) scenePronte.delete(scenePronte.keys().next().value); } return; }
+  const A = r.A; if (!A) return;
+  // (se il filo non ce la fa, si torna al calcolo sul filo principale: la finestra si rifà alla prossima chiamata)
+  if (d.errore && d.tipo === 'immagine') { A.inVolo = false; A.pronto = false; return; } // (il filo l'ha dimenticata: la si rifà, dall'immagine di adesso)
+  if (d.errore) { console.warn('finestre.worker.js, si torna al filo principale:', d.errore); senzaFiliFinestre = true; for (const [q, x] of rocceFatte) if (x === A) rocceFatte.delete(q); return; }
+  if (d.tipo === 'suolo' && d.nulla) { A.vuota = true; A.inVolo = false; return; }
+  const nuova = telaN(d.N); nuova.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(d.px.buffer), d.N, d.N), 0, 0);
+  if (d.tipo === 'immagine') { A.inVolo = false; A.costo = (d.ms || 0) / 1000; A.ultimo = d.tempo; if (A.sfuma) A.sfuma.a = nuova; else { A.cv = nuova; A.versione = (A.versione || 0) + 1; } }
+  else { // il figlio è arrivato: si sfuma dal padre (il segnaposto) a lui
+    A.N = d.N; A.pronto = true; A.inVolo = false; A.ultimo = 0; A.costo = (d.ms || 0) / 4000; A.msFilo = d.ms; A.msAttesa = performance.now() - r.t;
+    if (d.tipo === 'acqua') A.frase = d.frase; else if (d.tipo === 'suolo') A.frase = `${A.fraseBase}${d.riga || ''} (la finestra calcolata in ${Math.round(d.ms)} ms, in secondo piano)`;
+    A.sfuma = { da: A.cv, a: nuova, t0: performance.now() }; A.cv = telaN(d.N); componi(A);
+    if (avvisaFinestra) avvisaFinestra(A); // (la frase è cambiata)
+  }
+}
+// la dissolvenza dal padre al figlio, nel canvas della finestra (chi disegna la legge da lì)
+function componi(A) {
+  const s = A.sfuma; if (!s) return; const a = Math.min(1, (performance.now() - s.t0) / SFUMA), N = A.cv.width, x = A.cv.getContext('2d');
+  if (a >= 1) { A.cv = s.a; A.sfuma = null; A.versione = (A.versione || 0) + 1; return; }
+  x.globalAlpha = 1; x.imageSmoothingEnabled = true; x.drawImage(s.da, 0, 0, N, N); x.globalAlpha = a; x.drawImage(s.a, 0, 0, N, N); x.globalAlpha = 1; A.versione = (A.versione || 0) + 1;
+}
+// il segnaposto: il livello di sopra se c'è (la parte centrale della finestra dieci volte più grande, ingrandita), se no il colore
+function segnaposto(sopra, colore) {
+  const N = 64, cv = telaN(N), x = cv.getContext('2d');
+  if (sopra?.cv && sopra.cv.width > 0) { const M = sopra.cv.width, c = M * 0.45, l = M * 0.1; x.imageSmoothingEnabled = true; x.drawImage(sopra.cv, c, c, l, l, 0, 0, N, N); }
+  else { const c = colore || [10, 30, 60]; x.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; x.fillRect(0, 0, N, N); }
+  return cv;
+}
+function acquaInSecondoPiano(cam, S, k, u, v, profondo, lato, ka, A) {
+  const lon = u * 360 - 180, lat = 90 - v * 180;
+  if (!A) {
+    const sopra = rocceFatte.get(`${k}|acqua|${dieci(lato * 10)}`);
+    let colore = null; if (!sopra) { try { colore = coloreMare(S.mare, lon, lat, { profonditaM: profondo, acqua: true, scalaM: lato }); } catch { colore = null; } }
+    A = { cv: segnaposto(sopra, colore), acqua: true, liscio: true, N: 64, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `una finestra d'acqua larga ${fmtLunghezza(lato)}: si sta calcolando (intanto il livello di sopra)…`, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo }, pronto: false };
+    rocceFatte.set(ka, A); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
+  }
+  if (A.sfuma) componi(A);
+  // la priorità: la finestra che si guarda, poi le vicine in scala, poi quelle preparate in anticipo
+  const pri = cam.prepara ? 2 + (cam.prepara - 1) : cam.secondaria ? 1 : 0;
+  if (!A.pronto) { chiediF(S, ka, { tipo: 'acqua', id: ka, k: S.k, lon, lat, lato, fondoM: profondo, u, v }, pri, A); return A; }
+  // il mare si muove nel tempo vero: le immagini seguenti le fa lo stesso filo, al più venti al secondo e per un quarto del suo
+  // tempo (le vicine due al secondo, un ventesimo); le preparate in anticipo stanno ferme finché non si guardano
+  if (cam.prepara) return A;
+  const tt = performance.now() / 1000 - A.t0, passo = cam.secondaria ? Math.max(0.5, 20 * (A.costo || 0)) : Math.max(0.05, 4 * (A.costo || 0));
+  if (!A.inVolo && tt - A.ultimo >= passo) { A.inVolo = true; chiediF(S, `${ka}|immagine`, { tipo: 'immagine', id: ka, k: S.k, tempo: tt }, cam.secondaria ? 3 : 0.5, A, A.filo); }
+  else if (A.inVolo) { const r = richiesteF.get(`${ka}|immagine`); if (r) r.uso = performance.now(); }
+  return A;
+}
+// PREPARARE LUNGO IL VOLO «VAI A» (adozione 12; universo.js vaiA): la meta è nota prima dell'arrivo, quindi la superficie del
+// pianeta d'arrivo (il nodo che costa di più: tettonica, clima, vento, erosione, mare — superficie.worker.js, o il deposito se
+// c'è già) si chiede alla partenza, e il viaggio nasconde il calcolo. meta: { galassia, stella, pianeta } o { corpo } (un
+// pianeta del sistema aperto) o un bersaglio del doppio clic ({ rif }); U: l'universo 3D (per sapere dove si è)
+export function preparaVolo(meta, U) {
+  try {
+    if (!meta) return null; let v = null; const ora = U?.viaOra?.() || {};
+    if (meta.galassia != null && meta.stella != null && meta.pianeta != null) v = { cosmo: ora.cosmo ?? meta.cosmo, galassia: meta.galassia, stella: meta.stella, pianeta: meta.pianeta };
+    else { const c = meta.corpo || meta.rif || meta, Sis = U?.sistema?.(), s = Sis?.scheda?.(c); if (s?.c?.cosa === 'pianeta' && Sis.via) v = { ...Sis.via, pianeta: s.c.id }; }
+    if (!v || v.cosmo == null) return null; const P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; if (!P || P.tipo === 'gassoso' || !P.interno) return null;
+    superficieDi(v); return v;
+  } catch (err) { console.warn('preparaVolo:', err); return null; }
+}
+// PREPARARE IN ANTICIPO (adozione 12): mentre si zooma nell'acqua o nel suolo, le finestre dei due livelli dopo nella direzione
+// del moto (cam.verso: +1 avanti, −1 indietro) si mettono in coda, dietro a quelle che si guardano
+export function preparaAvanti(cam) {
+  if (!conFili() || cam?.livello !== 5 || !cam.verso) return;
+  try {
+    if (cam.suAcqua && !cam.eventoAcqua) { const l = dieci(cam.latoAcqua ?? 1); for (const p of [1, 2]) { const L = dieci(l * 10 ** (-cam.verso * p)); if (L < 1e-9 * 0.999 || L > 1.0001) continue; rocciaDi({ ...cam, latoAcqua: L, prepara: p }); }
+      // e, da tre livelli prima delle molecole, la loro scena in 3D (scenaAtomi: la si monta sotto i 10 nm; nel filo costa ~1 s)
+      if (cam.verso > 0 && l <= 1.0001e-5) { const r = rocciaDi(cam), S = superficieDi(cam.via); if (r?.punto && S) for (const L of [1e-8, 1e-9]) { if (L > l * 1.0001) continue; const { u, v, profondo } = r.punto, ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${L}`; if (!scenePronte.has(ch)) chiediF(S, ch, { tipo: 'nano', id: ch, k: S.k, lon: u * 360 - 180, lat: 90 - v * 180, lato: L, fondoM: profondo, u, v }, L === 1e-8 ? 2.5 : 3.5, null); } } }
+    else if (cam.latoSuolo !== null && cam.latoSuolo !== undefined) { const i = LATI_SUOLO.indexOf(cam.latoSuolo); for (const p of [1, 2]) { const L = LATI_SUOLO[i + cam.verso * p]; if (L) rocciaDi({ ...cam, latoSuolo: L, prepara: p }); } }
+  } catch (err) { console.warn('preparaAvanti:', err); }
+}
 export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ciò che si vede in fondo allo zoom, a ogni passo
 
   const S = superficieDi(cam.via); if (!S) return null;
@@ -619,17 +746,19 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   if (cam.suAcqua) {
     if (cam.eventoAcqua) return eventoNellAcqua(cam, S, k, u, v, profondo);
     const lato = cam.latoAcqua ?? 1, ka = `${k}|acqua|${lato}`; let A = rocceFatte.get(ka);
+    // con i fili (la pagina): la finestra la calcola finestre.worker.js; qui intanto c'è il padre, poi si sfuma al figlio
+    if (conFili()) return acquaInSecondoPiano(cam, S, k, u, v, profondo, lato, ka, A);
     if (!A) {
       // LA FINESTRA (finestra.js, PROGETTO.md lavoro 9): a ogni lato si calcola con la legge di quella grana solo il quadrato
       // inquadrato, come campione del mare di sopra: le onde di quel tratto (dallo spettro del vento, con le fasi degli eventi
       // del tratto), la schiuma, la corrente, le bolle, i granelli e i fiocchi nel loro numero
       const fin = finestraAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, P: S.P }), camp = fin.popolazioni?.campione || campioneAcqua(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, acqua: true, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`));
-      const NA = fin.N || 128, cvA = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(NA, NA) : Object.assign(document.createElement('canvas'), { width: NA, height: NA });
+      const NA = fin.N || 128, cvA = telaN(NA);
       A = { cv: cvA, camp, fin, acqua: true, liscio: true, N: NA, nome: `acqua (una finestra larga ${fmtLunghezza(lato)})`, larghezzaM: lato, frase: `${fin.descrizione || camp.descrizione}${lato <= 2e-9 ? " Avvicinati ancora: sotto le molecole c'è l'evento vero che le attraversa (un decadimento, un raggio cosmico), con la sua attesa." : ''}`, quante: camp.quanteDavvero, t0: performance.now() / 1000, ultimo: -1, punto: { u, v, profondo } };
       // LA CHIMICA CHE SI MUOVE LÌ (reazioni.js, lavoro 10): dal micron in giù, una riga — quante specie e reazioni le regole
       // permettono, quante si muovono nel bagno di quest'acqua, se c'è un RAF. Si calcola solo quando si guarda (decine di ms)
       if (lato <= 1.0001e-6) { try { const ch = chimicaDellaFinestra(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, fondoM: profondo, pianeta: S.P }); A.chimica = ch; A.frase += ` ${ch.riga} (calcolata in ${Math.round(ch.ms)} ms).`; } catch { /* la chimica non c'è: la finestra resta quella dell'acqua */ } }
-      rocceFatte.set(ka, A); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+      rocceFatte.set(ka, A); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
     }
     // il mare si muove nel tempo vero (le onde corrono con la loro ω); la finestra si ridisegna al più venti volte al secondo,
     // e mai per più di un quarto del tempo (un'immagine costa 20–60 ms: a venti al secondo era quasi tutto il filo principale);
@@ -681,7 +810,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   const mineraleIn = alPosto ? (x, y) => campo.granoIn(x * larghezzaM, y * larghezzaM)?.minerale ?? null : (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
   const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : '';
   const out = { specCampo, campo, alPosto, cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
-  out.punto = { u, v, t }; rocceFatte.set(k, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+  out.punto = { u, v, t }; rocceFatte.set(k, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   if (!(cam.passoRoccia > 0) && cam.latoSuolo !== null) { const w = suoloDelPunto(cam, S, out, k); if (w) return w; }
   return cam.passoRoccia > 0 ? passoRoccia(cam, S, out, k) : out;
 }
@@ -696,9 +825,20 @@ function suoloDelPunto(cam, S, base, k) {
   if (base.neve || base.sale || base.acqua) return null; const lato = cam.latoSuolo ?? LATI_SUOLO[0], { u, v } = base.punto || {};
   // (il padre: la tessera più fine già calcolata lì, dalla mappa o dalla vista 3D — suolo.js tesseraNota —: la stessa cella e
   // lo stesso indirizzo della finestra che il 3D mostra a pochi metri dal suolo)
-  const t3 = tesseraNota(S.k, u, v), t = t3 && !(base.punto.t?.livello >= t3.livello) ? t3 : base.punto.t, ks = `${k}|suolo|${lato}|${t?.livello ?? 0}`; let w = rocceFatte.get(ks); if (w !== undefined) return w; w = null;
+  const t3 = tesseraNota(S.k, u, v), t = t3 && !(base.punto.t?.livello >= t3.livello) ? t3 : base.punto.t, ks = `${k}|suolo|${lato}|${t?.livello ?? 0}`; let w = rocceFatte.get(ks);
+  if (w !== undefined) { if (w?.attesa) suoloInSecondoPiano(cam, S, w, ks); return w; } w = null;
   try {
-    const t0 = performance.now(), Ssu = { k: S.k, P: S.P, se: S.se, cl: S.cl, seme: S.seme }, fin = finestraSuolo(Ssu, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null });
+    // (lo stesso S per tutte le finestre del pianeta: trattoSuolo tiene il padre della cella per S, e con un S nuovo a ogni
+    // finestra il padre — ~0,5 s — si rifaceva a ogni lato)
+    const t0 = performance.now(), Ssu = suoloDi(S), fin = finestraSuolo(Ssu, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null });
+    if (fin && !fin.acqua && conFili()) {
+      // con i fili: la finestra c'è subito (fin: il rilievo e i granelli si calcolano solo se servono), l'immagine e la chimica dei
+      // pori le fa finestre.worker.js; intanto si vede il padre (la finestra del suolo dieci volte più grande, il suo centro)
+      const i = LATI_SUOLO.indexOf(lato), sopra = i > 0 ? rocceFatte.get(`${k}|suolo|${LATI_SUOLO[i - 1]}|${t?.livello ?? 0}`) : null;
+      w = { cv: segnaposto(sopra, [128, 112, 92]), nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase: `${fin.descrizione} (l'immagine si sta calcolando: intanto il livello di sopra…)`, fraseBase: fin.descrizione, liscio: false, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn, attesa: true,
+        richiesta: { tipo: 'suolo', id: ks, k: S.k, lon: u * 360 - 180, lat: 90 - v * 180, lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null, chimica: lato === LATI_SUOLO[LATI_SUOLO.length - 1] } };
+      rocceFatte.set(ks, w); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value); suoloInSecondoPiano(cam, S, w, ks); return w;
+    }
     if (fin && !fin.acqua) {
       const px = immagineSuolo(fin), N = fin.N, cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
       let frase = fin.descrizione;
@@ -710,7 +850,12 @@ function suoloDelPunto(cam, S, base, k) {
       w = { cv, nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase, liscio: false, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn };
     }
   } catch (err) { console.warn('il suolo non si è potuto calcolare:', err); w = null; }
-  rocceFatte.set(ks, w); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value); return w;
+  rocceFatte.set(ks, w); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value); return w;
+}
+const suoli = new WeakMap(), suoloDi = (S) => { let x = suoli.get(S); if (!x) { x = { k: S.k, P: S.P, se: S.se, cl: S.cl, seme: S.seme }; suoli.set(S, x); } return x; };
+function suoloInSecondoPiano(cam, S, w, ks) {
+  if (w.sfuma) componi(w); if (w.pronto) { w.attesa = !!w.sfuma; return; }
+  chiediF(S, ks, w.richiesta, cam.prepara ? 2 + (cam.prepara - 1) : cam.secondaria ? 1 : 0, w);
 }
 // ---------- LA SCALA DENTRO LA ROCCIA: quali livelli ci sono in quel punto, dal più grande al più piccolo, e quanto è grande
 // ognuno (in metri). Il passo della memoria c'è solo dove qualcosa tiene memoria.
@@ -801,7 +946,7 @@ function mascheraBordo(N) {
 }
 // la copia sfumata dell'immagine di una finestra (rifatta solo quando l'immagine cambia: l'acqua si ridisegna col tempo)
 function sfumata(r) {
-  const N = r.cv.width, quando = r.ultimo ?? 0; if (r.sfumata && r.sfumata.width === N && r.sfumataDi === quando) return r.sfumata;
+  const N = r.cv.width, quando = `${r.ultimo ?? 0}|${r.versione ?? 0}`; if (r.sfumata && r.sfumata.width === N && r.sfumataDi === quando) return r.sfumata;
   const s = r.sfumata && r.sfumata.width === N ? r.sfumata : telaN(N), x = s.getContext('2d');
   x.globalCompositeOperation = 'copy'; x.drawImage(r.cv, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mascheraBordo(N), 0, 0); x.globalCompositeOperation = 'source-over';
   r.sfumata = s; r.sfumataDi = quando; return s;
@@ -900,7 +1045,7 @@ function passoRoccia(cam, S, base, k) {
   }
   const cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
   const out = { cv, nome, larghezzaM, frase, liscio, passo, base, luogo: L, memoria: mem, minerale };
-  rocceFatte.set(kk, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+  rocceFatte.set(kk, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
 }
 // le tracce di una cella simulata, disegnate su una tela (per l'evento nell'acqua): ogni specie il suo colore
@@ -924,7 +1069,7 @@ function eventoNellAcqua(cam, S, k, u, v, profondo) {
   const nano = sorgentiNaturali(L).attesa(1e-9).find((a) => a.id === r.racconto.veri.processo);
   const out = { cv, acqua: true, evento: true, liscio: true, nome: `acqua: ${r.cella.sorgenti[0].origine}`, larghezzaM: r.cella.scala.latoM, luogo: L, punto: { u, v, profondo },
     frase: `${r.racconto.frasi[1]} ${r.racconto.frasi[2]} In un nanometro cubo, come quello delle molecole qui sopra, lo stesso evento accade una volta ogni ${nano ? fmtTempo(nano.secondi) : 'tempo lunghissimo'}: per questo lo si guarda alla sua scala (${fmtLunghezza(r.cella.scala.latoM)}: la barra). Verde l'elettrone, azzurra la luce Cherenkov, bianco un muone` };
-  rocceFatte.set(ke, out); if (rocceFatte.size > 24) rocceFatte.delete(rocceFatte.keys().next().value);
+  rocceFatte.set(ke, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
 }
 // ---------- GLI ATOMI IN TRE DIMENSIONI (atomi3d.js). Ai livelli più profondi la materia non è più un'immagine: chi monta
@@ -939,7 +1084,8 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
     return { acqua: true, chiave: `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, che: `le molecole e gli ioni di quest'acqua in un cubetto di ${fmtLunghezza(lato)}`,
       // (l'acqua attorno: le copie periodiche del cubetto, otto attorno a quello del punto, nel piano che si guarda)
       // (finestra.js scenaNano: l'acqua liquida alla sua densità e con la sua struttura, ogni ione nel suo numero e nel suo guscio)
-      crea: () => periodica(conMoto(scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]) };
+      // (se finestre.worker.js l'ha già preparata, arrivando, è quella: gli stessi argomenti, gli stessi bit; si usa una volta)
+      crea: () => { const ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, pronta = scenePronte.get(ch); if (pronta) scenePronte.delete(ch); return periodica(conMoto(pronta || scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]); } };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
   // (sul suolo: la superficie del minerale con sopra l'acqua dei pori a metà del suolo, ogni ione nel suo numero: suolo.js)
