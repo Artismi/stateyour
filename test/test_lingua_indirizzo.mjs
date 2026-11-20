@@ -372,7 +372,7 @@ prova('ogni indirizzo che il programma produce si rilegge, anche in un cosmo par
     assert.equal(t, L.scrivi(L.daVia(via, { tempo: ANNI_OGGI - 3.2e9 / ANNO_B })), `${nome}: la bolla non è lingua.daVia`);
     assert.deepEqual(TB.viaDi(b), via, `${nome}: la via della bolla non torna`);
     andataERitorno(indirizzo(TB.percorsoDi(via)), `percorsoDi ${nome}`); assert.equal(TB.luogoDi(via), TB.percorsoDi(via).join('/')); assert.ok(!TB.luogoDi(via).includes('#'), `${nome}: rami nel luogo`); n++;
-    // la bolla scritta nella memoria del browser (laboratorio.js, «stateyour.bolla3d»), riletta
+    // la bolla scritta nella memoria del browser (laboratorio.js, «stateyour.bolla3d.v2»), riletta
     const s = TB.scriviBolla({ ...b, posizione: [1, 2, 3], assi: [1, 0, 0, 0, 1, 0, 0, 0, 1], grandezza: 1e7 }), b2 = TB.leggiBolla(s);
     assert.equal(JSON.parse(s).i, t, `${nome}: scriviBolla non scrive con lingua.scrivi`); assert.equal(L.scrivi(b2.indirizzo), t); assert.deepEqual(TB.viaDi(b2), via); assert.deepEqual(b2.posizione, [1, 2, 3]); n++;
     // la bolla letta dal nucleo, con i luoghi che i corpi hanno nella vista 3D

@@ -462,7 +462,7 @@ function montaAtomi() {
     // oltre il più vicino possibile (dentro l'atomo): la scala quantistica, alla sua grandezza (montaQuanti)
     telaAtomi.addEventListener('wheel', (e) => {
       if (!(e.deltaY < 0 && vistaAtomi && vistaAtomi.camera.dist <= 0.1)) return;
-      e.stopImmediatePropagation(); e.preventDefault(); montaQuanti();
+      e.stopImmediatePropagation(); e.preventDefault(); if (quantiAssenti) { oltreIlFondo(); return; } montaQuanti();
     }, { capture: true, passive: false });
   } catch (err) { console.warn('la vista degli atomi in 3D non si è potuta montare: resta l\'immagine piatta', err); smontaAtomi(); senzaAtomi3D = true; }
 }
@@ -490,8 +490,19 @@ async function montaQuanti() {
     // la camera parte alla grandezza a cui si era: lo schermo alto `alta` metri
     nucleoQuanti.attacca(vistaQuanti.corpo, { distanza: alta / (2 * Math.tan((nucleoQuanti.camera.fov || 0.75) / 2)) }); nucleoQuanti.avvia();
     // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi
+    // avvicinandosi ancora quando la camera non scende più (il più vicino possibile all'atomo): la finestra delle particelle di
+    // quel punto, e da lì (sempre con la rotella) ciò che si inquadra ripetuto come pattern. Un unico scroll, senza clic.
+    let ultima = null, ferma = 0;
+    telaQuanti.addEventListener('wheel', (e) => { if (e.deltaY < 0) { const g = grandezzaQuanti(); ferma = g > 0 && ultima > 0 && g >= ultima * 0.995 ? ferma + 1 : 0; ultima = g; if (ferma >= 6) { e.stopImmediatePropagation(); e.preventDefault(); ferma = 0; oltreIlFondo(); } return; } ferma = 0; ultima = null; });
     telaQuanti.addEventListener('wheel', (e) => { if (e.deltaY > 0 && !(grandezzaQuanti() < alta)) { e.stopImmediatePropagation(); e.preventDefault(); const img = istantanea(); smontaQuanti(); disegna(); dove(); avviaPassaggio(img); } }, { capture: true, passive: false });
   } catch (err) { console.warn('la scala quantistica non si è potuta montare', err); smontaQuanti(); quantiAssenti = true; }
+}
+// OLTRE IL FONDO (gli atomi e i quanti, più vicino di così non si va): si entra nella finestra delle particelle del punto che
+// si guardava (entraTracce), che la rotella ingrandisce fino al pattern (rotellaMateria). Se quel punto non ha una finestra
+// (una roccia che non ricorda niente) lo si dice, e si resta lì.
+function oltreIlFondo() {
+  const m = camMappa ? finestraDelPunto(camMappa)?.materia : null; if (!m) { $('dove').textContent = 'Qui la materia non ha una finestra di particelle: più in fondo di così non si va.'; return; }
+  entraTracce(m);
 }
 // l'altezza dello schermo nella scala quantistica (metri): dalla distanza della camera dall'atomo
 const grandezzaQuanti = () => { const d = vistaQuanti?.stato?.distanza; return d > 0 ? 2 * (nucleoQuanti?.stato?.tanY || Math.tan(0.375)) * d : null; };
@@ -501,7 +512,7 @@ const grandezzaQuanti = () => { const d = vistaQuanti?.stato?.distanza; return d
 // così il pannello, il percorso e il ritorno alla mappa piatta restano giusti. In fondo, a pochi metri dal suolo,
 // avvicinandosi ancora si passa al livello 5 (la roccia o l'acqua di quel punto: rocciaDi, montaAtomi).
 let telaMondo = null, mondo3d = null, universo3d = null, barraMondo = null, senzaMondo3D = false, cursoreMondo = null, orologioMondo = 0, bottoneMondo = null, mondoPosato = false, primoMondo = true;
-const CHIAVE_BOLLA = 'stateyour.bolla3d';
+const VERSIONE_SALVATAGGI = 2, CHIAVE_BOLLA = `stateyour.bolla3d.v${VERSIONE_SALVATAGGI}`;
 const ANNO_S = 31557600, VELOCITA_MONDO = [1, 60, 600, 3600, 21600, 86400, 604800, 2592000, ANNO_S, 100 * ANNO_S, 1e4 * ANNO_S, 1e6 * ANNO_S, 1e8 * ANNO_S];
 const diceTempo = (v) => (v === 1 ? 'tempo vero' : v < 60 ? `${v.toLocaleString('it-IT', { maximumSignificantDigits: 2 })} secondi al secondo` : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < ANNO_S ? `${Math.round(v / 86400)} giorni al secondo` : v === ANNO_S ? 'un anno al secondo' : v < 1e6 * ANNO_S ? `${(v / ANNO_S).toLocaleString('it-IT')} anni al secondo` : `${(v / ANNO_S / 1e6).toLocaleString('it-IT')} milioni di anni al secondo`);
 function smontaMondo() {
@@ -1754,7 +1765,7 @@ function aggiornaVista() {
   document.body.classList.toggle('in-finestra', vista === 'finestra' || vista === 'spaziotempo');
   document.body.classList.toggle('in-pattern', inPattern);
   tela.hidden = vista === 'spaziotempo'; tela3d.hidden = vista !== 'spaziotempo';
-  $('nomeElemento').textContent = el() ? `: ${el().nome}` : '';
+  if ($('nomeElemento')) $('nomeElemento').textContent = el() ? `: ${el().nome}` : '';
   if (inPattern) scegliStrumento('seleziona');
   simula(); aggiornaTempo(); mostraSchede(); dove();
   if (vista === 'spaziotempo') imposta3D();
@@ -1958,12 +1969,17 @@ addEventListener('resize', disegna);
 addEventListener('resize', () => vistaAtomi?.ridimensiona());
 addEventListener('resize', () => mondo3d?.ridimensiona());
 // il lavoro resta: si salva da solo e si ritrova alla prossima apertura
-const CHIAVE = 'stateyour:camera';
-try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.reticolo) comp = s; } catch { /* un salvataggio rotto si ignora */ }
+// (le chiavi hanno la versione: i salvataggi delle versioni di prima, che potevano riaprire un pattern come la tavola greca, si
+// ignorano e si cancellano; si tiene solo un lavoro che ha un luogo nell'universo, perché all'avvio si apre sempre il cosmo)
+const CHIAVE = `stateyour:camera:v${VERSIONE_SALVATAGGI}`;
+try { for (const k of ['stateyour:camera', 'stateyour.bolla3d']) localStorage.removeItem(k); } catch { /* senza memoria */ }
+try { const s = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); if (s && Array.isArray(s.elementi) && s.elementi.length && s.elementi[0]?.cella?.indirizzo) comp = s; } catch { /* un salvataggio rotto si ignora */ }
 let salvato = '';
 setInterval(() => { const j = JSON.stringify(comp); if (j !== salvato) { try { localStorage.setItem(CHIAVE, j); salvato = j; } catch { /* spazio finito */ } } }, 1500);
-adattaPattern(); aggiornaVista();
-// si entra dall'universo: il pattern è una finestra dentro di lui, e ci si arriva scendendo fino alla materia di un punto
+adattaPattern();
+// si entra dall'universo, sempre (mai dal pattern): il pattern è una finestra dentro di lui, e ci si arriva scendendo con la
+// rotella fino alla materia di un punto e oltre gli atomi
+if (!indirizzoOra()) comp = compBiblioteca(15853643);
 apriCosmo();
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { if (vista === 'cosmo') { disegna(); mostraPannello(); } });
