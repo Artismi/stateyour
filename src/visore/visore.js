@@ -214,8 +214,8 @@ function costruisci() {
     const v = hud.q.via; if (v?.pianeta != null) { const k = JSON.stringify(v), calc = prova(() => superficieInCalcolo(v), false); if (visti.superficie?.k === k && visti.superficie.calc && !calc) hud.avvisa('Superficie pronta: clima ed erosione'); visti.superficie = { k, calc }; }
   }, 300);
 
-  // la prima volta: la guida, nel taccuino
-  try { if (!localStorage.getItem('stateyour.visore.guida')) { localStorage.setItem('stateyour.visore.guida', '1'); setTimeout(() => menu.taccuino('guida'), 800); } } catch { /* senza memoria */ }
+  // la prima volta: un avviso che dice dove sta la guida (il taccuino, T); niente finestre davanti alla scena
+  try { if (!localStorage.getItem('stateyour.visore.guida')) { localStorage.setItem('stateyour.visore.guida', '1'); setTimeout(() => hud.avvisa('La prima volta: T apre la guida, M il menu, I la scheda', { durata: 9000 }), 1500); } } catch { /* senza memoria */ }
   window.__visore = { azioni, hud, menu, scheda: (x) => scheda(x) };
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', costruisci); else costruisci();

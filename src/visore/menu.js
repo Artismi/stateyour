@@ -123,7 +123,8 @@ export function creaMenu(schermo, { azioni, hud }) {
     if (k === 'schermo') azioni.schermoPieno();
   });
   menu.addEventListener('keydown', (e) => { if (e.target.id === 'v-bolla' && e.key === 'Enter') menu.querySelector('[data-v-azione="bolla"]')?.click(); });
-  velo.addEventListener('click', () => { chiudi(); chiudiTaccuino(); });
+  // un clic sulla scena (fuori dal menu e dal taccuino) li chiude; il velo non prende mai la mano: la rotella resta alla scena
+  document.addEventListener('pointerdown', (e) => { if (!st.aperto && !st.taccuino) return; if (e.target.closest?.('.v-menu, .v-taccuino, .v-linguetta, dialog')) return; chiudi(); chiudiTaccuino(); }, true);
 
   // ---------- il taccuino
   function testoPannello() {
