@@ -82,8 +82,21 @@
   .sotto .nota { margin: 0; }
   .stato { font-size: 12px; padding: 6px 12px; border-top: 1px solid var(--riga); display: flex; gap: 14px; align-items: baseline; height: 6.4em; flex: none; overflow-y: auto; } /* (alta sempre uguale: la tela non cambia grandezza quando cambia il testo, e lo zoom resta continuo) */
   #dove { color: var(--inchiostro); }
+  /* il percorso dell'indirizzo nello spazio: ogni voce porta lì in volo; ↑ al livello sopra */
+  .briciole3d { flex: none; max-width: 46%; }
+  .briciole3d button { font: inherit; padding: 0; border: none; background: none; color: var(--inchiostro); border-bottom: 1px dotted var(--grigio); border-radius: 0; }
+  .briciole3d button:hover { color: var(--accento); border-color: var(--accento); }
+  .briciole3d button.su { border: 1px solid var(--riga); border-radius: 3px; padding: 0 6px; margin-right: 8px; }
+  .briciole3d b { font-weight: 600; }
+  .briciole3d i { font-style: normal; color: var(--grigio); margin: 0 4px; }
+  /* sopra lo spazio: il prossimo bersaglio (un anello e il suo nome) e le etichette che svaniscono con la grandezza */
+  .segni3d { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; font: 11px ui-monospace, monospace; color: #f3efe6; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+  .segni3d .anello { position: absolute; border: 1px solid rgba(243, 239, 230, 0.55); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 2px rgba(0, 0, 0, 0.6); }
+  .segni3d .anello.fermo { border-color: rgba(208, 83, 47, 0.9); }
+  .segni3d span { position: absolute; white-space: nowrap; transform: translate(-50%, 0); }
+  .segni3d span.meta { font-size: 12px; }
   /* la barra di scala vera: una riga sola, sempre, in ogni vista (laboratorio.js, barraDiScala) */
-  .barra-scala { position: absolute; left: 12px; bottom: 10px; z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); font: 12px ui-monospace, monospace; color: #f3efe6; text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; }
+  .barra-scala { position: absolute; left: 12px; bottom: 10px; z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 450px); /* (non sotto i bottoni in basso a destra) */ font: 12px ui-monospace, monospace; color: #f3efe6; text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; }
   .barra-scala i { display: block; height: 6px; border: 1.5px solid #f3efe6; border-top: none; box-shadow: 0 1px 2px #000; flex: none; }
   .barra-scala span { overflow: hidden; text-overflow: ellipsis; }
   #misure { color: var(--grigio); margin-left: auto; }
@@ -141,6 +154,7 @@
   .passi li.fatto { color: var(--inchiostro); } .passi li.fatto::before { content: '●'; color: #2a8c55; }
   .passi li small { display: block; color: var(--grigio); }
 </style>
+<link rel="stylesheet" href="./src/visore/visore.css"><!-- il visore (PROGETTO_VISORE.md, variante B): veste la camera -->
 </head>
 <body class="in-pattern">
 <header>
@@ -184,7 +198,7 @@
       <input type="range" id="fetta" min="0" max="0.5" step="0.005" value="0" title="lo spessore della fetta di tempo: 0 = tutta la storia">
       <output id="ofetta">tutta la storia</output>
     </div>
-    <div class="stato"><span id="dove"></span><span id="errore"></span><span id="misure"></span></div>
+    <div class="stato"><span id="briciole" class="briciole3d" hidden></span><span id="dove"></span><span id="errore"></span><span id="misure"></span></div>
   </section>
   <aside id="pannello"></aside>
 </main>
@@ -218,5 +232,6 @@
 <input type="file" id="fileImmagine" accept="image/*" hidden>
 <input type="file" id="fileSeme" accept=".json,application/json" hidden>
 <script type="module" src="./src/camera/laboratorio.js"></script>
+<script type="module" src="./src/visore/visore.js"></script>
 </body>
 </html>

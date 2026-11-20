@@ -29,8 +29,9 @@
 //    niente, quella che gli strati propongono (S.proponiLuce(E): la luce della stella dove si è; tra le stelle, il flusso
 //    delle più brillanti). Ognuno moltiplica la sua luce per S.espo(E) = E / E0. In S.adattamento: { LA (cd/m²), D (il grado
 //    di adattamento al colore), coni (1: fotopico, 0: scotopico) }.
-//  · I BERSAGLI. Ogni strato può dire che cosa c'è da raggiungere (S.bersaglio({ p, raggio, corpo })): la rotella porta
-//    verso quello che sta sotto il cursore, il volo va veloce quanto è lontana la cosa più vicina.
+//  · I BERSAGLI. Ogni strato può dire che cosa c'è da raggiungere (S.bersaglio({ p, raggio, corpo, nodo })): la rotella porta
+//    verso quello che sta sotto il cursore (`nodo`: il corpo nel cui riferimento sta ferma, se non è un corpo lei), il volo
+//    con i tasti va veloce quanto è lontana la cosa più vicina; `vaiA` vola fino a una cosa (il volo «vai a»).
 //  · GLI STRATI. Chi disegna si aggiunge come strato: { nome, aggiorna(S), disegna(S, passata), dopo(S, da, a), sopra(S),
 //    libera() }, tutti facoltativi. Le passate: 'fondo' (il cielo lontano, senza profondità), 'solido' (ciò che copre),
 //    'velato' (ciò che è trasparente, mescolato sopra); poi `dopo` può riscrivere l'immagine intera (l'aria: legge
@@ -276,36 +277,176 @@ export function creaNucleo(tela, opzioni = {}) {
     const c = cam.corpo; if (c.colpisci) return c.colpisci(o, d);
     if (!c.solido) return Infinity; const b = -V.scal(o, d), q = b * b - V.scal(o, o) + c.raggio * c.raggio; return q < 0 || b - Math.sqrt(q) < 0 ? Infinity : b - Math.sqrt(q);
   }
-  // il bersaglio (tra quelli detti dagli strati nell'ultimo fotogramma) più vicino al raggio dato, negli assi del mondo
-  // la cosa sotto il cursore (entro 18 pixel, o grande abbastanza da coprirlo). Con `vicina` (avvicinandosi), se sotto il
-  // cursore non c'è niente: la cosa più vicina al cursore sullo schermo, entro il campo visivo — nello spazio vuoto tra le
-  // galassie il raggio del cursore non tocca quasi mai niente, e senza questo la rotella volerebbe dritta senza arrivare mai
-  // a una galassia. `salta`: una cosa da non prendere (quella al cui bordo si è già arrivati)
-  function bersaglioLungo(dW, { vicina = false, salta = null } = {}) {
-    let meglio = null, vm = Infinity, prossima = null, am = Math.tan(cam.fov * 0.75); const tol = (18 * 2 * Math.tan(cam.fov / 2)) / Math.max(1, tela.clientHeight);
-    for (const b of S.bersagli) { if (b === salta || (salta && b.p[0] === salta.p[0] && b.p[1] === salta.p[1] && b.p[2] === salta.p[2])) continue; const lungo = V.scal(b.p, dW); if (lungo <= 0) continue; const fuori = Math.hypot(b.p[0] - dW[0] * lungo, b.p[1] - dW[1] * lungo, b.p[2] - dW[2] * lungo), largo = Math.max(b.raggio, tol * lungo);
-      if (fuori > largo) { if (vicina && fuori / lungo < am) { am = fuori / lungo; prossima = b; } continue; } const v = fuori / largo + (b.raggio > tol * lungo ? -1 : 0) + 1e-3 * Math.log10(lungo); if (v < vm) { vm = v; meglio = b; } }
-    return meglio || prossima;
-  }
   const quota = () => (cam.corpo ? V.lungo(cam.pos) - quotaSuolo(cam.corpo, V.norma(nelCorpo(tempo.t).p)) : 0);
 
   // --- i gesti (tutti lavorano negli assi del corpo e poi riportano la camera nel suo riferimento)
-  // avvicinarsi (k < 1) o allontanarsi verso il punto sotto il cursore
-  function avvicina(x, y, k) {
-    const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d), su0 = suDi(c.p), corpo0 = cam.corpo;
-    if (isFinite(s)) { const Q = V.somma(c.p, V.per(d, s)); c.p = V.somma(Q, V.per(V.meno(c.p, Q), k)); cam.perno = null; }
-    else {
-      const A = assettoDi(cam.corpo, tempo.t), dW = V.mv(A, d); let b = bersaglioLungo(dW, { vicina: k < 1 });
-      // (arrivati al bordo di una cosa — una galassia vista da fuori — si continua verso ciò che c'è dentro, sotto il cursore)
-      if (b && k < 1 && V.lungo(b.p) <= b.raggio * 1.26) b = bersaglioLungo(dW, { vicina: true, salta: b });
-      if (b) { // verso la cosa sotto il cursore: mai più vicino del suo bordo
-        const dist = V.lungo(b.p), nuova = Math.max(dist * k, b.raggio * 1.25), passo = dist - nuova, dir = V.tv(A, V.per(b.p, 1 / dist));
-        c.p = V.somma(c.p, V.per(dir, passo)); cam.perno = V.somma(c.p, V.per(dir, nuova));
-      } else { const h = cam.corpo.quota || cam.corpo.solido ? Math.max(V.lungo(c.p) - cam.corpo.raggio, cam.corpo.raggio * 0.05) : S.vicinoM || V.lungo(c.p) || 1; c.p = V.somma(c.p, V.per(d, h * (1 - k))); }
-    }
-    if (!O.attaccoDaSe) { const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (k > 1 && O.alFuori) O.alFuori(); } }
-    if (cam.corpo.quota) c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); scegliCorpo(); if (cam.corpo !== corpo0) cam.perno = null; cambia();
+  // ---------- LA ROTELLA: lo zoom di un gesto (rapporto «Navigazione e resa per stateyour», adozioni 1 e 2)
+  // Prima il bersaglio si sceglieva a ogni scatto tra le cose dell'ultimo fotogramma, la camera andava verso il suo centro
+  // e la nuova distanza era max(d·k, 1,25 R): due scatti di fila potevano puntare a due cose diverse (la camera sbandava
+  // di lato), e dentro il bordo di una cosa il passo diventava negativo (avvicinandosi si arretrava).
+  // Ora: un GESTO è una serie di scatti senza pause più lunghe di ZOOM.pausa (ms; e di tre fotogrammi: se i fotogrammi sono
+  // lenti gli scatti arrivano a grappoli, e una pausa del filo non è una pausa della mano). Al primo scatto si sceglie la cosa
+  // sotto il cursore e il punto P del raggio del cursore più vicino al suo centro, e restano fermi fino alla fine (se sotto
+  // il cursore non c'è niente: la cosa più vicina che si vede, e P sull'asse della vista). Ogni scatto aggiunge log k a
+  // una velocità in log(distanza), che i fotogrammi consumano con un'inerzia (ZOOM.tau, s) e un limite per fotogramma
+  // (ZOOM.limite); la camera va lungo la retta camera–P, che non gira: P resta fermo sullo schermo. Avvicinandosi la
+  // distanza da P non cresce mai — nuova = min(d, max(d − d_s·(1 − k), pavimento)), il pavimento a ZOOM.bordo raggi dal
+  // centro —, allontanandosi non cala mai. Arrivati al pavimento il gesto prosegue verso ciò che c'è dentro o dietro (la
+  // cosa raggiunta non è più una meta). La velocità d_s: la distanza da P mescolata con quella della cosa più vicina che si
+  // incontra sulla via (Gaia Sky 2025: d_s = mix(d_vicino, d_P, a), qui con a = log₁₀(d_vicino / d_P) + 1 tra 0 e 1):
+  // una cosa che si attraversa rallenta lo zoom invece di essere scavalcata (quelle accanto alla via no: farebbero strisciare),
+  // ma al più di dieci volte: andando verso una stella con un'altra sulla via, si avanzava come verso quella, cioè sempre
+  // più piano, e la si raggiungeva solo dopo cento scatti.
+  const ZOOM = { pausa: 200, tau: 0.06, limite: 0.35, bordo: 1.25 };
+  let gesto = null;
+  // il nome di un bersaglio (per riconoscerlo da un fotogramma all'altro)
+  const nomeBersaglio = (b) => (b.corpo ? b.corpo.nome : b.stella != null ? `stella ${b.galassia}/${b.stella}` : b.galassia != null ? `galassia ${b.galassia}` : 'una cosa');
+  const raggiunta = (b) => V.lungo(b.p) <= ZOOM.bordo * 1.04 * b.raggio;
+  // il bersaglio (tra quelli detti dagli strati nell'ultimo fotogramma) sotto il raggio dW (assi del mondo): entro 18
+  // pixel, o grande abbastanza da coprirlo; prima quelli che lo coprono, poi i più vicini al raggio e all'occhio.
+  // `daRaggiungere`: solo le cose al cui bordo non si è ancora arrivati
+  function bersaglioSotto(dW, { esclusi = null, daRaggiungere = false } = {}) {
+    let meglio = null, vm = Infinity; const tol = (18 * 2 * Math.tan(cam.fov / 2)) / Math.max(1, tela.clientHeight);
+    for (const b of S.bersagli) { const lungo = V.scal(b.p, dW); if (lungo <= 0 || (daRaggiungere && raggiunta(b)) || (esclusi && esclusi.has(nomeBersaglio(b)))) continue;
+      const fuori = Math.hypot(b.p[0] - dW[0] * lungo, b.p[1] - dW[1] * lungo, b.p[2] - dW[2] * lungo), largo = Math.max(b.raggio, tol * lungo); if (fuori > largo) continue;
+      const v = fuori / largo + (b.raggio > tol * lungo ? -1 : 0) + 1e-3 * Math.log10(lungo); if (v < vm) { vm = v; meglio = b; } }
+    return meglio;
   }
+  // la cosa più vicina (dal suo bordo) tra quelle che si vedono davanti lungo av, ancora da raggiungere
+  function vicinaDavanti(av, esclusi = null) {
+    let meglio = null, dm = Infinity; const lim = Math.tan(cam.fov / 2) * Math.max(1, tela.clientWidth / Math.max(1, tela.clientHeight));
+    for (const b of S.bersagli) { const lungo = V.scal(b.p, av); if (lungo <= 0 || raggiunta(b) || (esclusi && esclusi.has(nomeBersaglio(b)))) continue; const d = V.lungo(b.p) - b.raggio;
+      const fuori = Math.hypot(b.p[0] - av[0] * lungo, b.p[1] - av[1] * lungo, b.p[2] - av[2] * lungo); if (fuori > lim * lungo) continue;
+      const v = d * (1 + (4 * fuori) / (lim * lungo)); if (v < dm) { dm = v; meglio = b; } } // (a parità, quella più vicina all'asse: P le passa accanto meno)
+    return meglio;
+  }
+  // la distanza (dal bordo) della cosa più vicina sulla via: davanti lungo av, prima di `fin` metri, e tanto vicina alla
+  // retta da attraversarla o sfiorarla (entro tre raggi); 0 se non ce n'è
+  function vicinoSullaVia(av, fin) {
+    let dm = Infinity;
+    for (const b of S.bersagli) { const lungo = V.scal(b.p, av); if (lungo <= 0 || lungo > fin) continue; const d = V.lungo(b.p) - b.raggio; if (d <= 0 || d >= dm) continue;
+      if (Math.hypot(b.p[0] - av[0] * lungo, b.p[1] - av[1] * lungo, b.p[2] - av[2] * lungo) <= 3 * b.raggio) dm = d; }
+    return isFinite(dm) ? dm : 0;
+  }
+  const occhioOra = () => (cam.solidale ? V.mv(assettoDi(cam.corpo, tempo.t), cam.pos) : cam.pos.slice()); // (l'occhio dal centro del suo corpo, assi del mondo)
+  // dove si VEDE adesso la cosa di un gesto: la si ritrova tra i bersagli dell'ultimo fotogramma (col cono di luce una stella
+  // lontana si vede dov'era: avvicinandosi il ritardo cala e lei si sposta — da trecentomila anni luce, di diecimila UA —;
+  // un punto fermo nel riferimento della galassia non è lei). Se non c'è più: il punto fermo C nel riferimento `rif`
+  const stesso = (a, b) => (a.corpo || b.corpo ? a.corpo === b.corpo : a.stella === b.stella && a.galassia === b.galassia);
+  function vistoOra(g) { const L = S.bersagli; if (!g.b) return null; if (g.i < L.length && stesso(L[g.i], g.b)) return L[g.i].p; for (let i = 0; i < L.length; i++) if (stesso(L[i], g.b)) { g.i = i; return L[i].p; } return null; }
+  function verso(g) { const q = vistoOra(g); if (q) return q.slice(); return versoFermo(g); }
+  // dove sta adesso (occhio → cosa, assi del mondo) un punto C fermo nel riferimento di un corpo (in uno spazio che si
+  // richiude — un corpo con `periodo`, il lato: il cosmo — l'immagine più vicina)
+  function versoFermo(g) { const o = occhioOra(), d = tra(cam.corpo, g.rif, tempo.t), v = [d[0] + g.C[0] - o[0], d[1] + g.C[1] - o[1], d[2] + g.C[2] - o[2]], L = g.rif.periodo;
+    if (L > 0 && cam.corpo === g.rif) for (let i = 0; i < 3; i++) v[i] -= Math.round(v[i] / L) * L; return v; }
+  // la scelta all'inizio di un gesto (segno < 0: avvicinarsi). `soloSotto`: niente ripiego sulla cosa più vicina
+  function scegliGesto(x, y, segno, { esclusi = new Set(), soloSotto = false } = {}) {
+    const c = nelCorpo(tempo.t), d = raggio(x, y, c), A = assettoDi(cam.corpo, tempo.t), dW = V.mv(A, d);
+    const g = { x, y, segno, esclusi, vel: 0, ultimo: performance.now(), tipo: 'libero', asse: dW, nome: null, arrivato: false };
+    if (isFinite(tocca(c.p, d))) { g.tipo = 'suolo'; g.rif = cam.corpo; g.nome = 'suolo ' + cam.corpo.nome; return g; } // (il corpo solido sotto il cursore: P è il punto toccato)
+    let asse = dW, b = bersaglioSotto(dW, { esclusi, daRaggiungere: segno < 0 });
+    if (!b && segno < 0 && !soloSotto) { asse = V.mv(A, V.per(colonna(c.a, 2), -1)); b = vicinaDavanti(asse, esclusi); }
+    if (!b) return g;
+    // P: il punto dell'asse più vicino al centro della cosa (la camera che va verso P si avvicina anche al centro), se l'asse
+    // la attraversa; se le passa accanto (una cosa più piccola di un pixel, presa entro i 18), il suo centro: se no ci si
+    // passerebbe accanto senza arrivarci
+    const lungo = V.scal(b.p, asse), rif = b.corpo || b.nodo || cam.corpo; let P = [asse[0] * lungo - b.p[0], asse[1] * lungo - b.p[1], asse[2] * lungo - b.p[2]], f = V.lungo(P);
+    if (f > b.raggio) { P = [0, 0, 0]; f = 0; }
+    Object.assign(g, { tipo: 'bersaglio', b, nome: nomeBersaglio(b), rif, R: b.raggio, P, asse, C: b.corpo ? [0, 0, 0] : V.somma(V.somma(tra(rif, cam.corpo, tempo.t), occhioOra()), b.p),
+      pavimento: Math.max(Math.sqrt(Math.max(0, (ZOOM.bordo * b.raggio) ** 2 - f * f)), 0.05 * f, 1e-6 * b.raggio) });
+    return g;
+  }
+  // un passo del gesto: L = log k (< 0 avvicinandosi)
+  function passoGesto(L) {
+    const g = gesto, k = Math.exp(L), c = nelCorpo(tempo.t), su0 = suDi(c.p), corpo0 = cam.corpo, A = assettoDi(cam.corpo, tempo.t); let dist = NaN, nuova = NaN;
+    if (g.tipo === 'suolo') {
+      const d = raggio(g.x, g.y, c), s = cam.corpo === g.rif ? tocca(c.p, d) : Infinity; if (!isFinite(s)) { g.arrivato = true; return; } // (non è più sotto il cursore: si sceglie di nuovo)
+      dist = s; nuova = s * k; const Q = V.somma(c.p, V.per(d, s)); c.p = V.somma(Q, V.per(V.meno(c.p, Q), k)); cam.perno = null;
+    } else if (g.tipo === 'bersaglio') {
+      const w = verso(g), Pv = V.somma(w, g.P); dist = V.lungo(Pv);
+      if (L < 0 && dist <= g.pavimento * 1.0001) { g.esclusi.add(g.nome); g.arrivato = true; return; } // arrivati: si prosegue dentro
+      let ds = dist; g.dc = 0; if (L < 0) { const dc = (g.dc = vicinoSullaVia(V.per(Pv, 1 / dist), dist)); if (dc > 0 && dc < dist) ds = Math.max(0.1 * dist, mescola(dc, dist)); }
+      else ds = indietro(g, S.vicinoM > 0 && S.vicinoM < dist ? mescola(S.vicinoM, dist) : dist, k, dist);
+      nuova = L < 0 ? Math.min(dist, Math.max(dist - ds * (1 - k), g.pavimento)) : Math.max(dist, dist + ds * (k - 1));
+      c.p = V.somma(c.p, V.tv(A, V.per(Pv, 1 - nuova / dist))); cam.perno = V.somma(c.p, V.tv(A, V.per(Pv, nuova / dist)));
+    } else { // niente in vista: lungo il raggio del cursore, al passo della cosa più vicina
+      const dentro = cam.corpo.genitore ? V.lungo(c.p) : 0, h0 = cam.corpo.quota || cam.corpo.solido ? Math.max(V.lungo(c.p) - cam.corpo.raggio, cam.corpo.raggio * 0.05) : S.vicinoM || dentro || 1, h = L > 0 ? indietro(g, h0, k, Infinity) : h0;
+      dist = h; nuova = h * k; c.p = V.somma(c.p, V.per(V.tv(A, g.asse), h * (1 - k)));
+    }
+    if (N.registro) N.registro.push({ id: g.nome || 'niente', tipo: g.tipo, dist, nuova, dc: g.dc, pav: g.pavimento });
+    if (!O.attaccoDaSe) { const lim = O.distanzaFuori * cam.corpo.raggio; if (V.lungo(c.p) > lim) { c.p = V.per(V.norma(c.p), lim); if (L > 0 && O.alFuori) O.alFuori(); } }
+    if (cam.corpo.quota) c.a = V.mm(V.porta(su0, suDi(c.p)), c.a); sopraIlSuolo(c); dalCorpo(c, tempo.t); scegliRiferimento(tempo.t); scegliCorpo(); if (cam.corpo !== corpo0) cam.perno = null;
+  }
+  // la mescolanza di Gaia Sky: d_vicino quando è molto più vicina (un decimo o meno), d quando è lontana quanto lei
+  const mescola = (dv, d) => dv + Math.max(0, Math.min(1, Math.log10(dv / d) + 1)) * (d - dv);
+  // ALLONTANANDOSI il passo parte dalla scala di ciò che si ha vicino (dal suolo di un pianeta non si salta d'un colpo alla
+  // galassia che lo contiene) e cresce di k a ogni passo del gesto, senza tornare indietro (dentro una galassia la stella
+  // più vicina resta a un anno luce: col suo solo passo si uscirebbe dopo migliaia di scatti)
+  function indietro(g, base, k, max) { const ds = Math.min(max, Math.max(base, (g.dsPrima || 0) * k)); g.dsPrima = ds; return ds; }
+  // a ogni fotogramma: la parte della velocità che tocca a questo fotogramma (l'inerzia, in log della distanza)
+  function avanzaZoom(dt) {
+    let g = gesto; if (!g) return;
+    if (g.arrivato) { const n = scegliGesto(g.x, g.y, g.segno, { esclusi: g.esclusi }); n.vel = g.vel; n.ultimo = g.ultimo; n.fotogrammi = g.fotogrammi; n.dsPrima = g.dsPrima; gesto = g = n; }
+    g.fotogrammi = (g.fotogrammi || 0) + 1; if (Math.abs(g.vel) < 1e-4) { g.vel = 0; if (finito(g)) gesto = null; return; }
+    let L = g.vel * (dt > 0 ? 1 - Math.exp(-dt / ZOOM.tau) : 1); L = Math.max(-ZOOM.limite, Math.min(ZOOM.limite, L)); if (Math.abs(g.vel - L) < 1e-4) L = g.vel; g.vel -= L; passoGesto(L);
+  }
+  // uno scatto della rotella in (x, y): k < 1 avvicina, k > 1 allontana
+  function avvicina(x, y, k) {
+    if (volo) fermaVolo(); const L = Math.log(k), segno = L < 0 ? -1 : 1, ora = performance.now();
+    if (!gesto || gesto.segno !== segno || finito(gesto, ora)) { const resto = gesto && gesto.segno === segno ? gesto.vel : 0; gesto = scegliGesto(x, y, segno); gesto.vel = resto; }
+    gesto.ultimo = ora; gesto.fotogrammi = 0; gesto.vel += L; cambia();
+  }
+  const finito = (g, ora = performance.now()) => ora - g.ultimo > ZOOM.pausa && g.fotogrammi >= 3;
+  const fermaZoom = () => { gesto = null; };
+  // la cosa a cui porterebbe la rotella in (x, y) — quella del gesto in corso, o del volo —: { b, nome, p (occhio → centro), raggio }
+  function mira(x, y) {
+    if (volo) return { b: volo.b, nome: volo.nome, p: verso(volo), raggio: volo.raggio, volo: true };
+    if (gesto && !gesto.arrivato) return gesto.tipo === 'bersaglio' ? { b: gesto.b, nome: gesto.nome, p: verso(gesto), raggio: gesto.R, fermo: true } : null;
+    if (!(x >= 0)) return null; const g = scegliGesto(x, y, -1); return g.tipo === 'bersaglio' ? { b: g.b, nome: g.nome, p: g.b.p, raggio: g.R } : null;
+  }
+  // la cosa sotto (x, y) (per il doppio clic): un bersaglio, o il corpo solido a cui si è attaccati, o null
+  function cosaSotto(x, y) { const g = scegliGesto(x, y, -1, { soloSotto: true }); return g.tipo === 'bersaglio' ? g.b : g.tipo === 'suolo' ? { corpo: cam.corpo, raggio: cam.corpo.raggio } : null; }
+
+  // ---------- IL VOLO «VAI A» (adozione 4). La traiettoria è quella di van Wijk & Nuij 2003 (ρ = √2, la preferita da chi
+  // guarda): il punto guardato va dritto dalla partenza alla cosa, la larghezza della vista w sale finché si vedono
+  // entrambe e poi scende; nella forma di Reach & North 2018 senza cancellazioni, log(√(b²+1) − b) = −asinh(b), e con il
+  // tempo addolcito agli estremi (la velocità parte e arriva a zero senza salti). Prima del punto più alto si conta nel
+  // riferimento della partenza, dopo in quello dell'arrivo (la seconda metà è la stessa curva percorsa all'indietro): il
+  // cambio d'ancora sta lassù, dove le due cose sono piccole e i numeri grandi non toccano nessuna delle due. Lo sguardo
+  // gira verso la meta nella prima metà, sempre con lo stesso «su» (niente rollio); si arriva a `arrivo` metri dal centro.
+  // Si ferma con la rotella o con un clic. meta: { rif (un corpo), C (dal suo centro, assi del mondo), arrivo, raggio, nome, b,
+  // fine(arrivato: true; fermato: false) }
+  const RHO = Math.SQRT2; let volo = null;
+  function vaiA({ rif, C = [0, 0, 0], arrivo, raggio: R = 0, nome = '', b = null, fine = null }) {
+    fermaVolo(); gesto = null; const t = tempo.t, F0 = cam.corpo, o = occhioOra(), assi = cam.solidale ? V.mm(assettoDi(F0, t), cam.assi) : cam.assi.slice();
+    const av0 = V.per(colonna(assi, 2), -1), c1 = V.somma(tra(F0, rif, t), C);
+    // quanto lontano si guarda alla partenza: la cosa più vicina davanti (o il centro del corpo a cui si è attaccati, se è più
+    // vicino; mai oltre la meta): la vista larga quanto lei
+    let D0 = Math.min(F0.genitore ? V.lungo(o) : Infinity, V.lungo(V.meno(c1, o))); for (const q of S.bersagli) if (V.scal(q.p, av0) > 0) D0 = Math.min(D0, V.lungo(q.p)); if (!(D0 > 0 && isFinite(D0))) D0 = Math.max(1, arrivo);
+    const tY = Math.tan(cam.fov / 2); cam.pos = o; cam.assi = assi; cam.solidale = false; cam.perno = null;
+    volo = { F0, rif, C: C.slice(), m0: V.somma(o, V.per(av0, D0)), w0: 2 * tY * D0, w1: 2 * tY * arrivo, av0, su: colonna(assi, 1), dir1: V.norma(V.meno(c1, o)), raggio: R, nome, b, fine, t0: performance.now() };
+    volo.dur = 1000 * Math.max(2, Math.min(5, 1.2 + 0.2 * curva(volo).S)); cambia(); return volo;
+  }
+  // i numeri della curva, con la meta dov'è adesso (nel riferimento della partenza)
+  function curva(v) {
+    const c1 = V.somma(tra(v.F0, v.rif, tempo.t), v.C), dx = V.meno(c1, v.m0), d1 = V.lungo(dx), w0 = v.w0, w1 = v.w1, r2 = RHO * RHO;
+    if (d1 < 1e-9 * Math.max(w0, w1)) return { dx, d1, piatta: true, S: Math.abs(Math.log(w1 / w0)) / RHO };
+    const b0 = (w1 * w1 - w0 * w0 + r2 * r2 * d1 * d1) / (2 * w0 * r2 * d1), b1 = (w1 * w1 - w0 * w0 - r2 * r2 * d1 * d1) / (2 * w1 * r2 * d1), r0 = -Math.asinh(b0), r1 = -Math.asinh(b1);
+    return { dx, d1, r0, r1, S: (r1 - r0) / RHO };
+  }
+  // da a verso b (versori), per la frazione f dell'angolo (con `asse` se sono opposti)
+  function ruota(a, b, f, asse) { const c = Math.max(-1, Math.min(1, V.scal(a, b))), ang = Math.acos(c); if (ang < 1e-9) return a.slice(); let ax = V.vett(a, b); if (V.lungo(ax) < 1e-9) ax = asse; return V.mv(V.giro(V.norma(ax), ang * f), a); }
+  function passoVolo() {
+    const v = volo, q = Math.min(1, (performance.now() - v.t0) / v.dur), e = q * q * (3 - 2 * q), k = curva(v); let F, m, w;
+    if (k.piatta) { w = v.w0 * Math.pow(v.w1 / v.w0, e); if (v.w1 > v.w0 && e < 1) { F = v.F0; m = V.somma(v.m0, V.per(k.dx, e)); } else { F = v.rif; m = V.somma(v.C, V.per(k.dx, e - 1)); } }
+    else { const s = e * k.S, alto = Math.max(0, Math.min(k.S, -k.r0 / RHO));
+      if (s <= alto && q < 1) { const ch = Math.cosh(k.r0), u = (v.w0 / (RHO * RHO * k.d1)) * (ch * Math.tanh(RHO * s + k.r0) - Math.sinh(k.r0)); F = v.F0; m = V.somma(v.m0, V.per(k.dx, u)); w = (v.w0 * ch) / Math.cosh(RHO * s + k.r0); }
+      else { const r0 = -k.r1, s2 = k.S - s, ch = Math.cosh(r0), u = (v.w1 / (RHO * RHO * k.d1)) * (ch * Math.tanh(RHO * s2 + r0) - Math.sinh(r0)); F = v.rif; m = V.somma(v.C, V.per(k.dx, -u)); w = (v.w1 * ch) / Math.cosh(RHO * s2 + r0); } }
+    const g = Math.min(1, 2 * e), dir = ruota(v.av0, v.dir1, g * g * (3 - 2 * g), v.su), D = w / (2 * Math.tan(cam.fov / 2));
+    cam.corpo = F; cam.solidale = false; cam.pos = V.meno(m, V.per(dir, D)); cam.assi = assiDa(dir, v.su); cam.perno = null;
+    if (q >= 1) { volo = null; scegliRiferimento(tempo.t); scegliCorpo(); if (cam.corpo === v.rif) cam.perno = V.tv(assettoDi(v.rif, tempo.t), v.C); if (v.fine) v.fine(true); }
+  }
+  function fermaVolo() { const v = volo; if (!v) return; volo = null; scegliRiferimento(tempo.t); scegliCorpo(); if (v.fine) v.fine(false); }
   // trascinare: il punto afferrato segue il cursore (il corpo gira sotto la mano)
   let presa = null;
   function afferra(x, y) { const c = nelCorpo(tempo.t), d = raggio(x, y, c), s = tocca(c.p, d); presa = isFinite(s) ? { c, G: V.somma(c.p, V.per(d, s)), x, y } : { c, G: null, x, y }; }
@@ -463,7 +604,7 @@ export function creaNucleo(tela, opzioni = {}) {
       const av = k('w', 'arrowup') - k('s', 'arrowdown'), la = k('d', 'arrowright') - k('a', 'arrowleft'), su = k('r', ' ') - k('f', 'c'), gira = k('e') - k('q');
       if (av || la || su) vola(av * 1.2 * svelto, la * 1.2 * svelto, su * 0.9 * svelto, dtVero); if (gira) guarda(-gira * 1.2 * dtVero, 0);
     }
-    scegliRiferimento(tempo.t); scegliCorpo();
+    if (volo) passoVolo(); else { avanzaZoom(dtVero); scegliRiferimento(tempo.t); scegliCorpo(); }
     passoMondo = tempo.pausa ? 0 : Math.abs(tempo.velocita) / 60; S.passo = passoMondo;
     S.t = tempo.t; S.dt = dtVero * (tempo.pausa ? 0 : tempo.velocita); S.dtVero = dtVero; S.indice = stat.fotogrammi; _a.clear();
     preparaImmagini(); const W = S.W = tela.width, H = S.H = tela.height;
@@ -507,6 +648,7 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.sopra) s.sopra(S);
     gl.bindVertexArray(null);
     stat.cpuMs = performance.now() - t0; stat.fotogrammi++;
+    if ((volo || gesto) && !O.alCambio) cambia(); // (lo zoom e il volo continuano nei fotogrammi seguenti)
   }
   function cambia() { if (O.alCambio) O.alCambio(); else if (!giro && !richiesto) richiesto = requestAnimationFrame((ms) => { richiesto = 0; fotogramma(ms); }); }
   function passo(ms) { if (!giro) return; fotogramma(ms); giro = requestAnimationFrame(passo); }
@@ -519,7 +661,7 @@ export function creaNucleo(tela, opzioni = {}) {
   if (O.interazione) {
     let modo = null, ux = 0, uy = 0;
     ascolta(tela, 'contextmenu', (e) => e.preventDefault());
-    ascolta(tela, 'pointerdown', (e) => { const [x, y] = qui(e); modo = e.button === 2 || e.shiftKey ? 'orbita' : e.button === 1 || e.ctrlKey ? 'guarda' : 'afferra'; ux = x; uy = y; if (modo === 'afferra') afferra(x, y); try { tela.setPointerCapture(e.pointerId); } catch { /* il puntatore non c'è più */ } tela.focus?.(); });
+    ascolta(tela, 'pointerdown', (e) => { const [x, y] = qui(e); fermaVolo(); modo = e.button === 2 || e.shiftKey ? 'orbita' : e.button === 1 || e.ctrlKey ? 'guarda' : 'afferra'; ux = x; uy = y; if (modo === 'afferra') afferra(x, y); try { tela.setPointerCapture(e.pointerId); } catch { /* il puntatore non c'è più */ } tela.focus?.(); });
     ascolta(tela, 'pointermove', (e) => { if (!modo) return; const [x, y] = qui(e), dx = x - ux, dy = y - uy; ux = x; uy = y; if (modo === 'afferra') trascina(x, y); else if (modo === 'orbita') orbita(-dx * 0.005, dy * 0.005); else guarda(-dx * 0.003, -dy * 0.003); });
     const lascia = () => { modo = null; presa = null; }; ascolta(tela, 'pointerup', lascia); ascolta(tela, 'pointercancel', lascia);
     ascolta(tela, 'wheel', (e) => { e.preventDefault(); const [x, y] = qui(e); avvicina(x, y, Math.exp(Math.max(-0.7, Math.min(0.7, e.deltaY * 0.0016)))); }, { passive: false });
@@ -537,7 +679,7 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.libera) s.libera(); strati.length = 0;
     if (!perso) gl.getExtension('WEBGL_lose_context')?.loseContext(); perso = true;
   }
-  const N = { gl, tela, opzioni: O, V, tempo, vista, camera: cam, corpo, corpi, togliCorpo, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, leggiImmagine, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
+  const N = { gl, tela, opzioni: O, V, tempo, vista, camera: cam, corpo, corpi, togliCorpo, tra, quadro, assettoDi, mediato, attacca, riattacca, scegliCorpo, assiDa, vai, dove, sotto, quota, avvicina, fermaZoom, mira, cosaSotto, vaiA, fermaVolo, get volo() { return volo; }, get gesto() { return gesto; }, guarda, orbita, vola, afferra, trascina, aggiungi, togli, strati, fotogramma, cambia, ridimensiona, libera, leggiImmagine, programma, immagine, telaio, lega, schermo, V_SCHERMO, stato: S, statistiche: () => ({ ...stat, tasti: tasti.size }), conVirgola,
     avvia: () => { if (!giro) giro = requestAnimationFrame(passo); }, ferma: () => { if (giro) cancelAnimationFrame(giro); giro = 0; }, tasti };
   ridimensiona();
   return N;

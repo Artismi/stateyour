@@ -100,11 +100,14 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       const Vs = N.vista.cono ? sc.punti.vel : null;
       // (la polvere del volume oscura e arrossa anche le stelle del campione: la stessa colonna, dall'occhio alla stella)
       const conPolvere = !!(volume && volume.pronto()), giroV = conPolvere ? omega * (S.t - volume.stato.meta.t) : 0;
+      // (le stelle sono mete solo da vicino — entro quattro raggi della galassia, o una volta e mezzo quello con cui il cosmo
+      // la conta, che arriva più in là —: da lontano la meta è la galassia)
+      const mete = V.lungo(rel) < Math.max(4 * Rg, 1.5 * (strato.raggioCosmo || 0));
       for (let i = 0; i < n; i++) { let x = P[3 * i] - eG[0], y = P[3 * i + 1] - eG[1], z = P[3 * i + 2] - eG[2], d2 = x * x + y * y + z * z;
         if (Vs) { const rit = Math.sqrt(d2) / 299792458; x -= Vs[3 * i] * rit; y -= Vs[3 * i + 1] * rit; z -= Vs[3 * i + 2] * rit; d2 = x * x + y * y + z * z; }
         pos[3 * i] = q[0] * x + q[1] * y + q[2] * z; pos[3 * i + 1] = q[3] * x + q[4] * y + q[5] * z; pos[3 * i + 2] = q[6] * x + q[7] * y + q[8] * z;
         if (conPolvere) { volume.trasparenza(eG, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], giroV, _tr); luceV[4 * i] = luce[4 * i] * _tr[0]; luceV[4 * i + 1] = luce[4 * i + 1] * _tr[1]; luceV[4 * i + 2] = luce[4 * i + 2] * _tr[2]; luceV[4 * i + 3] = luce[4 * i + 3]; }
-        if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia }); } }
+        if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } if (mete || i === spenta) S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia, nodo }); } }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
       if (N.vista.splat) { if (!splat) strato.splat = splat = creaSplatNebulose(N, { cosmo: via.cosmo, galassia: via.galassia, nodo, volume, frazione: O.diffusa, giro: () => (volume && volume.pronto() ? omega * (N.tempo.t - volume.stato.meta.t) : 0) }); splat.aggiorna(S, eG); }
       stelle.metti(pos, conPolvere ? luceV : luce, n);
@@ -163,7 +166,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   // non la legge nessuno — la nebbia è il volume di volumi.js, che si fa la sua in volume.worker.js)
   const O = { rete: 1, puntiLuce: 6e-4, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t, { griglia: false }), tScena = N.tempo.t;
   const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: luogoDi({ cosmo }), raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
-  let lato = sc.riferimento.periodico[0]; const nascosta = new Set(), forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
+  let lato = sc.riferimento.periodico[0]; radice.periodo = lato; const nascosta = new Set(), forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
   // la luce di ogni galassia come la si vede: [watt, r, g, b (0…255), c'è]; col cono, quella di quando la luce è partita
   const vista = new Float64Array(5 * n), stato = { cono: null, occhio: [NaN, 0, 0], t: NaN, msCono: 0, zMassimo: 0 };
   function luci() { for (let i = 0; i < n; i++) { const L = vista[5 * i + 4] && !nascosta.has(i) ? vista[5 * i] / LUCE : 0; luce[4 * i] = L * lineare(vista[5 * i + 1]); luce[4 * i + 1] = L * lineare(vista[5 * i + 2]); luce[4 * i + 2] = L * lineare(vista[5 * i + 3]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
@@ -196,7 +199,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     nome: 'cosmo', radice, stato, rete,
     aggiorna(S) {
       // il cosmo si espande e le galassie invecchiano: la scena si rifà quando il tempo è cambiato di dieci milioni di anni
-      if (Math.abs(S.t - tScena) > 1e7 * ANNO) { sc = scenaCosmo(cosmo, S.t, { griglia: false }); tScena = S.t; lato = sc.riferimento.periodico[0]; stato.t = NaN; }
+      if (Math.abs(S.t - tScena) > 1e7 * ANNO) { sc = scenaCosmo(cosmo, S.t, { griglia: false }); tScena = S.t; lato = radice.periodo = sc.riferimento.periodico[0]; stato.t = NaN; }
       const v = S.versoCorpo(radice); occhio[0] = -v[0]; occhio[1] = -v[1]; occhio[2] = -v[2];
       // se si è attaccati al cosmo, lo spazio si richiude: uscendo da un lato si rientra dall'altro
       const cam = N.camera; if (cam.corpo === radice) for (let k = 0; k < 3; k++) { if (cam.pos[k] < 0) cam.pos[k] += lato; else if (cam.pos[k] >= lato) cam.pos[k] -= lato; }
@@ -205,7 +208,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
       const P = sc.punti.pos; let fMax = 0, vicina = -1, dv = Infinity;
       for (let i = 0; i < n; i++) { let d2 = 0; for (let k = 0; k < 3; k++) { let x = P[3 * i + k] - occhio[k]; x -= Math.round(x / lato) * lato; pos[3 * i + k] = x; d2 += x * x; } // l'immagine più vicina
         if (!sc.punti.esiste[i]) continue; if (d2 < dv) { dv = d2; vicina = i; } if (luce[4 * i + 3] > 0) { const f = vista[5 * i] / (4 * Math.PI * d2); if (f > fMax) fMax = f; }
-        S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: sc.punti.raggio[i], galassia: i }); }
+        S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: sc.punti.raggio[i], galassia: i, nodo: radice }); }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.metti(pos, luce, n);
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
       if (rete) { const a = sc.riferimento.fattoreDiScala; lungoIlCono(0, tScena);
@@ -241,7 +244,7 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
   const punti = creaPunti(N), cosmo = creaCosmo(N, punti, { cosmo: via.cosmo, opzioni: opzioni.cosmo });
   let G = null, Sis = null;
   function apriGalassia(i) { if (G && G.via.galassia === i) return G; chiudiSistema(); if (G) { cosmo.nascondi(G.via.galassia, false); G.libera(); } const v = { cosmo: via.cosmo, galassia: i };
-    G = creaGalassia(N, punti, { via: v, genitore: cosmo.radice, posizione: (t, o) => cosmo.posGalassia(i, o), opzioni: opzioni.galassia }); G.via = v; cosmo.nascondi(i, true); return G; }
+    G = creaGalassia(N, punti, { via: v, genitore: cosmo.radice, posizione: (t, o) => cosmo.posGalassia(i, o), opzioni: opzioni.galassia }); G.via = v; G.raggioCosmo = cosmo.scena().punti.raggio[i]; cosmo.nascondi(i, true); return G; }
   function chiudiSistema() { if (!Sis) return; if (G) G.spegni(-1); const cam = N.camera; let c = cam.corpo, dentro = false; while (c) { if (c === Sis.nodo) dentro = true; c = c.genitore; } if (dentro) N.riattacca(G ? G.nodo : cosmo.radice); if (G && Sis.buco) G.buchi.delete(Sis.buco); Sis.libera(); Sis = null; }
   function apriSistema(i) { if (Sis && Sis.via.stella === i) return Sis; chiudiSistema(); const v = { cosmo: via.cosmo, galassia: G.via.galassia, stella: i }, sc = G.scena();
     if (!sc.punti.esiste[i]) return null; const A = scenaAssi(v);
@@ -298,14 +301,52 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     if (daAprire) { if (applica(daAprire) !== false) { daAprire = null; partito = true; } return; }
     if (!partito && (assiSistema || livello === 'cosmo' || livello === 'galassia')) { partito = parti() !== false; } } };
   N.camera.corpo = cosmo.radice; N.strati.unshift(aspetta);
+  // a che cosa è attaccata la camera, come «via» della mappa: { cosmo, galassia, stella, pianeta } fin dove si è dentro
+  function viaOra() { const v = { cosmo: via.cosmo }; let c = N.camera.corpo, inG = false, inS = false; for (let x = c; x; x = x.genitore) { if (G && x === G.nodo) inG = true; if (Sis && x === Sis.nodo) inS = true; }
+    if (inG) v.galassia = G.via.galassia; if (inS) { v.stella = Sis.via.stella; const s = Sis.scheda(c); if (s && s.c.cosa === 'pianeta') v.pianeta = s.c.id; else if (s && s.c.cosa === 'luna') v.pianeta = s.c.pianeta; } return v; }
+  // IL VOLO «VAI A» (nucleo.js, vaiA) verso una meta: { cosmo: true } (fuori dalla galassia, a vedere le vicine), { sistema: true }
+  // (il sistema in cui si è, intero), { galassia },
+  // { galassia, stella }, { galassia, stella, pianeta }, { corpo }, o un bersaglio (quello del doppio clic). Ciò che non è
+  // ancora aperto (una galassia lontana, un sistema) si apre arrivandoci: il volo va per tappe — la galassia, la stella, il
+  // pianeta —, ognuna una curva sua; tra una tappa e l'altra si aspetta che la seguente sia pronta (al più qualche secondo).
+  // Arrivi: 2,6 raggi per una galassia (1,6 se si va oltre), 100 UA da una stella, 5,5 raggi da un corpo, 25 raggi della
+  // galassia per il cosmo. alla fine: fine(true); se il volo si ferma o non si può fare: fine(false).
+  let voloOra = null;
+  function vaiA(meta, { fine = null } = {}) {
+    if (!meta || (!meta.cosmo && !meta.sistema && meta.galassia == null && !meta.corpo)) return false;
+    const giro = (voloOra = { meta }); let attese = 0;
+    const m = meta.corpo ? { corpo: meta.corpo } : meta.cosmo ? { cosmo: true } : meta.sistema ? { sistema: true } : { galassia: meta.galassia, stella: meta.stella ?? null, pianeta: meta.pianeta ?? null };
+    const nomeG = (i) => `galassia ${i + 1}`, Rcosmo = (i) => cosmo.scena().punti.raggio[i];
+    function tappa() {
+      if (voloOra !== giro) return null; const v = viaOra(), t = N.tempo.t;
+      if (m.sistema) return Sis ? { rif: Sis.nodo, arrivo: 2.4 * Math.max(...Sis.Sis.pianeti.map((q) => q.aM || 0), 1e11), raggio: 0, nome: `stella ${Sis.via.stella + 1}`, ultima: true } : null;
+      if (m.corpo) return { rif: m.corpo, arrivo: 5.5 * m.corpo.raggio, raggio: m.corpo.raggio, nome: m.corpo.nome, ultima: true };
+      if (m.cosmo) { const i = v.galassia ?? (G ? G.via.galassia : cosmo.vicina); if (!(i >= 0)) return null; return { rif: cosmo.radice, C: cosmo.posGalassia(i), arrivo: 25 * Rcosmo(i), raggio: Rcosmo(i), nome: nomeG(i), ultima: true }; }
+      const g = m.galassia, oltre = m.stella != null;
+      if (!oltre || !G || G.via.galassia !== g) { if (oltre && m.fattaG) return 'aspetta'; m.fattaG = true; return { rif: cosmo.radice, C: cosmo.posGalassia(g), arrivo: (oltre ? 1.6 : 2.6) * Rcosmo(g), raggio: Rcosmo(g), nome: nomeG(g), ultima: !oltre }; }
+      const s = m.stella, aperto = Sis && Sis.via.stella === s;
+      if (m.pianeta == null || !aperto) { if (m.pianeta != null && m.fattaS) return 'aspetta'; m.fattaS = true;
+        return { rif: G.nodo, C: V.mv(N.quadro(G.nodo, t) || V.identita(), G.posStella(s)), arrivo: 1.5e13, raggio: 6e12, nome: `stella ${s + 1}`, ultima: m.pianeta == null }; }
+      const c = Sis.pianeta(m.pianeta); if (!c) return null; return { rif: c, arrivo: 5.5 * c.raggio, raggio: c.raggio, nome: `pianeta ${m.pianeta + 1}`, ultima: true };
+    }
+    function vai() {
+      if (voloOra !== giro) return; if (N.gesto) { voloOra = null; if (fine) fine(false); return; } // (la rotella l'ha fermato tra due tappe)
+      const q = tappa();
+      if (q === 'aspetta') { if (++attese > 40) { voloOra = null; if (fine) fine(false); return; } return setTimeout(vai, 100); }
+      if (!q) { voloOra = null; if (fine) fine(false); return; } attese = 0;
+      N.vaiA({ ...q, b: meta.p ? meta : null, fine: (arrivato) => { if (voloOra !== giro) return; if (!arrivato) { voloOra = null; if (fine) fine(false); } else if (q.ultima) { voloOra = null; if (fine) fine(true); } else setTimeout(vai, 60); } });
+    }
+    vai(); return true;
+  }
   return {
     cosmo, galassia: () => G, sistema: () => Sis, guardaDa, pronto: () => partito && !daAprire, apriGalassia, apriSistema,
     // LA BOLLA di adesso (un oggetto che si scrive con scriviBolla), e andare a un'altra
     bolla: () => bollaDi(N, ramiCosmo(via.cosmo)),
     vaiAllaBolla(b) { daAprire = b; N.tempo.t = b.t || 0; N.cambia(); },
     // a che cosa è attaccata la camera, come «via» della mappa: { cosmo, galassia, stella, pianeta } fin dove si è dentro
-    viaOra() { const v = { cosmo: via.cosmo }; let c = N.camera.corpo, inG = false, inS = false; for (let x = c; x; x = x.genitore) { if (G && x === G.nodo) inG = true; if (Sis && x === Sis.nodo) inS = true; }
-      if (inG) v.galassia = G.via.galassia; if (inS) { v.stella = Sis.via.stella; const s = Sis.scheda(c); if (s && s.c.cosa === 'pianeta') v.pianeta = s.c.id; else if (s && s.c.cosa === 'luna') v.pianeta = s.c.pianeta; } return v; },
+    viaOra,
+    // il volo verso una meta (vedi vaiA qui sopra); fermaVolo: lo si lascia dov'è
+    vaiA, fermaVolo() { voloOra = null; N.fermaVolo(); }, get inVolo() { return !!N.volo; }, get inViaggio() { return !!voloOra; },
     // dove si è, dal livello più grande al più piccolo (per la riga in basso)
     percorso() { const v = this.viaOra(), out = [`il cosmo ${cosmoBase(v.cosmo)}${Object.keys(ramiCosmo(v.cosmo)).length ? ' (un ramo parallelo)' : ''}`]; if (v.galassia != null) out.push(`la galassia ${v.galassia + 1}`); if (v.stella != null) out.push(`il sistema della stella ${v.stella + 1}`); if (v.pianeta != null) out.push(`il pianeta ${v.pianeta + 1}`); return out; },
     libera() { chiudiSistema(); if (G) G.libera(); cosmo.libera(); punti.libera(); for (const s of [governo, aspetta]) { const i = N.strati.indexOf(s); if (i >= 0) N.strati.splice(i, 1); } },

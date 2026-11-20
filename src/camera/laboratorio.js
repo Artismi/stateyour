@@ -530,14 +530,15 @@ const grandezzaQuanti = () => { const d = vistaQuanti?.stato?.distanza; return d
 // nuova sopra #tela; il motore ha il suo ciclo. La camera della mappa (camMappa) segue: dice a che livello e dove si è,
 // così il pannello, il percorso e il ritorno alla mappa piatta restano giusti. In fondo, a pochi metri dal suolo,
 // avvicinandosi ancora si passa al livello 5 (la roccia o l'acqua di quel punto: rocciaDi, montaAtomi).
-let telaMondo = null, mondo3d = null, universo3d = null, barraMondo = null, senzaMondo3D = false, cursoreMondo = null, orologioMondo = 0, bottoneMondo = null, mondoPosato = false, primoMondo = true;
+let telaMondo = null, mondo3d = null, universo3d = null, barraMondo = null, segniMondo = null, bricioleOra = '', senzaMondo3D = false, cursoreMondo = null, orologioMondo = 0, bottoneMondo = null, mondoPosato = false, primoMondo = true;
 const VERSIONE_SALVATAGGI = 2, CHIAVE_BOLLA = `stateyour.bolla3d.v${VERSIONE_SALVATAGGI}`;
 const ANNO_S = 31557600, VELOCITA_MONDO = [1, 60, 600, 3600, 21600, 86400, 604800, 2592000, ANNO_S, 100 * ANNO_S, 1e4 * ANNO_S, 1e6 * ANNO_S, 1e8 * ANNO_S];
 const diceTempo = (v) => (v === 1 ? 'tempo vero' : v < 60 ? `${v.toLocaleString('it-IT', { maximumSignificantDigits: 2 })} secondi al secondo` : v < 3600 ? `${v / 60} minuti al secondo` : v < 86400 ? `${v / 3600} ore al secondo` : v < ANNO_S ? `${Math.round(v / 86400)} giorni al secondo` : v === ANNO_S ? 'un anno al secondo' : v < 1e6 * ANNO_S ? `${(v / ANNO_S).toLocaleString('it-IT')} anni al secondo` : `${(v / ANNO_S / 1e6).toLocaleString('it-IT')} milioni di anni al secondo`);
 function smontaMondo() {
   clearInterval(orologioMondo); orologioMondo = 0;
   if (mondo3d) { try { universo3d?.libera(); mondo3d.libera(); } catch { /* già perso */ } }
-  telaMondo?.remove(); barraMondo?.remove(); telaMondo = null; mondo3d = null; universo3d = null; barraMondo = null;
+  telaMondo?.remove(); barraMondo?.remove(); segniMondo?.remove(); telaMondo = null; mondo3d = null; universo3d = null; barraMondo = null; segniMondo = null;
+  const br = $('briciole'); if (br) { br.hidden = true; br.innerHTML = ''; } bricioleOra = '';
 }
 // la camera della mappa segue quella dello spazio: il livello e la via di ciò a cui si è attaccati
 function seguiMondo() {
@@ -576,15 +577,68 @@ function rigaMondo() {
   const lungo = (x) => (x >= 9.46e14 ? `${(x / 9.461e15).toLocaleString('it-IT', { maximumFractionDigits: x > 9.46e17 ? 0 : 2 })} anni luce` : x >= 1.5e10 ? `${(x / 1.496e11).toFixed(2)} UA` : fmtLunghezza(x));
   // LA BOLLA (INTRECCIO.md, regola 11): lo stato di questa vista è lei; la si tiene scritta, per ripartire da lì
   const bolla = universo3d.bolla(); try { if (universo3d.pronto()) localStorage.setItem(CHIAVE_BOLLA, scriviBolla(bolla)); } catch { /* senza memoria: pazienza */ }
-  let testo = universo3d.percorso().join(' › ') + ` · ${scalaDi(bolla.grandezza).nome}: un volume largo ${lungo(bolla.grandezza)}` + ' · ' + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(mondo3d.stato.vicinoM || 0)} dalla cosa più vicina`);
+  briciole3d();
+  let testo = `${scalaDi(bolla.grandezza).nome}: un volume largo ${lungo(bolla.grandezza)}` + ' · ' + (d ? `sopra ${gradi(d.lon, d.lat)}, a ${lungo(d.quota)} dal suolo` : `a ${lungo(mondo3d.stato.vicinoM || 0)} dalla cosa più vicina`);
   const q = d && cursoreMondo ? mondo3d.sotto(cursoreMondo[0], cursoreMondo[1]) : null, i = q && pi ? pi.info(q.lon, q.lat) : null;
   if (i) testo += ` · sotto il cursore (${gradi(q.lon, q.lat)}, a ${lungo(q.distanza)}): ${i.acqua ? `acqua profonda ${fmtLunghezza(i.profondita)}` : `terra a quota ${Math.round(i.quota)} m`}`;
   if (d && d.quota < 3) testo += ' · avvicinati ancora: si entra nella materia di questo punto';
   // L'OCCHIO (nucleo.js, OCCHIO): a quanta luce è adattato, e se vede i colori; sotto la sua soglia ciò che c'è resta scuro
   const ad = mondo3d.stato.adattamento; if (ad && Number.isFinite(ad.LA)) testo += ` · l'occhio è adattato a ${ad.LA >= 0.1 ? ad.LA.toPrecision(2).replace('.', ',') : ad.LA.toExponential(0).replace('e', '·10^')} cd/m²${ad.LA <= 1.0001e-6 ? ' (la sua soglia: qui quasi non vede)' : ad.coni <= 0 ? ' (visione notturna: coi bastoncelli, senza colori)' : ad.coni < 1 ? ' (crepuscolo: i colori sbiadiscono)' : ''}`;
   const qui = universo3d.viaOra(); if (notaPunto && universo3d.pronto() && (qui.stella !== notaPunto.via.stella || qui.galassia !== notaPunto.via.galassia)) notaPunto = null; if (notaPunto) testo = `${notaPunto.testo} · ${testo}`; // (finché lo spazio non è pronto la nota resta)
-  $('dove').textContent = testo + '. Trascina: gira il mondo sotto la mano; tasto destro: orbita; rotella: verso ciò che sta sotto il cursore; W A S D R F: vola.';
+  $('dove').textContent = testo + '. Trascina: gira il mondo sotto la mano; tasto destro: orbita; rotella: verso ciò che sta sotto il cursore (l\'anello); doppio clic: vola lì; W A S D R F: vola.';
   if (barraMondo) barraMondo.querySelector('span').textContent = mondo3d.tempo.pausa ? 'in pausa' : diceTempo(mondo3d.tempo.velocita);
+}
+// GLI AIUTI PER NON PERDERSI (rapporto «Navigazione e resa per stateyour», adozione 3), sempre a schermo e sobri:
+//  · il percorso dell'indirizzo, in basso a sinistra nella riga «dove»: ogni voce porta lì in volo (universo.js, vaiA), e
+//    «↑ risali» al livello sopra;
+//  · il prossimo bersaglio: un anello attorno alla cosa verso cui porterebbe la rotella (quella sotto il cursore; durante un
+//    gesto o un volo, quella del gesto: allora l'anello è rosso) e il suo nome;
+//  · le etichette delle cose che si vedono, che compaiono quando la cosa è larga qualche pixel e svaniscono quando riempie
+//    lo schermo (l'opacità segue il raggio angolare, come le etichette di Gaia Sky): al più sei, le più grandi;
+//  · la barra di scala in potenze di dieci (barraDiScala, in fondo).
+const LIVELLI_3D = ['cosmo', 'galassia', 'stella', 'pianeta'];
+function briciole3d() {
+  const br = $('briciole'); if (!br || !universo3d) return; const v = universo3d.viaOra(), L = v.pianeta != null ? 3 : v.stella != null ? 2 : v.galassia != null ? 1 : 0, chiave = JSON.stringify(v);
+  if (chiave === bricioleOra) return; bricioleOra = chiave; br.hidden = false;
+  const nomi = percorso({ livello: L, via: v }).slice(0, L + 1), voci = nomi.map((n, i) => (i === L ? `<b>${n}</b>` : `<button data-livello="${LIVELLI_3D[i]}" title="vola fin qui">${n}</button>`));
+  br.innerHTML = (L > 0 ? `<button class="su" data-livello="${LIVELLI_3D[L - 1]}" title="risali di un livello: ${nomi[L - 1]}">↑ risali</button>` : '') + voci.join('<i>›</i>');
+  for (const b of br.querySelectorAll('button')) b.onclick = () => volaAlLivello(b.dataset.livello);
+}
+function volaAlLivello(liv) {
+  if (!universo3d) return; const v = universo3d.viaOra(), Sis = universo3d.sistema();
+  const meta = liv === 'cosmo' ? { cosmo: true } : liv === 'galassia' ? { galassia: v.galassia } : liv === 'stella' ? { sistema: true } : { corpo: Sis?.pianeta(v.pianeta) };
+  if (meta.corpo === undefined || meta.corpo) universo3d.vaiA(meta, { fine: () => rigaMondo() });
+}
+// il nome di una cosa dello spazio (un bersaglio del nucleo)
+function nomeCosa(b) {
+  if (!b) return ''; if (b.corpo) { const Sis = universo3d?.sistema(), s = Sis?.scheda(b.corpo); if (s?.c?.cosa === 'pianeta') return `pianeta ${s.c.id + 1}`; if (s?.c?.cosa === 'luna') return `una luna del pianeta ${s.c.pianeta + 1}`; if (b.corpo.nome === 'stella' && Sis) return `stella ${Sis.via.stella + 1}`; return b.corpo.nome; }
+  return b.stella != null ? `stella ${b.stella + 1}` : b.galassia != null ? `galassia ${b.galassia + 1}` : '';
+}
+// dal vettore occhio → cosa (assi del mondo) al punto della tela (pixel della pagina), con i pixel per metro a quella distanza
+function aSchermo(p) {
+  const S = mondo3d.stato, a = S.assi; if (!a) return null; const x = p[0] * a[0] + p[1] * a[3] + p[2] * a[6], y = p[0] * a[1] + p[1] * a[4] + p[2] * a[7], z = p[0] * a[2] + p[1] * a[5] + p[2] * a[8]; if (z >= 0) return null;
+  const W = telaMondo.clientWidth, H = telaMondo.clientHeight; return { x: W / 2 + (x / -z / S.tanX) * (W / 2), y: H / 2 - (y / -z / S.tanY) * (H / 2), k: H / 2 / (Math.hypot(p[0], p[1], p[2]) * S.tanY) };
+}
+let giroSegni = 0, miraOra = null, miraQuando = 0;
+function segni3d() {
+  giroSegni = 0; if (!mondo3d || !segniMondo || !telaMondo) return; giroSegni = requestAnimationFrame(segni3d);
+  const W = telaMondo.clientWidth, H = telaMondo.clientHeight, M = mondo3d, S = M.stato, rampa = (x, a, b) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+  const [anello, nomeA, ...etichette] = segniMondo.children;
+  // il prossimo bersaglio (scelto al più dieci volte al secondo quando non ci si muove: costa un raggio contro il suolo)
+  const ora = performance.now(), muove = M.volo || M.gesto; if (muove || ora - miraQuando > 100) { miraQuando = ora; const c = cursoreMondo || [W / 2, H / 2]; miraOra = mondoPosato ? M.mira(c[0], c[1]) : null; }
+  const m = miraOra, sm = m ? aSchermo(m.p) : null, rpx = sm ? m.raggio * sm.k : 0;
+  if (sm && rpx < 0.3 * H && sm.x > -50 && sm.x < W + 50 && sm.y > -50 && sm.y < H + 50) { const r = Math.max(9, rpx * 1.15 + 5);
+    anello.hidden = false; anello.className = m.fermo || m.volo ? 'anello fermo' : 'anello'; Object.assign(anello.style, { left: `${sm.x}px`, top: `${sm.y}px`, width: `${2 * r}px`, height: `${2 * r}px` });
+    nomeA.hidden = false; nomeA.textContent = (m.volo ? 'in volo verso ' : '') + (nomeCosa(m.b) || m.nome || ''); Object.assign(nomeA.style, { left: `${sm.x}px`, top: `${sm.y + r + 3}px`, opacity: 1 }); }
+  else { anello.hidden = true; nomeA.hidden = true; }
+  // le etichette: le cose più grandi a schermo, con l'opacità dal raggio angolare (da 2 a 8 pixel compaiono; da un quinto
+  // a un terzo dell'altezza dello schermo svaniscono: lì la cosa è il paesaggio, non ha bisogno di nome)
+  const viste = [], nomeMeta = m ? nomeCosa(m.b) : null;
+  for (const b of S.bersagli) { const d = Math.hypot(b.p[0], b.p[1], b.p[2]); if (d <= b.raggio) continue; const r = (b.raggio / d / S.tanY) * (H / 2); if (r < 2 || r > 0.35 * H) continue; viste.push([r, b]); }
+  viste.sort((a, b) => b[0] - a[0]); let n = 0;
+  for (const [r, b] of viste) { if (n >= etichette.length) break; const s = aSchermo(b.p); if (!s || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue; const nome = nomeCosa(b); if (!nome || nome === nomeMeta) continue;
+    const e = etichette[n++]; e.hidden = false; e.textContent = nome; Object.assign(e.style, { left: `${s.x}px`, top: `${s.y + r + 3}px`, opacity: (0.8 * rampa(r, 2, 8) * (1 - rampa(r, 0.2 * H, 0.35 * H))).toFixed(2) }); }
+  for (; n < etichette.length; n++) etichette[n].hidden = true;
 }
 function montaMondo() {
   const serve = vista === 'cosmo' && camMappa && !senzaMondo3D && camMappa.livello <= 4 && camMappa.via;
@@ -614,6 +668,10 @@ function montaMondo() {
         vaiSopra({ lon, lat, quota, direzione: 0, alza: dallaRoccia ? -1.54 : quota > 0.05 * R ? -1.5 : -0.5 }); posata = true; } }, 100); }
     else { const guarda = setInterval(() => { if (!mondo3d || universo3d.pronto()) { clearInterval(guarda); mondoPosato = true; } }, 100); }
     mondo3d.avvia();
+    segniMondo = document.createElement('div'); segniMondo.className = 'segni3d'; segniMondo.innerHTML = '<div class="anello" hidden></div><span class="meta" hidden></span>' + '<span hidden></span>'.repeat(6); tela.parentNode.insertBefore(segniMondo, telaMondo.nextSibling);
+    if (!giroSegni) giroSegni = requestAnimationFrame(segni3d);
+    // il doppio clic su una cosa (una galassia, una stella, un pianeta): il volo fin lì (universo.js, vaiA)
+    telaMondo.addEventListener('dblclick', (e) => { if (!mondoPosato) return; const r = telaMondo.getBoundingClientRect(), b = mondo3d.cosaSotto(e.clientX - r.left, e.clientY - r.top); if (b) universo3d.vaiA(b, { fine: () => rigaMondo() }); });
     telaMondo.addEventListener('pointermove', (e) => { const r = telaMondo.getBoundingClientRect(); cursoreMondo = [e.clientX - r.left, e.clientY - r.top]; });
     // VICINO AL SUOLO (sotto i tre chilometri) la rotella è questa: si scende verso il punto sotto il cursore e lo sguardo si
     // raddrizza piano verso il basso (del tutto sotto il metro), così il suolo diventa una carta vista dall'alto; quando il
@@ -623,7 +681,7 @@ function montaMondo() {
       // pianeta, e la rotella libera dello spazio la porterebbe lontano, oltre la galassia)
       if (!mondo3d) return; if (!mondoPosato) { e.stopImmediatePropagation(); e.preventDefault(); return; } if (!mondo3d.camera.corpo?.punto) return;
       const d = mondo3d.dove(); if (d.quota < 0) { e.stopImmediatePropagation(); e.preventDefault(); vaiSopra({ lon: d.lon, lat: d.lat, quota: quotaVoluta || 1, direzione: d.direzione, alza: d.alza }); return; } if (!(d.quota < 3000)) return;
-      e.stopImmediatePropagation(); e.preventDefault();
+      e.stopImmediatePropagation(); e.preventDefault(); mondo3d.fermaZoom(); universo3d.fermaVolo(); // (qui la rotella è questa: lo zoom e il volo del nucleo si fermano)
       const k = Math.exp(Math.max(-0.7, Math.min(0.7, e.deltaY * 0.0016))), q = d.quota * k;
       if (k < 1 && q < 3) { const v = universo3d.viaOra(); if (v.pianeta != null && q <= Math.max(quotaDellaRoccia(camRoccia(d, v)), 0.006)) return scendiNellaMateria(q); }
       let lon = d.lon, lat = d.lat; const r = telaMondo.getBoundingClientRect(), sotto = k < 1 ? mondo3d.sotto(e.clientX - r.left, e.clientY - r.top) : null;
@@ -2099,13 +2157,22 @@ function cosaSiGuarda() {
     return comp?.nome || '';
   } catch { return ''; }
 }
+// 10ⁿ metri a parole: coi prefissi fin dove sono d'uso (dal nanometro ai mille chilometri), poi la potenza (la misura degli
+// astronomi la dice, accanto, la larghezza dello schermo)
+const APICI = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function potenzaDiDieci(n) {
+  if (n < -9) return `10⁻${String(-n).split('').map((c) => APICI[+c]).join('')} m`;
+  if (n < 7) { const [u, e] = n < -6 ? ['nm', -9] : n < -3 ? ['µm', -6] : n < 0 ? ['mm', -3] : n < 3 ? ['m', 0] : ['km', 3]; return `${(10 ** (n - e)).toLocaleString('it-IT')} ${u}`; }
+  return `10${String(n).split('').map((c) => APICI[+c]).join('')} m`;
+}
 function barraDiScala(mpp) {
   if (!barraScala) return;
   barraScala.style.bottom = telaQuanti ? '36px' : ''; // (sopra la riga dello strumento della scala quantistica)
   if (!(mpp > 0)) { if (barraPrima !== '') { barraScala.innerHTML = ''; barraPrima = ''; } return; }
   const ora = performance.now(); if (ora - barraOra < 200 && Math.abs(Math.log(mpp / barraMpp)) < 0.02) return; barraOra = ora; barraMpp = mpp; // (il testo al più cinque volte al secondo)
-  const voluto = 120 * mpp, e = Math.pow(10, Math.floor(Math.log10(voluto))), passo = [1, 2, 5, 10].map((k) => k * e).filter((x) => x <= voluto).pop() || e, px = passo / mpp;
-  let sopra = vociSopraOra.find((v) => v.tracce && v.L / mpp > 0.05 * Math.min(tela.clientWidth, tela.clientHeight)), testo = `${fmtLunghezza(passo)} · lo schermo è largo ${fmtLunghezza(mpp * tela.clientWidth)} · ${cosaSiGuarda()}${sopra ? ` · con ${sopra.nome.replace(/^le particelle: /, 'le particelle di questo punto: ')}` : ''}`;
+  // (in potenze di dieci, come Powers of Ten: il tratto è largo da 16 a 160 pixel)
+  const n = Math.floor(Math.log10(160 * mpp)), passo = Math.pow(10, n), px = passo / mpp;
+  let sopra = vociSopraOra.find((v) => v.tracce && v.L / mpp > 0.05 * Math.min(tela.clientWidth, tela.clientHeight)), testo = `${potenzaDiDieci(n)} · lo schermo è largo ${fmtLunghezza(mpp * tela.clientWidth)} · ${cosaSiGuarda()}${sopra ? ` · con ${sopra.nome.replace(/^le particelle: /, 'le particelle di questo punto: ')}` : ''}`;
   // la nebbia: quanti grani e quante tracce ci sono davvero nello schermo, e quante se ne vedono
   const nb = nebbiaOra, gr = nb?.grani, tr = nb?.tracce, conta = (x) => (x >= 1e5 ? fmtGrande(x) : Math.round(x).toLocaleString('it-IT'));
   const nebbia = `${gr && gr.vere >= 1 ? ` · ${conta(gr.vere)} grani${gr.disegnati ? '' : ' (più piccoli di un pixel: se ne vede la media)'}` : ''}${tr && tr.vere >= 0.01 ? ` · tracce: ${tr.vere >= 1 ? conta(tr.vere) : tr.vere.toPrecision(1)} vere qui, ${tr.disegnate} disegnate` : ''}`;
@@ -2116,7 +2183,7 @@ function barraDiScala(mpp) {
 requestAnimationFrame(disegnaSopra);
 window.__camera = {
   mpp: () => scalaASchermo(), roccia: (c) => rocciaDi(c), get passaggio() { return !!passaggio; }, cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; },
-  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; },
+  get comp() { return comp; }, get tracce() { return tracce; }, get vista() { return vista; }, get camMappa() { return camMappa; }, pat, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; }, vaiA: (meta) => !!universo3d?.vaiA(meta), volaAlLivello,
   entra, carica, seleziona: (s) => { sel = s; disegna(); mostraPannello(); }, sonda: (s) => { sonda = s; disegna(); },
   vai: (v) => { vista = v; aggiornaVista(); }, tempo: (t) => { tempo = t; aggiornaTempo(); disegna(); },
 };

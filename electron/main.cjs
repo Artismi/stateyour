@@ -19,7 +19,7 @@ protocol.registerSchemesAsPrivileged([
 function finestra() {
   const w = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
-    title: 'stateyour', backgroundColor: '#f4f1ea',
+    title: 'stateyour', backgroundColor: '#521221', // (la cornice del visore: niente lampo chiaro all'apertura)
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   // i link verso l'esterno si aprono nel browser
