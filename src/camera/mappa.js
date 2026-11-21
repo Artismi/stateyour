@@ -875,7 +875,7 @@ function suoloDelPunto(cam, S, base, k) {
         if (L) { const Sc = sistemaChimico(L, { profondita: 3, atomiMassimi: 4 }), st = storiaChimica(Sc, { V: L.V, tempo: Math.min(3.156e9, Math.max(1, L.padre.residenzaAnni * 3.156e7)), massimo: 2e4, flussi: L.flussi, adatta: true }), ri = rileva(Sc, st, { tempoCicli: 200 });
           frase += ` La chimica dei pori lì (1 µm, ${Math.round(fin.profonditaM * 100)} cm sotto, ${Math.round(L.T - 273.15)} °C): H₂ ${L.padre.H2.toExponential(1)} mol/L dalla roccia, ${Sc.chiavi.length} specie possibili, ${st.eventi} reazioni in ${(st.t / 3.156e7).toPrecision(2)} anni, ${ri.emerso.raf ? 'un RAF' : 'nessun RAF'} (calcolata in ${Math.round(performance.now() - t1)} ms).`; } } catch (err) { console.warn(err); } }
       frase += ` (la finestra calcolata in ${Math.round(performance.now() - t0)} ms)`;
-      w = { cv, nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase, liscio: false, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn };
+      w = { cv, nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase, liscio: true /* (ingrandita, levigata: senza, i punti a blocchi davano barre attorno al millimetro) */, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn };
     }
   } catch (err) { console.warn('il suolo non si è potuto calcolare:', err); w = null; }
   rocceFatte.set(ks, w); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value); return w;

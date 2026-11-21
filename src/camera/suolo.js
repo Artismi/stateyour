@@ -687,7 +687,11 @@ export function scenaSuolo(padre, { z = null, latoM = 6e-9, minerale = null } = 
   // lungo la prima e la terza: periodica(scena, [3, 1, 3]))
   for (let i = 0; i < nR; i++) { const a = ret.atomi[i]; pos[3 * i] = a.x * 1e9; pos[3 * i + 2] = a.y * 1e9; pos[3 * i + 1] = dz - a.z * 1e9 - 0.15; raggio[i] = a.raggio * 1e9; elemento[i] = Z[a.el] || 14; }
   for (let i = 0; i < nA; i++) { pos[3 * (nR + i)] = acqua.atomi.pos[3 * i]; pos[3 * (nR + i) + 2] = acqua.atomi.pos[3 * i + 1]; pos[3 * (nR + i) + 1] = acqua.atomi.pos[3 * i + 2] + dz; raggio[nR + i] = acqua.atomi.raggio[i]; elemento[nR + i] = acqua.atomi.elemento[i]; }
+  // (i colori: l'acqua quelli della sua scena, il colore del mare come in finestra.js; il minerale quello della sua polvere, chimica.js.
+  // Prima la scena perdeva i colori dell'acqua e la vista dava agli idrogeni il bianco pieno: sfere sature a 0,9 nm)
+  const colore = new Uint8Array(3 * (nA + nR)), cMin = (padre.roccia.minerali.find((m) => m.nome === nome) || {}).colore || [190, 186, 176];
+  for (let i = 0; i < nR; i++) colore.set(cMin, 3 * i); if (acqua.atomi.colore) colore.set(acqua.atomi.colore.subarray ? acqua.atomi.colore.subarray(0, 3 * nA) : acqua.atomi.colore.slice(0, 3 * nA), 3 * nR); else for (let i = 0; i < nA; i++) colore.set(acqua.coloreAcqua || [40, 70, 100], 3 * (nR + i));
   const sposta = (arr) => Uint32Array.from(arr, (x) => x + nR);
-  return { ...acqua, atomi: { pos, raggio, elemento }, legami: sposta(acqua.legami), legamiH: sposta(acqua.legamiH), scatola: [Lb, Lb + dz, Lb], ripeti: [3, 1, 3], parti: [{ nome: nome, da: 0, a: nR }, ...acqua.parti.map((p) => ({ ...p, da: p.da + nR, a: p.a + nR }))],
+  return { ...acqua, atomi: { pos, raggio, elemento, colore }, legami: sposta(acqua.legami), legamiH: sposta(acqua.legamiH), scatola: [Lb, Lb + dz, Lb], ripeti: [3, 1, 3], parti: [{ nome: nome, da: 0, a: nR }, ...acqua.parti.map((p) => ({ ...p, da: p.da + nR, a: p.a + nR }))],
     acquaPori: A, minerale: nome, reticolo: ret.descrizione, descrizione: `la superficie ${/^[aeiou]/.test(nome) ? "dell'" : 'del '}${nome} con sopra l'acqua dei pori a ${lung(zz)} di profondità (pH ${fmt(A.pH)}, ${tempo(A.anni)} nei pori): ${acqua.descrizione.replace(/^l'acqua di questo mare in /, '')}` };
 }
