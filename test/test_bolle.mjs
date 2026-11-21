@@ -179,9 +179,12 @@ prova('più bolle: libere, ognuna trova il suo mondo; nello stesso pianeta, lo s
   for (const e of due.bolle) assert.equal(ridiscendi(e).esito, 'sì'); assert.ok(due.bolle[0].bolla.dove.punto[1] !== due.bolle[1].bolla.dove.punto[1]);
   tra(due.ricerche[0].frazione.valore, 0, r.ricerche[0].frazione.valore + 1e-9, 'i mondi con mare e ghiaccio sono una parte di quelli col mare');
   // dentro un sistema dato: si guardano tutti i suoi pianeti (peso esatto, senza errore)
-  const sis = incontra([{ luogo: 'cosmo 1/galassia 0/stella 21', contenuto: 'acqua liquida' }, { luogo: 'cosmo 1/galassia 0/stella 21', contenuto: 'ghiaccio' }]);
-  assert.ok(sis.esiste && sis.chiesto.livello === 'stella' && sis.ricerche.every((x) => x.esatto && x.frazione.errore === 0 && x.provati === CO.sistema(1, 0, 21).pianeti.length)); for (const e of sis.bolle) assert.equal(ridiscendi(e).esito, 'sì');
-  console.log(`      (quattro bolle libere → ${r.mondi.length} mondi: ${r.bolle.map((e) => `${e.bolla.contenuto.cosa} in ${e.luogo.replace(/\/punto.*/, '')}`).join('; ')})\n      (mare e ghiaccio nello stesso pianeta: ${due.bolle.map((e) => e.luogo).join(' e ')} — ${mostra(due.ricerche[0])})\n      (nel sistema cosmo 1/galassia 0/stella 21: ${sis.bolle.map((e) => `${e.bolla.contenuto.cosa} nel pianeta ${e.bolla.dove.pianeta}`).join(', ')})`);
+  // (il sistema: il primo della galassia 0, in ordine di stella, con un pianeta d'acqua liquida e uno di ghiaccio. Prima era la
+  // stella 21 scritta a mano, che col modello di oggi ha solo ghiaccio)
+  let sid = 0; while (sid < CO.STELLE && !(() => { const ps = CO.sistemaPigro(1, 0, sid).pianeti; return ps.some((p) => p.clima?.acqua === 'liquida') && ps.some((p) => p.clima?.acqua === 'ghiaccio'); })()) sid++;
+  const sis = incontra([{ luogo: `cosmo 1/galassia 0/stella ${sid}`, contenuto: 'acqua liquida' }, { luogo: `cosmo 1/galassia 0/stella ${sid}`, contenuto: 'ghiaccio' }]);
+  assert.ok(sis.esiste && sis.chiesto.livello === 'stella' && sis.ricerche.every((x) => x.esatto && x.frazione.errore === 0 && x.provati === CO.sistema(1, 0, sid).pianeti.length)); for (const e of sis.bolle) assert.equal(ridiscendi(e).esito, 'sì');
+  console.log(`      (quattro bolle libere → ${r.mondi.length} mondi: ${r.bolle.map((e) => `${e.bolla.contenuto.cosa} in ${e.luogo.replace(/\/punto.*/, '')}`).join('; ')})\n      (mare e ghiaccio nello stesso pianeta: ${due.bolle.map((e) => e.luogo).join(' e ')} — ${mostra(due.ricerche[0])})\n      (nel sistema cosmo 1/galassia 0/stella ${sid}: ${sis.bolle.map((e) => `${e.bolla.contenuto.cosa} nel pianeta ${e.bolla.dove.pianeta}`).join(', ')})`);
 });
 
 prova('posizione data: l\'incontro può essere vietato, e si dice quale legge lo vieta', () => {

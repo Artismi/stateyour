@@ -24,9 +24,14 @@ import { puntoACaso, analizza as analizzaIndirizzo, viaDi as viaDellIndirizzo } 
 
 const $ = (id) => document.getElementById(id);
 const tela = $('tela'), ctx = tela.getContext('2d'), pannello = $('pannello');
-// IL PUNTO D'AVVIO: il numero 15853643 della biblioteca (biblioteca.js) è un indirizzo del cosmo: la stella 72 della
-// galassia 34, il suo primo pianeta (un roccioso a 11 °C con 3 bar e acqua liquida), regione 11. Da lì si apre lo spazio.
-const AVVIO = universo(15853643).cella.indirizzo;
+// IL PUNTO D'AVVIO: un numero della biblioteca (biblioteca.js) è un indirizzo del cosmo. IL CRITERIO, scritto prima di
+// cercare (21/11/2026): il primo numero, in ordine (cosmo 1; galassia, stella, pianeta crescenti; regione 0), che dia un
+// pianeta roccioso con acqua liquida, aria tra 0,5 e 3 bar, terre emerse (dopo l'erosione, pesate con l'area) tra il 20% e
+// il 50%, temperatura media tra 0 e 25 °C, attorno a una stella tra 0,7 e 1,2 M☉. È il 217: la stella 2 della galassia 1
+// (in base 0: galassia 0, stella 1), il suo terzo pianeta (pianeta 2): 0,67 M⊕, 1,26 bar, 24% di terre, 5,4 °C, attorno a
+// una stella di 1,08 M☉ (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
+// un difetto nascosto: gli altri pianeti restano tutti raggiungibili. Da lì si apre lo spazio.
+const AVVIO = universo(217).cella.indirizzo;
 
 // ---------- il disegno: la mappa piatta (quando lo spazio in tre dimensioni non c'è, o in fondo, nella materia di un punto);
 // sopra ci sono le tele del mondo, degli atomi e dei quanti, ognuna col suo ciclo

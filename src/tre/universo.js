@@ -239,10 +239,14 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
         const R = sc.punti.raggio[i], w1 = pesoDiscreto((2 * R * S.fuoco) / Math.sqrt(d2 || 1), 1), pg = ap && ap.i === i ? ap.peso || 0 : 0, w = w1 * (1 - pg), o = 8 * i;
         dischi[o] = pos[3 * i]; dischi[o + 1] = pos[3 * i + 1]; dischi[o + 2] = pos[3 * i + 2]; dischi[o + 3] = 2 * R; for (let c = 0; c < 3; c++) dischi[o + 4 + c] = UN_DISCO * w * luce[4 * i + c]; dischi[o + 7] = 1;
         if (luce[4 * i + 3] > 0) discreta += (w + pg) * vista[5 * i]; // (il dischetto, e la parte che disegna la galassia aperta)
-        if (!sc.punti.esiste[i]) continue; if (d2 < dv) { dv = d2; vicina = i; } if (luce[4 * i + 3] > 0) { const f = vista[5 * i] / (4 * Math.PI * d2); if (f > fMax) fMax = f; }
+        if (!sc.punti.esiste[i]) continue; if (d2 < dv) { dv = d2; vicina = i; } if (luce[4 * i + 3] > 0 && w > 0) { const f = (w * vista[5 * i]) / (4 * Math.PI * Math.max(d2, R * R)); if (f > fMax) fMax = f; }
         S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: sc.punti.raggio[i], galassia: i, nodo: radice }); }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.aggiorna(dischi);
       strato.forzaRete = reteDati ? Math.max(0, 1 - discreta / reteDati.luce) : 1; // (la nebbia senza la luce che portano i dischetti e la galassia aperta)
+      // (la luce che si propone è quella dei dischetti, la parte che il cosmo disegna: la galassia aperta propone la sua. Prima
+      // c'era tutta la luce della galassia più vicina come un punto, L/(4π·d²): con l'occhio nel centro della galassia aperta,
+      // d = 0, la proposta era infinita, l'esposizione andava a infinito e poi a NaN, e la scena restava nera — test_vista, «la
+      // galassia è buia». Dentro il suo raggio una galassia non è un punto: d² non scende sotto R²)
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
       // (la nebbia si legge nel toro: l'occhio ci si riporta qui, in doppia precisione — appeso a una galassia o a una stella la sua
       // posizione nel cosmo può valere 10³⁰ m, e nella scheda, a 32 bit, la nebbia diventava un grigio uniforme)

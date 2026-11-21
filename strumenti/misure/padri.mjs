@@ -70,6 +70,14 @@ async function preparaLavoratore() {
   let n = 0; lavoratore = (L, tx, ty) => new Promise((ok) => { const id = ++n; attesi.set(id, ok); on({ data: { tipo: 'tessera', n: id, L, tx, ty } }); });
 }
 try { await preparaLavoratore(); } catch (e) { log('il filo delle tessere non parte in Node:', e.message); lavoratore = null; }
+// LA TINTA DELLE TERRE SI MISURA DOVE SI VEDE. La riflettanza «terra» c'è in ogni punto della tessera, anche sotto l'acqua:
+// lì è il colore della terra vicina allungato sotto la riva (tessere.worker.js estendi, perché sulla riva non si mescoli con
+// l'acqua) o quello che il conto dà al fondale, e il frammento (pianeta.js F_SUOLO, mix(colA, colT, asciutto)) non lo mostra.
+// Contarlo misura un colore che nessuno vede; e la riva si sposta da un livello all'altro col rilievo più fine, così una
+// cella della madre che era acqua e nella figlia è mezza terra (o il contrario) cambia la «media» senza che il colore visto
+// cambi. Si contano dunque solo le celle della madre asciutte con tutte le sedici figlie asciutte (bagnato: il livello
+// dell'acqua del punto sopra il terreno, come lo legge il frammento in altLiv), e la deviazione del padre sulle sue asciutte.
+const bagnatoDi = (r, c, W) => { if (!r.altLiv) return false; const q = 2 * ((((c / W) | 0) + 1) * (W + 2) + (c % W) + 1); return r.altLiv[q + 1] > -9e4 && r.altLiv[q + 1] > r.altLiv[q]; };
 const LIN = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const labDi = ([r, g, b]) => { const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : (841 / 108) * t + 4 / 29), x = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047), y = f(0.2126 * r + 0.7152 * g + 0.0722 * b), z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883); return [116 * y - 16, 500 * (x - y), 200 * (y - z)]; };
 for (const pt of RAPIDO ? punti.slice(0, 1) : punti) {
@@ -80,12 +88,14 @@ for (const pt of RAPIDO ? punti.slice(0, 1) : punti) {
     if (madre) {
       const { W, H } = t, ox = (tx & 3) * (W / 4), oy = (ty & 3) * (H / 4), celle = [], celleC = [[], [], []], dE = [];
       for (let J = 0; J < H / 4; J++) for (let I = 0; I < W / 4; I++) {
-        const f = [], fc = [0, 0, 0]; for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) { const c = (4 * J + b) * W + 4 * I + a; f.push(t.alt[c]); if (col) for (let q = 0; q < 3; q++) fc[q] += LIN(col.terra[4 * c + q]) / 16; }
+        const f = [], fc = [0, 0, 0]; let fBagnato = false; for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) { const c = (4 * J + b) * W + 4 * I + a; f.push(t.alt[c]); if (col) { fBagnato ||= bagnatoDi(col, c, W); for (let q = 0; q < 3; q++) fc[q] += LIN(col.terra[4 * c + q]) / 16; } }
         const cm = (oy + J) * madre.W + ox + I; celle.push({ p: madre.alt[cm], f });
-        if (col && colMadre) { const pc = [0, 1, 2].map((q) => LIN(colMadre.terra[4 * cm + q])); for (let q = 0; q < 3; q++) celleC[q].push({ p: pc[q], f: [fc[q]] }); const A = labDi(fc), B = labDi(pc); dE.push(Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2])); }
+        if (col && colMadre && !fBagnato && !bagnatoDi(colMadre, cm, madre.W)) { const pc = [0, 1, 2].map((q) => LIN(colMadre.terra[4 * cm + q])); for (let q = 0; q < 3; q++) celleC[q].push({ p: pc[q], f: [fc[q]] }); const A = labDi(fc), B = labDi(pc); dE.push(Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2])); }
       }
       riga('rilievo (tessere)', pt.nome, `L${L - 1}→L${L}`, 'm', scarto(celle, deviazione(madre.alt)), { lato: `${num((2 * Math.PI * P.raggioM) / (n * t.W) / 1e3)} km per cella` });
-      if (dE.length) riga('colore (tessere)', pt.nome, `L${L - 1}→L${L}`, 'riflettanza G', scarto(celleC[1], deviazione(Array.from({ length: madre.W * madre.H }, (_, c) => LIN(colMadre.terra[4 * c + 1])))), { deltaE: dE.reduce((s, x) => s + x, 0) / dE.length });
+      const asciutteMadre = colMadre ? Array.from({ length: madre.W * madre.H }, (_, c) => c).filter((c) => !bagnatoDi(colMadre, c, madre.W)) : [];
+      if (dE.length && asciutteMadre.length > 1) riga('colore (tessere)', pt.nome, `L${L - 1}→L${L}`, 'riflettanza G', scarto(celleC[1], deviazione(asciutteMadre.map((c) => LIN(colMadre.terra[4 * c + 1])))), { deltaE: dE.reduce((s, x) => s + x, 0) / dE.length, celleAsciutte: dE.length });
+      else if (col && colMadre) log(`-- colore (tessere)   ${pt.nome.padEnd(10)} L${L - 1}→L${L}    nessuna cella della madre asciutta con le sue sedici figlie asciutte: la tinta delle terre lì non si vede`);
     }
     madre = t; colMadre = col;
   }

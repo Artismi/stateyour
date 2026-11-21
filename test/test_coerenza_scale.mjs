@@ -191,16 +191,19 @@ for (const { gid, Gx } of CAMPIONI) for (let k = 0; k < 12; k++) { const sid = (
     // la massa del gas: Σ(r) = Σ₀·r^−3/2 da 0 al bordo esterno; con r = s² l'integrando è costante (punto medio esatto)
     const n = 64, ds = Math.sqrt(D.rOut) / n; let m = 0; for (let i = 0; i < n; i++) { const s = (i + 0.5) * ds, r = s * s; m += 2 * Math.PI * r * D.sigmaGas(r) * UA * UA * 2 * s * ds; }
     const z = Math.abs(m - D.massaKg) / D.massaKg; if (z > peggioDisco) peggioDisco = z; tolDisco = 4 * n * EPS;
-    // i pianeti: i solidi di ognuno più il cibo non mangiato delle sue strisce sono la massa di isolamento di quelle strisce
+    // i pianeti: i solidi di ognuno, più il cibo non mangiato delle sue strisce e quello che lo sciame ha diffuso via (disco.js
+    // cresci: i planetesimi rimasti scagliati o caduti senza farsi prendere), sono i solidi di quelle strisce: DUE masse di
+    // isolamento, perché all'isolamento l'embrione ne ha metà e l'altra metà sono planetesimi (Goldreich, Lithwick e Sari 2004,
+    // disco.js: cibo iniziale 2·m − m_ora). (Prima dei planetesimi rimasti il conto era sulla massa di isolamento sola.)
     for (const q of DI.formaPianeti(st, seme)) { const f = q.formazione, k = (S0.Z ?? 1) * DI.DISCO.metalliSole;
       const solidi = q.tipo === 'gassoso' ? (q.composizione.pesanti < 0.5 ? (q.massaKg * (q.composizione.pesanti - k)) / (1 - k) : NaN) : q.massaKg * (1 - (q.involucro || 0));
       if (!Number.isFinite(solidi)) { saltati++; continue; } pianeti++;
       // (più ciò che è partito nello spazio durante l'accrescimento: elementi.js perditeAccrescimento, un serbatoio del libro dei conti)
       let partito = 0; for (const x of q.composizione.elementi?.spazio || []) partito += x;
-      const r = Math.abs(solidi + partito + f.cibo - f.mIso) / f.mIso; if (r > peggioPianeti) peggioPianeti = r; }
+      const r = Math.abs(solidi + partito + f.cibo + f.cibiDiffusi - 2 * f.mIso) / (2 * f.mIso); if (r > peggioPianeti) peggioPianeti = r; }
     tolPianeti = 6000 * 4 * EPS; } });
   riga({ c: 'C6', passaggio: `stella → disco (${SISTEMI.length} sistemi)`, grandezza: 'massa del gas: ∫2πrΣ dr / massa del disco − 1 (il peggiore)', padre: 0, figli: peggioDisco, tol: tolDisco, da: 'precisione: 4·n·ε (punto medio esatto in √r)' });
-  riga({ c: 'C6', passaggio: `disco (strisce) → pianeti (${pianeti}${saltati ? `, ${saltati} giganti col tetto ai pesanti saltati` : ''})`, grandezza: '(solidi + partiti nello spazio + cibo non mangiato) / massa di isolamento − 1 (il peggiore)', padre: 0, figli: peggioPianeti, tol: tolPianeti, da: 'precisione: al più 6000 corpi sommati (il tetto di formaPianeti), 4ε per somma' });
+  riga({ c: 'C6', passaggio: `disco (strisce) → pianeti (${pianeti}${saltati ? `, ${saltati} giganti col tetto ai pesanti saltati` : ''})`, grandezza: '(solidi + partiti nello spazio + cibo non mangiato + cibo diffuso) / solidi delle strisce (2 masse di isolamento) − 1 (il peggiore)', padre: 0, figli: peggioPianeti, tol: tolPianeti, da: 'precisione: al più 6000 corpi sommati (il tetto di formaPianeti), 4ε per somma' });
 }
 
 // =====================================================================================================
@@ -276,7 +279,12 @@ if (!MONDO) {
     const q = Math.max(1 - X, X >= 0.9999 ? Math.exp(-(2.4 ** 3)) : 0), sigX = Math.sqrt(q * (1 - q) * (1 / Math.max(1, nostri.length) + 1 / r.nGrani));
     riga({ c: 'C6', passaggio: `roccia → grani: ${nome}`, grandezza: 'parte cristallina (il resto è vetro)', padre: X, figli: pieni / dentro, tol: 4 * sigX + (X >= 0.9999 ? q + 4 * Math.sqrt(q / dentro) : 0) + 1 / dentro, da: '4·√(q(1 − q)·(1/n_figli + 1/n_padre)) un grano alla volta, q la parte di vetro (≥ e^(−2,4³) se X = 1: allora Poisson sui punti) + un punto di griglia' });
     let peggio = -1, sc = 0, tl = 0;
-    r.minerali.forEach((m, k) => { const fp = r.frazioni[k], aree = tutti.map((q) => q.n), fig = somma(tutti.filter((q) => q.m === m.nome).map((q) => q.n)) / somma(aree), t = 4 * Math.sqrt(multinomiale(aree, fp) ** 2 + multinomiale(Array.from(areePadre), fp) ** 2) + 1 / somma(aree); const z = Math.abs(fig - fp) / t; if (z > peggio) { peggio = z; sc = fig - fp; tl = t; } });
+    // (lo scarto multinomiale con la probabilità vera di ogni minerale, la sua frazione nella ricetta che padre e figli estraggono
+    // entrambi — grani.js campoGrani sceglie con m.frazione —, non con quella uscita nel padre: un minerale raro può non avere
+    // nessun cristallo tra i ~170 del padre, e allora con la frazione del padre, 0, la varianza stimata è 0 e la tolleranza un
+    // punto solo, mentre i figli, migliaia, ne hanno i loro. Così nel continente con il 2,8‰ di feldspato potassico)
+    const totR = somma(r.minerali.map((m) => m.frazione));
+    r.minerali.forEach((m, k) => { const fp = r.frazioni[k], fv = m.frazione / totR, aree = tutti.map((q) => q.n), fig = somma(tutti.filter((q) => q.m === m.nome).map((q) => q.n)) / somma(aree), t = 4 * Math.sqrt(multinomiale(aree, fv) ** 2 + multinomiale(Array.from(areePadre), fv) ** 2) + 1 / somma(aree); const z = Math.abs(fig - fp) / t; if (z > peggio) { peggio = z; sc = fig - fp; tl = t; } });
     riga({ c: 'C6', passaggio: `roccia → grani: ${nome}`, grandezza: 'composizione: area di un minerale, grani − roccia (il peggiore)', padre: 0, figli: sc, tol: tl, da: '4 scarti multinomiali, figli e padre (Σa²/(Σa)²)' });
   }
 }
@@ -374,7 +382,7 @@ manca('C8', 'atomi → scala quantistica', 'l\'evoluzione: il moto degli atomi d
       riga({ c: 'C6', passaggio: 'mare (Monahan) → finestra (finestra.js)', grandezza: 'varianza dell\'accelerazione che frange, normalizzata (ciò che fa P(schiuma) = W)', padre: 1, figli: s2 / K, tol: 4 * Math.sqrt(2 / K), da: `χ²: 4·√(2/${K})` }); });
     // C6: la torbidità (massa dei granelli e dei fiocchi con la loro legge delle taglie) e le bolle sotto la schiuma
     tempo('popolazioni', () => { const f = FI.finestraAcqua(SM, { lon: TB.lon, lat: TB.lat, fondoM: TB.fondoM, P: PM, latoM: 1e-3 }), c = f.popolazioni.campione; let tot = 0, n = 0; for (const x of f.popolazioni.classi) if (x.kgPerM3 != null && (x.tipo === 'granello' || x.tipo === 'fiocco')) { tot += x.kgPerM3; n++; }
-      const pad = c.sospeso.sabbia + c.sospeso.limo + c.sospeso.argilla + c.sospeso.fiocchi;
+      const pad = c.sospeso.sabbia + c.sospeso.limo + c.sospeso.argilla + c.sospeso.fiocchi + (c.sospeso.polvere || 0); // (con la polvere del vento, mare.js polvereDelVento: è una classe di granelli della finestra come le altre)
       riga({ c: 'C6', passaggio: 'mare (torbidità) → finestra di 1 mm (finestra.js)', grandezza: `fango sospeso (kg/m³): mare.js contro le classi con le taglie di Stokes (${n} classi)`, padre: pad, figli: tot, tol: 64 * EPS * pad, da: 'esatto (il numero di ogni classe è quello che dà la massa di mare.js: n·ε)' });
       const g = FI.finestraAcqua(SM, { ...opz, latoM: 1e-2 }), B = g.popolazioni.bolle, cl = g.popolazioni.campione.classi.find((x) => x.tipo === 'bolla'), tutta = new Uint8Array(g.N * g.N).fill(1); let nb = 0, att = 0;
       for (let q = 0; q < 6; q++) { const [lo, la] = FI.dalTratto(tr, xc + q * 0.05, yc), h = FI.finestraAcqua(SM, { ...opz, lon: lo, lat: la, latoM: 1e-2 }); nb += FI.bolleSottoSchiuma(h, tutta).filter((p) => !p.zattera).length; att += h.popolazioni.bolle.n * h.L ** 3; }

@@ -1,8 +1,8 @@
 // indirizzi.mjs — i tre indirizzi del giro, scelti con un criterio scritto e non a caso.
 //
 // IL CRITERIO (scritto una volta, prima di vedere i giri):
-//  · «avvio»: l'indirizzo con cui l'app si apre (laboratorio.js, compBiblioteca(15853643): cosmo 1, galassia 34, stella 72,
-//    primo pianeta; in base 0: galassia 33, stella 71, pianeta 0). Nessuna scelta.
+//  · «avvio»: l'indirizzo con cui l'app si apre (laboratorio.js AVVIO, il numero 217, col suo criterio scritto lì: in base 0
+//    cosmo 1, galassia 0, stella 1, pianeta 2). Nessuna scelta qui.
 //  · i candidati: nel cosmo 1, in ordine di indirizzo (galassia, stella, pianeta), i primi N pianeti rocciosi con acqua
 //    liquida di stelle «in vita» (N = 12 di serie). Nessun salto, nessun filtro sull'aspetto.
 //  · «terre»: tra i candidati, quello con la frazione di terre emerse più alta (a pari merito il primo in ordine);
@@ -49,10 +49,10 @@ const primo = (cmp) => candidati.reduce((m, c) => (m == null || cmp(c, m) ? c : 
 const terre = primo((c, m) => c.terre > m.terre), acqua = primo((c, m) => c.terre < m.terre);
 const via = (c) => ({ cosmo: c.cosmo, galassia: c.galassia, stella: c.stella, pianeta: c.pianeta });
 const out = {
-  criterio: 'avvio: l\'indirizzo d\'avvio (seme 15853643). terre/acqua: tra i primi N pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, la frazione di terre emerse (dopo l\'erosione, pesata con l\'area) più alta e più bassa; a pari merito il primo.',
+  criterio: 'avvio: l\'indirizzo d\'avvio (numero 217, laboratorio.js AVVIO). terre/acqua: tra i primi N pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, la frazione di terre emerse (dopo l\'erosione, pesata con l\'area) più alta e più bassa; a pari merito il primo.',
   N, candidati,
   indirizzi: [
-    { nome: 'avvio', via: { cosmo: 1, galassia: 33, stella: 71, pianeta: 0 }, mira: 'centro' },
+    { nome: 'avvio', via: { cosmo: 1, galassia: 0, stella: 1, pianeta: 2 }, mira: 'centro' },
     { nome: 'terre', via: via(terre), terre: terre.terre, mira: 'terra' },
     { nome: 'acqua', via: via(acqua), terre: acqua.terre, mira: 'centro' },
   ],

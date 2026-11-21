@@ -1,102 +1,102 @@
 {
- "criterio": "avvio: l'indirizzo d'avvio (seme 15853643). terre/acqua: tra i primi N pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, la frazione di terre emerse (dopo l'erosione, pesata con l'area) più alta e più bassa; a pari merito il primo.",
+ "criterio": "avvio: l'indirizzo d'avvio (numero 217, laboratorio.js AVVIO). terre/acqua: tra i primi N pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, la frazione di terre emerse (dopo l'erosione, pesata con l'area) più alta e più bassa; a pari merito il primo.",
  "N": 12,
  "candidati": [
   {
    "cosmo": 1,
    "galassia": 0,
-   "stella": 2,
+   "stella": 0,
    "pianeta": 0,
-   "terre": 0,
-   "massaTerre": 0.095
+   "terre": 0.1661,
+   "massaTerre": 1.427
   },
   {
    "cosmo": 1,
    "galassia": 0,
-   "stella": 2,
-   "pianeta": 1,
-   "terre": 0,
-   "massaTerre": 0.127
-  },
-  {
-   "cosmo": 1,
-   "galassia": 0,
-   "stella": 2,
+   "stella": 1,
    "pianeta": 2,
+   "terre": 0.242,
+   "massaTerre": 0.671
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 1,
+   "pianeta": 3,
+   "terre": 0.1925,
+   "massaTerre": 1.13
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 1,
+   "pianeta": 4,
    "terre": 0,
-   "massaTerre": 0.157
+   "massaTerre": 1.512
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
-   "pianeta": 0,
-   "terre": 0.5152,
+   "pianeta": 1,
+   "terre": 0.8402,
+   "massaTerre": 0.038
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 2,
+   "terre": 0.7737,
    "massaTerre": 0.043
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
-   "pianeta": 2,
-   "terre": 0.2079,
-   "massaTerre": 0.071
-  },
-  {
-   "cosmo": 1,
-   "galassia": 0,
-   "stella": 4,
    "pianeta": 3,
-   "terre": 0.1283,
-   "massaTerre": 0.051
+   "terre": 0.696,
+   "massaTerre": 0.048
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
    "pianeta": 4,
-   "terre": 0.0424,
-   "massaTerre": 0.049
+   "terre": 0.6435,
+   "massaTerre": 0.027
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
    "pianeta": 5,
-   "terre": 0,
-   "massaTerre": 0.114
+   "terre": 0.3443,
+   "massaTerre": 0.049
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
    "pianeta": 6,
-   "terre": 0,
-   "massaTerre": 0.102
+   "terre": 0.3705,
+   "massaTerre": 0.031
   },
   {
    "cosmo": 1,
    "galassia": 0,
    "stella": 4,
    "pianeta": 7,
-   "terre": 0,
-   "massaTerre": 0.103
+   "terre": 0.1574,
+   "massaTerre": 0.033
   },
   {
    "cosmo": 1,
    "galassia": 0,
-   "stella": 5,
-   "pianeta": 0,
-   "terre": 0.1375,
-   "massaTerre": 0.484
-  },
-  {
-   "cosmo": 1,
-   "galassia": 0,
-   "stella": 6,
-   "pianeta": 0,
-   "terre": 0,
-   "massaTerre": 0.201
+   "stella": 4,
+   "pianeta": 8,
+   "terre": 0.0421,
+   "massaTerre": 0.036
   }
  ],
  "indirizzi": [
@@ -104,9 +104,9 @@
    "nome": "avvio",
    "via": {
     "cosmo": 1,
-    "galassia": 33,
-    "stella": 71,
-    "pianeta": 0
+    "galassia": 0,
+    "stella": 1,
+    "pianeta": 2
    },
    "mira": "centro"
   },
@@ -116,9 +116,9 @@
     "cosmo": 1,
     "galassia": 0,
     "stella": 4,
-    "pianeta": 0
+    "pianeta": 1
    },
-   "terre": 0.5152,
+   "terre": 0.8402,
    "mira": "terra"
   },
   {
@@ -126,8 +126,8 @@
    "via": {
     "cosmo": 1,
     "galassia": 0,
-    "stella": 2,
-    "pianeta": 0
+    "stella": 1,
+    "pianeta": 4
    },
    "terre": 0,
    "mira": "centro"

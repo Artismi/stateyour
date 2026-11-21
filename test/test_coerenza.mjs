@@ -57,7 +57,9 @@ for (const n of [1, 2]) {
   const ell = C.galassie.find((g) => g.tipo === 'ellittica'); if (ell) ids.add(ell.id);
   for (const gid of ids) {
     GALASSIE.push({ n, gid, Gx: CO.galassia(n, gid) });
-    for (let k = 0; k < 25; k++) {
+    // (30 stelle per galassia: con gli urti giganti di disco.js i sistemi adulti hanno meno pianeti, e con 25 i solidi del
+    // campione scendevano a 1322, sotto i 1500 che la prova dell'età chiede)
+    for (let k = 0; k < 30; k++) {
       const sid = (k * 61 + 7 * gid) % CO.STELLE, S0 = CO.galassia(n, gid).stelle[sid], S = CO.sistema(n, gid, sid);
       // l'età del sistema è quella della stella (anni dalla nascita a oggi), viva o morta che sia
       const s = { n, gid, sid, S0, S, eta: S0.eta, viva: S0.stato === 'in vita' || S0.stato === 'gigante rossa' };

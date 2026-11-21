@@ -354,7 +354,7 @@ export function formaPianeti(st, seme = 1) {
     b.nucleo = b.m; b.tGas = t0; b.gas = mGas; gasRimasto -= mGas;
     // gli embrioni dentro la sua nuova striscia (C raggi di Hill del gigante) gli cadono addosso
     const rh = P.C * hill(b.m + mGas, b.a);
-    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; o.morto = true; o.in = b.id; }
+    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.diffusi = (b.diffusi || 0) + (o.diffusi || 0); b.w += o.w; b.alGas += o.alGas; o.morto = true; o.in = b.id; }
     b.m += mGas;
   }
   // i nuclei tardivi: l'involucro cresce piano (in proporzione al tempo che resta), e quando il disco svanisce resta
@@ -502,7 +502,7 @@ export function formaPianeti(st, seme = 1) {
       fusioni.push({ g: grande.id, p: piccolo.id, t: tEvento, Mg: grande.m - grande.gas, Mp: piccolo.m - piccolo.gas, Rg: raggio(grande), Rp: raggio(piccolo), a: am });
       for (const u of piccolo.lista) { u.laterale = true; grande.lista.push(u); } // (gli urti del più piccolo: laterali per il grande; il piccolo non c'è più)
       grande.lista.push({ bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta: distanza, tIncrocio, t: tEvento, aUA: am });
-      grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.w += piccolo.w; grande.alGas += piccolo.alGas; for (const o of piccolo.orfani) grande.orfani.push(o);
+      grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.diffusi = (grande.diffusi || 0) + (piccolo.diffusi || 0); grande.w += piccolo.w; grande.alGas += piccolo.alGas; for (const o of piccolo.orfani) grande.orfani.push(o);
       grande.a = (mp * p.a + mq * q.a) / m; grande.zr = zr; grande.zi = zi;
       grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
       if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; } // l'urto strappa il velo di gas
@@ -592,7 +592,7 @@ export function formaPianeti(st, seme = 1) {
       for (const g of gruppi) {
         const b = g.capo;
         if (g.membri.length > 1) {
-          for (const o of g.membri) { if (o === b) continue; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; for (const x of o.orfani) b.orfani.push(x); b.misto ||= o.misto || o.freddo !== b.freddo; b.nato = (b.nato * b.m + o.nato * o.m) / (b.m + o.m); b.m += o.m; o.in = b.id; o.morto = true; }
+          for (const o of g.membri) { if (o === b) continue; b.iso += o.iso; b.cibo += o.cibo; b.diffusi = (b.diffusi || 0) + (o.diffusi || 0); b.w += o.w; b.alGas += o.alGas; for (const x of o.orfani) b.orfani.push(x); b.misto ||= o.misto || o.freddo !== b.freddo; b.nato = (b.nato * b.m + o.nato * o.m) / (b.m + o.m); b.m += o.m; o.in = b.id; o.morto = true; }
           b.m = g.m; b.fe = g.fe; b.h2o = g.h2o; b.a = g.a; b.zr = g.zr; b.zi = g.zi; b.tz = g.t; b.lista = g.lista; b.urti = g.urti;
         }
         if (g.m >= minimo || gruppi.length < 2) escono.push(b); else b.detrito = true; // (sotto il minimo a oggi: un detrito)

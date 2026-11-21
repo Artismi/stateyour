@@ -734,8 +734,13 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
     // lo diluisse, saliva a 4–6 Z☉ come in una scatola chiusa
     { const dovuto = Math.max(LEGGI.germe, LEGGI.bucoNero[0] * Math.pow(Msfer / 1e11, LEGGI.bucoNero[1]) * 10 ** scartoBuco);
       if (dovuto > Mbn && gas[0] > 0) {
-        const preso = Math.min(dovuto - Mbn, gas[0]), z = met[0] / gas[0], via = Math.min(gas[0] - preso, (LEGGI.quasar * LEGGI.radio[1] * preso * C_KMS) / Math.sqrt(F2[0])), fr = (preso + via) / gas[0];
-        Mbn += preso; B.buco += preso; B.bucoZ += preso * z; B.quasar += via; gas[0] -= preso + via; met[0] -= (preso + via) * z;
+        // (quando il buco e il vento si prendono tutto il gas del nucleo, il nucleo resta vuoto: gas e metalli a zero, non il
+        // resto di gas − preso − via e di met − (preso + via)·z, che è un errore di arrotondamento — in una ellittica del cosmo 1
+        // restavano 3·10⁻⁹ M☉ di metalli senza gas, che i canali, svuotati per moltiplicazione, non avevano: Σ canali / metalli
+        // del gas sbagliava dell'8,6 % su un gas che non c'è; «tutto» si decide prima della somma, perché (gas − preso) + preso
+        // può differire da gas di un'unità dell'ultima cifra)
+        const preso = Math.min(dovuto - Mbn, gas[0]), z = met[0] / gas[0], spinto = (LEGGI.quasar * LEGGI.radio[1] * preso * C_KMS) / Math.sqrt(F2[0]), tutto = preso >= gas[0] || spinto >= gas[0] - preso, via = tutto ? gas[0] - preso : spinto, fr = tutto ? 1 : (preso + via) / gas[0];
+        Mbn += preso; B.buco += preso; B.bucoZ += preso * z; B.quasar += via; if (tutto) { gas[0] = 0; met[0] = 0; } else { gas[0] -= preso + via; met[0] -= (preso + via) * z; }
         B.vento += via; B.ventoZ += via * z; fuori += via; fuoriZ += via * z; fuoriJ += via * rc[0] * Math.sqrt(V2[0]);
         for (let c = 0; c < NC; c++) { const x = metC[c] * fr; metC[c] -= x; fuoriC[c] += (x * via) / (preso + via); }
         gasOra -= preso + via; Zt[j * NR] = gas[0] > 0 ? met[0] / gas[0] / ZSOLE : 0;
