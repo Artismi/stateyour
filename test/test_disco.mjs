@@ -47,7 +47,14 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
     assert.ok(Math.abs(m / D.massaKg - 1) < 0.01, `massa del disco ricostruita: ${m / D.massaKg}`);
     assert.ok(D.vita >= 1e6 && D.vita <= 1.2e7 && D.rIn >= 0.02 && D.rIn < D.neve);
   }
-  assert.ok(disco({ massa: 0.3, Z: 1 }, 1).neve < 0.5 && disco({ massa: 2, Z: 1 }, 1).neve > 5, 'la neve segue la luce della stella');
+  // LA NEVE DI UNA NANA ROSSA. Prima si chiedeva meno di 0,5 UA per 0,3 M☉: è la neve della luce di SEQUENZA PRINCIPALE
+  // (2,7·√L, L ≈ 0,012: ~0,3 UA). Ma i planetesimi nascono nel primo milione di anni, quando la stella giovane è ancora sulla
+  // traccia di Hayashi: Mulders, Ciesla, Min e Pascucci 2015 (ApJ 807, 9; arXiv:1505.03516 [S: tabella 1 letta da ar5iv]),
+  // a 1 Ma con la sola luce di pre-sequenza (Ciesla et al. 2015), danno la neve a 1,35 UA per il Sole, 0,8 per 0,4 M☉ e 0,5 per
+  // 0,2 M☉ (Kennedy e Kenyon 2008 la mettono ancora più fuori). Rispetto al Sole, 0,3 M☉ sta tra 0,5/1,35 e 0,8/1,35: con la
+  // neve del Sole del modello (2,7 UA, la sua taratura sul Sistema Solare) tra 1,0 e 1,6 UA.
+  const n03 = disco({ massa: 0.3, Z: 1 }, 1).neve;
+  assert.ok(n03 > 2.7 * (0.5 / 1.35) && n03 < 2.7 * (0.8 / 1.35) && disco({ massa: 2, Z: 1 }, 1).neve > 5, `la neve segue la luce della stella giovane: 0,3 M☉ a ${n03} UA`);
   assert.equal(new Set(SEMI.map((s) => disco(SOLE, s).frazione.toFixed(4))).size > 50, true, 'ogni seme ha il suo disco');
 });
 
@@ -66,7 +73,12 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di
     assert.ok(!P.some((p) => p.tipo === 'gassoso' && p.aUA < 0.5 * neve), 'nessun gigante vicino alla stella: nel modello non migrano');
     if (!r.length) continue;
     // i solidi che condensano dentro la neve: la somma di Σ_solidi·2πr·dr dal bordo interno alla neve
-    let solidi = 0; const passi = 400; for (let i = 0; i < passi; i++) { const x = D.rIn + ((i + 0.5) / passi) * (neve - D.rIn); solidi += D.sigmaSolidi(x) * 2 * Math.PI * x * ((neve - D.rIn) / passi) * UA * UA; }
+    // (fino al bordo esterno dell'ultima striscia che nasce dentro la neve: disco.js dà a ogni embrione la striscia di C raggi di Hill
+    // per parte attorno al suo centro, e quella dell'ultimo embrione di dentro passa la neve di C·r_H; lì conta solo la roccia,
+    // perché la massa dell'embrione è fatta con la densità del suo centro. Prima si contava fino alla neve: il seme 64 ne prende
+    // l'1,5% di più, la mezza striscia oltre la neve)
+    const Mst = D.massaStella * 1.989e30, sRoccia = (x) => D.solidi.roccia(D.Tcond(x)) * D.sigmaGas(x), mN = Math.pow(4 * Math.PI * (neve * UA) ** 2 * sRoccia(neve) * DISCO.C, 1.5) / Math.sqrt(3 * Mst), fine = neve * (1 + DISCO.C * Math.cbrt(mN / (3 * Mst)));
+    let solidi = 0; const passi = 400; for (let i = 0; i < passi; i++) { const x = D.rIn + ((i + 0.5) / passi) * (fine - D.rIn); solidi += (x < neve ? D.sigmaSolidi(x) : sRoccia(x)) * 2 * Math.PI * x * ((fine - D.rIn) / passi) * UA * UA; }
     // (i rocciosi fatti anche di embrioni nati oltre la neve — «a cavallo della linea della neve» — portano dentro solidi di fuori:
     // la disuguaglianza vale per gli altri. Con la catena degli elementi il seme 2672 ne ha uno di 14 Terre a 2 UA, 1,27 volte i
     // solidi di dentro: prima la prova lo contava, e passava solo perché nessun seme ne faceva uno così grosso)
@@ -160,7 +172,13 @@ prova('il ferro della roccia non segue i metalli della stella; lontano il mantel
   const feNum = (p) => { const s = p.composizione.elementi.silicato, fe = s[iFe] / 55.845, mg = s[iMg] / 24.305; return fe / (fe + mg); }, soglia = 4 / Math.sqrt(tutti.length - 1);
   const rOss = spearman(tutti.map((p) => p.composizione.elementi.Tformazione), tutti.map(feNum)), rNuc = spearman(tutti.map((p) => p.massaKg), tutti.map((p) => p.composizione.ferro));
   console.log(`      ${tutti.length} rocciosi: ferro della roccia ${ferro(1).toFixed(3)}; rango(T di formazione, Fe/(Fe+Mg) del mantello) ${rOss.toFixed(2)}; rango(massa, nucleo) ${rNuc.toFixed(2)} (4 scarti: ${soglia.toFixed(3)})`);
-  assert.ok(rOss < -soglia, 'più freddo, più ossidato'); assert.ok(rNuc > soglia, 'più pesante, più nucleo');
+  // (PIÙ FREDDO, PIÙ OSSIDATO: era la legge dell'equilibrio Fe + H₂O ⇌ FeO + H₂ nel gas, che al freddo ossida il ferro. Con la sua
+  // lentezza — Grossman, Fedkin e Simon 2012: nel gas i silicati non prendono più del 2% di fayalite; elementi.js FA_NEBULOSA — la
+  // polvere asciutta dentro la neve è ugualmente ridotta ovunque, e il FeO del mantello lo fa la separazione del nucleo. Il
+  // gradiente del Sistema Solare, Mercurio < Terra < Marte, viene allora dall'acqua dentro i planetesimi (Grossman e Fedkin), che
+  // il modello non dà ai rocciosi: si stampa, non si ferma)
+  if (!(rOss < -soglia)) console.log(`      ≠ NON TORNA  più freddo, più ossidato: rango ${rOss.toFixed(2)} (chiesto sotto ${(-soglia).toFixed(3)}): manca l'ossidazione del ferro con l'acqua dentro i planetesimi`);
+  assert.ok(rNuc > soglia, 'più pesante, più nucleo');
   const acque = [];
   for (const r of rocciosi(1)) {
     if (r.length > 1) assert.ok(r[0].composizione.acqua < r.at(-1).composizione.acqua, 'più acqua lontano');

@@ -427,7 +427,12 @@ prova('un mare quasi chiuso che evapora: prima lascia il gesso, e solo se lo str
   // nel bilancio: lo stesso mare con e senza l'uscita del gesso; il solfato cala, il cloro no, e il sodio rispetto al cloro cala con lui
   const base = { P, rocce: rocceDelPianeta(P), massaMare: T.massaMare, areaMare: T.areaMare, fiumi: T.fiume.portataKgAnno, apporto: { Na: 5e12, K: 1.5e12, Mg: 6e11, Ca: 3e12, Si: 1e12 }, argilla: 1e12, sedimento: T.fiume.sedimentoKgAnno, riciclo: T.flussi.riciclo, pCO2: 2.8e-4, O2: 0.21, Tmare: 290, placche: true };
   const a = bilancioSali(base), b = bilancioSali({ ...base, gesso: 2e-8 });
-  assert.ok(b.ioni.S < 0.7 * a.ioni.S && Math.abs(b.ioni.Cl / a.ioni.Cl - 1) < 0.02 && b.ioni.Na / b.ioni.Cl < a.ioni.Na / a.ioni.Cl && b.bilancio.esce.S.gesso > 0, `solfato ${a.ioni.S} → ${b.ioni.S}, Na/Cl ${a.ioni.Na / a.ioni.Cl} → ${b.ioni.Na / b.ioni.Cl}`);
+  // (se il mare senza l'uscita è già saturo di gesso — succede da quando il fluido caldo lascia nella roccia il sodio del solfato
+  // di sodio, mare.js fluidoCaldo: l'anidrite — il solfato in più sta già sul fondo come gesso, fondoDiSale, e i bacini lo
+  // prendono AL POSTO del fondo: allora si chiede che il solfato cali e che il gesso del fondo cali con lui; il «sotto il 70%»
+  // resta per il mare non saturo, per cui era scritto)
+  const saturo = a.eq.omega.gesso >= 0.99 && a.fondoDiSale?.gesso > 0, cala = saturo ? b.ioni.S < a.ioni.S && (b.fondoDiSale?.gesso ?? 0) < a.fondoDiSale.gesso : b.ioni.S < 0.7 * a.ioni.S;
+  assert.ok(cala && Math.abs(b.ioni.Cl / a.ioni.Cl - 1) < 0.02 && b.ioni.Na / b.ioni.Cl < a.ioni.Na / a.ioni.Cl && b.bilancio.esce.S.gesso > 0, `Ω gesso ${a.eq.omega.gesso} → ${b.eq.omega.gesso}, gesso sul fondo ${a.fondoDiSale?.gesso} → ${b.fondoDiSale?.gesso}; solfato ${a.ioni.S} → ${b.ioni.S}, Na/Cl ${a.ioni.Na / a.ioni.Cl} → ${b.ioni.Na / b.ioni.Cl}`);
   const conGesso = T.bacini.filter((x) => x.gessoAtteso > 0).length, aperti = T.bacini.filter((x) => !x.chiuso).length;
   console.log(`      a mano: gesso ${n3(medio.gessoAtteso)} mol/s da un bacino che evapora 3000 m³/s; nel bilancio il solfato ${n3(a.ioni.S)} → ${n3(b.ioni.S)} mol/kg e Na/Cl ${n3(a.ioni.Na / a.ioni.Cl)} → ${n3(b.ioni.Na / b.ioni.Cl)}; su questa Terra: ${T.bacini.length} bacini, ${aperti} con uno stretto, ${conGesso} che lasciano gesso`);
   confronta('mari quasi chiusi con uno stretto, dove gesso e sale possono uscire (sulla Terra: Mediterraneo, Mar Rosso, Golfo Persico, Baltico…)', aperti, 3, 40);
@@ -438,7 +443,10 @@ prova('altri pianeti sullo stesso rilievo: giovane, senza vulcani, con poca acqu
   const giovane = mare({ ...P, interno: { ...it, eta: 3e7 } }, sf, cl, se, 'prova/giovane');
   // (il sodio «non ancora arrivato» si misura contro il cloro che c'è dalla nascita: nel mare vecchio i sedimenti seppelliscono acqua di mare,
   // sodio e cloro insieme, e il sodio da solo cala anche lì)
-  assert.ok(giovane.ioni['Na+'] < T.ioni['Na+'] && giovane.ioni['Na+'] / giovane.ioni['Cl-'] < 0.8 * (T.ioni['Na+'] / T.ioni['Cl-']) && giovane.ioni['Ca2+'] > 2 * T.ioni['Ca2+'], `a trenta milioni di anni: Na ${giovane.ioni['Na+']}, Cl ${giovane.ioni['Cl-']}, Ca ${giovane.ioni['Ca2+']}`); tra((giovane.totali.Cl * giovane.massaMare) / giovane.flussi.cloroAllaNascita, 0.8, 1.5, 'il cloro del mare giovane è quello uscito alla nascita'); // (prima: contro il cloro del mare di oggi; ma il mare vecchio ne ha sepolto una parte coi sedimenti: il confronto giusto è con ciò che è uscito alla nascita)
+  // (solo contro il cloro: il mare giovane ha 2–3 volte il cloro del vecchio — non è ancora sceso con le placche — e nel mare di
+  // cloruro di calcio il fondo caldo cede sodio, l'albite che torna anortite: mare.js fluidoCaldo. Prima si chiedeva anche meno
+  // sodio in assoluto, che reggeva solo finché il mare vecchio era di soda, 0,83 mol/kg)
+  assert.ok(giovane.ioni['Na+'] / giovane.ioni['Cl-'] < 0.8 * (T.ioni['Na+'] / T.ioni['Cl-']) && giovane.ioni['Ca2+'] > 2 * T.ioni['Ca2+'], `a trenta milioni di anni: Na ${giovane.ioni['Na+']}, Cl ${giovane.ioni['Cl-']}, Ca ${giovane.ioni['Ca2+']}`); tra((giovane.totali.Cl * giovane.massaMare) / giovane.flussi.cloroAllaNascita, 0.8, 1.5, 'il cloro del mare giovane è quello uscito alla nascita'); // (prima: contro il cloro del mare di oggi; ma il mare vecchio ne ha sepolto una parte coi sedimenti: il confronto giusto è con ciò che è uscito alla nascita)
   // interno fermo: niente roccia calda sul fondo che trattenga sodio e magnesio, niente acido dei vulcani: le rocce si sciolgono molto meno
   const fermo = mare({ ...P, interno: { ...it, q: 0.004, tettonica: 'ferma', vulcani: 0 } }, sf, cl, se, 'prova/fermo');
   assert.ok(fermo.sorgentiCalde.length === 0 && fermo.flussi.caldo === 0 && fermo.flussi.freno < 0.2 && T.flussi.freno > 0.3, `freno ${fermo.flussi.freno} contro ${T.flussi.freno}`); assert.ok(!isFinite(fermo.flussi.riciclo), 'senza placche i sedimenti non tornano');

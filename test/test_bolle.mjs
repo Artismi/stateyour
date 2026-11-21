@@ -205,21 +205,25 @@ prova('posizione data: l\'incontro può essere vietato, e si dice quale legge lo
 });
 
 prova('la causa comune: due croste di sale stanno più spesso nello stesso mondo che in due, quando i pesi lo dicono; mare e ghiaccio no', () => {
-  const sale = [{ contenuto: 'crosta di sale' }, { contenuto: 'crosta di sale', grandezza: 2 }], cc = causaComune(sale, { mondi: MONDI });
+  // (la prova chiede più di 100 mondi DECISI: quelli col mare restano «forse» — se una conca è arrivata al sale lo dice solo la
+  // superficie — e quanti sono dipende dal catalogo: col disco nuovo 62 su 150. Si allarga il campione, raddoppiando, finché i decisi
+  // bastano: lo stesso campione per tutte le domande sul sale qui sotto. Nessun seme scelto)
+  const sale = [{ contenuto: 'crosta di sale' }, { contenuto: 'crosta di sale', grandezza: 2 }]; let MS = MONDI, cc = causaComune(sale, { mondi: MS });
+  while (!(cc.provati > 100) && MS < 16 * MONDI) { MS *= 2; cc = causaComune(sale, { mondi: MS }); }
   assert.ok(cc.provati > 100 && cc.stesso.peso > 0 && cc.separati.peso > 0 && cc.stesso.errore > 0);
   // ⟨f²⟩ ≥ ⟨f⟩²: nello stesso mondo pesa di più, tanto più quanto più il sale è di pochi mondi
   assert.ok(cc.guadagno > 1.5 && cc.probabilita > 0.6, `guadagno ${cc.guadagno}`); tra(cc.probabilita, cc.guadagno / (1 + cc.guadagno) - 1e-12, cc.guadagno / (1 + cc.guadagno) + 1e-12, 'la probabilità dai pesi (a priori ½)');
   // la scelta segue i pesi: su molte etichette «stesso mondo» esce con la frequenza che i pesi dicono
-  const N = 400; let stesso = 0; for (let k = 0; k < N; k++) if (causaComune(sale, { mondi: MONDI, etichetta: `coppia ${k}` }).scelta === 'stesso') stesso++;
+  const N = 400; let stesso = 0; for (let k = 0; k < N; k++) if (causaComune(sale, { mondi: MS, etichetta: `coppia ${k}` }).scelta === 'stesso') stesso++;
   const f = stesso / N; assert.ok(Math.abs(f - cc.probabilita) < 4 * Math.sqrt((cc.probabilita * (1 - cc.probabilita)) / N), `stesso mondo ${f} delle volte contro ${cc.probabilita}`); assert.ok(f > 0.5);
   // e quando stanno insieme, il mondo scelto è più salato: due croste scelgono in proporzione a f², una sola a f
   // (in attesa: ⟨f³⟩/⟨f²⟩ ≥ ⟨f²⟩/⟨f⟩; qui si controlla entro l'errore del campione, perché il sale dei mondi asciutti copre quasi ovunque la stessa parte)
-  const parte = (bolle, opz) => { let s = 0, q = 0; for (let k = 0; k < 150; k++) { const r = incontra(bolle, { ...opz, mondi: MONDI, etichetta: `sale ${k}` }); assert.ok(r.esiste); const f = r.bolle[0].giudizio.parte; s += f; q += f * f; } return { media: s / 150, errore: Math.sqrt(Math.max(0, q / 150 - (s / 150) ** 2) / 150) }; };
+  const parte = (bolle, opz) => { let s = 0, q = 0; for (let k = 0; k < 150; k++) { const r = incontra(bolle, { ...opz, mondi: MS, etichetta: `sale ${k}` }); assert.ok(r.esiste); const f = r.bolle[0].giudizio.parte; s += f; q += f * f; } return { media: s / 150, errore: Math.sqrt(Math.max(0, q / 150 - (s / 150) ** 2) / 150) }; };
   const p1 = parte([sale[0]], {}), p2 = parte(sale, { insieme: 'pianeta' }), una = p1.media, due = p2.media; assert.ok(due > una - 4 * Math.hypot(p1.errore, p2.errore), `il sale copre ${due} dei mondi scelti con due croste, ${una} con una`);
   // mare e ghiaccio: i mondi col mare hanno meno ghiaccio: i pesi dicono «separati»
   const mg = causaComune([{ contenuto: 'acqua liquida' }, { contenuto: 'ghiaccio' }], { mondi: MONDI }); assert.ok(mg.guadagno < 1 && mg.probabilita < 0.5);
   // un a priori diverso (parte della domanda) sposta la risposta come deve
-  const raro = causaComune(sale, { mondi: MONDI, aPriori: 0.01 }); tra(raro.probabilita, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) - 1e-12, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) + 1e-12, 'con a priori 1%');
+  const raro = causaComune(sale, { mondi: MS, aPriori: 0.01 }); tra(raro.probabilita, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) - 1e-12, (0.01 * cc.guadagno) / (0.01 * cc.guadagno + 0.99) + 1e-12, 'con a priori 1%');
   console.log(`      (due croste di sale su ${cc.provati} mondi${cc.dubbi ? ` (${cc.dubbi} «forse» lasciati fuori: il sale dei mari chiusi lo sa la superficie)` : ''}: nello stesso mondo ${num(cc.stesso.peso)} ± ${num(cc.stesso.errore, 2)}, in due ${num(cc.separati.peso)} ± ${num(cc.separati.errore, 2)}: la causa comune pesa ${num(cc.guadagno)} volte di più → stesso mondo con probabilità ${num(cc.probabilita)}; su ${N} domande: ${num(f)})`);
   console.log(`      (il sale copre in media ${num(100 * una)}% del mondo scelto da una crosta, ${num(100 * due)}% di quello scelto da due; mare e ghiaccio: stesso mondo ${num(mg.guadagno)} volte «separati», probabilità ${num(mg.probabilita)})`);
 });

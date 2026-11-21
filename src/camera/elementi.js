@@ -67,14 +67,13 @@
 //     et al. 2017 (gli alogeni tra metallo e silicato). Nessuna di queste è stata riletta qui.
 // NON TORNA (stampato da test/test_elementi.mjs): la condensazione nel disco che si raffredda (disco.js: il disco viscoso, e
 // i planetesimi che tengono ciò che era condensato quando sono nati, Cassen 1996) toglie al pianeta come la Terra solo il
-// 10–15% di Na, K, Cl (rispetto al Mg e alla stella: Na 0,87, K 0,89; la Terra vera ~0,2): quasi tutti i suoi planetesimi
-// nascono tardi, quando il disco viscoso è freddo e la sua colonna più alta; le perdite durante l'accrescimento (2b) tolgono
-// poi una parte del cloro (metà, nella sua storia di urti) ma non il sodio e il potassio, che non escono dal fuso: resta
-// l'eccesso di TUTTI i moderatamente volatili (Na ×4,6 la Terra; l'evaporazione dal fuso — EVAPORA — non tocca gli embrioni
-// della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20; i loro planetesimi si uniscono prima che l'²⁶Al li fonda, e
-// l'evaporazione qui agisce solo a gas sparito, quando all'²⁶Al resta mille volte meno del calore che fonde la roccia); il
-// mare di quel pianeta resta troppo salato (189 g/kg, quasi tutto NaCl: il cloro del pianeta è 154 ppm, ~10 volte la Terra);
-// l'equilibrio Fe + H₂O ⇌ FeO + H₂ senza la sua lentezza al freddo ossida il ferro dei planetesimi nati tardi (FeO del mantello
+// 10–15% di Na, K, Cl: quasi tutti i suoi planetesimi nascono tardi, quando il disco viscoso è freddo. Il resto lo toglie
+// l'EVAPORAZIONE DAI PLANETESIMI FUSI DALL'²⁶Al (perditeAccrescimento, EVAPORA_PLANETESIMI: Young et al. 2019): ~80% della roccia
+// di quel pianeta viene da planetesimi nati dopo l'isolamento del loro embrione e fusi da soli, che perdono nel gas del disco
+// tutto il loro Na, K, Cl; il mantello resta con Na 2800 ppm (Terra 2600), Cl 32 ppm (17–30), Na/Mg sulla stella 0,20 (Terra
+// ~0,2) e un mare di 44 g/kg (prima 172, quasi tutto NaCl). Il potassio è 20 ppm (Terra 237) perché la stella ne ha dieci
+// volte meno del Sole (le rese di Kobayashi). L'equilibrio Fe + H₂O ⇌ FeO + H₂ senza la sua lentezza al freddo ossida il
+// ferro dei planetesimi nati tardi (FeO del mantello
 // 13%, Terra 8%: dichiarato); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese
@@ -245,6 +244,13 @@ export const rapportoSolare = (X, a, b) => Math.log10((X[a] / X[b]) / (PROTOSOLA
 // rocce né nel CO (tutto il carbonio come CO: semplificazione dichiarata); il FeO entra nei silicati come soluzione ideale.
 // Solo equilibrio: la lentezza della reazione al freddo non c'è (dichiarato).
 const P_NEBULOSA = 1e-4, TROUTON = 88;
+// LA LENTEZZA DEL FERRO CHE SI OSSIDA NEL GAS (disco.js la applica ai planetesimi asciutti, dentro la neve). L'equilibrio vuole il
+// ferro ossidato dove il gas è freddo; ma per entrare nei silicati il Fe²⁺ deve diffondere nell'olivina, e al freddo non fa in
+// tempo: Grossman, Fedkin e Simon 2012 (Meteorit. Planet. Sci. 47, 2160 [S: dall'estratto]) trovano che in qualche migliaio di
+// anni, anche con dieci volte l'acqua del Sole, i grani di olivina di 1 µm arrivano al 2% di fayalite (5% quelli di 0,1 µm):
+// il FeO dei silicati non viene dal gas della nebulosa ma dall'acqua dentro i planetesimi (l'alterazione acquosa, che ossida il
+// metallo: dove c'è ghiaccio). Qui: nei solidi asciutti il FeO dei silicati non supera FA_NEBULOSA moli per mole di FeO + MgO.
+export const FA_NEBULOSA = 0.02;
 const pressioneParziale = (X, s) => { const nH2 = X.H / ELEMENTI.H.massa / 2 + X.He / ELEMENTI.He.massa; return P_NEBULOSA * (X[s] / ELEMENTI[s].massa) / nH2; };
 export function frazioneCondensata(s, T, X = PROTOSOLARE) {
   const e = ELEMENTI[s]; if (e.sede === 'atmo' || e.sede === 'ghiaccio') return 0; if (!(X[s] > 0)) return 0;
@@ -296,7 +302,7 @@ const OSSIGENO = Float64Array.from(SIMBOLI, (s) => ELEMENTI[s].ossigeno), T50 = 
 const METALLICI = new Set(['Fe', 'Ni', 'Co', 'P', 'S'].map((s) => IDX[s]));
 export function tabellaSolidi(X = PROTOSOLARE) {
   let t = TABELLE.get(X); if (t) return t;
-  const roccia = new Float64Array(NT), metallo = new Float64Array(NT), el = new Float64Array(NT * NE);
+  const roccia = new Float64Array(NT), metallo = new Float64Array(NT), el = new Float64Array(NT * NE), feo = new Float64Array(NT);
   const nC = CONDENSA.length, xs = new Float64Array(nC), kf = new Float64Array(nC), ox = new Float64Array(nC), t50 = new Float64Array(nC), ms = new Float64Array(nC), met = new Uint8Array(nC);
   const nH2 = X.H / ELEMENTI.H.massa / 2 + X.He / ELEMENTI.He.massa; let Orocce = 0;
   for (let j = 0; j < nC; j++) { const i = CONDENSA[j], x = X[SIMBOLI[i]] || 0; xs[j] = x; ms[j] = MASSA[i]; ox[j] = OSSIGENO[i]; t50[j] = T50[i]; met[j] = METALLICI.has(i) ? 1 : 0;
@@ -309,7 +315,7 @@ export function tabellaSolidi(X = PROTOSOLARE) {
     // il ferro ossidato nel gas (ferroOssidato)
     const nFe = jFe >= 0 ? el[o + IDX.Fe] / ELEMENTI.Fe.massa : 0; let nFeO = 0;
     if (nFe > 0 && h2o > 0) { const lnK = -(gibbs('FeO', T) + gibbs('H2', T) - gibbs('Fe', T) - gibbs('H2O', T)) / (R_GAS * T), a = Math.exp(lnK) * (h2o / nH2s); nFeO = a >= 1 ? nFe : Math.min(nFe, (a * nSil) / (1 - a)); }
-    Ob += nFeO; m -= nFeO * ELEMENTI.Fe.massa; el[o + IDX.O] = Ob * ELEMENTI.O.massa; r += el[o + IDX.O];
+    Ob += nFeO; m -= nFeO * ELEMENTI.Fe.massa; el[o + IDX.O] = Ob * ELEMENTI.O.massa; r += el[o + IDX.O]; feo[k] = nFeO * ELEMENTI.Fe.massa;
     roccia[k] = r; metallo[k] = Math.max(0, m);
   }
   const freddi = solidiA(T_MIN, X, { ghiacci: true }), luogo = (T) => { const x = (Math.log(Math.min(T_MAX, Math.max(T_MIN, T))) - LT0) / DLT, k = Math.min(NT - 2, Math.floor(x)); return [k, x - k]; };
@@ -317,6 +323,8 @@ export function tabellaSolidi(X = PROTOSOLARE) {
     X, ghiaccio: freddi.ghiaccio, ghiacci: freddi.ghiacci, rocciaFredda: freddi.roccia, quotaAcqua: freddi.quotaAcqua, perAcqua: freddi.perAcqua,
     roccia: (T) => { const [k, u] = luogo(T); return roccia[k] + u * (roccia[k + 1] - roccia[k]); },
     metallo: (T) => { const [k, u] = luogo(T); return metallo[k] + u * (metallo[k + 1] - metallo[k]); },
+    // il ferro (kg per kg di gas) che l'equilibrio col gas mette nei silicati come FeO, a T
+    feo: (T) => { const [k, u] = luogo(T); return feo[k] + u * (feo[k + 1] - feo[k]); },
     // aggiunge a «dove» (Float64Array NE, kg) la roccia di massa «kg» condensata a T, nelle proporzioni della tabella
     aggiungi: (dove, kg, T) => { const [k, u] = luogo(T), r = roccia[k] + u * (roccia[k + 1] - roccia[k]); if (!(r > 0) || !(kg > 0)) return; const q = kg / r; for (let i = 0; i < NE; i++) { const a = el[k * NE + i], b = el[(k + 1) * NE + i]; if (a || b) dove[i] += q * (a + u * (b - a)); } },
     // (per le prove: i valori della tabella in un nodo, da confrontare con solidiA)
@@ -507,7 +515,8 @@ export function crostaDelPianeta(P, { stella } = {}) {
 // disco.js con il disco viscoso che si raffredda (Ṁ ∝ (1 + t/t_s)^−3/2): a 1 UA il disco del Sole parte da ~1200 K e scende
 // sotto i 300 K in un milione di anni; ma i planetesimi nascono in proporzione alla polvere che c'è, e la colonna di un disco
 // viscoso a temperatura più bassa è più alta: quasi tutti nascono tardi e al freddo. Toglie a Na, K, Cl il 10–15% dove nasce
-// la Terra del modello, non i quattro quinti della Terra vera. Dichiarato in NON TORNA.)
+// la Terra del modello, non i quattro quinti della Terra vera: il resto lo toglie l'evaporazione dai planetesimi fusi,
+// EVAPORA_PLANETESIMI.)
 export const INTRAPPOLATO = 0.05; // la parte del fuso che resta tra i cristalli quando un oceano di magma solidifica (Elkins-Tanton 2008: 1–5%) [R]
 export const PERDITE = Object.freeze({
   al26: 5.23e-5, tauAl: 1.034e6, energiaAl: 3.12 * 1.602e-13, // ²⁶Al/²⁷Al iniziale (Jacobsen et al. 2008), vita media (anni), J per decadimento [R]
@@ -527,6 +536,12 @@ export const parteTolta = (x) => (x >= 1 ? 1 : x <= 0 ? 0 : Math.min(1, 0.4 * x 
 const energiaFusione = (T) => PERDITE.cp * Math.max(0, liquidusPeridotite(0) - T) + PERDITE.latente;
 // il calore dell'alluminio 26 ancora da liberare a t (anni) per kg di roccia, con la parte di alluminio della roccia
 const caloreAl26 = (xAl, t) => (xAl / (ELEMENTI.Al.massa / 1000)) * NA_AVO * PERDITE.al26 * Math.exp(-t / PERDITE.tauAl) * PERDITE.energiaAl;
+// LA PARTE FUSA DALL'ALLUMINIO 26 di un planetesimo nato a t (anni) dove il disco era a T (K), con la parte xAl di alluminio
+// nella sua roccia: il calore che l'²⁶Al gli darà da lì in poi diviso per quello che fonde la roccia, al più 1 (Hevey e Sanders
+// 2006 [R]: sopra ~20 km di raggio la conduzione non lo raffredda in tempo, e i corpi nati entro ~1,5 Ma fondono; i planetesimi
+// del collasso dei ciottoli nascono di ~100 km: Johansen et al. 2007, Simon et al. 2016 [R]). Lo usa disco.js per ogni tempo di
+// nascita dei planetesimi di un luogo.
+export const fusoDaAlluminio = (xAl, t, T) => { const Ef = energiaFusione(T); return Ef > 0 ? Math.min(1, caloreAl26(xAl, Math.max(0, t)) / Ef) : 0; };
 // la luce XUV integrata (J/m² a 1 UA, per L = L☉) tra t1 e t2 anni
 function xuvIntegrata(t1, t2) {
   if (!(t2 > t1)) return 0; const s = PERDITE.saturaFino * 1e9, F0 = PERDITE.XUV1UA * Math.pow(PERDITE.saturaFino, -1.23); let E = 0;
@@ -547,23 +562,43 @@ const MOBILI_R = [...ALOGENI, IDX.Na, IDX.K, IDX.Zn, IDX.Mg, IDX.Si], MOBILI_G =
 // liquidus in superficie. Per Na, K, Cl, Zn e, molto meno, Mg e Si (le specie del vapore sono contate come atomi: NaCl, SiO, KCl
 // non ci sono — dichiarato; il frazionamento degli isotopi di Mg e Si che questa perdita lascia non è modellato).
 const EVAPORA = [IDX.Na, IDX.K, IDX.Cl, IDX.Zn, IDX.Mg, IDX.Si].map((i) => MOBILI_R.indexOf(i));
+// L'EVAPORAZIONE DAI PLANETESIMI FUSI DALL'ALLUMINIO 26, prima che finiscano in un embrione (Hin et al. 2017, Nature 549, 511
+// [R]; Young et al. 2019, Icarus 323, 1 [S: letto il testo da PMC6364317]). Un planetesimo nato dopo che l'embrione del suo luogo
+// si è isolato (disco.js: tIso, poche decine di migliaia di anni dentro 1 UA) fonde DA SOLO, se è nato abbastanza presto, e con
+// la sua gravità da poco (λ ≪ 1: Young, eq. 15–17, la fuga è idrodinamica) il suo vapore se ne va nel gas del disco. Young et
+// al. trovano che l'evaporazione QUASI ALL'EQUILIBRIO nell'idrogeno del disco (saturazione ~0,95–0,99), in 10⁴–10⁵ anni di
+// oceano di magma, toglie ~12% del magnesio e ~15% del silicio (il loro miglior accordo con gli isotopi di Mg e Si della Terra) e
+// lascia [K]/[K]₀ ≈ 2·10⁻³: il potassio dei corpi evaporati è perso, e quello della Terra viene dalla parte che non è
+// evaporata (~¼). Qui: il flusso di ogni elemento è quello di Hertz–Knudsen, p_sat·√(m/2πkT) (la stessa legge di EVAPORA, con
+// la stessa pressione di vapore di Clausius–Clapeyron fissata dal T50 di Lodders), e la superficie, il tempo e la parte che
+// manca alla saturazione sono gli stessi per tutti gli elementi: il numero di volte e che un elemento cala è quello del
+// magnesio (−ln(1 − 0,12), Young et al. 2019) per il rapporto delle due velocità, (√m·p_sat/c₀)_X / (√m·p_sat/c₀)_Mg.
+// Na, K, Cl, Br, I, Zn ne escono con e^(−N) di qualche 10⁻¹⁰⁰: tutto ciò che è fuso se ne va. Il magnesio e il silicio NON sono
+// tolti qui (le loro specie del vapore, Mg e SiO, e il loro peso sul resto della catena non sono modellati: dichiarato); il
+// vapore partito non ricondensa sulla polvere fredda vicina (dichiarato: Young lo tratta allo stesso modo).
+const EVAPORA_PLANETESIMI = [IDX.Na, IDX.K, IDX.Cl, IDX.Br, IDX.I, IDX.Zn].map((i) => MOBILI_R.indexOf(i)), MG_YOUNG = -Math.log(1 - 0.12);
 const UR = Float64Array.from(MOBILI_R, (i) => U_ROCCIA[i]), UG = Float64Array.from(MOBILI_G, (i) => U_GHIACCI[i]), KH = MOBILI_G.indexOf(IDX.H);
 const KNA = MOBILI_R.indexOf(IDX.Na), KK = MOBILI_R.indexOf(IDX.K), MASSA_R = Float64Array.from(MOBILI_R, (i) => MASSA[i]);
-// membri: gli embrioni del pianeta [{ id, roccia, ghiacci (Float64Array NE, kg), t (anni: quando è fatto), T (K: il disco lì),
+// membri: gli embrioni del pianeta [{ id, roccia, ghiacci (Float64Array NE, kg), fusa (facoltativa, Float64Array NE: la parte
+//   della roccia dei planetesimi fusi da soli dall'²⁶Al, disco.js rocciaFusa), t (anni: quando è fatto), T (K: il disco lì),
 //   R (m), a (UA) }]; fusioni: gli urti in ordine [{ g, p (id del bersaglio e di chi cade), t, Mg, Mp (kg di solidi), Rg, Rp (m),
 //   a (UA) }] (anche quelli che non c'entrano: si prendono quelli del pianeta); tGas: quando sparisce il gas (anni); eta: l'età
 //   della stella; L: la luce della stella (in L☉: quella di sequenza principale, che scala la luce dura del Sole giovane);
 //   Lt (facoltativa): la luce della stella al tempo t (L☉), che scalda il fuso a gas sparito (la stella giovane si sta ancora
 //   stringendo ed è più luminosa: stelle.js luceGiovane); radice: l'id del pianeta.
 // → { roccia, ghiacci (ciò che resta), spazio (kg per elemento: ciò che è partito), urti: [{ t, x, tolta, tolta2, fusa, fuori }],
-//     fuga, negliUrti (kg partiti per le due vie), solidificato (la parte del fuso solida all'età della stella) }
+//     fuga, negliUrti (kg partiti per le due vie), evaporato (dagli embrioni), planetesimi (kg evaporati dai planetesimi), solidificato (la parte del fuso solida all'età della stella) }
 export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, Lt = null, radice, miscela = PROTOSOLARE }) {
   const G = COSTANTI.G, stato = new Map(), spR = new Float64Array(NR), spG = new Float64Array(NG), urti = []; let fuga = 0, negliUrti = 0, evaporato = 0;
   // (per l'evaporazione: la pressione di vapore di ogni elemento al liquidus in superficie, in Pa, per la miscela di questa stella,
   // e la sua parte in massa nella roccia condensata tutta, a cui quella pressione si riferisce)
   const Ts = liquidusPeridotite(0), freddo = tabellaSolidi(miscela).rocciaFredda, PV = new Float64Array(NR), C0 = new Float64Array(NR);
-  for (const k of EVAPORA) { const sm = SIMBOLI[MOBILI_R[k]], e = ELEMENTI[sm], pi = pressioneParziale(miscela, sm); if (!(pi > 0)) continue; const dH = e.T50 * (TROUTON / R_GAS - Math.log(pi / 2));
+  for (let k = 0; k < NR; k++) { const sm = SIMBOLI[MOBILI_R[k]], e = ELEMENTI[sm], pi = pressioneParziale(miscela, sm); if (!(pi > 0)) continue; const dH = e.T50 * (TROUTON / R_GAS - Math.log(pi / 2));
     PV[k] = 1e5 * (pi / 2) * Math.exp(-dH * (1 / Ts - 1 / e.T50)); C0[k] = miscela[sm] / freddo; }
+  // (i planetesimi fusi: quante volte e cala ciascuno, sul magnesio di Young et al. 2019 — vedi EVAPORA_PLANETESIMI —)
+  const KMG = MOBILI_R.indexOf(IDX.Mg), vel = (k) => (PV[k] > 0 && C0[k] > 0 ? (Math.sqrt(MASSA_R[k]) * PV[k]) / C0[k] : 0), NPL = new Float64Array(NR);
+  for (const k of EVAPORA_PLANETESIMI) NPL[k] = vel(KMG) > 0 ? (MG_YOUNG * vel(k)) / vel(KMG) : 0;
+  let planetesimi = 0;
   const nuovo = (t0, T, a, R, M) => ({ R_: new Float64Array(NR), G_: new Float64Array(NG), pR: new Float64Array(NR), pG: new Float64Array(NG), sR: new Float64Array(NR), sG: new Float64Array(NG), tR: new Float64Array(NR), tG: new Float64Array(NG), t0, T, a, R, M, energia: 0, tFine: t0, tFuga: -Infinity, tEvap: -Infinity, psi: 0 });
   // il raffreddamento del fuso: quanta energia esce per m² e secondo, a t (nebulosa o stella), per un corpo a «a» UA in un disco a T
   const flussoNetto = (c, t) => {
@@ -617,8 +652,14 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, Lt = null,
   const ids = new Set(), rocciaTutta = new Float64Array(NE), ghiacciTutti = new Float64Array(NE);
   for (const o of membri) {
     let Mr = 0, Mg = 0; for (let i = 0; i < NE; i++) { Mr += o.roccia[i]; Mg += o.ghiacci[i]; rocciaTutta[i] += o.roccia[i]; ghiacciTutti[i] += o.ghiacci[i]; }
-    const xAl = Mr > 0 ? o.roccia[IDX.Al] / Mr : 0, Ef = energiaFusione(o.T), psi = Ef > 0 ? Math.min(1, caloreAl26(xAl, o.t) / Ef) : 0, c = nuovo(o.t, o.T, o.a, o.R, Mr + Mg);
-    for (let k = 0; k < NR; k++) { c.R_[k] = o.roccia[MOBILI_R[k]]; c.pR[k] = psi * c.R_[k]; } for (let k = 0; k < NG; k++) { c.G_[k] = o.ghiacci[MOBILI_G[k]]; c.pG[k] = psi * c.G_[k]; }
+    const xAl = Mr > 0 ? o.roccia[IDX.Al] / Mr : 0, Ef = energiaFusione(o.T), psi = Ef > 0 ? Math.min(1, caloreAl26(xAl, o.t) / Ef) : 0;
+    // i suoi planetesimi fusi da soli (o.fusa: gli elementi della loro roccia, già pesati con la parte fusa) hanno perso nel gas
+    // del disco i moderatamente volatili, prima di cadere sull'embrione (EVAPORA_PLANETESIMI)
+    const R0 = new Float64Array(NR); for (let k = 0; k < NR; k++) R0[k] = o.roccia[MOBILI_R[k]];
+    if (o.fusa) for (const k of EVAPORA_PLANETESIMI) { const via = Math.min(R0[k], o.fusa[MOBILI_R[k]] * -Math.expm1(-NPL[k])); if (!(via > 0)) continue; R0[k] -= via; spR[k] += via; Mr -= via; planetesimi += via; }
+    const G0 = Float64Array.from(MOBILI_G, (i) => o.ghiacci[i]);
+    const c = nuovo(o.t, o.T, o.a, o.R, Mr + Mg);
+    for (let k = 0; k < NR; k++) { c.R_[k] = R0[k]; c.pR[k] = psi * c.R_[k]; } for (let k = 0; k < NG; k++) { c.G_[k] = G0[k]; c.pG[k] = psi * c.G_[k]; }
     c.psi = psi; c.energia = psi * Ef * c.M; c.tFine = fine(c); stato.set(o.id, c); ids.add(o.id);
   }
   for (const u of fusioni) {
@@ -644,7 +685,7 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, Lt = null,
   const spazio = new Float64Array(NE);
   for (let k = 0; k < NR; k++) { const i = MOBILI_R[k]; rocciaTutta[i] = Math.max(0, rocciaTutta[i] - spR[k]); spazio[i] += spR[k]; }
   for (let k = 0; k < NG; k++) { const i = MOBILI_G[k]; ghiacciTutti[i] = Math.max(0, ghiacciTutti[i] - spG[k]); spazio[i] += spG[k]; }
-  return { roccia: rocciaTutta, ghiacci: ghiacciTutti, spazio, urti, fuga, negliUrti, evaporato, solidificato: solidificato(c, eta) };
+  return { roccia: rocciaTutta, ghiacci: ghiacciTutti, spazio, urti, fuga, negliUrti, evaporato, planetesimi, solidificato: solidificato(c, eta) };
 }
 
 // ---------- 6. L'ACQUA DEL MARE: le tracce
@@ -745,8 +786,14 @@ export function libroDeiConti(P, opz = {}) {
   for (let i = 0; i < NE; i++) {
     const s = SIMBOLI[i], dalVolatile = s === 'H' || s === 'O' || s === 'C' || s === 'N', chiesto = aria[i] + mare[i];
     if (aria[i]) metti('aria', s, aria[i]); if (mare[i]) metti('mare', s, mare[i]);
-    if (dalVolatile) { const resta = acquaFuori[i] - chiesto + (s === 'O' ? 0 : 0); if (resta < -1e-9 * Math.max(acquaFuori[i], chiesto)) { // (l'ossigeno dell'aria che non viene dall'acqua viene dalla roccia: O2, CO2 dalla crosta)
-        if (s === 'O') { mantello[i] += resta; } else scoperti.push({ elemento: s, serbatoio: 'acqua fuori', manca: -resta }); }
+    // (l'ossigeno dell'aria che non viene dall'acqua viene dalla roccia: O2, CO2 dalla crosta. L'IDROGENO dei gas ridotti dell'aria
+    // — metano, ammoniaca, idrogeno — di un pianeta che lo trattiene: chimica.js atmosfera ne fa l'equilibrio con l'idrogeno
+    // dell'acqua fuori, ma il mare si tiene tutta l'acqua fuori; quello in più viene dall'acqua sciolta nel MANTELLO, che esce coi
+    // magmi come H2 perché il ferro del fuso la riduce, 3FeO + H2O → Fe3O4 + H2, e ne tiene l'ossigeno (Holland 1984; Kasting et
+    // al. 1993; Hirschmann 2012 [R]: i gas dei vulcani di un mantello ridotto sono ricchi di H2). Prima il libro lo cercava
+    // nell'acqua fuori e andava scoperto: su un pianeta con l'aria all'80% di metano a 4,6 bar mancavano 2,7·10¹⁸ kg di H)
+    if (dalVolatile) { const resta = acquaFuori[i] - chiesto; if (resta < -1e-9 * Math.max(acquaFuori[i], chiesto)) {
+        if (s === 'O' || s === 'H') { mantello[i] += resta; } else scoperti.push({ elemento: s, serbatoio: 'acqua fuori', manca: -resta }); }
       else metti('ghiacci', s, Math.max(0, resta)); }
     else mantello[i] -= chiesto;
     if (mantello[i] < -1e-9 * Math.max(1, el.silicato[i])) scoperti.push({ elemento: s, serbatoio: 'mantello', manca: -mantello[i] });

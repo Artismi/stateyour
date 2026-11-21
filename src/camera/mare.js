@@ -34,9 +34,11 @@
 //      portano (per il clima), le province del mare trovate nei campi, il mare a un momento dell'anno e della marea.
 //
 // NIENTE È TARATO SUL MARE DELLA TERRA. Ogni numero è una conseguenza o un dato misurato in laboratorio o in natura,
-// citato dove sta (DATI, IONI, TERMO qui; ROCCE e MINERALI_ROCCIA in chimica.js §8). La Terra di prova esce a 55 g/kg
-// (prima 71: il sodio delle argille nuove tornava come sale, e il cloro non scendeva con le placche), 1,6 volte il vero: il
-// confronto, voce per voce, lo stampa test/test_mare.mjs.
+// citato dove sta (DATI, IONI, TERMO qui; ROCCE e MINERALI_ROCCIA in chimica.js §8). La Terra di prova esce a 32 g/kg, Na/Cl
+// 0,97, pH 8,4 (prima 55, Na/Cl 1,8 e pH 8,7: il sodio del solfato di sodio non aveva uscita; ora il fondo caldo lo lascia
+// nell'albite, perché il calcio che l'albitizzazione libera cade come anidrite: fluidoCaldo; e prima ancora 71: il sodio delle
+// argille nuove tornava come sale, e il cloro non scendeva con le placche): il confronto, voce per voce, lo stampa
+// test/test_mare.mjs.
 // LEGGI EMPIRICHE / DATI:
 //   · entalpie ed entropie degli ioni e delle specie in acqua a 298 K (CODATA 1989; NBS 1982; Fe²⁺: Parker e
 //     Khodakovskii 1995; gesso e silice: Robie e Hemingway 1995). Danno a 25 °C: calcite log K = −8,48 (misurato
@@ -289,9 +291,19 @@ export function fluidoCaldo(tot, T, rocce) {
   const K = costanti(T), b = rocce.basalto, Mg = tot.Mg || 0, Ca0 = (tot.Ca || 0) + Mg, Na0 = tot.Na || 0, K0 = tot.K || 0, I = 0.5 * (Na0 + K0 + (tot.Cl || 0) + 4 * (Ca0 + (tot.S || 0))) + 1e-6;
   const g1 = gammaIone('Na+', I, K), g2 = gammaIone('Ca2+', I, K), gK = gammaIone('K+', I, K), an = b.ospiti.anortite * b.Ca, xAb = b.Na / Math.max(1e-9, b.Na + an), xAn = 1 - xAb;
   const Kab = (kEq({ 'Na+': 2, CaAl2Si2O8: 1, SiO2: 4 }, { NaAlSi3O8: 2, 'Ca2+': 1 }, T) * Math.max(xAn, 1e-6)) / Math.max(xAb * xAb, 1e-9), Kor = kEq({ 'Na+': 1, KAlSi3O8: 1 }, { 'K+': 1, NaAlSi3O8: 1 }, T) * (b.K / Math.max(b.Na, 1e-9));
+  // L'ANIDRITE: l'acqua che scende e si scalda la lascia cadere (CaSO4 è meno solubile al caldo: Bischoff e Seyfried 1978; Mottl
+  // 1983; Alt 1995 [R]): il calcio sciolto nel fluido caldo non supera quello che il solfato rimasto permette,
+  // (Ca − y)(SO4 − y)·γCa·γSO4 = K_anidrite(T) (dalla stessa tabella: chimica.js CaSO4). È il calcio LIBERO che conta
+  // nell'equilibrio col plagioclasio: dove il solfato supera il calcio e il magnesio dell'acqua, l'albitizzazione non è
+  // frenata dal calcio che libera (che cade come anidrite) e il fluido lascia nella roccia il sodio del solfato di sodio. Sulla
+  // Terra il calcio supera il solfato (0,063 contro 0,028 mol/kg): l'anidrite prende tutto il solfato, e il freno resta. (Quando
+  // la crosta si raffredda l'anidrite si riscioglie quasi tutta — Sleep 1991; Alt 1995 [R] —: il calcio e il solfato tornano al
+  // mare, come prima.)
+  const gS = gammaIone('SO4(2-)', I, K), S0 = Math.max(0, tot.S || 0), qAn = K.sali.anidrite / (g2 * gS);
+  const libero = (Ct) => { if (!(Ct * S0 > qAn)) return Ct; const y = 0.5 * (Ct + S0 - Math.sqrt((Ct - S0) ** 2 + 4 * qAn)); return Math.max(1e-12, Ct - y); };
   let Na = Na0, Ca = Ca0;
   if (Na0 + Ca0 > 1e-9) { let lo = -0.999 * Math.min(b.Na, 2 * Ca0), hi = 0.999 * Math.min(Na0, 2 * an);
-    for (let it = 0; it < 44; it++) { const x = 0.5 * (lo + hi); if (Math.log(g2 * (Ca0 + x / 2)) - 2 * Math.log(g1 * (Na0 - x)) > Math.log(Kab)) hi = x; else lo = x; }
+    for (let it = 0; it < 44; it++) { const x = 0.5 * (lo + hi); if (Math.log(g2 * libero(Ca0 + x / 2)) - 2 * Math.log(g1 * (Na0 - x)) > Math.log(Kab)) hi = x; else lo = x; }
     const x = 0.5 * (lo + hi); Na = Na0 - x; Ca = Ca0 + x / 2; }
   const dK = limita((Na * Kor * g1) / gK - K0, -K0, b.K); Na = Math.max(0, Na - dK);
   return { Na, K: K0 + dK, Mg: 0, Ca, Cl: tot.Cl || 0, S: Math.max(0, (tot.S || 0) - DATI.solfatoRidotto) };
@@ -1437,7 +1449,7 @@ export function scenaMolecolare(stato, { lon = 0, lat = 0, profondita = 0, latoM
   for (let n = 0; n < NS; n++) { const z = (Math.floor(n / (nx * nx)) + 0.5) * a; if (z < zSolido + 0.12 || z > zSup) stato_[n] = 1; }
   if (quale) { const da = El.length; reticolo(quale, Lnm, zSolido, metti, legami, h); parte(`solido: ${quale}`, da); etichette.push({ testo: quale, pos: [Lnm / 2, Lnm / 2, zSolido / 2] }); }
   // --- gli ioni, le coppie, i gas: quanti ce ne sono davvero (gli stessi conteggi del campione), ognuno al posto di una molecola d'acqua
-  const liberi = []; for (let n = 0; n < NS; n++) if (!stato_[n]) liberi.push(n);
+  const liberi = []; for (let n = 0; n < NS; n++) if (!stato_[n]) liberi.push(n); const L0 = liberi.length;
   let giro = 0; const prendi = () => { for (let p = 0; p < 50 && liberi.length; p++) { const q = Math.floor(h(giro++, 91) * liberi.length), n = liberi[q]; if (!stato_[n]) { stato_[n] = 1; return n; } } return -1; };
   const guscio = (n, pos, segno) => { const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)); for (const [di, dj, dk] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) { const m = sito(i + di, j + dj, k + dk); if (stato_[m]) continue; versoIone[m * 3] = pos[0]; versoIone[m * 3 + 1] = pos[1]; versoIone[m * 3 + 2] = pos[2]; segnoIone[m] = segno; } };
   const molecola = (f, c, n) => { // gli atomi di uno ione o di un gas attorno al punto c
@@ -1458,6 +1470,9 @@ export function scenaMolecolare(stato, { lon = 0, lat = 0, profondita = 0, latoM
   for (const nome in camp.coppie) { if (nome.includes('incontri')) continue; const [ca, an] = nome.split(' '), da = El.length, N = quanti(nome, camp.coppie[nome].nelCampione); let fatti = 0;
     for (let q = 0; q < N; q++) { const n = prendi(); if (n < 0) break; const i = n % nx, j = Math.floor(n / nx) % nx, k = Math.floor(n / (nx * nx)), m = sito(i + 1, j, k), c = centro(n), dist = (IONI[ca][6] + IONI[an][6] + (ca === 'Mg2+' ? 2.76 : 0)) / 10; if (stato_[m]) continue; stato_[m] = 1;
       molecola(ca, [c[0] - dist / 2 + a / 2, c[1], c[2]], n); molecola(an, [c[0] + dist / 2 + a / 2, c[1], c[2]], n + NS); guscio(n, c, 1); guscio(m, centro(m), -1); fatti++; } conteggi[nome] = fatti; parte(`coppia ${nome}`, da); }
+  // --- la densità vera: il reticolo ha nx³ posti, con nx arrotondato, cioè fino al ±12% di posti in più o in meno di quante
+  // molecole d'acqua ci stanno davvero (nW·a³ per posto); i posti di troppo restano vuoti, a caso (prima erano tutti acqua)
+  { const via = liberi.filter((n) => !stato_[n]).length - (Math.round(nW * a ** 3 * L0) - (L0 - liberi.filter((n) => !stato_[n]).length)); for (let q = 0; q < via; q++) if (prendi() < 0) break; }
   // --- l'aria sopra la superficie (a quella pressione e temperatura: p/kT molecole per m³)
   if (isFinite(zSup)) { const da = El.length, nAria = ((stato.pressioneAria / (KB * camp.T)) * 1e-27) * Lnm * Lnm * (Lnm - zSup), N = Math.round(nAria + h(5, 77) - 0.5); for (let q = 0; q < N; q++) molecola(h(q, 78) < (stato.aria.O2 || 0) ? 'O2' : (stato.aria.CO2 || 0) > 0.5 ? 'CO2' : 'N2', [h(q, 79) * Lnm, h(q, 80) * Lnm, zSup + 0.3 + h(q, 81) * Math.max(0, Lnm - zSup - 0.3)], q + 2 * NS); parte('aria', da); etichette.push({ testo: 'la superficie', pos: [Lnm / 2, Lnm / 2, zSup] }); }
   // --- l'acqua: ogni molecola al suo posto (spostata di ~0,5 Å), con gli idrogeni verso due vicine, o girata verso lo ione che ha accanto

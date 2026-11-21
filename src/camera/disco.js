@@ -29,7 +29,8 @@
 import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI } from './leggi.js';
 import { stella as stellaVera, luceGiovane } from './stelle.js';
 import { comeSorgente } from './eventi.js';
-import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento } from './elementi.js'; // la catena degli elementi
+import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento, fusoDaAlluminio, FA_NEBULOSA, ELEMENTI } from './elementi.js';
+const MASSA_MG = ELEMENTI.Mg.massa, MASSA_FE = ELEMENTI.Fe.massa, MASSA_O = ELEMENTI.O.massa; // la catena degli elementi
 import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
@@ -147,11 +148,23 @@ export function disco(st, seme = 1) {
     const NT = 24, NR = 64, lr0 = Math.log(0.99 * rIn), lr1 = Math.log(1.01 * rOut), dl = (lr1 - lr0) / (NR - 1), lx = Math.log(xFine) / NT;
     const tk = new Float64Array(NT), wk = new Float64Array(NT), Mk = new Float64Array(NT), Lk = new Float64Array(NT);
     for (let k = 0; k < NT; k++) { const x0 = Math.exp(k * lx), x1 = Math.exp((k + 1) * lx), x = Math.sqrt(x0 * x1); tk[k] = (x - 1) * ts; wk[k] = (x1 - x0) * ts; Mk[k] = Mdot(tk[k]); Lk[k] = Lt(tk[k]); }
-    const Tm = new Float64Array(NR), fm = new Float64Array(NR), el = new Float64Array(NR * NE), somme = new Float64Array(NR), v = new Float64Array(NE);
+    const Tm = new Float64Array(NR), fm = new Float64Array(NR), el = new Float64Array(NR * NE), somme = new Float64Array(NR), v = new Float64Array(NE), u = new Float64Array(NE);
+    // (I PLANETESIMI FUSI DALL'ALLUMINIO 26: per ogni luogo e ogni tempo di nascita la parte della roccia nata da allora in poi che
+    // l'²⁶Al fonde, elemento per elemento — elementi.js fusoDaAlluminio, con l'alluminio di quella roccia —, sommata dalla fine:
+    // fusa[(i·(NT+1) + k)·NE + j]; perditeAccrescimento ne fa evaporare i moderatamente volatili)
+    const fusa = new Float64Array(NR * (NT + 1) * NE), fk = new Float64Array(NT * NE);
     for (let i = 0; i < NR; i++) {
-      const r = Math.exp(lr0 + i * dl), br = (B1 * om(r)) / (r * UA) ** 3, lr = 280 ** 4 / (r * r); let W = 0, Wr = 0, WrT = 0, Wm = 0, Tultima = 0, y = 0; v.fill(0);
-      for (let k = 0; k < NT; k++) { const T = radiceT(br * Mk[k] * Mk[k], lr * Lk[k], y), w = (Mk[k] / T) * wk[k], ro = tab.roccia(T); y = Math.sqrt(T) * 1.0001; Tultima = T; W += w; if (!(ro > 0)) continue; Wr += w * ro; WrT += w * ro * T; Wm += w * tab.metallo(T); tab.aggiungi(v, w * ro, T); }
-      if (Wr > 1e-30 * W) { Tm[i] = WrT / Wr; fm[i] = Wm / Wr; for (let j = 0; j < NE; j++) el[i * NE + j] = v[j] / Wr; }
+      const r = Math.exp(lr0 + i * dl), br = (B1 * om(r)) / (r * UA) ** 3, lr = 280 ** 4 / (r * r); let W = 0, Wr = 0, WrT = 0, Wm = 0, Tultima = 0, y = 0; v.fill(0); fk.fill(0);
+      for (let k = 0; k < NT; k++) { const T = radiceT(br * Mk[k] * Mk[k], lr * Lk[k], y), w = (Mk[k] / T) * wk[k], ro = tab.roccia(T); y = Math.sqrt(T) * 1.0001; Tultima = T; W += w; if (!(ro > 0)) continue; Wr += w * ro; WrT += w * ro * T; Wm += w * tab.metallo(T);
+        u.fill(0); tab.aggiungi(u, w * ro, T);
+        // (dentro la neve, la lentezza del ferro che si ossida — elementi.js FA_NEBULOSA, Grossman et al. 2012 —: il FeO che
+        // l'equilibrio vorrebbe oltre il 2% di fayalite resta ferro metallo, e il suo ossigeno resta nel gas; oltre la neve
+        // l'acqua dentro i planetesimi lo ossida, e vale l'equilibrio)
+        if (r < neve) { const nMg = u[IDX.Mg] / MASSA_MG, cap = (FA_NEBULOSA / (1 - FA_NEBULOSA)) * nMg * MASSA_FE, eccesso = Math.max(0, w * tab.feo(T) - cap);
+          if (eccesso > 0) { const dO = Math.min(u[IDX.O], (eccesso / MASSA_FE) * MASSA_O); u[IDX.O] -= dO; Wm += eccesso; Wr -= dO; WrT -= dO * T; } }
+        const psi = fusoDaAlluminio(u[IDX.Al] / (w * ro), tk[k], T); for (let j = 0; j < NE; j++) { v[j] += u[j]; fk[k * NE + j] = psi * u[j]; } }
+      if (Wr > 1e-30 * W) { Tm[i] = WrT / Wr; fm[i] = Wm / Wr; for (let j = 0; j < NE; j++) el[i * NE + j] = v[j] / Wr;
+        for (let k = NT - 1; k >= 0; k--) for (let j = 0; j < NE; j++) fusa[(i * (NT + 1) + k) * NE + j] = fusa[(i * (NT + 1) + k + 1) * NE + j] + fk[k * NE + j] / Wr; }
       else { Tm[i] = Tultima; fm[i] = 0; } // (sempre troppo caldo: niente roccia)
       let sum = 0; for (let j = 0; j < NE; j++) sum += el[i * NE + j]; somme[i] = sum;
     }
@@ -161,12 +174,16 @@ export function disco(st, seme = 1) {
       metallo: (r) => { const [k, u] = luogo(r); return fm[k] + u * (fm[k + 1] - fm[k]); },
       // aggiunge a «dove» kg di roccia nata a r, nelle proporzioni della miscela del luogo (sommano esattamente a kg)
       aggiungi: (dove, kg, r) => { const [k, u] = luogo(r), sm = somme[k] + u * (somme[k + 1] - somme[k]); if (!(sm > 0) || !(kg > 0)) return; const q = kg / sm; for (let j = 0; j < NE; j++) { const p = el[k * NE + j], s2 = el[(k + 1) * NE + j]; if (p || s2) dove[j] += q * (p + u * (s2 - p)); } },
+      // aggiunge a «dove» la parte di quei kg (stesse proporzioni) che viene dai planetesimi nati dopo «tDopo» (anni) e fusi
+      // dall'²⁶Al, elemento per elemento (≤ ciò che aggiungi dà)
+      fusa: (dove, kg, r, tDopo) => { const [k, u] = luogo(r), sm = somme[k] + u * (somme[k + 1] - somme[k]); if (!(sm > 0) || !(kg > 0)) return; const q = kg / sm; let n = 0; while (n < NT && tk[n] < tDopo) n++;
+        const a = (k * (NT + 1) + n) * NE, b = ((k + 1) * (NT + 1) + n) * NE; for (let j = 0; j < NE; j++) { const p = fusa[a + j], s2 = fusa[b + j]; if (p || s2) dove[j] += q * (p + u * (s2 - p)); } },
     });
   };
   const Tcond = (r) => laStoria().T(r);
   const sigmaSolidi = (r) => (tab.roccia(Tcond(r)) + (r < neve ? 0 : tab.ghiaccio)) * sigmaGas(r);
-  const rocciaNata = (dove, kg, r) => laStoria().aggiungi(dove, kg, r), metalloNato = (r) => laStoria().metallo(r);
-  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, ts, Mdot0, sigmaGas, sigmaSolidi, Tcond, Tmezzo, Mdot, rocciaNata, metalloNato, miscela: X, solidi: tab };
+  const rocciaNata = (dove, kg, r) => laStoria().aggiungi(dove, kg, r), metalloNato = (r) => laStoria().metallo(r), rocciaFusa = (dove, kg, r, tDopo) => laStoria().fusa(dove, kg, r, tDopo);
+  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, ts, Mdot0, sigmaGas, sigmaSolidi, Tcond, Tmezzo, Mdot, rocciaNata, metalloNato, rocciaFusa, miscela: X, solidi: tab };
 }
 
 // ---------- 5. il raggio, dalla massa e da ciò di cui è fatto
@@ -352,11 +369,16 @@ export function formaPianeti(st, seme = 1) {
   const ricettaGhiaccio = Object.fromEntries(Object.entries(D.solidi.ghiacci || {}).map(([k, v]) => [k, D.solidi.ghiaccio > 0 ? v / D.solidi.ghiaccio : 0]));
   const pianeti = vivi.filter((b) => b.m >= P.minimo * MTERRA && b.a >= 0.02).map((b) => {
     let sol = vettore(), ghi = vettore(), aria = vettore(), Tm = 0, mm = 0; const tutti = [], gigante = b.gas > 0.5 * b.m;
-    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0, r = vettore(), gh = vettore(); D.rocciaNata(r, roccia, o.r0); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
+    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0, r = vettore(), gh = vettore(), fu = vettore(); D.rocciaNata(r, roccia, o.r0); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
+      // (la parte della sua roccia nata dopo il suo isolamento e fusa dall'²⁶Al da sola: elementi.js EVAPORA_PLANETESIMI. Solo dentro la
+      // neve: in un planetesimo di ghiaccio il calore dell'²⁶Al scioglie il ghiaccio e l'acqua che circola lo porta via, e la roccia
+      // non fonde — i corpi d'origine delle condriti carbonacee, alterati dall'acqua e mai fusi: Grimm e McSween 1989; Travis e
+      // Schubert 2005 [R] —)
+      if (!o.freddo) D.rocciaFusa(fu, roccia, o.r0, o.tIso);
       for (let i = 0; i < SIMBOLI.length; i++) { sol[i] += r[i]; ghi[i] += gh[i]; } Tm += o.T * o.m0; mm += o.m0;
       // (R: con il ferro suo, di quando è nato — fe0 —: «fe» cresce con chi gli cade addosso, e un embrione che ne ha preso molto
       // veniva col raggio negativo, e le perdite di quel pianeta con NaN)
-      if (!gigante) tutti.push({ id: o.id, roccia: r, ghiacci: gh, t: o.tIso, T: o.T, a: o.nato, R: raggioPianeta({ massaKg: o.m0, ferro: o.fe0 / Math.max(o.m0, 1e-30), ghiaccio: o.acqua0 }) }); }
+      if (!gigante) tutti.push({ id: o.id, roccia: r, ghiacci: gh, fusa: fu, t: o.tIso, T: o.T, a: o.nato, R: raggioPianeta({ massaKg: o.m0, ferro: o.fe0 / Math.max(o.m0, 1e-30), ghiaccio: o.acqua0 }) }); }
     // LE PERDITE DURANTE L'ACCRESCIMENTO (elementi.js perditeAccrescimento): gli embrioni fusi liberano i volatili, gli urti e la
     // fuga portano via una parte di ciò che è fuori; ciò che parte va nello spazio (un serbatoio del libro dei conti) e il
     // pianeta pesa di meno. (I giganti no: la roccia resta il loro nucleo, sotto il gas.)
@@ -387,7 +409,7 @@ export function formaPianeti(st, seme = 1) {
       : tipo === 'ghiacciato' ? { ghiaccio, roccia: 1 - ghiaccio - ferro, ferro } : { ferro, roccia: 1 - ferro - ghiaccio, acqua: ghiaccio };
     // (gli elementi del pianeta, non enumerabili: viaggiano con la composizione — chimica.js, mare.js, il libro dei conti di
     // elementi.js li leggono — e chi la elenca o la somma vede le tre parti di sempre). Masse in kg.
-    Object.defineProperty(composizione, 'elementi', { value: Object.freeze({ solidi: sol, acqua: ghi, acquaFuori: ghiFuori, acquaDentro: ghiDentro, involucro: b.gas > 0 ? aria : null, spazio: perdite ? perdite.spazio : null, perdite: perdite ? { urti: perdite.urti, fuga: perdite.fuga, negliUrti: perdite.negliUrti, evaporato: perdite.evaporato, solidificato: perdite.solidificato } : null, nucleo: sep ? sep.nucleo : sol, silicato: sep ? sep.silicato : vettore(),
+    Object.defineProperty(composizione, 'elementi', { value: Object.freeze({ solidi: sol, acqua: ghi, acquaFuori: ghiFuori, acquaDentro: ghiDentro, involucro: b.gas > 0 ? aria : null, spazio: perdite ? perdite.spazio : null, perdite: perdite ? { urti: perdite.urti, fuga: perdite.fuga, negliUrti: perdite.negliUrti, evaporato: perdite.evaporato, planetesimi: perdite.planetesimi, solidificato: perdite.solidificato } : null, nucleo: sep ? sep.nucleo : sol, silicato: sep ? sep.silicato : vettore(),
       separazione: sep ? { P: sep.P, T: sep.T, deltaIW: sep.deltaIW } : null, stella: D.miscela, Tformazione: mm > 0 ? Tm / mm : null, simboli: SIMBOLI,
       // (quanta parte della massa dei ghiacci è acqua: il resto è il CO e l'NH3 gelati con lei. leggi.js e chimica.js contano
       // l'acqua del pianeta con questa: prima la massa intera dei ghiacci passava per acqua, e il mare ne aveva un terzo di troppo)

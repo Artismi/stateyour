@@ -370,7 +370,9 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
     const W = (comp.acqua ?? comp.ghiaccio ?? 0) * (comp.elementi?.quotaAcqua ?? 1), Wm = dp ? Math.max(W, 1e-15) : Math.max(W, 0.001), sol = dp ? dp.stella : abbondanzeFisse(1), V = Wm / (sol.O - ossigenoNellaRoccia(sol)), pa = comp.elementi?.ghiaccioPerAcqua;
     const C = pa ? pa.C * Wm : NEI_GHIACCI.C * sol.C * V, N = pa ? pa.N * Wm : NEI_GHIACCI.N * sol.N * V, S = Math.min(ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, dp && P.massaKg > 0 ? (dp.zolfoMoli * 0.018015) / P.massaKg : Infinity), secco = String(cl.acqua || '').startsWith('vapore');
     const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
-    // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente)
+    // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente. Il
+    // metano e l'ammoniaca che ne escono prendono idrogeno oltre a quello dell'acqua del mare: viene dall'acqua del mantello, che
+    // il ferro dei magmi riduce a H2 — il libro dei conti di elementi.js lo prende da lì —)
     el = conInventario && tieneH ? { H: 2 * W, C, N, O, S } : { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
     // la massa di quei volatili per ogni chilo d'acqua (acqua 18, e il resto contato come CO2, N2, SO2), e quanta ne sta fuori
     // (la massa è quella degli ATOMI che restano, elemento per elemento — el, nelle unità di W, cioè moli d'acqua per 18 g —: prima
@@ -580,7 +582,17 @@ export function climaEAria(dati, { Z } = {}) {
   const tutta = prova(1e12);
   if (tutta.c.acqua !== 'ghiaccio') {
     let lo = Math.log(pressioneCO2Urey(275)), hi = Math.log(Math.max(1, (tutta.a.gas.CO2 || 0) * tutta.a.pressione)), scelto = tutta.c.acqua === 'liquida' ? tutta : null, gelo = null;
-    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') { lo = m; gelo = r; } else { hi = m; if (r.c.acqua === 'liquida') scelto = r; } }
+    // (con «tutta» la CO2 nell'aria è tutta quella che il pianeta ha, exp(hi), non i 10¹² Pa chiesti: è quella che si scrive. Prima,
+    // se ogni prova a metà gelava, restava scritto 10¹²·1,33 Pa come CO2 del termostato, sopra un gelo a ~10⁶ Pa)
+    if (tutta.co2 > Math.exp(hi)) tutta.co2 = Math.exp(hi);
+    let disgelo = tutta; // (il capo di sopra della ricerca: la CO2 più bassa provata a cui il mare non è gelato, e com'è lì)
+    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') { lo = m; gelo = r; } else { hi = m; disgelo = r; if (r.c.acqua === 'liquida') scelto = r; } }
+    // (la CO2 sale piano dai vulcani finché il ghiaccio cede: ciò che accade è quello del PRIMO disgelo, il capo di sopra. Se lì il
+    // ghiaccio che sparisce scalda fino a far bollire il mare, il pianeta perde l'acqua come al punto 2 — non resta con il mare
+    // che gli darebbe una CO2 enorme, più su: prima la ricerca teneva il mare trovato con tutta la CO2, 1,33·10¹² Pa, sopra un
+    // disgelo che era già vapore a 8·10⁵ Pa)
+    if (disgelo.c.acqua.startsWith('vapore')) { const secco = cerca('vapore', disgelo.c.T); return esce(secco, secco.c.acqua.startsWith('vapore') ? {} : { acqua: 'vapore' }); }
+    if (disgelo.c.acqua === 'liquida') scelto = disgelo;
     // (proprio sulla soglia il mare è in bilico e ci mette un'eternità ad assestarsi: il pianeta sta un passo sopra, un terzo di CO2 in più)
     // (resta scritto anche il capo gelato della ricerca: la CO2 più alta provata a cui il mare gela, con la sua temperatura, e
     // la larghezza della forchetta: la legge del termostato dice che la CO2 lasciata sta tra il gelo e gelo·forchetta·1,33, e
