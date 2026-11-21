@@ -63,11 +63,16 @@ prova('la CO2 sopra un mare ha una legge sola: mai sotto l\'equilibrio di Urey, 
   for (const T of [275, 285, 290, 300, 320, 360, 450]) assert.ok(p(T) >= (CH.pressioneCO2Urey(T) / 1e5) * 0.999, `a ${T} K il ciclo scende sotto Urey: ${p(T)} bar contro ${CH.pressioneCO2Urey(T) / 1e5}`);
   assert.ok(p(275) > p(285) && p(285) > p(290) && p(290) >= p(300), 'più caldo, rocce consumate più in fretta, meno CO2');
   tra(p(450) / (CH.pressioneCO2Urey(450) / 1e5), 0.999, 1.001, 'al caldo il ciclo è fermo sul pavimento di Urey (prima scendeva a 10⁻⁹ bar, con 10⁴ Pa nell\'aria)');
-  // senza terre emerse non c'è chi la prenda: si accumula (il tetto dei cento bar); senza vulcani non c'è sorgente
-  assert.equal(CH.co2DelCiclo({ ...dati, T: 288, terre: 0 }), 100); assert.equal(CH.co2DelCiclo({ ...dati, T: 288, calore: 0 }), 0);
+  // senza terre emerse la prende il fondo del mare (fondoConsuma): sotto un mare intero la CO2 sale, ma si ferma (prima: il tetto
+  // dei cento bar, messo a mano); senza fondo né terre si accumula fino al capo della ricerca; senza vulcani non c'è sorgente
+  const soloFondo = CH.co2DelCiclo({ ...dati, T: 288, terre: 0 }); assert.ok(soloFondo > p(288) && soloFondo < CH.CICLO_FINO, `solo il fondo: ${soloFondo} bar`);
+  assert.equal(CH.co2DelCiclo({ ...dati, T: 288, terre: 0, mare: 0 }), CH.CICLO_FINO); assert.equal(CH.co2DelCiclo({ ...dati, T: 288, calore: 0 }), 0);
+  // il fondo di oggi: tra 0,225 e 0,675·10¹² mol C/anno (Krissansen-Totton, Arney e Catling 2018, tab. S2: 0,5–1,5 volte la precipitazione nei pori, 0,45)
+  const v = CH.vulcani({ calore: 0.087, raggioM: 6.371e6, composizione: VERI.Terra.composizione }), oggi = CH.fondoConsuma(2.8e-4, { T: 288, calore: 0.087, magma: v.magma, mare: 0.71, basalto: v.rocce.basalto });
+  tra(oggi, 0.225e12, 0.675e12, 'il fondo della Terra di oggi (mol C/anno)');
   // più calore dall'interno, più vulcani, più CO2 e più caldo (un pianeta più giovane)
   const caldo = CH.co2DelCiclo({ ...dati, T: 288, calore: 0.17 }); assert.ok(caldo > p(288), `il doppio del calore: ${caldo} contro ${p(288)} bar`);
-  console.log(`      pCO2 del ciclo (bar) a 275, 285, 290, 300 K con un quarto di terre: ${[275, 285, 290, 300].map((T) => n(p(T))).join(', ')}; Urey a 300 K: ${n(CH.pressioneCO2Urey(300) / 1e5)}`);
+  console.log(`      pCO2 del ciclo (bar) a 275, 285, 290, 300 K con un quarto di terre: ${[275, 285, 290, 300].map((T) => n(p(T))).join(', ')}; Urey a 300 K: ${n(CH.pressioneCO2Urey(300) / 1e5)}; senza terre ${n(soloFondo)} bar; il fondo di oggi ${n(oggi)} mol C/anno`);
 });
 
 prova('Venere e Marte con la loro aria: niente mare, niente ciclo; le temperature della serra', () => {

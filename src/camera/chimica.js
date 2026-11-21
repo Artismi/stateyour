@@ -511,7 +511,7 @@ export function climaEAria(dati, { Z } = {}) {
   // non scende fino all'equilibrio di Urey (ci arriverebbe in un tempo infinito): si ferma dove le rocce consumate dalla
   // pioggia ne prendono quanta i vulcani ne emettono (co2DelCiclo, più sotto). È la stessa CO2 che sta sciolta nel mare:
   // aria e mare sono un serbatoio solo (mare.js legge questa pressione, e la ricalcola con le terre e le piogge vere).
-  const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), continenti: dati.placche ? 1 : 0, magma: dati.magma ?? null, fuso: dati.fusoMantello ?? null }) : 0);
+  const ciclo = (T, c0) => (dati.calore > 0 && T > 273 ? 1e5 * co2DelCiclo({ T, calore: dati.calore, raggioM: dati.raggioM, massaKg: dati.massaKg, composizione: dati.composizione, terre: (1 - (c0?.mare ?? primo.mare ?? 0.7)) * (1 - (c0?.ghiaccio ?? 0)), mare: c0?.mare ?? primo.mare ?? 0.7, continenti: dati.placche ? 1 : 0, magma: dati.magma ?? null, fuso: dati.fusoMantello ?? null }) : 0);
   const cerca = (stato, T0, co2 = 0, giri = 5) => { let T = T0, r = null, cc = co2; for (let k = 0; k < (stato === 'liquida' && dati.calore > 0 ? giri + 3 : giri); k++) { if (stato === 'liquida') cc = Math.max(co2, ciclo(T, r?.c)); const a = ariaDi(T, stato, cc), c = climaDi(a, T); r = { a, c, co2: cc }; if (Math.abs(c.T - T) < 1) break; T = k < 2 ? c.T : (T + c.T) / 2; } if (r && stato === 'liquida' && cc > 0) r.c.co2Ciclo = cc; return r; };
   // SOPRA UN MARE temperatura, vapore e CO2 non si trovano a giri alterni: la CO2 che pareggia i vulcani cala di ordini di
   // grandezza in pochi gradi (e il vapore cresce col caldo), e i giri rimbalzano tra un'aria e un clima che non si corrispondono (un'aria calcolata a
@@ -586,12 +586,22 @@ export function climaEAria(dati, { Z } = {}) {
     // se ogni prova a metà gelava, restava scritto 10¹²·1,33 Pa come CO2 del termostato, sopra un gelo a ~10⁶ Pa)
     if (tutta.co2 > Math.exp(hi)) tutta.co2 = Math.exp(hi);
     let disgelo = tutta; // (il capo di sopra della ricerca: la CO2 più bassa provata a cui il mare non è gelato, e com'è lì)
-    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (r.c.acqua === 'ghiaccio') { lo = m; gelo = r; } else { hi = m; disgelo = r; if (r.c.acqua === 'liquida') scelto = r; } }
-    // (la CO2 sale piano dai vulcani finché il ghiaccio cede: ciò che accade è quello del PRIMO disgelo, il capo di sopra. Se lì il
-    // ghiaccio che sparisce scalda fino a far bollire il mare, il pianeta perde l'acqua come al punto 2 — non resta con il mare
-    // che gli darebbe una CO2 enorme, più su: prima la ricerca teneva il mare trovato con tutta la CO2, 1,33·10¹² Pa, sopra un
-    // disgelo che era già vapore a 8·10⁵ Pa)
-    if (disgelo.c.acqua.startsWith('vapore')) { const secco = cerca('vapore', disgelo.c.T); return esce(secco, secco.c.acqua.startsWith('vapore') ? {} : { acqua: 'vapore' }); }
+    // (il ghiaccio che sublima sotto un'aria troppo sottile per il liquido — «vapore (il ghiaccio sublima…)», sotto il punto
+    // triplo — non è un disgelo: sta dalla parte del gelo, e la ricerca cerca la CO2 a cui l'acqua diventa davvero liquida, o bolle)
+    const gelato = (c) => c.acqua === 'ghiaccio' || c.acqua.startsWith('vapore (');
+    for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2, r = prova(Math.exp(m)); if (gelato(r.c)) { lo = m; gelo = r; } else { hi = m; disgelo = r; if (r.c.acqua === 'liquida') scelto = r; } }
+    // (la CO2 sale piano dai vulcani finché il ghiaccio cede: ciò che accade è quello del PRIMO disgelo, il capo di sopra. Se lì,
+    // senza il ghiaccio, il pianeta assorbe più luce di quanta un'aria satura di vapore possa irradiare (LIMITE_VAPORE, 282 W/m²:
+    // il limite di Simpson e Nakajima, il bordo interno di Kasting 1993 e Kopparapu e altri 2013), o il mare evapora tutto, la serra
+    // del vapore non torna indietro: senza mare la pioggia non consuma più rocce, la CO2 resta, e l'idrogeno del vapore fugge.
+    // Fuga limitata dall'energia (Watson, Donahue e Walker 1981), ε = 0,15, con la luce ultravioletta di una stella come il Sole
+    // integrata sull'età (Ribas e altri 2005: ~6·10¹⁵ J/m² a 1 UA in 4,5 miliardi di anni): un pianeta come la Terra perde così
+    // ~2·10²¹ kg d'idrogeno, l'idrogeno di dieci oceani. Il pianeta perde l'acqua come al punto 2 — non resta con il mare che gli
+    // darebbe una CO2 enorme, più su. (Prima valeva per ogni «vapore», anche per quello di un'aria troppo sottile per l'acqua
+    // liquida, sotto il punto triplo, a 200 K: lì il ghiaccio non si scioglie affatto, non perde l'acqua; la CO2 continua a salire
+    // finché il mare si apre davvero. Su 1495 pianeti di roccia delle prime 400 stelle della galassia 0 del cosmo 1 la regola
+    // scattava su tre: uno oltre il limite del vapore, che resta senz'acqua, e due di 0,02 masse terrestri a 205 K e 4–8 Pa.)
+    if (disgelo.c.acqua === 'vapore') { const secco = cerca('vapore', disgelo.c.T); return esce(secco, secco.c.acqua.startsWith('vapore') ? {} : { acqua: 'vapore' }); }
     if (disgelo.c.acqua === 'liquida') scelto = disgelo;
     // (proprio sulla soglia il mare è in bilico e ci mette un'eternità ad assestarsi: il pianeta sta un passo sopra, un terzo di CO2 in più)
     // (resta scritto anche il capo gelato della ricerca: la CO2 più alta provata a cui il mare gela, con la sua temperatura, e
@@ -745,12 +755,40 @@ export function prebiotica({ atmosfera: atm = {}, T = 288, energia = 1, pression
 // dell'interno; il carbonio sta tutto nel fuso: sulla Terra ne escono così 8·10¹² mol l'anno, misurate 6-10). Ogni
 // carica di catione che la pioggia scioglie dai silicati ne porta via una molecola, che finisce nel calcare. A regime
 // le due cose si pareggiano (Walker, Hays e Kasting 1981): co2DelCiclo cerca la pressione di CO2 a cui succede.
+// IL FONDO DEL MARE CONSUMA ANCHE LUI (Brady e Gíslason 1997; Coogan e Gillis 2013; Krissansen-Totton e Catling 2017 [KC],
+// Nat. Commun. 8, 15423, eq. 11-13; Krissansen-Totton, Arney e Catling 2018 [KAC], PNAS 115, 4105, SI eq. S3-S4, S22-S23 — rilette
+// sui PDF l'11-2026). L'acqua che circola nella crosta giovane scioglie il basalto, e i cationi che ne escono fanno carbonato
+// nei pori: F = k·(crosta nuova)·exp(−E/R·(1/T_pori − 1/T_pori,oggi))·([H⁺]_pori/[H⁺]_pori,oggi)^γ. Il pozzo non vede le terre:
+// c'è anche su un mondo d'acqua senza un'isola. Numeri (scelti prima di provare, dalle fonti):
+//  · oggi 0,45·10¹² mol C/anno (KAC 2018 tab. S2: precipitazione nei pori 0,45 Tmol C/anno; dissoluzione = x·quella, x 0,5-1,5:
+//    qui 1), per la crosta che le dorsali fanno oggi, 21 km³/anno di 2900 kg/m³ (Crisp 1984): 7,4·10⁻³ mol C per kg di crosta;
+//    la crosta nuova di un pianeta è il suo magma (vulcani(), più sotto);
+//  · E = 92 ± 7 kJ/mol, misurata sulla crosta alterata (Coogan e Dosso 2015; KC 2017 la trovano tra 53 e 97);
+//  · γ = 0,27 (KC 2017, mediana a posteriori; a priori 0-0,5); [H⁺] dei pori ∝ pCO2^(1/1,34) (KAC 2018 eq. S22-S23): il pozzo
+//    va come pCO2^0,20 — debole, come Brady e Gíslason;
+//  · T del fondo = 1,02·T + 274,037 − 1,02·285 (KC 2017 eq. 12, dai modelli accoppiati e dai fossili), mai sotto il gelo
+//    dell'acqua di mare; i pori 9 K più caldi oggi, in proporzione al calore che sale (KAC 2018 eq. S4, legge di Fourier con lo
+//    spessore dei sedimenti di oggi; 0,087 W/m² il calore della Terra: Pollack e altri 1993);
+//  · il TETTO DELLA ROCCIA (supply limit): il carbonato non può prendere più calcio, magnesio e ferro di quanti ne ha la parte
+//    della crosta che l'acqua raggiunge, le lave di sopra: un sesto del magma (Crisp 1984). Il pozzo va verso quel tetto come
+//    la roccia che si scioglie nel suolo, 1 − exp(−cinetica/tetto).
+//  · Il fondo è sotto il mare: conta la parte del pianeta coperta d'acqua.
 // Che cosa manca: l'effetto della pioggia (qui le terre bagnate sono date), il carbonio dei sedimenti che torna con i
-// vulcani delle fosse (qui il carbonio del mantello non si consuma), la vita (che sulla Terra accelera il suolo).
+// vulcani delle fosse (qui il carbonio del mantello non si consuma), la vita (che sulla Terra accelera il suolo), lo spessore
+// dei sedimenti di ciascun pianeta (che scalda i pori: qui quello della Terra).
 export const ROCCE = Object.freeze({ denudazione: 3e-5, densita: 2700, suolo: 1, superficieGrani: 1000, velocita: 3.1e-13, invecchia: 0.61, Tsuoli: 288, pCO2suoli: 2.8e-4,
   magma: 0.1, caloreMagma: 1.7e6, // il magma porta un decimo del calore; J per kg di magma (1300 K di salto + calore di fusione)
   rimasto: { Cl: 17e-6 / 35.45e-3, S: 250e-6 / 32.06e-3, C: 120e-6 / 12.011e-3 }, // mol per kg di mantello
-  acidoCarbonico: [-7.82, -10.6] }); // log K a 25 °C e ΔH (kJ/mol) di CO2(gas) + H2O ⇌ H⁺ + HCO3⁻
+  acidoCarbonico: [-7.82, -10.6], // log K a 25 °C e ΔH (kJ/mol) di CO2(gas) + H2O ⇌ H⁺ + HCO3⁻
+  fondale: Object.freeze({ oggi: 0.45e12 / (21e9 * 2900), E: 92, gamma: 0.27, pH: 1 / 1.34, pendenza: 1.02, fondoOggi: 274.037, Toggi: 285, pori: 9, caloreTerra: 0.087, lave: 1 / 6 }) });
+// IL POZZO DEL FONDO (mol di CO2 l'anno) a una pCO2 (bar), con la temperatura dell'aria T, il calore che sale (W/m²), il
+// magma (kg/anno), la parte coperta dal mare e la roccia del fondo (rocceDelPianeta().basalto, mol/kg)
+export function fondoConsuma(pCO2, { T = 288, calore = 0, magma = 0, mare = 0.7, basalto } = {}) {
+  const f = ROCCE.fondale; if (!(magma > 0) || !(mare > 0) || !(pCO2 > 0)) return 0;
+  const fondo = (t) => Math.max(271.15, f.pendenza * t + f.fondoOggi - f.pendenza * f.Toggi), Tp = fondo(T) + f.pori * Math.max(0, calore) / f.caloreTerra, Tp0 = f.fondoOggi + f.pori;
+  const cinetica = f.oggi * Math.exp(((-1000 * f.E) / R_GAS) * (1 / Tp - 1 / Tp0)) * Math.pow(pCO2 / ROCCE.pCO2suoli, f.gamma * f.pH), tetto = f.lave * ((basalto?.Ca ?? 0) + (basalto?.Mg ?? 0) + (basalto?.Fe ?? 0));
+  return magma * Math.min(1, mare) * (tetto > 0 ? tetto * -Math.expm1(-cinetica / tetto) : 0);
+}
 // velocità a 25 °C (log₁₀ mol/m²/s) ed energia di attivazione (kJ/mol) del termine neutro; massa molare (kg/mol); poi
 // il termine acido: velocità, esponente di [H⁺], energia di attivazione
 export const MINERALI_ROCCIA = Object.freeze({ albite: [-12.56, 69.8, 0.262, -10.16, 0.457, 65.0], ortoclasio: [-12.41, 38.0, 0.278, -10.06, 0.5, 51.7], anortite: [-9.12, 17.8, 0.278, -3.5, 1.411, 16.6],
@@ -816,16 +854,22 @@ export function vulcani({ calore, raggioM, composizione, magma: dato = null, fus
 // la pressione di CO2 (bar) a cui le rocce consumate ne prendono quanta i vulcani ne emettono. «terre»: la parte della
 // superficie emersa e bagnata dalla pioggia; «continenti»: quanta di quella è granito (il resto basalto). Si può dare
 // «consumo(pCO2)» (mol/anno) per fare il conto con una carta vera delle terre e delle temperature (lo fa mare.js).
-export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null, magma = null, fuso = null } = {}) {
+// «mare»: la parte della superficie coperta dal mare (se manca, quella che non è terra), su cui il fondo consuma (fondoConsuma).
+// (Prima, se le terre non tenevano il passo sotto 100 bar, si tornava 100: un tetto messo a mano, a cui si fermavano i mondi
+// d'acqua senza terre. Ora il fondo consuma anche lì; la ricerca sale fino a CICLO_FINO bar, un capo numerico sopra ogni
+// inventario di carbonio dei pianeti del modello: quanta CO2 c'è davvero nell'aria la decide poi atmosfera(), con l'inventario.)
+export const CICLO_FINO = 1e4;
+export function co2DelCiclo({ T = 288, calore, raggioM, massaKg, composizione, terre = 0.3, continenti = 1, consumo = null, emissione = null, magma = null, fuso = null, mare = null } = {}) {
   const v = vulcani({ calore, raggioM, composizione, magma, fuso }), fonte = emissione ?? v.CO2; if (!(fonte > 0)) return 0;
-  const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre);
+  const massa = ROCCE.denudazione * ROCCE.densita * 4 * Math.PI * raggioM * raggioM * Math.max(0, terre), sotto = mare ?? 1 - Math.max(0, terre);
   // (la roccia che pesa zero non si consuma nemmeno nel conto: con le placche è tutto granito, senza è tutto basalto)
-  const prende = consumo || ((p) => massa * ((continenti > 0 ? continenti * rilascio(v.rocce.granito, T, p).cariche : 0) + (continenti < 1 ? (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche : 0)));
-  if (prende(100) < fonte) return 100; // nemmeno sotto cento bar le rocce tengono il passo: la CO2 si accumula (qui ci si ferma)
+  const terra = consumo || ((p) => massa * ((continenti > 0 ? continenti * rilascio(v.rocce.granito, T, p).cariche : 0) + (continenti < 1 ? (1 - continenti) * rilascio(v.rocce.basalto, T, p).cariche : 0)));
+  const prende = (p) => terra(p) + fondoConsuma(p, { T, calore, magma: v.magma, mare: sotto, basalto: v.rocce.basalto });
+  if (prende(CICLO_FINO) < fonte) return CICLO_FINO; // nemmeno lì rocce e fondo tengono il passo: tutta la CO2 che c'è resta nell'aria
   // il pavimento è l'equilibrio di Urey a quella temperatura: lì la reazione è ferma, la roccia non può prenderne altra
   // (è lo stesso tetto che atmosfera() mette alla CO2 sopra un mare: una grandezza, una legge)
   const pavimento = Math.max(1e-9, pressioneCO2Urey(T) / 1e5); if (prende(pavimento) >= fonte) return pavimento;
-  let lo = Math.log(pavimento), hi = Math.log(100); for (let k = 0; k < 40; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
+  let lo = Math.log(pavimento), hi = Math.log(CICLO_FINO); for (let k = 0; k < 44; k++) { const m = 0.5 * (lo + hi); if (prende(Math.exp(m)) > fonte) hi = m; else lo = m; }
   return Math.exp(0.5 * (lo + hi));
 }
 
