@@ -126,7 +126,9 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
       // mette un puntino del suo colore, sempre della stessa forza (non è luce vera: è un segno). Compare secondo la grandezza
       // a schermo, non di colpo: pieno per (1 − w), w = pesoDiscreto del raggio contro 0,7 pixel (eredita.js: la rampa di
       // un'ottava), quando il pianeta sta per diventare più piccolo di un punto
-      { let k = 0; const forza = (0.35 * 4 * Math.PI * S.E0 * 20) / (Math.PI * S.fuoco * S.fuoco) / 1e20, px = (2 * S.tanY) / S.H;
+      // (la stessa forza SULLO SCHERMO: divisa per S.kSchermo, ciò che l'occhio fa dell'immagine — nucleo.js —; senza, con
+      // l'occhio di Ferwerda il puntino cambiava con l'esposizione di calcolo e, quando riempiva il centro, la spingeva lui)
+      { let k = 0; const forza = (0.35 * 4 * Math.PI * (S.E0 / (S.kSchermo || 1)) * 20) / (Math.PI * S.fuoco * S.fuoco) / 1e20, px = (2 * S.tanY) / S.H;
         for (const s of schede) { if (s.corpo === stella || s.c.cosa === 'luna') continue; const d2 = V.scal(s.rel, s.rel), segno = 1 - pesoDiscreto(s.corpo.raggio / Math.sqrt(d2) / (0.7 * px)); if (!(segno > 0)) continue; const col = s.c.colore || [170, 170, 165], f = forza * d2 * segno; posS.set(s.rel, 3 * k); luceS.set([(col[0] / 255) * f, (col[1] / 255) * f, (col[2] / 255) * f, 1], 4 * k); k++; }
         segni.metti(posS, luceS, k); }
       pos1.set(schede[0].rel); luce1.set([nero[0] * stella.luminosita * 1e-20, nero[1] * stella.luminosita * 1e-20, nero[2] * stella.luminosita * 1e-20, 1]); alone.metti(pos1, luce1, 1);

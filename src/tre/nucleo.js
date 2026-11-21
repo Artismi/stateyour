@@ -593,14 +593,14 @@ export function creaNucleo(tela, opzioni = {}) {
   // su tutta l'immagine finale (tutti i suoi punti, nessuno saltato), letta un fotogramma dopo senza fermare la scheda (un
   // buffer di lettura e un recinto). Se ne tirano fuori (cd/m²): la luce del centro (le quattro caselle di mezzo: per
   // l'esposizione di calcolo), la media logaritmica pesata attorno al centro (per l'occhio), la media di tutto il campo (per
-  // l'amplificatore) e la casella più chiara (per dire se si vede qualcosa)
+  // l'amplificatore) e il punto più chiaro (per dire se sullo schermo si vede qualcosa)
   // (un punto oltre ciò che l'immagine a 16 bit tiene — 65 504 — o reso indefinito dal suo traboccare, Inf·0 nelle miscele, vale
   // il più chiaro che il formato tiene: nella misura e sullo schermo. Senza, un occhio adattato al buio con una stella nel
   // campo riempiva l'immagine di NaN, la misura non vedeva più niente e l'occhio restava al buio: il pianeta d'avvio nero)
   const NG = 32, prgMisura = conVirgola ? programma(V_SCHERMO, `out vec4 o; uniform sampler2D u_col; uniform vec4 u_reg; // la regione misurata: angolo (x, y) e lati (punti)
-    void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(u_reg.xy + floor(vec2(c) * u_reg.zw / ${NG}.0)), b = max(ivec2(u_reg.xy + floor(vec2(c + 1) * u_reg.zw / ${NG}.0)), a + 1); float s = 0.0;
-      for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) { vec3 q = texelFetch(u_col, ivec2(x, y), 0).rgb; s += dot(any(isnan(q)) ? vec3(65504.0) : clamp(q, 0.0, 65504.0), vec3(0.2126, 0.7152, 0.0722)); }
-      o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), 0.0, 0.0, 1.0); }`) : null;
+    void main() { ivec2 c = ivec2(gl_FragCoord.xy); ivec2 a = ivec2(u_reg.xy + floor(vec2(c) * u_reg.zw / ${NG}.0)), b = max(ivec2(u_reg.xy + floor(vec2(c + 1) * u_reg.zw / ${NG}.0)), a + 1); float s = 0.0, m = 0.0;
+      for (int y = a.y; y < b.y; y++) for (int x = a.x; x < b.x; x++) { vec3 q = texelFetch(u_col, ivec2(x, y), 0).rgb; float l = dot(any(isnan(q)) ? vec3(65504.0) : clamp(q, 0.0, 65504.0), vec3(0.2126, 0.7152, 0.0722)); s += l; m = max(m, l); }
+      o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), m, 0.0, 1.0); }`) : null; // (r: la media della casella; g: il suo punto più chiaro)
   // (tre buffer di lettura a giro: ognuno si rilegge solo quando il suo recinto è passato, e intanto si scrive nel successivo;
   // d'uso «COPY»: con «READ» Chromium ne tiene una copia d'ombra che qui scartava a ogni fotogramma, con un avviso)
   const misura = { img: null, f: null, code: [], liberi: [], LA: NaN, Lscena: NaN, Lmax: NaN, K: 0, dati: new Float32Array(4 * NG * NG), ord: new Float32Array(NG * NG) };
@@ -617,7 +617,8 @@ export function creaNucleo(tela, opzioni = {}) {
       // la luce del centro: le quattro caselle di mezzo
       const c0 = NG / 2 - 1, centro = (o[c0 * NG + c0] + o[c0 * NG + c0 + 1] + o[(c0 + 1) * NG + c0] + o[(c0 + 1) * NG + c0 + 1]) / 4;
       // la media logaritmica del campo, pesata con la gaussiana di OCCHIO.campo attorno al centro (angoli veri: il fuoco in punti)
-      let Lmax = 0; for (let i = 0; i < n; i++) if (o[i] > Lmax) Lmax = o[i]; const f = q.H / (2 * q.tanY), s2 = 2 * OCCHIO.campo * OCCHIO.campo, pw = misura.pesi || (misura.pesi = new Float64Array(NG * NG));
+      // (il punto più chiaro: una stella lontana è un punto)
+      let Lmax = 0; for (let i = 0; i < n; i++) { const v = D[4 * i + 1] * u; if (v > Lmax) Lmax = v; } const f = q.H / (2 * q.tanY), s2 = 2 * OCCHIO.campo * OCCHIO.campo, pw = misura.pesi || (misura.pesi = new Float64Array(NG * NG));
       if (misura.chiavePesi !== `${q.W}×${q.H}×${f}`) { misura.chiavePesi = `${q.W}×${q.H}×${f}`; for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const dx = ((i + 0.5) / NG - 0.5) * q.W, dy = ((j + 0.5) / NG - 0.5) * q.H, th = Math.atan(Math.hypot(dx, dy) / f); pw[j * NG + i] = Math.exp(-(th * th) / s2); } }
       let sa = 0, sl = 0, sw = 0; for (let i = 0; i < NG * NG; i++) { sa += pw[i] * o[i]; sw += pw[i]; }
       const pav = Math.max(1e-30, (OCCHIO.pavimento * sa) / sw); for (let i = 0; i < NG * NG; i++) sl += pw[i] * Math.log(Math.max(pav, o[i]));
@@ -631,7 +632,7 @@ export function creaNucleo(tela, opzioni = {}) {
   }
 
   // ---------- un fotogramma
-  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0, visione: { t: 0, lnG: 0, lnLA: NaN, G: 1, LA: NaN, Lscena: NaN, Lmedia: NaN, Lmax: NaN, sottoSoglia: false } };
+  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, kSchermo: 1, luceVoluta: 0, visione: { t: 0, lnG: 0, lnLA: NaN, G: 1, LA: NaN, Lscena: NaN, Lmedia: NaN, Lmax: NaN, sottoSoglia: false } };
   S.bersaglio = (b) => { S.bersagli.push(b); const d = V.lungo(b.p) - b.raggio; if (d > 0 && d < S._vicino) S._vicino = d; };
   S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
   S.proponiBianco = (rgb) => { if (rgb && rgb.every((x) => Number.isFinite(x) && x >= 0) && rgb[0] + rgb[1] + rgb[2] > 0) S.biancoLuogo = rgb; };
@@ -723,8 +724,9 @@ export function creaNucleo(tela, opzioni = {}) {
     // (u_k: dall'unità dell'immagine alle cd/m² del mondo, per G dello strumento, per la risposta dell'occhio, e L_da al grigio medio)
     let kP = S.adattamento.coni, kS = 1 - kP;
     if (ferwerda && Number.isFinite(oc.LA)) { const f = fattoriOcchio(oc.LA), b = ((S.E0 * K) / Math.PI) * oc.G * (X_MEDIO / OCCHIO.Lda); kP = b * f.mP; kS = b * f.k * f.mS;
-      oc.sottoSoglia = oc.Lmax > 0 && passiVisibili(oc.G * oc.Lmax, oc.LA) < 1; } else { oc.sottoSoglia = false; oc.G = 1; } // (sotto soglia: nemmeno la casella più chiara si vede)
+      oc.sottoSoglia = oc.Lmax > 0 && passiVisibili(oc.G * oc.Lmax, oc.LA) < 1; } else { oc.sottoSoglia = false; oc.G = 1; } // (sotto soglia: nemmeno il punto più chiaro si vede)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); gl.uniform2f(prgTono.u.u_k, kP, kS); schermo();
+    S.kSchermo = kP > 0 ? kP : 1; // (per i SEGNI che devono avere sullo schermo sempre la stessa forza, qualunque sia l'occhio: si dividono per questo — del fotogramma prima —, come il segnaposto dei pianeti di sistema.js)
     for (const s of strati) if (s.sopra) s.sopra(S);
     gl.bindVertexArray(null);
     stat.cpuMs = performance.now() - t0; stat.fotogrammi++;
