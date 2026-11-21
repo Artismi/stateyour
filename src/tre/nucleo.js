@@ -46,7 +46,8 @@
 //   N.aggiungi(strato);  N.attacca(terra, { distanza: 3 * raggio });  N.avvia();
 //   N.tempo.velocita = 86400;                     // un giorno al secondo
 // Lo stato S che ogni strato riceve: { gl, t, dt, W, H, proj, vista (mondo → occhio, 3×3), fc (per la profondità),
-//   tanX, tanY, fuoco (pixel), camera, versoCorpo(corpo, out) (occhio → centro, metri, doppia precisione),
+//   tanX, tanY, fuoco (pixel), camera, versoCorpo(corpo, out) (occhio → centro, metri, doppia precisione), visione (l'occhio
+//   di Ferwerda e gli strumenti: { LA, G, Lscena, Lmedia, Lmax, sottoSoglia }),
 //   assetto(corpo) (3×3), stella (il corpo che illumina), versoStella (unitario), E0, LA, adattamento, quota (dal suolo) }.
 
 // ---------- piccola algebra, in doppia precisione (vettori [x, y, z], matrici 3×3 per righe)
@@ -88,29 +89,55 @@ export function coloreCorpoNero(T) {
 }
 
 // ---------- L'OCCHIO (INTRECCIO.md, regola 14: anche il rivelatore è fisica). Ciò che decide come un'immagine in luce
-// vera arriva allo schermo, con la legge da cui viene:
-//  · l'ADATTAMENTO alla luce: l'occhio si porta sulla luminanza media di ciò che GUARDA — la FOVEA, un campo di 2° attorno
-//    al punto fissato, che qui è il centro dello schermo (adattamento foveale: Larson, Rushmeier & Piatko 1997, che usano
-//    campi di 1°; la fovea centrale è larga ~1,5–2°) —, la media della luminanza e non dei logaritmi (l'adattamento
-//    segue la luce che entra, l'illuminamento della retina). (Prima: la media di tutta l'immagine — un pianeta piccolo nel
-//    cielo nero ne usciva bianco saturo.) La mostra come il grigio medio della percezione: chiarezza CIE L* = 50, cioè Y = ((50 + 16)/116)³ =
-//    0,184 dello schermo dopo la curva di tonalità. Non scende sotto la SOGLIA ASSOLUTA della visione: ~10⁻⁶ cd/m² su un
-//    campo largo, occhio adattato al buio (Hecht, Shlaer & Pirenne 1942; misurata) — sotto, ciò che c'è resta scuro;
+// vera arriva allo schermo, con la legge da cui viene. La vista normale è un occhio umano vero: il buio resta buio.
+//  · la LUMINANZA DI ADATTAMENTO L_A: la media LOGARITMICA della luminanza della scena attorno al punto fissato (il centro
+//    dello schermo), pesata con una gaussiana di OCCHIO.campo (4°: la fovea e la parafovea pesano di più; i bordi del campo
+//    poco), sopra una griglia 32×32 di tutta l'immagine (ogni casella la media di tutti i suoi punti). Le caselle più buie
+//    di un centesimo della media (aritmetica, con gli stessi pesi) non la tirano più giù (il nero tra le stelle non è un
+//    numero: la luce che entra nell'occhio è quella della media, e il buio attorno non può contare più di lei). L_A non
+//    scende sotto la SOGLIA ASSOLUTA della visione, ~10⁻⁶ cd/m² (Hecht, Shlaer & Pirenne 1942).
+//  · come L_A SI MUOVE: piano e senza salti, una dinamica del primo ordine in log L_A. Verso il chiaro l'adattamento è
+//    nervoso e svelto: τ = 0,1 s per i coni, 0,4 s per i bastoncelli (i valori di Krawczyk, Myszkowski & Seidel 2005);
+//    verso il buio, finché si resta sopra il campo mesopico (5 cd/m²: solo coni, pigmenti poco sbiancati) è ancora svelto,
+//    τ = 1 s (dichiarato: dell'ordine di Crawford 1947); più giù è la rigenerazione dei pigmenti, lenta: τ ≈ 110 s per i
+//    coni, 400 s per i bastoncelli (Rushton; come in Pattanaik et al. 2000). Tra i due si pesa col peso dei coni. Nei primi OCCHIO.apertura secondi si parte già
+//    adattati al luogo (τ = 0,1 s nei due versi).
+//  · la RISPOSTA: le soglie di visibilità di FERWERDA, PATTANAIK, SHIRLEY & GREENBERG 1996 («A model of visual adaptation
+//    for realistic image synthesis»): t_p(L_A) dei coni e t_s(L_A) dei bastoncelli (cd/m², le loro funzioni a tratti in
+//    log₁₀). Una luminanza L del mondo va sullo schermo come L_d = m_p·L_p + k·m_s·L_s, con m_p = t_p(L_da)/t_p(L_A),
+//    m_s = t_p(L_da)/t_s(L_A): un passo appena visibile del mondo diventa un passo appena visibile dello schermo. L_da è
+//    l'adattamento di chi guarda lo schermo, metà del suo massimo (OCCHIO.Lda = 50 cd/m² di 100: dichiarato), e va al
+//    grigio medio della percezione: chiarezza CIE L* = 50, Y = ((50 + 16)/116)³ = 0,184 dopo la curva di tonalità. L_p è la
+//    luminanza a colori, L_s quella scotopica, Y′ = Y·(1,33·(1 + (Y + Z)/X) − 1,68) (Larson, Rushmeier & Piatko 1997),
+//    riportata al bianco D65; k va da 1 a 0 attraverso il campo MESOPICO, da 0,005 a 5 cd/m² (CIE 191:2010), in log L_A.
+//    Così al buio i colori spariscono da sé (m_p è cento volte più piccolo di m_s) e ciò che sta sotto la soglia resta nero.
+//  · gli STRUMENTI (il visore, src/visore/strumenti.js) stanno DAVANTI all'occhio: l'amplificatore di luce moltiplica la
+//    luce della scena di un fattore G prima che arrivi all'occhio (vista.occhio.amplificatore), come un intensificatore o
+//    una posa lunga mostrata sullo schermo dello strumento. G porta la LUCE MEDIA della regione inquadrata (la media
+//    aritmetica di tutto il campo: il flusso che arriva diviso l'angolo solido, ∝ j̄·w per una regione larga w con
+//    emissività media j̄) a OCCHIO.amplificato cd/m² (G ≥ 1: non attenua mai) e la segue con una costante di tempo,
+//    OCCHIO.tauAmp: dipende dalla scala e dalla luce della regione, non dal fotogramma. (Con la media logaritmica del
+//    centro, come l'occhio, una galassia che esce dal centro faceva salire G di 18 volte in mezza decade di zoom, e la
+//    nebbia della ragnatela compariva di colpo; la luce media scende come w⁻² e la nebbia sale piano.) Acceso e spento, G cambia con la stessa costante: niente scatti. Chi guarda lo
+//    schermo dello strumento sta in una stanza illuminata (come per CIECAM02, qui sotto): l'occhio si adatta alla stanza,
+//    L_da, non al nero dell'immagine; così la media della regione resta scura (4 cd/m² su 50: il fondo di una posa lunga)
+//    e ciò che è più chiaro di lei si vede, senza il velo grigio di un occhio che porta sempre la scena al grigio medio.
 //  · le candele: dalla luce (W) alla luminanza (cd/m²) con l'efficacia luminosa della luce che illumina,
 //    K = 683 lm/W · π∫B_λ(T)·ȳ(λ)dλ / (σT⁴) — il corpo nero della stella del luogo (fuori da un sistema quella del Sole,
 //    5772 K, l'unità di buconero.js); ȳ nella forma analitica di Wyman, Sloan & Shirley 2013 (come buconero.js);
-//  · la VISIONE CREPUSCOLARE: tra 0,005 e 5 cd/m² (il campo mesopico, CIE 191:2010) i coni lasciano il posto ai
-//    bastoncelli, che non vedono i colori: il colore sfuma (in log L_A) nella luminanza scotopica, Y′ = Y·(1,33·(1 +
-//    (Y + Z)/X) − 1,68) (Larson, Rushmeier & Piatko 1997), riportata al bianco D65;
 //  · l'ADATTAMENTO AL COLORE: von Kries verso il bianco della luce che illumina (la stella del luogo; sotto un'aria, la luce
 //    che arriva dove sta l'occhio, se lo strato del pianeta la propone: S.proponiBianco), di quanto dice
 //    CIECAM02: D = F·[1 − (1/3,6)·e^((−L_A − 42)/92)], F = 1 (chi guarda lo schermo in una stanza illuminata:
 //    dichiarato). Fatto nei primari sRGB, non nello spazio dei coni CAT02 (dichiarato).
+// L'ESPOSIZIONE DI CALCOLO (S.E0) è un'altra cosa: l'unità in cui gli strati scrivono la luce nell'immagine a 16 bit, che
+// segue la luce del centro (le quattro caselle di mezzo, ~2–3°: la fovea) perché i numeri restino dentro ciò che il formato
+// tiene. Non decide più che cosa si vede: la tonalità la riporta in cd/m² e poi fa l'occhio.
 // SCELTE RIMASTE (dichiarate): la curva di tonalità (Narkowicz 2015, un'approssimazione di ACES: manca la risposta dei
-// fotorecettori al posto suo); quanto in fretta l'occhio si adatta (6/s verso il chiaro, 2,5/s verso il buio: l'occhio
-// vero impiega minuti al buio — Hecht 1937 —; qui è tarato su chi guarda uno schermo); l'abbagliamento è l'alone di
-// luci.js, non la diffusione nell'occhio (CIE 135).
-export const OCCHIO = { soglia: 1e-6, grigioL: ((50 + 16) / 116) ** 3, mesopico: [0.005, 5], F: 1, TSole: 5772, fovea: (2 * Math.PI) / 180 };
+// fotorecettori al posto suo); l'abbagliamento è l'alone di luci.js, non la diffusione nell'occhio (CIE 135); il campo
+// di 4° e il pavimento di un centesimo della media nella media logaritmica.
+export const OCCHIO = { soglia: 1e-6, grigioL: ((50 + 16) / 116) ** 3, mesopico: [0.005, 5], F: 1, TSole: 5772, fovea: (2 * Math.PI) / 180,
+  campo: (4 * Math.PI) / 180, pavimento: 1e-2, Lda: 50, tauChiaro: [0.4, 0.1], tauBuio: [400, 110], tauConi: 1, apertura: 2, // ([bastoncelli, coni], secondi)
+  amplificato: 4, tauAmp: 1.5, Gmax: 1e16 }; // (l'amplificatore: la media della regione portata a 4 cd/m², seguita in 1,5 s)
 // la curva di tonalità (la stessa del frammento in fondo) e il valore che lei porta al grigio medio
 export const tonalita = (x) => Math.max(0, Math.min(1, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
 export const X_MEDIO = (() => { let a = 0, b = 10; for (let i = 0; i < 80; i++) { const m = 0.5 * (a + b); if (tonalita(m) < OCCHIO.grigioL) a = m; else b = m; } return 0.5 * (a + b); })();
@@ -127,6 +154,36 @@ export const gradoAdattamento = (LA) => Math.max(0, Math.min(1, OCCHIO.F * (1 - 
 export const pesoConi = (LA) => Math.max(0, Math.min(1, Math.log(Math.max(LA, 1e-30) / OCCHIO.mesopico[0]) / Math.log(OCCHIO.mesopico[1] / OCCHIO.mesopico[0])));
 // l'irradianza «che vale 1» (W/m²: la luce di un foglio bianco) che l'occhio adattato a L_A sceglie: L_A va al grigio medio
 export const E0Adattato = (LA, K) => (Math.PI * Math.max(LA, OCCHIO.soglia)) / (K * X_MEDIO);
+// LE SOGLIE DI FERWERDA et al. 1996 (cd/m²): il più piccolo aumento di luminanza visibile su uno sfondo L_A, per i coni
+// (fotopica) e per i bastoncelli (scotopica); le loro forme a tratti in log₁₀
+export const sogliaFotopica = (LA) => { const x = Math.log10(Math.max(LA, 1e-30)); return 10 ** (x <= -2.6 ? -0.72 : x >= 1.9 ? x - 1.255 : (0.249 * x + 0.65) ** 2.7 - 0.72); };
+export const sogliaScotopica = (LA) => { const x = Math.log10(Math.max(LA, 1e-30)); return 10 ** (x <= -3.94 ? -2.86 : x >= -1.44 ? x - 0.395 : (0.405 * x + 1.6) ** 2.18 - 2.86); };
+// i fattori dell'occhio adattato a L_A: L_d = mP·L_p + k·mS·L_s (cd/m² sullo schermo)
+export function fattoriOcchio(LA) { const td = sogliaFotopica(OCCHIO.Lda); return { mP: td / sogliaFotopica(LA), mS: td / sogliaScotopica(LA), k: 1 - pesoConi(LA) }; }
+// quanto si vede, sullo schermo, una luminanza L (cd/m²) per un occhio adattato a L_A, in passi appena visibili dello schermo
+export const passiVisibili = (L, LA) => { const f = fattoriOcchio(LA); return ((f.mP + f.k * f.mS) * L) / sogliaFotopica(OCCHIO.Lda); };
+// UN PASSO DELL'OCCHIO E DEGLI STRUMENTI DAVANTI A LUI (dt secondi): `oc` è il suo stato ({ t, lnG, lnLA }), `Lscena` la
+// media logaritmica attorno al punto fissato (cd/m², senza strumenti: per l'occhio), `Lmedia` la luce media di tutto il
+// campo (per l'amplificatore), `amplifica` se l'amplificatore è acceso. Niente dipende dal fotogramma: tutto segue con le
+// sue costanti di tempo.
+export function passoOcchio(oc, Lscena, dt, amplifica, Lmedia = Lscena) {
+  if (!(Lscena > 0)) return oc; oc.t = (oc.t || 0) + dt;
+  const lnGv = amplifica && Lmedia > 0 ? Math.log(Math.min(OCCHIO.Gmax, Math.max(1, OCCHIO.amplificato / Lmedia))) : 0;
+  if (!Number.isFinite(oc.lnG)) oc.lnG = 0; oc.lnG += (lnGv - oc.lnG) * (1 - Math.exp(-dt / OCCHIO.tauAmp));
+  // (con lo strumento acceso l'occhio guarda il suo schermo, in una stanza illuminata: si adatta alla stanza, L_da, o alla
+  // scena amplificata se è più chiara. Spento, alla scena)
+  const lnV = Math.log(Math.max(OCCHIO.soglia, Math.exp(oc.lnG) * Lscena, amplifica ? OCCHIO.Lda : 0));
+  if (!Number.isFinite(oc.lnLA)) oc.lnLA = lnV;
+  else {
+    // (verso il buio: dentro il campo dei soli coni, sopra il mesopico, in fretta — OCCHIO.tauConi —; sotto, coi pigmenti)
+    const c = pesoConi(Math.exp(oc.lnLA)), lnM = Math.log(OCCHIO.mesopico[1]); let tau, lnT = lnV;
+    if (oc.t < OCCHIO.apertura) tau = 0.1;
+    else if (lnV > oc.lnLA) tau = OCCHIO.tauChiaro[0] + (OCCHIO.tauChiaro[1] - OCCHIO.tauChiaro[0]) * c;
+    else if (oc.lnLA > lnM) { tau = OCCHIO.tauConi; lnT = Math.max(lnV, lnM - 0.1); }
+    else tau = OCCHIO.tauBuio[0] + (OCCHIO.tauBuio[1] - OCCHIO.tauBuio[0]) * c;
+    oc.lnLA += (lnT - oc.lnLA) * (1 - Math.exp(-dt / tau)); }
+  oc.G = Math.exp(oc.lnG); oc.LA = Math.exp(oc.lnLA); return oc;
+}
 
 // un colore lineare portato a luminanza 1 (Rec. 709)
 export const luminanzaUno = (c) => { const y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] || 1; return c.map((x) => x / y); };
@@ -227,9 +284,9 @@ export function creaNucleo(tela, opzioni = {}) {
   // per fotogramma. L'aria del pianeta: a camera ferma si calcola una volta sola.
   // `vuoto`: sotto quale frazione della luce più forte del suo anello (e A_V per raggio) una cella della galassia è vuota e il
   // raggio la salta (volumi.js; 0: niente salto).
-  const vista = { cono: O.cono !== false, passi: { galassia: 48, ragnatela: 48 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4, occhio: { adatta: O.adatta !== false, E0: 0 } }, C_LUCE = 299792458;
+  const vista = { cono: O.cono !== false, passi: { galassia: 48, ragnatela: 48 }, riduzione: 2, accumulo: { attivo: O.accumulo !== false, ferma: 64, moto: 4, tolleranza: 0.15, passiFerma: 2 }, vuoto: 1e-4, occhio: { adatta: O.adatta !== false, E0: 0, amplificatore: false } }, C_LUCE = 299792458;
   // (`occhio`: l'esposizione dell'occhio — vedi OCCHIO in cima —; `adatta: false` lascia l'unità a ciò che gli strati
-  // propongono, come prima; `E0` > 0 la fissa, W/m², per le prove)
+  // propongono, come prima; `E0` > 0 la fissa, W/m², per le prove; `amplificatore`: lo strumento davanti all'occhio)
 
   // ---------- la camera: attaccata a un corpo; pos e assi (colonne: destra, su, dietro) nel riferimento del corpo
   // (i suoi assi che girano se «solidale», altrimenti gli assi inerziali centrati su di lui)
@@ -524,15 +581,19 @@ export function creaNucleo(tela, opzioni = {}) {
     imm.fA = telaio(imm.colA, imm.prof); imm.fB = telaio(imm.colB);
   }
   // la tonalità: dall'immagine in virgola mobile allo schermo. Prima l'occhio (OCCHIO in cima): von Kries verso il bianco
-  // della luce del luogo (u_bianco, luminanza 1) di D; il colore che sfuma nella luminanza scotopica quando i coni non
-  // bastano (u_occ.y: il loro peso); poi la curva (Narkowicz 2015) e la gamma dello schermo (sRGB, ~2,2)
-  const prgTono = programma(V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col; uniform vec3 u_bianco; uniform vec2 u_occ;
+  // della luce del luogo (u_bianco, luminanza 1) di D (u_occ.x); poi la risposta di Ferwerda, u_k.x·(a colori) +
+  // u_k.y·(scotopica) — u_k porta già l'unità dell'immagine in cd/m², lo strumento davanti all'occhio e il grigio medio —;
+  // poi la curva (Narkowicz 2015) e la gamma dello schermo (sRGB, ~2,2)
+  const prgTono = programma(V_SCHERMO, `in vec2 v_uv; out vec4 o; uniform sampler2D u_col; uniform vec3 u_bianco; uniform vec2 u_occ; uniform vec2 u_k;
     void main() { vec3 x = texture(u_col, v_uv).rgb; x = any(isnan(x)) ? vec3(65504.0) : clamp(x, 0.0, 65504.0); x /= mix(vec3(1.0), max(u_bianco, vec3(1e-3)), u_occ.x);
-      if (u_occ.y < 1.0) { vec3 X = mat3(0.4124, 0.2126, 0.0193, 0.3576, 0.7152, 0.1192, 0.1805, 0.0722, 0.9505) * x; float sc = X.y * max(0.0, 1.33 * (1.0 + (X.y + X.z) / max(X.x, 1e-20)) - 1.68) / 2.5731; x = mix(vec3(sc), x, u_occ.y); }
+      float sc = 0.0; if (u_k.y > 0.0) { vec3 X = mat3(0.4124, 0.2126, 0.0193, 0.3576, 0.7152, 0.1192, 0.1805, 0.0722, 0.9505) * x; sc = X.y * max(0.0, 1.33 * (1.0 + (X.y + X.z) / max(X.x, 1e-20)) - 1.68) / 2.5731; }
+      x = u_k.x * x + u_k.y * vec3(sc);
       x = clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); o = vec4(pow(x, vec3(1.0 / 2.2)), 1.0); }`);
   // LA MISURA DELLA LUCE per l'occhio: la luminanza (Rec. 709, primari sRGB) media di ogni casella di una griglia 32×32
-  // sull'immagine finale (tutti i suoi punti, nessuno saltato), letta un fotogramma dopo senza fermare la scheda (un
-  // buffer di lettura e un recinto); la media dell'immagine è la media delle caselle pesata per la loro area
+  // su tutta l'immagine finale (tutti i suoi punti, nessuno saltato), letta un fotogramma dopo senza fermare la scheda (un
+  // buffer di lettura e un recinto). Se ne tirano fuori (cd/m²): la luce del centro (le quattro caselle di mezzo: per
+  // l'esposizione di calcolo), la media logaritmica pesata attorno al centro (per l'occhio), la media di tutto il campo (per
+  // l'amplificatore) e la casella più chiara (per dire se si vede qualcosa)
   // (un punto oltre ciò che l'immagine a 16 bit tiene — 65 504 — o reso indefinito dal suo traboccare, Inf·0 nelle miscele, vale
   // il più chiaro che il formato tiene: nella misura e sullo schermo. Senza, un occhio adattato al buio con una stella nel
   // campo riempiva l'immagine di NaN, la misura non vedeva più niente e l'occhio restava al buio: il pianeta d'avvio nero)
@@ -542,7 +603,7 @@ export function creaNucleo(tela, opzioni = {}) {
       o = vec4(s / float(max(1, (b.x - a.x) * (b.y - a.y))), 0.0, 0.0, 1.0); }`) : null;
   // (tre buffer di lettura a giro: ognuno si rilegge solo quando il suo recinto è passato, e intanto si scrive nel successivo;
   // d'uso «COPY»: con «READ» Chromium ne tiene una copia d'ombra che qui scartava a ogni fotogramma, con un avviso)
-  const misura = { img: null, f: null, code: [], liberi: [], LA: NaN, K: 0, dati: new Float32Array(4 * NG * NG) };
+  const misura = { img: null, f: null, code: [], liberi: [], LA: NaN, Lscena: NaN, Lmax: NaN, K: 0, dati: new Float32Array(4 * NG * NG), ord: new Float32Array(NG * NG) };
   function misuraLuce(col, W, H) {
     if (!prgMisura) return; const prima = gl.getParameter(gl.FRAMEBUFFER_BINDING);
     if (!misura.img) { misura.img = immagine(NG, NG, gl.getExtension('EXT_color_buffer_float') ? 'rgba32f' : 'rgba16f', null, { filtro: gl.NEAREST }); misura.f = telaio(misura.img);
@@ -551,20 +612,26 @@ export function creaNucleo(tela, opzioni = {}) {
     const q = misura.code[0];
     if (q && gl.getSyncParameter(q.recinto, gl.SYNC_STATUS) === gl.SIGNALED) { misura.code.shift();
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, q.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, misura.dati); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); gl.deleteSync(q.recinto); misura.liberi.push(q.pbo);
-      // (la media sulle caselle il cui centro sta nel cerchio della fovea: caselle uguali, ognuna la media dei suoi punti)
-      let m = 0, a = 0;
-      for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const x = (i + 0.5) / NG - 0.5, y = (j + 0.5) / NG - 0.5, v = misura.dati[4 * (j * NG + i)]; if (x * x + y * y <= 0.25 && Number.isFinite(v)) { m += v; a++; } }
-      if (a > 0) misura.LA = ((m / a) * q.E0 * q.K) / Math.PI; }
+      const u = (q.E0 * q.K) / Math.PI, D = misura.dati, o = misura.ord; let n = 0;
+      for (let i = 0; i < NG * NG; i++) { const v = D[4 * i]; o[i] = Number.isFinite(v) ? v * u : 0; n++; }
+      // la luce del centro: le quattro caselle di mezzo
+      const c0 = NG / 2 - 1, centro = (o[c0 * NG + c0] + o[c0 * NG + c0 + 1] + o[(c0 + 1) * NG + c0] + o[(c0 + 1) * NG + c0 + 1]) / 4;
+      // la media logaritmica del campo, pesata con la gaussiana di OCCHIO.campo attorno al centro (angoli veri: il fuoco in punti)
+      let Lmax = 0; for (let i = 0; i < n; i++) if (o[i] > Lmax) Lmax = o[i]; const f = q.H / (2 * q.tanY), s2 = 2 * OCCHIO.campo * OCCHIO.campo, pw = misura.pesi || (misura.pesi = new Float64Array(NG * NG));
+      if (misura.chiavePesi !== `${q.W}×${q.H}×${f}`) { misura.chiavePesi = `${q.W}×${q.H}×${f}`; for (let j = 0; j < NG; j++) for (let i = 0; i < NG; i++) { const dx = ((i + 0.5) / NG - 0.5) * q.W, dy = ((j + 0.5) / NG - 0.5) * q.H, th = Math.atan(Math.hypot(dx, dy) / f); pw[j * NG + i] = Math.exp(-(th * th) / s2); } }
+      let sa = 0, sl = 0, sw = 0; for (let i = 0; i < NG * NG; i++) { sa += pw[i] * o[i]; sw += pw[i]; }
+      const pav = Math.max(1e-30, (OCCHIO.pavimento * sa) / sw); for (let i = 0; i < NG * NG; i++) sl += pw[i] * Math.log(Math.max(pav, o[i]));
+      let tot = 0; for (let i = 0; i < NG * NG; i++) tot += o[i];
+      misura.LA = centro; misura.Lmax = Lmax; misura.Lscena = Lmax > 0 ? Math.exp(sl / sw) : 0; misura.Lmedia = tot / (NG * NG); }
     const pbo = misura.liberi.shift(); if (!pbo) return; // (tutte e tre in viaggio: questo fotogramma non si misura)
     gl.bindFramebuffer(gl.FRAMEBUFFER, misura.f); gl.viewport(0, 0, NG, NG); gl.useProgram(prgMisura.p); lega(0, col, prgMisura.u.u_col);
-    // (la fovea: un cerchio di OCCHIO.fovea gradi attorno al centro dello schermo, dove si guarda; il quadrato che lo contiene)
-    const rf = Math.min(W, H, Math.max(1, (2 * (H / 2) * Math.tan(OCCHIO.fovea / 2)) / S.tanY)); gl.uniform4f(prgMisura.u.u_reg, Math.round(W / 2 - rf / 2), Math.round(H / 2 - rf / 2), Math.max(1, Math.round(rf)), Math.max(1, Math.round(rf))); schermo();
+    gl.uniform4f(prgMisura.u.u_reg, 0, 0, W, H); schermo(); // (tutta l'immagine)
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.readPixels(0, 0, NG, NG, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    misura.code.push({ pbo, recinto: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), E0: S.E0, K: misura.K, W, H }); gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
+    misura.code.push({ pbo, recinto: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), E0: S.E0, K: misura.K, W, H, tanY: S.tanY }); gl.bindFramebuffer(gl.FRAMEBUFFER, prima);
   }
 
   // ---------- un fotogramma
-  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0 };
+  const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0, visione: { t: 0, lnG: 0, lnLA: NaN, G: 1, LA: NaN, Lscena: NaN, Lmedia: NaN, Lmax: NaN, sottoSoglia: false } };
   S.bersaglio = (b) => { S.bersagli.push(b); const d = V.lungo(b.p) - b.raggio; if (d > 0 && d < S._vicino) S._vicino = d; };
   S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
   S.proponiBianco = (rgb) => { if (rgb && rgb.every((x) => Number.isFinite(x) && x >= 0) && rgb[0] + rgb[1] + rgb[2] > 0) S.biancoLuogo = rgb; };
@@ -595,7 +662,7 @@ export function creaNucleo(tela, opzioni = {}) {
   const tasti = new Set();
   function fotogramma(ms = performance.now()) {
     if (perso || !cam.corpo || !tela.width || !tela.height) return;
-    const t0 = performance.now(), dtVero = Math.min(0.1, ultimoMs ? (ms - ultimoMs) / 1000 : 0); ultimoMs = ms;
+    const t0 = performance.now(), dtVero = Math.min(0.1, ultimoMs ? (ms - ultimoMs) / 1000 : 0), dtOcchio = Math.min(1, ultimoMs ? (ms - ultimoMs) / 1000 : 0); ultimoMs = ms; // (l'occhio vive nel tempo di chi guarda, anche a pochi fotogrammi al secondo)
     // (il tempo che scorre è quello di chi guarda: dove il suo orologio va più piano — vicino a un buco nero — nello stesso
     // suo secondo il mondo ne fa di più. Chi lo sa lo dice a ogni fotogramma in `tempo.ritmo` = dτ/dt ≤ 1; lontano vale 1.)
     if (!tempo.pausa) tempo.t += (dtVero * tempo.velocita) / (tempo.ritmo > 0 ? tempo.ritmo : 1);
@@ -627,11 +694,16 @@ export function creaNucleo(tela, opzioni = {}) {
     // finché non c'è una misura (i primi fotogrammi), o senza immagini in virgola mobile, quella proposta dagli strati.
     // La si segue come fa l'occhio: in fretta verso il chiaro, piano verso il buio
     const K = efficaciaLuminosa((st && st.luce && st.luce.T) || OCCHIO.TSole); misura.K = K; S.efficacia = K;
+    S.Ecampo = misura.Lmedia > 0 ? (Math.PI * misura.Lmedia) / K : NaN; // (W/m²: la luce media di tutto il campo come irradianza, per chi taglia ciò che non si vedrebbe: universo.js)
     if (vista.occhio.adatta && Number.isFinite(misura.LA)) S.luceVoluta = E0Adattato(misura.LA, K);
     if (vista.occhio.E0 > 0) S.E0 = vista.occhio.E0;
     else if (S.luceVoluta > 0) { const v = Math.log(S.luceVoluta), o = Math.log(S.E0), k = Math.min(1, dtVero > 0 ? dtVero * (v > o ? 6 : 2.5) : 1); S.E0 = Math.exp(o + (v - o) * k); }
-    // ciò che l'occhio è adesso: la luminanza a cui è adattato (cd/m²), il grado di adattamento al colore, il peso dei coni
-    S.LA = Number.isFinite(misura.LA) ? Math.max(misura.LA, OCCHIO.soglia) : (S.E0 * K * X_MEDIO) / Math.PI;
+    // ciò che l'occhio è adesso: la luminanza a cui è adattato (cd/m²), il grado di adattamento al colore, il peso dei coni.
+    // Con l'occhio che si adatta, quello di Ferwerda (OCCHIO in cima) con gli strumenti davanti; altrimenti (le prove, o
+    // l'esposizione fissata) l'unità dell'immagine va al grigio medio come prima
+    const oc = S.visione, ferwerda = vista.occhio.adatta && !(vista.occhio.E0 > 0) && conVirgola;
+    if (ferwerda && misura.Lscena > 0) { passoOcchio(oc, misura.Lscena, dtOcchio, !!vista.occhio.amplificatore, misura.Lmedia); oc.Lscena = misura.Lscena; oc.Lmedia = misura.Lmedia; oc.Lmax = misura.Lmax; }
+    S.LA = ferwerda && Number.isFinite(oc.LA) ? oc.LA : Number.isFinite(misura.LA) ? Math.max(misura.LA, OCCHIO.soglia) : (S.E0 * K * X_MEDIO) / Math.PI;
     gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA); gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 1); gl.clearDepth(1); gl.depthMask(true); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
     for (const s of strati) if (s.disegna) s.disegna(S, 'fondo');
@@ -648,7 +720,11 @@ export function creaNucleo(tela, opzioni = {}) {
     // (il bianco a cui l'occhio si adatta: la luce che illumina DOVE STA L'OCCHIO — sotto un'aria spessa quella della stella
     // passata dall'aria e quella del cielo, non la stella fuori dall'aria: CIECAM02 si adatta all'illuminante della scena)
     const cs = S.biancoLuogo || S.coloreStella, yb = 0.2126 * cs[0] + 0.7152 * cs[1] + 0.0722 * cs[2] || 1, Dc = S.stella ? gradoAdattamento(S.LA) : 0; S.adattamento = { LA: S.LA, D: Dc, coni: pesoConi(S.LA) };
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); schermo();
+    // (u_k: dall'unità dell'immagine alle cd/m² del mondo, per G dello strumento, per la risposta dell'occhio, e L_da al grigio medio)
+    let kP = S.adattamento.coni, kS = 1 - kP;
+    if (ferwerda && Number.isFinite(oc.LA)) { const f = fattoriOcchio(oc.LA), b = ((S.E0 * K) / Math.PI) * oc.G * (X_MEDIO / OCCHIO.Lda); kP = b * f.mP; kS = b * f.k * f.mS;
+      oc.sottoSoglia = oc.Lmax > 0 && passiVisibili(oc.G * oc.Lmax, oc.LA) < 1; } else { oc.sottoSoglia = false; oc.G = 1; } // (sotto soglia: nemmeno la casella più chiara si vede)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); gl.uniform2f(prgTono.u.u_k, kP, kS); schermo();
     for (const s of strati) if (s.sopra) s.sopra(S);
     gl.bindVertexArray(null);
     stat.cpuMs = performance.now() - t0; stat.fotogrammi++;

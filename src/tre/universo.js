@@ -221,8 +221,10 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
     },
     disegna(S, passata) {
       // (con l'occhio chiuso quattrocento volte più di quanto la nebbia chiede — dentro una galassia, vicino a una stella —
-      // la nebbia varrebbe un decimillesimo: non la si cammina nemmeno)
-      if (passata === 'fondo' && rete && !(S.E0 > 400 * (strato.reteE || 0))) { if (N.vista.splat && reteSplat && reteSplat.pronto()) reteSplat.disegna(S); else rete.disegna(S, O.rete); }
+      // la nebbia varrebbe un decimillesimo: non la si cammina nemmeno. Si confronta con la luce di tutto il campo, S.Ecampo,
+      // se è minore dell'esposizione del centro: con una galassia al centro la nebbia attorno conta ancora, e l'amplificatore
+      // di luce la mostra — prima spariva qui e ricompariva di colpo appena la galassia rimpiccioliva)
+      if (passata === 'fondo' && rete && !(Math.min(S.E0, S.Ecampo > 0 ? S.Ecampo : Infinity) > 400 * (strato.reteE || 0))) { if (N.vista.splat && reteSplat && reteSplat.pronto()) reteSplat.disegna(S); else rete.disegna(S, O.rete); }
       if (passata !== 'velato') return;
       // (da lontano — oltre un ventesimo del lato — ogni punto porta anche una piccola parte della luce di quelle che rappresenta)
       gal.disegna(S, LUCE, 1.5, [1 + O.puntiLuce * peso, 0.002 * lato, 0.05 * lato]);

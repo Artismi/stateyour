@@ -1,8 +1,8 @@
 // icone.js — le icone del visore (PROGETTO_VISORE.md, § 4): un solo tratto 1,6 su una griglia di 24, angoli tondi, nessun
 // riempimento salvo un punto. Un unico sprite SVG di <symbol>, messo una volta nella pagina; `ico(id)` ne fa un <svg>.
 // Le venti del progetto (livelli, azioni, schede, menu) più poche di servizio: le tessere (gravità, giorno, campo, calore,
-// massa, età), e le voci del menu (seme, vista, taccuino, impostazioni,
-// diagnostica). I glifi universali (chiudi, freccia, riproduci) non contano.
+// massa, età), le voci del menu (seme, vista, taccuino, impostazioni,
+// diagnostica) e gli strumenti. I glifi universali (chiudi, freccia, riproduci) non contano.
 
 const SIMBOLI = {
   // i livelli della scala (8), fino alle particelle in fondo
@@ -46,6 +46,10 @@ const SIMBOLI = {
   schermo: '<path d="M3.5 8V3.5H8M16 3.5h4.5V8M20.5 16v4.5H16M8 20.5H3.5V16"/>',
   annulla: '<path d="M9 5 4.5 9.5 9 14"/><path d="M4.5 9.5h9a6 6 0 0 1 0 12h-3"/>',
   rifai: '<path d="M15 5l4.5 4.5L15 14"/><path d="M19.5 9.5h-9a6 6 0 0 0 0 12h3"/>',
+  // gli strumenti (strumenti.js): il cassetto, l'amplificatore di luce (un visore notturno), l'infrarosso (un'onda lunga)
+  strumenti: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3l5.2 5.2"/><path d="M7.6 9a3.2 3.2 0 0 1 3-2.2" opacity=".6"/>',
+  amplificatore: '<circle cx="7" cy="14" r="4"/><circle cx="17" cy="14" r="4"/><path d="M11 14h2M5 10.5 7 6h10l2 4.5"/><path d="M12 2.5v1.8M8.2 3.4l.8 1M15.8 3.4l-.8 1" opacity=".6"/>',
+  infrarosso: '<path d="M2.5 12c1.6-4.5 3.2-4.5 4.8 0s3.2 4.5 4.8 0 3.2-4.5 4.8 0 3.2 4.5 4.8 0"/><path d="M5 19.5h14" opacity=".55"/>',
   // glifi universali
   'g-chiudi': '<path d="M6 6l12 12M18 6 6 18"/>',
   'g-sep': '<path d="M9 5l7 7-7 7"/>',

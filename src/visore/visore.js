@@ -5,7 +5,8 @@
 // La barra in alto, la riga di stato e il pannello laterale spariscono (visore.css); ogni loro funzione ha un posto qui
 // (la tabella del § 11): i tasti, la catena, il righello, il mirino, le schede, il menu, il taccuino.
 //
-// I tasti funzionano davvero: M menu · , P . il tempo · B esci · A entra · I scheda · F inquadra · R a caso · T taccuino.
+// I tasti funzionano davvero: M menu · , P . il tempo · B esci · A entra · I scheda · F inquadra · R a caso · T taccuino ·
+// O gli strumenti · e il tasto di ogni strumento (L l'amplificatore di luce: strumenti.js).
 // Si ascoltano prima della camera (in cattura): A, R e F del volo diventano i tasti del visore; il volo resta con le frecce,
 // W S D, Spazio e C, Q ed E.
 import { metteSprite, ico } from './icone.js';
@@ -14,6 +15,7 @@ import { superficieInCalcolo } from '../camera/mappa.js';
 import { creaHud } from './hud.js';
 import { creaMenu } from './menu.js';
 import { schedaDi } from './schede.js';
+import { creaStrumenti, STRUMENTI, accendi, strumento } from './strumenti.js';
 
 const $ = (id) => document.getElementById(id);
 const prova = (f, d = null) => { try { return f(); } catch { return d; } };
@@ -70,6 +72,7 @@ function costruisci() {
   const azioni = {};
   const hud = creaHud(schermo, { azioni });
   const menu = creaMenu(schermo, { azioni, hud });
+  const strumenti = creaStrumenti(schermo, { hud, ico });
 
   // ---------- LA GHIERA: la rotella resa tasto (A e B, il righello). Si manda la rotella alla tela che sta sotto il mirino,
   // così fa esattamente ciò che fa la rotella vera a ogni livello (lo spazio, il suolo, la roccia, gli atomi, i quanti)
@@ -178,7 +181,11 @@ function costruisci() {
   const FA = { menu: azioni.menu, lento: () => azioni.tempo(-1), pausa: () => azioni.tempo(0), veloce: () => azioni.tempo(1), esci: azioni.esci, entra: azioni.entra, scheda: () => azioni.scheda(), inquadra: azioni.inquadra, caso: azioni.caso };
   radice.querySelector('.v-linguetta').addEventListener('click', (e) => { const b = e.target.closest('[data-v-tasto]'); if (b) FA[b.dataset.vTasto]?.(); });
   radice.querySelector('.v-finestrella').addEventListener('click', azioni.schermoPieno);
-  const TASTI = { m: 'menu', ',': 'lento', p: 'pausa', '.': 'veloce', b: 'esci', a: 'entra', i: 'scheda', f: 'inquadra', r: 'caso', t: 'taccuino' };
+  const TASTI = { m: 'menu', ',': 'lento', p: 'pausa', '.': 'veloce', b: 'esci', a: 'entra', i: 'scheda', f: 'inquadra', r: 'caso', t: 'taccuino', o: 'strumenti' };
+  for (const s of STRUMENTI) if (s.pronto && s.tasto) TASTI[s.tasto.toLowerCase()] = `strumento:${s.id}`;
+  // (uno strumento col suo tasto: si accende o si spegne, e l'avviso dice che cosa fa)
+  azioni.strumento = (id) => { const s = strumento(id); if (!s) return; const si = accendi(id); hud.avvisa(si ? `${s.nome}: acceso. ${s.vedi}` : `${s.nome}: spento. Di nuovo con i tuoi occhi`, { durata: 7000 }); strumenti.aggiorna(); };
+  azioni.strumenti = () => { if (menu.taccuinoAperto) menu.chiudiTaccuino(); menu.apri('strumenti'); };
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target?.matches?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
@@ -186,7 +193,7 @@ function costruisci() {
     const k = TASTI[e.key.length === 1 ? e.key.toLowerCase() : '']; if (!k) return;
     e.preventDefault(); e.stopImmediatePropagation();
     const b = radice.querySelector(`[data-v-tasto="${k}"]`); if (b) { b.classList.add('premuto'); setTimeout(() => b.classList.remove('premuto'), 140); }
-    if (k === 'taccuino') azioni.taccuino(); else FA[k]?.();
+    if (k === 'taccuino') azioni.taccuino(); else if (k === 'strumenti') azioni.strumenti(); else if (k.startsWith('strumento:')) azioni.strumento(k.slice(10)); else FA[k]?.();
   }, { capture: true });
 
   // ---------- GLI AVVISI: uno alla volta, da ciò che la camera scrive (gli errori, la ricerca di una finestra bella, la
@@ -201,5 +208,6 @@ function costruisci() {
   // la prima volta: un avviso che dice dove sta la guida (il taccuino, T); niente finestre davanti alla scena
   try { if (!localStorage.getItem('stateyour.visore.guida')) { localStorage.setItem('stateyour.visore.guida', '1'); setTimeout(() => hud.avvisa('La prima volta: T apre la guida, M il menu, I la scheda', { durata: 9000 }), 1500); } } catch { /* senza memoria */ }
   window.__visore = { azioni, hud, menu, scheda: (x) => scheda(x) };
+  window.__strumenti = { accendi: (id, si) => { const r = accendi(id, si); strumenti.aggiorna(); return r; }, elenco: STRUMENTI };
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', costruisci); else costruisci();

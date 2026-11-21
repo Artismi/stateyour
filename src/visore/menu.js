@@ -1,14 +1,15 @@
 // menu.js — il menu ≡ (un cassetto da sinistra: la scena si scurisce ma continua a muoversi) e il taccuino (i testi lunghi,
 // impaginati per leggere). Il menu ha cinque voci (PROGETTO_VISORE.md, § 5): Seme, Vista, Taccuino, Impostazioni,
-// Diagnostica. Ogni comando di prima ha qui il suo posto (§ 11): i comandi si eseguono premendo i bottoni della camera, che
+// Diagnostica; e gli Strumenti (strumenti.js: l'amplificatore di luce e quelli che verranno). Ogni comando di prima ha qui il suo posto (§ 11): i comandi si eseguono premendo i bottoni della camera, che
 // restano nella pagina (nascosti), così la logica resta una sola, quella di laboratorio.js.
 import { ico } from './icone.js';
 import { C, catena, scala, lunghezza } from './dati.js';
+import { STRUMENTI, acceso, accendi, ascolta } from './strumenti.js';
 
 const $ = (id) => document.getElementById(id);
 const prova = (f, d = null) => { try { return f(); } catch { return d; } };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const VOCI = [['seme', 'seme', 'Seme'], ['vista', 'vista', 'Vista'], ['taccuino', 'taccuino', 'Taccuino', 'T'], ['impostazioni', 'impostazioni', 'Impostazioni'], ['diagnostica', 'diagnostica', 'Diagnostica']];
+const VOCI = [['seme', 'seme', 'Seme'], ['vista', 'vista', 'Vista'], ['strumenti', 'strumenti', 'Strumenti', 'O'], ['taccuino', 'taccuino', 'Taccuino', 'T'], ['impostazioni', 'impostazioni', 'Impostazioni'], ['diagnostica', 'diagnostica', 'Diagnostica']];
 const voce = (az, icona, testo, { kbd = '', off = false, on = false, titolo = '' } = {}) => `<button data-v-azione="${az}"${off ? ' disabled' : ''} class="${on ? 'on' : ''}"${titolo ? ` title="${esc(titolo)}"` : ''}>${ico(icona)}<span>${testo}</span>${kbd ? `<small>${kbd}</small>` : ''}</button>`;
 
 // LA GUIDA: le istruzioni che stavano sempre a schermo (la riga in basso, i riquadri del pannello), qui una volta sola
@@ -25,6 +26,7 @@ const GUIDA = `
 <tr><td><kbd>F</kbd></td><td>inquadra: una finestra bella a questa scala</td></tr>
 <tr><td><kbd>R</kbd></td><td>a caso: un punto a caso dell'universo, scelto con la misura della lingua</td></tr>
 <tr><td><kbd>T</kbd></td><td>questo taccuino</td></tr>
+<tr><td><kbd>O</kbd></td><td>gli strumenti: ciò che si mette davanti agli occhi per vedere di più · <kbd>L</kbd> accende e spegne l'amplificatore di luce</td></tr>
 </table>
 <h3>Il mouse e il volo</h3>
 <table>
@@ -66,7 +68,7 @@ export function creaMenu(schermo, { azioni, hud }) {
   function paginaImpostazioni() {
     const c = C(), ad = c?.mondo3d?.stato?.adattamento;
     const occhio = ad && Number.isFinite(ad.LA) ? `${ad.LA >= 0.1 ? ad.LA.toPrecision(2).replace('.', ',') : ad.LA.toExponential(0).replace('e', '·10^')} cd/m²` : '–', visione = !ad ? '–' : ad.LA <= 1.0001e-6 ? 'alla sua soglia: quasi non vede' : ad.coni <= 0 ? 'notturna, senza colori' : ad.coni < 1 ? 'crepuscolo: i colori sbiadiscono' : 'diurna, a colori';
-    return `<h4>L'occhio</h4><div class="riga-d"><span>adattato a</span><b>${occhio}</b></div><div class="riga-d"><span>la visione</span><b>${visione}</b></div><p class="nota" style="margin:8px 0 18px;color:var(--avorio-50)">L'occhio si adatta alla luce della fovea (2°): sotto la sua soglia ciò che c'è resta scuro.</p>
+    return `<h4>L'occhio</h4><div class="riga-d"><span>adattato a</span><b>${occhio}</b></div><div class="riga-d"><span>la visione</span><b>${visione}</b></div><p class="nota" style="margin:8px 0 18px;color:var(--avorio-50)">È un occhio umano (Ferwerda et al. 1996): si adatta piano alla luce che c'è attorno a dove guardi, in fretta verso il chiaro e in minuti verso il buio; sotto la sua soglia ciò che c'è resta nero, e al buio i colori spariscono. Per vedere di più: gli strumenti (O).</p>
       <h4>Il visore</h4>
       <label class="inter">Le etichette nello spazio<input type="checkbox" data-v-imp="etichette" ${document.body.classList.contains('v-senza-etichette') ? '' : 'checked'}></label>
       <label class="inter">Schermo pieno<input type="checkbox" data-v-imp="schermo" ${document.fullscreenElement ? 'checked' : ''}></label>
@@ -80,7 +82,13 @@ export function creaMenu(schermo, { azioni, hud }) {
       ['fotogrammi', s ? `${s.fotogrammi}${st.fps != null ? ` · ${st.fps.toFixed(1)} al secondo` : ''}` : '–']];
     return `<h4>I numeri</h4>${righe.map(([a, b]) => `<div class="riga-d"><span>${a}</span><b>${esc(b)}</b></div>`).join('')}<h4 style="margin-top:18px">La barra di scala</h4><p class="lungo">${esc(sc?.barra || '–')}</p>${s ? `<h4 style="margin-top:18px">Il motore</h4><p class="lungo">${esc(JSON.stringify(s, (k, v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)).slice(0, 900))}</p>` : ''}`;
   }
-  const PAGINE = { seme: paginaSeme, vista: paginaVista, impostazioni: paginaImpostazioni, diagnostica: paginaDiagnostica };
+  // GLI STRUMENTI: uno per riga, con l'interruttore, il tasto, che cosa fa e che cosa vedi (strumenti.js)
+  function paginaStrumenti() {
+    return `<p class="nota" style="margin:0 0 14px;color:var(--avorio-50)">Di solito vedi con occhi umani: dove c'è poca luce, è buio. Gli strumenti si mettono davanti agli occhi per vedere di più.</p>
+      ${STRUMENTI.map((s) => `<div class="v-strumento${s.pronto ? '' : ' futuro'}"><label class="inter">${ico(s.icona)}<span>${s.nome}${s.pronto ? ` <kbd>${s.tasto}</kbd>` : ' <em>in arrivo</em>'}</span><input type="checkbox" data-v-strumento="${s.id}" ${acceso(s.id) ? 'checked' : ''} ${s.pronto ? '' : 'disabled'}></label>
+        ${s.pronto ? `<p><b>Che cosa fa.</b> ${esc(s.fa)}</p><p><b>Che cosa vedi.</b> ${esc(s.vedi)}</p>` : ''}</div>`).join('')}`;
+  }
+  const PAGINE = { strumenti: paginaStrumenti, seme: paginaSeme, vista: paginaVista, impostazioni: paginaImpostazioni, diagnostica: paginaDiagnostica };
   function disegnaPagina() {
     for (const b of menu.querySelectorAll('[data-v-pagina]')) b.classList.toggle('on', b.dataset.vPagina === st.pagina);
     const f = PAGINE[st.pagina]; if (f) { const aperto = document.activeElement?.id === 'v-bolla'; if (!aperto) pagina.innerHTML = prova(f, ''); }
@@ -109,6 +117,8 @@ export function creaMenu(schermo, { azioni, hud }) {
     if (k === 'etichette') document.body.classList.toggle('v-senza-etichette', !e.target.checked);
     if (k === 'schermo') azioni.schermoPieno();
   });
+  menu.addEventListener('change', (e) => { const id = e.target.dataset.vStrumento; if (id) { accendi(id, e.target.checked); disegnaPagina(); } });
+  ascolta(() => { if (st.aperto && st.pagina === 'strumenti') disegnaPagina(); }); // (anche quando lo si accende col tasto)
   menu.addEventListener('keydown', (e) => { if (e.target.id === 'v-bolla' && e.key === 'Enter') menu.querySelector('[data-v-azione="bolla"]')?.click(); });
   // un clic sulla scena (fuori dal menu e dal taccuino) li chiude; il velo non prende mai la mano: la rotella resta alla scena
   document.addEventListener('pointerdown', (e) => { if (!st.aperto && !st.taccuino) return; if (e.target.closest?.('.v-menu, .v-taccuino, .v-linguetta, dialog')) return; chiudi(); chiudiTaccuino(); }, true);
