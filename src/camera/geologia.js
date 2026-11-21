@@ -133,15 +133,18 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // resta la convenzione di prima: int.vulcani edifici da 2500 m
   const pennacchi = (() => { if (!tempo || !cime.length) return null; try { const s = storia(P, int.eta ?? 4.5e9), n = tempo.t.length - 1, vI = tempo.vInterno[n], D = tempo.struttura.D;
     const f = s.Q.cmb > 0 ? s.Q.cmb / Math.max(1, s.Q.conv + s.Q.fuso) : 0; return { flusso: (STORIA.erutta * f * s.fuso.kgAnno) / ROCCE.densita, giro: vI > 0 ? D / (vI * 3.156e7) : 0 }; } catch { return null; } })();
-  if (pennacchi) { const pendio = Math.tan((5 * Math.PI) / 180), dy = (Math.PI * P.raggioM) / H; let su = 0; for (const c of cime) su += c[2];
-    for (const [i, j, v] of cime) { const F = (pennacchi.flusso * v) / su, vel = tt ? tt.storia.velocita : 0; // (la placca corre sul pennacchio alla velocità delle placche: sopra la salita la cella stessa quasi non si muove, è la dorsale)
-      const h = vel > 0 ? Math.sqrt((6 * F * pendio) / (Math.PI * vel)) : Math.cbrt((3 * F * pennacchi.giro * pendio * pendio) / Math.PI); if (!(h > 1)) continue;
+  // (QUANTI: quelli di storia.js, interno.vulcani, sulle cime più calde: una fonte sola del numero. Prima qui un pennacchio per
+  // ogni cima del campo, e la Terra di test_fili ne disegnava 11 dove il suo interno ne contava 4)
+  const nPennacchi = pennacchi ? Math.min(int.vulcani || 0, cime.length) : 0;
+  if (nPennacchi > 0) { const pendio = Math.tan((5 * Math.PI) / 180), dy = (Math.PI * P.raggioM) / H; let su = 0; for (let k = 0; k < nPennacchi; k++) su += cime[k][2];
+    for (const [i, j, v] of cime.slice(0, nPennacchi)) { const F = (pennacchi.flusso * v) / su, vel = tt ? tt.storia.velocita : 0; // (la placca corre sul pennacchio alla velocità delle placche: sopra la salita la cella stessa quasi non si muove, è la dorsale)
+      const h = vel > 0 ? Math.sqrt((6 * F * pendio) / (Math.PI * vel)) : Math.cbrt((3 * F * pennacchi.giro * pendio * pendio) / Math.PI); if (!(h > 1)) { vulcani.push([i, j]); continue; } // (un camino senza un edificio di un metro: c'è, ma non si vede)
       const r = h / pendio, dx = Math.max(0.1 * dy, ((2 * Math.PI * P.raggioM) / W) * Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI)), rj = Math.ceil(r / dy), ri = Math.min(W >> 1, Math.ceil(r / dx)); // (dx: il lato della cella lungo il parallelo)
       const V = (Math.PI * r * r * h) / 3; let posto = 0; const pezzi = [];
       for (let b = -rj; b <= rj; b++) { const jj = j + b; if (jj < 0 || jj >= H) continue; for (let a = -ri; a <= ri; a++) { const z = h * (1 - Math.hypot(a * dx, b * dy) / r); if (z > 0) { pezzi.push([jj * W + ((i + a + W) % W), z]); posto += z * dx * dy; } } }
       const sc = V / posto; // (il volume si conserva anche se il cono è più stretto di una cella: la cella del centro c'è sempre)
       for (const [q, z] of pezzi) { alt[q] += z * sc * (1 - ROCCE.densita / TETTONICA.rhoMantello); lava[q] += z * sc; } vulcani.push([i, j]); } }
-  else for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) { const colata = 2500 * Math.exp(-(di * di + dj * dj) / 3); alt[jj * W + ii] += colata; lava[jj * W + ii] += colata; } } } // (l'edificio è una pila di lave: quello spessore è roccia vulcanica)
+  for (let k = nPennacchi; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) { const colata = 2500 * Math.exp(-(di * di + dj * dj) / 3); alt[jj * W + ii] += colata; lava[jj * W + ii] += colata; } } } // (l'edificio è una pila di lave: quello spessore è roccia vulcanica)
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = acquaKg / 1000;
