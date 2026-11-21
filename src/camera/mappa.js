@@ -18,6 +18,7 @@ import { cosmo, galassia, sistema, pianeta, regione, magnetosfera, fascia, metri
 import { fmtLunghezza } from './unita.js';
 import { nebbiaPianeta, ACCELERA, fmtGrande } from './nebbia.js';
 import { sorgente } from './eventi.js';
+import { serie } from './eredita.js';
 import { bellezzaImmagine } from './sezione.js';
 import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
@@ -41,6 +42,8 @@ function figli(cam) {
   if (cam.livello === 2) return sistema(v.cosmo, v.galassia, v.stella).pianeti.map((P) => ({ pos: P.pos, scala: P.r, raggio: Math.max(2.8, 1.1 * estensioneLune(P)), via: { ...v, pianeta: P.id }, dato: P }));
   return [];
 }
+// la grandezza a schermo (in lati corti) a cui un livello prende il posto del genitore, e a cui glielo rende
+const sogliaLivello = (livello) => (livello === 3 ? 0.42 : 0.4);
 // dove sta il livello dentro il genitore (posizione e scala)
 function nelGenitore(cam) {
   const v = cam.via;
@@ -63,12 +66,16 @@ export function zoomMappa(cam, fx, fy, k, W, H) {
   cam.verso = k > 1 ? 1 : k < 1 ? -1 : 0; const esito = zoomMappaQui(cam, fx, fy, k, W, H); if (cam.livello === 5) preparaAvanti(cam); return esito;
 }
 function zoomMappaQui(cam, fx, fy, k, W, H) {
-  const ax = cam.cx + (fx - W / 2) / cam.z, ay = cam.cy + (fy - H / 2) / cam.z;
+  const ax = cam.cx + (fx - W / 2) / cam.z, ay = cam.cy + (fy - H / 2) / cam.z, cx0 = cam.cx, cy0 = cam.cy;
   cam.z *= k; cam.cx = ax - (fx - W / 2) / cam.z; cam.cy = ay - (fy - H / 2) / cam.z;
-  const m = minimo(W, H);
+  const m = minimo(W, H), sulPunto = () => { cam.cx = 0.5 + (cx0 - 0.5) / k; cam.cy = 0.5 + (cy0 - 0.5) / k; };
   // LA ROCCIA (livello 5): in fondo alla superficie, avvicinandosi ancora, si guarda di che cosa è fatto quel punto
-  if (cam.livello === 4 && cam.z > 6e6) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = 0.8 * m; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; return null; }
+  if (cam.livello === 4 && cam.z > Z4_ROCCIA) { cam.roccia = { cx: cam.cx, cy: cam.cy }; cam.livello = 5; cam.cx = 0.5; cam.cy = 0.5; cam.z = (cam.z / Z4_ROCCIA) * Z5_ROCCIA * m; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; return null; }
   if (cam.livello === 5) {
+    // (sotto il metro tutto è centrato nel punto: le finestre dell'acqua e del suolo, la roccia e i suoi livelli uno dentro
+    // l'altro. La rotella ingrandisce attorno al punto, che resta dove sta sullo schermo: così la vista è una funzione del
+    // punto e dello zoom, e andata e ritorno passano per gli stessi quadri qualunque sia la strada)
+    sulPunto();
     // SUL SUOLO (suolo.js, PROGETTO.md lavoro 9): prima della roccia, le finestre del suolo di quel punto, di dieci in dieci
     // (LATI_SUOLO), come per l'acqua; sotto l'ultima, la roccia del punto alla sua grandezza vera. «latoSuolo» non detto è la
     // prima finestra; null è la roccia
@@ -80,18 +87,20 @@ function zoomMappaQui(cam, fx, fy, k, W, H) {
         // dal primo suo livello più piccolo della finestra (la lamina, il reticolo, gli atomi del granello che sta nel punto
         // guardato: granoNelPunto), fino alla scena dei nanometri in 3D (la superficie del minerale con l'acqua dei pori)
         if (i === LATI_SUOLO.length - 1) {
+          sulPunto();
           const c = sottoIlSuolo(cam)[0], Lc = c != null ? latoPasso(cam, c) : null;
           if (Lc) { const zc = (cam.z * Lc) / L;
-            if (!cam.ancoraSuolo || (k > 1 && zc < 0.03 * m)) { cam.ancoraSuolo = [ax, ay]; const g = granoNelPunto(r.fin, r.fin.x0 + ax * r.fin.L, r.fin.y0 + (1 - ay) * r.fin.L); cam.mineraleRoccia = g && RETICOLI[g] ? g : null; }
+            // (il livello sotto sta nel punto, al centro delle finestre: lì si scende, e lì si risale; il granello è quello del punto)
+            if (!cam.ancoraSuolo) { cam.ancoraSuolo = [0.5, 0.5]; const g = granoNelPunto(r.fin, r.fin.x0 + 0.5 * r.fin.L, r.fin.y0 + 0.5 * r.fin.L); cam.mineraleRoccia = g && RETICOLI[g] ? g : null; }
             if (zc >= m) { const b = cam.ancoraSuolo; cam.cx = 0.5 + ((cam.cx - b[0]) * L) / Lc; cam.cy = 0.5 + ((cam.cy - b[1]) * L) / Lc; cam.z = zc; cam.latoSuolo = null; cam.passoRoccia = c; cam.dalSuolo = c; cam.ancore = {}; return null; }
-            if (cam.z < 0.8 * m) { cam.latoSuolo = LATI_SUOLO[i - 1]; tieniIlPunto(cam, m); dentroDieci(cam, 0.1); cam.ancoraSuolo = undefined; return null; }
+            if (cam.z < 0.8 * m) { cam.latoSuolo = LATI_SUOLO[i - 1]; sulPunto(); dentroDieci(cam, 0.1); cam.ancoraSuolo = undefined; return null; }
             return null; }
         }
-        tieniIlPunto(cam, m);
+        sulPunto();
         if (cam.z > 9 * m) { if (i + 1 < LATI_SUOLO.length) { cam.latoSuolo = LATI_SUOLO[i + 1]; dentroDieci(cam, 10); return null; }
-          const b = rocciaDi({ ...cam, latoSuolo: null, passoRoccia: 0 }); cam.latoSuolo = null; cam.passoRoccia = 0; cam.ancore = {}; cam.z = Math.max(0.5 * m, (cam.z * (b?.larghezzaM || L)) / L); cam.cx = 0.5; cam.cy = 0.5; return null; }
+          const b = rocciaDi({ ...cam, latoSuolo: null, passoRoccia: 0 }); cam.latoSuolo = null; cam.passoRoccia = 0; cam.ancore = {}; ribasa(cam, Math.max(0.5 * m, (cam.z * (b?.larghezzaM || L)) / L)); return null; }
         if (cam.z < 0.8 * m && i > 0) { cam.latoSuolo = LATI_SUOLO[i - 1]; dentroDieci(cam, 0.1); return null; }
-        if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
+        if (cam.z < Z5_ROCCIA * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = (cam.z / (Z5_ROCCIA * m)) * Z4_ROCCIA; cam.passoRoccia = 0; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
         cam.z = Math.min(cam.z, 12 * m); return null;
       }
       if (!cam.suAcqua) cam.latoSuolo = null; // (niente suolo lì: la roccia)
@@ -106,36 +115,43 @@ function zoomMappaQui(cam, fx, fy, k, W, H) {
       const seq = sequenzaRoccia(cam), i = Math.max(0, seq.indexOf(cam.passoRoccia ?? 0)), p = (cam.passoRoccia = seq[i]), L = latoPasso(cam, p); cam.ancore ??= {};
       if (i + 1 < seq.length && L) {
         const c = seq[i + 1], Lc = latoPasso(cam, c), zc = (cam.z * Lc) / L;
-        // finché il livello sotto è un puntino segue il punto che si guarda (è lo stesso dappertutto, per indirizzo: il
-        // cristallo di quel punto); da quando si vede resta dov'è
-        if (!cam.ancore[p] || (k > 1 && zc < 0.03 * m)) { cam.ancore[p] = [ax, ay]; if (p === 0) { cam.puntoRoccia = [ax, ay]; cam.mineraleRoccia = rocciaDi({ ...cam, passoRoccia: 0 })?.mineraleIn?.(ax, ay) ?? null; } }
+        // il livello sotto sta nel punto, al centro di questo (il cristallo di quel punto, la sua lamina, il suo reticolo:
+        // per indirizzo). Prima seguiva il cursore finché era un puntino e poi restava dov'era: la strada decideva il quadro
+        if (!cam.ancore[p]) { cam.ancore[p] = [0.5, 0.5]; if (p === 0) { cam.puntoRoccia = [0.5, 0.5]; cam.mineraleRoccia = rocciaDi({ ...cam, passoRoccia: 0 })?.mineraleIn?.(0.5, 0.5) ?? null; } }
         if (Lc && zc >= m) { const b = cam.ancore[p]; cam.cx = 0.5 + ((cam.cx - b[0]) * L) / Lc; cam.cy = 0.5 + ((cam.cy - b[1]) * L) / Lc; cam.z = zc; cam.passoRoccia = c; return null; }
       }
       // (entrati dal suolo: sopra il primo livello c'è la finestra del suolo di 10 µm, non la roccia grande)
       if (cam.dalSuolo === p && cam.z < 0.5 * m) { const Ls = LATI_SUOLO[LATI_SUOLO.length - 1], a = cam.ancoraSuolo || [0.5, 0.5]; cam.cx = a[0] + ((cam.cx - 0.5) * L) / Ls; cam.cy = a[1] + ((cam.cy - 0.5) * L) / Ls; cam.z = (cam.z * Ls) / L; cam.latoSuolo = Ls; cam.passoRoccia = 0; cam.dalSuolo = undefined; cam.ancore = {}; return null; }
       if (i > 0 && cam.z < 0.5 * m) { const q = seq[i - 1], Lq = latoPasso(cam, q), a = cam.ancore[q] || [0.5, 0.5]; cam.cx = a[0] + ((cam.cx - 0.5) * L) / Lq; cam.cy = a[1] + ((cam.cy - 0.5) * L) / Lq; cam.z = (cam.z * Lq) / L; cam.passoRoccia = q; return null; }
-      if (i === 0 && cam.z < 0.45 * m && rocciaDi({ ...cam, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1], passoRoccia: 0 })?.suolo) { const Ls = [...LATI_SUOLO].reverse().find((x) => x >= L) ?? LATI_SUOLO[0]; cam.z = (cam.z * Ls) / L; cam.latoSuolo = Ls; cam.passoRoccia = 0; cam.cx = 0.5; cam.cy = 0.5; return null; }
-      if (i === 0 && cam.z < 0.45 * m) { cam.livello = 4; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.passoRoccia = 0; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
+      if (i === 0 && cam.z < 0.45 * m && rocciaDi({ ...cam, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1], passoRoccia: 0 })?.suolo) { const Ls = [...LATI_SUOLO].reverse().find((x) => x >= L) ?? LATI_SUOLO[0]; ribasa(cam, (cam.z * Ls) / L); cam.latoSuolo = Ls; cam.passoRoccia = 0; return null; }
+      if (i === 0 && cam.z < Z5_ROCCIA * m && !rocciaDi({ ...cam, latoSuolo: LATI_SUOLO[LATI_SUOLO.length - 1], passoRoccia: 0 })?.suolo) { cam.livello = 4; cam.latoSuolo = undefined; cam.dalSuolo = undefined; cam.ancoraSuolo = undefined; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = (cam.z / (Z5_ROCCIA * m)) * Z4_ROCCIA; cam.passoRoccia = 0; cam.ancore = {}; cam.mineraleRoccia = null; return null; }
       if (i === seq.length - 1) cam.z = Math.min(cam.z, 12 * m); // (in fondo: gli atomi; sotto, in tre dimensioni, la scala quantistica)
       return null;
     }
     // dentro l'acqua si continua a scendere: ogni volta che il campione riempie dieci schermi se ne guarda uno dieci volte più
     // piccolo, alla stessa grandezza a schermo (z diviso dieci). L'evento vero di quell'acqua non sta in fondo: sta alla sua
     // scala (millimetri), sovrapposto al campione quando lo si attraversa (finestraDelPunto, laboratorio.js)
-    cam.eventoAcqua = false; tieniIlPunto(cam, m);
+    cam.eventoAcqua = false; sulPunto();
     if (cam.z > 9 * m && (cam.latoAcqua ?? 1) > 2e-9) { cam.latoAcqua = dieci((cam.latoAcqua ?? 1) / 10); dentroDieci(cam, 10); return null; }
     if (cam.z < 0.8 * m && (cam.latoAcqua ?? 1) < 0.5) { cam.latoAcqua = dieci(cam.latoAcqua * 10); dentroDieci(cam, 0.1); return null; }
-    if (cam.z < 0.45 * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = 5.5e6; cam.latoAcqua = undefined; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.mineraleRoccia = null; return null; }
+    if (cam.z < Z5_ROCCIA * m) { cam.livello = 4; cam.cx = cam.roccia.cx; cam.cy = cam.roccia.cy; cam.z = (cam.z / (Z5_ROCCIA * m)) * Z4_ROCCIA; cam.latoAcqua = undefined; cam.passoRoccia = 0; cam.eventoAcqua = false; cam.mineraleRoccia = null; return null; }
     cam.z = Math.min(cam.z, 12 * m); return null;
   }
   return passaggi(cam, W, H, k > 1, { fx, fy, k });
 }
 // (le finestre dell'acqua e del suolo stanno tutte centrate nel punto: passando a quella dieci volte più piccola, o più grande,
-// lo schermo resta com'è — le coordinate si contano nella finestra nuova —, e il punto non esce dallo schermo, se no le
-// finestre più fini non si vedrebbero mai: la rotella va verso il cursore finché il punto sta entro un terzo dello schermo)
+// lo schermo resta com'è — le coordinate si contano nella finestra nuova. LA VISTA È UNA FUNZIONE DI PUNTO E ZOOM: nelle
+// finestre la rotella ingrandisce attorno al punto (sulPunto), che resta dov'è sullo schermo (dove lo si è portato
+// trascinando). Prima andava verso il cursore e il punto veniva trattenuto entro un terzo dello schermo (tieniIlPunto): un
+// taglio che non si disfa, e al ritorno la stessa scala mostrava un altro pezzo. Ora andata e ritorno passano per gli stessi
+// quadri. ribasa: cambiare il lato contato tenendo fermo il punto sullo schermo (prima si rimetteva il punto al centro).)
 const dieci = (x) => 10 ** Math.round(Math.log10(x));
 function dentroDieci(cam, f) { cam.cx = 0.5 + (cam.cx - 0.5) * f; cam.cy = 0.5 + (cam.cy - 0.5) * f; cam.z /= f; }
-function tieniIlPunto(cam, m) { const d = (0.35 * m) / cam.z; cam.cx = Math.max(0.5 - d, Math.min(0.5 + d, cam.cx)); cam.cy = Math.max(0.5 - d, Math.min(0.5 + d, cam.cy)); }
+function ribasa(cam, z1) { cam.cx = 0.5 + ((cam.cx - 0.5) * cam.z) / z1; cam.cy = 0.5 + ((cam.cy - 0.5) * cam.z) / z1; cam.z = z1; }
+// IL PASSAGGIO TRA LA CARTA DEL PIANETA (livello 4) E LA ROCCIA DEL PUNTO (livello 5): una soglia sola nei due versi (prima si
+// entrava a 6·10⁶ verso 0,8 schermi e si usciva a 0,45 schermi verso 5,5·10⁶: andata e ritorno non si incontravano), e lo
+// zoom che passa è proporzionale: z₅/(Z5·m) = z₄/Z4. (A MANO, dichiarato: la carta non va oltre Z4, la roccia si vede all'80%.)
+export const Z4_ROCCIA = 6e6, Z5_ROCCIA = 0.8;
 // le finestre attorno a quella di adesso, centrate nello stesso punto: la dieci volte più grande, lei, la dieci volte più
 // piccola (disegnaFinestre). → [{ L, r }] o null (dove non c'è una catena di finestre: la roccia)
 export function finestreDelPunto(cam) {
@@ -166,7 +182,10 @@ function passaggi(cam, W, H, dentro = false, fuoco = null) {
     // LA SUPERFICIE (livello 4): la mappa del pianeta, x = longitudine (0..1, si richiude), y = latitudine (0..0,5)
     if (cam.livello === 4) {
       cam.cx = ((cam.cx % 1) + 1) % 1; cam.cy = Math.max(0, Math.min(0.5, cam.cy)); cam.z = Math.min(cam.z, 6e6);
-      if (cam.z < 0.9 * m) { cam.livello = 3; cam.cx = 0; cam.cy = 0; cam.z /= 2 * Math.PI; continue; }
+      // (si torna al disco alla stessa soglia a cui ci si è scesi, 0,8 schermi, e nel punto che si guardava: la proiezione
+      // inversa di quella della discesa qui sotto; prima si usciva a 0,9/2π ≈ 0,14 schermi al centro del disco)
+      if (cam.z < 0.8 * 2 * Math.PI * m) { const P = sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella).pianeti[cam.via.pianeta], lon = cam.cx * 2 * Math.PI - Math.PI, lat = Math.PI / 2 - cam.cy * 2 * Math.PI;
+        cam.livello = 3; cam.cx = Math.cos(lat) * Math.sin(lon); cam.cy = -Math.sin(lat) * (1 - (P.schiacciamento || 0)); cam.z /= 2 * Math.PI; continue; }
       break;
     }
     if (cam.livello === 3 && cam.z > 0.8 * m && Math.hypot(cam.cx, cam.cy) < 0.95) {
@@ -179,7 +198,7 @@ function passaggi(cam, W, H, dentro = false, fuoco = null) {
     if (cam.livello === 0) { cam.cx = ((cam.cx % 1) + 1) % 1; cam.cy = ((cam.cy % 1) + 1) % 1; cam.z = Math.max(cam.z, m / 1.25); }
     // dentro: un figlio che riempie lo schermo e contiene il centro
     if (cam.livello < 3) {
-      const soglia = cam.livello === 2 ? 0.42 * m : 0.4 * m;
+      const soglia = sogliaLivello(cam.livello + 1) * m;
       let scelto = null, dmin = Infinity;
       for (const f of figli(cam)) {
         if (f.scala * cam.z * f.raggio < soglia) continue;
@@ -216,9 +235,11 @@ function passaggi(cam, W, H, dentro = false, fuoco = null) {
     }
     // fuori: il livello è diventato piccolo sullo schermo
     const g = nelGenitore(cam);
-    // il livello del pianeta arriva fin dove arrivano le sue lune
-    const largo = cam.livello === 3 ? Math.max(6, 2.2 * estensioneLune(sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella).pianeti[cam.via.pianeta])) : cam.livello === 2 ? 1.3 : 1.1;
-    if (g && cam.z * largo < 0.3 * m) {
+    // (si esce alla stessa grandezza a schermo a cui si entra: il raggio del figlio in figli() contro sogliaLivello. Prima si
+    // usciva a 0,3 schermi con un raggio più largo, ed entrare e uscire avvenivano a scale diverse: andata e ritorno non si
+    // incontravano. Il livello del pianeta arriva fin dove arrivano le sue lune: è già nel suo raggio.)
+    const largo = cam.livello === 3 ? Math.max(2.8, 1.1 * estensioneLune(sistema(cam.via.cosmo, cam.via.galassia, cam.via.stella).pianeti[cam.via.pianeta])) : cam.livello === 2 ? 1.2 : 1.05;
+    if (g && cam.z * largo < sogliaLivello(cam.livello) * m) {
       cam.cx = g.pos[0] + cam.cx * g.scala; cam.cy = g.pos[1] + cam.cy * g.scala; cam.z /= g.scala; cam.livello--;
       const v = { ...cam.via }; delete v[['galassia', 'stella', 'pianeta'][cam.livello]]; cam.via = v;
       continue;
@@ -301,7 +322,8 @@ export function percorso(cam) {
 }
 
 // ---------- il disegno
-const fondoStelle = (() => { const p = []; let s = 7; const r = () => ((s = (s * 16807) % 2147483647) / 2147483647); for (let i = 0; i < 260; i++) p.push([r(), r(), r()]); return p; })();
+// (le stelle di fondo della carta piatta: una serie con nome, non più il seme fisso 7 con il generatore 16807)
+const fondoStelle = (() => { const p = [], r = serie('mappa piatta', 'stelle di fondo'); for (let i = 0; i < 260; i++) p.push([r(3 * i), r(3 * i + 1), r(3 * i + 2)]); return p; })();
 const reteImg = new Map();
 function immagineRete(n) {
   if (reteImg.has(n)) return reteImg.get(n);
