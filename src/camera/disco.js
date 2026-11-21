@@ -395,10 +395,36 @@ export function formaPianeti(st, seme = 1) {
   let vivi = corpi.filter((b) => !b.morto && b.m > 0).sort((p, q) => p.a - q.a); const fusioni = [];
   const MS = D.massaStella, LN = 3, anno = (a) => Math.pow(a, 1.5) / Math.sqrt(MS), cache = new Map(), incontri = new Map(); // (incontri: quante volte si è incontrata ogni coppia)
   const raggio = (b) => { if (b._rm !== b.m || b._rf !== b.fe || b._rh !== b.h2o) { b._rm = b.m; b._rf = b.fe; b._rh = b.h2o; b._R = raggioPianeta({ massaKg: b.m, ferro: b.fe / (b.m - b.gas), ghiaccio: b.h2o / (b.m - b.gas), gas: b.gas / b.m }); } return b._R; }; // (in memoria finché il corpo non cambia)
-  // LA CRESCITA DOPO IL GAS: ogni embrione continua a mangiare i planetesimi della sua striscia (mangia, sopra), centinaia di
-  // volte più lentamente senza gas (DISCO.senzaGas). I giganti no: i planetesimi li scagliano.
+  // IL DESTINO DEI PLANETESIMI RIMASTI, DOPO IL GAS (il cibo: i resti della striscia e i frammenti degli urti). Il corpo li agita fino
+  // alla sua velocità di fuga (Safronov), e da lì ognuno o lo colpisce o ne è diffuso via — scagliato fuori, sulla stella, sugli
+  // altri —. Quanti lo colpiscono: Ida e Lin 2004 (ApJ 604, 388, §3 [V: letto il testo]), il rapporto tra urti ed espulsioni è
+  // f_cap ≈ (V_fuga,stella/V_sup)⁴ = 4/Θ², con V_sup = √(GM/R), V_fuga,stella = √(2GM*/a) e Θ = (v_fuga/v_orbita)²/2 il numero di
+  // Safronov: una Terra a 1 UA (Θ ≈ 0,07) se li prende quasi tutti, un gigante li scaglia. Quanto in fretta: il tempo d'urto della
+  // fase degli urti giganti (Kimura et al. 2025, eq. 11), con lo sciame largo quanto la striscia e agitato alla fuga (e = e_fuga:
+  // 1/(1 + e_fuga²/e²) = ½), τ = w·a/(π·R²)·T_K·2; lo svuotamento è quello dinamico dello sciame — urti più diffusioni, al ritmo
+  // (1 + 1/f_cap)/τ, più lo svuotamento dinamico qui sotto — e non più la crescita del gas 300 volte più lenta. (Dichiarato: dentro
+  // un intervallo la massa e il raggio del corpo restano quelli dell'inizio.)
   for (const b of vivi) b.tAcc = Math.min(eta, D.vita);
-  const cresci = (b, T) => { const dt = T - b.tAcc; b.tAcc = Math.max(b.tAcc, T); if (!(dt > 0) || !(b.cibo > 0) || !(b.w > 0) || b.gas > 0.5 * b.m) return; mangia(b, dt, P.senzaGas); };
+  const sciame = (b) => { const R = raggio(b), th = (G * b.m) / R / vK(b.a) ** 2, fcap = 4 / (th * th), tau = ((b.w * UA * b.a * UA) / (Math.PI * R * R)) * anno(b.a) * 2; return { ritmo: (1 + 1 / fcap) / tau, presa: fcap / (1 + fcap) }; };
+  // (la massa che il corpo avrà a T, senza toccarlo: serve al tempo d'incrocio, che con i corpi che crescono si accorcia — la
+  // crescita stessa avvicina le orbite in raggi di Hill)
+  // LO SVUOTAMENTO DINAMICO dei resti (Morbidelli et al. 2012, EPSL 355, 144, §4 [V: letto il testo]: nelle N-corpi di Walsh et al.
+  // 2011 il ritmo d'urto dei planetesimi rimasti cala come exp(−(t/t₀)^β), tra (t₀ = 10 milioni di anni, β = 0,5) e (3, 0,34);
+  // qui la prima, contando dalla fine del gas — dichiarato: loro contano da quando i pianeti sono finiti): oltre a ciò che il
+  // corpo prende o scaglia, la popolazione cala da sola (risonanze, la stella, gli altri pianeti) al ritmo −d ln S/dt =
+  // β·t^(β−1)/t₀^β. Si integra a passi in logaritmo del tempo, ciascuno coi ritmi del suo mezzo.
+  const DIN = { t0: 1e7, beta: 0.5 };
+  const evolvi = (b, t1, t2) => { const { ritmo, presa } = sciame(b); let c = b.cibo, dm = 0; const u1 = Math.max(1, t1 - D.vita), u2 = Math.max(u1, t2 - D.vita), passi = 8;
+    for (let k = 0; k < passi && c > 0; k++) { const a = u1 * Math.pow(u2 / u1, k / passi), z = u1 * Math.pow(u2 / u1, (k + 1) / passi), dt = z - a; if (!(dt > 0)) continue;
+      const din = Math.pow(z / DIN.t0, DIN.beta) - Math.pow(a / DIN.t0, DIN.beta), tot = ritmo * dt + din, via = c * -Math.expm1(-tot); dm += via * presa * (ritmo * dt) / tot; c -= via; }
+    return { dm, via: b.cibo - c }; };
+  const massaA = (b, T) => (T > b.tAcc && b.cibo > 0 && b.w > 0 ? b.m + evolvi(b, b.tAcc, T).dm : b.m);
+  const cresci = (b, T) => { const t1 = b.tAcc, dt = T - t1; b.tAcc = Math.max(b.tAcc, T); if (!(dt > 0) || !(b.cibo > 0) || !(b.w > 0)) return;
+    const ms = b.m - b.gas, { dm, via } = evolvi(b, t1, T);
+    // (la «vernice tardiva» è la parte primitiva — i planetesimali mai fusi —, non i frammenti dell'urto, che sono il pianeta stesso
+    // già separato: Walker 2009 la misura con gli elementi siderofili, che i frammenti non riportano)
+    const qf = b.frantumi > 0 ? Math.min(1, b.frantumi / b.cibo) : 0; b.frantumi = (b.frantumi || 0) * (1 - via / b.cibo);
+    b.cibo -= via; b.fe += (dm * b.fe) / ms; b.h2o += (dm * b.h2o) / ms; b.m += dm; b.accr += dm; b.vernice = (b.vernice || 0) + dm * (1 - qf); b.diffusi = (b.diffusi || 0) + via - dm; };
   // (e) l'attrito: de/dt = −e/τ con τ ∝ e⁴, cioè e⁴ cala di 4·dt/C, C = M*²·T_K/(4π²·M·Σ_p·a²·lnΛ); fermo alla velocità di Hill
   const attrito = (b, e, dt) => { if (!(b.cibo > 0) || !(b.w > 0) || !(dt > 0)) return e;
     if (b._a !== b.a || b._m !== b.m || b._c !== b.cibo || b._w !== b.w) { b._a = b.a; b._m = b.m; b._c = b.cibo; b._w = b.w; b._eH = Math.cbrt(b.m / (3 * Mst)); const sp = b.cibo / (2 * Math.PI * b.a * b.w * UA * UA); b._C = (Mst * Mst * anno(b.a)) / (4 * Math.PI * Math.PI * b.m * sp * (b.a * UA) ** 2 * LN); } // (C: ricalcolato solo quando il corpo cambia)
@@ -443,7 +469,7 @@ export function formaPianeti(st, seme = 1) {
       const T = t0 + dt; let tau = Infinity;
       if (n === 2) { const h = Math.cbrt((p.m + q.m) / (3 * Mst)), et = Math.hypot(eA(p, T), eA(q, T)) / h, bt = (q.a - p.a) / ((0.5 * (p.a + q.a)) * h);
         if (0.5 * (et * et + 0.25 * et * et) - 0.375 * bt * bt + 4.5 > 0) tau = 0; }
-      else { const x = tempoIncrocio(p.a, q.a, r.a, p.m / Mst, q.m / Mst, r.m / Mst, eA(p, T), eA(q, T), eA(r, T), anno(p.a), K, giriCheRegge); tau = x.tau; coppia = x.coppia; }
+      else { const x = tempoIncrocio(p.a, q.a, r.a, massaA(p, T) / Mst, massaA(q, T) / Mst, massaA(r, T) / Mst, eA(p, T), eA(q, T), eA(r, T), anno(p.a), K, giriCheRegge); tau = x.tau; coppia = x.coppia; }
       const fermo = !(tau > dt * (1 + 1e-2)); dt = Math.max(dt, tau); if (fermo || t0 + dt > eta) break;
     }
     return (p.terna = { T: t0 + dt, coppia, x: null, b: [p, q, r], ver: [p.ver, q.ver, r?.ver], K: n === 2 ? 0 : K });
@@ -481,6 +507,7 @@ export function formaPianeti(st, seme = 1) {
       grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
       if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; } // l'urto strappa il velo di gas
       else { grande.m = m; grande.gas += piccolo.gas; }
+      grande.vernice = 0; grande.frantumi = (grande.frantumi || 0) + (piccolo.frantumi || 0); // (la «vernice tardiva»: ciò che il corpo prenderà dopo questo urto)
       grande.fe += piccolo.fe; grande.h2o += piccolo.h2o; grande.urti += 1 + piccolo.urti; grande.misto ||= piccolo.misto || grande.freddo !== piccolo.freddo; piccolo.in = grande.id; piccolo.morto = true;
       // I FRAMMENTI DELLO SCONTRO (Leinhardt e Stewart 2012, ApJ 745, 79, eq. 4 [V: letto il testo]): il resto più grosso è
       // M_lr/M_tot = 1 − ½·Q_R/Q*_RD, con Q_R = ½·μ·V²/M_tot l'energia dell'urto per chilo (V² = v_fuga² + v_∞², v_∞ = e·v_orbita,
@@ -703,7 +730,7 @@ export function formaPianeti(st, seme = 1) {
       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`
         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
-    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto, diffusioni: b.diffusioni || 0 };
+    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto, diffusioni: b.diffusioni || 0, vernice: b.vernice || 0, cibiDiffusi: b.diffusi || 0 };
     return Object.defineProperty({ aUA: b.a, massaKg: massa, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
   });
   // (le perdite dell'accrescimento tolgono un poco di massa: chi scende sotto il minimo resta tra i detriti)
