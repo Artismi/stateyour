@@ -850,7 +850,13 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
 // { cv, nome, larghezzaM, frase, suolo: true, fin, base, luogo, memoria }
 export const LATI_SUOLO = [10, 1, 0.1, 0.01, 1e-3, 1e-4, 1e-5];
 function suoloDelPunto(cam, S, base, k) {
-  if (base.neve || base.sale || base.acqua) return null; const lato = cam.latoSuolo ?? LATI_SUOLO[0], { u, v } = base.punto || {};
+  if (base.neve || base.sale || base.acqua) return null; const lato = cam.latoSuolo ?? LATI_SUOLO[0];
+  // (il punto è quello della camera, non quello di «base»: base si ricorda per u e v a sette cifre — fino a qualche metro sul
+  // pianeta —, e la finestra del suolo, di centimetri, si apriva attorno al punto di chi l'aveva chiesta per primo. Il 3D e il
+  // livello 5 nello stesso punto avevano così padri diversi quando il punto di prima stava sul confine di due celle — il
+  // centro di una cella del padre è il confine di quattro celle della tessera sotto —; per lo stesso motivo la finestra si
+  // ricorda col punto intero)
+  const u = ((cam.roccia.cx % 1) + 1) % 1, v = Math.max(0, Math.min(0.9999, cam.roccia.cy * 2)); k = `${k}|${u}|${v}`;
   // (il padre: la tessera più fine già calcolata lì, dalla mappa o dalla vista 3D — suolo.js tesseraNota —: la stessa cella e
   // lo stesso indirizzo della finestra che il 3D mostra a pochi metri dal suolo)
   const t3 = tesseraNota(S.k, u, v), t = t3 && !(base.punto.t?.livello >= t3.livello) ? t3 : base.punto.t, ks = `${k}|suolo|${lato}|${t?.livello ?? 0}`; let w = rocceFatte.get(ks);
@@ -858,13 +864,13 @@ function suoloDelPunto(cam, S, base, k) {
   try {
     // (lo stesso S per tutte le finestre del pianeta: trattoSuolo tiene il padre della cella per S, e con un S nuovo a ogni
     // finestra il padre — ~0,5 s — si rifaceva a ogni lato)
-    const t0 = performance.now(), Ssu = suoloDi(S), fin = finestraSuolo(Ssu, { lon: u * 360 - 180, lat: 90 - v * 180, latoM: lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null });
+    const t0 = performance.now(), Ssu = suoloDi(S), fin = finestraSuolo(Ssu, { lon: u * 360 - 180, lat: 90 - v * 180, uv: [u, v], latoM: lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null });
     if (fin && !fin.acqua && conFili()) {
       // con i fili: la finestra c'è subito (fin: il rilievo e i granelli si calcolano solo se servono), l'immagine e la chimica dei
       // pori le fa finestre.worker.js; intanto si vede il padre (la finestra del suolo dieci volte più grande, il suo centro)
       const i = LATI_SUOLO.indexOf(lato), sopra = i > 0 ? rocceFatte.get(`${k}|suolo|${LATI_SUOLO[i - 1]}|${t?.livello ?? 0}`) : null;
       w = { cv: segnaposto(sopra, [128, 112, 92]), nome: `il suolo (una finestra larga ${fmtLunghezza(fin.L)})`, larghezzaM: fin.L, frase: `${fin.descrizione} (l'immagine si sta calcolando: intanto il livello di sopra…)`, fraseBase: fin.descrizione, liscio: false, suolo: true, fin, base, luogo: base.luogo, memoria: base.memoria, mineraleIn: base.mineraleIn, attesa: true,
-        richiesta: { tipo: 'suolo', id: ks, k: S.k, lon: u * 360 - 180, lat: 90 - v * 180, lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null, chimica: lato === LATI_SUOLO[LATI_SUOLO.length - 1] } };
+        richiesta: { tipo: 'suolo', id: ks, k: S.k, lon: u * 360 - 180, lat: 90 - v * 180, uv: [u, v], lato, livello: t?.livello ?? 0, tessera: t?.livello ? t : null, chimica: lato === LATI_SUOLO[LATI_SUOLO.length - 1] } };
       rocceFatte.set(ks, w); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value); suoloInSecondoPiano(cam, S, w, ks); return w;
     }
     if (fin && !fin.acqua) {

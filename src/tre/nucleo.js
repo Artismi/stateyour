@@ -704,7 +704,8 @@ export function creaNucleo(tela, opzioni = {}) {
     // l'esposizione fissata) l'unità dell'immagine va al grigio medio come prima
     const oc = S.visione, ferwerda = vista.occhio.adatta && !(vista.occhio.E0 > 0) && conVirgola;
     if (ferwerda && misura.Lscena > 0) { passoOcchio(oc, misura.Lscena, dtOcchio, !!vista.occhio.amplificatore, misura.Lmedia); oc.Lscena = misura.Lscena; oc.Lmedia = misura.Lmedia; oc.Lmax = misura.Lmax; }
-    S.LA = ferwerda && Number.isFinite(oc.LA) ? oc.LA : Number.isFinite(misura.LA) ? Math.max(misura.LA, OCCHIO.soglia) : (S.E0 * K * X_MEDIO) / Math.PI;
+    // (con l'esposizione fissata e l'occhio fermo — le prove — L_A è quella dell'occhio adattato a quell'esposizione, non l'ultima misura arrivata)
+    S.LA = ferwerda && Number.isFinite(oc.LA) ? oc.LA : vista.occhio.E0 > 0 && !vista.occhio.adatta ? (S.E0 * K * X_MEDIO) / Math.PI : Number.isFinite(misura.LA) ? Math.max(misura.LA, OCCHIO.soglia) : (S.E0 * K * X_MEDIO) / Math.PI;
     gl.bindFramebuffer(gl.FRAMEBUFFER, imm.fA); gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 1); gl.clearDepth(1); gl.depthMask(true); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
     for (const s of strati) if (s.disegna) s.disegna(S, 'fondo');

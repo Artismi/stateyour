@@ -64,20 +64,24 @@ export const accumuloAttivo = (N) => !!(N.vista.accumulo && N.vista.accumulo.att
 
 // una storia: due coppie d'immagini (si legge dall'una e si scrive sull'altra)
 export function creaStoria(N, formato = null) {
-  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null, ultimo = -2, fermi = 0; const A = [null, null], B = [null, null], F = [null, null];
+  const gl = N.gl; let prg = null, w = 0, h = 0, cur = 0, piena = false, prima = null, ultimo = -2, fermi = 0, conta = 0; const A = [null, null], B = [null, null], F = [null, null];
   const fmt = formato || (gl.getExtension('OES_texture_float_linear') ? 'rgba32f' : 'rgba16f');
   const u9 = new Float32Array(9), u9p = new Float32Array(9);
   function prepara(W, H) {
     if (W === w && H === h && A[0]) return; libera(); w = W; h = H; piena = false;
     for (let i = 0; i < 2; i++) { A[i] = N.immagine(w, h, fmt, null); B[i] = N.immagine(w, h, fmt, null, { filtro: gl.NEAREST }); F[i] = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, F[i]); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, A[i], 0); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, B[i], 0); }
   }
-  function libera() { for (let i = 0; i < 2; i++) { if (A[i]) gl.deleteTexture(A[i]); if (B[i]) gl.deleteTexture(B[i]); if (F[i]) gl.deleteFramebuffer(F[i]); A[i] = B[i] = F[i] = null; } w = h = 0; piena = false; }
+  function libera() { conta = 0; for (let i = 0; i < 2; i++) { if (A[i]) gl.deleteTexture(A[i]); if (B[i]) gl.deleteTexture(B[i]); if (F[i]) gl.deleteFramebuffer(F[i]); A[i] = B[i] = F[i] = null; } w = h = 0; piena = false; }
   // la camera (nel riferimento dello strato) è dov'era al fotogramma prima? (entro gli arrotondamenti)
   const comePrima = (S, occhio, raggi) => { if (!piena || !prima || S.indice !== ultimo + 1 || prima.tan[0] !== S.tanX || prima.tan[1] !== S.tanY) return false; const r = Math.hypot(occhio[0], occhio[1], occhio[2]) + 1e-30;
     for (let i = 0; i < 3; i++) if (Math.abs(occhio[i] - prima.occhio[i]) > 1e-9 * r) return false; for (let i = 0; i < 9; i++) if (Math.abs(raggi[i] - prima.raggi[i]) > 1e-7) return false; return true; };
   return {
     get w() { return w; }, get h() { return h; }, get immagine() { return A[cur]; }, get fermi() { return fermi; },
-    azzera() { piena = false; fermi = 0; },
+    // (quanti fotogrammi ha la storia da quando è ripartita: lo sfasamento dei passi del prossimo è sfasatura(conta). Prima era il
+    // numero del fotogramma del nucleo, che dipende da quanti ne sono stati fatti prima — nelle prove, da quanto si è aspettato
+    // che la scena fosse pronta —: la stessa storia sommava sfasamenti diversi da una corsa all'altra)
+    get conta() { return conta; },
+    azzera() { piena = false; fermi = 0; conta = 0; },
     // A CAMERA FERMA: quanti fotogrammi di fila (questo compreso) la camera è stata ferma nel riferimento dello strato, con
     // `mondoFermo` (lo strato sa se ciò che disegna cambia col tempo). Lo strato ne fa due cose: dopo qualche fotogramma
     // fermo alza i passi (la media si avvicina al conto pieno anche dove la polvere rende ogni passo un po' sbagliato), e
@@ -95,6 +99,7 @@ export function creaStoria(N, formato = null) {
       for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = raggi[3 * r + c]; // (per colonne)
       fermi = comePrima(S, occhio, raggi) ? fermi + 1 : 0; let sposta = [0, 0, 0], tanP = [S.tanX, S.tanY], scala = 1, c = piena && prima && S.indice === ultimo + 1; ultimo = S.indice; // (un fotogramma saltato: la storia non vale più)
       if (c) { sposta = [occhio[0] - prima.occhio[0], occhio[1] - prima.occhio[1], occhio[2] - prima.occhio[2]]; for (let i = 0; i < 9; i++) u9p[i] = prima.raggi[i]; tanP = prima.tan; scala = luce ? prima.E0 / S.E0 : 1; if (!(isFinite(sposta[0] + sposta[1] + sposta[2]) && isFinite(scala))) c = false; }
+      if (!c) conta = 0; conta++; // (una storia che riparte riparte anche negli sfasamenti)
       // (u_primaT: la trasposta degli assi di prima, per colonne = gli assi di prima per righe)
       gl.bindFramebuffer(gl.FRAMEBUFFER, F[scrivi]); gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST);
       gl.useProgram(prg.p); N.lega(0, img, u.u_cor); N.lega(1, A[leggi], u.u_stA); N.lega(2, B[leggi], u.u_stB);

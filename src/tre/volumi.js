@@ -114,7 +114,7 @@ function teloPiccolo(N) {
     // lo sfasamento dei passi in questo fotogramma (u_sfasa): [quanto, su che ampiezza del passo]
     // (in moto la storia è corta: lo spostamento resta vicino al mezzo del passo, come senza accumulo — meno grana, un
     // poco di errore del passo —; a camera ferma copre tutto il passo e la media va al conto pieno)
-    sfasa(S, u) { const acc = accumuloAttivo(N); gl.uniform2f(u, acc ? sfasatura(S.indice || 0)[0] : 0, acc && !this.inMoto ? 1 : 0.3); },
+    sfasa(S, u) { const acc = accumuloAttivo(N); gl.uniform2f(u, acc ? sfasatura(storia.conta)[0] : 0, acc && !this.inMoto ? 1 : 0.3); },
     apri(S) { const r = Math.max(1, N.vista.riduzione || 2), W = Math.max(8, Math.ceil(S.W / r)), H = Math.max(8, Math.ceil(S.H / r)); if (W !== w || H !== h) { if (img) { gl.deleteTexture(img); gl.deleteFramebuffer(tel); } w = W; h = H; img = N.immagine(w, h, 'rgba16f', null); tel = N.telaio(img, null); }
       this.prima = gl.getParameter(gl.FRAMEBUFFER_BINDING); gl.bindFramebuffer(gl.FRAMEBUFFER, tel); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND); },
     // a camera ferma (accumulo.js): quanti passi in questo fotogramma (× `passiFerma` dopo quattro fotogrammi fermi), o null se la

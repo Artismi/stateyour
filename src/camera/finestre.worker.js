@@ -47,7 +47,7 @@ async function acqua(d) {
 async function suolo(d) {
   // (la tessera del padre arriva una volta per filo; poi solo il suo nome)
   let tt = d.tessera || null; if (tt) { if (tt.gia && !tt.rett) tt = tessere.get(tt.gia) || null; else { tessere.set(tt.gia, tt); if (tessere.size > 8) tessere.delete(tessere.keys().next().value); } }
-  const t0 = performance.now(), S = B, Ssu = S.Ssu; let fin; const finDi = () => (fin !== undefined ? fin : (fin = finestraSuolo(Ssu, { lon: d.lon, lat: d.lat, latoM: d.lato, livello: d.livello, tessera: tt })));
+  const t0 = performance.now(), S = B, Ssu = S.Ssu; let fin; const finDi = () => (fin !== undefined ? fin : (fin = finestraSuolo(Ssu, { lon: d.lon, lat: d.lat, uv: d.uv, latoM: d.lato, livello: d.livello, tessera: tt })));
   // l'immagine del suolo (statica: funzione dell'indirizzo) dal deposito, se c'è
   const im = await ricorda('finestra suolo', d.id, () => { const f = finDi(); return !f || f.acqua ? { nulla: true } : { N: f.N, px: immagineSuolo(f) }; }, { codice: CODICE });
   if (im.nulla) { manda({ tipo: 'suolo', id: d.id, k: S.k, nulla: true, ms: performance.now() - t0 }); return; }

@@ -20,7 +20,7 @@
 //   aria       un pianeta con l'aria, dal suolo verso l'orizzonte, con la stella a mezza altezza (la passata dell'aria di
 //              pianeta.js, i suoi passi `passiAria`).
 // window.prova: { pronta, scena(nome), disegna({ passi, passiAria, accumulo, fotogrammi }), tieni(chiave), confronta(a, b) }
-import { creaNucleo } from '../nucleo.js';
+import { creaNucleo, E0Adattato } from '../nucleo.js';
 import { creaUniverso } from '../universo.js';
 import { creaPianeta } from '../pianeta.js';
 import { sistema } from '../../camera/cosmo.js';
@@ -38,7 +38,11 @@ async function scena(quale) {
   N = creaNucleo(tl, { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = true;
   if (quale === 'galassia' || quale === 'dentro') {
     U = creaUniverso(N, { via: { cosmo: 1, galassia: 2 }, livello: 'galassia' });
-    await aspetta(() => U.pronto() && U.galassia() && U.galassia().volume && U.galassia().volume.stato.nebulose > 0);
+    // (e la ragnatela del cosmo dietro di lei, che volumi.js fa in tre tempi — la grana grossa in pochi secondi, quella piena, la
+    // regione fine —: finché arrivano, la luce del fondo cambia sotto le immagini, e la serie dei passi della galassia cambiava da
+    // una corsa all'altra secondo quando arrivava ciascuna)
+    const reteFerma = () => { const r = U.cosmo && U.cosmo.rete; return !r || (r.pronto() && r.stato.fine); };
+    await aspetta(() => U.pronto() && U.galassia() && U.galassia().volume && U.galassia().volume.stato.nebulose > 0 && reteFerma(), 600000);
     const G = U.galassia(); if (quale === 'dentro') U.guardaDa(G.nodo, 0.45 * G.raggio, 0.02, 0.6); nome = quale;
   } else if (quale === 'ragnatela') {
     U = creaUniverso(N, { via: { cosmo: 1 }, livello: 'cosmo' });
@@ -65,11 +69,24 @@ async function scena(quale) {
   return adatta(quale);
 }
 async function adatta(quale) {
-  // l'occhio si adatta per qualche fotogramma, poi lo si ferma lì: le immagini da confrontare hanno la stessa esposizione
-  // (tra un fotogramma e l'altro si torna al giro del browser: la misura della luce si legge solo lì — un recinto della
-  // scheda cambia stato solo fra un compito e l'altro, come in un'applicazione vera)
-  N.vista.occhio.E0 = 0; N.vista.occhio.adatta = true; for (let i = 0; i < 40; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 20)); }
-  N.vista.occhio.E0 = N.stato.E0; N.vista.occhio.adatta = false;
+  // L'OCCHIO FERMATO AL SUO PUNTO FISSO: l'esposizione E a cui l'occhio adattato porta la luce del centro di un'immagine fatta con
+  // la stessa E (E = E0Adattato(L_A(E)): la luminanza delle quattro caselle di mezzo della griglia 32 × 32, come la misura di
+  // nucleo.js), cercata a esposizione fissa da un inizio fisso (1 W/m²) finché non cambia più, con la misura letta qui
+  // dall'immagine del fotogramma. Le immagini da confrontare hanno così la stessa esposizione, e la stessa da una corsa
+  // all'altra. (Prima: quaranta fotogrammi dell'occhio che si adatta nel tempo vero, poi fermo dov'era. Il passo dell'occhio va
+  // col tempo vero tra due fotogrammi, e la misura arriva dalla scheda quando il suo recinto è passato: E0 cambiava di qualche
+  // millesimo da una corsa all'altra, e con lei ciò che gli strati tagliano perché non si vedrebbe — gli splat —: le prove dei
+  // passi della galassia cambiavano da una corsa all'altra. A esposizione fissa l'immagine è la stessa a ogni corsa.)
+  const NG = 32, centro = () => { const a = N.leggiImmagine(), W = N.stato.W, H = N.stato.H; let tot = 0;
+    for (const cy of [NG / 2 - 1, NG / 2]) for (const cx of [NG / 2 - 1, NG / 2]) { const x0 = Math.floor((cx * W) / NG), x1 = Math.max(Math.floor(((cx + 1) * W) / NG), x0 + 1), y0 = Math.floor((cy * H) / NG), y1 = Math.max(Math.floor(((cy + 1) * H) / NG), y0 + 1); let s = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const k = 4 * (y * W + x), c = [a[k], a[k + 1], a[k + 2]].map((v) => (Number.isNaN(v) ? 65504 : Math.min(65504, Math.max(0, v)))); s += 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+      tot += s / ((x1 - x0) * (y1 - y0)); }
+    return tot / 4; };
+  // (senza l'accumulo nel tempo: con lui il fotogramma dipende da quanti ne sono stati fatti prima — lo sfasamento dei passi
+  // va col numero del fotogramma —, e quanti, mentre si aspettava che la scena fosse pronta, dipende dal tempo vero)
+  N.vista.accumulo = { ...N.vista.accumulo, attivo: false }; N.vista.occhio.adatta = false; let E = 1;
+  for (let giro = 0; giro < 60; giro++) { N.vista.occhio.E0 = E; N.fotogramma(); const K = N.stato.efficacia, E2 = E0Adattato((centro() * E * K) / Math.PI, K); if (E2 === E) break; E = E2; }
+  N.vista.occhio.E0 = E; N.fotogramma();
   return { scena: quale, E0: N.stato.E0, LA: N.stato.LA, W: N.stato.W, H: N.stato.H, pianeta: Pi ? Pi.aria && { H: Pi.aria.H, pressione: Pi.aria.pressione } : null };
 }
 

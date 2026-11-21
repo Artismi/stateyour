@@ -234,8 +234,11 @@ export function sezioneVersante(col, { ell, nx = 40, nz = 60, profondo = null, t
 // ======================================================================================================================
 // S = { k (la radice: l'indirizzo del pianeta), P, se (la superficie erosa), cl (il clima), seme } — quello di mappa.js superficieDi.
 // → null sull'acqua; altrimenti il padre: la cella, le pendenze, la roccia, il clima, l'erosione, lo spettro, il suolo, la colonna
-export function padreSuolo(S, lon, lat, { livello = LIVELLO_PADRE, tessera: tt = null } = {}) {
-  const { P, se, cl } = S, u = (((lon + 180) / 360) % 1 + 1) % 1, v = limita((90 - lat) / 180, 0, 0.999999), n = 4 ** livello;
+// (uv: il punto nelle coordinate della mappa, [u, v], quando chi chiede lo ha già così — mappa.js —: da lì a lon, lat e di nuovo a
+// u, v l'arrotondamento sposta l'ultima cifra, e un punto sul confine di due celle — il centro di una cella del padre è il confine
+// di quattro di quelle della tessera sotto — cadeva nell'altra: il livello 5 e il 3D avevano padri diversi nello stesso punto)
+export function padreSuolo(S, lon, lat, { livello = LIVELLO_PADRE, tessera: tt = null, uv = null } = {}) {
+  const { P, se, cl } = S, u = uv ? ((uv[0] % 1) + 1) % 1 : (((lon + 180) / 360) % 1 + 1) % 1, v = limita(uv ? uv[1] : (90 - lat) / 180, 0, 0.999999), n = 4 ** livello;
   const tx = Math.floor(u * n), ty = Math.floor(v * n), t = tt || (livello > 0 ? tessera(S.k, se, cl, livello, tx, ty, S.seme ?? P.origine) : se);
   const [u0, v0, u1, v1] = t.rett || [0, 0, 1, 1], W = t.W, H = t.H, i = Math.min(W - 1, Math.floor(((u - u0) / (u1 - u0)) * W)), j = Math.min(H - 1, Math.floor(((v - v0) / (v1 - v0)) * H)), c = j * W + i;
   if (t.alt[c] < t.mare || (t.lago && t.lago[c] > 0)) return null;
@@ -436,8 +439,8 @@ function rilievoGriglia(t, gx0, gy0, h, nx, ny, bande) {
 export const FINESTRA = { massimo: 40000 };
 // («tratto» e «centro»: una finestra di quel tratto col centro in quel punto delle sue coordinate, anche fuori dalla cella: la
 // stessa legge, per le prove che vogliono finestre indipendenti dello stesso padre)
-export function finestraSuolo(S, { lon = 0, lat = 0, latoM = 1, N = 128, profonditaM = null, livello = LIVELLO_PADRE, tessera: tt = null, tratto = null, centro = null } = {}) {
-  const t = tratto || trattoSuolo(S, lon, lat, { livello, tessera: tt }); if (!t) return { acqua: true, descrizione: 'Qui c\'è acqua: la finestra è quella del mare (finestra.js).' };
+export function finestraSuolo(S, { lon = 0, lat = 0, latoM = 1, N = 128, profonditaM = null, livello = LIVELLO_PADRE, tessera: tt = null, tratto = null, centro = null, uv = null } = {}) {
+  const t = tratto || trattoSuolo(S, lon, lat, { livello, tessera: tt, uv }); if (!t) return { acqua: true, descrizione: 'Qui c\'è acqua: la finestra è quella del mare (finestra.js).' };
   const P = t.padre, h = latoM / N, [xc, yc] = centro || nelTrattoSuolo(t, lon, lat), gx0 = Math.floor((xc - latoM / 2) / h), gy0 = Math.floor((yc - latoM / 2) / h), x0 = gx0 * h, y0 = gy0 * h;
   const tutte = bandeSuolo(t), bf = Math.floor(Math.log2(RILIEVO.campioniPerOnda * h)), bande = tutte.filter((B) => B.b >= bf);
   const fin = { S, tratto: t, padre: P, lon, lat, L: N * h, N, h, x0, y0, gx0, gy0, bf, bande, profonditaM: profonditaM ?? Math.max(0.01, P.suolo.h / 2) };
