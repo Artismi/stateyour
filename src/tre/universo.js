@@ -144,7 +144,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       if (passata !== 'velato') return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
       if (N.vista.splat && splat) splat.disegna(S); // (prima delle stelle: la loro polvere la contano già, lungo la loro colonna)
-      const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1), 0.004 * Rg, 0.25 * Rg]);
+      const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1) * (sc.punti.normaLuce || 1), 0.004 * Rg, 0.25 * Rg]); // (da lontano le stelle portano puntiLuce della luce vera, la diffusa il resto: spazio3d.js normaLuce)
       // ciò che sta tra le stelle (mezzo.js): le nubi oscure tolgono luce a ciò che è già disegnato, le nebulose aggiungono la loro
       if (mezzo) mezzo.disegna(S, rel, q);
     },
@@ -262,7 +262,9 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
   let fermoGoverno = 0;
   const governo = { nome: 'livelli', aggiorna(S) {
     if (fermoGoverno > 0) { fermoGoverno--; return; }
-    if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina]; if (cosmo.distanzaVicina < 14 * r && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
+    // (la galassia aperta resta quella finché l'occhio non è uscito dalla sua zona, 14 raggi: uscendo da lei verso il cosmo e
+    // tornando indietro non si rientra in un'altra solo perché il suo centro è passato più vicino)
+    if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina], tiene = G && G.via.galassia !== cosmo.vicina && G.distanza < 14 * G.raggio; if (cosmo.distanzaVicina < 14 * r && !tiene && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
     cosmo.dentro = !!G && G.distanza < 2.5 * G.raggio;
     if (G && assiSistema) { if (G.vicina >= 0 && G.distanzaVicina < 4e15 && (!Sis || Sis.via.stella !== G.vicina)) apriSistema(G.vicina); else if (Sis && G.distanzaVicina > 1.2e16) chiudiSistema(); }
   } };

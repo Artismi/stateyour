@@ -36,7 +36,7 @@ const KPC = 3.0857e19, MSOLE = 1.989e30, GIOVANI = 3, lin = (c) => (c / 255) ** 
 function volumeGalassia(d, manda) {
   const sg = scenaGalassia(d.cosmo, d.galassia, d.t), F = galassia(d.cosmo, d.galassia).forma, D = densitaGalassia(F), Rg = sg.riferimento.raggio, Rk = Rg / KPC, tG = d.t / (1e9 * 3.15576e7);
   const { nf, nr, nz } = d, Rmax = 1.15, zmax = 0.8, dati = new Float32Array(4 * nf * nr * nz), vecchio = coloreCorpoNero(4300), giovane = coloreCorpoNero(9500);
-  const sf = D.sferoide, sferoide = (R, z) => { const r3 = Math.hypot(R, z) || 1e-6; return sf.massa > 0 ? (sf.massa * sf.scala) / (2 * Math.PI * (sf.schiacciata || 1) * r3 * (r3 + sf.scala) ** 3) : 0; };
+  const sf = D.sferoide, sferoide = (R, z) => { const q = sf.schiacciata || 1, r3 = Math.hypot(R, z / q) || 1e-6; return sf.massa > 0 ? (sf.massa * sf.scala) / (2 * Math.PI * q * r3 * (r3 + sf.scala) ** 3) : 0; }; // (ellissoidi omotetici m² = R² + (z/q)²: la massa resta, la forma si schiaccia — come galassie.js densitaGalassia)
   // κ: A_V per metro per kg/m³ di polvere, da vuoto.js (in un punto del piano dove c'è polvere)
   // (κ non dipende dal posto — polvere/gas va coi metalli come in galassie.js —: lo si legge nel primo anello del modello
   // che ha gas; prima si provavano quattro raggi fissi e in una galassia col gas solo al centro κ restava zero: niente polvere)

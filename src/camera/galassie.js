@@ -89,6 +89,10 @@
 //     simulazioni); la dispersione del gas neutro: 10 km/s (misurata nell'idrogeno delle galassie);
 //   · il buco nero che scalda il gas caldo: Croton et al. 2006 (MNRAS 365, 11: ṁ = 6·10⁻⁶ M☉/anno ·
 //     (M_bn/10⁸)·(f_caldo/0,1)·(V/200)³, resa 0,1). È una legge dei modelli semi-analitici, non una misura;
+//   · il vento del nucleo attivo dopo una fusione: M_via = ε_wind·ε_r·Δm_bn·c/V_fuga, ε_wind = 0,5 (Somerville et al. 2008,
+//     MNRAS 391, 481, §2.10, eq. 17: tarata sulle simulazioni di fusioni con il buco nero); Δm_bn è la crescita del buco nero
+//     che segue lo sferoide (Kormendy & Ho), presa dal gas freddo del nucleo;
+//   · la polvere del gas: G/D in funzione di Z, una spezzata (Rémy-Ruyer et al. 2014, A&A 563, A31, tabella 1);
 //   · il gas lanciato fuori dall'alone ci ricade in 18 Ga·(10¹⁰ M☉/M_alone) (Henriques et al. 2013, MNRAS 431,
 //     3373: anche questa dai modelli semi-analitici): subito in una galassia grande (una fontana), mai in una nana;
 //   · LE NASCITE: Σ_SFR = ν₀·[1 + (Σ_gas/Σ₀)^q]·f_mol·Σ_gas. Il gas molecolare delle spirali fa stelle a ritmo costante,
@@ -172,9 +176,13 @@
 //     ricade in un buco nero e non restituisce metalli: 0,74 Z☉ per M☉ nata) non ne lascerebbero perdere di più;
 //   · IL GAS CHIUSO SI ARRICCHISCE TROPPO. Dove il gas non riceve altro gas e non ne perde (il centro dopo una fusione
 //     maggiore; i dischi degli aloni grandi, che il buco nero tiene senza rifornimento) i metalli salgono come in una
-//     scatola chiusa, Z = resa·ln(1/frazione di gas): 3,5–5 Z☉ nel gas del centro delle galassie con fusioni (le più
-//     ricche vere: 2–3), e le stelle che nascono oggi nelle ellittiche hanno 3,5 Z☉ (nelle spirali 1,5). Sono poche: il
-//     3% di tutte le stelle ha più di 3 Z☉. Manca un vento che porti via i metalli appena fatti;
+//     scatola chiusa, Z = resa·ln(1/frazione di gas). Il vento del nucleo attivo dopo ogni fusione (passo 7 di evolvi:
+//     Somerville et al. 2008) porta via una parte del gas rimasto dallo scoppio (le stelle che nascono oggi nelle ellittiche
+//     scendono da 3,8 a 2,6 Z☉), ma il resto, nell'anello centrale, continua a fare stelle per 1–2 Ga e a riprendersi il gas
+//     che loro restituiscono: nel primo anello di 40 galassie del cosmo 1 la mediana è 4,2 Z☉ (prima 4,5; le più ricche vere:
+//     2–3). Le rese non c'entrano (0,77 Z☉ di metalli nuovi per M☉ nata, più bassa delle tabelle di Kroupa perché sopra 23 M☉
+//     il nucleo ricade in un buco nero). Mancano i flussi radiali del gas verso il centro (Lin & Pringle 1987) e la
+//     stabilità che lo sferoide dà al disco di gas al centro (Martig et al. 2009), che diluirebbero o fermerebbero quel resto;
 //   · le ellittiche fanno ancora troppe stelle: per massa, un quinto delle spirali (0,007 contro 0,034 per Ga; vere:
 //     meno di un decimo), tutte nell'anello centrale, dal gas restituito dalle stelle nate lì dopo l'ultima fusione;
 //   · la legge di Kennicutt torna sull'intervallo intero (pendenza 1,41 da 3 a 10⁵ M☉/pc²), ma tra i soli scoppi è più
@@ -224,6 +232,7 @@ export const LEGGI = {
   bucoNero: [0.49e9, 1.17, 0.28], // Kormendy & Ho 2013
   germe: 1e5, // PARAMETRO LIBERO: (M☉) il buco nero di partenza, in una galassia senza sferoide
   radio: [6e-6, 0.1], // Croton et al. 2006: κ (M☉/anno) e resa
+  quasar: 0.5, // ε_wind: la parte della spinta della luce del buco nero acceso che passa al vento del nucleo, M_via·V_fuga = ε_wind·ε_r·Δm·c (Somerville et al. 2008, MNRAS 391, 481, §2.10, eq. 16–17 [V]: il numero con cui la legge ridà il gas soffiato via nelle simulazioni di fusioni con il buco nero, la loro fig. 1)
   eddington: -0.65, // Aird et al. 2012
   getto: 1e-3, // PARAMETRO LIBERO
   barra: 1.1, // Efstathiou, Lake & Negroponte 1982
@@ -233,7 +242,8 @@ export const LEGGI = {
   assi: [0.7, 0.15], // lo schiacciamento apparente di uno sferoide (Lambas et al. 1992)
   rapportoVerticale: 0.5, // σ_z/σ_R delle stelle del disco (misurato vicino al Sole: Dehnen & Binney 1998)
   corotazione: 1.2, // la corotazione di una barra, in lunghezze della barra (misurato: Aguerri et al. 2003)
-  polvere: 0.5, // la parte dei metalli del gas che sta nei grani di polvere (misurato nella Via Lattea: Draine 2011)
+  polvere: 0.5, // la parte dei metalli che sta nei grani nella Via Lattea (Draine 2011): la usa ancora il mezzo tra le stelle (vuoto_mezzo.js, vuoto_oggetti.js); la galassia usa polvereZ
+  polvereZ: [2.21, 0.96, 3.1, 8.1 - 8.69], // il gas per la polvere in funzione dei metalli, una spezzata in log: log(G/D) = a − log(Z/Z☉) sopra la rottura, b − α_L·log(Z/Z☉) sotto; a, b, α_L e la rottura in log(Z/Z☉) (12 + log(O/H) = 8,10, con il Sole a 8,69). [V] Rémy-Ruyer et al. 2014 (A&A 563, A31), tabella 1, il caso con X_CO che dipende da Z: 126 galassie da 1/50 a 2 Z☉. Al Sole G/D = 162, la polvere è il 43% dei metalli (prima: la metà fissa di Draine 2011); sotto 1/4 Z☉ cala come Z³
 };
 export const ANELLI = 20, PASSI = 46, RESTI = 8;
 
@@ -550,7 +560,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   // (le stelle portate dalle fusioni: per passo di nascita e per tabella di metalli, perché ognuna continui a vivere con le sue vite)
   const NE = nt + 1, est = new Float64Array(4 * NE), estZ = new Float64Array(4 * NE), haEst = new Uint8Array(NE), Zt = new Float32Array((nt + 1) * NR), V2 = new Float64Array(NR), F2 = new Float64Array(NR), dove = new Float64Array(NR);
   const S = { sfr: new Float64Array(nt + 1), gas: new Float64Array(nt + 1), stelle: new Float64Array(nt + 1), caldo: new Float64Array(nt + 1), collasso: new Float64Array(nt + 1), Ia: new Float64Array(nt + 1), freddo: new Uint8Array(nt + 1) };
-  const B = { caduto: 0, cadutoZ: 0, vento: 0, ventoZ: 0, prodotti: 0, alCaldo: 0, alCaldoZ: 0, fusioniStelle: 0, fusioniStelleZ: 0, fusioniGas: 0, fusioniGasZ: 0, resi: 0 };
+  const B = { caduto: 0, cadutoZ: 0, vento: 0, ventoZ: 0, prodotti: 0, alCaldo: 0, alCaldoZ: 0, fusioniStelle: 0, fusioniStelleZ: 0, fusioniGas: 0, fusioniGasZ: 0, resi: 0, buco: 0, bucoZ: 0, quasar: 0 };
   const [, aMol] = LEGGI.molecole, [nu0, S0, qS] = LEGGI.nascite, lS0 = Math.log(S0 * 1e6), S0k = S0 * 1e6, sFreddo = LEGGI.soglia[1], kSigZ = LEGGI.rapportoVerticale * LEGGI.Qstelle * 3.36 * GK, mUna = P.massaMedia, ESN = LEGGI.energiaSN / MSOLE / 1e6, eSN = P.tab[2].nSN * ESN; // l'energia di una supernova in M☉·(km/s)², e per unità di massa nata in (km/s)²
   // (per il vento: la densità del gas in cm⁻³ è Σ·e^lnGas, non meno di 10⁻³; la parte dell'energia che resta in moto è cResta·n^esponente)
   const lnGas = Math.log(MSOLE / KPC ** 2 / (2 * LEGGI.spessoreGas * KPC) / (1.4 * COSTANTI.mp) / 1e6), LN_RADO = Math.log(1e-3), cResta = (LEGGI.momentoSN[0] * LEGGI.sigmaGas) / (2 * ESN);
@@ -567,7 +577,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   // nascita restituiti, zb·(gas − nuovi) come in rende(), nella miscela di nascita fa[fo…] (normalizzata)
   const nuoviC = (dest, off, m, q, L0, L1) => { const T = P.tab[q]; dest[off + q] += m * (T.cPcc[L1 + 1] - T.cPcc[L0 + 1]); dest[off + IA] += m * (T.cI[L1 + 1] - T.cI[L0 + 1]) * P.MCH; dest[off + AGC] += m * (T.cPc[L1 + 1] - T.cPc[L0 + 1]); dest[off + AGN] += m * (T.cPn[L1 + 1] - T.cPn[L0 + 1]); };
   const rendeC = (dest, off, m, q, L0, L1, zb, fa, fo) => { const T = P.tab[q], g = m * (T.cR[L1 + 1] - T.cR[L0 + 1]), nuovi = m * (T.cP[L1 + 1] - T.cP[L0 + 1]), b = zb * (g - nuovi); let sf = 0; for (let c = 0; c < NC; c++) sf += fa[fo + c]; if (sf > 0 && b !== 0) for (let c = 0; c < NC; c++) dest[off + c] += (b * fa[fo + c]) / sf; nuoviC(dest, off, m, q, L0, L1); };
-  let caldo = 0, caldoZ = 0, caldoJ = 0, fuori = 0, fuoriZ = 0, fuoriJ = 0, sferoideFino = 0, Mdisco = 0, Msfer = 0, Rsfer = 0, Rd = 0.05 * Rg, ultimaMaggiore = 0, Jprima = 0;
+  let Mbn = LEGGI.germe, caldo = 0, caldoZ = 0, caldoJ = 0, fuori = 0, fuoriZ = 0, fuoriJ = 0, sferoideFino = 0, Mdisco = 0, Msfer = 0, Rsfer = 0, Rd = 0.05 * Rg, ultimaMaggiore = 0, Jprima = 0;
   const arrivi = fusioni.filter((f) => f.passoArrivo <= nt), entrate = fusioni.filter((f) => f.passo <= nt);
   // ciò che una generazione di massa m nata al passo i (tabella q) restituisce tra il ritardo L0 e il ritardo L1
   // (zb: i metalli con cui era nata, in frazione di massa). R = [gas, metalli che porta, supernove da collasso, Ia, metalli NUOVI]
@@ -699,6 +709,22 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
       }
       sfr += formate; gasOra += gas[k]; Zt[o] = gas[k] > 0 ? met[k] / gas[k] / ZSOLE : 0;
     }
+    // 7. IL NUCLEO ATTIVO DOPO UNA FUSIONE (il «modo quasar» dei modelli semi-analitici: Di Matteo, Springel & Hernquist 2005;
+    // Croton et al. 2006, §3.4; Somerville et al. 2008, MNRAS 391, 481, §2.9–2.10 [V]). Il buco nero segue lo sferoide (Kormendy &
+    // Ho): quando lo sferoide cresce (le stelle di un compagno, uno scoppio) cresce anche lui, e la massa la prende dal gas freddo
+    // del nucleo (l'anello centrale). Acceso, irradia ε_r·Δm·c² (ε_r = 0,1, la resa del disco di accrescimento: LEGGI.radio[1]);
+    // la spinta di quella luce, per la parte ε_wind (LEGGI.quasar), porta fuori dalla galassia il gas del nucleo alla velocità di
+    // fuga: M_via = ε_wind·ε_r·Δm·c/V_fuga (Somerville et al. 2008, eq. 17). Va dove va il vento delle supernove, e ne ricade allo
+    // stesso modo (Henriques et al. 2013). Prima il gas rimasto dallo scoppio restava freddo al centro, e lì, senza altro gas che
+    // lo diluisse, saliva a 4–6 Z☉ come in una scatola chiusa
+    { const dovuto = Math.max(LEGGI.germe, LEGGI.bucoNero[0] * Math.pow(Msfer / 1e11, LEGGI.bucoNero[1]) * 10 ** scartoBuco);
+      if (dovuto > Mbn && gas[0] > 0) {
+        const preso = Math.min(dovuto - Mbn, gas[0]), z = met[0] / gas[0], via = Math.min(gas[0] - preso, (LEGGI.quasar * LEGGI.radio[1] * preso * C_KMS) / Math.sqrt(F2[0])), fr = (preso + via) / gas[0];
+        Mbn += preso; B.buco += preso; B.bucoZ += preso * z; B.quasar += via; gas[0] -= preso + via; met[0] -= (preso + via) * z;
+        B.vento += via; B.ventoZ += via * z; fuori += via; fuoriZ += via * z; fuoriJ += via * rc[0] * Math.sqrt(V2[0]);
+        for (let c = 0; c < NC; c++) { const x = metC[c] * fr; metC[c] -= x; fuoriC[c] += (x * via) / (preso + via); }
+        gasOra -= preso + via; Zt[j * NR] = gas[0] > 0 ? met[0] / gas[0] / ZSOLE : 0;
+      } else Mbn = Math.max(Mbn, dovuto); }
     S.sfr[j] = sfr / DT / 1e9; S.gas[j] = gasOra; S.stelle[j] = Mdisco + Msfer; S.caldo[j] = caldo; S.collasso[j] = ncc / DT / 1e9; S.Ia[j] = nia / DT / 1e9;
   }
   // ---------- com'è oggi
@@ -801,7 +827,7 @@ export function formaDaAlone(alone, caso = sorgente('galassia')) {
   const B = e.B;
   const bilancio = {
     entrato: B.caduto + B.fusioniGas + B.fusioniStelle, gas: massaGas, stelle: massaStelle, vento: B.vento, alCaldo: B.alCaldo, restituito: B.resi, nate: e.nateTutte,
-    metalliProdotti: B.prodotti, metalliEntrati: B.cadutoZ + B.fusioniGasZ + B.fusioniStelleZ, metalliGas: e.gasZ, metalliStelle: e.metStelle, metalliVento: B.ventoZ, metalliCaldo: B.alCaldoZ, dettaglio: B,
+    metalliProdotti: B.prodotti, metalliEntrati: B.cadutoZ + B.fusioniGasZ + B.fusioniStelleZ, metalliGas: e.gasZ, metalliStelle: e.metStelle, metalliVento: B.ventoZ, metalliCaldo: B.alCaldoZ, buco: B.buco, metalliBuco: B.bucoZ, quasar: B.quasar, dettaglio: B,
   };
   const formazione = e.inizio; // (Ga) quando l'alone ha cominciato a raffreddare gas: nessuna stella è più vecchia
   const schiacciata = tipo === 'ellittica' ? stringi(LEGGI.assi[0] + LEGGI.assi[1] * caso.normale('sferoide/assi'), 0.35, 1) : 1;
@@ -933,16 +959,26 @@ export function motoStella(forma, S, caso) {
 // LA FORMA CONTINUA, per la luce diffusa: quanta materia c'è in un punto (R, z in kpc, fi in radianti; t in Ga da oggi).
 // → { stelle, gas, polvere } in M☉/kpc³. Il disco: la densità di superficie dell'anello, spessa sech²(z/z₀), con l'onda dei
 // bracci; il gas e la polvere in uno strato più sottile (LEGGI.spessoreGas), con l'onda più marcata; la polvere è il gas
-// per i suoi metalli per la parte che sta nei grani (LEGGI.polvere: metà, misurato nella Via Lattea: Draine 2011); lo
+// per il rapporto polvere/gas misurato in funzione dei metalli (polvereDelGas, Rémy-Ruyer et al. 2014: LEGGI.polvereZ); lo
 // sferoide: Hernquist. `colonne` dà gli stessi numeri anello per anello, per chi li vuole disegnare a strati.
+// LA POLVERE PER OGNI M☉ DI GAS, data la Z del gas (in unità del Sole): Rémy-Ruyer et al. 2014 (LEGGI.polvereZ). Sopra la rottura
+// la polvere va con i metalli (D/Z costante: i grani crescono nel gas denso quanto le supernove li distruggono); sotto, dove
+// la crescita è lenta, cala molto più in fretta dei metalli
+export function polvereDelGas(Z) {
+  if (!(Z > 0)) return 0; const [a, b, aL, xt] = LEGGI.polvereZ, l = Math.log10(Z);
+  return Math.pow(10, -(l > xt ? a - l : b - aL * l));
+}
 export function densitaGalassia(forma) {
   const C = cinematica(forma), A = forma.anelli, NR = ANELLI, B = forma.bracci, as = forma.scalaSferoide, Ms = forma.massaSferoide, q = forma.schiacciata || 1;
   const anello = (R) => { let k = 0; while (k < NR - 1 && A.bordo[k + 1] < R) k++; return k; }, sech2 = (x) => { const c = Math.cosh(Math.min(Math.abs(x), 30)); return 1 / (c * c); };
   const onda = (R, fi, t, ampiezza) => (ampiezza > 0 ? 1 + ampiezza * Math.cos(B.numero * (fi - faseBraccioAlTempo(forma, R, t))) : 1);
   const in3d = (R, z, fi, t = 0) => {
-    const k = anello(R), fuori = R > A.bordo[NR] ? 0 : 1, hg = LEGGI.spessoreGas, r3 = Math.hypot(R, z) || 1e-6;
+    // (lo sferoide schiacciato lungo la normale: le superfici di pari densità sono ellissoidi omotetici, m² = R² + (z/q)²,
+    // e la densità di Hernquist in m divisa per q: la massa resta la stessa. Prima r3 = √(R² + z²) e il /q da solo: la forma
+    // restava tonda e la massa disegnata cresceva di 1/q)
+    const k = anello(R), fuori = R > A.bordo[NR] ? 0 : 1, hg = LEGGI.spessoreGas, r3 = Math.hypot(R, z / q) || 1e-6;
     const disco = (fuori * A.sigmaStelle[k] * sech2(z / C.z0[k])) / (2 * C.z0[k]) * onda(R, fi, t, B.contrasto), gas = (fuori * A.sigmaGas[k] * sech2(z / hg)) / (2 * hg) * onda(R, fi, t, B.contrastoGas);
-    return { stelle: disco + (Ms > 0 ? (Ms * as) / (2 * Math.PI * q * r3 * (r3 + as) ** 3) : 0), gas, polvere: gas * A.Z[k] * ZSOLE * LEGGI.polvere };
+    return { stelle: disco + (Ms > 0 ? (Ms * as) / (2 * Math.PI * q * r3 * (r3 + as) ** 3) : 0), gas, polvere: gas * polvereDelGas(A.Z[k]) };
   };
   return { in3d, colonne: { r: A.r, bordo: A.bordo, stelle: A.sigmaStelle, gas: A.sigmaGas, Z: A.Z, spessore: C.z0, spessoreGas: LEGGI.spessoreGas }, sferoide: { massa: Ms, scala: as, schiacciata: q },
     bracci: { numero: B.numero, contrasto: B.contrasto, contrastoGas: B.contrastoGas, fase: (R, t = 0) => faseBraccioAlTempo(forma, R, t), velocita: C.velocitaBracci, corotazione: C.corotazione, verso: C.verso }, barra: forma.barra };

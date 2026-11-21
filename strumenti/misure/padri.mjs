@@ -138,7 +138,8 @@ try {
 try {
   const SP = await import(join(RADICE, 'src/camera/spazio3d.js')), sc = SP.scenaGalassia(1, 33, 0), Pt = sc.punti; let s = 0;
   for (let i = 0; i < Pt.luminosita.length; i++) if (Pt.esiste[i]) s += Pt.luminosita[i];
-  const peso = typeof Pt.peso === 'number' ? Pt.peso : 1, rapporto = (s * peso) / sc.daLontano.luminosita;
+  const peso = (typeof Pt.peso === 'number' ? Pt.peso : 1) * (Pt.normaLuce ?? 1), grezzo = (s * peso) / (Pt.normaLuce ?? 1) / sc.daLontano.luminosita, rapporto = (s * peso) / sc.daLontano.luminosita;
+  log(`galassia: stelle × peso / luce da lontano = ${num(grezzo, 3)} senza la stima di rapporto, ${num(rapporto, 3)} con (normaLuce ${num(Pt.normaLuce ?? 1, 3)})`);
   riga('luce galassia', 'galassia 34', 'lontano→stelle', 'W', { celle: 1, deriva: s * peso - sc.daLontano.luminosita, rms: Math.abs(s * peso - sc.daLontano.luminosita), max: Math.abs(s * peso - sc.daLontano.luminosita), devPadre: sc.daLontano.luminosita, rmsRelativo: null, varRiassunto: null, varFiglio: null }, { luce: rapporto, nota: `${Pt.luminosita.length} stelle del campione, peso ${num(peso)}: la luce che le stelle portano da sole (la vista vi aggiunge la luce diffusa, universo.js)` });
 } catch (e) { log('galassia: non misurata:', e.message); }
 

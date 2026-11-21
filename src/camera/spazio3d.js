@@ -227,13 +227,21 @@ export function scenaGalassia(n, gid, t = 0) {
   const S = statoGalassia(n, gid, t), Gx = galassia(n, gid), F = Gx.forma, N = S.n, colore = new Uint8Array(3 * N), mag = new Float32Array(N), id = Int32Array.from({ length: N }, (_, i) => i);
   for (let i = 0; i < N; i++) { const c = coloreDi(S.T[i], S.stato[i]); colore[3 * i] = c[0]; colore[3 * i + 1] = c[1]; colore[3 * i + 2] = c[2]; mag[i] = magnitudine(S.L[i]); }
   const C = statoCosmo(n, t), D = densitaGalassia(F), tG = t / GA, k = KPC, quando = galassiaAlTempo(F, C.tGa);
+  // LA LUCE DEL CAMPIONE, CONSERVATA. Ogni stella del campione ne rappresenta `peso`; la somma L·peso è una stima della luce
+  // della galassia, ma con 2500 stelle è dominata dalle poche massicce (una stella di 30 M☉ ne vale 10⁵ del Sole, e ne
+  // rappresenta 10⁸): da galassia a galassia va da metà al doppio di quella vera. La luce vera è quella delle popolazioni
+  // (galassiaAlTempo): la stima di rapporto (Cochran 1977, Sampling Techniques, cap. 6) dà alla luce rappresentata dal
+  // campione il fattore normaLuce = luce vera / Σ L·peso, così le stelle da lontano (la parte discreta) e la luce diffusa (il
+  // continuo) sommano per costruzione la luce della galassia; le stelle viste da vicino restano con la loro luce
+  let somma = 0; for (let i = 0; i < N; i++) if (S.esiste[i]) somma += S.L[i];
+  const normaLuce = somma > 0 && S.peso > 0 ? (quando.luce * LSOLE) / (somma * S.peso) : 1;
   return {
     livello: 'galassia', via: { cosmo: n, galassia: gid }, t, eta: C.tGa * 1e9,
     riferimento: { origine: 'il centro della galassia (il buco nero)', assi: 'x, y: il piano della galassia (le stesse della mappa); z: la normale', unita: 'm', raggio: F.unitaM },
     nelGenitore: { livello: 'cosmo', pos: [C.pos[3 * gid], C.pos[3 * gid + 1], C.pos[3 * gid + 2]], vel: [C.vel[3 * gid], C.vel[3 * gid + 1], C.vel[3 * gid + 2]], assi: assiGalassia(n, gid) },
     // da lontano: un punto solo, con la luce di tutte le sue stelle
     daLontano: { luminosita: quando.luce * LSOLE, magnitudine: magnitudine(quando.luce * LSOLE), colore: quando.tinta, raggio: F.unitaM, massaStelle: quando.massaStelle },
-    punti: { n: N, id, pos: S.pos, vel: S.vel, raggio: S.raggio, luminosita: S.L, magnitudine: mag, colore, esiste: S.esiste, stato: S.stato, stati: S.stati, massa: S.massa, peso: S.peso, cosa: 'stelle: un campione; ognuna ne rappresenta `peso` vere (le ultime supernove: se stesse)' },
+    punti: { n: N, id, pos: S.pos, vel: S.vel, raggio: S.raggio, luminosita: S.L, magnitudine: mag, colore, esiste: S.esiste, stato: S.stato, stati: S.stati, massa: S.massa, peso: S.peso, normaLuce, cosa: 'stelle: un campione; ognuna ne rappresenta `peso` vere (le ultime supernove: se stesse)' },
     // la forma continua, per la luce diffusa (kg/m³ in un punto; le colonne anello per anello in kg/m²)
     campi: {
       densita: (x, y, z) => { const d = D.in3d(Math.hypot(x, y) / k, z / k, Math.atan2(y, x), tG), u = MSOLE / k ** 3; return { stelle: d.stelle * u, gas: d.gas * u, polvere: d.polvere * u }; },

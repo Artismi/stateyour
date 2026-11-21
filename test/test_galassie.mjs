@@ -98,8 +98,8 @@ prova('i metalli escono dal bilancio: Z ≈ 1 nel gas vicino al Sole oggi, e dov
 prova('il bilancio è chiuso: la massa entrata è quella che c\'è più quella uscita, i metalli che ci sono sono quelli prodotti', () => {
   const chiuso = (f, che) => {
     const b = f.bilancio;
-    tra((b.gas + b.stelle + b.vento + b.alCaldo) / b.entrato, 1 - 1e-9, 1 + 1e-9, `${che}: massa`);
-    tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, `${che}: metalli`);
+    tra((b.gas + b.stelle + b.vento + b.alCaldo + b.buco) / b.entrato, 1 - 1e-9, 1 + 1e-9, `${che}: massa`);
+    tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo + b.metalliBuco) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, `${che}: metalli`);
   };
   chiuso(VL, 'Via Lattea');
   // senza fusioni: ciò che è nato, meno ciò che le stelle morte hanno restituito, è ciò che resta in stelle e resti
@@ -238,7 +238,7 @@ prova('le galassie vere di cosmo(1): l\'alone dal picco, lo spin dalle maree dei
     assert.ok(['spirale', 'spirale barrata', 'lenticolare', 'ellittica'].includes(f.classe));
     if (f.tipo === 'ellittica') { assert.ok(f.fusioni.some((x) => x.avvenuta), 'un\'ellittica senza fusioni'); assert.ok(f.bracci.contrasto < 0.05 && !f.barra); assert.ok(f.classe === 'lenticolare' || f.frazioneSferoide > 0.8); }
     else assert.ok(f.massaGas > 0 && f.bracci.contrasto >= 0.05 && f.frazioneSferoide <= 0.8);
-    const b = f.bilancio; tra((b.gas + b.stelle + b.vento + b.alCaldo) / b.entrato, 1 - 1e-9, 1 + 1e-9, 'bilancio di massa'); tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, 'bilancio dei metalli');
+    const b = f.bilancio; tra((b.gas + b.stelle + b.vento + b.alCaldo + b.buco) / b.entrato, 1 - 1e-9, 1 + 1e-9, 'bilancio di massa'); tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo + b.metalliBuco) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, 'bilancio dei metalli');
     assert.ok(f.massaStelle > 0 && f.massaStelle < U.fb * f.alone.massa, 'più stelle dei barioni dell\'alone'); assert.ok(f.unitaKpc > 0.5 && f.unitaKpc < 200 && f.buco.M >= LEGGI.germe && f.buco.attivita >= 0 && f.buco.attivita <= 1);
     assert.ok(f.formazione > 0 && f.formazione < 3e9 * ANNO && f.tinta.every((x) => x >= 0 && x <= 255) && f.perG.bracci >= 2 && f.perG.passo > 0);
   }
