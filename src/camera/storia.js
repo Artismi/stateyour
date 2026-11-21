@@ -19,7 +19,8 @@
 // per riga in research_notes/Leggi fisiche complete per stateyour/interno_rocce_paesaggio.md §2 [V]. Marche delle fonti,
 // come nelle note: [V] letto sulla fonte, [T] triangolato, [D] derivato qui, [R] ricordato.
 //   · strati limite: δ = [Ra_c·ν·κ/(α·g·ΔT)]^(1/3); flussi q = k·ΔT/δ, in alto (verso la superficie) e in basso (dal nucleo) [V];
-//   · viscosità ν = ν_rif·exp(E_ν/(R·T_UM))/ε_fuso, con ε_fuso la legge di Costa per la roccia in parte fusa [V];
+//   · viscosità ν = ν_rif·exp(E_ν/(R·T_UM))/ε_fuso, con ε_fuso la legge di Costa per la roccia in parte fusa [V]; la frazione fusa
+//     sotto il coperchio è quella della risalita isoentropica di Katz (fusoIsoentropico), la stessa della colonna;
 //   · le temperature degli strati limite: sulla Terra T_UM = 0,7·T_m e T_LM = 1,3·T_m [V]; sono rapporti adiabatici:
 //     per un altro pianeta T ∝ ρ^γ lungo l'adiabatica, con la densità della roccia sotto pressione di Seager e altri
 //     2007 [V] e l'esponente che sulla Terra ridà quei due numeri [D] (una super-Terra non ha così un mantello a 30 000 K);
@@ -205,12 +206,29 @@ function frazioneFusa(T, P) {
   const Tl = poli(S.lherzolite, P), TL = poli(S.liquidus, P), Fc = Math.min(1, k.Mcpx / (k.r0 + k.r1 * Math.min(P, S.pMaxFusione))), Tc = Ts + Math.pow(Fc, 1 / k.beta1) * (Tl - Ts);
   return T < Tc ? Math.pow((T - Ts) / (Tl - Ts), k.beta1) : Math.min(1, Fc + (1 - Fc) * Math.pow(Math.max(0, (T - Tc) / (TL - Tc)), k.beta2));
 }
-// (la tabella si fa una riga di T_p per volta, la prima volta che serve. In ogni punto della risalita la colonna è in equilibrio
-// con l'entropia di partenza: T = (T_p + adiabaticaSolida·P)·e^(−ΔS·F/c_p), F = frazioneFusa(T, P), risolto per bisezione)
+// LA FRAZIONE FUSA DEL MANTELLO DI TEMPERATURA POTENZIALE T_p ALLA PRESSIONE P: il mantello che sale è in equilibrio con
+// l'entropia di partenza, T = (T_p + adiabaticaSolida·P)·e^(−ΔS·F/c_p), F = frazioneFusa(T, P), risolto per bisezione (Katz e
+// altri 2003 [V]; McKenzie e Bickle 1988). È una sola frazione fusa: quella che la risalita estrae (la colonna, qui sotto) e
+// quella che sotto il coperchio ammorbidisce il mantello (la viscosità e la rigidità di flussi()). (Prima la seconda era la retta
+// (T_p − T_s)/(T_L − T_s) tra solidus e liquidus, senza il calore latente: Io a 1911 K aveva il 70% di fuso sotto il coperchio
+// dove la sua stessa risalita ne dava il 35%, e l'equilibrio della marea stava oltre il massimo della dissipazione)
+// (la radice di g(F) = F − frazioneFusa(T₀·e^(−ΔS·F/c_p), P), che cresce con F, sta tra 0 e frazioneFusa(T₀, P): regula falsi
+// con la correzione di Illinois, fino a 10⁻¹³ — continua in T_p per lo jacobiano per differenze dell'integratore)
+function fusoIsoentropico(Tp, P) {
+  const S = STORIA, a = S.katz.dS / S.katz.cp, T0 = Tp + S.adiabaticaSolida * P, F0 = frazioneFusa(T0, P); if (!(F0 > 0)) return 0;
+  let x0 = 0, g0 = -F0, x1 = F0, g1 = F0 - frazioneFusa(T0 * Math.exp(-a * F0), P), lato = 0;
+  for (let n = 0; n < 100 && x1 - x0 > 1e-13; n++) {
+    const x = g1 - g0 > 0 ? x1 - (g1 * (x1 - x0)) / (g1 - g0) : 0.5 * (x0 + x1), g = x - frazioneFusa(T0 * Math.exp(-a * x), P);
+    if (g === 0) return x;
+    if (g < 0) { x0 = x; g0 = g; if (lato === -1) g1 *= 0.5; lato = -1; } else { x1 = x; g1 = g; if (lato === 1) g0 *= 0.5; lato = 1; }
+  }
+  return 0.5 * (x0 + x1);
+}
+// (la tabella si fa una riga di T_p per volta, la prima volta che serve: in ogni punto della risalita fusoIsoentropico)
 const COLONNA = { T0: 1200, dT: 5, nT: 281, dP: 5e7, nP: 161, righe: [] };
 function rigaColonna(a) {
   const c = COLONNA; let r = c.righe[a]; if (r) return r; r = c.righe[a] = new Float64Array(c.nP);
-  const S = STORIA, k = S.katz, Tp = c.T0 + a * c.dT, Fdi = (P) => { const T0 = Tp + S.adiabaticaSolida * P; if (frazioneFusa(T0, P) <= 0) return 0; let lo = 0, hi = 1; for (let n = 0; n < 26; n++) { const m = 0.5 * (lo + hi); if (frazioneFusa(T0 * Math.exp((-k.dS * m) / k.cp), P) > m) lo = m; else hi = m; } return 0.5 * (lo + hi); };
+  const Tp = c.T0 + a * c.dT, Fdi = (P) => fusoIsoentropico(Tp, P);
   let I = 0, Fsu = Fdi((c.nP - 1) * c.dP); for (let b = c.nP - 1; b > 0; b--) { const Fgiu = Fdi((b - 1) * c.dP); I += 0.5 * (Fsu + Fgiu) * c.dP; r[b - 1] = I; Fsu = Fgiu; }
   return r;
 }
@@ -321,9 +339,10 @@ function flussi(st, piu, amb, rami, Tm, Tcmb, o) {
     lnCrit = LN_KORENAGA + 0.5 * Math.log((S.alfa * st.g * dT * piu.D3) / (st.kappaSu * nu));
     mob = 1 / (1 + Math.exp(Math.max(-50, Math.min(50, S.raccordo * (lnEta - lnCrit)))));
     pref = mob + (1 - mob) * fermo; lid = delta / pref; Pbase = st.Ptop + S.rhoSu * st.g * Math.min(lid, st.D);
-    const Pd = Pbase, Tsol = poli(S.solidus, Pd); // (il mantello che convette comincia sotto il coperchio: è lì che fonde o no)
-    if (Tum <= Tsol) { Fv = 0; if (eps === 1) break; eps = Math.sqrt(eps); continue; }
-    Fv = Math.min(1, (Tum - Tsol) / (poli(S.liquidus, Pd) - Tsol)); const e2 = epsilonFuso(Fv); if (Math.abs(e2 - eps) < 1e-3 * eps) { eps = e2; break; } eps = giro === 0 ? e2 : Math.sqrt(eps * e2);
+    // (il mantello che convette comincia sotto il coperchio: è lì che fonde o no, con la frazione fusa della risalita)
+    const F = fusoIsoentropico(Tum, Pbase);
+    if (!(F > 0)) { Fv = 0; if (eps === 1) break; eps = Math.sqrt(eps); continue; }
+    Fv = F; const e2 = epsilonFuso(Fv); if (Math.abs(e2 - eps) < 1e-3 * eps) { eps = e2; break; } eps = giro === 0 ? e2 : Math.sqrt(eps * e2);
   }
   const qUM = (S.kSu * dT) / delta, Qconv = st.A * qUM * pref;
   // la risalita che fonde: dall'incontro dell'adiabatica con il solidus fino alla base del coperchio (alla superficie, a placche)
