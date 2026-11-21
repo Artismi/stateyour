@@ -65,19 +65,17 @@
 //     intrappolato; la solubilità dell'acqua; l'opacità del vapore); Schlichting, Sari e Yalinewich 2015 (l'aria tolta dagli urti
 //     giganti); Watson et al. 1981 (la fuga limitata dall'energia); Ribas et al. 2005 (la luce dura del Sole giovane); Kuwahara
 //     et al. 2017 (gli alogeni tra metallo e silicato). Nessuna di queste è stata riletta qui.
-// NON TORNA (stampato da test/test_elementi.mjs): equilibrio di condensazione a quelle temperature lascia a 1 UA il
-// cloro e gli alcalini del Sole; le perdite durante l'accrescimento (2b) tolgono al pianeta come la Terra i tre quarti del
-// cloro (365 → 90 ppm nel mantello: Cl/Na diventa quello della Terra) ma non il sodio e il potassio, che non escono dal fuso:
-// resta l'eccesso di TUTTI i moderatamente volatili (Na ×5,7 la Terra), che la Terra vera ha perso nel disco (la sua fase
-// calda: il disco di disco.js a 1 UA non supera ~570 K, e la condensazione incompleta lì non agisce; l'evaporazione dal fuso
-// — EVAPORA — non tocca gli embrioni della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20; i loro planetesimi si uniscono in
-// ~6·10⁴ anni, prima dei ~4·10⁵ che all'²⁶Al servono per fonderli, ma quel tempo è la crescita oligarchica di Kokubo e Ida
-// (2012, eq. 4.8 [V]) per quel disco (fd·ε 1,3, fg 1,9 a 0,67 UA), non un errore; e anche con la crescita 7 volte più lenta
-// (t_iso 4·10⁵ anni, provato) il sodio non cambia: l'evaporazione qui agisce solo a gas sparito, a 8,2 milioni di anni, quando
-// all'²⁶Al restano 2·10³ J/kg contro i 2·10⁶ che fondono la roccia); il mare di quel
-// pianeta resta troppo salato (114 g/kg, quasi tutto NaCl: con le argille nuove che non tornano come sale e il cloro che le
-// placche riportano nel mantello, mare.js, la soda è sparita e il mare tiene un terzo del cloro, come la Terra; il resto è il
-// cloro del pianeta, 5,6 volte la Terra); il nucleo
+// NON TORNA (stampato da test/test_elementi.mjs): la condensazione nel disco che si raffredda (disco.js: il disco viscoso, e
+// i planetesimi che tengono ciò che era condensato quando sono nati, Cassen 1996) toglie al pianeta come la Terra solo il
+// 10–15% di Na, K, Cl (rispetto al Mg e alla stella: Na 0,87, K 0,89; la Terra vera ~0,2): quasi tutti i suoi planetesimi
+// nascono tardi, quando il disco viscoso è freddo e la sua colonna più alta; le perdite durante l'accrescimento (2b) tolgono
+// poi una parte del cloro (metà, nella sua storia di urti) ma non il sodio e il potassio, che non escono dal fuso: resta
+// l'eccesso di TUTTI i moderatamente volatili (Na ×4,6 la Terra; l'evaporazione dal fuso — EVAPORA — non tocca gli embrioni
+// della Terra, che pesano 0,12–0,15 Terre: λ_Na ≈ 20; i loro planetesimi si uniscono prima che l'²⁶Al li fonda, e
+// l'evaporazione qui agisce solo a gas sparito, quando all'²⁶Al resta mille volte meno del calore che fonde la roccia); il
+// mare di quel pianeta resta troppo salato (189 g/kg, quasi tutto NaCl: il cloro del pianeta è 154 ppm, ~10 volte la Terra);
+// l'equilibrio Fe + H₂O ⇌ FeO + H₂ senza la sua lentezza al freddo ossida il ferro dei planetesimi nati tardi (FeO del mantello
+// 13%, Terra 8%: dichiarato); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese
 // (oltre lo zinco) seguono l'ossigeno o il carbonio nella proporzione r/s del Sistema Solare [R]: è una taratura sul Sole,
@@ -505,9 +503,11 @@ export function crostaDelPianeta(P, { stella } = {}) {
 //   sola; la solubilità dell'acqua nel fuso, 6,8·10⁻⁸·p^0,7 [R], sotto qualche centinaio di bar ne lascia fuori una parte
 //   simile); lo zolfo resta nei solfuri e nel nucleo (dichiarato); Na e K se ne vanno solo come contro-ioni degli alogeni persi
 //   dal mare quando il fuso è già solido (il mare è neutro; a fuso aperto l'aria porta HCl). Il resto non si muove.
-// (La condensazione incompleta — i solidi che si separano dal gas mentre il disco giovane è più caldo, Cassen 1996 [R] — con
-// il disco di disco.js non agisce: il gas cala come e^(−2t/vita), e a 1 UA la temperatura del gas che cade parte da 2^¼ volte
-// quella media: ~570 K per la Terra del modello, sotto i T50 di Na, K, Cl. Dichiarato in NON TORNA.)
+// (La condensazione incompleta — i solidi che si separano dal gas mentre il disco giovane è più caldo, Cassen 1996 [R] — la fa
+// disco.js con il disco viscoso che si raffredda (Ṁ ∝ (1 + t/t_s)^−3/2): a 1 UA il disco del Sole parte da ~1200 K e scende
+// sotto i 300 K in un milione di anni; ma i planetesimi nascono in proporzione alla polvere che c'è, e la colonna di un disco
+// viscoso a temperatura più bassa è più alta: quasi tutti nascono tardi e al freddo. Toglie a Na, K, Cl il 10–15% dove nasce
+// la Terra del modello, non i quattro quinti della Terra vera. Dichiarato in NON TORNA.)
 export const INTRAPPOLATO = 0.05; // la parte del fuso che resta tra i cristalli quando un oceano di magma solidifica (Elkins-Tanton 2008: 1–5%) [R]
 export const PERDITE = Object.freeze({
   al26: 5.23e-5, tauAl: 1.034e6, energiaAl: 3.12 * 1.602e-13, // ²⁶Al/²⁷Al iniziale (Jacobsen et al. 2008), vita media (anni), J per decadimento [R]
@@ -552,10 +552,12 @@ const KNA = MOBILI_R.indexOf(IDX.Na), KK = MOBILI_R.indexOf(IDX.K), MASSA_R = Fl
 // membri: gli embrioni del pianeta [{ id, roccia, ghiacci (Float64Array NE, kg), t (anni: quando è fatto), T (K: il disco lì),
 //   R (m), a (UA) }]; fusioni: gli urti in ordine [{ g, p (id del bersaglio e di chi cade), t, Mg, Mp (kg di solidi), Rg, Rp (m),
 //   a (UA) }] (anche quelli che non c'entrano: si prendono quelli del pianeta); tGas: quando sparisce il gas (anni); eta: l'età
-//   della stella; L: la luce della stella (in L☉); radice: l'id del pianeta.
+//   della stella; L: la luce della stella (in L☉: quella di sequenza principale, che scala la luce dura del Sole giovane);
+//   Lt (facoltativa): la luce della stella al tempo t (L☉), che scalda il fuso a gas sparito (la stella giovane si sta ancora
+//   stringendo ed è più luminosa: stelle.js luceGiovane); radice: l'id del pianeta.
 // → { roccia, ghiacci (ciò che resta), spazio (kg per elemento: ciò che è partito), urti: [{ t, x, tolta, tolta2, fusa, fuori }],
 //     fuga, negliUrti (kg partiti per le due vie), solidificato (la parte del fuso solida all'età della stella) }
-export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice, miscela = PROTOSOLARE }) {
+export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, Lt = null, radice, miscela = PROTOSOLARE }) {
   const G = COSTANTI.G, stato = new Map(), spR = new Float64Array(NR), spG = new Float64Array(NG), urti = []; let fuga = 0, negliUrti = 0, evaporato = 0;
   // (per l'evaporazione: la pressione di vapore di ogni elemento al liquidus in superficie, in Pa, per la miscela di questa stella,
   // e la sua parte in massa nella roccia condensata tutta, a cui quella pressione si riferisce)
@@ -567,7 +569,7 @@ export function perditeAccrescimento({ membri, fusioni, tGas, eta, L, radice, mi
   const flussoNetto = (c, t) => {
     const colonna = (UG[KH] * c.pG[KH] * ((ELEMENTI.O.massa + 2 * ELEMENTI.H.massa) / (2 * ELEMENTI.H.massa))) / (4 * Math.PI * c.R * c.R);
     const esce = PERDITE.OLR + SIGMA * liquidusPeridotite(0) ** 4 * Math.exp(-PERDITE.kappa * colonna);
-    const entra = t < tGas ? SIGMA * c.T ** 4 : ((1 - PERDITE.albedo) * L * LSOLE_W) / (16 * Math.PI * (c.a * UA_M) ** 2);
+    const entra = t < tGas ? SIGMA * c.T ** 4 : ((1 - PERDITE.albedo) * (Lt ? Lt(t) : L) * LSOLE_W) / (16 * Math.PI * (c.a * UA_M) ** 2);
     return esce - entra;
   };
   // quando finisce di solidificare il fuso cominciato a c.t0 (anni; Infinity se non finisce mai)

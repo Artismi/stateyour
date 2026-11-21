@@ -4,6 +4,7 @@ import { formaPianeti, disco, raggioPianeta, DISCO, MTERRA, RTERRA, MGIOVE, RGIO
 import { MSOLE, UA } from '../src/camera/leggi.js';
 import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
 import * as EL from '../src/camera/elementi.js';
+import { luceGiovane } from '../src/camera/stelle.js';
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -27,7 +28,11 @@ for (const massa of [0.08, 0.3, 1, 2, 8, 40]) for (const Z of [0.01, 0.3, 1, 3.5
 prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio di solidi oltre la neve, massa di qualche centesimo', () => {
   for (const s of SEMI) {
     const D = disco(SOLE, s);
-    assert.ok(Math.abs(D.neve - 2.7) < 0.1, `neve a ${D.neve}`); // (la luce è quella al tempo del disco, in unità di quella del Sole di allora: per il Sole la neve è a 2,7 UA esatti)
+    // (la luce è quella al tempo del disco, in unità di quella del Sole a metà della vita mediana del gas: lì la neve del Sole è
+    // a 2,7 UA esatti. Con la contrazione prima della sequenza principale la luce del Sole giovane cala col tempo, L ∝ t^−⅔
+    // circa: un disco che svanisce prima vede un Sole più luminoso e ha la neve più fuori, come √L)
+    const neveAttesa = 2.7 * Math.sqrt(luceGiovane(1, { Z: 1, eta: D.tDisco }).L / luceGiovane(1, { Z: 1, eta: 0.5 * DISCO.vitaMedia }).L);
+    assert.ok(Math.abs(D.neve - neveAttesa) < 0.1, `neve a ${D.neve} (attesa ${neveAttesa})`);
     assert.ok(Math.abs(D.sigmaGas(1) / D.sigmaGas(4) - 8) < 1e-9, 'la densità del gas cala come r^(3/2)');
     // (le proporzioni sono quelle della miscela protosolare di elementi.js: la roccia fredda 0,35 dei metalli; il salto alla neve
     // è 1 + ghiacci/roccia, contato qui atomo per atomo dalla miscela — l'acqua è l'ossigeno che non sta negli ossidi né nel CO

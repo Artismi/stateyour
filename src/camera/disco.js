@@ -19,14 +19,15 @@
 // possono rifare) sono dichiarate una per una dove si usano, con «LEGGE EMPIRICA».
 // LA MATERIA (la catena degli elementi, elementi.js): i solidi sono gli elementi del gas di QUELLA stella che a quella
 // temperatura condensano (Lodders 2003: ogni elemento alla sua temperatura del 50%), con la temperatura che il disco ha lì
-// (la luce della stella o il gas che cade, la più alta); oltre la neve anche i ghiacci. Ogni pianeta sa di quali embrioni
+// QUANDO i planetesimi nascono (il disco viscoso che si raffredda, scaldato dal suo gas e dalla stella giovane: Cassen 1996);
+// oltre la neve anche i ghiacci. Ogni pianeta sa di quali embrioni
 // è fatto, e quindi di quale roccia; poi si separa (elementi.js differenzia): il suo «ferro» è il nucleo che ne esce.
 // (Prima: i solidi erano Z × 0,0119 × una parte fissa, e il ferro della polvere cresceva come T², una regola semplice.)
 // Che cosa manca: la migrazione delle orbite nel disco (niente «Giovi caldi»),
 // le risonanze, i sistemi con due stelle.
 
 import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI } from './leggi.js';
-import { stella as stellaVera } from './stelle.js';
+import { stella as stellaVera, luceGiovane } from './stelle.js';
 import { comeSorgente } from './eventi.js';
 import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento } from './elementi.js'; // la catena degli elementi
 import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
@@ -57,6 +58,9 @@ export const DISCO = Object.freeze({
   presa: 0.05, // la parte del gas rimasto che un gigante riesce a intercettare
   minimo: 0.02, // sotto questa massa (in Terre) non lo chiamiamo pianeta: resta tra i detriti
   senzaGas: 300, // sparito il gas i sassi non sono più frenati: gli embrioni li catturano centinaia di volte più lentamente
+  // il disco viscoso (LA STORIA DEL DISCO, in disco()): α di Shakura e Sunyaev e raggio di scala del disco, quelli con cui
+  // Hartmann et al. 1998 (ApJ 495, 385) riproducono l'afflusso misurato delle T Tauri [R]; opacità dei grani (Bell e Lin 1994)
+  alfa: 0.01, raggioViscoso: 10, kappaGrani: 0.01, // (UA·√M; κ = 0,01·√T m²/kg, cioè 0,1·T^½ cm²/g, con i metalli del Sole)
 });
 
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -72,24 +76,23 @@ const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 // Restituisce il disco di una stella { massa, Z, eta }: distanze in UA, densità in kg/m², tempi in anni.
 // la luce del Sole al tempo del suo disco (in unità di quella di oggi): dalla stessa fonte, a metà della vita mediana del gas
 let soleGiovane = 0;
-const luceDelSoleGiovane = () => (soleGiovane ||= stellaVera(1, { Z: 1, eta: 0.5 * DISCO.vitaMedia }).L);
+const luceDelSoleGiovane = () => (soleGiovane ||= luceGiovane(1, { Z: 1, eta: 0.5 * DISCO.vitaMedia }).L);
 export function disco(st, seme = 1) {
   const c = comeSorgente(seme, 'disco'), M = Math.max(0.01, st.massa ?? 1), Z = Math.max(0, st.Z ?? 1);
   // LEGGE EMPIRICA: il gas dura pochi milioni di anni (poi la luce della stella lo soffia via), meno attorno alle stelle grandi
   const vita = Math.min(1.2e7, DISCO.vitaMinima - (DISCO.vitaMedia - DISCO.vitaMinima) * Math.log(1 - 0.98 * c('vita del gas'))) / Math.sqrt(M);
-  // LA LUCE DELLA STELLA AL TEMPO DEL DISCO. È la stessa grandezza che scalda i pianeti oggi, letta dalla stessa fonte
-  // (stelle.js stella(M, { Z, eta })) a un altro tempo: a metà della vita del gas (o dell'età della stella, se è più
-  // giovane del suo disco). «L» è in unità della luce che il SOLE aveva al tempo del suo disco (luceDelSoleGiovane): la
-  // taratura del disco è una sola, la linea della neve del Sistema Solare a 2,7 UA (da lì 280 K a 1 UA e la polvere che
-  // evapora a 0,034 UA: la stessa legge T ∝ L^¼/√r), e le altre stelle la scalano con la loro luce di ALLORA rispetto a
-  // quella del Sole di allora. «Lstella» è la stessa luce in unità del Sole di oggi. (Prima era la luce a metà della vita
-  // della stella: per il Sole quasi quella di oggi; ma il Sole giovane dava il 71% di oggi mentre una nana rossa dà
-  // sempre la stessa, e una nana bruna giovane molto di più: rispetto al Sole le loro linee della neve erano troppo vicine,
-  // del 20% per le nane rosse.)
-  // CHE COSA MANCA: stelle.js non ha la contrazione prima della sequenza principale, quando ogni stella è più luminosa
-  // (le piccole molto di più): la luce «al tempo del disco» è quella dell'età zero della sequenza principale.
-  const tDisco = 0.5 * Math.min(vita, st.eta > 0 ? st.eta : vita), Lstella = stellaVera(M, { Z, eta: tDisco }).L, L = Lstella / luceDelSoleGiovane();
-  // la linea della neve: dove il disco scende sotto i 170 K e il ghiaccio non evapora più
+  // LA LUCE DELLA STELLA AL TEMPO DEL DISCO. È la stessa stella che scalda i pianeti oggi (stelle.js), letta a un altro
+  // tempo e CON LA CONTRAZIONE PRIMA DELLA SEQUENZA PRINCIPALE (stelle.js luceGiovane: la traccia di Hayashi, la stessa
+  // fisica delle nane brune): a un milione di anni il Sole dà ~2 volte la sua luce di età zero, una nana rossa di 0,3 M☉ ~25
+  // volte, una di 0,1 M☉ ~80 (Baraffe et al. 2015 per confronto [R]). Il tempo è metà della vita del gas (o dell'età della
+  // stella, se è più giovane del suo disco). «L» è in unità della luce che il SOLE aveva al tempo del suo disco
+  // (luceDelSoleGiovane): la taratura del disco è una sola, la linea della neve del Sistema Solare a 2,7 UA (da lì 280 K a
+  // 1 UA e la polvere che evapora a 0,034 UA: la stessa legge T ∝ L^¼/√r), e le altre stelle la scalano con la loro luce di
+  // ALLORA rispetto a quella del Sole di allora. «Lstella» è la stessa luce in unità del Sole di oggi. (Prima la luce era
+  // quella dell'età zero della sequenza principale: le nane rosse giovani erano 10–30 volte troppo deboli e le loro linee
+  // della neve 3–5 volte troppo vicine.)
+  const tDisco = 0.5 * Math.min(vita, st.eta > 0 ? st.eta : vita), Lsole0 = luceDelSoleGiovane(), Lstella = luceGiovane(M, { Z, eta: tDisco }).L, L = Lstella / Lsole0;
+  // la linea della neve: dove la luce della stella lascia il disco sotto i 170 K e il ghiaccio non evapora più
   const neve = 2.7 * Math.sqrt(L);
   // LEGGE EMPIRICA: i dischi osservati arrivano a qualche decina di UA, più larghi attorno alle stelle più grandi
   const rOut = DISCO.raggio * Math.sqrt(M);
@@ -98,25 +101,72 @@ export function disco(st, seme = 1) {
   const frazione = limita(DISCO.frazione * Math.exp(DISCO.sparpaglio * gauss), 0.01, 0.12), massaKg = frazione * M * MSOLE;
   // Σ(r) = Σ₀·r^(-3/2): Σ₀ (a 1 UA) è quella che, sommata fino al bordo esterno, dà la massa del disco
   const sigma0 = massaKg / (4 * Math.PI * UA * UA * Math.sqrt(rOut));
-  // il bordo interno dei solidi: dove il disco giovane supera i 1500 K la polvere evapora, e non c'è di che fare pianeti.
-  // Vicino alla stella il disco è scaldato soprattutto dal suo stesso gas che cade (in una vita il disco si svuota
-  // sulla stella: Ṁ = massa / vita) e il calore esce a fatica attraverso la polvere (opacità κ ≈ 0,1 m²/kg × Z):
-  //   T⁴ = 9·κ·Σ·G·M·Ṁ / (128·π·σ·r³)   →   con Σ ∝ r^(-3/2), T ∝ r^(-9/8)
-  // Più dentro di così restano solo il limite della luce della stella e quello del suo campo magnetico.
-  const T4 = (9 * 0.1 * Z * sigma0 * G * M * MSOLE * (massaKg / (vita * ANNO))) / (128 * Math.PI * COSTANTI.sigma * UA ** 3);
-  const rIn = Math.min(0.5 * rOut, Math.max(0.02, 0.034 * Math.sqrt(L), 0.05 * Math.cbrt(M), Math.pow(T4 / 1500 ** 4, 1 / 4.5)));
   const sigmaGas = (r) => sigma0 * Math.pow(r, -DISCO.pendenza);
+  // LA STORIA DEL DISCO. Il disco è viscoso e si svuota sulla stella: l'afflusso cala nel tempo come nella soluzione di
+  // Lynden-Bell e Pringle (1974) con ν ∝ r, Ṁ(t) = Ṁ₀·(1 + t/t_s)^−3/2 (Hartmann et al. 1998 [R]: è la legge che segue
+  // l'afflusso misurato delle stelle giovani, ~10⁻⁸ M☉/anno a un milione di anni). ν = α·c_s²/Ω (Shakura e Sunyaev 1973), e
+  // con la temperatura della luce T ∝ r^−½ è proprio ν ∝ r; t_s = R₁²/(3ν(R₁)) è il tempo viscoso al raggio di scala R₁, e
+  // Ṁ₀ = massa/(2·t_s) perché tutto il disco cada sulla stella (∫Ṁ dt = massa: la massa del disco di qui sopra è quella della
+  // nascita). Per il Sole t_s ≈ 5·10⁴ anni, Ṁ₀ ≈ 6·10⁻⁷ e 6·10⁻⁹ M☉/anno a un milione di anni.
+  // LA TEMPERATURA A METÀ DEL DISCO, a ogni tempo: T⁴ = T_visc⁴ + T_luce⁴. Il calore viscoso esce a fatica attraverso la
+  // polvere: T_visc⁴ = 9·κ·Σ·G·M·Ṁ/(128·π·σ·r³) (la legge di prima), con la colonna del disco viscoso Σ = Ṁ/(3πν) e l'opacità
+  // dei grani di metallo e silicato κ = 0,01·√T m²/kg × Z (Bell e Lin 1994 [R], tra il ghiaccio che evapora e i grani che
+  // evaporano, ~170–1400 K: oltre, il termostato dei grani che evaporano manca, dichiarato); la luce è quella della stella di
+  // quel tempo (luceGiovane), 280 K·L(t)^¼/√r. Il disco giovane a 1 UA supera così i 1300 K, e si raffredda in un milione di anni.
+  const GM = G * M * MSOLE, MUH = 2.34 * COSTANTI.mp, om = (r) => Math.sqrt(GM / (r * UA) ** 3);
+  const Lt = (t) => luceGiovane(M, { Z, eta: Math.max(t, 1) }).L / Lsole0, Tluce = (r, Lx) => (280 * Math.pow(Lx, 0.25)) / Math.sqrt(r);
+  const R1 = DISCO.raggioViscoso * Math.sqrt(M), ts = ((R1 * UA) ** 2 * om(R1) * MUH) / (3 * DISCO.alfa * COSTANTI.kB * Tluce(R1, L)) / ANNO;
+  const Mdot0 = massaKg / (2 * ts * ANNO), Mdot = (t) => Mdot0 * Math.pow(1 + t / ts, -1.5);
+  const B1 = (9 * DISCO.kappaGrani * Z * GM * MUH) / (384 * Math.PI * Math.PI * DISCO.alfa * COSTANTI.kB * COSTANTI.sigma);
+  // (T⁴ = b·T^−½ + T_luce⁴: con y = √T è y⁹ − T_luce⁴·y − b = 0, che Newton risolve in pochi passi partendo da sopra)
+  const radiceT = (b, ti4, y) => { if (!(y > 0)) y = Math.max(Math.pow(ti4, 0.125), Math.pow(b, 1 / 9)) * 1.01;
+    for (let k = 0; k < 30; k++) { const y8 = (y * y) ** 4, d = (y8 * y - ti4 * y - b) / (9 * y8 - ti4); y -= d; if (Math.abs(d) < 1e-7 * y) break; } return y * y; };
+  const Tmezzo = (r, Md, Lx) => radiceT((B1 * om(r) * Md * Md) / (r * UA) ** 3, Tluce(r, Lx) ** 4);
+  // il bordo interno dei solidi: dove il disco giovane supera i 1500 K la polvere evapora, e non c'è di che fare pianeti. Resta
+  // la legge di prima, con la colonna di gas di qui sopra e l'afflusso medio della vita del gas (il disco viscoso ne fa cadere
+  // sulla stella massa·(1 − 1/√(1 + vita/t_s)) in una vita; prima era massa / vita) e l'opacità κ ≈ 0,1 m²/kg × Z:
+  //   T⁴ = 9·κ·Σ·G·M·Ṁ / (128·π·σ·r³)   →   con Σ ∝ r^(-3/2), T ∝ r^(-9/8)
+  // (dichiarato: è un bordo medio; la storia termica qui sopra dice di che cosa sono fatti i solidi dal bordo in fuori, non
+  // sposta il bordo). Più dentro di così restano solo il limite della luce della stella e quello del suo campo magnetico.
+  const xFine = 1 + vita / ts, MdotMedio = (massaKg * (1 - 1 / Math.sqrt(xFine))) / (vita * ANNO);
+  const T4 = (9 * 0.1 * Z * sigma0 * G * M * MSOLE * MdotMedio) / (128 * Math.PI * COSTANTI.sigma * UA ** 3);
+  const rIn = Math.min(0.5 * rOut, Math.max(0.02, 0.034 * Math.sqrt(L), 0.05 * Math.cbrt(M), Math.pow(T4 / 1500 ** 4, 1 / 4.5)));
   // I SOLIDI (la catena degli elementi, elementi.js): la miscela del gas di QUESTA stella; ogni elemento condensa alla sua
-  // temperatura (Lodders 2003, con la curva di Clausius–Clapeyron), e la temperatura del luogo è la più alta tra quella che dà
-  // la luce della stella (280 K·L^¼/√r, la stessa della linea della neve) e quella del gas che cade (la legge del bordo
-  // interno qui sopra: T⁴ = T4·r^−4,5, con il ritmo medio della caduta). Dentro la neve è solida la roccia che a quella
-  // temperatura è condensata (vicino alla stella mancano zolfo, sodio, potassio, zinco, cloro; oltre i 1300 K anche il ferro e
-  // i silicati); oltre la neve anche i ghiacci. (La neve resta quella della luce: con il calore del gas che cade starebbe un
-  // poco più fuori; dichiarato.)
-  const X = st.abbondanze || miscelaSolare(Z), tab = tabellaSolidi(X);
-  const Tcond = (r) => Math.max((280 * Math.pow(L, 0.25)) / Math.sqrt(r), Math.pow(T4 * Math.pow(r, -4.5), 0.25));
+  // temperatura (Lodders 2003, con la curva di Clausius–Clapeyron). I SOLIDI CHE SI SEPARANO DAL GAS MENTRE IL DISCO SI
+  // RAFFREDDA tengono ciò che era condensato quando si sono separati (Cassen 1996 [R]): i planetesimi di un luogo nascono a ogni
+  // tempo della vita del gas, in proporzione alla polvere che c'è (Σ del disco viscoso lì e allora: un tempo di crescita fisso
+  // in giri), e ognuno ha la roccia condensata alla temperatura di quel momento. La roccia di un luogo è la loro miscela: ciò che
+  // condensa solo al freddo (Na, K, Cl, S, Zn, …) manca a chi è nato quando faceva caldo. La sua TEMPERATURA DI FORMAZIONE è la
+  // media sulla roccia (Tcond); la QUANTITÀ di roccia è quella che condensa a quella temperatura (approssimazione dichiarata: la
+  // miscela ne avrebbe un poco meno dove il disco giovane era più caldo dei silicati). Oltre la neve anche i ghiacci (la neve
+  // resta quella della luce a metà vita del gas: dichiarato).
+  const X = st.abbondanze || miscelaSolare(Z), tab = tabellaSolidi(X), NE = SIMBOLI.length;
+  let storia = null; // (fatta al primo uso: chi chiede solo il disco non la paga)
+  const laStoria = () => {
+    if (storia) return storia;
+    const NT = 24, NR = 64, lr0 = Math.log(0.99 * rIn), lr1 = Math.log(1.01 * rOut), dl = (lr1 - lr0) / (NR - 1), lx = Math.log(xFine) / NT;
+    const tk = new Float64Array(NT), wk = new Float64Array(NT), Mk = new Float64Array(NT), Lk = new Float64Array(NT);
+    for (let k = 0; k < NT; k++) { const x0 = Math.exp(k * lx), x1 = Math.exp((k + 1) * lx), x = Math.sqrt(x0 * x1); tk[k] = (x - 1) * ts; wk[k] = (x1 - x0) * ts; Mk[k] = Mdot(tk[k]); Lk[k] = Lt(tk[k]); }
+    const Tm = new Float64Array(NR), fm = new Float64Array(NR), el = new Float64Array(NR * NE), somme = new Float64Array(NR), v = new Float64Array(NE);
+    for (let i = 0; i < NR; i++) {
+      const r = Math.exp(lr0 + i * dl), br = (B1 * om(r)) / (r * UA) ** 3, lr = 280 ** 4 / (r * r); let W = 0, Wr = 0, WrT = 0, Wm = 0, Tultima = 0, y = 0; v.fill(0);
+      for (let k = 0; k < NT; k++) { const T = radiceT(br * Mk[k] * Mk[k], lr * Lk[k], y), w = (Mk[k] / T) * wk[k], ro = tab.roccia(T); y = Math.sqrt(T) * 1.0001; Tultima = T; W += w; if (!(ro > 0)) continue; Wr += w * ro; WrT += w * ro * T; Wm += w * tab.metallo(T); tab.aggiungi(v, w * ro, T); }
+      if (Wr > 1e-30 * W) { Tm[i] = WrT / Wr; fm[i] = Wm / Wr; for (let j = 0; j < NE; j++) el[i * NE + j] = v[j] / Wr; }
+      else { Tm[i] = Tultima; fm[i] = 0; } // (sempre troppo caldo: niente roccia)
+      let sum = 0; for (let j = 0; j < NE; j++) sum += el[i * NE + j]; somme[i] = sum;
+    }
+    const luogo = (r) => { const x = (Math.log(r) - lr0) / dl, k = Math.max(0, Math.min(NR - 2, Math.floor(x))); return [k, Math.max(0, Math.min(1, x - k))]; };
+    return (storia = {
+      T: (r) => { const [k, u] = luogo(r); return Tm[k] + u * (Tm[k + 1] - Tm[k]); },
+      metallo: (r) => { const [k, u] = luogo(r); return fm[k] + u * (fm[k + 1] - fm[k]); },
+      // aggiunge a «dove» kg di roccia nata a r, nelle proporzioni della miscela del luogo (sommano esattamente a kg)
+      aggiungi: (dove, kg, r) => { const [k, u] = luogo(r), sm = somme[k] + u * (somme[k + 1] - somme[k]); if (!(sm > 0) || !(kg > 0)) return; const q = kg / sm; for (let j = 0; j < NE; j++) { const p = el[k * NE + j], s2 = el[(k + 1) * NE + j]; if (p || s2) dove[j] += q * (p + u * (s2 - p)); } },
+    });
+  };
+  const Tcond = (r) => laStoria().T(r);
   const sigmaSolidi = (r) => (tab.roccia(Tcond(r)) + (r < neve ? 0 : tab.ghiaccio)) * sigmaGas(r);
-  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, sigmaGas, sigmaSolidi, Tcond, miscela: X, solidi: tab };
+  const rocciaNata = (dove, kg, r) => laStoria().aggiungi(dove, kg, r), metalloNato = (r) => laStoria().metallo(r);
+  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, ts, Mdot0, sigmaGas, sigmaSolidi, Tcond, Tmezzo, Mdot, rocciaNata, metalloNato, miscela: X, solidi: tab };
 }
 
 // ---------- 5. il raggio, dalla massa e da ciò di cui è fatto
@@ -206,9 +256,9 @@ export function formaPianeti(st, seme = 1) {
     // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
     // (LA CATENA DEGLI ELEMENTI: la roccia è quella che lì condensa, alla temperatura del luogo; il suo metallo — ferro non
     // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
-    const T = D.Tcond(r), ferroRoccia = D.solidi.metallo(T) / Math.max(1e-30, D.solidi.roccia(T));
+    const T = D.Tcond(r), ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
     const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
-    corpi.push({ id: corpi.length, a: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
+    corpi.push({ id: corpi.length, a: r, r0: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, fe0: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
       lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
   }
 
@@ -290,6 +340,9 @@ export function formaPianeti(st, seme = 1) {
   // la luce della stella OGGI (Sole di oggi = 1): il velo di gas di un pianeta si gonfia con il flusso che riceve adesso
   // (Lopez e Fortney 2014: la legge del raggio è data con il flusso di oggi e l'età); è la stessa luce che cosmo.js dà al clima
   const Loggi = stellaVera(D.massaStella, { Z: D.Z, eta }).L;
+  // (per le perdite: la luce di sequenza principale al tempo del disco, che scala la luce dura del Sole giovane come prima, e la
+  // luce della stella giovane a ogni tempo, che scalda il fuso dopo il gas: prima era quella sola, ferma al tempo del disco)
+  const Lsequenza = stellaVera(D.massaStella, { Z: D.Z, eta: D.tDisco }).L, luceAllora = (t) => luceGiovane(D.massaStella, { Z: D.Z, eta: t }).L;
   // LA CATENA DEGLI ELEMENTI: di quali embrioni è fatto ogni pianeta (chi è caduto su chi: «in»), e quindi di quale roccia
   // (quella del luogo e della temperatura di ciascuno: elementi.js tabellaSolidi) e di quali ghiacci (la ricetta della
   // stella: acqua, e il carbonio e l'azoto gelati con lei; l'acqua portata dentro la neve dai corpi venuti da fuori ha la
@@ -299,13 +352,15 @@ export function formaPianeti(st, seme = 1) {
   const ricettaGhiaccio = Object.fromEntries(Object.entries(D.solidi.ghiacci || {}).map(([k, v]) => [k, D.solidi.ghiaccio > 0 ? v / D.solidi.ghiaccio : 0]));
   const pianeti = vivi.filter((b) => b.m >= P.minimo * MTERRA && b.a >= 0.02).map((b) => {
     let sol = vettore(), ghi = vettore(), aria = vettore(), Tm = 0, mm = 0; const tutti = [], gigante = b.gas > 0.5 * b.m;
-    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0, r = vettore(), gh = vettore(); D.solidi.aggiungi(r, roccia, o.T); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
+    for (const o of membri.get(b.id) || [b]) { const roccia = o.m0 * (1 - o.acqua0), g = o.m0 * o.acqua0, r = vettore(), gh = vettore(); D.rocciaNata(r, roccia, o.r0); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
       for (let i = 0; i < SIMBOLI.length; i++) { sol[i] += r[i]; ghi[i] += gh[i]; } Tm += o.T * o.m0; mm += o.m0;
-      if (!gigante) tutti.push({ id: o.id, roccia: r, ghiacci: gh, t: o.tIso, T: o.T, a: o.nato, R: raggioPianeta({ massaKg: o.m0, ferro: o.fe / Math.max(o.m0, 1e-30), ghiaccio: o.acqua0 }) }); }
+      // (R: con il ferro suo, di quando è nato — fe0 —: «fe» cresce con chi gli cade addosso, e un embrione che ne ha preso molto
+      // veniva col raggio negativo, e le perdite di quel pianeta con NaN)
+      if (!gigante) tutti.push({ id: o.id, roccia: r, ghiacci: gh, t: o.tIso, T: o.T, a: o.nato, R: raggioPianeta({ massaKg: o.m0, ferro: o.fe0 / Math.max(o.m0, 1e-30), ghiaccio: o.acqua0 }) }); }
     // LE PERDITE DURANTE L'ACCRESCIMENTO (elementi.js perditeAccrescimento): gli embrioni fusi liberano i volatili, gli urti e la
     // fuga portano via una parte di ciò che è fuori; ciò che parte va nello spazio (un serbatoio del libro dei conti) e il
     // pianeta pesa di meno. (I giganti no: la roccia resta il loro nucleo, sotto il gas.)
-    const perdite = gigante ? null : perditeAccrescimento({ membri: tutti, fusioni, tGas: D.vita, eta, L: D.Lstella, radice: b.id, miscela: D.miscela });
+    const perdite = gigante ? null : perditeAccrescimento({ membri: tutti, fusioni, tGas: D.vita, eta, L: Lsequenza, Lt: luceAllora, radice: b.id, miscela: D.miscela });
     let perso = 0, persoGhiacci = 0;
     if (perdite) { sol = perdite.roccia; for (let i = 0; i < SIMBOLI.length; i++) { persoGhiacci += ghi[i] - perdite.ghiacci[i]; perso += perdite.spazio[i]; } ghi = perdite.ghiacci; }
     if (b.gas > 0) for (let i = 0; i < SIMBOLI.length; i++) aria[i] = b.gas * (D.miscela[SIMBOLI[i]] || 0);

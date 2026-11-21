@@ -30,6 +30,8 @@
 //   · LA VITA: l'idrogeno cala guscio per guscio (48 gusci) al ritmo delle reazioni; le zone convettive si mescolano;
 //     la struttura si ricalcola a ogni passo, fino all'1% dell'idrogeno al centro (fine della sequenza principale).
 //   · LE NANE BRUNE (sotto la massa minima): sfere tutte convettive che si stringono irradiando l'energia di gravità.
+//   · LA STELLA GIOVANE (luceGiovane): prima della sequenza principale ogni stella si stringe allo stesso modo, più grande e
+//     più luminosa (a un milione di anni il Sole ~2 volte la luce di età zero, una nana rossa di 0,3 M☉ ~25 volte).
 // Il calcolo costa minuti: lo fa una volta `node strumenti/tabella_stelle.mjs`, che scrive stelle_tabella.js
 // (7 metallicità × 36 masse × ~10 età). stella() interpola quella tabella in un microsecondo. La tabella è un
 // RISULTATO di questo file, rigenerabile: se si cambia una costante o una legge va rifatta.
@@ -69,7 +71,9 @@
 //     la massa di un barione è m_p; i metalli contano nella pressione come completamente ionizzati;
 //   · della catena pp l'energia e i neutrini del ramo I, a regime; del ciclo solo CN (l'ossigeno non entra);
 //   · il nucleo convettivo, dopo che ha cominciato a bruciare, non si allarga più (criterio di Ledoux, a gradino);
-//     niente sovrasconfinamento, rotazione, campi, perdita di massa, diffusione degli elementi, contrazione iniziale;
+//     niente sovrasconfinamento, rotazione, campi, perdita di massa, diffusione degli elementi;
+//   · la contrazione prima della sequenza principale (luceGiovane) è quella di una sfera tutta convettiva (la traccia di
+//     Hayashi, la stessa delle nane brune): senza il deuterio e senza la fase radiativa di Henyey delle stelle sopra ~0,5 M☉;
 //   · la MASSA MASSIMA è un criterio, non un muro: la massa a cui al centro la pressione della luce uguaglia quella
 //     del gas (≈ 137 M☉). L'integrazione arriva fino a 130 M☉; oltre, stella() estrapola;
 //   · la fine: nana bianca se il nucleo di elio rimasto è sotto la massa di Chandrasekhar; la stella di neutroni ha la
@@ -562,9 +566,11 @@ function sequenza(Z, masse, { parla = false } = {}) {
 // fotosfera il cui involucro, integrato in dentro, raggiunge l'entropia dell'interno.
 const LE15 = (() => { const l = laneEmden(1.5); return { xi: l.xi, rc: l.xi / (-3 * l.d), pc: 1 / (PI4 * 2.5 * l.d * l.d) }; })(); // ρc/ρ̄ e Pc/(GM²/R⁴) del polìtropo n = 3/2
 const T_BRUNA = 1600; // (K) sotto, l'opacità delle polveri che qui manca decide tutto: lì ci si ferma
-function raffreddamento(Msol, Z) {
-  const { X, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X), t = [], lL = [], lR = [];
-  const luce = (R) => { // la luce che esce da una sfera di raggio R: [L, T_eff]
+// la luce che esce da una sfera TUTTA CONVETTIVA di massa Msol e raggio R: [L, T_eff] (la stessa per le nane brune e per
+// le stelle giovani che si stringono prima della sequenza principale)
+function luceConvettiva(Msol, Z) {
+  const { X, Zm } = composizione(Z), M = Msol * MSOLE, tav = tavolaOpacita(Zm), Xp = new Float64Array(NGU).fill(X);
+  return (R) => {
     const rhoc = (LE15.rc * 3 * M) / (PI4 * R ** 3), Pc = (LE15.pc * K.G * M * M) / R ** 4;
     // la temperatura al centro (da P e ρ) e l'entropia dell'interno
     let a = Math.log(1e3), b = Math.log(1e9); for (let it = 0; it < 50; it++) { const m = 0.5 * (a + b); if (stato(rhoc, Math.exp(m), X, Zm).P < Pc) a = m; else b = m; }
@@ -575,6 +581,9 @@ function raffreddamento(Msol, Z) {
     for (let it = 0; it < 18; it++) { const m = 0.5 * (ta + tb), sv = sInv(m); if (!(sv < sc)) tb = m; else ta = m; }
     const Te = Math.exp(0.5 * (ta + tb)); return [PI4 * R * R * K.sigma * Te ** 4, Te];
   };
+}
+function raffreddamento(Msol, Z) {
+  const M = Msol * MSOLE, luce = luceConvettiva(Msol, Z), t = [], lL = [], lR = [];
   let R = RSOLE * Math.cbrt(Msol / 0.05), tt = 0, [L0] = luce(R);
   t.push(0); lL.push(Math.log(L0 / LSOLE)); lR.push(Math.log(R / RSOLE));
   for (let k = 0; k < 60 && tt < 3e10 * ANNO; k++) {
@@ -584,11 +593,35 @@ function raffreddamento(Msol, Z) {
   }
   return { M: Msol, t, lL, lR };
 }
+// ---------- LA CONTRAZIONE PRIMA DELLA SEQUENZA PRINCIPALE (la traccia di Hayashi). Una stella appena nata è una sfera tutta
+// convettiva più grande di quella che sarà: si stringe irradiando l'energia di gravità esattamente come una nana bruna (la
+// stessa luce, luceConvettiva, e la stessa energia del viriale), finché arriva al raggio della sua sequenza di età zero, dove
+// l'idrogeno pareggia le perdite. Si parte da 20 R☉ (il tempo per arrivarci da un raggio infinito a T_eff ferma, R ∝ t^−⅓, è
+// (1/7)·GM²/(R·L): qualche secolo, contato); la T_eff della traccia viene dall'involucro integrato, non è data.
+// CHE COSA MANCA (dichiarato): il deuterio, che nel primo milione di anni ferma per un po' la contrazione (le stelle giovani
+// qui sono un poco meno luminose del vero a parità d'età); la fase radiativa di Henyey sopra ~0,5 M☉ (vicino alla sequenza la
+// luce della traccia convettiva scende sotto quella vera: si prende la più alta tra le due, vedi luceGiovane). Confronto:
+// Baraffe et al. 2015 (A&A 577, A42) [R]: 1 M☉ a 1 milione di anni ~2 L☉, 0,3 M☉ ~0,2 L☉.
+const R_NASCITA = 20; // (R☉) da dove si comincia a contare
+function contrazione(Msol, Z, Rzams) {
+  const M = Msol * MSOLE, luce = luceConvettiva(Msol, Z), t = [], lL = [], lR = [];
+  let R = R_NASCITA * RSOLE, [L0] = luce(R); if (!(L0 > 0)) return null;
+  let tt = (K.G * M * M) / (7 * R * L0);
+  t.push(tt / ANNO); lL.push(Math.log(L0 / LSOLE)); lR.push(Math.log(R / RSOLE));
+  for (let k = 0; k < 200 && R > Rzams * 1.0001; k++) {
+    const R1 = Math.max(Rzams, R * 0.92), [L1] = luce(R1); if (!(L1 > 0)) break;
+    tt += (3 / 7) * K.G * M * M * (1 / R1 - 1 / R) * 0.5 * (1 / L0 + 1 / L1);
+    R = R1; L0 = L1; t.push(tt / ANNO); lL.push(Math.log(L1 / LSOLE)); lR.push(Math.log(R / RSOLE));
+  }
+  return { t, lL, lR };
+}
 // ---------- LA TABELLA: per una metallicità, le tracce di un po' di masse dalla minima in su, e le nane brune.
 // È questo che `node strumenti/tabella_stelle.mjs` scrive in stelle_tabella.js (minuti di calcolo, una volta).
 export const Z_NODI = [0.01, 0.03, 0.1, 0.3, 1, 2, 3.5];
 export const M_NODI = [0.1, 0.13, 0.17, 0.22, 0.28, 0.35, 0.42, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2.1, 2.5, 3.2, 4, 5, 6.5, 8, 10, 13, 17, 22, 30, 40, 55, 75, 100, 130];
 const cifre = (v) => +Number(v).toPrecision(5);
+// la contrazione di una traccia in forma di tabella (t in anni, ln L e ln R in unità solari), dal raggio di nascita a Rzams (R☉)
+export function preDellaTraccia(M, Z, Rzams) { const c = contrazione(M, Z, Rzams * RSOLE); return c && c.t.length > 1 ? { t: c.t.map(cifre), lL: c.lL.map(cifre), lR: c.lR.map(cifre) } : null; }
 export function calcolaRiga(Z, masse = M_NODI, parla = () => {}) {
   const t0 = Date.now(), sq = sequenza(Z, masse); if (!sq) return null;
   parla(`Z = ${Z}: massa minima ${sq.minima.toFixed(4)}, massima raggiunta ${sq.massima} (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
@@ -597,7 +630,8 @@ export function calcolaRiga(Z, masse = M_NODI, parla = () => {}) {
     const tr = traccia(M, Z, sq.y.get(M)); if (!tr) { parla(`  ${M}: traccia mancata`); continue; }
     if (tr.stati.length < 2) tr.stati.push({ ...tr.stati[0], t: tr.vita });
     const col = (k, f = (v) => v) => tr.stati.map((x) => cifre(f(x[k])));
-    tracce.push({ M: cifre(M), vita: cifre(tr.vita), mHe: cifre(tr.mHe), finita: tr.finita, t: col('t'), lL: col('L', Math.log), lR: col('R', Math.log), lTc: col('Tc', Math.log), lrho: col('rhoc', Math.log), cno: col('cno'), qcc: col('qcc'), qenv: col('qenv'), renv: col('renv'), Xc: col('Xc') });
+    const pre = preDellaTraccia(M, Z, tr.stati[0].R); // (la contrazione prima: fino al raggio di età zero di questa traccia)
+    tracce.push({ M: cifre(M), vita: cifre(tr.vita), mHe: cifre(tr.mHe), finita: tr.finita, t: col('t'), lL: col('L', Math.log), lR: col('R', Math.log), lTc: col('Tc', Math.log), lrho: col('rhoc', Math.log), cno: col('cno'), qcc: col('qcc'), qenv: col('qenv'), renv: col('renv'), Xc: col('Xc'), ...(pre ? { pre } : {}) });
     const a = tr.stati[0], b = tr.stati[tr.stati.length - 1];
     parla(`  ${String(cifre(M)).padEnd(8)} L ${a.L.toPrecision(4)} → ${b.L.toPrecision(4)}  R ${a.R.toFixed(3)} → ${b.R.toFixed(3)}  T ${a.T.toFixed(0)}  vita ${tr.vita.toExponential(3)}  nucleo He ${tr.mHe.toFixed(3)}${tr.finita ? '' : '  (INTERROTTA)'}  (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
   }
@@ -692,6 +726,31 @@ function nanaBruna(Msol, righe, eta) {
   return { L, R, T: Math.pow((L * LSOLE) / (PI4 * (R * RSOLE) ** 2 * K.sigma), 0.25), vita: Infinity, Tc: NaN, densitaCentro: NaN, cno: 0, nucleoConvettivo: 1, involucroConvettivo: 1, fondoInvolucro: 0, idrogenoCentro: NaN, struttura: 'tutta convettiva', eddington: 0, eta: anni, finita: false, nanaBruna: true };
 }
 
+// LA STELLA GIOVANE: la luce (L☉) e il raggio (R☉) di una stella a «eta» anni contando la contrazione prima della sequenza
+// principale (contrazione, qui sopra: la tabella ne tiene la traccia «pre» per ogni massa). Si interpola come stella(): in
+// logaritmo, su massa e metalli; per ogni traccia vicina vale la più luminosa tra la contrazione (finché dura) e la sequenza
+// principale a quell'età (manca la fase radiativa di Henyey: dichiarato). Sotto la massa minima è la nana bruna di stella().
+// La usa disco.js: la luce che scalda il disco e fissa la linea della neve è quella della stella di allora. stella() resta
+// la sequenza principale (chi la chiede a età zero ha la stella di età zero, come prima).
+const lnInterp = (T, V, lt) => { const n = T.length; let k = 0; while (k < n - 2 && T[k + 1] < lt) k++; const u = (lt - T[k]) / (T[k + 1] - T[k] || 1); return V[k] + Math.min(1, Math.max(0, u)) * (V[k + 1] - V[k]); };
+const LN_PRE = new WeakMap(), lnTpre = (tr) => { let v = LN_PRE.get(tr); if (!v) LN_PRE.set(tr, (v = tr.pre.t.map(Math.log))); return v; };
+export function luceGiovane(Msol, { Z = 1, eta = 1e6 } = {}) {
+  const righe = pesiZ(Z), lm = Math.log(Math.min(Msol, 300)), lt = Math.log(Math.max(eta, 1));
+  let lmin = 0; for (const [r, w] of righe) lmin += w * Math.log(r.Mmin);
+  if (lm < lmin - 1e-9) { const b = nanaBruna(Msol, righe, eta); return { L: b.L, R: b.R, preSequenza: true }; }
+  let lL = 0, lR = 0, pre = false;
+  for (const [r, w] of righe) {
+    const x = Math.max(lm, r.lnM[0]), i = posto(r.lnM, x), u = Math.min(1, (x - r.lnM[i]) / (r.lnM[i + 1] - r.lnM[i]));
+    for (const [tr, p] of [[r.tr[i], w * (1 - u)], [r.tr[i + 1], w * u]]) {
+      if (!(p > 0)) continue;
+      const rms = lnInterp(tr.t, tr.lR, eta); let a = lnInterp(tr.t, tr.lL, eta), b = rms; // (la sequenza principale a quell'età)
+      if (tr.pre) { const tp = lnTpre(tr); if (lt < tp[tp.length - 1]) { const lp = lnInterp(tp, tr.pre.lL, lt); if (lp > a) { a = lp; b = Math.max(rms, lnInterp(tp, tr.pre.lR, lt)); pre = true; } } }
+      lL += p * a; lR += p * b;
+    }
+  }
+  return { L: Math.exp(lL), R: Math.exp(lR), preSequenza: pre };
+}
+
 // il nucleo di elio che la stella si ritrova quando al centro l'idrogeno finisce (in masse solari)
 export function nucleoElio(Msol, { Z = 1 } = {}) {
   let s = 0; const lm = Math.log(Msol);
@@ -740,4 +799,4 @@ export function stellaOggi(S) {
 // Big Bang a quello del Sole (le stelle che fanno i metalli fanno anche elio)
 
 // i pezzi, per i test e per chi vuole guardare dentro
-export const dentro = { calcolaRiga, sequenza, raffreddamento, traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, sigmaV, mescolamento, fuori, dentroDa, fotosfera, stato, densita, termo, elettroni, laneEmden, registra: (r) => { registro = r; }, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, C_ES, C_FF, A_RAD, MB, NGU, QC, QB, RIGHE };
+export const dentro = { calcolaRiga, sequenza, raffreddamento, contrazione, luceConvettiva, traccia, profilo, risolvi, scarti, opacitaAtomica, energiaAtomo, tavolaOpacita, kappa, energia, sigmaV, mescolamento, fuori, dentroDa, fotosfera, stato, densita, termo, elettroni, laneEmden, registra: (r) => { registro = r; }, METALLI, CN, RY, A0, SIGMA_K, SIGMA_T, C_ES, C_FF, A_RAD, MB, NGU, QC, QB, RIGHE };
