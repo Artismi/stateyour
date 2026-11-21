@@ -75,6 +75,13 @@ function materiali(Tc, umido) {
   M = { granito: uno('granito', mt.continente), basalto: uno('basalto', mt.basalto), sedimento: uno('sedimento', mt.continente) };
   MATERIALI.set(chiave, M); if (MATERIALI.size > 64) MATERIALI.delete(MATERIALI.keys().next().value); return M;
 }
+// i materiali nel punto: tra i due gradini di temperatura di 10 K attorno e tra il suolo secco (ematite) e umido (goethite), in
+// linea retta (i gradini fissi, uguali per tutte le tessere: niente salti sul bordo tra due tessere)
+function materialiNelPunto(T, u) {
+  const x = T / 10, t0 = Math.floor(x), f = x - t0, A = materiali(10 * t0, 0), Bm = materiali(10 * t0, 1), C = materiali(10 * t0 + 10, 0), D = materiali(10 * t0 + 10, 1), out = {};
+  for (const k of ['granito', 'basalto', 'sedimento']) { const m = (p) => [0, 1, 2].map((q) => (1 - f) * ((1 - u) * A[k][p][q] + u * Bm[k][p][q]) + f * ((1 - u) * C[k][p][q] + u * D[k][p][q])); out[k] = { roccia: m('roccia'), suolo: m('suolo'), r: (1 - f) * A[k].r + f * C[k].r }; }
+  return out;
+}
 // un campo di meteo.js (griglia m.W × m.H) nel punto (u, v) della carta, interpolato tra i centri delle celle
 const campoMeteo = (m, arr, u, v) => { const x = u * m.W - 0.5, y = Math.min(m.H - 1.001, Math.max(0, v * m.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), a = x - x0, b = y - y0, f = (xx, yy) => arr[yy * m.W + ((xx % m.W) + m.W) % m.W]; return f(x0, y0) * (1 - a) * (1 - b) + f(x0 + 1, y0) * a * (1 - b) + f(x0, y0 + 1) * (1 - a) * b + f(x0 + 1, y0 + 1) * a * b; };
 // la tinta di un colore (lineare, luminanza 1)
@@ -116,6 +123,13 @@ function prepara(L, tx, ty) {
   const alt = new Float32Array(WB * HB), lago = new Float32Array(WB * HB), lg = sf.largo && sf.largo.W > W ? sf.largo : null;
   if (lg) { const ox = (lg.W - W) / 2 - 1, oy = (lg.H - H) / 2 - 1; for (let j = 0; j < HB; j++) for (let i = 0; i < WB; i++) { const q = (j + oy) * lg.W + i + ox; alt[j * WB + i] = lg.alt[q]; lago[j * WB + i] = lg.lago ? lg.lago[q] : 0; } }
   else for (let j = 0; j < HB; j++) for (let i = 0; i < WB; i++) { const q = Math.max(0, Math.min(H - 1, j - 1)) * W + ((i - 1 + W) % W); alt[j * WB + i] = sf.alt[q]; lago[j * WB + i] = sf.lago ? sf.lago[q] : 0; }
+  // --- I FIUMI LARGHI quanto mezza cella o più sono acqua: la larghezza w ≈ 7,2·Q^0,5 m e la profondità d ≈ 0,27·Q^0,39 m dalla
+  // portata (la geometria idraulica di Leopold e Maddock 1953, coi coefficienti di Moody e Troutman 2002 sui fiumi del mondo; Q
+  // dall'area drenata e dalla pioggia: flusso × area della cella, per anno). Così la riva del fiume la fa il frammento, come
+  // quella dei laghi; quelli più stretti restano nel colore della terra (vedi sotto, la parte della cella che coprono)
+  const fiumeAcqua = new Uint8Array(W * H); { const [, fv0, , fv1] = sf.rett || [0, 0, 1, 1], dyC = ((fv1 - fv0) * Math.PI * B.raggioM) / H, dxC = dyC * Math.max(0.05, Math.cos((0.5 - (fv0 + fv1) / 2) * Math.PI)), aC = dxC * dyC, F = lg ? lg.flusso : sf.flusso;
+    if (F) for (let j = 0; j < HB; j++) for (let i = 0; i < WB; i++) { const c = j * WB + i, q = lg ? (j + (lg.H - H) / 2 - 1) * lg.W + i + (lg.W - W) / 2 - 1 : Math.max(0, Math.min(H - 1, j - 1)) * W + ((i - 1 + W) % W); if (haMare && alt[c] < mare) continue;
+      const Q = (F[q] * aC) / 3.15576e7; if (7.2 * Math.sqrt(Q) < 0.5 * Math.min(dxC, dyC)) continue; lago[c] = Math.max(lago[c], 0.27 * Math.pow(Q, 0.39)); if (i > 0 && j > 0 && i <= W && j <= H) fiumeAcqua[(j - 1) * W + i - 1] = 1; } }
   // --- il livello dell'acqua: il mare dove il terreno è sotto, la superficie del lago dove c'è un lago; poi lo si
   // estende ai punti vicini (quattro giri), perché tra un punto bagnato e uno asciutto la superficie resti piana
   const altLiv = new Float32Array(2 * WB * HB); let liv = new Float32Array(WB * HB).fill(NaN), haAcqua = false, hMin = Infinity, hMax = -Infinity;
@@ -162,17 +176,19 @@ function prepara(L, tx, ty) {
   // i materiali al clima del centro della tessera (la temperatura, l'umidità del secchio di meteo.js) e l'umidità dal rilievo
   const Tc = cl && cl.media ? campo(cl.media, W >> 1, H >> 1) : B.T, me = cl?.meteo, secchio = me?.suolo ? (i, j) => Math.min(1, Math.max(0, campoMeteo(me, me.suolo, ru0 + ((i + 0.5) / W) * (ru1 - ru0), v0 + ((j + 0.5) / H) * (v1 - v0)) / PARAMETRI.secchio)) : () => 0.5;
   // (A^m·S della superficie intera, per cella; poi la parte coperta di suolo nel punto, interpolata tra i centri)
-  if (!B.AmS) { const { W: w, H: h, alt: a, flusso: f } = r0, out = new Float32Array(w * h), dy = (Math.PI * B.raggioM) / h;
+  if (!B.AmS) { const { W: w, H: h, alt: a, flusso: f } = r0, out = new Float32Array(w * h), pend0 = new Float32Array(w * h), dy = (Math.PI * B.raggioM) / h;
     for (let jj = 0; jj < h; jj++) { const dx = Math.max(0.05 * dy, (2 * Math.PI * B.raggioM * Math.cos((0.5 - (jj + 0.5) / h) * Math.PI)) / w); for (let ii = 0; ii < w; ii++) { const q = jj * w + ii, e = a[jj * w + ((ii + 1) % w)], o = a[jj * w + ((ii - 1 + w) % w)], n = a[Math.max(0, jj - 1) * w + ii], sd = a[Math.min(h - 1, jj + 1) * w + ii];
-      out[q] = Math.pow(Math.max(1, f ? f[q] : 1) * dx * dy, EROSIONE.m) * Math.hypot((e - o) / (2 * dx), (n - sd) / (2 * dy)); } } B.AmS = out; }
+      const S0 = Math.hypot((e - o) / (2 * dx), (n - sd) / (2 * dy)); pend0[q] = S0; out[q] = Math.pow(Math.max(1, f ? f[q] : 1) * dx * dy, EROSIONE.m) * S0; } } B.AmS = out; B.S0 = pend0; }
   const suolo0 = (Rk, K, i, j) => { const E = K * bil0((q) => B.AmS[q], i, j); return E >= EROSIONE.suolo * Rk.r ? 0 : Math.min(1, Math.log((EROSIONE.suolo * Rk.r) / Math.max(E, 1e-12))); };
-  const M3 = materiali(Tc, Math.round(10 * secchio(W >> 1, H >> 1)) / 10), dxC = passoLat * Math.max(0.05, Math.cos((0.5 - (v0 + v1) / 2) * Math.PI)), aCella = dxC * passoLat;
-  // l'indice topografico di umidità (Beven e Kirkby 1979): ln(a/tan β), a l'area drenata per unità di larghezza; e^indice
-  // diviso per la sua media sulle terre della tessera: così la media dell'umidità resta quella del secchio a ogni livello
-  // (l'indice cresce con la grana della griglia: Wolock e Price 1994; la media lo toglie)
-  const twi = new Float32Array(W * H), fl = sf.flusso; let twiMed = 0; { let s = 0, n = 0; for (let k = 0; k < W * H; k++) { const a = (Math.max(1, fl ? fl[k] : 1) * aCella) / dxC, tb = Math.max(1e-4, Math.hypot(pend[4 * k], pend[4 * k + 1])); twi[k] = Math.log(a / tb); if (!(haMare && sf.alt[k] < mare)) { s += Math.exp(Math.min(30, twi[k])); n++; } } twiMed = n ? Math.log(s / n) : 0; }
+  const M3c = (i, j) => materialiNelPunto(cl && cl.media ? campo(cl.media, i, j) : B.T, secchio(i, j)), dxC = passoLat * Math.max(0.05, Math.cos((0.5 - (v0 + v1) / 2) * Math.PI)), aCella = dxC * passoLat;
+  // l'indice topografico di umidità (Beven e Kirkby 1979): ln(a/tan β), a l'area drenata per unità di larghezza, contato da
+  // quello di una cella senza niente a monte sulla pendenza della superficie intera (interpolata): le valli e le conche più
+  // umide del secchio, i versanti come lui. (Prima: diviso per la media della tessera; ma la media cambia da una tessera
+  // all'altra, e sul loro bordo il colore saltava: una retta netta attraverso lo schermo)
+  const twi = new Float32Array(W * H), fl = sf.flusso; for (let k = 0; k < W * H; k++) { const a = (Math.max(1, fl ? fl[k] : 1) * aCella) / dxC, tb = Math.max(1e-4, Math.hypot(pend[4 * k], pend[4 * k + 1])); twi[k] = Math.log(a / tb); }
+  const twiRif = (i, j) => Math.log(aCella / dxC / Math.max(1e-4, bil0((q) => B.S0[q], i, j)));
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const k = j * W + i, h = sf.alt[k], suMare = !(haMare && h < mare); bagnato[k] = !suMare || (sf.lago && sf.lago[k] > 0) ? 1 : 0;
+    const k = j * W + i, h = sf.alt[k], suMare = !(haMare && h < mare); bagnato[k] = !suMare || (sf.lago && sf.lago[k] > 0) || fiumeAcqua[k] ? 1 : 0;
     // la roccia: la classe che l'erosione ha lasciato in superficie (basamento, lave, copertura), sulla crosta dei continenti
     // (il basamento è granito) o su quella dei fondali (basalto)
     const fc = r0.cont ? bil0((q) => (r0.cont[q] ? 1 : 0), i, j) : 1, cl0 = lito && lito0 ? lito0[cella0(i, j)] : -1;
@@ -183,17 +199,17 @@ function prepara(L, tx, ty) {
     // (gli AFFIORAMENTI). La parte coperta: h/h₀ (sotto mezzo metro il suolo lascia vedere la roccia). A e S sono quelli della
     // superficie intera (il livello 0), interpolati: la legge dipende dalla grana della griglia (A^m·S con la cella più fine
     // cambia), e presa a ogni livello faceva cambiare colore alle terre entrando nella tessera figlia (ΔE fino a 14, padri.mjs)
-    const sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.sedimento, i, j);
+    const M3 = M3c(i, j), sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.sedimento, i, j);
     // L'UMIDITÀ del punto: quella del secchio del suolo di meteo.js (Manabe 1969) lì, distribuita col rilievo come in TOPMODEL
     // (Beven e Kirkby 1979: il deficit locale cresce con la differenza dall'indice medio, in forma esponenziale): più acqua nelle
     // valli e nelle conche, meno sui crinali
-    const wet = Math.min(1, secchio(i, j) * Math.exp(Math.min(30, twi[k]) - twiMed)), dep = sf.depositato ? Math.min(1, Math.max(0, sf.depositato[k]) / SUOLO.h0) : 0;
+    const wet = Math.min(1, secchio(i, j) * Math.exp(Math.min(30, twi[k] - twiRif(i, j)))), dep = sf.depositato ? Math.min(1, Math.max(0, sf.depositato[k]) / SUOLO.h0) : 0;
     const c = [0, 0, 0]; for (let q = 0; q < 3; q++) { const rG = M3.granito.roccia[q] * (1 - sG) + M3.granito.suolo[q] * sG, rB = M3.basalto.roccia[q] * (1 - sB) + M3.basalto.suolo[q] * sB, rS = M3.sedimento.roccia[q] * (1 - sS) + M3.sedimento.suolo[q] * sS;
       const asciutta = (wG * rG + wB * rB + wS * rS) * (1 - dep) + dep * M3.sedimento.suolo[q]; c[q] = asciutta * (1 - wet) + bagnata(asciutta) * wet; }
     // I FIUMI: la larghezza dalla portata (la geometria idraulica di Leopold e Maddock 1953, w ≈ 7,2·Q^0,5 m con Q in m³/s: Moody e
     // Troutman 2002 sui fiumi del mondo); la parte della cella che il letto copre è acqua (riflettanza dell'acqua profonda
-    // vista da sopra, quella di mare.js per l'acqua limpida); i letti più larghi della cella li ha già la tessera come laghi o mare
-    if (suMare && fl) { const Q = (fl[k] * aCella) / 3.15576e7, fr = Math.min(1, (7.2 * Math.sqrt(Q)) / Math.max(dxC, passoLat)); if (fr > 0.002) for (let q = 0; q < 3; q++) c[q] = c[q] * (1 - fr) + ACQUA_FIUME[q] * fr; }
+    // vista da sopra, quella di mare.js per l'acqua limpida); i letti larghi più di mezza cella sono acqua (vedi sopra)
+    if (suMare && fl) { const Q = (fl[k] * aCella) / 3.15576e7, fr = Math.min(0.5, (7.2 * Math.sqrt(Q)) / Math.max(dxC, passoLat)); if (fr > 0.002) for (let q = 0; q < 3; q++) c[q] = c[q] * (1 - fr) + ACQUA_FIUME[q] * fr; }
     let cc = c; if (mat.ghiacciato) cc = FORMA_NEVE.map((f) => aGhiaccio * f); // una crosta di ghiaccio d'acqua (95% dei minerali di superficie)
     // il gelo: la parte dell'anno che il punto passa sotto lo zero (lo stesso conto della carta: clima e quota, 6,5 °C al km)
     let gelo;
