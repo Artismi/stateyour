@@ -647,9 +647,12 @@ export function mare(P, sf, cl, se = null, caso = null) {
     out.fine.bacino = bac.id; out.bacini = bac.lista.map(({ celle, ...b }) => ({ ...b, descrizione: b.saturo ? 'mare quasi chiuso che evapora: è arrivato al sale, che si deposita sul fondo e sulle rive' : b.salinita > 1.08 * So ? 'mare quasi chiuso dove evapora più acqua di quanta ne arrivi: più salato del mare aperto' : b.salinita < 0.92 * So ? 'mare quasi chiuso dove piove e arrivano fiumi più di quanto evapori: salmastro' : 'golfo che scambia bene col mare aperto' }));
     const conta = new Float32Array(N), sommaS = new Float32Array(N); for (const b of bac.lista) for (const k of b.celle) { const q = Math.floor(Math.floor(k / FW) / kx) * W + Math.floor((k % FW) / kx); conta[q] += 1 / (kx * kx); sommaS[q] += b.salinita / (kx * kx); }
     for (let q = 0; q < N; q++) if (conta[q] > 0 && bagnato[q] > 0) Sm[q] = Sm[q] * (1 - Math.min(1, conta[q] / bagnato[q])) + (sommaS[q] / conta[q]) * Math.min(1, conta[q] / bagnato[q]); }
-  // l'argilla dei fiumi: entra alle foci, viaggia con la corrente, cade con la velocità di Stokes
-  const wArgilla = Math.max(1e-7, stokes(DATI.taglie.argilla, DATI.densitaGrani, Tmare, salinitaMedia, g)), torb = new Float32Array(N);
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; sorg[k] = fango[k]; perd[k] = righe.A[j] * wArgilla; }
+  // l'argilla dei fiumi: entra alle foci, viaggia con la corrente, cade con la velocità di Stokes. Nel mare salato coagula
+  // (Schulze-Hardy, inFiocchi: la stessa legge del pennacchio di luogo()), e i fiocchi cadono in pochi giorni, dentro il
+  // pennacchio della foce: lontano arriva solo la parte che resta in granelli. (Prima viaggiava tutta come granelli, e un punto
+  // di mare aperto a 4750 km dalle foci, in mezzo a un giro, aveva 0,12 g/m³ di argilla: il mare aperto vero ne ha qualche mg/m³)
+  const wArgilla = Math.max(1e-7, stokes(DATI.taglie.argilla, DATI.densitaGrani, Tmare, salinitaMedia, g)), torb = new Float32Array(N), sciolta = 1 - inFiocchi(ioni);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; sorg[k] = fango[k] * sciolta; perd[k] = righe.A[j] * wArgilla; }
   if (celleMare) porta(torb, 0);
   // --- le saturazioni: l'equilibrio calcolato su una tavola (temperatura × salinità) e interpolato
   const tavola = { T: [271, 276, 282, 288, 294, 300, 306, 314], f: [0.3, 0.6, 0.85, 1, 1.2, 1.6], pH: [], calcite: [], gesso: [], salgemma: [] };
@@ -1087,6 +1090,9 @@ const nomiIoni = (t, eq) => ({ 'Na+': t.Na || 0, 'K+': t.K || 0, 'Mg2+': t.Mg ||
 // LA REGOLA PER IL PUNTO: il mare è ben rimescolato rispetto ai tempi di residenza, quindi gli ioni maggiori hanno
 // ovunque le stesse proporzioni (lo si misura dal 1819, Marcet): in un punto di salinità S ci sono gli ioni medi
 // moltiplicati per S / S media. Il carbonio, il pH e le saturazioni no: dipendono dalla temperatura (acqua()).
+// L'ARGILLA INCONTRA IL SALE (Schulze-Hardy): la parte dell'argilla che coagula in fiocchi, con gli ioni t (mol/kg): gli ioni a
+// una carica schermano a DATI.coagula, quelli a due 64 volte meglio (z⁶)
+function inFiocchi(t) { const schermo = ((t.Na || 0) + (t.K || 0)) / DATI.coagula + (64 * ((t.Mg || 0) + (t.Ca || 0))) / DATI.coagula; return schermo > 1 ? 1 - 1 / schermo : 0; }
 export function ioniNelPunto(stato, salinita) { const f = stato.salinitaMedia > 0 ? salinita / stato.salinitaMedia : 1, o = {}; for (const e in stato.totali) o[e] = stato.totali[e] * f; return o; }
 
 // ---------- 5. IL LUOGO: che acqua c'è in un punto (longitudine e latitudine in gradi, profondità in metri)
@@ -1124,10 +1130,10 @@ export function luogo(stato, lon, lat, { profondita = 0, acqua: forzata = null, 
     const Cf = stato.fiume.sospeso * parte, fr = stato.fiume, pSabbia = fr.sedimentoKgAnno > 0 ? fr.sabbiaKgAnno / fr.sedimentoKgAnno : 0.3, pArg = f.argilla, pLimo = Math.max(0, 1 - pSabbia - pArg);
     // L'ARGILLA INCONTRA IL SALE (Schulze-Hardy): i granelli d'argilla, carichi negativi, si respingono; gli ioni positivi
     // li schermano, quelli a due cariche 64 volte meglio. Oltre la concentrazione critica si attaccano in fiocchi, che cadono
-    const t = ioniNelPunto(stato, Ss * (1 - parte)), schermo = ((t.Na || 0) + (t.K || 0)) / DATI.coagula + (64 * ((t.Mg || 0) + (t.Ca || 0))) / DATI.coagula, inFiocchi = schermo > 1 ? 1 - 1 / schermo : 0;
-    o.foce = { lon: f.lon, lat: f.lat, distanzaM: x, portata: f.portata, parteDiFiume: parte, coagula: inFiocchi }; o.parteDiFiume = parte; o.salinita = o.salinita * (1 - parte) + stato.fiume.salinita * parte;
+    const coagula = inFiocchi(ioniNelPunto(stato, Ss * (1 - parte)));
+    o.foce = { lon: f.lon, lat: f.lat, distanzaM: x, portata: f.portata, parteDiFiume: parte, coagula }; o.parteDiFiume = parte; o.salinita = o.salinita * (1 - parte) + stato.fiume.salinita * parte;
     o.sospeso.sabbia = Cf * pSabbia * cade(DATI.taglie.sabbia, DATI.densitaGrani); o.sospeso.limo = Cf * pLimo * cade(DATI.taglie.limo, DATI.densitaGrani);
-    o.sospeso.argilla = Cf * pArg * (1 - inFiocchi) * cade(DATI.taglie.argilla, DATI.densitaGrani); o.sospeso.fiocchi = Cf * pArg * inFiocchi * cade(DATI.fiocco, DATI.densitaFiocchi); }
+    o.sospeso.argilla = Cf * pArg * (1 - coagula) * cade(DATI.taglie.argilla, DATI.densitaGrani); o.sospeso.fiocchi = Cf * pArg * coagula * cade(DATI.fiocco, DATI.densitaFiocchi); }
   o.sospeso.argilla += campo(stato, stato.torbidita, lon, lat) * Math.exp(-z / (2 * hs));
   if (stato.polvere) { const Fp = Math.max(0, campo(stato, stato.polvere, lon, lat)), ps = polvereSospesa(Fp, limita(o.T, 271, 373), Math.min(o.salinita, 300), g, DATI.mescola / Math.max(1, stato.termoclino || 1)); o.sospeso.polvere = ps.kgM3 * Math.exp(-z / (2 * hs)); o.polvere = { flusso: Fp, dMedio: ps.dMedio }; }
   // gli ioni: quelli del mare a quella salinità, mescolati con quelli del fiume
