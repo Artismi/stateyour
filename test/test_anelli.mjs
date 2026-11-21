@@ -222,7 +222,7 @@ prova('sui pianeti veri del cosmo: quanti hanno anelli, e in fretta', () => {
   const classi = {}, tempi = [], visti = new Set(); let peggio = 0;
   // (si guarda finché ci sono abbastanza pianeti di ogni specie per contare: quanti sistemi servano dipende da che stelle ha la galassia)
   const bastano = () => (classi.rocciosi?.n ?? 0) > 450 && (classi['giganti di gas']?.n ?? 0) + (classi['giganti di ghiaccio (più di 10 Terre)']?.n ?? 0) > 450;
-  for (let n = 1; n < 260000 && !bastano(); n += 197) {
+  for (let n = 1; n < 2600000 && !bastano(); n += 197) {
     const a = indirizzoDi(n), chiave = `${a.cosmo}/${a.galassia}/${a.stella}`; if (visti.has(chiave)) continue; visti.add(chiave);
     const S = sistema(a.cosmo, a.galassia, a.stella), stella = { massa: S.stella.massa, eta: S.stella.eta ?? 5e9, morta: S.stella.morta, Z: S.stella.Z };
     for (const P of S.pianeti) {
