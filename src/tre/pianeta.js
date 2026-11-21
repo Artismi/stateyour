@@ -147,6 +147,22 @@ float frattale(vec3 p) { return 0.5 * rumore(p) + 0.25 * rumore(p * 2.03 + 7.1) 
 
 // ---------- la superficie: una pezza
 const CASC_N = CASCATA.N;
+const GLSL_ONDE = `
+// LE TESSERE SENZA RIPETIZIONE (Heitz e Neyret 2018, «High-Performance By-Example Noise using a Histogram-Preserving Blending
+// Operator», HPG): una tessera periodica, vista da lontano, ripete il suo motivo (a 2 km di schermo la tessera più lunga sta
+// cinque volte: autocorrelazione 0,68 al suo periodo). Il piano si copre di triangoli larghi un terzo di tessera; ogni vertice
+// legge la tessera da un punto suo (uno spostamento dal reticolo con nome); in ogni punto le tre letture si sommano coi pesi
+// baricentrici divisi per √(Σw²), così la varianza resta quella della tessera e lo spettro non cambia (gli spostamenti sono solo
+// traslazioni: direzioni e lunghezze delle onde restano quelle del vento). La schiuma: la media pesata (Σw = 1) delle tre
+// soglie, che lascia la parte coperta quella cercata. Le coordinate stanno entro 4096 tessere (lo spostamento della pezza).
+float casoT(ivec2 i, int c) { highp uvec2 u = uvec2(i & 4095); highp uint h = u.x * 73856093u ^ u.y * 19349663u ^ uint(c + 1) * 83492791u; h = (h ^ (h >> 13u)) * 1274126177u; return float((h ^ (h >> 16u)) & 65535u) / 65535.0; }
+vec4 ondaStoc(vec2 uv, int c, vec2 dx, vec2 dy, float soglia) {
+  vec2 sk = mat2(1.0, 0.0, -0.57735027, 1.15470054) * (uv * 3.4641016); highp ivec2 b = ivec2(floor(sk)); vec2 f = fract(sk); float z = 1.0 - f.x - f.y;
+  vec3 w; highp ivec2 v1, v2, v3; if (z > 0.0) { w = vec3(z, f.y, f.x); v1 = b; v2 = b + ivec2(0, 1); v3 = b + ivec2(1, 0); } else { w = vec3(-z, 1.0 - f.y, 1.0 - f.x); v1 = b + ivec2(1, 1); v2 = b + ivec2(1, 0); v3 = b + ivec2(0, 1); }
+  vec4 a1 = textureGrad(u_ondeT, vec3(uv + vec2(casoT(v1, c), casoT(v1 + 7, c)), float(c)), dx, dy), a2 = textureGrad(u_ondeT, vec3(uv + vec2(casoT(v2, c), casoT(v2 + 7, c)), float(c)), dx, dy), a3 = textureGrad(u_ondeT, vec3(uv + vec2(casoT(v3, c), casoT(v3 + 7, c)), float(c)), dx, dy);
+  float n = inversesqrt(max(dot(w, w), 1e-6)); vec3 s = (w.x * (a1.rgb * 2.0 - 1.0) + w.y * (a2.rgb * 2.0 - 1.0) + w.z * (a3.rgb * 2.0 - 1.0)) * n;
+  float sc = soglia > 0.998 ? 0.0 : w.x * smoothstep(soglia, soglia + 0.002, a1.a) + w.y * smoothstep(soglia, soglia + 0.002, a2.a) + w.z * smoothstep(soglia, soglia + 0.002, a3.a);
+  return vec4(s, sc); }`;
 const V_SUOLO = `
 in vec3 a_griglia;        // x, y da 0 a 1 nella pezza; z: 1 se il vertice è dell'orlo che scende
 uniform mat4 u_proj; uniform mat3 u_vista; uniform float u_fc;
@@ -168,6 +184,7 @@ uniform vec2 u_sfuma;     // tra queste due distanze dall'occhio i dati passano 
 uniform highp sampler2DArray u_ondeT;
 uniform vec4 u_cM[4]; uniform vec2 u_cO[4]; uniform vec4 u_cS[4];
 uniform float u_ondeSi;   // 1 se le onde ci sono
+${GLSL_ONDE}
 uniform vec4 u_fineG;     // IL SUOLO FINE: dove sta la pezza nelle coordinate della finestra (0…1, da sud-ovest): il suo centro e la sua ampiezza
 out vec3 v_su; out vec3 v_est; out vec3 v_rel; out vec4 v_dati; out vec2 v_uv; out vec3 v_uvM; out vec2 v_en; out float v_w; out vec2 v_fw;
 vec2 quote(sampler2D u_img, vec2 f) { // interpolazione a mano tra i quattro punti vicini (le immagini a 32 bit non si interpolano da sole)
@@ -195,7 +212,7 @@ void main() {
   if (livello > terra && a_griglia.z < 0.5 && u_ondeSi > 0.5) { // l'acqua si muove: la quota delle quattro tessere, mediata sulla maglia della pezza
     float fondo = clamp((livello - terra) * 0.5, 0.0, 1.0), passo = u_geo.y * R / ${MY}.0;
     for (int c = 0; c < 4; c++) { vec2 uv = vec2(dot(u_cM[c].xy, en), dot(u_cM[c].zw, en)) + u_cO[c]; float lod = log2(max(1.0, 2.0 * passo * ${CASC_N}.0 / u_cS[c].w));
-      h += fondo * (textureLod(u_ondeT, vec3(uv, float(c)), lod).b * 2.0 - 1.0) * u_cS[c].z; }
+      vec2 g = vec2(exp2(lod) / ${CASC_N}.0, 0.0); h += fondo * ondaStoc(uv, c, g, g.yx, 1.0).b * u_cS[c].z; }
   }
   h -= a_griglia.z * u_orlo.x;
   vec3 loc = vec3((R + h) * su.x, (R + h) * su.y, (R + h) * (su.z - 1.0) + h);
@@ -214,6 +231,7 @@ uniform vec3 u_sole, u_luce;   // verso la stella (assi del mondo); il suo color
 uniform float u_disco;         // il raggio angolare della stella (rad): la penombra delle ombre del rilievo
 uniform vec4 u_espo;           // esposizione; c'è l'immagine dell'acqua; c'è quella della madre; luce di notte
 uniform highp sampler2DArray u_ondeT; uniform vec4 u_cM[4]; uniform vec2 u_cO[4]; uniform vec4 u_cS[4]; uniform float u_ondeSi; // le tessere delle onde (vedi V_SUOLO)
+${GLSL_ONDE}
 uniform vec4 u_mare;   // vento dove sta l'occhio (m/s, quello delle tessere), increspatura sotto l'ultima tessera (pendenza quadratica media), parte libera dal ghiaccio, (lon − lon_rif) × seno della latitudine (X dipende anche dal nord)
 uniform vec4 u_aria;   // lo strato limite dell'aria h (m) e quello rimescolato del mare h_m (m) dove sta l'occhio; lo spostamento della pezza nel rumore delle raffiche (in unità di 3h)
 uniform vec2 u_lang;   // lo spostamento della pezza nelle righe di Langmuir (in unità della loro spaziatura)
@@ -288,12 +306,16 @@ void main() {
     float cmL = 0.003 + 5.12e-3 * Ue, cmO = 0.003 + 5.12e-3 * max(u_mare.x, 0.3), aU = sqrt(cmL / cmO);
     // LE ONDE: la somma delle quattro tessere (con la media sul punto dello schermo che fa la scheda grafica); le onde corte
     // (tessere dalla seconda) seguono il vento del punto; ciò che il punto non risolve va nella pendenza media sotto il punto
-    vec2 pend = vec2(0.0); float s2 = u_mare.y * cmL / cmO, r0 = 0.0, r1 = 0.0, wRis = 0.0;
+    // (la soglia della schiuma: vedi sotto)
+    float W = clamp(u_mare.z * 3.84e-6 * pow(Ue, 3.41), 0.0, 0.5);
+    vec2 pl = v_en / (2.5 * u_aria.y) + u_lang; float riga = 0.5 + 0.5 * cos(6.2831853 * dot(pl, pv) + 4.0 * (rum2(pl * vec2(0.37, 0.11) + 3.1) - 0.5));
+    float vedeRighe = clamp(2.5 * u_aria.y / (6.0 * orma) - 0.5, 0.0, 1.0), Wr = W * mix(1.0, 0.4 + 2.2 * riga * riga * riga, 0.5 * vedeRighe), soglia = sqrt(max(1.0 - Wr, 0.0));
+    vec2 pend = vec2(0.0); float s2 = u_mare.y * cmL / cmO, f0 = 0.0, f1 = 0.0, wRis = 0.0;
     if (u_ondeSi > 0.5) for (int c = 0; c < 4; c++) {
-      vec2 uv = vec2(dot(u_cM[c].xy, v_en), dot(u_cM[c].zw, v_en)) + u_cO[c]; vec4 tx = texture(u_ondeT, vec3(uv, float(c)));
+      vec2 uv = vec2(dot(u_cM[c].xy, v_en), dot(u_cM[c].zw, v_en)) + u_cO[c]; vec4 tx = ondaStoc(uv, c, dFdx(uv), dFdy(uv), soglia);
       float a = c > 0 ? aU : 1.0, ris = clamp(log(u_cS[c].w / (8.0 * orma)) / 1.7, 0.0, 1.0); // (la parte della banda — da L/4 a L/21,9 — più lunga di due punti)
-      pend += (tx.rg * 2.0 - 1.0) * u_cS[c].y * a; s2 += (1.0 - ris) * u_cS[c].x * a * a;
-      if (c == 0) r0 = tx.a; if (c == 1) { r1 = tx.a; wRis = clamp(u_cS[c].w / ${CASC_N}.0 / orma - 0.5, 0.0, 1.0); }
+      pend += tx.rg * u_cS[c].y * a; s2 += (1.0 - ris) * u_cS[c].x * a * a;
+      if (c == 0) f0 = tx.a; if (c == 1) { f1 = tx.a; wRis = clamp(u_cS[c].w / ${CASC_N}.0 / orma - 0.5, 0.0, 1.0); }
     }
     pend.y -= u_mare.w * pend.x; pend *= clamp(fondo * 0.5, 0.0, 1.0);
     vec3 n = normalize(u_normali * (su + est * pend.x + nord * pend.y));
@@ -320,10 +342,7 @@ void main() {
     // vecchia il vento e le onde la raccolgono nelle righe di LANGMUIR, allineate al vento, distanti ≈ 2,5 volte lo strato
     // rimescolato (Leibovich 1983, Annu. Rev. Fluid Mech. 15, 391; Thorpe 2004); da lontano è la sua media, W. La riflettanza
     // efficace della schiuma 0,22 (Koepke 1984); sulla riva (a mano) la risacca.
-    float W = clamp(u_mare.z * 3.84e-6 * pow(Ue, 3.41), 0.0, 0.5);
-    vec2 pl = v_en / (2.5 * u_aria.y) + u_lang; float riga = 0.5 + 0.5 * cos(6.2831853 * dot(pl, pv) + 4.0 * (rum2(pl * vec2(0.37, 0.11) + 3.1) - 0.5));
-    float vedeRighe = clamp(2.5 * u_aria.y / (6.0 * orma) - 0.5, 0.0, 1.0), Wr = W * mix(1.0, 0.4 + 2.2 * riga * riga * riga, 0.5 * vedeRighe);
-    float soglia = sqrt(max(1.0 - Wr, 0.0)), cresta = soglia > 0.998 ? 0.0 : smoothstep(soglia, soglia + 0.002, max(r0, r1)); // (il rango sta in 8 bit: sotto due millesimi le creste non si distinguono, resta la media)
+    float cresta = 1.0 - (1.0 - f0) * (1.0 - f1); // (le due tessere sono indipendenti: coperto se lo è in una delle due; la soglia √(1 − W) dà W. Il rango sta in 8 bit: sotto due millesimi le creste non si distinguono, resta la media)
     float spuma = mix(W, cresta, wRis * u_ondeSi), risacca = (1.0 - smoothstep(0.0, 0.6, fondo)) * 0.5;
     colA = mix(colA, vec3(0.22) * (arriva * max(muS, 0.0) + ambiente), clamp(spuma, 0.0, 1.0));
     colA = mix(colA, vec3(0.8) * (arriva * max(muS, 0.0) + ambiente), risacca);
@@ -978,7 +997,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
         // le onde di questa pezza: dove sta il suo centro nelle tessere e nei rumori del vento (la parte frazionaria, contata in
         // doppia precisione; dentro la pezza conta lo scarto in metri, v_en)
         let dl0 = z.lon0 - lonRif; dl0 -= 2 * Math.PI * Math.round(dl0 / (2 * Math.PI)); const X0 = R * cf * dl0, Y0 = R * z.lat0;
-        if (co && t.haAcqua) { for (const T of co.C) { const c = Math.cos(T.angolo) / T.L, sn = Math.sin(T.angolo) / T.L, x = c * X0 + sn * Y0, y = -sn * X0 + c * Y0; cO[2 * T.c] = x - Math.floor(x) + 0.5 / CASCATA.N; cO[2 * T.c + 1] = y - Math.floor(y) + 0.5 / CASCATA.N; } gl.uniform2fv(u.u_cO, cO); }
+        if (co && t.haAcqua) { for (const T of co.C) { const c = Math.cos(T.angolo) / T.L, sn = Math.sin(T.angolo) / T.L, x = c * X0 + sn * Y0, y = -sn * X0 + c * Y0; cO[2 * T.c] = x - 4096 * Math.floor(x / 4096) + 0.5 / CASCATA.N; cO[2 * T.c + 1] = y - 4096 * Math.floor(y / 4096) + 0.5 / CASCATA.N; } gl.uniform2fv(u.u_cO, cO); }
         { const mo = (x, p) => x - p * Math.floor(x / p), lr = 3 * hAria, ll = 2.5 * hMare; gl.uniform4f(u.u_aria, hAria, hMare, mo(X0 / lr, 4096), mo(Y0 / lr, 4096)); gl.uniform2f(u.u_lang, mo(X0 / ll, 4096), mo(Y0 / ll, 4096)); }
         gl.uniform4f(u.u_mare, m ? m.U : 0, coda, libero, dl0 * sf); gl.uniform1f(u.u_lon0, dl0);
         // (la pezza tocca la finestra del suolo fine? allora al posto della madre le immagini della finestra, e niente sfumatura:
