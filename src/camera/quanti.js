@@ -448,6 +448,41 @@ export function decoerenza({ ambiente = { fotoni: 2.7255 }, raggioM = 1e-10, sep
 // la densità totale (elettroni per a₀³) di uno stato, a un tempo
 export function densita(stato, x, y, z, t = 0) { if (stato.densita) return stato.densita(x, y, z); let s = 0; for (const c of stato.componenti) { const [a, b] = c.psiT(x, y, z, t); s += c.peso * (a * a + b * b); } return s; }
 
+// ======================================================================= LA DENSITÀ DELL'ATOMO INTERO E LA SUA SUPERFICIE
+// La densità elettronica di un atomo libero (o di uno ione) dalle regole di Slater (Slater 1930, Phys. Rev. 36, 57): ogni
+// gruppo di elettroni (1s)(2s,2p)(3s,3p)(3d)(4s,4p)… è un orbitale di Slater r^(n*−1)·e^(−ζr), ζ = (Z − schermo)/n*, con lo
+// schermo delle sue regole (0,35 dallo stesso gruppo, 0,30 nell'1s; 0,85 dal guscio sotto e 1 da quelli più giù per s e p;
+// 1 da tutti quelli prima per d e f) e n* = 1, 2, 3, 3,7, 4, 4,2. La base STO-3G qui sopra (Hehre, Stewart e Pople 1969) è
+// questa stessa funzione scritta con tre gaussiane. La «superficie» di un atomo non è una sfera di raggio scelto: è dove la
+// densità scende a 0,001 elettroni per a₀³ (Bader, Carroll, Cheeseman e Chang 1987: quella superficie racchiude quasi tutta la
+// carica e dà le grandezze di van der Waals). Al nucleo la densità è finita: ρ(0) = Σ_1s ζ³/π (la «densità di contatto»).
+// → { rho(r) (e/a₀³, r in a₀), rIso(livello = 0,001) (a₀), rho0, gruppi }
+const ORDINE_AUFBAU = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [4, 0], [3, 2], [4, 1], [5, 0], [4, 2], [5, 1], [6, 0], [4, 3], [5, 2], [6, 1]], NSTAR = { 1: 1, 2: 2, 3: 3, 4: 3.7, 5: 4.0, 6: 4.2 };
+const gammaFn = (x) => { if (x < 0.5) return Math.PI / (Math.sin(Math.PI * x) * gammaFn(1 - x)); x -= 1; const g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; let a = c[0]; const t = x + g + 0.5; for (let i = 1; i < 9; i++) a += c[i] / (x + i); return Math.sqrt(2 * Math.PI) * t ** (x + 0.5) * Math.exp(-t) * a; }; // (Lanczos)
+const densitaFatte = new Map();
+export function densitaAtomo(Z, carica = 0) {
+  const ch = `${Z}|${carica}`; if (densitaFatte.has(ch)) return densitaFatte.get(ch);
+  let resta = Math.max(1, Z - carica); const occ = []; for (const [n, l] of ORDINE_AUFBAU) { if (resta <= 0) break; const k = Math.min(resta, 2 * (2 * l + 1)); occ.push({ n, l, k }); resta -= k; }
+  // i gruppi di Slater: s e p dello stesso n insieme; d e f a parte
+  const gruppi = []; for (const o of occ) { const chi = o.l <= 1 ? `${o.n}sp` : `${o.n}${'spdf'[o.l]}`; let g = gruppi.find((x) => x.chi === chi); if (!g) gruppi.push((g = { chi, n: o.n, l: o.l <= 1 ? 0 : o.l, k: 0 })); g.k += o.k; }
+  const posto = (g) => (g.l <= 1 ? 2 * g.n : 2 * g.n + 1) + (g.l >= 2 ? g.l * 0.1 : 0); gruppi.sort((a, b) => posto(a) - posto(b));
+  for (const g of gruppi) { let sch = 0; for (const h of gruppi) { if (h === g) sch += (g.k - 1) * (g.n === 1 ? 0.3 : 0.35); else if (posto(h) < posto(g)) { if (g.l >= 2) sch += h.k; else sch += h.k * (h.n === g.n - 1 ? 0.85 : h.n < g.n - 1 ? 1 : 0); } }
+    g.ns = NSTAR[g.n] || 4.2; g.zeta = Math.max(0.3, Z - sch) / g.ns; g.N2 = (2 * g.zeta) ** (2 * g.ns + 1) / gammaFn(2 * g.ns + 1); }
+  const rho = (r) => { let s = 0; for (const g of gruppi) s += (g.k * g.N2 * r ** (2 * g.ns - 2) * Math.exp(-2 * g.zeta * r)) / (4 * Math.PI); return s; };
+  const rIso = (liv = 0.001) => { let a = 0.3, b = 30; if (rho(b) > liv) return b; for (let i = 0; i < 80; i++) { const m = 0.5 * (a + b); if (rho(m) > liv) a = m; else b = m; } return 0.5 * (a + b); };
+  const out = { rho, rIso, rho0: rho(0), gruppi }; densitaFatte.set(ch, out); return out;
+}
+// LA CARICA INDOTTA NEL VUOTO attorno a un nucleo (Uehling 1935): il potenziale di una carica Ze cresce, a distanze sotto la
+// lunghezza Compton ridotta dell'elettrone (ƛ = 386 fm), del termine (2α/3π)·∫₁^∞ e^(−2rt/ƛ)·(1 + 1/(2t²))·√(t² − 1)/t² dt; la
+// carica che lo fa (per r > 0, dall'equazione di Poisson) è −Z·(2α/3π)/(4π r)·∫₁^∞ f(t)·(2t/ƛ)²·e^(−2rt/ƛ) dt, negativa:
+// scherma il nucleo, che da vicino si vede più carico. → e/m³ (in valore assoluto), r in metri
+export const LAMBDA_E = 3.8615926796e-13;
+export function caricaUehling(Z, r) {
+  const a = 1 / AU.c, k0 = 2 / LAMBDA_E; let s = 0; const n = 400, tTop = 1 + 60 / (k0 * r + 1e-30);
+  for (let i = 0; i < n; i++) { const u = (i + 0.5) / n, t = 1 + (tTop - 1) * u * u, dt = 2 * (tTop - 1) * u / n, f = ((1 + 1 / (2 * t * t)) * Math.sqrt(t * t - 1)) / (t * t), k = k0 * t; s += f * k * k * Math.exp(-k * r) * dt; }
+  return (Z * ((2 * a) / (3 * Math.PI)) * s) / (4 * Math.PI * r);
+}
+
 // ======================================================================= IL NUCLEO
 // raggi quadratici medi di CARICA misurati, fm (Angeli & Marinova 2013, At. Data Nucl. Data Tables 99, 69 [R]), per
 // l'isotopo più abbondante; il protone: CODATA 2018 (atomi muonici e idrogeno) [R]
@@ -511,11 +546,16 @@ export function nucleone() {
 }
 // un'istantanea del nucleo (un evento): i centri di Z protoni e N neutroni (fm, dal centro), e i tre quark di valenza
 // di ognuno (fm, dal centro del nucleo). → { nucleoni: [{ tipo: 'p'|'n', pos, quark: [{ sapore: 'u'|'d', pos }] }] }
+// (due nucleoni non stanno più vicini di 0,9 fm: il nocciolo repulsivo della forza nucleare; la «distanza di espulsione» con cui
+// si tirano i nucleoni nei modelli di Glauber, Broniowski e Rybczyński 2010, PRC 81, 064909 [R]. Il nucleo pieno ne ha uno
+// ogni ρ₀^(−1/3) = 1,8 fm)
+export const DISTANZA_MINIMA = 0.9;
 export function istantanea(nuc, indirizzo, k) {
   const rnd = contatore(`${indirizzo}/istantanea ${k}`), Q = nucleone(), out = [];
   const metti = (tipo, pos) => { const sapori = tipo === 'p' ? ['u', 'u', 'd'] : ['u', 'd', 'd'], quark = sapori.map((s) => { const dist = tipo === 'p' ? (s === 'u' ? Q.u : Q.d) : (s === 'u' ? Q.d : Q.u), r = dist.quantile(rnd()), d = direzione(rnd); return { sapore: s, pos: [pos[0] + r * d[0], pos[1] + r * d[1], pos[2] + r * d[2]] }; }); out.push({ tipo, pos, quark }); };
   if (!nuc.protoni) metti('p', [0, 0, 0]);
-  else { for (let i = 0; i < nuc.Z; i++) { const r = nuc.protoni.quantile(rnd()), d = direzione(rnd); metti('p', d.map((v) => v * r)); } for (let i = 0; i < nuc.N; i++) { const r = nuc.neutroni.quantile(rnd()), d = direzione(rnd); metti('n', d.map((v) => v * r)); } }
+  else { const posti = [], lontano = (p) => posti.every((q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 >= DISTANZA_MINIMA ** 2), tira = (dist) => { let p = null; for (let t = 0; t < 60; t++) { const r = dist.quantile(rnd()), d = direzione(rnd); p = d.map((v) => v * r); if (lontano(p)) break; } posti.push(p); return p; };
+    for (let i = 0; i < nuc.Z; i++) metti('p', tira(nuc.protoni)); for (let i = 0; i < nuc.N; i++) metti('n', tira(nuc.neutroni)); }
   return { k, nucleoni: out };
 }
 

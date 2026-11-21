@@ -1112,43 +1112,73 @@ function vistaLungo(R, asse = R.asse) {
   // (c*: la normale al piano a-b; le file lungo di lei hanno il periodo dello spessore di uno strato)
   const D = chi[0] || croce(A, B).map((x) => (x * R.volume) / dot(croce(A, B), croce(A, B))), ez = norma(D), ex = norma(chi[1].map((x, i) => x - dot(chi[1], ez) * ez[i])), ey = croce(ez, ex);
   const pr = (u) => [dot(u, ex), dot(u, ey)];
-  return { ez, ex, ey, periodo: Math.hypot(...D), p1: pr(chi[1]), p2: pr(chi[2]), proietta: (u) => [dot(u, ex), dot(u, ey), dot(u, ez)] };
+  return { ez, ex, ey, periodo: Math.hypot(...D), p1: pr(chi[1]), p2: pr(chi[2]), chi, proietta: (u) => [dot(u, ex), dot(u, ey), dot(u, ez)] };
 }
 // GLI ATOMI di un campione di cristallo largo latoM (pochi nanometri), visti lungo un asse: le posizioni vere della cella
 // ripetuta, ognuna spostata dalla sua agitazione termica (un esito per atomo, dal suo indirizzo: è un'istantanea).
 //   latoM, T (K), asse ('a', 'b', 'c', 'c*'), spessoreM (quanto cristallo in profondità; se manca: un periodo), massimo (atomi),
 //   fermi (vero: ognuno al suo posto esatto; l'agitazione la mette chi li muove, con le ampiezze di «agitazione»)
+//   centroM: [x, y] (m) dove sta il centro del campione nel piano che si guarda, rispetto all'origine del reticolo (di norma 0)
+//   tessera (vero: il campione è una TESSERA del reticolo, che ripetuta copre il piano senza cuciture — vedi sotto)
+// L'ISTANTANEA è una sola per il cristallo: l'esito di ogni atomo dipende dal suo indirizzo (la cella i, j, k e il posto q) e
+// dalla temperatura, non da quanto è largo il campione: il campione di 30 nm e quello di 3 nm mostrano gli stessi atomi negli
+// stessi posti, e così uno spostato di centroM.
+// LA TESSERA. Un quadrato non contiene un numero intero di celle (3 nm di quarzo sono 6,1 celle): ripetuto, lungo i lati si
+// vede la cucitura. Il reticolo proiettato lungo l'asse ha due spigoli p1 (lungo x) e p2; la tessera è il rettangolo largo
+// m·|p1| e alto n·|p2,y| (m, n gli interi più vicini a latoM), che è un dominio fondamentale del reticolo generato da
+// u = (m·|p1|, 0) e v = n·p2: le file di tessere si ripetono spostate di v_x l'una sull'altra («scarto»), e la ripetizione
+// è esatta (per gli assi perpendicolari agli altri due spigoli; per quelli obliqui di un monoclino resta l'inclinazione
+// della fetta, una frazione d'ångström nella profondità).
 // → { atomi: [{ x, y, z (m; z la profondità), el, raggio (m), colore, occ }], quantiDavvero (nel cubo di lato latoM), agitazione:
-//     { elemento: Å }, periodoM (lungo l'asse), cella, descrizione }
-export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM = null, massimo = 6000, fermi = false } = {}, caso = null) {
-  const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), c = (caso || sorgente(`reticolo/${minerale}`)).sotto(`atomi/${minerale}/${latoM.toExponential(2)}/${Math.round(T)}`), L = latoM * 1e10, debye = (MATERIALI[minerale] || {}).debye || 400;
+//     { elemento: Å }, periodoM (lungo l'asse), cella, descrizione, latoM (con la tessera: la sua larghezza), altezzaM, scartoM }
+// la sola tessera (le misure, senza gli atomi): per sapere quanto è grande un campione senza costruirlo
+export function tesseraReticolo(minerale, latoM, asse = null) {
+  const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), a1 = Math.hypot(...V.p1), p2 = V.p2[1] < 0 ? V.p2.map((x) => -x) : V.p2, m = Math.max(1, Math.round((latoM * 1e10) / a1)), n = Math.max(1, Math.round((m * a1) / p2[1])), Lx = m * a1;
+  return { latoM: Lx * 1e-10, altezzaM: n * p2[1] * 1e-10, scartoM: ((((n * p2[0]) % Lx) + Lx) % Lx) * 1e-10 };
+}
+export function atomi(minerale, { latoM = 3e-9, T = 288, asse = null, spessoreM = null, massimo = 6000, fermi = false, centroM = null, tessera = false } = {}, caso = null) {
+  const R = reticolo(minerale), V = vistaLungo(R, asse || R.asse), c = (caso || sorgente(`reticolo/${minerale}`)).sotto(`atomi/${minerale}/${Math.round(T)}`), debye = (MATERIALI[minerale] || {}).debye || 400;
   const { A, B, C } = R.base, ag = {}; for (const q of R.atomi) ag[q.el] ??= agitazione(q.el === 'H' ? 18.015 : ELEMENTI[q.el].A, debye, T); // (l'idrogeno si muove con la sua molecola)
-  let spess = (spessoreM ?? V.periodo * 1e-10) * 1e10; const perA3 = R.atomi.reduce((s, q) => s + q.occ, 0) / R.volume; if (perA3 * L * L * spess > massimo) spess = massimo / (perA3 * L * L);
-  // quante celle servono per coprire il campione: il raggio della sfera che lo contiene, in celle
-  // quante celle servono per coprire il campione: il raggio della sfera che lo contiene, diviso la distanza tra i piani della cella
-  const croce = (u, v) => Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]), raggio = Math.hypot(L, L, 2 * spess) / 2 + 2, out = [];
+  // la tessera: larga m·|p1|, alta n·|p2,y|, con le file spostate di scarto
+  let Lx = latoM * 1e10, Ly = Lx, scarto = 0;
+  if (tessera) { const a1 = Math.hypot(...V.p1), p2 = V.p2[1] < 0 ? V.p2.map((x) => -x) : V.p2, m = Math.max(1, Math.round(Lx / a1)), n = Math.max(1, Math.round((m * a1) / p2[1]));
+    Lx = m * a1; Ly = n * p2[1]; scarto = (((n * p2[0]) % Lx) + Lx) % Lx; }
+  const L = Lx;
+  let spess = (spessoreM ?? V.periodo * 1e-10) * 1e10; const perA3 = R.atomi.reduce((s, q) => s + q.occ, 0) / R.volume; if (perA3 * Lx * Ly * spess > massimo) spess = massimo / (perA3 * Lx * Ly);
+  // il centro: la traslazione del reticolo più vicina (s·p1 + t·p2, interi) e ciò che avanza (dentro una cella)
+  const cx = (centroM?.[0] || 0) * 1e10, cy = (centroM?.[1] || 0) * 1e10, [p1, p2] = [V.p1, V.p2], det = p1[0] * p2[1] - p1[1] * p2[0];
+  const s0 = Math.round((cx * p2[1] - cy * p2[0]) / det), t0 = Math.round((p1[0] * cy - p1[1] * cx) / det), idx = [0, 0, 0], base = [A, B, C];
+  for (let k = 0; k < 3; k++) { if (base[k] === V.chi[1]) idx[k] += s0; if (base[k] === V.chi[2]) idx[k] += t0; }
+  const T3 = V.proietta([0, 1, 2].map((d) => idx[0] * A[d] + idx[1] * B[d] + idx[2] * C[d]));
+  // quante celle servono per coprire il campione: il raggio della sfera che lo contiene (più lo scarto del centro), diviso la distanza tra i piani della cella
+  const croce = (u, v) => Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]), raggio = Math.hypot(Lx, Ly, 2 * spess) / 2 + 2 + Math.hypot(cx - T3[0], cy - T3[1]) + Math.abs(T3[2]), out = [];
   const nA = Math.ceil(raggio / (R.volume / croce(B, C))) + 1, nB = Math.ceil(raggio / (R.volume / croce(C, A))) + 1, nC = Math.ceil(raggio / (R.volume / croce(A, B))) + 1;
-  for (let i = -nA; i <= nA; i++) for (let j = -nB; j <= nB; j++) for (let k = -nC; k <= nC; k++) for (let q = 0; q < R.atomi.length; q++) {
+  // (la tessera è il rettangolo [−Lx/2, Lx/2) × [−Ly/2, Ly/2) attorno al centro: ogni posto ci cade una volta sola)
+  const dentro = tessera ? (x, y) => x >= -Lx / 2 && x < Lx / 2 && y >= -Ly / 2 && y < Ly / 2 : (x, y) => Math.abs(x) <= L / 2 + 1 && Math.abs(y) <= L / 2 + 1;
+  for (let i = idx[0] - nA; i <= idx[0] + nA; i++) for (let j = idx[1] - nB; j <= idx[1] + nB; j++) for (let k = idx[2] - nC; k <= idx[2] + nC; k++) for (let q = 0; q < R.atomi.length; q++) {
     const at = R.atomi[q], p = V.proietta([at.pos[0] + i * A[0] + j * B[0] + k * C[0], at.pos[1] + i * A[1] + j * B[1] + k * C[1], at.pos[2] + i * A[2] + j * B[2] + k * C[2]]);
-    if (Math.abs(p[0]) > L / 2 + 1 || Math.abs(p[1]) > L / 2 + 1 || p[2] < -0.01 || p[2] >= spess - 0.01) continue;
+    p[0] -= cx; p[1] -= cy; if (!dentro(p[0], p[1]) || p[2] < -0.01 || p[2] >= spess - 0.01) continue;
     const id = `${i},${j},${k},${q}`, s = fermi ? 0 : ag[at.el]; if (at.occ < 1 && c(`${id}/c'è`) >= at.occ) continue; // (un posto occupato a metà: c'è o non c'è)
     const x = p[0] + s * c.normale(`${id}/x`), y = p[1] + s * c.normale(`${id}/y`), z = p[2] + s * c.normale(`${id}/z`);
-    if (Math.abs(x) > L / 2 || Math.abs(y) > L / 2) continue;
-    out.push({ x: (x + L / 2) * 1e-10, y: (y + L / 2) * 1e-10, z: z * 1e-10, el: at.el, raggio: ATOMI_DISEGNO[at.el][0] * 1e-10, colore: ATOMI_DISEGNO[at.el][1], occ: at.occ });
+    if (!tessera && (Math.abs(x) > L / 2 || Math.abs(y) > L / 2)) continue;
+    out.push({ x: (x + Lx / 2) * 1e-10, y: (y + Ly / 2) * 1e-10, z: z * 1e-10, el: at.el, raggio: ATOMI_DISEGNO[at.el][0] * 1e-10, colore: ATOMI_DISEGNO[at.el][1], occ: at.occ });
   }
   out.sort((p, q) => q.z - p.z); // dal più profondo al più vicino: così chi disegna copre nel verso giusto
-  return { atomi: out, quantiDavvero: perA3 * L ** 3, agitazione: ag, periodoM: V.periodo * 1e-10, spessoreM: spess * 1e-10, cella: R.cella, asse: asse || R.asse, latoM,
-    descrizione: `${minerale} (${R.sistema}, ${R.gruppo}; a = ${fmt(R.cella.a, 3)}, b = ${fmt(R.cella.b, 3)}, c = ${fmt(R.cella.c, 3)} Å), visto lungo ${asse || R.asse}: ${out.length} atomi in uno strato di ${fmtLunghezza(spess * 1e-10)} (in un cubo di ${fmtLunghezza(latoM)} sarebbero ${fmt(perA3 * L ** 3)}); a ${Math.round(T)} K ognuno è spostato dal suo posto di ${Object.entries(ag).map(([e, v]) => `${ELEMENTI[e].nome} ${fmt(v, 1)} Å`).join(', ')}` };
+  return { atomi: out, quantiDavvero: perA3 * L ** 3, agitazione: ag, periodoM: V.periodo * 1e-10, spessoreM: spess * 1e-10, cella: R.cella, asse: asse || R.asse, latoM: Lx * 1e-10, ...(tessera ? { altezzaM: Ly * 1e-10, scartoM: scarto * 1e-10 } : {}),
+    descrizione: `${minerale} (${R.sistema}, ${R.gruppo}; a = ${fmt(R.cella.a, 3)}, b = ${fmt(R.cella.b, 3)}, c = ${fmt(R.cella.c, 3)} Å), visto lungo ${asse || R.asse}: ${out.length} atomi in uno strato di ${fmtLunghezza(spess * 1e-10)} (in un cubo di ${fmtLunghezza(latoM)} sarebbero ${fmt(perA3 * (latoM * 1e10) ** 3)}); a ${Math.round(T)} K ognuno è spostato dal suo posto di ${Object.entries(ag).map(([e, v]) => `${ELEMENTI[e].nome} ${fmt(v, 1)} Å`).join(', ')}` };
 }
-// l'immagine degli atomi (RGBA N×N): dischi con il raggio ionico vero, i più profondi più scuri
+// l'immagine degli atomi (RGBA N×N; con la tessera N × N·altezza/larghezza): dischi con il raggio ionico vero, i più profondi più scuri
 export function immagineAtomi(campione, N = 192) {
-  const px = new Uint8ClampedArray(N * N * 4), k = N / campione.latoM, zmax = Math.max(1e-12, campione.spessoreM);
-  for (let i = 0; i < N * N; i++) { px[i * 4] = 10; px[i * 4 + 1] = 12; px[i * 4 + 2] = 18; px[i * 4 + 3] = 255; }
+  const k = N / campione.latoM, Ny = campione.altezzaM ? Math.max(1, Math.round(campione.altezzaM * k)) : N, ky = Ny / (campione.altezzaM || campione.latoM), sx = (campione.scartoM || 0) * k;
+  const px = new Uint8ClampedArray(N * Ny * 4), zmax = Math.max(1e-12, campione.spessoreM);
+  for (let i = 0; i < N * Ny; i++) { px[i * 4] = 10; px[i * 4 + 1] = 12; px[i * 4 + 2] = 18; px[i * 4 + 3] = 255; }
   // (il campione si ripete oltre i lati — mappa.js lo posa con le condizioni periodiche —: un atomo a cavallo di un lato si
-  // disegna anche dall'altra parte, se no lungo le cuciture resta una riga scura dove manca la sua metà)
-  const copie = []; for (const a of campione.atomi) { const r = Math.max(1, a.raggio * k), x = a.x * k, y = a.y * k; for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) if (x + dx + r >= 0 && x + dx - r <= N && y + dy + r >= 0 && y + dy - r <= N) copie.push([a, x + dx, y + dy, r]); }
+  // disegna anche dall'altra parte, se no lungo le cuciture resta una riga scura dove manca la sua metà; con la tessera la
+  // fila sopra e quella sotto sono spostate dello scarto)
+  const copie = []; for (const a of campione.atomi) { const r = Math.max(1, a.raggio * k), x = a.x * k, y = a.y * ky;
+    for (const fy of [-1, 0, 1]) for (const fx of [-2, -1, 0, 1, 2]) { const X = x + fx * N + fy * sx, Y = y + fy * Ny; if (X + r >= 0 && X - r <= N && Y + r >= 0 && Y - r <= Ny) copie.push([a, X, Y, r]); } }
   for (const [a, cx, cy, r] of copie) { const lume = 0.45 + 0.55 * (1 - a.z / zmax);
-    for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(N - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(N - 1, Math.ceil(cx + r)); x++) { const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r; if (d > 1) continue; const o = (y * N + x) * 4, s = lume * (1 - 0.45 * d * d); px[o] = a.colore[0] * s; px[o + 1] = a.colore[1] * s; px[o + 2] = a.colore[2] * s; } }
+    for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(Ny - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(N - 1, Math.ceil(cx + r)); x++) { const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r; if (d > 1) continue; const o = (y * N + x) * 4, s = lume * (1 - 0.45 * d * d); px[o] = a.colore[0] * s; px[o + 1] = a.colore[1] * s; px[o + 2] = a.colore[2] * s; } }
   return px;
 }
 

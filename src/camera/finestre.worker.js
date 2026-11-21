@@ -72,6 +72,8 @@ self.onmessage = async (e) => {
     if (d.tipo === 'nano') { const t0 = performance.now(), sc = scenaNano(B.mare, { lon: d.lon, lat: d.lat, profondita: 0, latoM: d.lato, fondoM: d.fondoM }, sorgente(`${B.k}/acqua/${d.u.toFixed(6)}/${d.v.toFixed(6)}`)); // (il moto e le copie periodiche, che portano funzioni, li mette la pagina)
       manda({ tipo: 'nano', id: d.id, k: B.k, scena: sc, ms: performance.now() - t0 }); return; }
     if (d.tipo === 'immagine') { const A = finestraDi(d.id); if (!A) { manda({ tipo: 'immagine', id: d.id, k: B.k, errore: 'finestra dimenticata' }); return; }
-      const t0 = performance.now(), px = immagine(A, d.tempo); manda({ tipo: 'immagine', id: d.id, k: B.k, N: A.N, px, tempo: d.tempo, ms: performance.now() - t0 }, px); }
+      // (con l'immagine, le scintille: l'immagine senza lampo, il lampo e la densità dei punti speculari — finestra.js)
+      const t0 = performance.now(), px = immagine(A, d.tempo), sc = A.fin?.ultima?.tempo === d.tempo ? A.fin.ultima.scintille : null;
+      self.postMessage({ tipo: 'immagine', id: d.id, k: B.k, N: A.N, px, tempo: d.tempo, ms: performance.now() - t0, scintille: sc || null }, sc ? [px.buffer, sc.senza.buffer, sc.lampi.buffer, sc.dens.buffer] : [px.buffer]); }
   } catch (err) { manda({ tipo: d.tipo, id: d.id, k: d.k, errore: String((err && err.stack) || err) }); }
 };

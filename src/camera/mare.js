@@ -624,6 +624,11 @@ export function mare(P, sf, cl, se = null, caso = null) {
   for (const f of out.foci.slice(0, 200)) { const i0 = Math.floor(((f.lon + 180) / 360) * FW), j0 = Math.floor(((90 - f.lat) / 180) * FH);
     for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const j = j0 + dj, i = (i0 + di + FW) % FW; if (j < 0 || j >= FH || tipo[j * FW + i] !== 1) continue;
       const x = Math.max(0.3 * R * (Math.PI / FH), distanza(R, f.lon, f.lat, lonDi(i, FW), latDi(j, FH))), pn = pennacchio(f.portata, x, g); torbidaFine[j * FW + i] += out.fiume.sospeso * f.argilla * pn.parte * Math.exp((-x * wArgilla) / (pn.velocita * DATI.pennacchio)); } }
+  // LA POLVERE CHE IL VENTO PORTA DALLE TERRE ASCIUTTE (polvereDelVento, più sotto): il flusso che cade su ogni cella (kg/m²/s)
+  // (le terre che possono dare polvere: dove l'acqua ha lasciato sedimenti fini — la sorgente «geomorfica» di Zender e altri 2003:
+  // la polvere viene dalle piane alluvionali e dai fondi dei laghi asciutti, non dalla roccia nuda né dai ciottoli)
+  const erodibile = new Float32Array(N); if (s.depositato) for (let k = 0; k < FN; k++) if (tipo[k] !== 1 && s.depositato[k] > 3) { const i = k % FW, j = (k - i) / FW; erodibile[Math.floor(j / kx) * W + Math.floor(i / kx)] += 1 / (kx * kx); }
+  out.polvere = polvereDelVento({ W, H, R, bagnato, erodibile, vu, vv, piove, umid, Tclima, rhoAria, g, area, lat, dl });
   out.fine.torbida = torbidaFine; out.vulcani = (s.vulcani || []).map(([i, j]) => ({ lon: lonDi(i, FW), lat: latDi(j, FH), sommerso: tipo[j * FW + i] === 1 })); out.spessoreGhiaccio = spessoreGhiaccio;
   out.coloreFondo = s.materiali?.coloreBasalto || [120, 110, 100]; out.coloreContinente = s.materiali?.coloreContinente || [170, 150, 130]; out.eta = P.interno?.eta ?? 4.5e9;
   // che cosa c'è sul fondo, cella per cella: 0 sabbia dei continenti, 1 roccia vulcanica (crosta dei fondali), 2 fango (dove i fiumi depositano)
@@ -733,6 +738,52 @@ function correnti({ W, H, R, omega, bagnato, fondo, tx, ty, g, salto, areaMare }
 // mare «pienamente sviluppato» (Pierson e Moskowitz 1964: H = 0,243·U²/g, T = 8,13·U/g); sul fondale basso l'onda
 // frange quando è alta più di 0,6 volte la profondità. Il MARE LUNGO sono le onde uscite dalla zona dove sono nate:
 // qui l'energia delle onde di vento sparsa sulle celle vicine (viaggiano per migliaia di chilometri), con periodo più lungo.
+// ---------- LA POLVERE PORTATA DAL VENTO. Al largo il fango dei fiumi non arriva: la torbidità del mare aperto senza vita è la
+// polvere delle terre asciutte, che il vento solleva, porta per migliaia di km e lascia cadere (sulla Terra ~0,45 Pg/anno sui mari:
+// Jickells e altri 2005). Le leggi:
+//   · dove: le terre asciutte (indice d'aridità P/PET < 0,2: UNEP 1992, Middleton e Thomas 1997; qui la parte asciutta
+//     max(0, 1 − (P/PET)/0,2)) coperte di sedimento fine (la parte della cella dove l'erosione ha depositato: Zender e altri
+//     2003); su un pianeta senza vita il suolo è nudo ovunque;
+//   · quanto il vento solleva: il flusso orizzontale di saltazione Q = 2,61·(ρa/g)·u*³·(1 + u*t/u*)·(1 − u*t²/u*²) (White 1979),
+//     u* = κ·U₁₀/ln(10 m/z₀) con z₀ = 1 mm (suolo nudo), la soglia di Shao e Lu 2000 per i granelli di 75 µm,
+//     u*t = √(A_N·(ρp·g·d/ρa + γ/(ρa·d))) con A_N = 0,0123 e γ = 3·10⁻⁴ kg/s²; la polvere è la parte che sale, F = α·Q, con
+//     α = 10^(13,4·f_argilla − 6) m⁻¹ (Marticorena e Bergametti 1995), f_argilla = 0,1 (A MANO: suoli aridi, 5–20 %);
+//     la velocità del vento non è costante: la distribuzione di Rayleigh (Weibull k = 2: Justus e altri 1978) attorno alla media;
+//   · fin dove arriva: un nucleo isotropo e^(−x/Λ)/(2π·Λ·x), con Λ = Ū·τ, τ = 4 giorni la vita della polvere portata lontano
+//     (Mahowald e altri 2014); il vento medio non la spinge da una parte (chiusura dichiarata: niente direzione).
+// → Float32Array(W·H): kg/m²/s che cadono su ogni cella (anche sulle terre)
+export const POLVERE = { fArgilla: 0.1, z0: 1e-3, dSalta: 75e-6, AN: 0.0123, gamma: 3e-4, vitaS: 4 * 86400, mmd: 2.5e-6, sigmaG: 2, densita: 2650 };
+function polvereDelVento({ W, H, R, bagnato, erodibile, vu, vv, piove, umid, Tclima, rhoAria, g, area, lat, dl }) {
+  const N = W * H, D = new Float32Array(N), E = new Float64Array(N), Pq = POLVERE, ra = Math.max(1e-3, rhoAria), alfa = Math.pow(10, 13.4 * Pq.fArgilla - 6);
+  const ust = Math.sqrt(Pq.AN * ((Pq.densita * g * Pq.dSalta) / ra + Pq.gamma / (ra * Pq.dSalta))), kU = 0.41 / Math.log(10 / Pq.z0);
+  const Q = (u) => { const us = kU * u; return us > ust ? 2.61 * (ra / g) * us ** 3 * (1 + ust / us) * (1 - (ust / us) ** 2) : 0; };
+  let sU = 0, sA = 0, fonti = [];
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, U = Math.hypot(vu[k], vv[k]), A = area(j); sU += U * A; sA += A; const terra = Math.min(1 - Math.min(1, bagnato[k]), erodibile[k]); if (!(terra > 0) || !(U > 0)) continue;
+    const T = Tclima[k], PET = (DATI.ce * (pressioneVapore(T) / (461.5 * T)) * (U + 1) * Math.max(0.1, 1 - 0.8 * (umid[k] || 0.5)) * ANNO) / 1000, P = (piove[k] || 0) / 1000, secco = Math.max(0, 1 - (PET > 0 ? P / PET : 1) / 0.2); if (!(secco > 0) || T < 260) continue;
+    let m = 0; const n = 40; for (let q = 0; q < n; q++) { const u = ((q + 0.5) / n) * 5 * U, p = ((Math.PI * u) / (2 * U * U)) * Math.exp((-Math.PI * u * u) / (4 * U * U)); m += Q(u) * p * ((5 * U) / n); } // (Rayleigh con media U)
+    E[k] = alfa * m * secco * terra; if (E[k] > 0) fonti.push(k); }
+  // (il trasporto su una griglia grossa, al più 64 × 32 celle: il nucleo è largo migliaia di km, e la somma su tutte le coppie di
+  // celle fini costava minuti; poi si torna sulla griglia del mare per interpolazione)
+  const L = Math.max(1e5, (sU / Math.max(1e-30, sA)) * Pq.vitaS), f = Math.max(1, Math.ceil(W / 64)), Wg = Math.ceil(W / f), Hg = Math.ceil(H / f), Mg = new Float64Array(Wg * Hg), Dg = new Float64Array(Wg * Hg), dlg = (2 * Math.PI) / Wg, dfg = Math.PI / Hg, latg = (j) => Math.PI / 2 - (j + 0.5) * dfg, cella = R * dlg;
+  for (const s of fonti) { const js = Math.floor(s / W), is = s - js * W; Mg[Math.min(Hg - 1, Math.floor(js / f)) * Wg + Math.min(Wg - 1, Math.floor(is / f))] += E[s] * area(js); }
+  for (let q = 0; q < Wg * Hg; q++) { if (!(Mg[q] > 0)) continue; const js = Math.floor(q / Wg), la1 = latg(js), lo1 = (q - js * Wg + 0.5) * dlg;
+    for (let j = 0; j < Hg; j++) { const la2 = latg(j), cl = Math.cos(la1) * Math.cos(la2), sl = Math.sin(la1) * Math.sin(la2);
+      for (let i = 0; i < Wg; i++) { const x = R * Math.acos(Math.max(-1, Math.min(1, sl + cl * Math.cos((i + 0.5) * dlg - lo1)))); if (x > 8 * L) continue; const xe = Math.max(x, 0.5 * cella * Math.max(0.05, Math.cos(la2))); Dg[j * Wg + i] += (Mg[q] * Math.exp(-x / L)) / (2 * Math.PI * L * xe); } } }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) D[j * W + i] = bil(Dg, Wg, Hg, ((i + 0.5) / W) * Wg - 0.5, ((j + 0.5) / H) * Hg - 0.5);
+  return D;
+}
+// quanta polvere sospesa (kg/m³) e di che taglia, nello strato rimescolato a regime: ogni taglia vi entra col flusso che cade e
+// ne esce cadendo e col rimescolamento che lo scambia con l'acqua di sotto (w_m = K/h_termoclino, la stessa di trasporta), quindi
+// C(d) = F(d)/(w_s(d) + w_m) (le taglie del flusso: lognormale in massa, diametro mediano 2,5 µm e σg = 2 per la
+// polvere portata lontano: Mahowald e altri 2014). → { kgM3, dMedio (della massa sospesa), legge(d): numero per unità di d (relativo) }
+const polvereFatta = new Map();
+export function polvereSospesa(F, T, S, g, wMescola = 0) {
+  const ch = `${T.toFixed(1)}|${S.toFixed(1)}|${g.toFixed(3)}|${wMescola.toExponential(2)}`; let b = polvereFatta.get(ch);
+  if (!b) { const Pq = POLVERE, s2 = 2 * Math.log(Pq.sigmaG) ** 2, pm = (d) => Math.exp(-(Math.log(d / Pq.mmd) ** 2) / s2) / Math.sqrt(Math.PI * s2), ws = (d) => Math.max(1e-12, stokes(d, Pq.densita, T, S, g)) + wMescola;
+    let k = 0, m = 0; const n = 200, a = 1e-7, z = 1e-4; for (let q = 0; q < n; q++) { const d = a * Math.pow(z / a, (q + 0.5) / n), w = (pm(d) / ws(d)) * (Math.log(z / a) / n); k += w; m += w * Math.log(d); }
+    b = { perFlusso: k, dMedio: Math.exp(m / k), legge: (d) => pm(d) / ws(d) / ((Math.PI / 6) * Pq.densita * d ** 3) / d }; polvereFatta.set(ch, b); }
+  return { kgM3: F * b.perFlusso, dMedio: b.dMedio, legge: b.legge };
+}
 function campoOnde({ W, H, R, vu, vv, mare, fondo, g, righe }) {
   const N = W * H, alt = new Float32Array(N), per = new Float32Array(N), tratto = new Float32Array(N), ex = new Float32Array(N), ey = new Float32Array(N), en = new Float32Array(N), pm = new Float32Array(N);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!mare[k]) continue; const U = Math.hypot(vu[k], vv[k]); if (U < 0.3) continue;
@@ -1012,7 +1063,7 @@ export function luogo(stato, lon, lat, { profondita = 0, acqua: forzata = null, 
     tipo = vicinoMare ? 1 : 2; idLago = -1; }
   if (tipo === 0) return { tipo: 'terra', asciutto: true, motivo: 'terra emersa' };
   const g = stato.gravita, c = caso || sorgente(stato.radice), vento = Math.hypot(campo(stato, stato.vento.u, lon, lat), campo(stato, stato.vento.v, lon, lat));
-  const o = { tipo: tipo === 1 ? 'mare' : tipo === 4 ? 'piana di sale' : 'lago', lon, lat, vento, pCO2: stato.pCO2, foce: null, camino: null, vulcano: null, parteDiFiume: 0, sospeso: { sabbia: 0, limo: 0, argilla: 0, fiocchi: 0 } };
+  const o = { tipo: tipo === 1 ? 'mare' : tipo === 4 ? 'piana di sale' : 'lago', lon, lat, vento, pCO2: stato.pCO2, foce: null, camino: null, vulcano: null, parteDiFiume: 0, sospeso: { sabbia: 0, limo: 0, argilla: 0, fiocchi: 0, polvere: 0 } };
   if (tipo !== 1) { // un lago: la sua acqua è quella della sua scheda (o, se la griglia non lo conosce, quella dei fiumi)
     const L = idLago >= 0 ? stato.laghi[idLago] : null, fondo = fondoM ?? (F.fondo[k] || 2), z = limita(profondita, 0, fondo);
     const Ts = L ? L.T : Math.max(271, campo(stato, stato.temperatura, lon, lat)), dolce = !L || L.salinita < 24.7;
@@ -1037,6 +1088,7 @@ export function luogo(stato, lon, lat, { profondita = 0, acqua: forzata = null, 
     o.sospeso.sabbia = Cf * pSabbia * cade(DATI.taglie.sabbia, DATI.densitaGrani); o.sospeso.limo = Cf * pLimo * cade(DATI.taglie.limo, DATI.densitaGrani);
     o.sospeso.argilla = Cf * pArg * (1 - inFiocchi) * cade(DATI.taglie.argilla, DATI.densitaGrani); o.sospeso.fiocchi = Cf * pArg * inFiocchi * cade(DATI.fiocco, DATI.densitaFiocchi); }
   o.sospeso.argilla += campo(stato, stato.torbidita, lon, lat) * Math.exp(-z / (2 * hs));
+  if (stato.polvere) { const Fp = Math.max(0, campo(stato, stato.polvere, lon, lat)), ps = polvereSospesa(Fp, limita(o.T, 271, 373), Math.min(o.salinita, 300), g, DATI.mescola / Math.max(1, stato.termoclino || 1)); o.sospeso.polvere = ps.kgM3 * Math.exp(-z / (2 * hs)); o.polvere = { flusso: Fp, dMedio: ps.dMedio }; }
   // gli ioni: quelli del mare a quella salinità, mescolati con quelli del fiume
   o.totali = {}; { const t = ioniNelPunto(stato, o.parteDiFiume < 1 ? (o.salinita - stato.fiume.salinita * o.parteDiFiume) : 0); for (const e in stato.totali) o.totali[e] = t[e] + (stato.fiume[e] || 0) * o.parteDiFiume; }
   // la sorgente calda più vicina: se il punto è sul fondo, in un campo di camini, il pennacchio caldo si mescola
@@ -1086,6 +1138,13 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
   metti('granello', 'limo', DATI.taglie.limo, perMassa(sp.limo, DATI.taglie.limo, DATI.densitaGrani), { perche: 'portato dal fiume' });
   metti('granello', 'argilla', DATI.taglie.argilla, perMassa(sp.argilla, DATI.taglie.argilla, DATI.densitaGrani), { forma: 'lamella', perche: 'il fango più fine: resta sospeso per mesi' });
   metti('fiocco', 'fiocco', DATI.fiocco, perMassa(sp.fiocchi, DATI.fiocco, DATI.densitaFiocchi - 1000), { rho: DATI.densitaFiocchi, forma: 'fiocco', sigma: 0.5, perche: 'argilla che il sale ha fatto coagulare' });
+  // la polvere delle terre asciutte portata dal vento (polvereDelVento) e, di lei, gli AGGREGATI: due granelli che si sono
+  // incontrati per l'agitazione termica (coagulazione browniana, β = 8kT/(3μ): Smoluchowski 1917) nel tempo in cui restano
+  // nello strato rimescolato (h/w_s): la parte aggregata è β·n·h/w_s (senza la vita non ci sono la neve marina né i suoi collanti);
+  // la coppia ha la massa di due granelli (il diametro della sfera di ugual volume: 2^⅓ d)
+  if (sp.polvere > 0 && qui.polvere) { const dP = qui.polvere.dMedio, nP = perMassa(sp.polvere, dP, POLVERE.densita), beta = (8 * KB * Math.max(T, 271)) / (3 * mu), resta = DATI.strato / Math.max(1e-12, stokes(dP, POLVERE.densita, Math.max(T, 271), Math.min(S, 300), g)), parte = Math.min(0.5, beta * nP * resta);
+    metti('granello', 'polvere', dP, nP * (1 - parte), { perche: `polvere delle terre asciutte portata dal vento (${(qui.polvere.flusso * 1e3 * 3.156e7).toPrecision(2)} g/m² all'anno): cade piano, resta mesi`, colore: stato.coloreContinente || COLORE.limo });
+    if (parte * nP > 0) metti('granello', 'aggregato', dP * Math.cbrt(2), (parte * nP) / 2, { forma: 'fiocco', perche: `granelli di polvere incontrati per l'agitazione termica: ${(100 * parte).toPrecision(2)}% della polvere`, colore: (stato.coloreContinente || COLORE.limo).map((c) => c * 0.85) }); }
   // i colloidi: sotto il micron la stessa massa in ogni decade di taglia (legge di potenza misurata, Sheldon 1972): tante più quanto più piccole
   metti('colloide', 'colloide', 3e-7, perMassa(sp.argilla, 3e-7, DATI.densitaGrani), { forma: 'lamella', perche: 'troppo piccole per cadere: le tiene sospese l\'agitazione termica' });
   metti('colloide', 'colloide', 3e-8, perMassa(sp.argilla, 3e-8, DATI.densitaGrani), { forma: 'lamella', perche: 'troppo piccole per cadere: le tiene sospese l\'agitazione termica' });
@@ -1154,7 +1213,7 @@ export function campioneAcqua(stato, { lon = 0, lat = 0, profondita = 0, latoM =
     ioni, coppie, gas: Object.fromEntries(Object.entries(gas).map(([f, m]) => [f, { moliPerKg: m, perM3: perM3(m), nelCampione: perM3(m) * V }])), acquaNelCampione: acquaPerM3 * V, acquaPerM3,
     ioniPerMolecolaDAcqua: moliIoni / 55.51, saturazione: { ...om, 'solfuro di ferro': fumo ? fumo.omega : 0 }, soglie: soglia,
     particelle, cristalli: particelle.filter((p) => p.tipo === 'cristallo'), bolle: particelle.filter((p) => p.tipo === 'bolla'), velo, fuoriScala, quanteDavvero, contati, nuclei: nucleiDi(nomi, acquaPerM3, perM3, V),
-    classi: classi.map((x) => ({ tipo: x.tipo, materiale: x.materiale, diametroM: x.d, perM3: x.n, perche: x.perche })), sospeso: { ...qui.sospeso }, torbidita: qui.sospeso.sabbia + qui.sospeso.limo + qui.sospeso.argilla + qui.sospeso.fiocchi,
+    classi: classi.map((x) => ({ tipo: x.tipo, materiale: x.materiale, diametroM: x.d, perM3: x.n, perche: x.perche })), sospeso: { ...qui.sospeso }, torbidita: qui.sospeso.sabbia + qui.sospeso.limo + qui.sospeso.argilla + qui.sospeso.fiocchi + (qui.sospeso.polvere || 0),
     luogo: { foce: qui.foce, camino: qui.camino ? { id: qui.camino.id, distanzaM: qui.camino.distanzaM, parteDiFluido: qui.camino.parteDiFluido, T: qui.camino.T } : null, vulcano: qui.vulcano, ghiaccio: qui.ghiaccio, vento: qui.vento, lago: qui.lago ? qui.lago.id : null, salamoia },
     luce: stato.luce || [1, 1, 1], coloreFondale: stato.coloreContinente ? stato.coloreContinente.map((v, i) => 0.5 * (v + OTTICA.sabbia[i])) : OTTICA.sabbia, radice: c.radice, rami: c.rami || null };
   out.descrizione = descrivi(out, qui, note, stato);

@@ -78,11 +78,12 @@ let mppASchermo = null;
 function scalaASchermo() { const P = passaggio; if (P && P.t0 == null && P.mppImg > 0) return P.mppImg; return misura(); }
 // LA GRANDEZZA VERA di ciò che si guarda: metri per pixel (della pagina), al centro dello schermo, in ogni vista; null dove la
 // vista non ha ancora una scala in metri
+let ultimaQuanti = 0; // (l'ultima grandezza valida della scala quantistica)
 function misura() {
   const dpr = devicePixelRatio || 1, H = tela.clientHeight || 1;
   try {
     {
-      if (vistaQuanti) { const g = grandezzaQuanti(); if (g > 0) return g / H; }
+      if (vistaQuanti) { const g = grandezzaQuanti(); if (g > 0) { ultimaQuanti = g; return g / H; } if (ultimaQuanti > 0) return ultimaQuanti / H; } // (al fondo la camera tocca l'atomo, distanza 0: resta l'ultima grandezza, non quella degli atomi di sopra)
       if (vistaAtomi) { const c = vistaAtomi.camera; return (2 * c.dist * Math.tan((c.fov || 0.6) / 2) * 1e-9) / H; } // (la camera degli atomi conta in nanometri)
       if (mondo3d && universo3d) { const g = universo3d.bolla().grandezza; return g > 0 ? g / H : null; }
       if (camMappa?.livello === 5) { if (camMappa.suAcqua) return ((camMappa.latoAcqua ?? 1) / camMappa.z) * dpr; const r = rocciaDi(camMappa); return r ? (r.larghezzaM / camMappa.z) * dpr : null; } // (l'acqua: il lato del campione, senza ridisegnarlo)
@@ -187,10 +188,43 @@ function montaAtomi() {
 // ---------- SOTTO GLI ATOMI: LA SCALA QUANTISTICA (src/tre/quanti.js, creaQuanti(N, { atomo, luogo, scala }): un altro
 // modulo). Si monta sopra gli atomi, alla grandezza a cui si è arrivati (scala: l'altezza dello schermo, in metri), con
 // l'atomo che si aveva sotto gli occhi e il luogo di quella materia. Se il modulo non c'è ancora lo si dice, e si resta qui.
-let telaQuanti = null, vistaQuanti = null, nucleoQuanti = null, ultimoAtomo = null, quantiAssenti = false, scenaAtomiOra = null;
+let telaQuanti = null, vistaQuanti = null, nucleoQuanti = null, ultimoAtomo = null, quantiAssenti = false, scenaAtomiOra = null, telaDensita = null, cicloDensita = 0;
 function smontaQuanti() {
   try { vistaQuanti?.libera?.(); nucleoQuanti?.libera?.(); } catch { /* già perso */ }
-  telaQuanti?.remove(); telaQuanti = null; vistaQuanti = null; nucleoQuanti = null;
+  cancelAnimationFrame(cicloDensita); cicloDensita = 0; telaDensita?.remove(); telaDensita = null;
+  telaQuanti?.remove(); telaQuanti = null; vistaQuanti = null; nucleoQuanti = null; ultimaQuanti = 0;
+}
+// LA SCALA QUANTISTICA CONTINUA LO ZOOM: non è un'altra vista che prende il posto degli atomi, ma lo stesso atomo più da
+// vicino. (1) Si fonde con gli atomi secondo la scala, non col tempo, come gli atomi con l'immagine piatta: trasparente alla
+// grandezza a cui si entra, piena a un terzo di quella (A MANO, dichiarato: il fattore 3, lo stesso di fondiAtomi).
+// (2) Sotto gli eventi dello strumento c'è sempre il CAMPO, la densità di carica attorno al nucleo dell'atomo guardato, a
+// ogni decade (quanti.js): la densità elettronica di Slater, la cui superficie a 0,001 e/a₀³ è la sfera che si vedeva da fuori;
+// dentro, i gusci e poi, sotto il raggio dell'1s, la densità di contatto, uniforme; sotto ƛ = 386 fm la carica che il vuoto
+// polarizzato mette attorno al nucleo (Uehling 1935, in magenta: negativa); il nucleo con la sua densità di carica misurata
+// (raggi di Angeli e Marinova 2013, forma di Fermi o dell'oscillatore); sotto, le istantanee dei nucleoni, mai più vicini di
+// 0,9 fm. Ogni decade di densità è una fascia appena più chiara (le isolinee in log ρ): a ogni ingrandimento c'è una
+// superficie da vedere, come chiede la continuità (rapporto «Generatore multiscala», §5). Il colore lo dà la luce dello
+// strumento (il verde del fosforo per gli elettroni), non l'atomo.
+function densitaQuanti(Qc, atomo, alta) {
+  telaDensita = document.createElement('canvas'); telaDensita.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen'; telaQuanti.parentNode.insertBefore(telaDensita, telaQuanti.nextSibling);
+  const Z = atomo.Z, d = Qc.densitaAtomo(Z, atomo.carica || 0), a0 = Qc.AU.a0, nuc = Qc.nucleo(Z), iso = 0.001 / a0 ** 3;
+  // (la densità di carica del nucleo, e/m³: il profilo dei protoni normalizzato a Z)
+  let norma = 0; if (nuc.protoni) { const top = 12, n = 600; for (let i = 0; i < n; i++) { const r = ((i + 0.5) / n) * top; norma += nuc.protoni.densita(r) * 4 * Math.PI * r * r * (top / n); } }
+  const rhoN = (r) => (nuc.protoni && norma > 0 ? (Z * nuc.protoni.densita(r * 1e15)) / norma * 1e45 : 0), top = Math.log10(0.16e45), bassa = Math.log10(iso);
+  const luce = (rho) => { if (!(rho > 0)) return 0; const L = Math.log10(rho), x = (L - bassa) / (top - bassa); if (x < -0.15) return 0; return Math.max(0, Math.min(1, 0.12 + 0.5 * x)) * (0.82 + 0.18 * Math.cos(2 * Math.PI * L)); };
+  let ultima = 0;
+  const disegna1 = () => {
+    cicloDensita = requestAnimationFrame(disegna1); if (!telaDensita) return; const g = grandezzaQuanti(); if (!(g > 0)) return;
+    const a = Math.max(0, Math.min(1, Math.log(alta / g) / Math.log(3))); telaQuanti.style.opacity = String(a); telaDensita.style.opacity = String(a);
+    const W = telaDensita.clientWidth, H = telaDensita.clientHeight; if (!W || !H) return; if (telaDensita.width !== W || telaDensita.height !== H) { telaDensita.width = W; telaDensita.height = H; ultima = 0; } // (assegnare la misura svuota la tela: solo se cambia)
+    if (Math.abs(g / ultima - 1) < 1e-3) return; ultima = g;
+    const x = telaDensita.getContext('2d'), mpp = g / H, R = Math.hypot(W, H) / 2, grad = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R), n = 96;
+    for (let k = 0; k <= n; k++) { const rp = k === 0 ? 0 : 0.25 * Math.pow(R / 0.25, (k - 1) / (n - 1)), r = Math.max(rp, 0.25) * mpp, e = luce(d.rho(r / a0) / a0 ** 3), v = r < 4 * Qc.LAMBDA_E ? luce(Qc.caricaUehling(Z, r)) : 0, nN = luce(rhoN(r)), sup = Math.exp(-((d.rho(r / a0) / a0 ** 3 / iso - 1) ** 2) / 0.02) * 0.35;
+      const c = [0.25 * (e + sup) + 0.9 * v + 0.95 * nN, 1.0 * (e + sup) + 0.3 * v + 0.85 * nN, 0.18 * (e + sup) + 0.9 * v + 0.5 * nN].map((q) => Math.round(255 * Math.min(1, q * 0.8)));
+      grad.addColorStop(Math.min(1, rp / R), `rgb(${c[0]},${c[1]},${c[2]})`); }
+    x.fillStyle = grad; x.fillRect(0, 0, W, H);
+  };
+  telaQuanti.style.opacity = '0'; disegna1();
 }
 async function montaQuanti() {
   if (telaQuanti || quantiAssenti) { if (quantiAssenti) $('dove').textContent = 'Sotto gli atomi: la scala quantistica (src/tre/quanti.js) non si è potuta montare. Qui finisce, per ora, la scala.'; return; }
@@ -207,6 +241,7 @@ async function montaQuanti() {
     vistaQuanti = mod.creaQuanti(nucleoQuanti, { atomo, luogo: null, scala: atomo.scala });
     // la camera parte alla grandezza a cui si era: lo schermo alto `alta` metri
     nucleoQuanti.attacca(vistaQuanti.corpo, { distanza: alta / (2 * Math.tan((nucleoQuanti.camera.fov || 0.75) / 2)) }); nucleoQuanti.avvia();
+    try { densitaQuanti(Qc, atomo, alta); } catch (err) { console.warn('la densità sotto la scala quantistica:', err); }
     // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi; avvicinandosi quando la camera non scende
     // più (il più vicino possibile all'atomo) lo zoom è finito: è la scala più piccola, e lo si dice
     let ultima = null, ferma = 0;

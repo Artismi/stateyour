@@ -121,7 +121,7 @@ prova('i granelli e i fiocchi: nel numero (Poisson su n·V) e nella massa della 
   if (!provate) console.log('      (in questo punto nessuna classe di granelli ha in media 4 granelli visibili in 12 finestre: il conteggio non si prova qui)');
   // la massa: la somma per classe (tutte le taglie, anche sotto il punto) è la torbidità di mare.js
   const camp = f0.popolazioni.campione; let tot = 0; for (const c of f0.popolazioni.classi) if (c.kgPerM3 != null && (c.tipo === 'granello' || c.tipo === 'fiocco')) tot += c.kgPerM3;
-  const conosciute = (camp.sospeso.sabbia || 0) + (camp.sospeso.limo || 0) + (camp.sospeso.argilla || 0) + (camp.sospeso.fiocchi || 0);
+  const conosciute = (camp.sospeso.sabbia || 0) + (camp.sospeso.limo || 0) + (camp.sospeso.argilla || 0) + (camp.sospeso.fiocchi || 0) + (camp.sospeso.polvere || 0); // (la polvere del vento: mare.js polvereDelVento)
   console.log(`      massa delle classi (granelli e fiocchi) con la loro legge delle taglie ${num(1000 * tot)} g/m³ contro la torbidità di mare.js ${num(1000 * conosciute)} g/m³`);
   assert.ok(Math.abs(tot - conosciute) <= 64 * EPS * conosciute + 1e-18, `massa ${tot} contro ${conosciute}`);
 });

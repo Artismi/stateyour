@@ -62,10 +62,11 @@
 // NON TORNA: la schiuma è istantanea (nasce e muore con l'accelerazione delle onde: niente schiuma vecchia trascinata);
 // le bolle stanno solo sotto la schiuma; le onde non frangono davvero (il profilo resta quello lineare).
 
-import { DATI, IONI, luogo, ondeNelPunto, campioneAcqua, densita, viscosita, coloreMare, stokes, pennacchio, costanti, muovi, scenaMolecolare } from './mare.js';
+import { DATI, IONI, luogo, ondeNelPunto, campioneAcqua, densita, viscosita, coloreMare, stokes, pennacchio, costanti, muovi, scenaMolecolare, polvereSospesa } from './mare.js';
 import { vaporeSaturo, COSTANTI } from './leggi.js';
 import { sorgente } from './eventi.js';
 import { TEMPLATE_MW } from './acqua_mw.js';
+import { densitaAtomo } from './quanti.js';
 
 const RAD = Math.PI / 180, DUE_PI = 2 * Math.PI, NA = 6.02214076e23, KB = COSTANTI.kB, R_GAS = 8.314462618;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -363,6 +364,15 @@ export function finestraAcqua(stato, { lon = 0, lat = 0, latoM = 1, Nmin = 128, 
   // la pendenza sotto il punto: le ottave più corte di quella calcolata (k ≥ 4π/2^bf), più il disco della stella
   const kc = (2 * DUE_PI) / lambdaDi(bf), pe = t.sp ? t.sp.pendenze(kc, Math.max(kc * 1e4, 40 * t.sp.km)) : { xx: 0, yy: 0, xy: 0 }, ds = ((fin.sole.raggio || 0) ** 2) / 4;
   fin.sotto = { xx: pe.xx + ds, yy: pe.yy + ds, xy: pe.xy };
+  // LE SCINTILLE SOTTO IL PUNTO. Il riflesso d'un punto è la media su molte faccette più piccole di lui: ognuna rimanda la
+  // stella in un PUNTO SPECULARE. Quanti ce ne sono per m² con la pendenza ζ che serve (Longuet-Higgins 1960, per una
+  // superficie gaussiana: gradiente ed hessiano indipendenti): n(ζ) = p(ζ)·E|det H|, con p la densità delle pendenze sotto il
+  // punto (quella di Cox e Munk del lampo) e, per uno spettro isotropo, E|det H| = M₄/(2√3) (M₄ = ∫k⁴S(k)dk delle ottave sotto
+  // il punto; la costante 2/√3 dalla media della |det| di tre gaussiane correlate). Chi guarda la finestra più ingrandita della
+  // distanza tra le scintille vede punti di luce staccati, non una macchia: mappa.js, scintille
+  // (solo se le pendenze sotto il punto allargano il lampo ben oltre il disco della stella — quattro volte la sua varianza —: se no
+  // il riflesso è già risolto dai punti della finestra, e resta nell'immagine)
+  if (pe.xx + pe.yy > 4 * 2 * ds) fin.scintille = { detH: t.sp ? integra((k) => k ** 4 * t.sp.omni(k), kc, Math.max(kc * 1e4, 40 * t.sp.km)) / (2 * Math.sqrt(3)) : 0, pend: { xx: pe.xx, yy: pe.yy, xy: pe.xy } };
   fin.varianza = bande.reduce((a, B) => a + B.varianza, 0);
   fin.popolazioni = popolazioni(fin);
   fin.descrizione = descrivi(fin);
@@ -414,14 +424,24 @@ export function bolleSottoSchiuma(fin, schiuma, { pennacchio = true } = {}) {
       if (!l) { l = []; genera2D(fin, Z.n, Z.dVis, Z.legge, l, { lato, i, j }); fin._celleBolle.set(k, l); } for (const p of l) out.push(p); } }
   return out;
 }
-function genera(fin, voce, cl, legge, n, dVis, lista, { T, S, g }, cella = null) {
+// LE PARTICELLE NON DIPENDONO DALLA FINESTRA che le guarda: ogni ottava di taglia [2^b, 2^(b+1)) ha le sue celle (lato
+// n_b^(−1/3), una particella attesa per cella) e il suo caso, con l'indirizzo nel tratto; una finestra prende le ottave che
+// distingue (d ≥ un suo punto) e, di quella a cavallo, le particelle sopra il punto. Prima le celle e il caso dipendevano dalla
+// taglia più piccola visibile, cioè dalla finestra: ogni finestra aveva altre particelle (il puntino che saltava di posto)
+function genera(fin, voce, cl, legge, n, dVis, lista, amb, cella = null) {
+  if (cella || !legge.estraiTra) return generaCelle(fin, voce, cl, legge, n, dVis, lista, amb, cella);
+  const nTot = n / Math.max(1e-300, legge.parteSopra(dVis)), b0 = Math.floor(Math.log2(dVis)), b1 = Math.ceil(Math.log2(legge.dMax));
+  for (let b = b0; b < b1; b++) { const lo = Math.max(2 ** b, legge.dMin), hi = Math.min(2 ** (b + 1), legge.dMax), nb = nTot * (legge.parteSopra(lo) - legge.parteSopra(hi)); if (!(nb > 0) || hi <= lo) continue;
+    generaCelle(fin, voce, cl, legge, nb, dVis, lista, amb, null, { b, lo, hi }); }
+}
+function generaCelle(fin, voce, cl, legge, n, dVis, lista, { T, S, g }, cella = null, ottava = null) {
   const t = fin.tratto, L = fin.L, attesi = n * L * L * L; if (!(attesi > 0)) return;
   let lato = cella ? cella.lato : Math.cbrt(1 / n); if (!cella && Math.pow(L / lato + 1, 3) > POPOLAZIONI.massimo) lato = L / (Math.cbrt(POPOLAZIONI.massimo) - 1);
   const media = n * lato ** 3, i0 = cella ? cella.i : Math.floor(fin.x0 / lato), i1 = cella ? cella.i : Math.floor((fin.x0 + L) / lato), j0 = cella ? cella.j : Math.floor(fin.y0 / lato), j1 = cella ? cella.j : Math.floor((fin.y0 + L) / lato), k0 = cella ? cella.kz : 0, k1 = cella ? cella.kz : Math.floor(L / lato);
   for (let kz = k0; kz <= k1; kz++) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-    const r = generatore(t.caso.seme(`classe ${cl.tipo} ${cl.materiale} ${dVis.toExponential(2)}/cella ${lato.toExponential(3)}/${i},${j},${kz}`)), quante = poisson(r, media);
+    const r = generatore(t.caso.seme(ottava ? `classe ${cl.tipo} ${cl.materiale}/ottava ${ottava.b}/cella ${lato.toExponential(3)}/${i},${j},${kz}` : `classe ${cl.tipo} ${cl.materiale} ${dVis.toExponential(2)}/cella ${lato.toExponential(3)}/${i},${j},${kz}`)), quante = poisson(r, media);
     for (let q = 0; q < quante; q++) { const x = (i + r()) * lato, y = (j + r()) * lato, z = (kz + r()) * lato, u = r(), ang = r(); if (x < fin.x0 || x >= fin.x0 + L || y < fin.y0 || y >= fin.y0 + L || z >= L) continue;
-      const d = legge.estrai(u, dVis), cade = cl.tipo === 'bolla' ? Math.max(0, -stokes(d, 1.2, T, S, g)) : cl.tipo === 'granello' || cl.tipo === 'fiocco' || cl.tipo === 'cristallo' ? -Math.max(0, stokes(d, legge.rho ? legge.rho(d) : cl.rho || DATI.densitaGrani, T, S, g)) : 0;
+      const d = ottava ? legge.estraiTra(u, ottava.lo, ottava.hi) : legge.estrai(u, dVis); if (d < dVis) continue; const cade = cl.tipo === 'bolla' ? Math.max(0, -stokes(d, 1.2, T, S, g)) : cl.tipo === 'granello' || cl.tipo === 'fiocco' || cl.tipo === 'cristallo' ? -Math.max(0, stokes(d, legge.rho ? legge.rho(d) : cl.rho || DATI.densitaGrani, T, S, g)) : 0;
       lista.push({ tipo: cl.tipo, materiale: cl.materiale, forma: formaDi(cl), colore: cl.colore || COLORI[cl.materiale] || [200, 200, 200], d, x: (x - fin.x0) / L, y: (y - fin.y0) / L, z: z / L, angolo: ang * Math.PI, vz: cade, sottoSchiuma: cl.tipo === 'bolla', primarie: legge.primarie ? legge.primarie(d) : 0 }); } }
 }
 function genera2D(fin, nA, dVis, legge, lista, cella = null) {
@@ -430,8 +450,8 @@ function genera2D(fin, nA, dVis, legge, lista, cella = null) {
     for (let q = 0; q < quante; q++) { const x = (i + r()) * lato, y = (j + r()) * lato, d = legge.estrai(r(), dVis); if (x < fin.x0 || x >= fin.x0 + L || y < fin.y0 || y >= fin.y0 + L) continue;
       lista.push({ tipo: 'bolla', materiale: 'schiuma', forma: 'bolla', colore: COLORI.bolla, d, x: (x - fin.x0) / L, y: (y - fin.y0) / L, z: 0, angolo: 0, vz: 0, sottoSchiuma: true, zattera: true }); } }
 }
-const formaDi = (cl) => (cl.tipo === 'bolla' ? 'bolla' : cl.tipo === 'fiocco' ? 'fiocco' : cl.materiale === 'argilla' || cl.materiale === 'colloide' ? 'lamella' : cl.materiale === 'salgemma' ? 'cubo' : cl.materiale === 'calcite' ? 'rombo' : cl.materiale === 'gesso' || cl.materiale === 'soda' ? 'ago' : cl.materiale === 'ghiaccio' ? 'esagono' : 'granello');
-const COLORI = { bolla: [226, 240, 250], schiuma: [246, 248, 250], sabbia: [214, 200, 172], limo: [176, 160, 136], argilla: [150, 124, 100], fiocco: [136, 116, 98], colloide: [160, 140, 120] };
+const formaDi = (cl) => (cl.tipo === 'bolla' ? 'bolla' : cl.tipo === 'fiocco' || cl.materiale === 'aggregato' ? 'fiocco' : cl.materiale === 'argilla' || cl.materiale === 'colloide' ? 'lamella' : cl.materiale === 'salgemma' ? 'cubo' : cl.materiale === 'calcite' ? 'rombo' : cl.materiale === 'gesso' || cl.materiale === 'soda' ? 'ago' : cl.materiale === 'ghiaccio' ? 'esagono' : 'granello');
+const COLORI = { bolla: [226, 240, 250], schiuma: [246, 248, 250], sabbia: [214, 200, 172], limo: [176, 160, 136], argilla: [150, 124, 100], fiocco: [136, 116, 98], colloide: [160, 140, 120], polvere: [180, 150, 120], aggregato: [150, 125, 100] };
 
 // I GAS D'UNA BOLLA di raggio a a profondità z: dentro c'è il vapore alla pressione di saturazione dell'acqua di lì e il resto
 // nelle proporzioni dell'aria di quel pianeta (stato.aria), alla pressione dell'aria + quella dell'acqua sopra + quella di
@@ -459,14 +479,18 @@ function taglie(fin, cl, camp) {
     else filtro = (d) => 1 / ws(d);
     return conMassa(tabulata(`Wentworth ${cl.materiale}: sorgente di Sheldon (d⁻⁴) × ${f ? 'pennacchio del fiume e^(−x·w_s/(v·h))' : 'strato rimescolato a regime h/w_s'}`, a, b, (d) => Math.pow(d, -4) * filtro(d)));
   }
+  if (cl.tipo === 'granello' && cl.materiale === 'polvere') { // la polvere del vento: il flusso che cade (lognormale) diviso la sua velocità di Stokes (mare.js polvereSospesa)
+    const ps = polvereSospesa(1, T, S, g, DATI.mescola / Math.max(1, fin.stato.termoclino || 1)); return conMassa(tabulata('polvere del vento: lognormale di Mahowald 2014 (2,5 µm, σg 2) nel flusso, a regime nello strato C(d) = F(d)/(w_s(d) + w_m)', 1e-7, 1e-4, ps.legge)); }
   if (cl.tipo === 'fiocco') { // la scala di Kolmogorov dello strato (ε a metà dello strato rimescolato: legge di parete, u*³/(κ·z)) e la densità frattale
     const z = DATI.strato / 2, eps = Math.max(1e-12, P.ustarAcqua ** 3 / (0.41 * z)), eta = Math.pow(P.nu ** 3 / eps, 0.25), Dp = DATI.taglie.argilla, nf = 2;
     const D0 = Math.max(Dp, eta), rhoF = (d) => 1000 + (DATI.densitaGrani - 1000) * Math.pow(Math.max(d, Dp) / Dp, nf - 3);
     const L = tabulata(`fiocchi frattali (n_f = 2, Kranenburg 1994) grandi quanto la scala di Kolmogorov η = (ν³/ε)^¼ = ${(eta * 1e6).toFixed(0)} µm (Winterwerp 1998)`, Dp * 2, 4 * D0, (d) => Math.exp(-((Math.log(d / D0)) ** 2) / (2 * 0.5 * 0.5)) / d);
     L.rho = rhoF; L.kolmogorov = eta; L.primarie = (d) => Math.round(Math.pow(d / Dp, nf)); return conMassa(L, (d) => rhoF(d) - 1000);
   }
-  // il resto (colloidi, cristalli): la taglia di mare.js, con la sua dispersione dichiarata lì
+  // il resto (colloidi, cristalli, gli aggregati di polvere): la taglia di mare.js, con la sua dispersione dichiarata lì (gli
+  // aggregati sono granelli: con la loro massa, come la sabbia e la polvere)
   const s = cl.tipo === 'colloide' ? 0.35 : 0.3, d0 = cl.diametroM;
+  if (cl.materiale === 'aggregato') return conMassa(tabulata(`coppie di granelli di polvere: la taglia di mare.js (${(d0 * 1e6).toPrecision(2)} µm), lognormale ${s}`, d0 * Math.exp(-4 * s), d0 * Math.exp(4 * s), (d) => Math.exp(-((Math.log(d / d0)) ** 2) / (2 * s * s)) / d));
   return tabulata(`la taglia di mare.js (${(d0 * 1e6).toPrecision(2)} µm), lognormale ${s}`, d0 * Math.exp(-4 * s), d0 * Math.exp(4 * s), (d) => Math.exp(-((Math.log(d / d0)) ** 2) / (2 * s * s)) / d);
 }
 // LE BOLLE (Deane e Stokes 2002): numero per raggio ∝ a^−3/2 sotto la scala di Hinze a_H, ∝ a^−10/3 sopra. a_H: il loro 1 mm
@@ -487,7 +511,7 @@ function tabulata(nome, a, b, f) {
   for (let i = 0; i < n; i++) { d[i] = a * Math.pow(b / a, i / (n - 1)); const w = f(d[i]) * d[i]; c[i] = s; s += i < n - 1 ? w : 0; m += i < n - 1 ? w * d[i] : 0; m2 += i < n - 1 ? w * Math.PI * d[i] * d[i] / 4 : 0; }
   const cdf = (x) => { if (x <= a) return 0; if (x >= b) return 1; const u = (Math.log(x / a) / Math.log(b / a)) * (n - 1), i = Math.floor(u); return (c[i] + (c[Math.min(n - 1, i + 1)] - c[i]) * (u - i)) / s; };
   const inv = (p) => { let lo = 0, hi = n - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (c[mid] / s < p) lo = mid; else hi = mid; } const p0 = c[lo] / s, p1 = c[hi] / s, u = p1 > p0 ? (p - p0) / (p1 - p0) : 0; return d[lo] * Math.pow(d[hi] / d[lo], u); };
-  return { nome, dMin: a, dMax: b, medio: m / s, areaMedia: m2 / s, parteSopra: (x) => 1 - cdf(x), estrai: (u, dv = a) => { const p0 = cdf(dv); return inv(p0 + u * (1 - p0)); },
+  return { nome, dMin: a, dMax: b, medio: m / s, areaMedia: m2 / s, parteSopra: (x) => 1 - cdf(x), estrai: (u, dv = a) => { const p0 = cdf(dv); return inv(p0 + u * (1 - p0)); }, estraiTra: (u, lo, hi) => { const p0 = cdf(lo), p1 = cdf(hi); return inv(p0 + u * (p1 - p0)); },
     // la media di g(d) sopra una taglia (quadratura sulla cumulata: 4000 punti)
     media: (g, dv = a) => { const p0 = cdf(dv); let q = 0; for (let i = 0; i < 4000; i++) q += g(inv(p0 + ((i + 0.5) / 4000) * (1 - p0))); return q / 4000; } };
 }
@@ -507,6 +531,8 @@ export function immagineFinestra(fin, tempo = 0, { onde = null } = {}) {
   const G = onde || ondeFinestra(fin, tempo); const s = fin.sole, sd = s.dir, Sx = fin.sotto.xx, Sy = fin.sotto.yy, Sxy = fin.sotto.xy, det = Math.max(1e-12, Sx * Sy - Sxy * Sxy);
   const soglia = fin.tratto.sogliaSchiuma, h = fin.h, fresnel = (c) => { const u = 1 - limita(c, 0, 1), u2 = u * u; return F0 + (1 - F0) * u2 * u2 * u; };
   const pend = new Float32Array(2 * N * N), schiuma = new Uint8Array(N * N), lin = new Float32Array(3 * N * N), cielo = cieloDi(fin);
+  // (le scintille: il lampo di ogni punto, e quanti punti speculari per m² lo fanno — la densità delle pendenze senza il disco della stella)
+  const sc = fin.scintille, lampi = sc ? new Float32Array(N * N) : null, dens = sc ? new Float32Array(N * N) : null, P0 = sc?.pend, det0 = P0 ? Math.max(1e-12, P0.xx * P0.yy - P0.xy * P0.xy) : 1;
   // L'OCCHIO: sopra il centro, all'altezza da cui la finestra riempie lo schermo (come nel 3D: tan(fov/2) = 0,375 rad di
   // nucleo.js), così ogni punto si guarda da una direzione sua (la prospettiva: verso i bordi il cielo riflesso cambia)
   const Hocchio = fin.L / (2 * Math.tan(fin.occhio ?? 0.375)), muS = Math.max(0.02, sd[2]), q2 = 1 / (2 * det), kG = 1 / (DUE_PI * Math.sqrt(det));
@@ -523,15 +549,22 @@ export function immagineFinestra(fin, tempo = 0, { onde = null } = {}) {
     // il cielo riflesso nella direzione speculare r = 2(n·e)n − e (e = verso l'occhio, in alto)
     const rx = 2 * cv * nx - ex, ry = 2 * cv * ny - ey, rz = 2 * cv * nz - ez;
     for (let c = 0; c < 3; c++) { let R = (Rw[c] * (1 - Fv)) / (1 - F0) + Fv * cielo(c, rx, ry, rz) + lampo; if (foam) R = SCHIUMA; lin[3 * o + c] = R; }
+    if (lampi && !foam && lampo > 0) { lampi[o] = lampo; dens[o] = hz > 0 ? (sc.detH / (DUE_PI * Math.sqrt(det0))) * Math.exp(-(P0.yy * dx * dx - 2 * P0.xy * dx * dy + P0.xx * dy * dy) / (2 * det0)) : 0; }
   }
+  // la stessa finestra senza il lampo (per chi la guarda più da vicino delle scintille: mappa.js le mette una per una)
+  const linS = lampi ? lin.slice() : null; if (linS) for (let o = 0; o < N * N; o++) if (lampi[o] > 0) for (let c = 0; c < 3; c++) linS[3 * o + c] -= lampi[o];
   // le particelle, viste attraverso la superficie: spostate dalla rifrazione (di z·(1 − 1/n)·pendenza), attenuate dall'acqua sopra
-  disegnaParticelle(fin, fin.popolazioni.particelle, lin, pend, schiuma, tempo);
-  // (si vede la schiuma, cioè la zattera di bolle in superficie: le bolle del pennacchio stanno sotto di lei, nascoste)
-  disegnaParticelle(fin, bolleSottoSchiuma(fin, schiuma, { pennacchio: false }), lin, pend, schiuma, tempo);
-  const kc = [0, 1, 2].map((c) => ESPOSIZIONE * luce[c] * (GAMMA.length - 1));
-  for (let o = 0; o < N * N; o++) for (let c = 0; c < 3; c++) { const v = lin[3 * o + c] * kc[c]; px[4 * o + c] = v >= GAMMA.length - 1 ? 255 : GAMMA[v > 0 ? v | 0 : 0]; }
-  for (let o = 0; o < N * N; o++) px[4 * o + 3] = 255;
+  const bolle = bolleSottoSchiuma(fin, schiuma, { pennacchio: false });
+  for (const L of linS ? [lin, linS] : [lin]) {
+    disegnaParticelle(fin, fin.popolazioni.particelle, L, pend, schiuma, tempo);
+    // (si vede la schiuma, cioè la zattera di bolle in superficie: le bolle del pennacchio stanno sotto di lei, nascoste)
+    disegnaParticelle(fin, bolle, L, pend, schiuma, tempo);
+  }
+  const kc = [0, 1, 2].map((c) => ESPOSIZIONE * luce[c] * (GAMMA.length - 1)), inPx = (L, out) => { for (let o = 0; o < N * N; o++) { for (let c = 0; c < 3; c++) { const v = L[3 * o + c] * kc[c]; out[4 * o + c] = v >= GAMMA.length - 1 ? 255 : GAMMA[v > 0 ? v | 0 : 0]; } out[4 * o + 3] = 255; } return out; };
+  inPx(lin, px);
   fin.ultima = { schiuma: schiuma.reduce((a, b) => a + b, 0) / (N * N), tempo };
+  // (le scintille: l'immagine senza lampo, il lampo e la densità dei punti speculari, e come il lampo diventa colore: ×E·luce, poi 1/2,2)
+  if (lampi) fin.ultima.scintille = { senza: inPx(linS, new Uint8ClampedArray(N * N * 4)), lampi, dens, esposizione: [0, 1, 2].map((c) => ESPOSIZIONE * luce[c]), N, L: fin.L };
   return px;
 }
 // IL CIELO che la superficie riflette: un'aria piana di Rayleigh a diffusione semplice (Chandrasekhar 1950; la radianza
@@ -614,6 +647,13 @@ function descrivi(fin) {
 // scatola neutra (la lunghezza di Debye dell'acqua di mare è 0,3 nm: in pochi nanometri la carica non fluttua; campioniNeutri); ognuno al posto di
 // una molecola, con le vicine del primo guscio girate verso di lui (l'ossigeno verso un catione, un idrogeno verso un anione).
 // → la stessa forma di scena di mare.js scenaMolecolare (atomi, legami, legamiH, scatola, parti, etichette, agitazione)
+// IL RAGGIO DI OGNI SFERA: dove la densità elettronica dell'atomo (o dello ione: la sua carica di qui sotto) scende a 0,001
+// e/a₀³ (quanti.js densitaAtomo: regole di Slater 1930; la superficie di Bader e altri 1987), in nm. Prima: i raggi di van der
+// Waals e ionici scelti da tabella
+const CARICA_IONE = { Na: 1, K: 1, Mg: 2, Ca: 2, Fe: 2, Cl: -1 }, raggiFatti = {};
+const raggioIso = (el) => (raggiFatti[el] ??= densitaAtomo(ELEMENTO[el][0], CARICA_IONE[el] || 0).rIso() * 0.0529177210903);
+// (i colori convenzionali degli elementi, quelli dei modelli CPK/Jmol, per gli ioni)
+const COLORI_ELEMENTI = { 1: [255, 255, 255], 6: [144, 144, 144], 7: [48, 80, 248], 8: [255, 13, 13], 11: [171, 92, 242], 12: [138, 255, 0], 16: [255, 255, 48], 17: [31, 240, 31], 18: [128, 209, 227], 19: [143, 64, 212], 20: [61, 255, 0], 26: [224, 102, 51] };
 const ELEMENTO = { H: [1, 0.11], C: [6, 0.17], N: [7, 0.155], O: [8, 0.152], Na: [11, 0.102], Mg: [12, 0.072], S: [16, 0.18], Cl: [17, 0.181], K: [19, 0.138], Ca: [20, 0.1], Fe: [26, 0.078], Ar: [18, 0.188] };
 const SIMBOLI = { 'Na+': 'Na', 'K+': 'K', 'Mg2+': 'Mg', 'Ca2+': 'Ca', 'Fe2+': 'Fe', 'Cl-': 'Cl' };
 let modello = null;
@@ -663,7 +703,7 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
   const gas = {}; for (const f in camp.gas || {}) gas[f] = poisson(r, camp.gas[f].perM3 * V);
   // --- ogni ione al posto di una molecola (scelta per evento), via le molecole troppo vicine ai suoi atomi
   const via = new Uint8Array(NS), versoIone = new Float64Array(3 * NS), segnoIone = new Int8Array(NS), P = [], Rr = [], El = [], legami = [], legamiH = [], parti = [], etichette = [];
-  const metti = (el, x, y, z) => { P.push(x, y, z); Rr.push(ELEMENTO[el][1]); El.push(ELEMENTO[el][0]); return El.length - 1; }, parte = (nome, da, extra = {}) => { if (El.length > da) parti.push({ nome, da, a: El.length, ...extra }); };
+  const metti = (el, x, y, z) => { P.push(x, y, z); Rr.push(raggioIso(el)); El.push(ELEMENTO[el][0]); return El.length - 1; }, parte = (nome, da, extra = {}) => { if (El.length > da) parti.push({ nome, da, a: El.length, ...extra }); };
   const conteggi = {}, ioniMessi = [];
   const posti = (f, numero) => { const da = El.length; let fatti = 0;
     for (let q = 0; q < numero; q++) { let n = -1; for (let p = 0; p < 60; p++) { const c = Math.floor(r() * NS); if (!via[c]) { n = c; break; } } if (n < 0) break; via[n] = 2;
@@ -706,7 +746,13 @@ export function scenaNano(stato, { lon = 0, lat = 0, latoM = 1e-8, fondoM = null
     diffusione: Object.fromEntries([['acqua', Dnm(2.3e-9 * fT)], ...Object.keys(quanti).filter((f) => IONI[f]).map((f) => [f, Dnm(IONI[f][5] * 1e-9 * fT)])]) };
   const attesi = { acqua: nW * Lb ** 3 }; for (const f in camp.ioni) attesi[f] = (camp.ioni[f].perM3 || 0) * V;
   const messi = {}; for (const f in quanti) messi[f] = (messi[f] || 0) + (conteggi[f] || 0); for (const c of coppie) { const k = conteggi[`${c.ca} ${c.an}`] || 0; messi[c.ca] = (messi[c.ca] || 0) + k; messi[c.an] = (messi[c.an] || 0) + k; }
-  return { atomi: { pos: Float32Array.from(P), raggio: Float32Array.from(Rr), elemento: Uint8Array.from(El) }, legami: Uint32Array.from(legami), legamiH: Uint32Array.from(legamiH), scatola: [Lb, Lb, Lb], unita: 'nm', parti, etichette, agitazione, conteggi, attesi,
+  // I COLORI, ALLA «ILLUSTRATE» (Goodsell e altri 2019: un colore pieno per tipo di molecola, l'ombra solo dove le sfere si
+  // toccano): l'acqua ha il colore che quest'acqua rimanda a chi la guarda (coloreMare, lo stesso delle finestre di sopra),
+  // l'ossigeno un poco più scuro e l'idrogeno più chiaro; gli ioni e il resto i colori convenzionali degli elementi. Così,
+  // avvicinandosi, le molecole escono dall'acqua del loro colore e non da un altro (mappa.js, tesseraNano: la stessa scena in piano)
+  const cAcqua = coloreMare(stato, lon, lat, { profonditaM: fondoM ?? camp.luogo?.fondoM ?? 100, acqua: true, scalaM: latoM }) || [40, 70, 100], col = new Uint8Array(3 * El.length), pa = parti.find((q) => q.nome === 'acqua');
+  for (let i = 0; i < El.length; i++) { const z = El[i], acquaI = pa && i >= pa.da && i < pa.a, c = acquaI ? cAcqua.map((v) => (z === 1 ? v + (255 - v) * 0.35 : v * 0.9)) : COLORI_ELEMENTI[z] || [200, 200, 200]; col[3 * i] = c[0]; col[3 * i + 1] = c[1]; col[3 * i + 2] = c[2]; }
+  return { atomi: { pos: Float32Array.from(P), raggio: Float32Array.from(Rr), elemento: Uint8Array.from(El), colore: col }, colora: 'auto', coloreAcqua: cAcqua, legami: Uint32Array.from(legami), legamiH: Uint32Array.from(legamiH), scatola: [Lb, Lb, Lb], unita: 'nm', parti, etichette, agitazione, conteggi, attesi,
     gusci, messi, carica: Q, aggiustati, aggiunti, classiIoni, tentativi: neutri.tentativi, condizionati: neutri.riuscito, latoNm: Lb, volumeM3: V, solido: null, campione: camp, nuclei: camp.nuclei, densitaNm3: nW, ripetizioni: rip, modello: { nome: M.nome, T: M.T, N: M.N, latoNm: M.latoNm, fonte: M.fonte },
     descrizione: `l'acqua di questo mare in un cubetto di ${Lb.toFixed(1)} nm: ${nAcqua} molecole d'acqua alla sua densità (${(nW).toFixed(2)} per nm³, struttura del liquido dal potenziale mW), ${Object.entries(conteggi).filter(([f, x]) => f !== 'acqua' && x > 0).map(([f, x]) => `${x} ${f}`).join(', ') || 'nessuno ione (in questo volume se ne aspettano meno di uno)'}; ogni ione col suo guscio d'acqua.` };
 }

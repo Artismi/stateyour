@@ -164,6 +164,22 @@ export function cristallizza({ N = 192, raffreddamento = 0.01, minerali = GRANIT
   return fine(dt);
 }
 
+// LO STESSO RISULTATO IN FORMA CHIUSA, quando servono solo i numeri (la taglia dei cristalli, quanto è cristallino, quanto vetro,
+// quanti grani): sul plateau nascita I e crescita G sono costanti, e vale Johnson-Mehl-Avrami in sezione,
+// X(t) = 1 − exp(−(π/3)·I·G²·t³), fino al tempo del vetro t_v = (1 − u)/r; i grani per cella sono quelli nati nel fuso che
+// restava, ν = ∫₀^t_v I·(1 − X) dt (Johnson e Mehl 1939; Avrami 1939). Non dipende dal quadro di N×N celle (la simulazione,
+// quando i cristalli sono più grandi del quadro, ne vede uno solo, nato fuori): il grano medio è 2·√(X/(π·ν)) celle.
+// Costa meno di un millisecondo (la simulazione 1,6–3 s). → { tipo: 'cristalli', N, minerali, granoMedio, cristallino, vetro,
+// nGrani (attesi nel quadro), sottoraffreddamento, chiusa: true }, oppure null se il fuso resta vetro (lì serve l'immagine)
+export function cristallizzaChiusa({ N = 192, raffreddamento = 0.01, minerali = GRANITO } = {}) {
+  const r = Math.max(1e-9, raffreddamento) * CRITICO, u = decollo(r), { nascita: I, crescita: G } = tammann(u);
+  if (!(G > 0) || !(I > 0)) return null;
+  const tv = (1 - u) / r, tA = Math.cbrt(3 / (Math.PI * I * G * G)), t1 = Math.min(tv, 6 * tA), n = 2000, X = (t) => 1 - Math.exp(-(Math.PI / 3) * I * G * G * t * t * t);
+  let nu = 0; for (let q = 0; q < n; q++) { const t = ((q + 0.5) / n) * t1; nu += I * (1 - X(t)) * (t1 / n); }
+  const Xv = X(tv); if (!(Xv > 1e-6) || !(nu > 0)) return null;
+  return { tipo: 'cristalli', N, minerali, granoMedio: 2 * Math.sqrt(Xv / (Math.PI * nu)), cristallino: Xv, vetro: 1 - Xv, nGrani: Math.max(1, Math.round(nu * N * N)), sottoraffreddamento: u, chiusa: true };
+}
+
 // =====================================================================================
 // 2. IL FIOCCO DI NEVE
 // =====================================================================================

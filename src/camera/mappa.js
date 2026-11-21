@@ -20,14 +20,15 @@ import { nebbiaPianeta, ACCELERA, fmtGrande } from './nebbia.js';
 import { sorgente } from './eventi.js';
 import { serie } from './eredita.js';
 import { bellezzaImmagine } from './sezione.js';
-import { cristallizza, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
+import { pesoDiscreto } from './eredita.js';
+import { cristallizza, cristallizzaChiusa, fioccoDiNeve, sedimento, immagine as immagineRoccia, GRANITO, BASALTO } from './rocce.js';
 import { superficiePianeta, immagineSuperficie, climaSuperficie, erosione, tessera, climaConIlMare } from './geologia.js';
 import { mare as mareDi, campioneAcqua, immagineAcqua, coloraMare, coloreMare, aspettoMare, luogo as luogoMare, scenaMolecolare } from './mare.js';
 import { conMoto, scenaDaElenco, periodica } from './atomi3d.js';
 import { finestraAcqua, immagineFinestra, scenaNano } from './finestra.js';
 import { chimicaDellaFinestra, luogoDellaCrosta, sistema as sistemaChimico, storia as storiaChimica, rileva } from './reazioni.js';
 import { finestraSuolo, immagineSuolo, scenaSuolo, tesseraNota, granoNelPunto } from './suolo.js';
-import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
+import { luogoDaRoccia, luogoDaAcqua, luogoDaAria, cieloRelativo, memoriaDelLuogo, aloni, tracceFossili, atomi as atomiDelReticolo, tesseraReticolo, immagineAtomi, incanalamento, cellaMateria, sorgentiNaturali, concentrazioni, RETICOLI, fmtTempo } from './materia.js';
 import { simulaMondo } from './mondo.js';
 import { campoGrani, granoGhiaccio, popolazioneTracce } from './grani.js';
 
@@ -687,7 +688,7 @@ function arrivataF(d) {
   if (d.errore) { console.warn('finestre.worker.js, si torna al filo principale:', d.errore); senzaFiliFinestre = true; for (const [q, x] of rocceFatte) if (x === A) rocceFatte.delete(q); return; }
   if (d.tipo === 'suolo' && d.nulla) { A.vuota = true; A.inVolo = false; return; }
   const nuova = telaN(d.N); nuova.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(d.px.buffer), d.N, d.N), 0, 0);
-  if (d.tipo === 'immagine') { A.inVolo = false; A.costo = (d.ms || 0) / 1000; A.ultimo = d.tempo; if (A.sfuma) A.sfuma.a = nuova; else { A.cv = nuova; A.versione = (A.versione || 0) + 1; } }
+  if (d.tipo === 'immagine') { A.inVolo = false; A.costo = (d.ms || 0) / 1000; A.ultimo = d.tempo; if (A.sfuma) A.sfuma.a = nuova; else { A.cv = nuova; A.versione = (A.versione || 0) + 1; } A.scintille = conScintille(d.scintille, A.versione); }
   else { // il figlio è arrivato: si sfuma dal padre (il segnaposto) a lui
     A.N = d.N; A.pronto = true; A.inVolo = false; A.ultimo = 0; A.costo = (d.ms || 0) / 4000; A.msFilo = d.ms; A.msAttesa = performance.now() - r.t;
     if (d.tipo === 'acqua') A.frase = d.frase; else if (d.tipo === 'suolo') A.frase = `${A.fraseBase}${d.riga || ''} (la finestra calcolata in ${Math.round(d.ms)} ms, in secondo piano)`;
@@ -752,6 +753,8 @@ export function preparaAvanti(cam) {
     else if (cam.latoSuolo !== null && cam.latoSuolo !== undefined) { const i = LATI_SUOLO.indexOf(cam.latoSuolo); for (const p of [1, 2]) { const L = LATI_SUOLO[i + cam.verso * p]; if (L) rocciaDi({ ...cam, latoSuolo: L, prepara: p }); } }
   } catch (err) { console.warn('preparaAvanti:', err); }
 }
+// i cristalli di una roccia: i cinque numeri dalla forma chiusa; se il fuso resta vetro (o quasi), la simulazione (veloce: si ferma subito)
+const cristalli = (o) => { const c = cristallizzaChiusa(o); return c ? { ...c, raffreddamento: o.raffreddamento, seme: o.seme } : cristallizza(o); };
 export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ciò che si vede in fondo allo zoom, a ogni passo
 
   const S = superficieDi(cam.via); if (!S) return null;
@@ -787,7 +790,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
     // le finestre attorno a quella di adesso (secondaria: sopra e sotto, disegnaFinestre) al più due volte al secondo e per un
     // ventesimo del tempo
     const tt = performance.now() / 1000 - A.t0, passo = cam.secondaria ? Math.max(0.5, 20 * (A.costo || 0)) : Math.max(0.05, 4 * (A.costo || 0));
-    if (tt - A.ultimo >= passo || A.ultimo < 0) { const t0 = performance.now(); A.ultimo = tt; A.cv.getContext('2d').putImageData(new ImageData(A.fin && !A.fin.asciutto ? immagineFinestra(A.fin, tt) : immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0); A.costo = (performance.now() - t0) / 1000; }
+    if (tt - A.ultimo >= passo || A.ultimo < 0) { const t0 = performance.now(); A.ultimo = tt; A.cv.getContext('2d').putImageData(new ImageData(A.fin && !A.fin.asciutto ? immagineFinestra(A.fin, tt) : immagineAcqua(A.camp, { N: A.N, t: tt }), A.N, A.N), 0, 0); A.costo = (performance.now() - t0) / 1000; A.versione = (A.versione || 0) + 1; A.scintille = conScintille(A.fin?.ultima?.tempo === tt ? A.fin.ultima.scintille : null, A.versione); }
     return A;
   }
   const bagnato = t.alt[c] < t.mare || (t.lago && t.lago[c] > 0) || (t.depositato && t.depositato[c] > 3), mat = S.se.materiali || {};
@@ -797,15 +800,18 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   const neve = cl.neve > 0 && cl.freddo[ck] > 0.6, continente = !!(t.cont && t.cont[c]), etaP = S.P.interno?.eta ?? 4.5e9;
   let r, nome, larghezzaM, frase;
   if (neve) { r = fioccoDiNeve({ T: Math.max(238, Math.min(271, T)), umidita: cl.meteo?.umidita ? Math.max(0.3, Math.min(1, cl.meteo.umidita[ck])) : 0.86 + 0.14 * ((seme % 97) / 97), seme }); nome = `un cristallo di neve (${r.forma})`; larghezzaM = 0.004; frase = 'cresciuto dal vapore: la forma a sei viene dal reticolo del ghiaccio, i rami dall\'umidità'; }
-  else if (sale) { r = cristallizza({ raffreddamento: 0.003, minerali: [{ nome: 'salgemma', frazione: 0.85, colore: [240, 236, 228], anisotropia: 0 }, { nome: 'gesso', frazione: 0.15, colore: [236, 230, 218], anisotropia: 0.6 }], seme }); nome = 'crosta di sale'; larghezzaM = 0.02; frase = 'cristalli cresciuti dalla salamoia di una conca dove l\'acqua evapora tutta: salgemma (cubi) e un po\' di gesso'; }
+  else if (sale) { r = cristalli({ raffreddamento: 0.003, minerali: [{ nome: 'salgemma', frazione: 0.85, colore: [240, 236, 228], anisotropia: 0 }, { nome: 'gesso', frazione: 0.15, colore: [236, 230, 218], anisotropia: 0.6 }], seme }); nome = 'crosta di sale'; larghezzaM = 0.02; frase = 'cristalli cresciuti dalla salamoia di una conca dove l\'acqua evapora tutta: salgemma (cubi) e un po\' di gesso'; }
   else if (bagnato) { const e = Math.max(0.05, Math.min(1, Math.log10(1 + (t.flusso[c] || 0)) / 4)); r = sedimento({ energia: e, seme }); nome = e > 0.6 ? 'ghiaia e sabbia grossa' : e > 0.3 ? 'sabbia' : 'limo'; larghezzaM = 0.02 + 0.3 * e; frase = 'granelli portati e depositati dall\'acqua: più corre, più sono grossi e mescolati'; }
-  else if (continente) { r = cristallizza({ raffreddamento: 0.003, minerali: conAnisotropia(mat.continente, GRANITO), seme }); nome = 'roccia dei continenti, a cristalli grossi'; larghezzaM = 0.04; frase = 'raffreddata lentamente in profondità: pochi cristalli, cresciuti a lungo'; }
-  else { r = cristallizza({ raffreddamento: 0.15, minerali: conAnisotropia(mat.basalto, BASALTO), seme }); nome = 'basalto, a cristalli minuti'; larghezzaM = 0.004; frase = 'lava raffreddata in fretta in superficie: tanti cristalli piccoli'; }
-  const N = r.N || Math.round(Math.sqrt(immagineRoccia(r).length / 4)), px = immagineRoccia(r);
-  // (il cristallo di neve sta SOPRA la neve: dove non c'è ghiaccio la sua immagine è trasparente, non cielo)
-  if (neve) for (let q = 0; q < N * N; q++) px[4 * q + 3] = Math.round(255 * Math.min(1, 1.5 * r.copertura[q]));
-  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N });
-  cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
+  else if (continente) { r = cristalli({ raffreddamento: 0.003, minerali: conAnisotropia(mat.continente, GRANITO), seme }); nome = 'roccia dei continenti, a cristalli grossi'; larghezzaM = 0.04; frase = 'raffreddata lentamente in profondità: pochi cristalli, cresciuti a lungo'; }
+  else { r = cristalli({ raffreddamento: 0.15, minerali: conAnisotropia(mat.basalto, BASALTO), seme }); nome = 'basalto, a cristalli minuti'; larghezzaM = 0.004; frase = 'lava raffreddata in fretta in superficie: tanti cristalli piccoli'; }
+  // L'IMMAGINE DEL CAMPIONE si fa solo se la si guarda: per la roccia a cristalli si vede il campo dei grani (grani.js), che
+  // vuole cinque numeri soli (la forma chiusa di Avrami: rocce.js cristallizzaChiusa, meno di un millisecondo); la simulazione
+  // cella per cella (1,6–3 s sul filo principale) si fa solo se qualcuno chiede l'immagine (out.cv, più sotto)
+  const faiTela = () => { const rr = r.chiusa ? cristallizza({ raffreddamento: r.raffreddamento, minerali: r.minerali, seme: r.seme }) : r, px = immagineRoccia(rr), N = rr.N || Math.round(Math.sqrt(px.length / 4));
+    // (il cristallo di neve sta SOPRA la neve: dove non c'è ghiaccio la sua immagine è trasparente, non cielo)
+    if (neve) for (let q = 0; q < N * N; q++) px[4 * q + 3] = Math.round(255 * Math.min(1, 1.5 * rr.copertura[q]));
+    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, N) : Object.assign(document.createElement('canvas'), { width: N, height: N }); c.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0); return c; };
+  const N = r.N || 192; let tela = null;
   // LA ROCCIA ATTORNO (grani.js): l'immagine è un campione dell'aggregato; attorno continua lo stesso aggregato, con la
   // stessa legge e la taglia dei grani che questa simulazione ha dato (in celle × la larghezza della cella)
   const cellaM = larghezzaM / N; let specCampo;
@@ -831,7 +837,7 @@ export function rocciaDi(cam) { // → { cv, nome, larghezzaM, frase, … }: ci�
   if (alPosto) { const x = campo.granoIn(larghezzaM / 2, larghezzaM / 2); if (x) nome = `${nome}: il grano del punto è ${x.minerale}`; }
   const mineraleIn = alPosto ? (x, y) => campo.granoIn(x * larghezzaM, y * larghezzaM)?.minerale ?? null : (x, y) => { if (r.tipo !== 'cristalli') return null; const m = r.minerale[Math.max(0, Math.min(N - 1, Math.floor(y * N))) * N + Math.max(0, Math.min(N - 1, Math.floor(x * N)))]; return m === 255 ? null : r.minerali[m]?.nome ?? null; };
   const sotto = memoria.tipo === 'alone' ? `un granello di ${memoria.granello} dentro la biotite, con il suo alone` : memoria.tipo === 'tracce' ? `le tracce di fissione in un granello di ${memoria.minerale}` : '';
-  const out = { specCampo, campo, alPosto, cv, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
+  const out = { specCampo, campo, alPosto, get cv() { return (tela ||= faiTela()); }, nome, larghezzaM, frase: `${frase}. Avvicinati ancora: dentro c'è ${memoria.tipo ? `${sotto}, poi ` : ''}la stella che il cristallo disegna con le particelle, e i suoi atomi`, luogo, memoria, mineraleIn, neve, sale: !!sale };
   out.punto = { u, v, t }; rocceFatte.set(k, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   if (!(cam.passoRoccia > 0) && cam.latoSuolo !== null) { const w = suoloDelPunto(cam, S, out, k); if (w) return w; }
   return cam.passoRoccia > 0 ? passoRoccia(cam, S, out, k) : out;
@@ -905,7 +911,9 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
   if (cam.suAcqua) {
     cam.nebbiaGrani = null; const zz = cam.z; if (!(zz > 2)) return;
     if (r0.evento) { pezzo(ctx, r0.cv, W / 2 - cam.cx * zz, H / 2 - cam.cy * zz, zz, W, H, r0.liscio); return; }
-    const F = finestreDelPunto(cam); if (F) disegnaFinestre(ctx, { W, H, px: W / 2 + (0.5 - cam.cx) * zz, py: H / 2 + (0.5 - cam.cy) * zz, pxm: zz / r0.larghezzaM, m, finestre: F });
+    const F = finestreDelPunto(cam), px = W / 2 + (0.5 - cam.cx) * zz, py = H / 2 + (0.5 - cam.cy) * zz, pxm = zz / r0.larghezzaM; if (F) disegnaFinestre(ctx, { W, H, px, py, pxm, m, finestre: F });
+    // le molecole che escono dall'acqua (tesseraNano): dal micron in giù, secondo quanto è grande una molecola sullo schermo
+    if ((cam.latoAcqua ?? 1) <= 1.0001e-6) molecoleInPiano(ctx, cam, r0, px, py, pxm, W, H);
     return;
   }
   if (r0.suolo) { // (il suolo: le finestre una dentro l'altra; nell'ultima, nel punto guardato, il primo livello della roccia sotto, alla sua grandezza)
@@ -938,13 +946,22 @@ function disegnaRoccia(ctx, W, H, cam, dpr) {
   // condizioni periodiche, e la sua copia del punto sta al centro)
   if (a > 0) { const r = img(seq[i + 1]); if (r) { ctx.globalAlpha = a; if (r.passo === 3 || r.passo === 4) periodico(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); else pezzo(ctx, r.cv, cx - zz / 2, cy - zz / 2, zz, W, H, r.liscio); ctx.globalAlpha = 1; } }
 }
-// un campione che si ripete oltre i suoi lati (condizioni periodiche): si disegnano solo le copie che toccano lo schermo
+// un campione che si ripete oltre i suoi lati (condizioni periodiche): si disegnano solo le copie che toccano lo schermo.
+// (ox, oy, zz): il quadrato di lato zz in cui sta il campione; la tessera (cv.width × cv.height pixel, alta zz·altezza/larghezza)
+// ha il centro nel centro del quadrato, e ogni fila è spostata sulla precedente di cv.scarto (in frazioni della larghezza):
+// materia.js atomi, la tessera del reticolo
 function periodico(ctx, cv, ox, oy, zz, W, H, liscio) {
-  if (!(zz > 0.5)) return; const i0 = Math.floor(-ox / zz), i1 = Math.floor((W - ox) / zz), j0 = Math.floor(-oy / zz), j1 = Math.floor((H - oy) / zz);
-  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 64 && typeof DOMMatrix !== 'undefined') { // (tante copie: un motivo solo, che si ripete)
-    const N = cv.width, m = ctx.createPattern(cv, 'repeat'); m.setTransform(new DOMMatrix([zz / N, 0, 0, zz / N, ox, oy])); ctx.imageSmoothingEnabled = !!liscio; ctx.fillStyle = m; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingEnabled = true; return;
+  if (!(zz > 0.5)) return; const zh = (zz * cv.height) / cv.width, sf = (cv.scarto || 0) * zz, X0 = ox, Y0 = oy + zz / 2 - zh / 2;
+  const j0 = Math.floor(-Y0 / zh), j1 = Math.floor((H - Y0) / zh), file = j1 - j0 + 1, perFila = Math.ceil(W / zz) + 1;
+  ctx.imageSmoothingEnabled = !!liscio;
+  if (file * perFila > 64 && typeof DOMMatrix !== 'undefined') { // (tante copie: un motivo solo, che si ripete, fila per fila; sotto i due pixel la fila è il motivo)
+    const m = ctx.createPattern(cv, 'repeat'); ctx.fillStyle = m;
+    if (zh < 2 || file > 400) { m.setTransform(new DOMMatrix([zz / cv.width, 0, 0, zh / cv.height, X0, Y0])); ctx.fillRect(0, 0, W, H); }
+    else for (let j = j0; j <= j1; j++) { const y = Y0 + j * zh; m.setTransform(new DOMMatrix([zz / cv.width, 0, 0, zh / cv.height, X0 + j * sf, y])); ctx.fillRect(0, Math.max(0, y), W, Math.min(H, y + zh) - Math.max(0, y)); }
+    ctx.imageSmoothingEnabled = true; return;
   }
-  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(ctx, cv, ox + i * zz, oy + j * zz, zz, W, H, liscio);
+  for (let j = j0; j <= j1; j++) { const xr = X0 + j * sf, i0 = Math.floor(-xr / zz), i1 = Math.floor((W - xr) / zz); for (let i = i0; i <= i1; i++) ctx.drawImage(cv, xr + i * zz, Y0 + j * zh, zz, zh); }
+  ctx.imageSmoothingEnabled = true;
 }
 // ---------- LE FINESTRE UNA DENTRO L'ALTRA (l'acqua e il suolo, di dieci in dieci): ogni finestra si fonde con quella sopra.
 // Quanto si vede una finestra lo dice solo la sua grandezza a schermo (non il tempo, non quale finestra è «quella di adesso»):
@@ -967,22 +984,56 @@ function mascheraBordo(N) {
   c.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0); maschere.set(N, c); return c;
 }
 // la copia sfumata dell'immagine di una finestra (rifatta solo quando l'immagine cambia: l'acqua si ridisegna col tempo)
-function sfumata(r) {
-  const N = r.cv.width, quando = `${r.ultimo ?? 0}|${r.versione ?? 0}`; if (r.sfumata && r.sfumata.width === N && r.sfumataDi === quando) return r.sfumata;
-  const s = r.sfumata && r.sfumata.width === N ? r.sfumata : telaN(N), x = s.getContext('2d');
-  x.globalCompositeOperation = 'copy'; x.drawImage(r.cv, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mascheraBordo(N), 0, 0); x.globalCompositeOperation = 'source-over';
-  r.sfumata = s; r.sfumataDi = quando; return s;
+function sfumata(r, senza = false) {
+  const cv = senza ? r.scintille.cv : r.cv, chi = senza ? 'sfumataSenza' : 'sfumata', N = cv.width, quando = `${r.ultimo ?? 0}|${r.versione ?? 0}`; if (r[chi] && r[chi].width === N && r[chi + 'Di'] === quando) return r[chi];
+  const s = r[chi] && r[chi].width === N ? r[chi] : telaN(N), x = s.getContext('2d');
+  x.globalCompositeOperation = 'copy'; x.drawImage(cv, 0, 0); x.globalCompositeOperation = 'destination-in'; x.drawImage(mascheraBordo(N), 0, 0); x.globalCompositeOperation = 'source-over';
+  r[chi] = s; r[chi + 'Di'] = quando; return s;
 }
 // il mosaico senza cuciture di una finestra larga s pixel, con la copia del punto centrata in (px, py), su una tela grande
 // quanto lo schermo (riusata)
+// (oltre 900 copie la finestra è larga pochi pixel: il motivo semplice che si ripete, senza la sfumatura, la cui cucitura
+// è più piccola di un pixel; prima la tela restava vuota)
 let telaMosaico = null;
-function mosaico(r, s, px, py, W, H) {
+const copieMosaico = (N, s, px, py, W, H) => { const P = (s * (N - fasciaDi(N))) / N, i0 = Math.floor((-px - s / 2) / P), i1 = Math.ceil((W - px + s / 2) / P), j0 = Math.floor((-py - s / 2) / P), j1 = Math.ceil((H - py + s / 2) / P); return { P, i0, i1, j0, j1, n: (i1 - i0 + 1) * (j1 - j0 + 1) }; };
+function mosaico(r, s, px, py, W, H, senza = false) {
   if (!telaMosaico || telaMosaico.width !== W || telaMosaico.height !== H) telaMosaico = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
-  const x = telaMosaico.getContext('2d'), N = r.cv.width, P = (s * (N - fasciaDi(N))) / N, img = sfumata(r);
-  x.globalCompositeOperation = 'copy'; x.clearRect(0, 0, W, H); x.globalCompositeOperation = 'lighter';
-  const i0 = Math.floor((-px - s / 2) / P), i1 = Math.ceil((W - px + s / 2) / P), j0 = Math.floor((-py - s / 2) / P), j1 = Math.ceil((H - py + s / 2) / P);
-  if ((i1 - i0 + 1) * (j1 - j0 + 1) <= 900) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(x, img, px + i * P - s / 2, py + j * P - s / 2, s, W, H, r.liscio);
+  const x = telaMosaico.getContext('2d'), cv = senza ? r.scintille.cv : r.cv, N = cv.width, { P, i0, i1, j0, j1, n } = copieMosaico(N, s, px, py, W, H);
+  x.globalCompositeOperation = 'copy'; x.clearRect(0, 0, W, H);
+  if (n > 900 && typeof DOMMatrix !== 'undefined') { const m = x.createPattern(cv, 'repeat'); m.setTransform(new DOMMatrix([P / N, 0, 0, P / N, px - s / 2, py - s / 2])); x.globalCompositeOperation = 'source-over'; x.fillStyle = m; x.fillRect(0, 0, W, H); return telaMosaico; }
+  const img = sfumata(r, senza); x.globalCompositeOperation = 'lighter';
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pezzo(x, img, px + i * P - s / 2, py + j * P - s / 2, s, W, H, r.liscio);
   x.globalCompositeOperation = 'source-over'; return telaMosaico;
+}
+// ---------- LE SCINTILLE (finestra.js, fin.scintille): il riflesso della stella in un punto della finestra è la media dei punti
+// speculari delle onde più piccole del punto; se ne conoscono la luce (il lampo) e quanti sono per m² (Longuet-Higgins 1960).
+// DISCRETO SOPRA IL PIXEL, CONTINUO SOTTO (eredita.js, pesoDiscreto): quando la distanza tra i punti speculari (1/√n) è più
+// grande del pixel la luce del lampo si vede come punti staccati, ognuno con la sua parte (lampo/(n·area del pixel)); quando è
+// più piccola, come la media (l'immagine col lampo); attorno alla soglia, su un'ottava, i due pesi sommano a uno. I punti hanno
+// l'indirizzo del punto della finestra, della copia e dell'immagine (cambiano quando il mare si muove).
+function conScintille(sc, versione) {
+  if (!sc || !sc.senza) return null; const N = sc.N, cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(sc.senza.buffer, sc.senza.byteOffset, N * N * 4), N, N), 0, 0);
+  let nMax = 0; for (let o = 0; o < N * N; o++) if (sc.dens[o] > nMax && sc.lampi[o] > 0) nMax = sc.dens[o];
+  return { cv, lampi: sc.lampi, dens: sc.dens, esposizione: sc.esposizione, N, L: sc.L, nMax, versione };
+}
+const pesoMedia = (sc, s) => (sc && sc.nMax > 0 ? 1 - pesoDiscreto(1 / Math.sqrt(sc.nMax) / (sc.L / s)) : 1); // (eredita.js: la distanza tra le scintille contro il pixel)
+let telaScintille = null, pxScintille = null;
+const hashS = (a, b, c, d) => { let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35) ^ Math.imul(c + 0x165667b1, 0x27d4eb2f) ^ Math.imul(d, 0x61c88647); return () => { h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39); h ^= h >>> 15; return (h >>> 0) / 4294967296; }; };
+function scintille(ctx, r, s, px, py, W, H, copie, peso) {
+  const sc = r.scintille, N = sc.N, h = sc.L / N, Apx = (sc.L / s) ** 2, k = s / N, f = fasciaDi(N), maschera = !copie;
+  if (!telaScintille || telaScintille.width !== W || telaScintille.height !== H) { telaScintille = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H }); pxScintille = new ImageData(W, H); }
+  const d = pxScintille.data; d.fill(0); let tot = 0; const TETTO = 60000, liscio = (x) => { const t = Math.max(0, Math.min(1, x / f)); return t * t * (3 - 2 * t); };
+  const C = copie || { P: s, i0: 0, i1: 0, j0: 0, j1: 0 };
+  for (let cj = C.j0; cj <= C.j1 && tot < TETTO; cj++) for (let ci = C.i0; ci <= C.i1 && tot < TETTO; ci++) {
+    const X0 = px + ci * C.P - s / 2, Y0 = py + cj * C.P - s / 2, a0 = Math.max(copie ? Math.floor(f / 2) : 0, Math.floor(-X0 / k)), a1 = Math.min(copie ? N - Math.ceil(f / 2) : N, Math.ceil((W - X0) / k)), b0 = Math.max(copie ? Math.floor(f / 2) : 0, Math.floor(-Y0 / k)), b1 = Math.min(copie ? N - Math.ceil(f / 2) : N, Math.ceil((H - Y0) / k));
+    for (let j = b0; j < b1; j++) for (let i = a0; i < a1; i++) { const o = j * N + i, n = sc.dens[o], g = sc.lampi[o]; if (!(n > 0 && g > 0)) continue;
+      const w = peso * (maschera ? liscio(Math.min(i + 0.5, N - i - 0.5)) * liscio(Math.min(j + 0.5, N - j - 0.5)) : 1), mu = n * h * h * w; if (!(mu > 1e-4)) continue;
+      const R = hashS(o, ci, cj, sc.versione | 0); let q = 0; for (let L = Math.exp(-Math.min(mu, 50)), p = R(); p > L && q < 64; q++) p *= R(); if (mu > 50) q = Math.round(mu); // (Poisson)
+      const v = g / (n * Apx);
+      for (let t = 0; t < q; t++) { const x = (X0 + (i + R()) * k) | 0, y = (Y0 + (j + R()) * k) | 0; if (x < 0 || y < 0 || x >= W || y >= H) continue; const z = 4 * (y * W + x);
+        for (let c = 0; c < 3; c++) d[z + c] = Math.min(255, d[z + c] + 255 * Math.pow(Math.min(1, v * sc.esposizione[c]), 1 / 2.2)); d[z + 3] = 255; tot++; } }
+  }
+  telaScintille.getContext('2d').putImageData(pxScintille, 0, 0); ctx.drawImage(telaScintille, 0, 0);
 }
 // le finestre [{ L (metri), r (rocciaDi) }], dalla più grande, centrate nel punto (px, py) dello schermo, a pxm pixel per metro.
 // fondo: la più grande sta sotto a tutto, piena; se no anche lei si fonde secondo la sua grandezza (sopra il 3D).
@@ -992,7 +1043,14 @@ export function disegnaFinestre(ctx, { W, H, px, py, pxm, m, finestre, fondo = t
     const s = f.L * pxm, a = q === 0 && fondo ? 1 : alfaFinestra(s, m) * peso; if (!(a > 0) || !(s > 2)) return; const r = f.r; if (!r?.cv) return;
     // (si ripetono la finestra che fa da fondo e quelle del suolo; quelle dell'acqua stanno una volta sola nel punto, sfumate:
     // ripetute mostrerebbero a righe ciò che dentro la finestra cambia da un lato all'altro, il riflesso della stella)
-    ctx.globalAlpha = a; if ((q === 0 && fondo) || r.suolo) ctx.drawImage(mosaico(r, s, px, py, W, H), 0, 0); else pezzo(ctx, sfumata(r), px - s / 2, py - s / 2, s, W, H, r.liscio); ctx.globalAlpha = 1;
+    // (le scintille solo quando un punto della finestra è almeno un pixel dello schermo: più piccolo, il lampo resta la media del
+    // punto della finestra — una semplificazione dichiarata: lì i punti speculari stanno sotto il pixel della finestra e, se radi,
+    // sarebbero ancora punti staccati, ma contarli punto per punto costerebbe una passata su tutta la finestra a ogni immagine)
+    const tutto = (q === 0 && fondo) || r.suolo, copie = tutto && r.scintille ? copieMosaico(r.scintille.N, s, px, py, W, H) : null, w = r.scintille && s >= r.scintille.N && !(copie && copie.n > 900) ? pesoMedia(r.scintille, s) : 1, disegna = (senza, al) => { ctx.globalAlpha = al; if (tutto) ctx.drawImage(mosaico(r, s, px, py, W, H, senza), 0, 0); else pezzo(ctx, sfumata(r, senza), px - s / 2, py - s / 2, s, W, H, r.liscio); };
+    // (più vicino delle scintille: l'immagine senza lampo, e il lampo in punti; più lontano: l'immagine col lampo, la media)
+    if (w < 1) { disegna(true, a); if (w > 0) disegna(false, a * w); ctx.globalAlpha = 1; scintille(ctx, r, s, px, py, W, H, copie, a * (1 - w)); }
+    else disegna(false, a);
+    ctx.globalAlpha = 1;
   });
 }
 // I GRANI ATTORNO AL PUNTO (grani.js): l'aggregato di cui il campione è un pezzo, con lo zero nell'angolo del campione e
@@ -1038,9 +1096,12 @@ function passoRoccia(cam, S, base, k) {
   const L = base.luogo, mem = base.memoria, passo = cam.passoRoccia === 1 && !mem.tipo ? 2 : cam.passoRoccia;
   // il minerale in cui si scende: quello che si aveva sotto gli occhi, se la sua cella è nota; se no il più abbondante che lo sia
   const noto = (n) => n && RETICOLI[n], minerale = L.tipo === 'ghiaccio' ? 'ghiaccio d\'acqua' : noto(cam.mineraleRoccia) ? cam.mineraleRoccia : (L.minerali.find((m) => noto(m.nome)) || { nome: 'quarzo' }).nome;
-  const kk = `${k}|passo ${passo}|${passo === 1 ? mem.tipo : minerale}`; if (rocceFatte.has(kk)) return rocceFatte.get(kk);
+  // (gli atomi di tre nanometri sono un pezzo del reticolo di trenta proprio dove li si guarda: il loro centro è l'ancora
+  // dentro i trenta nanometri, in metri dall'origine del reticolo; gli atomi sono gli stessi, con la stessa istantanea)
+  const L4 = passo === 3 ? latoPasso(cam, 4) : null, b4 = passo === 3 && L4 ? cam.ancore?.[4] : null, centroM = b4 ? [(b4[0] - 0.5) * L4, (b4[1] - 0.5) * L4] : null;
+  const kk = `${k}|passo ${passo}|${passo === 1 ? mem.tipo : minerale}${centroM ? `|${centroM[0].toExponential(4)},${centroM[1].toExponential(4)}` : ''}`; if (rocceFatte.has(kk)) return rocceFatte.get(kk);
   const caso = sorgente(L.indirizzo, ramiCosmo(cam.via.cosmo)), il = (n) => (/^[aeiou]/.test(n) ? `l'${n}` : n === 'zircone' ? `lo ${n}` : ['biotite', 'calcite', 'monazite', 'olivina'].includes(n) ? `la ${n}` : `il ${n}`), del = (n) => il(n).replace(/^l'/, "dell'").replace(/^lo /, 'dello ').replace(/^la /, 'della ').replace(/^il /, 'del ');
-  let px, N, nome, larghezzaM, frase, liscio = false;
+  let px, N, nome, larghezzaM, frase, liscio = false, tessera = null;
   if (passo === 1 && mem.tipo === 'alone') {
     // l'alone: gli anelli escono dalle energie delle α della catena e dal loro percorso nella biotite
     const al = aloni(L, { ospite: mem.ospite, granello: mem.granello, raggioM: mem.raggioM, N: 192 }), cz = concentrazioni(L, mem.granello), forti = al.anelli.filter((a) => !a.debole), buio = Math.max(...al.profilo.oscuramento);
@@ -1054,10 +1115,11 @@ function passoRoccia(cam, S, base, k) {
   } else if (passo === 4) {
     // il reticolo largo trenta nanometri: la stessa legge degli atomi qui sotto, un campione cento volte più grande (una fetta
     // spessa quanto basta per stare in 20 000 atomi): a questa scala gli atomi sono puntini di un pixel o due, e si vede la trama
-    const a = atomiDelReticolo(minerale, { latoM: 3e-8, T: L.T ?? 288, massimo: 20000 }, caso); N = 384; px = immagineAtomi(a, N); larghezzaM = a.latoM; liscio = true; nome = `il reticolo ${del(minerale.replace(' d\'acqua', ''))}, trenta nanometri`;
-    frase = `${a.descrizione}. Trenta nanometri: gli atomi sono puntini, le file del reticolo una trama. Avvicinati ancora: tre nanometri, gli atomi uno per uno`;
+    // (l'immagine si fa solo quando la si guarda: per sapere quanto è grande basta la tessera)
+    const opz = { latoM: 3e-8, T: L.T ?? 288, massimo: 20000, tessera: true }; N = 384; px = () => immagineAtomi(atomiDelReticolo(minerale, opz, caso), N); tessera = tesseraReticolo(minerale, opz.latoM); larghezzaM = tessera.latoM; liscio = true; nome = `il reticolo ${del(minerale.replace(' d\'acqua', ''))}, trenta nanometri`;
+    frase = `${minerale}, visto lungo il suo asse: trenta nanometri, gli atomi sono puntini, le file del reticolo una trama. Avvicinati ancora: tre nanometri, gli atomi uno per uno`;
   } else if (passo === 3) {
-    const a = atomiDelReticolo(minerale, { latoM: 3e-9, T: L.T ?? 288 }, caso); N = 320; px = immagineAtomi(a, N); larghezzaM = a.latoM; liscio = true; nome = `gli atomi ${del(minerale.replace(' d\'acqua', ''))}`;
+    const a = atomiDelReticolo(minerale, { latoM: 3e-9, T: L.T ?? 288, tessera: true, centroM }, caso); N = 320; px = immagineAtomi(a, N); larghezzaM = a.latoM; liscio = true; tessera = a; nome = `gli atomi ${del(minerale.replace(' d\'acqua', ''))}`;
     frase = `${a.descrizione}. Le sfere hanno il raggio vero degli ioni e i colori dei modelli (${Object.keys(a.agitazione).map((e) => ({ O: 'ossigeno rosso', Si: 'silicio chiaro, piccolo, nascosto tra gli ossigeni', Na: 'sodio viola', Cl: 'cloro verde', K: 'potassio viola scuro', Ca: 'calcio verde chiaro', Mg: 'magnesio verde-giallo', Fe: 'ferro arancio', Al: 'alluminio grigio', C: 'carbonio grigio', H: 'idrogeno bianco' })[e] || e).join('; ')}); le più scure stanno più in profondità. È un'istantanea: un attimo dopo ogni atomo è spostato altrove attorno al suo posto. Sotto, in tre dimensioni, gli atomi uno per uno e poi la scala quantistica; un clic entra nella finestra, dove corrono le particelle di questo punto`;
   } else {
     // la particella: una α della radioattività di questa roccia (la più frequente); dove non ce n'è (ghiaccio, sale), un muone cosmico
@@ -1065,8 +1127,11 @@ function passoRoccia(cam, S, base, k) {
     const r = incanalamento(minerale, alfa ? 'alfa' : 'muone+', E, null, { T: L.T ?? 288, N: 40, punti: 12 }); px = r.immagine; N = r.N; liscio = true; larghezzaM = r.spessoreM; nome = `la stella d'incanalamento ${del(minerale.replace(' d\'acqua', ''))}, in una lamina spessa ${fmtLunghezza(r.spessoreM)}`;
     frase = `${r.descrizione} La particella è ${alfa ? `una α ${del(alfa.nuclide)} di questa stessa roccia (${numero(alfa.perKg)} al secondo per chilo)` : `un muone cosmico da ${numero(E / 1000)} GeV (qui non c'è radioattività che dia α)`}. La figura è in angoli (su uno schermo a un metro dal cristallo sarebbe larga ${fmtLunghezza(2 * r.campoRad)}): qui sta nella scala alla grandezza della lamina che la disegna, spessa ${fmtLunghezza(r.spessoreM)}. La simmetria la decide il reticolo di questo minerale, non chi guarda. Avvicinati ancora: gli atomi di quel reticolo`;
   }
-  const cv = telaN(N); cv.getContext('2d').putImageData(new ImageData(px, N, N), 0, 0);
-  const out = { cv, nome, larghezzaM, frase, liscio, passo, base, luogo: L, memoria: mem, minerale };
+  // (la tessera del reticolo: N × Ny, e la fila sopra spostata di «scarto», in frazioni della larghezza: periodico)
+  const faiTela = () => { const p = typeof px === 'function' ? px() : px, Ny = p.length / (4 * N), cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(N, Ny) : Object.assign(document.createElement('canvas'), { width: N, height: Ny }); cv.getContext('2d').putImageData(new ImageData(p, N, Ny), 0, 0);
+    if (tessera) cv.scarto = (tessera.scartoM || 0) / tessera.latoM; return cv; };
+  let tela = typeof px === 'function' ? null : faiTela();
+  const out = { get cv() { return (tela ||= faiTela()); }, nome, larghezzaM, frase, liscio, passo, base, luogo: L, memoria: mem, minerale };
   rocceFatte.set(kk, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
 }
@@ -1094,6 +1159,40 @@ function eventoNellAcqua(cam, S, k, u, v, profondo) {
   rocceFatte.set(ke, out); if (rocceFatte.size > 48) rocceFatte.delete(rocceFatte.keys().next().value);
   return out;
 }
+// ---------- LE MOLECOLE IN PIANO, PRIMA DEL 3D: DAL CAMPO DI DENSITÀ ALLE MOLECOLE (alla «Illustrate»: Goodsell, Autin e
+// Olson 2019). Sotto il micron l'acqua della finestra è il colore medio di ciò che contiene (continuo sotto il pixel); le
+// molecole sono larghe 0,3 nm, e quando sullo schermo una molecola diventa più grande di un pixel (eredita.js, pesoDiscreto:
+// la rampa di un'ottava attorno al pixel, la stessa regola di tutto lo zoom) compaiono, una per una, sopra la finestra:
+// sono LE STESSE della scena in 3D che si monta sotto i 10 nm (scenaNano, preparata da finestre.worker.js con gli stessi
+// argomenti), viste dall'alto come la vede il 3D (la x a destra, la y in su), con i colori della scena (l'acqua del colore
+// del mare): così il 3D, quando compare, ha sotto di sé già le sue molecole. La scena è periodica (come nel 3D): la tessera
+// si ripete. Il dettaglio sotto il pixel lo fa la piramide di immagini (ognuna la media di quattro pixel di quella sopra).
+const tessereNano = new Map(), DIAMETRO_ACQUA = 2 * 0.152e-9; // (m: il diametro di van der Waals dell'ossigeno, Bondi 1964)
+// (il totale si conserva, come vuole eredita.js separa: la media della tessera è il colore della finestra sotto, quello che le
+// molecole sotto il pixel già facevano; i colori delle molecole si scalano di k, e la scena in 3D con loro: scenaAtomi)
+const mediaTela = (cv) => { const c = telaN(16), x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingEnabled = true; x.drawImage(cv, 0, 0, 16, 16); const d = x.getImageData(0, 0, 16, 16).data, m = [0, 0, 0]; for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) m[k] += d[4 * i + k] / 256; return m; };
+function tesseraNano(sc, voluto = null) {
+  const A = sc.atomi, Lb = sc.latoNm || sc.scatola[0], N = 512, k = N / Lb, buf = new Uint8ClampedArray(N * N * 4), prof = new Float32Array(N * N).fill(-Infinity), c0 = sc.coloreAcqua || [40, 70, 100];
+  for (let i = 0; i < N * N; i++) { buf[4 * i] = c0[0]; buf[4 * i + 1] = c0[1]; buf[4 * i + 2] = c0[2]; buf[4 * i + 3] = 255; }
+  // (la fetta davanti, 1,2 nm: chi sta più dietro è coperto; ogni sfera col suo raggio, l'ombra dove si allontana dal centro)
+  const n = A.raggio.length, fetta = Lb - 1.2;
+  for (let a = 0; a < n; a++) { const z = A.pos[3 * a + 2]; if (z < fetta) continue; const r = A.raggio[a] * k, cx = A.pos[3 * a] * k, cy = (Lb - A.pos[3 * a + 1]) * k, col = A.colore ? [A.colore[3 * a], A.colore[3 * a + 1], A.colore[3 * a + 2]] : [200, 200, 200];
+    for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) { const X = cx + dx, Y = cy + dy; if (X + r < 0 || X - r > N || Y + r < 0 || Y - r > N) continue;
+      for (let y = Math.max(0, Math.floor(Y - r)); y <= Math.min(N - 1, Math.ceil(Y + r)); y++) for (let x = Math.max(0, Math.floor(X - r)); x <= Math.min(N - 1, Math.ceil(X + r)); x++) {
+        const d2 = ((x + 0.5 - X) ** 2 + (y + 0.5 - Y) ** 2) / (r * r); if (d2 > 1) continue; const zz = z + A.raggio[a] * Math.sqrt(1 - d2), o = y * N + x; if (zz <= prof[o]) continue; prof[o] = zz;
+        const lume = 0.62 + 0.38 * Math.sqrt(1 - d2); buf[4 * o] = col[0] * lume; buf[4 * o + 1] = col[1] * lume; buf[4 * o + 2] = col[2] * lume; } } }
+  let kc = [1, 1, 1]; if (voluto) { const m = [0, 0, 0]; for (let i = 0; i < N * N; i++) for (let c = 0; c < 3; c++) m[c] += buf[4 * i + c] / (N * N); kc = m.map((x, c) => (x > 0 ? voluto[c] / x : 1)); for (let i = 0; i < N * N; i++) for (let c = 0; c < 3; c++) buf[4 * i + c] *= kc[c]; }
+  const mip = [telaN(N)]; mip[0].getContext('2d').putImageData(new ImageData(buf, N, N), 0, 0);
+  for (let M = N / 2; M >= 8; M /= 2) { const c = telaN(M), x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.drawImage(mip[mip.length - 1], 0, 0, M, M); mip.push(c); }
+  return { mip, latoM: Lb * 1e-9, k: kc };
+}
+function molecoleInPiano(ctx, cam, r0, px, py, pxm, W, H) {
+  const S = superficieDi(cam.via); if (!S || !r0.punto) return; const { u, v } = r0.punto, ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|1e-8`;
+  const a = pesoDiscreto(DIAMETRO_ACQUA * pxm); if (!(a > 0)) return; // (eredita.js: la molecola contro il pixel, su un'ottava)
+  let T = tessereNano.get(ch); if (!T) { const sc = scenePronte.get(ch); if (!sc) return; try { T = tesseraNano(sc, r0.cv ? mediaTela(r0.cv) : null); } catch (err) { console.warn(err); return; } tessereNano.set(ch, T); if (tessereNano.size > 3) tessereNano.delete(tessereNano.keys().next().value); }
+  const zt = T.latoM * pxm; let cv = T.mip[0]; for (const c of T.mip) if (c.width >= zt) cv = c;
+  ctx.globalAlpha = a; periodico(ctx, cv, px - zt / 2, py - zt / 2, zt, W, H, true); ctx.globalAlpha = 1;
+}
 // ---------- GLI ATOMI IN TRE DIMENSIONI (atomi3d.js). Ai livelli più profondi la materia non è più un'immagine: chi monta
 // la vista (laboratorio.js) chiede qui se dove si sta guardando c'è una scena di atomi, e quale. Nell'acqua, sotto i dieci
 // nanometri: le molecole e gli ioni veri di quel punto (mare.js, scenaMolecolare: gli stessi conteggi del campione).
@@ -1107,7 +1206,10 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
       // (l'acqua attorno: le copie periodiche del cubetto, otto attorno a quello del punto, nel piano che si guarda)
       // (finestra.js scenaNano: l'acqua liquida alla sua densità e con la sua struttura, ogni ione nel suo numero e nel suo guscio)
       // (se finestre.worker.js l'ha già preparata, arrivando, è quella: gli stessi argomenti, gli stessi bit; si usa una volta)
-      crea: () => { const ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, pronta = scenePronte.get(ch); if (pronta) scenePronte.delete(ch); return periodica(conMoto(pronta || scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`))), [3, 3, 1]); } };
+      crea: () => { const ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, pronta = scenePronte.get(ch); if (pronta && !tessereNano.has(ch)) { try { tessereNano.set(ch, tesseraNano(pronta, r.cv ? mediaTela(r.cv) : null)); } catch { /* resta senza */ } } if (pronta) scenePronte.delete(ch);
+        const sc0 = pronta || scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`)), T = tessereNano.get(ch);
+        if (T && sc0.atomi.colore) { const c = Uint8Array.from(sc0.atomi.colore); for (let i = 0; i < c.length; i++) c[i] = Math.min(255, c[i] * T.k[i % 3]); sc0.atomi = { ...sc0.atomi, colore: c }; } // (i colori della tessera: la media è quella dell'acqua)
+        return periodica(conMoto(sc0), [3, 3, 1]); } };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
   // (sul suolo: la superficie del minerale con sopra l'acqua dei pori a metà del suolo, ogni ione nel suo numero: suolo.js)

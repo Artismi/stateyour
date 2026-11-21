@@ -29,6 +29,7 @@
 //     minerale hanno lo stesso colore; i bordi dei grani diffondono la luce e sono più scuri (come in rocce.js).
 
 import { sorgente, logEsatto, cosGiro } from './eventi.js';
+import { pesoDiscreto } from './eredita.js';
 import { sorgentiNaturali, ritenzione, concentrazioni } from './materia.js';
 
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -185,14 +186,19 @@ export function campoGrani(spec, caso) {
     dipingi(ctx, { W, H, ox, oy, k, alfa = 1 }) {
       const granoPx = u * k, area = (W / k) * (H / k), vere = this.conta(area);
       if (alfa <= 0) return { vere, disegnati: 0 };
-      if (granoPx < 0.7) { ctx.globalAlpha = alfa; ctx.fillStyle = `rgb(${mediaColore.map(Math.round).join(',')})`; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; return { vere, disegnati: 0 }; } // la nebbia: il colore medio
+      // DISCRETO SOPRA IL PIXEL, CONTINUO SOTTO (eredita.js, pesoDiscreto: la rampa di un'ottava attorno al pixel): un grano largo
+      // w·… pesa w come grano disegnato e 1 − w nel colore medio (la nebbia), così il totale si conserva e i grani compaiono per
+      // gradi, non a una soglia secca (prima: sotto 0,7 pixel il colore medio, sopra i grani)
+      const w = pesoDiscreto(granoPx), media = () => { ctx.globalAlpha = alfa; ctx.fillStyle = `rgb(${mediaColore.map(Math.round).join(',')})`; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; };
+      if (!(w > 0)) { media(); return { vere, disegnati: 0 }; } // la nebbia: il colore medio
+      if (w < 1) { media(); alfa *= w; }
       const C = cache, scala = C ? k / C.k : 0, dx = C ? ox - C.ox * scala : 0, dy = C ? oy - C.oy * scala : 0;
       // (la tela fatta copre ancora lo schermo, alla stessa scala entro il 20%?)
       const copre = C && C.W === W && C.H === H && scala > 0.83 && scala < 1.2 && C.sx * scala + dx <= 0 && C.sy * scala + dy <= 0 && (C.sx + C.cv.width * C.passo) * scala + dx >= W && (C.sy + C.cv.height * C.passo) * scala + dy >= H;
       if (!copre) rendi(W, H, ox, oy, k);
       const D = cache, sc = k / D.k, tx = ox - D.ox * sc, ty = oy - D.oy * sc;
       ctx.globalAlpha = alfa; ctx.imageSmoothingEnabled = D.passo > 1.2; ctx.drawImage(D.cv, D.sx * sc + tx, D.sy * sc + ty, D.cv.width * D.passo * sc, D.cv.height * D.passo * sc); ctx.imageSmoothingEnabled = true; ctx.globalAlpha = 1;
-      return { vere, disegnati: Math.round(vere) };
+      return { vere, disegnati: Math.round(vere * w) };
     },
   };
 }
