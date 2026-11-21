@@ -140,8 +140,9 @@ prova('le orbite: nessuna dentro 0,02 UA, in ordine, separate, senza incroci; i 
       // che si diffonde si allarga, e il corpo di fuori va più fuori)
       assert.ok(p.aUA >= 0.02 && (p.aUA <= D.rOut || p.formazione.diffusioni > 0), `${p.aUA} UA: ${dove}`);
       // (PRIMA: e < 0,5. Ora gli incontri dopo il gas, quando i planetesimi rimasti sono già stati diffusi, lasciano qualche orbita
-      // allungata: 4 su più di mille qui, fino a 0,72. Ce ne sono anche tra i pianeti osservati sotto le dieci masse terrestri —
-      // Kepler-1656 b, e = 0,84 (Brady et al. 2018 [R]) —: si chiede l'orbita legata e lontana dalla stella)
+      // allungata: 4 su più di mille qui, fino a 0,72. Tra i piccoli pianeti osservati: Van Eylen et al. 2019 (AJ 157, 61 [V:
+      // l'estratto]), i sistemi di Kepler con un pianeta solo seguono una mezza gaussiana con σ = 0,32 ± 0,06 — sopra 0,5 ne sta il
+      // 12%, sopra 0,9 lo 0,5% —, quelli con più pianeti σ = 0,083: il 4 per mille sopra 0,5 è compatibile. Si chiede e < 0,9)
       assert.ok(p.eccentricita >= 0 && p.eccentricita < 0.9 && p.massaKg >= DISCO.minimo * MTERRA && p.raggioM > 1e6 && p.raggioM < 1.5e8);
       if (!i) continue;
       const q = P[i - 1], d = hill(q, p, st.massa);

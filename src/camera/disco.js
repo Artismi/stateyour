@@ -648,6 +648,17 @@ export function formaPianeti(st, seme = 1) {
     t = tEvento; for (const o of [p, q]) if (o.morto) vivi.splice(vivi.indexOf(o), 1);
     if (!vivi.every((o, j) => !j || vivi[j - 1].a <= o.a)) vivi.sort((x, y) => x.a - y.a); if (vivi.length >= 2) rifai();
   }
+  // NESSUNA COPPIA SOTTO IL LIMITE DI HILL A OGGI. Due orbite più vicine di 2√3 raggi di Hill reciproci si incrociano entro poche
+  // migliaia di giri (Gladman 1993, Icarus 106, 247 [R]: è il limite di stabilità di Hill di due pianeti): una coppia così non può
+  // esserci all'età della stella. Se gli eventi l'hanno lasciata (un incontro che a oggi non era ancora finito), lo si chiude
+  // adesso, con lo scontro o la diffusione di Kimura, all'età della stella. Contano i corpi da pianeta (sopra il minimo).
+  if (eta > D.vita) for (let giro = 0; giro < 200; giro++) {
+    const grandi = vivi.filter((o) => !o.morto && o.m >= P.minimo * MTERRA).sort((x, y) => x.a - y.a); let fatto = false;
+    for (let i = 0; i + 1 < grandi.length; i++) { const p = grandi[i], q = grandi[i + 1], h = Math.cbrt((p.m + q.m) / (3 * Mst)) * 0.5 * (p.a + q.a);
+      if ((q.a - p.a) / h >= 2 * Math.sqrt(3)) continue;
+      const x = esito(p, q, eta); x.tEvento = eta; applica(x); fatto = true; break; }
+    vivi = vivi.filter((o) => !o.morto).sort((x, y) => x.a - y.a); if (!fatto) break;
+  }
   // l'eccentricità di oggi: quella secolare, all'età della stella
   if (eta > D.vita && vivi.length >= 2 && vivi.length <= 40) rifai();
   for (const b of vivi) if (eta > D.vita) cresci(b, eta);
