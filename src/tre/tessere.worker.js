@@ -199,7 +199,7 @@ function prepara(L, tx, ty) {
     // (gli AFFIORAMENTI). La parte coperta: h/h₀ (sotto mezzo metro il suolo lascia vedere la roccia). A e S sono quelli della
     // superficie intera (il livello 0), interpolati: la legge dipende dalla grana della griglia (A^m·S con la cella più fine
     // cambia), e presa a ogni livello faceva cambiare colore alle terre entrando nella tessera figlia (ΔE fino a 14, padri.mjs)
-    const M3 = M3c(i, j), sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.sedimento, i, j);
+    const M3 = M3c(i, j), sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.granito, i, j); // (la copertura litificata si altera come la roccia: K del sedimento è quello del sedimento SCIOLTO, e con lui la copertura restava sempre nuda — più scura del basamento accanto, a blocchi quanto le celle della madre)
     // L'UMIDITÀ del punto: quella del secchio del suolo di meteo.js (Manabe 1969) lì, distribuita col rilievo come in TOPMODEL
     // (Beven e Kirkby 1979: il deficit locale cresce con la differenza dall'indice medio, in forma esponenziale): più acqua nelle
     // valli e nelle conche, meno sui crinali
