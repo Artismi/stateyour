@@ -289,4 +289,28 @@ prova('sulla Terra di prova: sollevamento in m/anno dove la crosta è stretta, s
   const fermo = evolviTettonica({ q: 0.04, seme: 7, W: 64, H: 32 }); assert.ok(fermo.sollevamento.every((v) => v === 0) && fermo.copertura.every((v) => v === 0) && fermo.velEst.every((v) => v === 0) && fermo.storia.finestra === 0);
 });
 
+// ---------- con la storia termica (storia.js): il calore, la velocità, la mobilità e il fuso di ogni epoca
+console.log('  con la storia della Terra: la crosta dei continenti nasce agli archi e torna giù alle fosse; la gravità accorcia catene e bacini');
+{
+  const ST = await import('../src/camera/storia.js'), TERRA = { tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: { ferro: 0.32, roccia: 0.674, acqua: 0.006 }, Lw: 3.828e26, aM: 1.496e11, Mstella: 1.989e30, giorno: 86164 };
+  const s = ST.storia(TERRA, 4.5e9, { stella: { eta: 4.5e9, Z: 1, massa: 1 } }), tempo = ST.tabellaStoria(TERRA, { finoA: 4.5e9 });
+  const r = evolviTettonica({ W: 128, H: 64, seme: 7, q: s.q, eta: 4.5e9, placche: true, termico: { dT: s.Tum - s.Ts, k: 4.2, kappa: 1e-6, alfa: 3e-5, rho: 3300, basalto: s.crosta.basalto }, tempo, acquaM3: 1.4e18 });
+  const b = r.bilancio, N1 = r.W * r.H, attesa = crostaAttesa(4.5e9) * COSTANTI.hMisura;
+  prova('…il bilancio: nata = presente + in viaggio + tornata giù (a meno di un millesimo)', () => { assert.ok(r.storia.conLaStoria && b.riciclata > 0 && b.prodotta > 0); assert.ok(Math.abs(b.prodotta - b.presente - b.inViaggio - b.riciclata) < 1e-3 * b.prodotta, JSON.stringify(b)); });
+  let nc = 0; for (const v of r.cont) nc += v;
+  riscontro(b.presente > 0.5 * attesa && b.presente < 2 * attesa, `la Terra dalla storia: crosta continentale ${(b.presente / 1e3).toFixed(1)} km di spessore medio (il vero ${(attesa / 1e3).toFixed(1)}: Cogley 1984); chiesto entro un fattore 2`);
+  console.log(`      la Terra dalla storia: crosta dei continenti ${(b.presente / 1e3).toFixed(1)} km medi (nata ${(b.prodotta / 1e3).toFixed(0)}, tornata giù ${(b.riciclata / 1e3).toFixed(0)}; il vero ${(attesa / 1e3).toFixed(1)}), continenti sul ${(100 * nc / N1).toFixed(0)}% (vero ~40); saltati ${(r.storia.saltati / 1e9).toFixed(2)} Ga`);
+  prova('…la gravità: lo spessore che uno scontro regge e il bacino più fondo vanno come 1/g (Cowan e Abbot 2014)', () => {
+    assert.equal(litosfera().hMassimo, COSTANTI.hMassimo); assert.ok(Math.abs(litosfera({ g: 2 * 9.81 }).hMassimo - COSTANTI.hMassimo / 2) < 1e-6);
+    assert.equal(litosfera().fondoG, 1); const g3 = litosfera({ g: 3 * 9.81 }); assert.ok(Math.abs(g3.fondoG * COSTANTI.abisso - COSTANTI.bacino / 3) < 1e-6 && Math.abs(-g3.oceano(1e4) / g3.aria - COSTANTI.bacino / 3) < 1e-6); });
+  // senza placche: il rilievo del coperchio viene dalla storia (Marte asciutto, nessun mare)
+  const MARTE = { tipo: 'roccioso', massaKg: 6.417e23, raggioM: 3.3895e6, composizione: { ferro: 0.25, roccia: 0.75, acqua: 0 }, Lw: 3.828e26, aM: 2.279e11, Mstella: 1.989e30 };
+  ST.storia(MARTE, 4.5e9, { stella: { eta: 4.5e9, Z: 1, massa: 1 } });
+  const m = evolviTettonica({ W: 64, H: 32, seme: 7, raggioM: MARTE.raggioM, nucleo: 0.5, eta: 4.5e9, placche: false, tempo: ST.tabellaStoria(MARTE, { finoA: 4.5e9 }), gravita: 3.71, acquaM3: 0 });
+  prova('…senza placche, con la storia: la crosta del coperchio ispessita dove sale il mantello, la topografia dinamica, il sollevamento di oggi', () => {
+    assert.ok(m.regime === 'coperchio unico' || m.regime === 'fermo'); assert.ok(m.alt.every(Number.isFinite) && m.sollevamento.every((v) => v >= 0) && m.basalto.every((v) => v >= 0));
+    let a = 0, a2 = 0; for (const v of m.alt) { a += v; a2 += v * v; } a /= m.alt.length; const sd = Math.sqrt(a2 / m.alt.length - a * a); assert.ok(sd > 0, 'il coperchio non è piatto');
+    console.log(`      Marte con la storia: ${m.regime}, crosta ${(m.rilievo.crostaMedia / 1e3).toFixed(0)} km (la storia: ${(m.rilievo.crostaStoria / 1e3).toFixed(0)}; il vero ~50), topografia dinamica ${m.rilievo.dinamica.toFixed(0)} m, scarto delle quote ${sd.toFixed(0)} m (il vero ~3000), ${m.rilievo.giri.toFixed(0)} giri del mantello`); });
+}
+
 console.log(`tettonica: ${ok} prove, tutto ok` + (nonTorna.length ? `; ${nonTorna.length} riscontri NON TORNANO:\n  ${nonTorna.join('\n  ')}` : ''));

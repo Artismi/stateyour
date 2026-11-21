@@ -36,6 +36,7 @@ import { finestraSuolo, immagineSuolo, rocciaDelPianeta, granulometria, porosita
 import { EROSIONE } from '../camera/geologia.js';
 import { coloreRoccia } from '../camera/chimica.js';
 import { PARAMETRI } from '../camera/meteo.js';
+import { ottava } from '../camera/eredita.js';
 
 let B = null; // la superficie intera del pianeta (il livello 0) e ciò che serve per le tessere
 const W = 256, H = 128, WB = W + 2, HB = H + 2;
@@ -117,6 +118,45 @@ function zeroDi(se) {
   return a > 0 ? s / a : 0;
 }
 
+// L'UMIDITÀ E IL SUOLO DI UNA TESSERA, CONDIZIONATI SULLA MADRE (eredita.js, «il figlio è il padre più una correzione a media
+// nulla»). Il campo grezzo del punto (l'umidità del secchio distribuita con l'indice topografico; la parte coperta di suolo dal
+// bilancio di Heimsath, per i tre materiali; il sedimento che l'erosione della tessera ha posato) dipende dalla grana: la pendenza e l'area drenata della tessera figlia non sono quelle
+// della madre, e la media della figlia sulla cella della madre se ne staccava (padri.mjs: ΔE fino a 6,9 entrando nella figlia).
+// Qui la figlia è la PREDIZIONE della madre (due ottave di eredita.js ottava, senza rumore: la predizione di Donoho, che conserva
+// le medie delle celle della madre) più lo scarto del campo grezzo dalla sua media su ogni cella della madre (4 × 4 punti): la
+// media sulla cella della madre resta quella della madre (a meno del taglio in [0, 1]), il dettaglio è quello della figlia.
+// SEMPLIFICAZIONE: oltre il bordo della tessera madre la predizione ripete l'ultima cella (le tessere vicine della madre non si
+// calcolano qui): sul bordo tra due madri la pendenza della predizione è presa da una parte sola.
+const UMIDI = new Map();
+function campoUmido(L, tx, ty, sf = null) {
+  const chiave = `${B.k}|${L}|${tx}|${ty}`; let U = UMIDI.get(chiave); if (U) return U;
+  sf ??= tessera(B.k, B.se, B.cl, L, tx, ty, B.seme);
+  const lg = sf.largo && sf.largo.W > W ? sf.largo : null, alt = new Float32Array(WB * HB);
+  if (lg) { const ox = (lg.W - W) / 2 - 1, oy = (lg.H - H) / 2 - 1; for (let j = 0; j < HB; j++) for (let i = 0; i < WB; i++) alt[j * WB + i] = lg.alt[(j + oy) * lg.W + i + ox]; }
+  else for (let j = 0; j < HB; j++) for (let i = 0; i < WB; i++) alt[j * WB + i] = sf.alt[Math.max(0, Math.min(H - 1, j - 1)) * W + ((i - 1 + W) % W)];
+  const cl = B.cl, [ru0, v0, ru1, v1] = sf.rett || [0, 0, 1, 1], passoLat = ((v1 - v0) * Math.PI * B.raggioM) / H, r0 = B.se;
+  const campo = (arr, i, j) => { const x = (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * cl.W - 0.5, y = Math.min(cl.H - 1.001, Math.max(0, (v0 + ((j + 0.5) / H) * (v1 - v0)) * cl.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => arr[yy * cl.W + ((xx % cl.W) + cl.W) % cl.W]; return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
+  const x0Di = (i) => (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * r0.W - 0.5, y0Di = (j) => Math.max(0, Math.min(r0.H - 1.001, (v0 + ((j + 0.5) / H) * (v1 - v0)) * r0.H - 0.5));
+  const bil0 = (f, i, j) => { const x = x0Di(i), y = y0Di(j), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => f(yy * r0.W + ((xx % r0.W) + r0.W) % r0.W); return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
+  const me = cl?.meteo, secchio = me?.suolo ? (i, j) => Math.min(1, Math.max(0, campoMeteo(me, me.suolo, ru0 + ((i + 0.5) / W) * (ru1 - ru0), v0 + ((j + 0.5) / H) * (v1 - v0)) / PARAMETRI.secchio)) : () => 0.5;
+  const suolo0 = (Rk, K, i, j) => { const E = K * bil0((q) => B.AmS[q], i, j); return E >= EROSIONE.suolo * Rk.r ? 0 : Math.min(1, Math.log((EROSIONE.suolo * Rk.r) / Math.max(E, 1e-12))); };
+  const dxC = passoLat * Math.max(0.05, Math.cos((0.5 - (v0 + v1) / 2) * Math.PI)), aCella = dxC * passoLat, fl = sf.flusso;
+  const grezzo = [0, 1, 2, 3, 4].map(() => new Float32Array(W * H)); // umidità, suolo su granito, su basalto, su sedimento, sedimento posato da questa erosione
+  for (let j = 0; j < H; j++) { const lat = (0.5 - (v0 + ((j + 0.5) / H) * (v1 - v0))) * Math.PI, passoLon = passoLat * Math.max(0.02, Math.cos(lat));
+    for (let i = 0; i < W; i++) { const k = j * W + i, c = (j + 1) * WB + i + 1, gx = (alt[c + 1] - alt[c - 1]) / (2 * passoLon), gy = (alt[c - WB] - alt[c + WB]) / (2 * passoLat);
+      // l'indice topografico di umidità (Beven e Kirkby 1979), contato da quello di una cella senza niente a monte sulla pendenza della superficie intera
+      const twi = Math.log((Math.max(1, fl ? fl[k] : 1) * aCella) / dxC / Math.max(1e-4, Math.hypot(gx, gy))), twiRif = Math.log(aCella / dxC / Math.max(1e-4, bil0((q) => B.S0[q], i, j)));
+      const M3 = materialiNelPunto(cl && cl.media ? campo(cl.media, i, j) : B.T, secchio(i, j));
+      grezzo[0][k] = Math.min(1, secchio(i, j) * Math.exp(Math.min(30, twi - twiRif))); grezzo[1][k] = suolo0(M3.granito, EROSIONE.K.granito, i, j); grezzo[2][k] = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j); grezzo[3][k] = suolo0(M3.sedimento, EROSIONE.K.granito, i, j); grezzo[4][k] = sf.depositato ? Math.min(1, Math.max(0, sf.depositato[k]) / SUOLO.h0) : 0; } }
+  if (L > 0) { const madre = campoUmido(L - 1, tx >> 2, ty >> 2), ox = (tx & 3) * (W / 4), oy = (ty & 3) * (H / 4), nI = W / 4, nJ = H / 4;
+    for (let q = 0; q < 5; q++) { const Pa = madre[q], g = grezzo[q];
+      const o1 = ottava({ padre: (I, J) => Pa[Math.max(0, Math.min(H - 1, J)) * W + Math.max(0, Math.min(W - 1, I))], livello: 0, I0: ox - 2, J0: oy - 2, nI: nI + 4, nJ: nJ + 4, radice: 'umido', nome: 'predizione', sigma: 0 }), w1 = 2 * (nI + 4), h1 = 2 * (nJ + 4);
+      const o2 = ottava({ padre: (I, J) => o1[Math.max(0, Math.min(h1 - 1, J - 2 * (oy - 2))) * w1 + Math.max(0, Math.min(w1 - 1, I - 2 * (ox - 2)))], livello: 1, I0: 2 * ox, J0: 2 * oy, nI: 2 * nI, nJ: 2 * nJ, radice: 'umido', nome: 'predizione', sigma: 0 });
+      for (let J = 0; J < nJ; J++) for (let I = 0; I < nI; I++) { let m = 0; for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) m += g[(4 * J + b) * W + 4 * I + a]; m /= 16;
+        for (let b = 0; b < 4; b++) for (let a = 0; a < 4; a++) { const k = (4 * J + b) * W + 4 * I + a; g[k] = Math.min(1, Math.max(0, o2[k] + g[k] - m)); } } } }
+  UMIDI.set(chiave, grezzo); if (UMIDI.size > 48) UMIDI.delete(UMIDI.keys().next().value); return grezzo;
+}
+
 function prepara(L, tx, ty) {
   const sf = tessera(B.k, B.se, B.cl, L, tx, ty, B.seme), mare = sf.mare, haMare = isFinite(mare), liquido = !!(B.mare && B.mare.esiste);
   // --- quote e laghi col bordo di un punto: dal bordo largo della tessera, o (livello 0) richiudendo in longitudine
@@ -185,8 +225,8 @@ function prepara(L, tx, ty) {
   // quello di una cella senza niente a monte sulla pendenza della superficie intera (interpolata): le valli e le conche più
   // umide del secchio, i versanti come lui. (Prima: diviso per la media della tessera; ma la media cambia da una tessera
   // all'altra, e sul loro bordo il colore saltava: una retta netta attraverso lo schermo)
-  const twi = new Float32Array(W * H), fl = sf.flusso; for (let k = 0; k < W * H; k++) { const a = (Math.max(1, fl ? fl[k] : 1) * aCella) / dxC, tb = Math.max(1e-4, Math.hypot(pend[4 * k], pend[4 * k + 1])); twi[k] = Math.log(a / tb); }
-  const twiRif = (i, j) => Math.log(aCella / dxC / Math.max(1e-4, bil0((q) => B.S0[q], i, j)));
+  const fl = sf.flusso;
+  const U = campoUmido(L, tx, ty, sf); // (l'umidità e il suolo, condizionati sulla tessera madre: vedi campoUmido)
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, h = sf.alt[k], suMare = !(haMare && h < mare); bagnato[k] = !suMare || (sf.lago && sf.lago[k] > 0) || fiumeAcqua[k] ? 1 : 0;
     // la roccia: la classe che l'erosione ha lasciato in superficie (basamento, lave, copertura), sulla crosta dei continenti
@@ -199,11 +239,11 @@ function prepara(L, tx, ty) {
     // (gli AFFIORAMENTI). La parte coperta: h/h₀ (sotto mezzo metro il suolo lascia vedere la roccia). A e S sono quelli della
     // superficie intera (il livello 0), interpolati: la legge dipende dalla grana della griglia (A^m·S con la cella più fine
     // cambia), e presa a ogni livello faceva cambiare colore alle terre entrando nella tessera figlia (ΔE fino a 14, padri.mjs)
-    const M3 = M3c(i, j), sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.granito, i, j); // (la copertura litificata si altera come la roccia: K del sedimento è quello del sedimento SCIOLTO, e con lui la copertura restava sempre nuda — più scura del basamento accanto, a blocchi quanto le celle della madre)
+    const M3 = M3c(i, j), sG = U[1][k], sB = U[2][k], sS = U[3][k]; // (la copertura litificata si altera come la roccia: K del sedimento è quello del sedimento SCIOLTO, e con lui la copertura restava sempre nuda — più scura del basamento accanto, a blocchi quanto le celle della madre)
     // L'UMIDITÀ del punto: quella del secchio del suolo di meteo.js (Manabe 1969) lì, distribuita col rilievo come in TOPMODEL
     // (Beven e Kirkby 1979: il deficit locale cresce con la differenza dall'indice medio, in forma esponenziale): più acqua nelle
     // valli e nelle conche, meno sui crinali
-    const wet = Math.min(1, secchio(i, j) * Math.exp(Math.min(30, twi[k] - twiRif(i, j)))), dep = sf.depositato ? Math.min(1, Math.max(0, sf.depositato[k]) / SUOLO.h0) : 0;
+    const wet = U[0][k], dep = U[4][k];
     const c = [0, 0, 0]; for (let q = 0; q < 3; q++) { const rG = M3.granito.roccia[q] * (1 - sG) + M3.granito.suolo[q] * sG, rB = M3.basalto.roccia[q] * (1 - sB) + M3.basalto.suolo[q] * sB, rS = M3.sedimento.roccia[q] * (1 - sS) + M3.sedimento.suolo[q] * sS;
       const asciutta = (wG * rG + wB * rB + wS * rS) * (1 - dep) + dep * M3.sedimento.suolo[q]; c[q] = asciutta * (1 - wet) + bagnata(asciutta) * wet; }
     // I FIUMI: la larghezza dalla portata (la geometria idraulica di Leopold e Maddock 1953, w ≈ 7,2·Q^0,5 m con Q in m³/s: Moody e

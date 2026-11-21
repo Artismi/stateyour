@@ -24,8 +24,8 @@
 //     per un altro pianeta T ∝ ρ^γ lungo l'adiabatica, con la densità della roccia sotto pressione di Seager e altri
 //     2007 [V] e l'esponente che sulla Terra ridà quei due numeri [D] (una super-Terra non ha così un mantello a 30 000 K);
 //   · il fuso: la risalita fonde dove l'adiabatica incontra il solidus di Katz, Spiegelman e Langmuir 2003 [V] e si ferma
-//     alla base del coperchio; con le placche (mobilità oltre un mezzo) ci sono dorsali e arriva in superficie; produttività (dφ/dP)_S = 1,5·10⁻¹⁰ Pa⁻¹ (intervallo
-//     1,2–1,5: Foley 2019; O'Rourke e Korenaga 2012; verifica A2) [V]; portata Ṁ = 1,16·κ·A·ρ·φ/δ e calore portato dalle
+//     alla base del coperchio; con le placche (mobilità oltre un mezzo) ci sono dorsali e arriva in superficie; la frazione fusa
+//     lungo la risalita isoentropica è quella di Katz e altri 2003 (F ∝ (T − T_s)^1,5, il calore latente che raffredda) [V]; portata Ṁ = 1,16·κ·A·ρ·φ/δ e calore portato dalle
 //     eruzioni ε_erutt·Ṁ·c_p·ΔT, ε_erutt = 0,1 [V, ThermInt]; sotto un coperchio fermo la portata è quella di Foley 2019
 //     [V]: 17,8·π·R·v·(spessore che fonde)·φ con v = 0,05·(κ/d)·(Ra_i/θ)^(2/3);
 //   · calore radiogenico: leggi.js caloreDellaRoccia (ISOTOPI: condriti) per la massa di roccia e ferro, come lune.js:
@@ -114,9 +114,10 @@
 //   · Marte (e ogni pianeta piccolo con un nucleo di ferro) tiene una dinamo debole finché il nucleo interno cresce: il Marte
 //     vero non ne ha da 4 miliardi di anni (nucleo ricco di zolfo, tutto liquido); la Luna qui non ne ha mai avuta una;
 //   · sotto un coperchio fermo il mantello resta sul suo solidus e fonde sempre un poco: Marte oggi esce «con vulcani», e la
-//     crosta di basalto accumulata arriva allo spessore del coperchio (centinaia di km);
+//     crosta di basalto accumulata arriva alla profondità dell'eclogite (Marte: 140 km; il vero ~50);
 //   · la temperatura potenziale del mantello terrestre cala di 38 K per miliardo di anni (dalle lave antiche: 50–100);
-//     la crosta degli oceani viene di 14 km (vera: 7) e il magma il doppio del vero;
+//     (la crosta degli oceani veniva di 14 km e il magma il doppio del vero con la produttività lineare di Foley 2019; con la
+//     fusione isoentropica di Katz è 8,6 km e 36 km³/anno: test_storia);
 //   · il campo senza dipolo (Venere, Mercurio) è solo «dieci volte meno»: resta 10⁻⁶ T dove il vero è sotto 10⁻⁸;
 //   · stadio 4: il tetto energetico della fuga supera di 200 volte l'aria della Terra come quella di Marte (non le
 //     distingue); con il ciclo del carbonio di chimica.js la Terra di 3,5 miliardi di anni fa non gela ma bolle (i
@@ -147,10 +148,20 @@ export const STORIA = Object.freeze({
   latenteMantello: 3.2e5, fusoPerKelvin: 8e17 / 9.06e20, // (J/kg; 1/K) calore latente; quanta parte del mantello fonde per kelvin: dV_liq/dT = 8·10¹⁷ m³/K di ThermInt [V] sul volume del mantello terrestre [D]
   // la fusione (Katz e altri 2003, letti nel sorgente di pyMelt [V]; T in K, P in Pa); i polinomi valgono fino a ~8 GPa
   solidus: Object.freeze([1085.7 + 273.15, 132.9e-9, -5.1e-18]), liquidus: Object.freeze([1780 + 273.15, 45e-9, -2.0e-18]), pMaxFusione: 8e9,
-  adiabaticaSolida: 1e-8, produttivita: 1.5e-10, // (K/Pa, 1/Pa) Foley 2019 [V]; produttività 1,2–1,5·10⁻¹⁰
+  adiabaticaSolida: 1e-8, // (K/Pa) Foley 2019 [V]
+  // LA FUSIONE LUNGO LA RISALITA (Katz e altri 2003, tab. 2, letti nel sorgente di pyMelt [V]): la frazione fusa della
+  // lherzolite F(T, P) = ((T − T_s)/(T_lherz − T_s))^β₁ fino all'esaurimento del clinopirosseno (F_cpx = M_cpx/(r₀ + r₁·P)),
+  // poi verso il liquidus con β₂; la risalita è isoentropica (c_p·dT/T − α/ρ·dP + ΔS·dF = 0, con il c_p e il ΔS di Katz):
+  // il calore latente raffredda la colonna, e vicino al solidus la produttività è piccola (F ∝ ΔT^1,5). Prima era lineare,
+  // dF/dP = 1,5·10⁻¹⁰ Pa⁻¹ costante (Foley 2019): la crosta degli oceani veniva di 14 km e il magma il doppio del vero
+  lherzolite: Object.freeze([1475 + 273.15, 80e-9, -3.2e-18]), katz: Object.freeze({ beta1: 1.5, beta2: 1.5, Mcpx: 0.17, r0: 0.5, r1: 0.08e-9, cp: 1000, dS: 300 }),
   // il coperchio fermo (Foley 2019 [V]) e il criterio delle placche (Korenaga 2010 [V])
   c1Fermo: 0.5, c2Fermo: 0.05, foleyFuso: 17.8, rhoFuso: 2800, korenagaA: 0.327, korenagaN: 0.647, korenagaCrit: 0.25, raccordo: 1,
   attritoSecco: 0.65, // Byerlee: 0,6–0,7 [V]
+  // LA CROSTA DI BASALTO NON SCENDE OLTRE L'ECLOGITE: sotto ~1,5 GPa il basalto diventa eclogite, più densa del mantello, e
+  // affonda (Ito e Kennedy 1971 [R]; per i coperchi O'Rourke e Korenaga 2012 [V]: la profondità del limite va come 1/g). Prima la
+  // crosta di un coperchio arrivava allo spessore del coperchio (Marte: 360 km)
+  eclogite: 1.5e9, rhoBasalto: 2900,
   // il nucleo (ThermInt [V]; le curve di Simon: Zhang e Rogers 2022 [V])
   rhoNucleo: 11000, // (kg/m³) la stessa di geologia.interno
   alfaNucleo: 1e-5, cNucleo: 840, latenteFerro: 7.5e5, gravitazionale: 3e5, saltoLeggeri: 700, // (1/K, J/kg/K, J/kg, J/kg, kg/m³)
@@ -177,11 +188,41 @@ export const APERTI = Object.freeze({
   leggeriNucleo: Object.freeze({ valore: 0.10, intervallo: Object.freeze([0.05, 0.15]), unita: 'frazione in massa (come zolfo)', fonte: 'ThermInt: 10% [V]; quali elementi, aperto' }),
 });
 // la Terra di riferimento per la costante del numero di Rossby (i numeri di test/test_fili.mjs)
-const TERRA_RIF = Object.freeze({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: Object.freeze({ ferro: 0.32, roccia: 0.674, acqua: 0.006 }), Lw: LSOLE, aM: UA, Mstella: MSOLE, giorno: 86164 });
+// (la luce è quella che stelle.js dà al Sole di 4,5 miliardi di anni, come per ogni altro pianeta: prima era L☉, l'8% in più, e la
+// Terra di riferimento girava attorno a un Sole diverso da quello del modello; con la fusione di Katz la differenza spostava Ro_l
+// della Terra delle prove di 1,2·10⁻⁴)
+const TERRA_RIF = Object.freeze({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: Object.freeze({ ferro: 0.32, roccia: 0.674, acqua: 0.006 }), aM: UA, Mstella: MSOLE, giorno: 86164 });
 
 // ---------- piccoli attrezzi
 const simon = ([T0, P0, n], P) => T0 * Math.pow(Math.max(0, P) / P0 + 1, n);
 const poli = (c, P) => { const p = Math.min(Math.max(0, P), STORIA.pMaxFusione); return c[0] + c[1] * p + c[2] * p * p; };
+// LA COLONNA CHE FONDE (Katz e altri 2003 [V], vedi STORIA.lherzolite): la frazione fusa all'equilibrio a (T, P), e la tabella,
+// fatta una volta, dell'integrale ∫F dP lungo la risalita isoentropica da dove l'adiabatica solida (T_p + adiabaticaSolida·P)
+// incontra il solidus fino a una pressione P: per T_p da 1200 a 2600 K ogni 5 K e P ogni 50 MPa fino a 8 GPa. ∫F dP/(ρ·g) è lo
+// spessore del fuso estratto da una colonna (McKenzie e Bickle 1988: la crosta è ∫F dz) [D]; la frazione media è ∫F dP/(P_i − P)
+function frazioneFusa(T, P) {
+  const S = STORIA, k = S.katz, Ts = poli(S.solidus, P); if (T <= Ts) return 0;
+  const Tl = poli(S.lherzolite, P), TL = poli(S.liquidus, P), Fc = Math.min(1, k.Mcpx / (k.r0 + k.r1 * Math.min(P, S.pMaxFusione))), Tc = Ts + Math.pow(Fc, 1 / k.beta1) * (Tl - Ts);
+  return T < Tc ? Math.pow((T - Ts) / (Tl - Ts), k.beta1) : Math.min(1, Fc + (1 - Fc) * Math.pow(Math.max(0, (T - Tc) / (TL - Tc)), k.beta2));
+}
+// (la tabella si fa una riga di T_p per volta, la prima volta che serve. In ogni punto della risalita la colonna è in equilibrio
+// con l'entropia di partenza: T = (T_p + adiabaticaSolida·P)·e^(−ΔS·F/c_p), F = frazioneFusa(T, P), risolto per bisezione)
+const COLONNA = { T0: 1200, dT: 5, nT: 281, dP: 5e7, nP: 161, righe: [] };
+function rigaColonna(a) {
+  const c = COLONNA; let r = c.righe[a]; if (r) return r; r = c.righe[a] = new Float64Array(c.nP);
+  const S = STORIA, k = S.katz, Tp = c.T0 + a * c.dT, Fdi = (P) => { const T0 = Tp + S.adiabaticaSolida * P; if (frazioneFusa(T0, P) <= 0) return 0; let lo = 0, hi = 1; for (let n = 0; n < 26; n++) { const m = 0.5 * (lo + hi); if (frazioneFusa(T0 * Math.exp((-k.dS * m) / k.cp), P) > m) lo = m; else hi = m; } return 0.5 * (lo + hi); };
+  let I = 0, Fsu = Fdi((c.nP - 1) * c.dP); for (let b = c.nP - 1; b > 0; b--) { const Fgiu = Fdi((b - 1) * c.dP); I += 0.5 * (Fsu + Fgiu) * c.dP; r[b - 1] = I; Fsu = Fgiu; }
+  return r;
+}
+// ∫F dP (Pa) della colonna di temperatura potenziale Tp, dall'inizio della fusione fino alla pressione Pfine
+function fusoDellaColonna(Tp, Pfine) {
+  // (interpolazione cubica di Catmull-Rom nei due versi: la derivata è continua, e lo jacobiano per differenze dell'integratore
+  // non vede i nodi della tabella; con quella lineare i passi di lavoro si staccavano da quelli fitti di 12 K)
+  const c = COLONNA, x = Math.min(c.nT - 1.000001, Math.max(0, (Tp - c.T0) / c.dT)), y = Math.min(c.nP - 1.000001, Math.max(0, Pfine / c.dP)), a = Math.floor(x), b = Math.floor(y), u = x - a, v = y - b;
+  const g = (i, j) => rigaColonna(Math.min(c.nT - 1, Math.max(0, i)))[Math.min(c.nP - 1, Math.max(0, j))], cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+  const riga = (i) => cr(g(i, b - 1), g(i, b), g(i, b + 1), g(i, b + 2), v);
+  return Math.max(0, cr(riga(a - 1), riga(a), riga(a + 1), riga(a + 2), u));
+}
 // ---------- STADIO 3: la stella nel tempo
 // la luce della stella (in unità solari) a t anni, tenuta in memoria per (massa, metalli): quaranta punti in logaritmo
 const memoStelle = new Map();
@@ -290,13 +331,16 @@ function flussi(st, piu, amb, rami, Tm, Tcmb, o) {
   const Pi = Tum <= s0 ? 0 : disc <= 0 ? S.pMaxFusione : Math.min(S.pMaxFusione, (-bq + Math.sqrt(disc)) / (2 * s2));
   // (con le placche — mobilità oltre un mezzo — ci sono dorsali, e lì la risalita arriva in superficie; senza, si ferma
   // alla base del coperchio. Le dorsali ci sono o non ci sono: qui i due regimi non si mescolano)
-  const colonna = fermoDelTutto ? 0 : Math.max(0, Pi - (mob > 0.5 ? st.Ptop : Pbase)), fi = Math.min(1, 0.5 * S.produttivita * colonna);
+  // (fi: la frazione fusa media della colonna, ∫F dP/colonna, lungo la risalita isoentropica di Katz: vedi fusoDellaColonna)
+  const Pfine = mob > 0.5 ? st.Ptop : Pbase, colonna = fermoDelTutto ? 0 : Math.max(0, Pi - Pfine), fi = colonna > 0 ? Math.min(1, fusoDellaColonna(Tum, Pfine) / colonna) : 0;
   // quanto fuso (kg/s): con le placche la legge di ThermInt, Ṁ = 1,16·κ·A·ρ·φ/δ [V]; sotto un coperchio fermo quella di
   // Foley 2019 [V]: volume 17,8·π·R·v·(spessore della zona che fonde)·φ, con la velocità sotto il coperchio
   // v = 0,05·(κ/d)·(Ra_i/θ)^(2/3) e la densità del fuso 2800 kg/m³
   const Mfuso = !(fi > 0) ? 0 : mob > 0.5 ? (S.portataFuso * st.kappaSu * st.A * S.rhoSu * fi) / delta
     : S.rhoFuso * S.foleyFuso * PI * st.Ri * (S.c2Fermo * (st.kappaSu / st.D) * Math.pow(Math.exp(2 * (lnCrit - LN_KORENAGA)) / teta, 2 / 3)) * (colonna / (S.rhoSu * st.g)) * fi;
   const Qfuso = S.erutta * Mfuso * S.cp * dT;
+  // la velocità del mantello sotto il coperchio (m/s), la stessa della portata di Foley 2019 qui sopra: v = 0,05·(κ/d)·(Ra_i/θ)^(2/3)
+  const vInterno = fermoDelTutto ? 0 : S.c2Fermo * (st.kappaSu / st.D) * Math.pow(Math.exp(2 * (lnCrit - LN_KORENAGA)) / teta, 2 / 3);
   // il confine nucleo–mantello
   let Qcmb = 0, qcmb = 0;
   if (st.haNucleo) { const d = Tcmb - Tlm, nuGiu = S.saltoViscosita * arr, // (il fuso alla base del mantello non è modellato: lì la viscosità è quella della roccia solida)
@@ -315,7 +359,7 @@ function flussi(st, piu, amb, rami, Tm, Tcmb, o) {
   o.dTc = st.haNucleo ? (-Qcmb / capC) * ANNO_S : 0;
   o.Tum = Tum; o.Tlm = Tlm; o.Ts = Ts; o.delta = delta; o.lid = lid; o.mob = mob; o.lnEta = lnEta; o.lnCrit = lnCrit; o.attrito = attrito; o.teta = teta; o.Fv = Fv; o.eps = eps; o.nu = nu;
   o.Qconv = Qconv; o.Qfuso = Qfuso; o.Qcmb = Qcmb; o.Qrad = Qrad; o.Qmarea = Qmarea; o.imK2 = imK2; o.k2re = k2re; o.qcmb = qcmb; o.Mfuso = Mfuso; o.fi = fi; o.colonna = colonna; o.Ric = Ric; o.dRic = o.dr * o.dTc / ANNO_S; // (m/s)
-  o.vapore = vapore; o.convette = !fermoDelTutto;
+  o.vapore = vapore; o.convette = !fermoDelTutto; o.vInterno = vInterno;
   o.arr = arr; o.capM = capM; // (per flussiDelNucleo, qui sotto)
   return o;
 }
@@ -343,10 +387,12 @@ function dinamo(st, rami, Tcmb, f) {
   return { F, Fth, Fchi, qad, Rem, accesa, guscio, M: accesa ? 4 * PI * st.Rc ** 3 * rami.dipolo * Math.sqrt(S.rhoNucleo / (2 * MU0)) * Math.cbrt(F * guscio) : 0 };
 }
 
+// lo spessore (m) a cui la base della crosta di basalto arriva alla pressione dell'eclogite
+const eclogite = (st) => Math.max(0, (STORIA.eclogite - st.Ptop) / (STORIA.rhoBasalto * st.g));
 // ---------- l'integrazione: Rosenbrock a due stadi (ROS2, L-stabile: le equazioni sono rigide quando il mantello è in
 // parte fuso), jacobiano per differenze, passo adattivo dall'errore tra il primo e il secondo ordine. Il passo non supera
 // il 10% del tempo trascorso: la tabella ha così qualche centinaio di righe, fitte dove la storia cambia in fretta.
-const COLONNE = ['t', 'Tm', 'Tcmb', 'Tum', 'Ts', 'Qconv', 'Qfuso', 'Qcmb', 'Qrad', 'Qmarea', 'Ric', 'dRic', 'mob', 'lid', 'delta', 'Mfuso', 'fi', 'F', 'Fth', 'Fchi', 'M', 'Rem', 'qad', 'qcmb', 'accesa', 'lnEta', 'lnCrit', 'Fv', 'crosta', 'imK2', 'k2re'];
+const COLONNE = ['t', 'Tm', 'Tcmb', 'Tum', 'Ts', 'Qconv', 'Qfuso', 'Qcmb', 'Qrad', 'Qmarea', 'Ric', 'dRic', 'mob', 'lid', 'delta', 'Mfuso', 'fi', 'F', 'Fth', 'Fchi', 'M', 'Rem', 'qad', 'qcmb', 'accesa', 'lnEta', 'lnCrit', 'Fv', 'crosta', 'imK2', 'k2re', 'vInterno', 'convette'];
 const T_INIZIO = 1e5; // (anni) da dove parte l'integrazione: prima c'è la formazione (disco.js, impatti.js)
 function integra(voce, finoA) {
   const { st, sv, rami, tab } = voce, piu = voce.piu || (voce.piu = piuDi(st)), b = {}, gR = 1 + Math.SQRT1_2, fine = voce.fine, tol = 1 / fine; // (K) l'errore ammesso per passo
@@ -355,7 +401,7 @@ function integra(voce, finoA) {
   const scrivi = (f) => { const d = dinamo(st, rami, Tc, f);
     tab.t.push(t); tab.Tm.push(Tm); tab.Tcmb.push(Tc); tab.Tum.push(f.Tum); tab.Ts.push(f.Ts); tab.Qconv.push(f.Qconv); tab.Qfuso.push(f.Qfuso); tab.Qcmb.push(f.Qcmb); tab.Qrad.push(f.Qrad); tab.Qmarea.push(f.Qmarea);
     tab.Ric.push(f.Ric); tab.dRic.push(f.dRic); tab.mob.push(f.mob); tab.lid.push(f.lid); tab.delta.push(f.delta); tab.Mfuso.push(f.Mfuso); tab.fi.push(f.fi); tab.F.push(d.F); tab.Fth.push(d.Fth); tab.Fchi.push(d.Fchi); tab.M.push(d.M); tab.Rem.push(d.Rem);
-    tab.qad.push(d.qad); tab.qcmb.push(f.qcmb); tab.accesa.push(d.accesa ? 1 : 0); tab.lnEta.push(f.lnEta); tab.lnCrit.push(f.lnCrit); tab.Fv.push(f.Fv); tab.crosta.push(crosta); tab.imK2.push(f.imK2); tab.k2re.push(f.k2re); };
+    tab.qad.push(d.qad); tab.qcmb.push(f.qcmb); tab.accesa.push(d.accesa ? 1 : 0); tab.lnEta.push(f.lnEta); tab.lnCrit.push(f.lnCrit); tab.Fv.push(f.Fv); tab.crosta.push(crosta); tab.imK2.push(f.imK2); tab.k2re.push(f.k2re); tab.vInterno.push(f.vInterno); tab.convette.push(f.convette ? 1 : 0); };
   ambiente(st, sv, t, qui); flussi(st, piu, qui, rami, Tm, Tc, a);
   if (!tab.t.length) scrivi(a);
   let passi = 0;
@@ -374,10 +420,16 @@ function integra(voce, finoA) {
       const err = Math.max(Math.abs(0.5 * h * (k1a + k2a)), Math.abs(0.5 * h * (k1b + k2b)));
       if (!(err <= tol) && h > 1) { h *= Math.max(0.2, 0.9 * Math.sqrt(tol / err)); continue; }
       const TmN = Tm + 1.5 * h * k1a + 0.5 * h * k2a, TcN = Tc + 1.5 * h * k1b + 0.5 * h * k2b;
+      // (LA NASCITA DEL NUCLEO INTERNO è un evento: lì la capacità del nucleo salta, per il calore latente. Il passo che la
+      // scavalca si accorcia finché arriva a un quarto di kelvin oltre: con la fusione di Katz il passo di lavoro la scavalcava
+      // e il nucleo interno nasceva 0,3 Ga dopo quello dei passi fitti)
+      // (e subito dopo, finché il raggio va come la radice della distanza dalla nascita, il passo non sposta T_cmb più di un
+      // quarto di quella distanza: lo jacobiano per differenze lì non vede la radice, e T_cmb oscillava risalendo)
+      if (st.nBuoni >= 2 && h > 1 && ((Tc > st.Gr[0] && TcN < st.Gr[0] - 0.25) || (Tc <= st.Gr[0] && Math.abs(TcN - Tc) > 0.25 * (st.Gr[0] - Tc) + 0.25))) { h *= Tc > st.Gr[0] ? Math.max(0.1, (Tc - st.Gr[0] + 0.25) / (Tc - TcN)) : 0.5; continue; }
       // la crosta di basalto (m): quella di una colonna che fonde fino in superficie con le placche; sotto un coperchio
       // fermo si accumula con le eruzioni e le intrusioni, e non supera il coperchio (ciò che lo supera sprofonda: Foley 2019)
       const colonnaM = (a.fi * a.colonna) / (STORIA.rhoSu * st.g), accumulo = crosta + ((MfusoPrima * ANNO_S * h) / (STORIA.rhoSu * st.A)) * (1 - mobPrima);
-      crosta = mobPrima > 0.5 ? colonnaM : Math.min(lidPrima, Math.max(accumulo, 0));
+      crosta = mobPrima > 0.5 ? colonnaM : Math.min(lidPrima, eclogite(st), Math.max(accumulo, 0));
       t += h; Tm = Math.max(50, TmN); Tc = Math.max(50, TcN);
       h *= err > 0 ? Math.min(3, Math.max(0.3, 0.9 * Math.sqrt(tol / err))) : 3;
       break;

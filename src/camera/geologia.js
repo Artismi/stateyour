@@ -11,10 +11,10 @@
 
 import { celle } from './fluidi.js';
 import { minerali, coloreRoccia, ROCCE } from './chimica.js';
-import { evolviTettonica } from './tettonica.js';
+import { evolviTettonica, COSTANTI as TETTONICA } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
-import { internoDaStoria, storia, STORIA } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
+import { internoDaStoria, storia, tabellaStoria, STORIA } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
 import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, bilancioPerFasce, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
 // L'INTERNO DI OGGI: lo stato della storia del pianeta (storia.js) all'età della sua stella, nella forma di sempre:
 // { eta, nucleo (raggio del nucleo / raggio), crosta (spessore della crosta di basalto / raggio), q (W/m²), dinamo, B0 (T
@@ -59,21 +59,29 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // la storia usa, la crosta di basalto che il mantello produce, la temperatura della superficie; poi l'acqua e la gravità)
   const mantello0 = aPlacche ? statoDelMantello(P, int) : null, Tsup = P.clima?.T ?? P.clima?.Teq, mantello = mantello0 ? { ...mantello0, alfa: STORIA.alfa, rho: STORIA.rhoSu, ...(int.crosta > 0 ? { basalto: int.crosta * P.raggioM } : {}), ...(Tsup > 0 ? { Ts: Tsup } : {}) } : null;
   const gravita = P.massaKg > 0 ? (6.674e-11 * P.massaKg) / P.raggioM ** 2 : 9.81;
-  const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, acquaM3: acquaKg / 1000, gravita, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
+  // LA STORIA TERMICA NEL TEMPO (storia.js, la tabella intera fino all'età): la tettonica la legge passo per passo (il calore, la
+  // velocità, la mobilità, il fuso di ogni epoca), con le placche e senza
+  const tempo = (() => { try { const tb = tabellaStoria(P, { finoA: int.eta ?? 4.5e9 }); return tb && tb.t.length > 1 ? tb : null; } catch { return null; } })();
+  const opzT = { W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, acquaM3: acquaKg / 1000, gravita, tempo, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null };
+  const tt = aPlacche ? evolviTettonica({ ...opzT, placche: true, termico: mantello }) : null;
+  const lid = !aPlacche && tempo ? evolviTettonica({ ...opzT, placche: false }) : null; // (senza placche: il rilievo del coperchio, tettonica.js coperchio)
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
   // IL RILIEVO. Con le placche è quello della tettonica (il galleggiamento della crosta, l'età dei fondali, le catene), e
   // basta: il dettaglio sotto la cella lo aggiungono le tessere, con l'ottava condizionata dal padre (tessera, sotto). Prima
   // vi si sommava un rumore di 24 sinusoidi a caso (±180 m), lo stesso su catene, cratoni e abissi.
-  // SENZA PLACCHE non c'è niente che faccia il rilievo grande (manca ancora la topografia dinamica del mantello sotto il
-  // coperchio): resta il campo di prima, −1500 m più un rilievo della stessa ampiezza (lo scarto della somma di sinusoidi
-  // di prima, 700·1,25 m, la radice di Σa²/2: AMPIEZZA EREDITATA, a mano), ma con lo spettro del terreno vero: le ottave di eredita.js con
-  // l'esponente di Hurst dei continenti (0,66: Gagnon e altri 2006), dalla cella di 1/4 del giro fino a quella della carta.
+  // SENZA PLACCHE il rilievo grande è quello del coperchio (tettonica.js coperchio, con la storia termica): la crosta di basalto
+  // ispessita dove il fuso di ogni epoca si è posato (isostasia) e la topografia dinamica del mantello di oggi. Sotto la grana
+  // del mantello continua con lo spettro del terreno vero: le ottave di eredita.js con l'esponente di Hurst dei continenti
+  // (0,66: Gagnon e altri 2006), dalla cella di 1/4 del giro fino a quella della carta, con l'AMPIEZZA DEL RILIEVO GRANDE: la
+  // prima ottava sotto quella del mantello ha lo scarto del campo del coperchio per 2^(−H) (l'autoaffinità che continua). Prima
+  // l'ampiezza era 700·1,25 m a mano, attorno a −1500 m; resta solo se la storia manca.
   // (Il campo si richiude in longitudine: due campi, in x e in x − W, pesati cos e sin di πx/2W, che hanno la stessa varianza.)
   let rilievo = null;
   if (!tt) { const lv = Math.log2(W / 4), f = discendi({ base: () => 0, livello0: 0, livello: lv, I0: -W, J0: 0, nI: 2 * W, nJ: H, radice: `${chiave}/superficie`, nome: 'rilievo del pianeta', ampiezza: 1, hurst: HURST.continente, lato0: 1 });
     rilievo = new Float64Array(W * H); let s2 = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const t = (Math.PI * i) / (2 * W), v = f[j * 2 * W + i + W] * Math.cos(t) + f[j * 2 * W + i] * Math.sin(t); rilievo[j * W + i] = v; s2 += v * v; }
-    const sc = (700 * 1.25) / Math.sqrt(s2 / (W * H)); for (let k = 0; k < W * H; k++) rilievo[k] *= sc; }
-  for (let k = 0; k < W * H; k++) { alt[k] = tt ? tt.alt[k] : -1500 + rilievo[k]; if (tt) spinta[k] = tt.spinta[k]; } // (spinta: l'OROGENESI, dove oggi la crosta è compressa e i monti crescono)
+    let sigma = 700 * 1.25; if (lid) { let m = 0, m2 = 0, a = 0; for (let j = 0; j < H; j++) { const c = Math.sin(((j + 0.5) / H) * Math.PI); for (let i = 0; i < W; i++) { const v = lid.alt[j * W + i]; m += c * v; m2 += c * v * v; a += c; } } sigma = (Math.sqrt(Math.max(0, m2 / a - (m / a) ** 2)) * 2 ** -HURST.continente) / Math.sqrt(1 - 4 ** -HURST.continente); } // (la prima ottava σ·2^(−H), e tutte quelle sotto: Σ 4^(−H·m))
+    const sc = sigma / Math.sqrt(s2 / (W * H)); for (let k = 0; k < W * H; k++) rilievo[k] *= sc; }
+  for (let k = 0; k < W * H; k++) { alt[k] = tt ? tt.alt[k] : (lid ? lid.alt[k] : -1500) + rilievo[k]; if (tt) spinta[k] = tt.spinta[k]; } // (spinta: l'OROGENESI, dove oggi la crosta è compressa e i monti crescono)
   // GLI IMPATTI. Per tutta la sua vita il pianeta è colpito: moltissimo da giovane, poi sempre meno; molti
   // crateri piccoli e pochi grandi; un'atmosfera densa brucia i corpi piccoli. Quanti se ne vedono ancora
   // dipende da quanto la superficie si rinnova: un mondo fermo e senz'aria li conserva tutti (la Luna), uno
@@ -109,11 +117,31 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // mantello (tt.salite) stanno sulle sue cime più alte, la più calda per prima e non due nello stesso pennacchio; se
   // le cime non bastano, o il mantello non è stato calcolato (i mondi senza placche), i restanti cadono dove capita
   const vulcani = [], cime = [];
-  if (tt && tt.salite) { const u = tt.salite, tutte = [];
+  const campoU = (tt || lid)?.salite; if (campoU) { const u = campoU, tutte = [];
     for (let j = 1; j < H - 1; j++) for (let i = 0; i < W; i++) { const v = u[j * W + i]; if (!(v > 0)) continue; let cima = true; for (let b = -1; b <= 1 && cima; b++) for (let a = -1; a <= 1; a++) if ((a || b) && u[(j + b) * W + ((i + a + W) % W)] > v) { cima = false; break; } if (cima) tutte.push([v, i, j]); }
     tutte.sort((a, b) => b[0] - a[0] || a[2] - b[2] || a[1] - b[1]);
-    for (const [, i, j] of tutte) { const pi = sfera(i, j); if (cime.every(([a, b]) => dot(pi, sfera(a, b)) < Math.cos(0.25))) cime.push([i, j]); } } // (almeno un quarto di radiante tra due vulcani)
-  for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) { const colata = 2500 * Math.exp(-(di * di + dj * dj) / 3); alt[jj * W + ii] += colata; lava[jj * W + ii] += colata; } } } // (l'edificio è una pila di lave: quello spessore è roccia vulcanica)
+    for (const [v, i, j] of tutte) { const pi = sfera(i, j); if (cime.every(([a, b]) => dot(pi, sfera(a, b)) < Math.cos(0.25))) cime.push([i, j, v]); } } // (almeno un quarto di radiante tra due vulcani)
+  // I VULCANI DEI PENNACCHI (con la storia): un pennacchio su ogni cima del mantello (le salite; il numero viene dalla convezione),
+  // e il loro flusso dal calore: i pennacchi portano su il calore che esce dal nucleo (Davies 1988, Sleep 1990 [R]: il flusso di
+  // galleggiamento è B = α·Q_cmb/c_p), quindi la loro parte del fuso della storia è Q_cmb/(Q_conv + Q_fuso), divisa tra le cime in
+  // proporzione a quanto salgono; ne esce in superficie la parte che erutta (storia.js erutta, ThermInt [V]). L'EDIFICIO è un cono
+  // con i fianchi di uno scudo (5°: Mauna Loa, Olympus Mons [R]). Sotto un coperchio cresce per un giro del mantello (il tempo di
+  // vita di una salita: storia.js vInterno); sopra una placca che corre resta l'edificio che si fa mentre la placca gli passa
+  // sopra (il resto è la catena, che qui non si disegna): V = F·2r/v, con r = h/tan 5° e v quella delle placche. L'edificio pesa e
+  // affonda in isostasia locale, come tutto il rilievo del coperchio: in quota resta (1 − ρ_roccia/ρ_mantello) della pila di lave (la
+  // rigidità della litosfera, che sulla Terra regge circa metà dell'edificio, manca). Senza la storia
+  // resta la convenzione di prima: int.vulcani edifici da 2500 m
+  const pennacchi = (() => { if (!tempo || !cime.length) return null; try { const s = storia(P, int.eta ?? 4.5e9), n = tempo.t.length - 1, vI = tempo.vInterno[n], D = tempo.struttura.D;
+    const f = s.Q.cmb > 0 ? s.Q.cmb / Math.max(1, s.Q.conv + s.Q.fuso) : 0; return { flusso: (STORIA.erutta * f * s.fuso.kgAnno) / ROCCE.densita, giro: vI > 0 ? D / (vI * 3.156e7) : 0 }; } catch { return null; } })();
+  if (pennacchi) { const pendio = Math.tan((5 * Math.PI) / 180), dy = (Math.PI * P.raggioM) / H; let su = 0; for (const c of cime) su += c[2];
+    for (const [i, j, v] of cime) { const F = (pennacchi.flusso * v) / su, vel = tt ? tt.storia.velocita : 0; // (la placca corre sul pennacchio alla velocità delle placche: sopra la salita la cella stessa quasi non si muove, è la dorsale)
+      const h = vel > 0 ? Math.sqrt((6 * F * pendio) / (Math.PI * vel)) : Math.cbrt((3 * F * pennacchi.giro * pendio * pendio) / Math.PI); if (!(h > 1)) continue;
+      const r = h / pendio, dx = Math.max(0.1 * dy, ((2 * Math.PI * P.raggioM) / W) * Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI)), rj = Math.ceil(r / dy), ri = Math.min(W >> 1, Math.ceil(r / dx)); // (dx: il lato della cella lungo il parallelo)
+      const V = (Math.PI * r * r * h) / 3; let posto = 0; const pezzi = [];
+      for (let b = -rj; b <= rj; b++) { const jj = j + b; if (jj < 0 || jj >= H) continue; for (let a = -ri; a <= ri; a++) { const z = h * (1 - Math.hypot(a * dx, b * dy) / r); if (z > 0) { pezzi.push([jj * W + ((i + a + W) % W), z]); posto += z * dx * dy; } } }
+      const sc = V / posto; // (il volume si conserva anche se il cono è più stretto di una cella: la cella del centro c'è sempre)
+      for (const [q, z] of pezzi) { alt[q] += z * sc * (1 - ROCCE.densita / TETTONICA.rhoMantello); lava[q] += z * sc; } vulcani.push([i, j]); } }
+  else for (let k = 0; k < int.vulcani; k++) { const p = casuale(`vulcano ${k}/dove`), lat = Math.asin(p[2]), lon = Math.atan2(p[1], p[0]); const [i, j] = cime[k] || [Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W, Math.min(H - 1, Math.floor(((Math.PI / 2 - lat) / Math.PI) * H))]; vulcani.push([i, j]); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const jj = j + dj, ii = (i + di + W) % W; if (jj >= 0 && jj < H) { const colata = 2500 * Math.exp(-(di * di + dj * dj) / 3); alt[jj * W + ii] += colata; lava[jj * W + ii] += colata; } } } // (l'edificio è una pila di lave: quello spessore è roccia vulcanica)
   // il mare: l'acqua del pianeta riempie i punti più bassi (si cerca il livello che contiene quel volume)
   const area = (j) => Math.cos(Math.PI / 2 - ((j + 0.5) / H) * Math.PI) * (2 * Math.PI * P.raggioM ** 2 * (Math.PI / H)) / W;
   const volumeAcqua = acquaKg / 1000;
@@ -155,7 +183,8 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const tetto = tt ? new Float32Array(W * H) : null; if (tt) for (let k = 0; k < W * H; k++) tetto[k] = alt[k] + tt.regge[k];
   const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati,
     ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, spessore: tt.spessore, copre: tt.copre, calore: tt.calore, termica: tt.termica,
-      tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera, salite: tt.salite, stiramento: tt.stiramento } } : {}) };
+      tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera, salite: tt.salite, stiramento: tt.stiramento, bilancio: tt.bilancio } } : {}),
+    ...(lid ? { sollevamento: lid.sollevamento, basalto: lid.basalto, tettonica: { salite: lid.salite, mare: lid.mare, rilievo: lid.rilievo, regime: lid.regime } } : {}) };
   memo.set(chiave, out); if (memo.size > 6) memo.delete(memo.keys().next().value);
   return out;
 }
