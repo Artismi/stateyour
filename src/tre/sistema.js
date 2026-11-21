@@ -87,20 +87,20 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   })();
   let prgOrbita = null; const u9 = new Float32Array(9), pos1 = new Float32Array(3), luce1 = new Float32Array(4);
   // QUANTO SI VEDE UN'ORBITA da dove sta l'occhio (c: il corpo attorno a cui gira, visto dall'occhio; q: gli assi del sistema
-  // per righe; l'occhio nel riferimento dell'orbita è qᵀ·(−c)). Un'orbita è un segno per chi la guarda DA FUORI o dall'alto:
-  // · se l'occhio sta dentro l'ellisse e vicino al suo piano, l'orbita gli gira attorno e sullo schermo è una retta che
-  //   attraversa tutta la vista (all'avvio, accanto al pianeta 1, le orbite degli altri pianeti e delle sue lune): si spegne
-  //   dentro metà del semiasse e sotto un decimo di semiasse dal piano, piena fuori dall'ellisse o a tre decimi sopra il piano;
-  // · se l'occhio sta quasi SULLA linea (accanto al corpo che la percorre: dentro la sua sfera di Hill e oltre) la vede di
-  //   taglio, una retta che passa accanto all'occhio: si spegne sotto mezzo centesimo di a, piena a due centesimi.
+  // per righe; l'occhio nel riferimento dell'orbita è qᵀ·(−c)). Un'orbita è un segno per chi la guarda dall'alto:
+  // · DI TAGLIO — l'occhio quasi nel suo piano rispetto a quanto ne dista: altezza sul piano / distanza dal punto più vicino
+  //   della linea sotto 0,03 — è una retta (o due, il lato vicino e quello lontano) che attraversa tutta la vista: all'avvio,
+  //   accanto al pianeta, le orbite degli altri pianeti e delle sue lune. Si spegne lì, piena da 0,12 (7°);
+  // · se l'occhio sta quasi SULLA linea (accanto al corpo che la percorre: dentro la sua sfera di Hill e oltre) la linea gli
+  //   passa accanto, a qualunque altezza: si spegne sotto mezzo centesimo di a, piena a due centesimi.
   const rampa = (x, a, b) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   function vistaOrbita(o, c, q) {
     const x = -(q[0] * c[0] + q[3] * c[1] + q[6] * c[2]), y = -(q[1] * c[0] + q[4] * c[1] + q[7] * c[2]), z = -(q[2] * c[0] + q[5] * c[1] + q[8] * c[2]), v = o.v, nn = o.nrm;
-    const alto = Math.abs(x * nn[0] + y * nn[1] + z * nn[2]) / o.a, fuori = Math.hypot(x, y, z) / o.a, attorno = Math.max(rampa(fuori, 0.5, 1), rampa(alto, 0.1, 0.3)); if (attorno <= 0) return 0;
     let m = Infinity;
     for (let i = 0; i < o.n - 1; i++) { const ax = v[3 * i], ay = v[3 * i + 1], az = v[3 * i + 2], bx = v[3 * i + 3] - ax, by = v[3 * i + 4] - ay, bz = v[3 * i + 5] - az, px = x - ax, py = y - ay, pz = z - az, bb = bx * bx + by * by + bz * bz;
       const f = bb > 0 ? Math.max(0, Math.min(1, (px * bx + py * by + pz * bz) / bb)) : 0, dx = px - f * bx, dy = py - f * by, dz = pz - f * bz, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m) m = d2; }
-    return attorno * rampa(Math.sqrt(m) / o.a, 0.005, 0.02);
+    const dOrb = Math.sqrt(m), alto = Math.abs(x * nn[0] + y * nn[1] + z * nn[2]);
+    return rampa(alto / Math.max(dOrb, 1e-9), 0.03, 0.12) * rampa(dOrb / o.a, 0.005, 0.02);
   }
 
   const strato = {

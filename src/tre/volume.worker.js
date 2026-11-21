@@ -90,14 +90,19 @@ function volumeGalassia(d, manda) {
   try { const v = sg.vuoto({ centro: [0, 0, 0], raggio: Rk * 1.1 }); let messe = 0;
     // (vicino all'asse una cella è uno spicchio stretto: una nebulosa più larga dello spicchio vi stava tutta dentro, e di
     // faccia il centro si vedeva a raggi, spicchi chiari e scuri. La si stende sugli spicchi che il suo raggio copre a quella
-    // distanza dall'asse — 2·asin(r/R), tutto il giro se r ≥ R —, con la stessa somma)
+    // distanza dall'asse — 2·asin(r/R), tutto il giro se r ≥ R —, con la stessa somma. E non sta in una cella sola: si
+    // divide tra le due più vicine per raggio, per quota e — se è più stretta di uno spicchio — per angolo, coi pesi della
+    // distanza dai loro centri (la «nuvola nella cella»): da vicino una nube più piccola della cella era un blocco dai lati
+    // dritti, una scatola scura nel disco.)
+    const dueCelle = (x, n) => { const f = Math.max(0, Math.min(n - 1, x - 0.5)), a = Math.min(n - 2, Math.floor(f)), w = f - a; return n < 2 ? [[0, 1]] : [[a, 1 - w], [a + 1, w]]; };
     for (const x of v.volumi) { const R = Math.hypot(x.pos[0], x.pos[1]) / Rg, z = x.pos[2] / Rg; if (R >= Rmax || Math.abs(z) >= zmax) continue; let fi = Math.atan2(x.pos[1], x.pos[0]) / (2 * Math.PI); fi -= Math.floor(fi);
-      const jf = Math.min(nf - 1, Math.floor(fi * nf)), jr = Math.min(nr - 1, Math.floor((R / Rmax) * nr)), s = Math.sign(z) * Math.sqrt(Math.abs(z) / zmax), jz = Math.min(nz - 1, Math.floor(((s + 1) / 2) * nz)), vc = volCella(jr, jz);
-      const rr = x.raggio / Rg, largo = rr >= R ? 2 * Math.PI : 2 * Math.asin(rr / R), nc = Math.max(1, Math.min(nf, Math.ceil((largo * nf) / (2 * Math.PI)))), f0 = jf - Math.floor(nc / 2);
-      const L = x.brillanza > 0 && x.colore ? (x.brillanza * 4 * Math.PI * Math.PI * x.raggio * x.raggio) / sg.daLontano.luminosita / vc / nc : 0, m = x.colore ? Math.max(lin(x.colore[0]), lin(x.colore[1]), lin(x.colore[2])) || 1 : 1, A = x.estinzione > 0 ? (x.estinzione * (2 / 3) * Math.PI * rr * rr) / vc / nc : 0;
-      for (let q = 0; q < nc; q++) { const o = 4 * ((jz * nr + jr) * nf + ((((f0 + q) % nf) + nf) % nf));
-        if (L > 0) for (let c = 0; c < 3; c++) dati[o + c] += (L * lin(x.colore[c])) / m;
-        if (A > 0) dati[o + 3] += A; }
+      const s = Math.sign(z) * Math.sqrt(Math.abs(z) / zmax), rr = x.raggio / Rg, largo = rr >= R ? 2 * Math.PI : 2 * Math.asin(rr / R), nc = Math.max(1, Math.min(nf, Math.ceil((largo * nf) / (2 * Math.PI))));
+      const spicchi = nc > 1 ? Array.from({ length: nc }, (_, q) => [Math.floor(fi * nf) - Math.floor(nc / 2) + q, 1 / nc]) : (() => { const f = fi * nf - 0.5, a = Math.floor(f), w = f - a; return [[a, 1 - w], [a + 1, w]]; })();
+      const L = x.brillanza > 0 && x.colore ? (x.brillanza * 4 * Math.PI * Math.PI * x.raggio * x.raggio) / sg.daLontano.luminosita : 0, m = x.colore ? Math.max(lin(x.colore[0]), lin(x.colore[1]), lin(x.colore[2])) || 1 : 1, A = x.estinzione > 0 ? x.estinzione * (2 / 3) * Math.PI * rr * rr : 0;
+      for (const [jr, wr] of dueCelle((R / Rmax) * nr, nr)) for (const [jz, wz] of dueCelle(((s + 1) / 2) * nz, nz)) { const vc = volCella(jr, jz);
+        for (const [jf, wf] of spicchi) { const w = (wr * wz * wf) / vc; if (!(w > 0)) continue; const o = 4 * ((jz * nr + jr) * nf + (((jf % nf) + nf) % nf));
+          if (L > 0) for (let c = 0; c < 3; c++) dati[o + c] += (w * L * lin(x.colore[c])) / m;
+          if (A > 0) dati[o + 3] += w * A; } }
       if (L > 0) messe++; if (A > 0) messe++; }
     tetto(); manda({ n: d.n, tipo: 'galassia', dati, ...meta, nebulose: messe });
   } catch (e) { /* senza vuoto.js resta il volume delle stelle e della polvere */ }
