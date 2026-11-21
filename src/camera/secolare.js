@@ -104,7 +104,9 @@ function coefficienti(p, q, cache) {
 export function blocchiSecolari(corpi, Mst, quanti, cache = null) {
   const N = corpi.length; if (N <= quanti) return [0];
   const d = new Float64Array(N), off = new Float64Array(N), n = corpi.map((c) => (2 * Math.PI * Math.sqrt(Mst)) / Math.pow(c.a, 1.5)), W = corpi.map((c) => Math.sqrt(c.m * Math.sqrt(c.a)));
-  for (let j = 0; j < N; j++) for (let k = j + 1; k < N; k++) { const p = corpi[j], q = corpi[k], b = coefficienti(p, q, cache), al = b[0];
+  // (per dove tagliare bastano i vicini: i giri secolari si sommano sulle coppie entro otto posti — l'accoppiamento cala in fretta
+  // con la distanza —; la teoria secolare di ogni pezzo, poi, li conta tutti)
+  for (let j = 0; j < N; j++) for (let k = j + 1; k < Math.min(N, j + 9); k++) { const p = corpi[j], q = corpi[k], b = coefficienti(p, q, cache), al = b[0];
     d[j] += 0.25 * n[j] * q.m * al * al * b[1]; d[k] += 0.25 * n[k] * p.m * al * b[1]; if (k === j + 1) off[j] = Math.abs((0.25 * n[j] * q.m * al * al * b[2] * W[j]) / W[k]); }
   const legame = (j) => off[j] / (off[j] + Math.abs(d[j] - d[j + 1])), inizi = [];
   const taglia = (lo, hi) => { if (hi - lo + 1 <= quanti) { inizi.push(lo); return; } let jm = lo; for (let j = lo; j < hi; j++) if (legame(j) < legame(jm)) jm = j; taglia(lo, jm); taglia(jm + 1, hi); };

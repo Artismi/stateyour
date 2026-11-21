@@ -284,13 +284,16 @@ export function formaPianeti(st, seme = 1) {
   // restava niente che frenasse le orbite.)
   const massaIso = (r) => Math.pow(2 * Math.PI * (r * UA) ** 2 * D.sigmaSolidi(r) * P.C, 1.5) * Math.sqrt(2 / (3 * Mst));
   const corpi = [];
+  let wPrima = 0;
   for (let lo = D.rIn * (1 + 0.15 * c('bordo interno')); lo < D.rOut && corpi.length < 6000;) {
-    let m = massaIso(lo), w = 2 * P.C * hill(2 * m, lo);
-    const r = lo + Math.min(w, 0.4 * lo) / 2, sS = D.sigmaSolidi(r); m = Math.pow(2 * Math.PI * (r * UA) ** 2 * sS * P.C, 1.5) * Math.sqrt(2 / (3 * Mst)); w = 2 * P.C * hill(2 * m, r); // (massaIso(r), con la Σ già letta)
+    // (la larghezza della striscia che comincia a lo: quella dell'embrione di lo, o — dopo il primo — quella della striscia di prima,
+    // che cambia piano: serve solo a mettere il centro)
+    let m = 0, w = wPrima; if (!(w > 0)) { m = massaIso(lo); w = 2 * P.C * hill(2 * m, lo); }
+    const r = lo + Math.min(w, 0.4 * lo) / 2, T = D.Tcond(r), sG = D.sigmaGas(r), sS = (D.solidi.roccia(T) + (r < D.neve ? 0 : D.solidi.ghiaccio)) * sG; // (D.sigmaSolidi(r), con T e Σ_gas che servono anche dopo) m = Math.pow(2 * Math.PI * (r * UA) ** 2 * sS * P.C, 1.5) * Math.sqrt(2 / (3 * Mst)); w = 2 * P.C * hill(2 * m, r); // (massaIso(r), con la Σ già letta)
     if (!(w > 0)) break;
     if (w > 0.4 * r) { w = 0.4 * r; m = Math.PI * r * UA * w * UA * sS; } // un disco enorme: la striscia non può essere più larga dell'orbita (e l'embrione ne ha metà)
-    lo += w; if (lo > D.rOut) break;
-    const sG = D.sigmaGas(r), tIso = 3 * tempoCrescita(m, r, sS, sG, D.massaStella);
+    lo += w; wPrima = w; if (lo > D.rOut) break;
+    const tIso = 3 * tempoCrescita(m, r, sS, sG, D.massaStella);
     // la massa cresce come il cubo del tempo (il tempo di raddoppio va come M^(1/3)) fino all'isolamento, finché c'è il gas
     const mora = m * Math.min(1, (colGas / tIso) ** 3);
     // 6. LA MATERIA. Il ferro condensa prima della roccia: vicino alla stella, dove fa caldo, la polvere è più ricca di
@@ -300,7 +303,7 @@ export function formaPianeti(st, seme = 1) {
     // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
     // (LA CATENA DEGLI ELEMENTI: la roccia è quella che lì condensa, alla temperatura del luogo; il suo metallo — ferro non
     // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
-    const T = D.Tcond(r), ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
+    const ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
     const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
     // L'ORBITA ALLA FINE DEL GAS: l'eccentricità che gli incontri tra embrioni lasciano contro il freno del gas, con la legge di
     // Rayleigh e lo scarto delle condizioni iniziali di Kimura et al. 2025 (eq. 31 [V], dalle N-corpi dell'accrescimento
@@ -432,7 +435,7 @@ export function formaPianeti(st, seme = 1) {
   // (cresce a ogni passo: ci si ferma quando non si muove più). Poi l'incontro della coppia che cede, e quando finisce.
   const terna = (i, t0) => terna3(vivi[i], vivi[i + 1], vivi[i + 2], vivi.length, t0);
   const terna3 = (p, q, r, n, t0) => {
-    const K = Math.min(0.5 * (n - 3) + 1, 3); let dt = 0, coppia = 0;
+    const K = Math.min(0.5 * (n - 3) + 1, 3); let dt = 0, coppia = 0; t0 = Math.max(t0, p.tz, q.tz, r ? r.tz : 0); // (chi esce dalla popolazione dei piccolissimi c'è solo da quando ne esce)
     for (let passo = 0; passo < 20; passo++) {
       const T = t0 + dt; let tau = Infinity;
       if (n === 2) { const h = Math.cbrt((p.m + q.m) / (3 * Mst)), et = Math.hypot(eA(p, T), eA(q, T)) / h, bt = (q.a - p.a) / ((0.5 * (p.a + q.a)) * h);
@@ -520,6 +523,54 @@ export function formaPianeti(st, seme = 1) {
   // ordine con una coda di priorità e la catena dei vicini, così il costo di un evento non cresce col numero dei corpi. Le voci
   // della coda: una terna col suo tempo di incrocio (che è un limite inferiore della fine del suo incontro), o col suo incontro
   // calcolato; una voce è vecchia se uno dei suoi corpi è cambiato o non sono più vicini.
+  // I PICCOLISSIMI COME POPOLAZIONE. Nei dischi poveri gli embrioni alla fine del gas sono migliaia, e tutti sotto la massa minima
+  // di un pianeta: seguirli uno per uno costa come il loro numero. Come nei codici ibridi (Kenyon e Bromley 2006; Kobayashi,
+  // Tanaka e Krivov 2010 [R]: i corpi piccoli come popolazione statistica, i grandi uno per uno), una fila di embrioni vicini sotto
+  // il minimo si segue a generazioni: a ogni generazione i vicini si fondono a due a due, quando la loro terna cede (lo stesso
+  // tempo di incrocio di Petit, con le masse e le distanze di quel momento) e si sono trovati (lo stesso τ_urto, con l'agitazione
+  // media di Kimura, e = e_fuga); l'eccentricità che ne esce è quella media della fusione di Kimura, e² = m₁m₂·e_fuga²/M², nella
+  // direzione dell'evento «…/fusione con…». Chi arriva al minimo esce dalla popolazione ed entra nella gara come corpo; chi a oggi
+  // non c'è arrivato resta un detrito. Dichiarato: nella popolazione nessuno è scagliato né diffuso (con e = e_fuga la gara di Kimura
+  // dà l'urto nove volte su dieci), e i frammenti degli urti non si contano.
+  if (eta > D.vita) {
+    const minimo = P.minimo * MTERRA, piccolo = (b) => b.m < minimo && !(b.gas > 0.5 * b.m), escono = [];
+    for (let j = 0; j < vivi.length;) {
+      if (!piccolo(vivi[j])) { escono.push(vivi[j]); j++; continue; }
+      let k = j; while (k < vivi.length && piccolo(vivi[k])) k++;
+      if (k - j < 2) { escono.push(vivi[j]); j = k; continue; }
+      const R = (g) => raggioPianeta({ massaKg: g.m, ferro: g.fe / g.m, ghiaccio: g.h2o / g.m });
+      let gruppi = vivi.slice(j, k).map((b) => { const g = { capo: b, m: b.m, fe: b.fe, h2o: b.h2o, a: b.a, t: b.tz, e: Math.hypot(b.zr, b.zi), zr: b.zr, zi: b.zi, lista: [], membri: [b], urti: 0 }; g.R = R(g); return g; });
+      for (let giro = 0; giro < 40; giro++) {
+        const dopo = []; let fusi = 0;
+        for (let i = 0; i < gruppi.length; i++) {
+          const A = gruppi[i], B = gruppi[i + 1];
+          if (!B || A.m >= minimo || B.m >= minimo || A.fermo || B.fermo) { dopo.push(A); continue; }
+          const C = gruppi[i + 2], Cp = C ? null : gruppi[i - 1], ms = A.m + B.m, am = (A.m * A.a + B.m * B.a) / ms, Ra = A.R, Rb = B.R, eF = Math.sqrt((2 * G * ms) / (Ra + Rb)) / vK(am);
+          const [u1, u2, u3] = C ? [A, B, C] : Cp ? [Cp, A, B] : [];
+          const x = u1 ? tempoIncrocio(u1.a, u2.a, u3.a, u1.m / Mst, u2.m / Mst, u3.m / Mst, u1.e, u2.e, u3.e, anno(u1.a), 3, giriCheRegge) : { tau: 0 };
+          const b = Math.abs(B.a - A.a), tU = ((b * am * UA * UA) / (Math.PI * (Ra + Rb) ** 2) / 2) * anno(am), t0 = Math.max(A.t, B.t), tI = t0 + x.tau, tF = tI + tU;
+          if (!(tF <= eta)) { A.fermo = true; dopo.push(A); continue; } // (a oggi non si sono ancora fusi: A resta com'è — dichiarato: non si riprova con l'altro vicino)
+          const [gA, pA] = A.m >= B.m ? [A, B] : [B, A], fi = 2 * Math.PI * c(`embrione ${A.capo.id}/fusione con ${B.capo.id}`), en = (Math.sqrt(A.m * B.m) / ms) * eF;
+          fusioni.push({ g: gA.capo.id, p: pA.capo.id, t: tF, Mg: gA.m, Mp: pA.m, Rg: gA === A ? Ra : Rb, Rp: gA === A ? Rb : Ra, a: am });
+          for (const u of pA.lista) { u.laterale = true; gA.lista.push(u); }
+          gA.lista.push({ bersaglioKg: gA.m, massaKg: pA.m, delta: 0, tIncrocio: tI, t: tF, aUA: am });
+          const nuovo = { capo: gA.capo, m: ms, fe: A.fe + B.fe, h2o: A.h2o + B.h2o, a: am, t: tF, e: en, zr: en * Math.cos(fi), zi: en * Math.sin(fi), lista: gA.lista, membri: gA.membri, urti: A.urti + B.urti + 1 }; nuovo.R = R(nuovo); for (const o of pA.membri) nuovo.membri.push(o); dopo.push(nuovo);
+          i++; fusi++;
+        }
+        gruppi = dopo; if (!fusi) break;
+      }
+      for (const g of gruppi) {
+        const b = g.capo;
+        if (g.membri.length > 1) {
+          for (const o of g.membri) { if (o === b) continue; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; for (const x of o.orfani) b.orfani.push(x); b.misto ||= o.misto || o.freddo !== b.freddo; b.nato = (b.nato * b.m + o.nato * o.m) / (b.m + o.m); b.m += o.m; o.in = b.id; o.morto = true; }
+          b.m = g.m; b.fe = g.fe; b.h2o = g.h2o; b.a = g.a; b.zr = g.zr; b.zi = g.zi; b.tz = g.t; b.lista = g.lista; b.urti = g.urti;
+        }
+        if (g.m >= minimo || gruppi.length < 2) escono.push(b); else b.detrito = true; // (sotto il minimo a oggi: un detrito)
+      }
+      j = k;
+    }
+    vivi = escono;
+  }
   if (eta > D.vita && vivi.length > 40) {
     vivi.forEach((o, j) => { o.prima = vivi[j - 1] || null; o.dopo = vivi[j + 1] || null; });
     let N = vivi.length; const coda = [], su = (v) => { coda.push(v); let j = coda.length - 1; while (j > 0) { const h = (j - 1) >> 1; if (coda[h].k <= v.k) break; coda[j] = coda[h]; j = h; } coda[j] = v; };

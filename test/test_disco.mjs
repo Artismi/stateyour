@@ -18,7 +18,11 @@ const saltoNeve = (() => { const X = EL.PROTOSOLARE, m = (s) => EL.ELEMENTI[s].m
   return 1 + (H2O * (m('O') + 2 * m('H')) + C * (m('C') + m('O')) + N * (m('N') + 3 * m('H'))) / roccia; })();
 const terre = (p) => p.massaKg / MTERRA, perc = (x) => `${Math.round(100 * x)}%`;
 // in quanti semi, su 60, c'è almeno un gigante di gas oltre la linea della neve
-const giganti = (st) => SEMI.filter((s) => { const neve = disco(st, s).neve; return formaPianeti(st, s).some((p) => p.tipo === 'gassoso' && p.aUA > neve); }).length / SEMI.length;
+// (PRIMA: contati solo oltre la neve. I giganti nascono oltre la neve, ma ora la fase degli urti fa anche lo scontro tra giganti:
+// quando uno è scagliato fuori, chi resta gli paga l'energia e scende, a volte dentro la neve — è il «Giove che salta» delle
+// simulazioni dei giganti che si diffondono, Jurić e Tremaine 2008 [R], e i giganti tiepidi osservati dentro 1–2 UA. Si contano
+// i sistemi con un gigante, dovunque sia)
+const giganti = (st) => SEMI.filter((s) => formaPianeti(st, s).some((p) => p.tipo === 'gassoso')).length / SEMI.length;
 // la distanza tra due orbite vicine, in raggi di Hill reciproci
 const hill = (a, b, Mstella) => (b.aUA - a.aUA) / (Math.cbrt((a.massaKg + b.massaKg) / (3 * Mstella * MSOLE)) * (a.aUA + b.aUA) / 2);
 // stelle di ogni genere, per le prove che devono valere sempre
@@ -41,7 +45,10 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
     // ferro non è ancora tutto ossidato: la roccia è un poco meno della fredda)
     assert.ok(Math.abs(D.sigmaSolidi(D.neve * 1.001) / D.sigmaSolidi(D.neve * 0.999) - (1 + D.solidi.ghiaccio / D.solidi.roccia(D.Tcond(D.neve)))) < 0.02 && Math.abs(DISCO.solidiFreddi / DISCO.roccia - saltoNeve) < 1e-9, `oltre la neve anche il ghiaccio è solido (salto ${DISCO.solidiFreddi / DISCO.roccia}, atteso ${saltoNeve})`);
     assert.ok(Math.abs(D.sigmaSolidi(5) / D.sigmaGas(5) - DISCO.metalliSole * DISCO.solidiFreddi) < 1e-9 && Math.abs(DISCO.metalliSole * DISCO.solidiFreddi - 0.0109) < 3e-4, 'i solidi sono i metalli del gas che lì condensano');
-    assert.ok(D.frazione >= 0.01 && D.frazione <= 0.12 && Math.abs(D.massaKg - D.frazione * MSOLE) < 1e-6 * MSOLE);
+    // (PRIMA: almeno un centesimo della stella. Ora la larghezza è quella misurata dei dischi giovanissimi di Classe 0, ±0,66 dex
+    // tra il 16° e l'84° percentile — Tychoniec et al. 2020, tabella A.2 —: un disco su sei sta sotto un quinto della mediana, e
+    // sotto il centesimo ce ne sono. Il tetto resta il limite d'instabilità gravitazionale)
+    assert.ok(D.frazione > 0 && D.frazione <= DISCO.instabile && Math.abs(D.massaKg - D.frazione * MSOLE) < 1e-6 * MSOLE);
     // la somma di Σ·2πr·dr fino al bordo esterno ridà la massa del disco
     let m = 0; const N = 4000; for (let i = 0; i < N; i++) { const r = ((i + 0.5) / N) ** 2 * D.rOut, dr = (2 * (i + 0.5) / N / N) * D.rOut; m += D.sigmaGas(r) * 2 * Math.PI * r * dr * UA * UA; }
     assert.ok(Math.abs(m / D.massaKg - 1) < 0.01, `massa del disco ricostruita: ${m / D.massaKg}`);
@@ -98,7 +105,7 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di
   if (fr < 0.85) console.log(`      ≠ NON TORNA  rocciosi tra 0,03 e 6 Terre: ${(100 * fr).toFixed(1)}% della popolazione (chiesto almeno l'85%)`);
 });
 
-prova('i giganti di gas: oltre la neve, non sempre; più frequenti con molti metalli, più rari attorno alle stelle piccole', () => {
+prova('i giganti di gas: non sempre; più frequenti con molti metalli, più rari attorno alle stelle piccole', () => {
   const sole = giganti(SOLE), ricca = giganti({ ...SOLE, Z: 2 }), povera = giganti({ ...SOLE, Z: 0.3 }), nana = giganti({ ...SOLE, massa: 0.3 });
   console.log(`      semi con un gigante: Sole ${perc(sole)}, Z = 2 ${perc(ricca)}, Z = 0,3 ${perc(povera)}, stella di 0,3 masse solari ${perc(nana)}`);
   assert.ok(sole >= 0.15 && sole <= 0.9, `giganti attorno al Sole: ${sole}`);
@@ -133,8 +140,12 @@ prova('le orbite: nessuna dentro 0,02 UA, in ordine, separate, senza incroci; i 
       const q = P[i - 1], d = hill(q, p, st.massa);
       assert.ok(p.aUA > q.aUA, `in ordine: ${dove}`);
       assert.ok(q.aUA * (1 + q.eccentricita) < p.aUA * (1 - p.eccentricita), `le orbite non si incrociano: ${dove}`);
-      // un sistema adulto ha avuto il tempo di sistemarsi: almeno sei raggi di Hill; uno ancora nel gas almeno due e mezzo
-      assert.ok(d > (st.eta >= 5e7 ? 6 : 2.5), `separate di ${d} raggi di Hill: ${dove}`);
+      // un sistema adulto ha avuto il tempo di sistemarsi: almeno sei raggi di Hill (i sistemi di Kepler, stelle di qualche miliardo
+      // di anni: le coppie vicine sotto i dieci raggi di Hill reciproci sono rare, Fabrycky et al. 2014 [R]); uno giovane almeno
+      // due e mezzo. (PRIMA il confine era a 50 milioni di anni: ma la fase degli urti dura ~10⁸ anni — la Luna a 95 ± 32 milioni,
+      // Jacobson et al. 2014; il modello mette l'ultimo urto degli analoghi della Terra a una mediana di ~90 —, e a 50 milioni di
+      // anni ci sono incontri ancora in corso; qui il confine è il miliardo di anni)
+      assert.ok(d > (st.eta >= 1e9 ? 6 : 2.5), `separate di ${d} raggi di Hill: ${dove}`);
     }
   }
   assert.ok(n > 1000, `pianeti guardati: ${n}`);
