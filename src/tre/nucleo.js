@@ -102,7 +102,8 @@ export function coloreCorpoNero(T) {
 //  · la VISIONE CREPUSCOLARE: tra 0,005 e 5 cd/m² (il campo mesopico, CIE 191:2010) i coni lasciano il posto ai
 //    bastoncelli, che non vedono i colori: il colore sfuma (in log L_A) nella luminanza scotopica, Y′ = Y·(1,33·(1 +
 //    (Y + Z)/X) − 1,68) (Larson, Rushmeier & Piatko 1997), riportata al bianco D65;
-//  · l'ADATTAMENTO AL COLORE: von Kries verso il bianco della luce che illumina (la stella del luogo), di quanto dice
+//  · l'ADATTAMENTO AL COLORE: von Kries verso il bianco della luce che illumina (la stella del luogo; sotto un'aria, la luce
+//    che arriva dove sta l'occhio, se lo strato del pianeta la propone: S.proponiBianco), di quanto dice
 //    CIECAM02: D = F·[1 − (1/3,6)·e^((−L_A − 42)/92)], F = 1 (chi guarda lo schermo in una stanza illuminata:
 //    dichiarato). Fatto nei primari sRGB, non nello spazio dei coni CAT02 (dichiarato).
 // SCELTE RIMASTE (dichiarate): la curva di tonalità (Narkowicz 2015, un'approssimazione di ACES: manca la risposta dei
@@ -566,6 +567,7 @@ export function creaNucleo(tela, opzioni = {}) {
   const S = { gl, t: 0, dt: 0, W: 1, H: 1, proj: new Float32Array(16), vista: new Float32Array(9), fc: 1, tanX: 1, tanY: 1, fuoco: 1, camera: cam, stella: null, versoStella: [1, 0, 0], quota: 0, conVirgola, schermo, lega, bersagli: [], vicinoM: 0, E0: 1, luceVoluta: 0 };
   S.bersaglio = (b) => { S.bersagli.push(b); const d = V.lungo(b.p) - b.raggio; if (d > 0 && d < S._vicino) S._vicino = d; };
   S.proponiLuce = (E) => { if (E > S.luceVoluta) S.luceVoluta = E; }; S.espo = (E) => E / S.E0;
+  S.proponiBianco = (rgb) => { if (rgb && rgb.every((x) => Number.isFinite(x) && x >= 0) && rgb[0] + rgb[1] + rgb[2] > 0) S.biancoLuogo = rgb; };
   const _a = new Map(); let occhioInerziale = [0, 0, 0];
   S.assetto = (c) => { let a = _a.get(c); if (!a) { a = assettoDi(c, S.t); _a.set(c, a); } return a; };
   // dove SI VEDE un corpo: col cono, dov'era quando è partita la luce. Il ritardo è distanza/c (dalla sua superficie: il
@@ -618,7 +620,7 @@ export function creaNucleo(tela, opzioni = {}) {
     let st = cam.corpo; while (st && !st.luce) st = st.genitore; if (!st) st = cam.corpo.stella || null; S.stella = st || null; // (un riferimento può dire qual è la sua stella: `stella`)
     S.bersagli.length = 0; S._vicino = Infinity; S.luceVoluta = 0; S.luceGalassia = 0; // (luceGalassia: W/m², la luce diffusa della galassia che arriva all'occhio da tutte le direzioni — universo.js)
     if (st && st !== cam.corpo) { const v = tra(cam.corpo, st, S.t); S.distanzaStella = V.lungo(v); S.versoStella = V.norma(v); } else { S.versoStella = [0, 1, 0]; S.distanzaStella = 1; }
-    S.coloreStella = st && st.luce.colore ? st.luce.colore : [1, 1, 1];
+    S.coloreStella = st && st.luce.colore ? st.luce.colore : [1, 1, 1]; S.biancoLuogo = null; // (biancoLuogo: il colore della luce che arriva dove sta l'occhio, se uno strato lo sa — S.proponiBianco)
     for (const s of strati) if (s.aggiorna) s.aggiorna(S);
     S.vicinoM = isFinite(S._vicino) ? S._vicino : 0;
     // l'irradianza che vale «1»: quella che l'occhio sceglie adattandosi alla luce misurata nell'immagine (OCCHIO in cima);
@@ -643,7 +645,9 @@ export function creaNucleo(tela, opzioni = {}) {
     for (const s of strati) if (s.dopo) { gl.bindFramebuffer(gl.FRAMEBUFFER, a.f); gl.viewport(0, 0, W, H); if (s.dopo(S, da, a)) { const x = da; da = a; a = x; } }
     ultima = da; if (vista.occhio.adatta) misuraLuce(da.col, W, H);
     // (il bianco della luce del luogo, a luminanza 1: S.coloreStella è il colore vero della sua luce)
-    const cs = S.coloreStella, yb = 0.2126 * cs[0] + 0.7152 * cs[1] + 0.0722 * cs[2] || 1, Dc = S.stella ? gradoAdattamento(S.LA) : 0; S.adattamento = { LA: S.LA, D: Dc, coni: pesoConi(S.LA) };
+    // (il bianco a cui l'occhio si adatta: la luce che illumina DOVE STA L'OCCHIO — sotto un'aria spessa quella della stella
+    // passata dall'aria e quella del cielo, non la stella fuori dall'aria: CIECAM02 si adatta all'illuminante della scena)
+    const cs = S.biancoLuogo || S.coloreStella, yb = 0.2126 * cs[0] + 0.7152 * cs[1] + 0.0722 * cs[2] || 1, Dc = S.stella ? gradoAdattamento(S.LA) : 0; S.adattamento = { LA: S.LA, D: Dc, coni: pesoConi(S.LA) };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.useProgram(prgTono.p); lega(0, da.col, prgTono.u.u_col); gl.uniform3f(prgTono.u.u_bianco, cs[0] / yb, cs[1] / yb, cs[2] / yb); gl.uniform2f(prgTono.u.u_occ, Dc, S.adattamento.coni); schermo();
     for (const s of strati) if (s.sopra) s.sopra(S);
     gl.bindVertexArray(null);

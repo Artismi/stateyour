@@ -40,7 +40,9 @@
 //     d'altezza R·T/(M·g); la luce diffusa più volte dalla tabella di Hillaire (2020), fatta una volta per pianeta.
 //     Cielo, orizzonte, alba, l'alone al bordo, l'ombra del pianeta nell'aria: escono dal conto.
 //   · LE NUVOLE: uno strato alla quota dove l'aria è scesa a metà; quanta parte del cielo coprono lo dice meteo.js
-//     (cl.meteo.nuvole, nella stagione di quel momento), la forma minuta è un rumore che il vento (cl.meteo.u, v) trascina.
+//     (cl.meteo.nuvole, nella stagione di quel momento); dentro la cella della carta un campo con lo spettro di Kolmogorov
+//     (k^−5/3, misurato sulle nubi) che il vento (cl.meteo.u, v) trascina, sommato fino al punto dello schermo: lo spessore
+//     ottico, e la luce che rimandano da quello (vedi GLSL_NUVOLE). La copertura media non cambia con lo zoom.
 //   · IL MOTO: il pianeta gira attorno al suo asse inclinato (P.giorno, P.obliquita, retrogrado, o bloccato con la
 //     stessa faccia alla stella) e attorno alla stella (P.anno): le stagioni vengono da sé. Le lune girano col loro periodo.
 //
@@ -83,23 +85,52 @@ vec3 luceCheArriva(float r, float mu) {
 uniform sampler2D u_ms, u_cieloT;
 vec3 multipla(float r, float mus) { float h = clamp((r - u_atm.x) / max(u_atm.w, 1.0), 0.0, 1.0); return texture(u_ms, vec2((0.5 + (clamp(mus, -1.0, 1.0) * 0.5 + 0.5) * 31.0) / 32.0, (0.5 + sqrt(h) * 31.0) / 32.0)).rgb; }
 vec3 cieloSu(float mus) { return texture(u_cieloT, vec2((0.5 + (clamp(mus, -1.0, 1.0) * 0.5 + 0.5) * 31.0) / 32.0, 0.5)).rgb; }`;
-// quanta nuvola c'è in un punto dello strato (0…1): la copertura di meteo.js, col rumore trascinato dal vento per un
-// periodo e poi ricominciato sfumando (due copie sfasate di mezzo periodo)
+// quanta nuvola c'è in un punto dello strato (0…1). La COPERTURA è quella di meteo.js (cl.meteo.nuvole: la parte del cielo
+// coperta, in media, nella stagione di quel momento, sulla sua carta); dentro una cella della carta le nuvole sono un campo
+// che il vento trascina (due copie sfasate di mezzo periodo, che si danno il cambio sfumando).
+// LO SPETTRO DEL CAMPO non è un rumore a mano: l'acqua delle nubi ha lo spettro di Kolmogorov, E(k) ∝ k^(−5/3), dalla
+// decina di metri alle centinaia di km (Cahalan e Snider 1989, Remote Sens. Environ. 28, 95: le nubi di FIRE; Davis e altri
+// 1996, J. Atmos. Sci. 53, 1538), e i contorni delle nubi hanno dimensione 1,35 da 1 a 10⁶ km² (Lovejoy 1982, Science 216,
+// 185): ogni ottava ha l'ampiezza della precedente per 2^(−1/3). La scala più grande è la cella della carta di meteo.js; la più
+// piccola è il punto dello schermo (o la penombra della stella, per le ombre). Prima: sei ottave fisse da 1/36 di raggio
+// con l'ampiezza dimezzata a ogni ottava (uno spettro k^(−3), liscio): da vicino una nuvola era una sfumatura uniforme.
+// LA COPERTURA NON CAMBIA CON LO ZOOM: il campo, sommato su tutte le ottave, è quasi gaussiano con scarto σ_T; la soglia è
+// quella che lascia sopra di sé la parte «copertura» (σ_T·Φ⁻¹, con Φ la logistica di scala 1,702: Bowling e altri 2009).
+// Le ottave più fini del punto dello schermo non si sommano, ma la loro varianza resta (σ_o): ciò che conta nel punto è
+// la media di (v − soglia)⁺ sulle ottave che mancano (per una gaussiana: la «softplus» di scala 0,58·σ_o). Così la media
+// su un'area non dipende da quanto la si guarda da vicino, e avvicinandosi le ottave nuove entrano sfumando (l'ultima
+// pesa la parte frazionaria): niente salti tra le scale.
+// LO SPESSORE OTTICO: τ = κ·(v − soglia)⁺, con κ = 4,6/σ_T, perché a metà copertura la nube media abbia τ ≈ 3,7, lo
+// spessore ottico medio delle nubi della Terra (ISCCP: Rossow e Schiffer 1999, BAMS 80, 2261). Dentro una coltre le nubi
+// non sono più tutte uguali: la luce che riflettono è quella di uno strato che diffonde senza assorbire, a due flussi,
+// R = (1 − g)·τ / (2 + (1 − g)·τ) con g = 0,85 delle gocce d'acqua (Bohren 1987, Am. J. Phys. 55, 524); ciò che non
+// riflettono passa (1 − R). Prima: una parte coperta (0…1) bianca all'82%, uguale per una velatura e per un cumulonembo.
 const GLSL_NUVOLE = `
 uniform sampler2D u_meteo;
 uniform vec4 u_nuv;      // quota delle nuvole (m), tempo (s), periodo del trascinamento (s), quanto coprono (0: niente nuvole)
+uniform vec2 u_nuvL;     // la scala più grande del campo (m: la cella della carta di meteo.js) e il raggio dello strato (m)
 uniform float u_notte;   // la luce di notte su una superficie orizzontale (un quarto della luce diffusa della galassia), nell'unità della stella
-float nuvola(vec3 p, float fine) {
+const float N_SIG = 0.1847, N_RAP2 = 0.62996, N_LOG = 1.702; // scarto del rumore a valori (misurato); 2^(−2/3); la logistica come Φ
+const mat3 N_GIRO = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64); // (ogni ottava girata: il reticolo non si allinea)
+float campoNuvole(vec3 x, int n, float ultima) { float v = 0.0, a = 1.0;
+  for (int i = 0; i < 18; i++) { if (i >= n) break; v += a * (i == n - 1 ? ultima : 1.0) * (rumore(x) - 0.5); x = N_GIRO * x * 2.0 + vec3(7.1, 3.7, 1.3); a *= 0.7937005; }
+  return v; }
+float nuvola(vec3 p, float orma) { // lo spessore ottico della nube in quel punto dello strato
   vec3 q = normalize(p); float lon = atan(-q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
   vec4 m = texture(u_meteo, vec2(lon / 6.2831853 + 0.5, 0.5 - lat / 3.1415927));
-  vec3 est = normalize(vec3(-q.z, 0.0, -q.x) + 1e-6), nord = cross(q, est), vento = (est * m.g + nord * m.b) / (u_atm.x + u_nuv.x);
-  float f1 = fract(u_nuv.y / u_nuv.z), f2 = fract(u_nuv.y / u_nuv.z + 0.5);
-  vec3 a = (q - vento * ((f1 - 0.5) * u_nuv.z)) * 36.0, b = (q - vento * ((f2 - 0.5) * u_nuv.z)) * 36.0 + 11.3;
-  float n = (fine > 0.5 ? frattale(a) : frattale3(a)) * (1.0 - abs(1.0 - 2.0 * f1)) + (fine > 0.5 ? frattale(b) : frattale3(b)) * (1.0 - abs(1.0 - 2.0 * f2));
-  // (il rumore sta attorno a 0,5 con scarto ~0,1: la soglia è messa perché la parte di cielo coperta sia quella di meteo.js)
-  float soglia = 0.5 + 0.235 * (1.0 - 2.0 * clamp(m.r * u_nuv.w, 0.0, 1.0));
-  return smoothstep(soglia - 0.03, soglia + 0.11, 0.62 * n + 0.38 * frattale3(q * 5.0 + 4.0));
-}`;
+  float cop = clamp(m.r * u_nuv.w, 0.0, 1.0); if (cop < 1e-4) return 0.0;
+  vec3 est = normalize(vec3(-q.z, 0.0, -q.x) + 1e-6), nord = cross(q, est), vento = (est * m.g + nord * m.b) / u_nuvL.y;
+  float f1 = fract(u_nuv.y / u_nuv.z), f2 = fract(u_nuv.y / u_nuv.z + 0.5), k = u_nuvL.y / u_nuvL.x;
+  vec3 a = (q - vento * ((f1 - 0.5) * u_nuv.z)) * k, b = (q - vento * ((f2 - 0.5) * u_nuv.z)) * k + 11.3;
+  // quante ottave: dalla cella della carta fino al punto dello schermo (la parte frazionaria pesa l'ultima)
+  float nf = clamp(log2(u_nuvL.x / max(orma, 1.0)) + 1.0, 1.0, 18.0); int n = int(ceil(nf)); float w = nf - float(n - 1);
+  float w1 = 1.0 - abs(1.0 - 2.0 * f1), w2 = 1.0 - abs(1.0 - 2.0 * f2);
+  float v = (w1 * campoNuvole(a, n, w) + w2 * campoNuvole(b, n, w)) / sqrt(max(w1 * w1 + w2 * w2, 1e-6));
+  float vT = N_SIG * N_SIG / (1.0 - N_RAP2), rn = pow(N_RAP2, float(n - 1)), vR = N_SIG * N_SIG * ((1.0 - rn) / (1.0 - N_RAP2) + w * w * rn);
+  float sT = sqrt(vT), sO = sqrt(max(vT - vR, 4e-4 * vT)), c = clamp(cop, 1e-3, 0.999), soglia = -sT * log(c / (1.0 - c)) / N_LOG, s = 0.576 * sO, x = (v - soglia) / s;
+  return (4.6 / sT) * s * (x > 30.0 ? x : log(1.0 + exp(x)));
+}
+float rifNuvola(float tau) { return 0.15 * tau / (2.0 + 0.15 * tau); } // (la luce che uno strato di spessore τ rimanda indietro: vedi sopra)`;
 export const GLSL_RUMORE = `
 float caso3(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 float rumore(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -179,7 +210,8 @@ ${GLSL_NUVOLE}
 // l'ombra delle nuvole: dove il raggio verso la stella attraversa il loro strato
 float ombraNuvole(vec3 rel) {
   if (u_nuv.w <= 0.0) return 1.0; vec3 p = u_tondo * (rel - u_centro); float Rn = u_atm.x + u_nuv.x, b = dot(p, u_soleC), c = dot(p, p) - Rn * Rn;
-  if (c > 0.0) return 1.0; return 1.0 - 0.78 * nuvola(p + u_soleC * (-b + sqrt(b * b - c)), 0.0);
+  // (il campo si legge alla grandezza del punto dello schermo, ma mai più fine della penombra: la stella non è un punto)
+  if (c > 0.0) return 1.0; float s = -b + sqrt(b * b - c); return 1.0 - rifNuvola(nuvola(p + u_soleC * s, max(length(rel) * u_orma, s * u_disco)));
 }
 // LA RIVA: il segno dei punti vicini (+1 asciutto, −1 bagnato) interpolato, come la costa delle tessere figlie in
 // geologia.js (che interpola il segno delle quattro celle madri); qui con la B-spline cubica sui sedici punti attorno
@@ -275,6 +307,7 @@ uniform mat3 u_raggi;    // dagli assi dell'occhio a quello spazio
 uniform vec3 u_soleC;    // verso la stella, in quello spazio
 uniform vec4 u_cam;      // tangenti di metà campo, costante della profondità, esposizione
 uniform vec3 u_E;        // l'irradianza della stella (π × il suo colore)
+uniform float u_orma;    // quanto è largo un punto dello schermo a distanza 1 (1 / fuoco)
 uniform float u_cima;    // dove il cammino entra nell'aria (m sopra il suolo): sopra, lo spessore ottico è sotto 10⁻³ anche di striscio (vedi impostaAria)
 ${GLSL_ARIA}
 ${GLSL_RUMORE}
@@ -339,14 +372,14 @@ void main() {
   if (u_nuv.w > 0.0 && dn > 0.0) { float s = sqrt(dn); tn = b - s > 0.0 ? b - s : b + s; if (tn <= t0 || tn >= t1) tn = -1.0; }
   vec3 tra, luce;
   if (tn > 0.0) {
-    vec3 p = o + d * tn; float c = nuvola(p, 1.0), r = length(p), muS = dot(p, u_soleC) / r;
+    vec3 p = o + d * tn; float r = length(p), muS = dot(p, u_soleC) / r, tau = nuvola(p, tn * u_orma / sqrt(max(0.05, abs(dot(d, p) / r)))), R = rifNuvola(tau); // (il punto dello schermo sullo strato: di striscio è più lungo)
     vec3 dT = vec3(1.0), dA = vec3(0.0); // (ciò che c'è dietro la nuvola = scena·dT + dA)
-    if (c < 0.995 && t1 - tn > 1.0) { vec3 tr2; vec3 l2 = tratto(o, d, tn, t1, tr2); dT = tr2; dA = l2 * u_cam.w; }
-    if (c > 0.003) {
-      float ombra = nuvola(p + u_soleC * 2500.0, 0.0); // quanto la nuvola si fa ombra da sé verso la stella
+    if (R < 0.995 && t1 - tn > 1.0) { vec3 tr2; vec3 l2 = tratto(o, d, tn, t1, tr2); dT = tr2; dA = l2 * u_cam.w; }
+    if (tau > 0.01) {
+      float ombra = rifNuvola(nuvola(p + u_soleC * 2500.0, max(tn * u_orma, 500.0))); // quanto la nuvola si fa ombra da sé verso la stella
       vec3 sole = (u_E / 3.14159) * luceCheArriva(r, muS) * smoothstep(-0.05, 0.1, muS);
-      vec3 bianco = 0.82 * sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra * c) + 0.82 * (u_E / 3.14159) * cieloSu(muS) + 0.82 * vec3(u_notte); // (più la luce del cielo, quella vera, e di notte quella della galassia: prima mancava, e una coltre di nuvole di notte era nero puro — il 3D nero del seme 12345)
-      float k = clamp(c * 1.15, 0.0, 1.0); dT *= 1.0 - k; dA = dA * (1.0 - k) + bianco * u_cam.w * k;
+      vec3 bianco = sole * (0.45 + 0.55 * clamp(muS, 0.0, 1.0)) * (1.0 - 0.45 * ombra) + (u_E / 3.14159) * cieloSu(muS) + vec3(u_notte); // (più la luce del cielo, quella vera, e di notte quella della galassia: prima mancava, e una coltre di nuvole di notte era nero puro — il 3D nero del seme 12345)
+      dT *= 1.0 - R; dA = dA * (1.0 - R) + bianco * u_cam.w * R;
     }
     luce = tratto(o, d, t0, tn, tra); esce(scena, dT * tra, dA * tra + luce * u_cam.w, dist);
   } else { luce = tratto(o, d, t0, t1, tra); esce(scena, tra, luce * u_cam.w, dist); }
@@ -496,6 +529,40 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 48 }
     for (const d of D256) { const cosS = d[0] * s[0] + d[1] * s[1], fR = (3 / (16 * Math.PI)) * (1 + cosS * cosS), fM = (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * cosS, 1.5)), w = (2 * Math.PI) / D256.length;
       marcia(R + 1, d, s, (rp, mus, Te, ds, rR, rM) => { sole(rp, mus, Ts); for (let c = 0; c < 3; c++) E[c] += w * d[1] * Te[c] * ds * (betaR[c] * rR * fR * Ts[c] + betaM * rM * fM * Ts[c] + (betaR[c] * rR + betaM * rM) * psi(rp, mus, c)); }); }
     cieloT.set([E[0], E[1], E[2], 1], 4 * im); }
+  // L'ARIA SPESSA: la serie Ψ = L₂/(1 − f) suppone che ogni ordine di diffusione abbia la forma del secondo, nello stesso
+  // punto; dove l'aria è otticamente spessa la luce arriva in basso DIFFONDENDO dagli strati sopra (il fascio diretto non
+  // c'è più), e la serie — troncata a 1/(1 − f) ≤ 20 — non lo vede: misurato su un mondo di 34 bar (τ ≈ 10 nel verde, 26 nel
+  // blu) la luce del cielo al suolo usciva 1,7·10⁻⁴ di quella della stella nel verde e 5·10⁻¹¹ nel blu, quando uno strato che
+  // diffonde senza assorbire ne lascia passare ~1/(1 + ¾τ) ≈ 10% (il suolo e l'aria bassa erano neri: la vista vuota da
+  // vicino). Qui il trasporto vero lungo la verticale: i due flussi (Eddington; Toon e altri 1989, J. Geophys. Res. 94,
+  // 16287, con ω = 1: γ₁ = ¾(1 − g), la parte del fascio diretto che va in su γ₃ = ½ − ¾·g·μ₀), strato per strato (δτ ≤ 0,02;
+  // al più 80·NS strati: su un'aria di migliaia di bar ognuno è spesso, e lo si prende omogeneo)
+  // col metodo dell'addizione, il suolo che rimanda con l'albedo del clima e il fascio diretto attenuato come nel frammento
+  // (Chapman). Ne escono la luce diffusa che scende sul suolo (la luce del cielo) e, a ogni quota, quella che va in su e in
+  // giù: la radianza media del campo diffuso, J = (F↓ + F↑)/2π, è ciò che l'aria di lì ridiffonde dopo il primo ordine
+  // (Ψ). Si tiene il più grande dei due conti: la serie, che conosce la forma angolare, può soltanto mancare luce dove
+  // l'aria è spessa; dove è sottile i due conti si accordano (su un'aria come quella della Terra la serie resta sopra).
+  { const tauV = (h, c) => betaR[c] * H * Math.exp(-h / H) + betaM * 1.1 * HM * Math.exp(-h / HM), tMax = Math.max(tauV(0, 0), tauV(0, 1), tauV(0, 2));
+    const n = Math.min(80 * NS, Math.ceil(tMax / 0.02) + 64), hL = new Float64Array(n + 1), tc = (h) => Math.max(tauV(h, 0), tauV(h, 1), tauV(h, 2));
+    // (i livelli: uguali nello spessore ottico del colore più diffuso, dalla cima al suolo)
+    for (let k = 0; k <= n; k++) { const obiettivo = tc(cima) + (tMax - tc(cima)) * (k / n); let a = 0, b = cima; for (let i = 0; i < 60; i++) { const m = 0.5 * (a + b); if (tc(m) > obiettivo) a = m; else b = m; } hL[k] = 0.5 * (a + b); }
+    hL[0] = cima; hL[n] = 0;
+    const al = new Float64Array(n + 1), be = new Float64Array(n + 1), Dn = new Float64Array(n + 1), S = new Float64Array(n + 1), S3 = new Float64Array(3 * (n + 1)), rL = new Float64Array(n), gL = new Float64Array(n), T3 = [0, 0, 0];
+    for (let im = 0; im < NM; im++) { const mu = -1 + (2 * im) / (NM - 1); if (!(mu > 0.002)) continue;
+      for (let k = 0; k <= n; k++) { sole(R + hL[k], mu, T3); S3[3 * k] = mu * T3[0]; S3[3 * k + 1] = mu * T3[1]; S3[3 * k + 2] = mu * T3[2]; }
+      for (let c = 0; c < 3; c++) {
+        for (let k = 0; k <= n; k++) S[k] = S3[3 * k + c];
+        for (let k = 0; k < n; k++) { const dR = betaR[c] * H * (Math.exp(-hL[k + 1] / H) - Math.exp(-hL[k] / H)), dM = betaM * 1.1 * HM * (Math.exp(-hL[k + 1] / HM) - Math.exp(-hL[k] / HM)), dt = dR + dM, gE = dt > 0 ? (dM * g) / dt : 0; const g1 = 0.75 * (1 - gE) * dt; rL[k] = g1 / (1 + g1); gL[k] = gE; } // (uno strato omogeneo che diffonde senza assorbire, a due flussi: R = γ₁τ/(1 + γ₁τ), esatto anche dove lo strato è spesso)
+        // dal suolo in su: F↑ = α·F↓ + β a ogni livello; poi dalla cima in giù
+        al[n] = albedo; be[n] = albedo * S[n];
+        for (let k = n - 1; k >= 0; k--) { const r = rL[k], t = 1 - r, sc = S[k] - S[k + 1], su = sc * (0.5 - 0.75 * gL[k] * mu), giu = sc - su, q = 1 / (1 - r * al[k + 1]);
+          al[k] = r + t * t * al[k + 1] * q; be[k] = t * be[k + 1] + su + t * al[k + 1] * (r * be[k + 1] + giu) * q; }
+        Dn[0] = 0; for (let k = 0; k < n; k++) { const r = rL[k], t = 1 - r, sc = S[k] - S[k + 1], giu = sc - sc * (0.5 - 0.75 * gL[k] * mu); Dn[k + 1] = (t * Dn[k] + r * be[k + 1] + giu) / (1 - r * al[k + 1]); }
+        if (Dn[n] > cieloT[4 * im + c]) cieloT[4 * im + c] = Dn[n];
+        // Ψ alle quote della tabella (interpolando tra i livelli)
+        for (let ih = 0; ih < NM; ih++) { const h = Math.max(1, cima * (ih / (NM - 1)) ** 2); let lo = 0, hi = n; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (hL[m] > h) lo = m; else hi = m; }
+          const w = hL[lo] > hL[hi] ? (hL[lo] - h) / (hL[lo] - hL[hi]) : 0, J = ((1 - w) * (Dn[lo] + al[lo] * Dn[lo] + be[lo]) + w * (Dn[hi] + al[hi] * Dn[hi] + be[hi])) / (2 * Math.PI), q = 4 * (ih * NM + im) + c;
+          if (J > ms[q]) ms[q] = J; } } } }
   return { ms, cieloT };
 }
 
@@ -534,10 +601,14 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const d = decl(t), x = Math.asin(Math.max(-1, Math.min(1, d / eps))) / (2 * Math.PI), sale = decl(t + anno / 400) > d, f = sale ? x : 0.5 - x; return f - Math.floor(f);
   }
   const aria = ariaDi(P, R, grav);
+  // la luce della stella che arriva a raggio r con la stella a coseno mu dalla verticale (la stessa luceCheArriva del frammento)
+  const luceDiretta = (r, mu) => { const ch = (X, c) => { const k = Math.sqrt(1.5707963 * X); return k / ((k - 1) * c + 1); };
+    const sp = (Hs) => { const rho = Math.exp(Math.max(-40, Math.min(8, -(r - R) / Hs))); if (mu >= 0) return rho * ch(r / Hs, mu); const rt = r * Math.sqrt(Math.max(0, 1 - mu * mu)); if (rt < R) return 1e7; return 2 * Math.exp(-(rt - R) / Hs) * ch(rt / Hs, 0) - rho * ch(r / Hs, -mu); };
+    if (!aria) return [1, 1, 1]; const a = sp(aria.H) * aria.H, m = aria.betaM * 1.1 * aria.HM * sp(aria.HM); return aria.betaR.map((b) => Math.exp(-(b * a + m))); };
   // (le tabelle costano un secondo e mezzo: sul filo dell'interfaccia se ne fanno subito di GREZZE — 16 direzioni, 32 per
   // il cielo, 16 passi: 80 ms, ~8% dalle fini —, le FINI le fa volume.worker.js e arrivano dopo; `ariaFine` dice quando)
-  let texMS = null, texCielo = null, ariaFine = !aria, filoAria = null;
-  const metti = (t) => { if (texMS) { gl.deleteTexture(texMS); gl.deleteTexture(texCielo); } texMS = N.immagine(32, 32, 'rgba16fDaFloat', t.ms); texCielo = N.immagine(32, 1, 'rgba16fDaFloat', t.cieloT); };
+  let texMS = null, texCielo = null, ariaFine = !aria, filoAria = null, tabCPU = null;
+  const metti = (t) => { tabCPU = t; if (texMS) { gl.deleteTexture(texMS); gl.deleteTexture(texCielo); } texMS = N.immagine(32, 32, 'rgba16fDaFloat', t.ms); texCielo = N.immagine(32, 1, 'rgba16fDaFloat', t.cieloT); };
   if (aria && typeof Worker !== 'undefined') {
     metti(tabelleAria(aria, R, P.clima?.albedo, TABELLE_GREZZE));
     try { filoAria = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
@@ -726,11 +797,11 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   }
 
   // ---------- le nuvole: la copertura e i venti di meteo.js in un'immagine (rifatta quando la stagione cambia)
-  let meteoTex = null, meteoStagione = -9, nuvoleMedie = 0;
+  let meteoTex = null, meteoStagione = -9, nuvoleMedie = 0, meteoH = 32;
   function preparaMeteo(t = 0) {
     const m = S0?.cl?.meteo; if (!m || !m.nuvole || !aria) return; const st = Array.isArray(m.stagioni) && m.stagioni.length > 1 ? m.stagioni : null;
     const x = st ? stagione(t) * st.length - 0.5 : 0; if (meteoTex && Math.abs(x - meteoStagione) < 0.04) return; meteoStagione = x;
-    const n = m.W * m.H, dati = new Float32Array(4 * n), i0 = st ? ((Math.floor(x) % st.length) + st.length) % st.length : 0, i1 = st ? (i0 + 1) % st.length : 0, f = st ? x - Math.floor(x) : 0, A = st ? st[i0] : m, B = st ? st[i1] : m; let somma = 0;
+    meteoH = m.H; const n = m.W * m.H, dati = new Float32Array(4 * n), i0 = st ? ((Math.floor(x) % st.length) + st.length) % st.length : 0, i1 = st ? (i0 + 1) % st.length : 0, f = st ? x - Math.floor(x) : 0, A = st ? st[i0] : m, B = st ? st[i1] : m; let somma = 0;
     for (let k = 0; k < n; k++) { dati[4 * k] = A.nuvole[k] * (1 - f) + B.nuvole[k] * f; dati[4 * k + 1] = A.u[k] * (1 - f) + B.u[k] * f; dati[4 * k + 2] = A.v[k] * (1 - f) + B.v[k] * f; dati[4 * k + 3] = 1; somma += dati[4 * k]; }
     nuvoleMedie = somma / n; if (meteoTex) gl.deleteTexture(meteoTex); meteoTex = N.immagine(m.W, m.H, 'rgba16fDaFloat', dati, { ripeti: 'x' });
   }
@@ -805,6 +876,16 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       const sole = V.tv(A, stato.sole), mu = V.scal(V.norma(stato.occhioCorpo), sole), giorno = Math.max(0, Math.min(1, (mu + 0.12) / 0.3)), vicino = Math.max(0, Math.min(1, 1 - stato.quota / (0.25 * R)));
       // la luce che l'occhio chiede: quella della stella qui, meno di notte vicino al suolo (se si è lontanissimi dal pianeta non si chiede niente)
       if (V.lungo(stato.occhioCorpo) < 400 * R) S.proponiLuce(stato.E * (1 - vicino * (1 - Math.max(0.01, giorno))));
+      // IL BIANCO DEL LUOGO (nucleo.js, OCCHIO): il colore della luce su un piano orizzontale dove sta l'occhio — la stella
+      // passata dall'aria sopra di lui (Chapman, come nel frammento) più la luce diffusa di lì, π·Ψ (la tabella: la radianza
+      // media del campo diffuso, presa uguale in tutte le direzioni). In orbita è la stella; sul fondo di un'aria spessa è
+      // la luce arrossata e quella blu del cielo: chi sta lì si adatta a quella (prima: sempre alla stella fuori dall'aria,
+      // e sotto 34 bar il suolo usciva rosso pieno).
+      if (aria && tabCPU && V.lungo(stato.occhioCorpo) < 400 * R) { const ro = V.lungo(stato.occhioTondo), so = V.norma(tondo(sole)), mus = (stato.occhioTondo[0] * so[0] + stato.occhioTondo[1] * so[1] + stato.occhioTondo[2] * so[2]) / ro;
+        const x = Math.max(0, Math.min(30.999, (Math.max(-1, Math.min(1, mus)) * 0.5 + 0.5) * 31)), y = Math.max(0, Math.min(30.999, Math.sqrt(Math.max(0, Math.min(1, (ro - R) / aria.cima))) * 31)), i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, M = tabCPU.ms;
+        const psi = (c) => (M[4 * (j * 32 + i) + c] * (1 - u) + M[4 * (j * 32 + i + 1) + c] * u) * (1 - v) + (M[4 * ((j + 1) * 32 + i) + c] * (1 - u) + M[4 * ((j + 1) * 32 + i + 1) + c] * u) * v;
+        const dir = luceDiretta(ro, mus), b = [0, 1, 2].map((c) => coloreLuce[c] * (Math.max(0, mus) * dir[c] + Math.PI * psi(c)));
+        if (b[0] + b[1] + b[2] > 1e-6 * (coloreLuce[0] + coloreLuce[1] + coloreLuce[2])) S.proponiBianco(b); }
     },
     disegna(S, passata) {
       if (passata !== 'solido') return; const P_ = prgSuolo, u = P_.u, A = stato.A; gl.useProgram(P_.p); gl.bindVertexArray(griglia.vao); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
@@ -865,7 +946,8 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   // secondi di chi guarda, anche quando il tempo corre)
   function impostaNuvole(u, S) {
     const periodo = Math.max(6 * 3600, Math.abs(N.tempo.velocita) * 6); S.lega(5, meteoTex || trasparente, u.u_meteo);
-    gl.uniform4f(u.u_nuv, aria ? Math.min(0.7 * aria.H, 9000) : 0, S.t % (periodo * 64), periodo, aria && meteoTex && O.nuvole ? O.nuvole : 0);
+    const hn = aria ? Math.min(0.7 * aria.H, 9000) : 0; gl.uniform4f(u.u_nuv, hn, S.t % (periodo * 64), periodo, aria && meteoTex && O.nuvole ? O.nuvole : 0);
+    gl.uniform2f(u.u_nuvL, (Math.PI * (R + hn)) / meteoH, R + hn); gl.uniform1f(u.u_orma, 1 / S.fuoco); // (la cella della carta di meteo.js, in metri sullo strato)
     gl.uniform1f(u.u_notte, (S.luceGalassia || 0) / 4 / stato.E);
   }
   // (dove comincia l'aria che conta: la quota sopra cui lo spessore ottico che resta, anche preso di striscio — per il
@@ -965,6 +1047,6 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,
     // il suolo fine che si vede ora (per le prove: la finestra di suolo.js con la sua griglia, e quanto è costata)
     suoloFine: () => { const F = fine.fin; if (!fine.attiva || !F?.fin) return null; const f = F.fin; return { lato: F.lato, N: f.N, h: f.h, gx0: f.gx0, gy0: f.gy0, livello: f.padre.livello, I: f.padre.I, J: f.padre.J, lon: F.lon, lat: F.lat, rms: F.rms, Z: Array.from(f.campo.Z), ms: fine.ms, msTinta: fine.msTinta, quante: fine.quante, chiaveTratto: f.tratto.chiave }; },
-    statistiche: () => { const ondeF = ondeUsate, ondeV = vertUsate; ondeUsate = 0; vertUsate = 0; let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; return { pezze, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, ondeF, ondeV, suoloFine: fine.attiva ? { lato: fine.fin?.lato, msCalcolo: fine.ms, msTinta: fine.msTinta, quante: fine.quante } : null, suoloFineStato: { quota: stato.quota, largo: fine.largo, campi: fine.campi.size, chiesti: fine.chiesti.size, inCorso: fine.inCorso, finestra: !!fine.fin?.fin, attiva: fine.attiva, tex: !!fine.tex, quante: fine.quante }, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
+    statistiche: () => { const ondeF = ondeUsate, ondeV = vertUsate; ondeUsate = 0; vertUsate = 0; let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; const livelli = {}; for (const z of lista) { const k = `${z.t.L}`; livelli[k] = (livelli[k] || 0) + 1; } return { pezze, livelli, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, ondeF, ondeV, suoloFine: fine.attiva ? { lato: fine.fin?.lato, msCalcolo: fine.ms, msTinta: fine.msTinta, quante: fine.quante } : null, suoloFineStato: { quota: stato.quota, largo: fine.largo, campi: fine.campi.size, chiesti: fine.chiesti.size, inCorso: fine.inCorso, finestra: !!fine.fin?.fin, attiva: fine.attiva, tex: !!fine.tex, quante: fine.quante }, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U } : null }; },
   };
 }

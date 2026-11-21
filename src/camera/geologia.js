@@ -695,7 +695,10 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
       if (copertura) copertura[c] = m.copertura[q]; if (sciolto) sciolto[c] = m.sciolto[q]; if (lava) lava[c] = m.lava[q]; roccia[c] = m.roccia ? m.roccia[q] : m.cont && !m.cont[q] ? 1 : 0; }
     if (i === 0 || j === 0 || i === Wl - 1 || j === Hl - 1) afflusso[c] = M.flusso[iy(Math.round(fy)) * MW + ix(Math.round(fx))] * 4; // la portata dei fiumi che entrano
     if (M.lago) { // il lago della madre: la sua superficie è piatta, la riva la decide il terreno fine
-      const x0 = Math.floor(fx), y0 = Math.floor(fy); let lev = 0;
+      // (−∞ se nessuna delle quattro celle è lago: prima si partiva da 0 m, e dove il mare sta sotto lo zero delle quote — su
+      // 33/11/0 a −320 m — ogni terra della figlia, più bassa di 0, diventava un lago profondo fino a 0: tutte le terre del
+      // livello 0 uscivano acqua da vicino)
+      const x0 = Math.floor(fx), y0 = Math.floor(fy); let lev = -Infinity;
       for (const q of [iy(y0) * MW + ix(x0), iy(y0) * MW + ix(x0 + 1), iy(y0 + 1) * MW + ix(x0), iy(y0 + 1) * MW + ix(x0 + 1)]) if (M.lago[q] > 0) lev = Math.max(lev, M.alt[q] + M.lago[q]);
       livelloLago[c] = lev;
     }
