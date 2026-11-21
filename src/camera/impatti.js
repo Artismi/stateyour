@@ -102,7 +102,7 @@
 
 import { COSTANTI, MSOLE } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
-import { DISCO, MTERRA, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
+import { DISCO, MTERRA, URTI, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
 import { MATERIALI, densitaCorpo, limiteRoche } from './lune.js';
 import { MOLECOLE } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
@@ -115,7 +115,7 @@ export const IMPATTI = Object.freeze({
   inOrbita: 1 / 3, sfugge: 1 / 12,
   // Leinhardt e Stewart 2012: sopra la velocità di fuga dei due corpi fusi l'energia in più disperde materia
   // (Q*_RD = c*·(4/5)·π·ρ₁·G·R_C1², corretto per il rapporto di massa); i frammenti: N(>D) ∝ D^-β, due i più grossi
-  urtoGrande: { cStar: 1.9, rho1: 1000, mu: 0.36, beta: 2.85, secondi: 2 },
+  urtoGrande: URTI, // (disco.js: la stessa legge per i frammenti degli urti della formazione)
   luna: { a: 1.9, b: 1.1, persa: 0.05 }, // Ida, Canup e Stewart 1997: M_luna = a·L/√(G·M·a_R) − b·M_d − a·M_persa
   inerzia: 0.33,
   giroLimite: 0.53, // la velocità angolare più alta di un fluido che ruota, in unità di quella di rottura √(GM/R³) (dove la sequenza di Maclaurin si biforca in quella di Jacobi: ω² = 0,374·πGρ)
