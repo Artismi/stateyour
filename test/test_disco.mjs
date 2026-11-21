@@ -153,7 +153,13 @@ prova('le orbite: nessuna dentro 0,02 UA, in ordine, separate, senza incroci; i 
       // due e mezzo. (PRIMA il confine era a 50 milioni di anni: ma la fase degli urti dura ~10⁸ anni — la Luna a 95 ± 32 milioni,
       // Jacobson et al. 2014; il modello mette l'ultimo urto degli analoghi della Terra a una mediana di ~90 —, e a 50 milioni di
       // anni ci sono incontri ancora in corso; qui il confine è il miliardo di anni)
-      assert.ok(d > (st.eta >= 1e9 ? 6 : 2.5), `separate di ${d} raggi di Hill: ${dove}`);
+      // (le coppie con un gigante, eccezione approvata: i sei raggi vengono dai piccoli pianeti di Kepler. Due pianeti oltre 2√3 raggi
+      // di Hill reciproci non si incrociano mai (Gladman 1993, Icarus 106, 247 [R]: la stabilità di Hill di due pianeti), e due giganti
+      // si osservano anche più vicini: GJ 876 c e b, in risonanza 2:1, 0,7142 e 2,2756 masse di Giove a 0,129590 e 0,208317 UA
+      // attorno a una stella di 0,32 M☉ (Rivera et al. 2010, ApJ 719, 890, tabella 3 [V: letta]) stanno a 3,2 raggi di Hill
+      // reciproci, protetti dalla risonanza. Per loro vale 2√3)
+      const gigante = p.tipo === 'gassoso' || q.tipo === 'gassoso';
+      assert.ok(d > (st.eta >= 1e9 ? (gigante ? 2 * Math.sqrt(3) : 6) : 2.5), `separate di ${d} raggi di Hill: ${dove}`);
     }
   }
   assert.ok(n > 1000, `pianeti guardati: ${n}`);
