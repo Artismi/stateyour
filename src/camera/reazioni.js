@@ -38,9 +38,10 @@
 // tempo di residenza dell'acqua dalla colonna di suolo.js, il gradiente geotermico, l'H₂ della serpentinizzazione e della radiolisi, il CO₂ disciolto; vedi lì).
 //   GILLESPIE      l'algoritmo diretto (Gillespie 1977) su questo volume: il tempo d'attesa Δt = −ln(1 − u)/a₀ (legge
 //                  ESPONENZIALE da un tiro uniforme, col logaritmo esatto di eventi.js) e quale reazione (legge DISCRETA sui
-//                  pesi a_j, la stessa di sceltaDiscreta, cercata in un albero di somme parziali). I tiri sono le estrazioni
-//                  k-esime di due eventi del luogo, «…/chimica/quando» e «…/chimica/quale» (c.serie): per lo stesso indirizzo
-//                  la storia chimica è la stessa, bit per bit; con conRegistro ogni tiro è annotato. Le reazioni 1 ⇌ 1 con
+//                  pesi a_j), scritto nella forma del prossimo scatto modificato di Anderson (2007): ogni canale ha il suo
+//                  flusso, «…/chimica/canale/<tipo>: <reagenti> → <prodotti>/<andata|ritorno>» (c.serie), e il suo n-esimo
+//                  scatto usa l'n-esima estrazione. Per lo stesso indirizzo la storia chimica è la stessa, bit per bit;
+//                  allargare la rete non cambia i numeri dei canali che c'erano; con conRegistro ogni tiro è annotato. Le reazioni 1 ⇌ 1 con
 //                  tempo di rilassamento sotto la RISOLUZIONE (le idratazioni, le tautomerie veloci, gli anelli che si aprono)
 //                  stanno in un INSIEME in equilibrio: il loro numero totale è lo stato, e chi ne prende una molecola la
 //                  prende con il peso di Boltzmann (multinomiale: Cao, Gillespie e Petzold 2005, J. Chem. Phys. 122, 014116,
@@ -84,9 +85,9 @@ import { colonnaDelPianeta } from './suolo.js'; // la porosità di Athy e il tem
 
 export const NA = 6.02214076e23;
 export const SCALA_PREBIOTICA = 1e-3, DIFFUSIONE = 1e-9, BRONSTED_PKA = 1.5;
-// le leggi dei tiri di una storia (misura.js le pesa): due eventi del luogo, estrazione k-esima per il k-esimo passo
+// le leggi dei tiri di una storia (misura.js le pesa): un evento del luogo per canale, estrazione n-esima per l'n-esimo scatto
 export const LEGGI_DEI_TIRI = Object.freeze({
-  quando: 'esponenziale: Δt = −ln(1 − u)/a₀, u uniforme (logEsatto)', quale: 'discreta sui pesi a_j (sceltaDiscreta), cercata in un albero di somme',
+  canale: 'esponenziale a tasso uno: il prossimo scatto interno del canale, E = −ln(1 − u), u uniforme (logEsatto); un flusso per canale, col nome della reazione (Anderson 2007)',
   scatola: 'Poisson del numero di ogni specie, media Ω·c (inversione della cumulata per media < 50, campana sopra)' });
 const CONSERVATI = ['C', 'N', 'S', 'P', 'H-2O'];
 const FAMIGLIE_ACIDO_BASE = new Set(['addizione', 'addizione C', 'eliminazione', 'tautomeria', 'sostituzione']);
@@ -203,12 +204,38 @@ export function motore(S, { V = 1e-21, risoluzione = 1e-3, flussi = S.luogo.flus
   // l'albero delle somme parziali (foglie in [L, 2L))
   let L = 1; while (L < C) L *= 2; const albero = new Float64Array(2 * L);
   const metti = (c, v) => { let i = L + c; albero[i] = v; for (i >>= 1; i >= 1; i >>= 1) albero[i] = albero[2 * i] + albero[2 * i + 1]; };
-  const rifai = () => { for (let c = 0; c < C; c++) albero[L + c] = prop(c); for (let c = C; c < L; c++) albero[L + c] = 0; for (let i = L - 1; i >= 1; i--) albero[i] = albero[2 * i] + albero[2 * i + 1]; };
-  const cerca = (x) => { let i = 1; while (i < L) { const s = albero[2 * i]; if (x < s) i = 2 * i; else { x -= s; i = 2 * i + 1; } } return Math.min(i - L, C - 1); };
+  // IL METODO DEL PROSSIMO SCATTO MODIFICATO (Anderson 2007, J. Chem. Phys. 127, 214107; la rappresentazione a processi di
+  // Poisson a tasso unitario, Kurtz): ogni canale c ha il SUO orologio interno T_c = ∫a_c dt e il suo prossimo scatto interno
+  // P_c, una somma di esponenziali a tasso uno tirate dal SUO flusso, che ha il nome del canale («canale/<tipo>: <reagenti> →
+  // <prodotti>/andata», «bordo/<specie>/entra»…). Scatta il canale con t + (P_c − T_c)/a_c più piccolo. È la stessa legge di
+  // Gillespie (esatta), ma i numeri di un canale non dipendono da quanti canali ci sono né dal loro ordine: allargare la rete
+  // non rimescola la storia dei canali che c'erano (prima i tiri erano due serie globali per numero di passo, «quando» e
+  // «quale», e ogni canale nuovo spostava la scelta di tutti i passi dopo). Dà anche numeri casuali comuni tra due storie.
+  const nomi = new Array(C), visti = new Map();
+  canali.forEach((ch, c) => { let n = ch.bordo != null ? (ch.insieme ? `uscita/${S.chiavi[ch.bordo]}` : `bordo/${S.chiavi[ch.bordo]}/${ch.verso > 0 ? 'entra' : 'esce'}`) : `canale/${S.reazioni[ch.r].tipo}: ${S.reazioni[ch.r].chiave}/${ch.verso > 0 ? 'andata' : 'ritorno'}`;
+    const v = visti.get(n) || 0; visti.set(n, v + 1); if (v) n += ` #${v + 1}`; nomi[c] = n; });
+  const flusso = new Array(C), scatti = new Float64Array(C), Tint = new Float64Array(C), Pint = new Float64Array(C), tUlt = new Float64Array(C), tau = new Float64Array(C);
+  const esp = (c) => -logEsatto(1 - flusso[c](scatti[c]++));
+  // il mucchio (heap) dei prossimi tempi assoluti, con la posizione di ogni canale
+  const mucchio = new Int32Array(C), posto = new Int32Array(C);
+  const scambia = (i, j) => { const a = mucchio[i], b = mucchio[j]; mucchio[i] = b; mucchio[j] = a; posto[b] = i; posto[a] = j; };
+  const sali = (i) => { while (i > 0) { const g = (i - 1) >> 1; if (tau[mucchio[g]] <= tau[mucchio[i]]) break; scambia(i, g); i = g; } };
+  const scendi = (i) => { for (;;) { const a = 2 * i + 1, b = a + 1; let m = i; if (a < C && tau[mucchio[a]] < tau[mucchio[m]]) m = a; if (b < C && tau[mucchio[b]] < tau[mucchio[m]]) m = b; if (m === i) break; scambia(i, m); i = m; } };
+  const ritocca = (c) => { const i = posto[c]; sali(i); scendi(posto[c]); };
+  const prossimo = (c) => { const a = albero[L + c]; tau[c] = a > 0 ? tUlt[c] + (Pint[c] - Tint[c]) / a : Infinity; };
+  // la propensione del canale c cambia al tempo M.t: l'orologio interno corre fin lì con quella vecchia, poi la nuova
+  const aggiorna = (c) => { Tint[c] += albero[L + c] * (M.t - tUlt[c]); tUlt[c] = M.t; metti(c, prop(c)); prossimo(c); ritocca(c); };
+  let freschi = true; // (orologi da ripartire: all'inizio e dopo un flusso nuovo)
+  const rifai = () => {
+    if (freschi) { for (let c = 0; c < C; c++) { Tint[c] = 0; tUlt[c] = M.t; Pint[c] = esp(c); } freschi = false; }
+    else for (let c = 0; c < C; c++) { if (M.t >= tUlt[c]) Tint[c] += albero[L + c] * (M.t - tUlt[c]); else { Tint[c] = 0; Pint[c] = esp(c); } tUlt[c] = M.t; }
+    for (let c = 0; c < C; c++) albero[L + c] = prop(c); for (let c = C; c < L; c++) albero[L + c] = 0; for (let i = L - 1; i >= 1; i--) albero[i] = albero[2 * i] + albero[2 * i + 1];
+    for (let c = 0; c < C; c++) { prossimo(c); mucchio[c] = c; posto[c] = c; } for (let i = (C >> 1) - 1; i >= 0; i--) scendi(i); };
   const fonte = caso || sorgente(`${S.luogo.indirizzo || 'luogo'}/chimica`);
-  const M = { S, ins, canali, interne, nReaz, C, N, F, Om, V, risoluzione, tenute, fissi: fisso, t: 0, k: 0, eventi: 0, pesi: () => pesi, aw: () => awOra,
-    quando: fonte.serie('quando'), quale: fonte.serie('quale'), fonte };
-  M.sorgente = (c) => { M.quando = c.serie('quando'); M.quale = c.serie('quale'); M.k = 0; M.fonte = c; };
+  const M = { S, ins, canali, interne, nReaz, C, N, F, Om, V, risoluzione, tenute, fissi: fisso, t: 0, eventi: 0, pesi: () => pesi, aw: () => awOra, nomi, fonte };
+  // un flusso nuovo per ogni canale (il suo nome sotto la sorgente); gli orologi ripartono alla prossima imposta
+  M.sorgente = (c) => { M.fonte = c; for (let k = 0; k < C; k++) { flusso[k] = c.serie(nomi[k]); scatti[k] = 0; } freschi = true; };
+  M.sorgente(fonte);
   M.imposta = (Nuovo, t = 0) => { N.set(Nuovo); M.t = t; rifai(); };
   M.prop = prop; M.a0 = () => albero[1];
   // le fasi (bagnato e secco): l'attività dell'acqua cambia a tempi dati; tra un cambio e l'altro le velocità sono costanti
@@ -223,16 +250,17 @@ export function motore(S, { V = 1e-21, risoluzione = 1e-3, flussi = S.luogo.flus
   M.corri = (fino, { massimo = Infinity, avanza = null, cambia = null, osserva = null, ferma = null } = {}) => {
     let fatti = 0;
     while (M.t < fino && fatti < massimo) {
-      const a0 = albero[1]; if (!(a0 > 0)) { if (fineFase < fino) { cambiaFase(avanza); continue; } if (avanza) avanza(fino); M.t = fino; break; }
-      const u = M.quando(M.k), v = M.quale(M.k); M.k++;
-      const dt = -logEsatto(1 - u) / a0;
-      if (M.t + dt > fineFase && fineFase <= fino) { cambiaFase(avanza); continue; }
-      if (M.t + dt > fino) { if (avanza) avanza(fino); M.t = fino; break; }
-      if (avanza) avanza(M.t + dt); M.t += dt;
-      const c = cerca(v * a0), ap = albero[L + c]; if (cambia) cambia(c);
+      const c = mucchio[0], t1 = tau[c]; if (!(t1 < Infinity)) { if (fineFase < fino) { cambiaFase(avanza); continue; } if (avanza) avanza(fino); M.t = fino; break; }
+      if (t1 > fineFase && fineFase <= fino) { cambiaFase(avanza); continue; }
+      if (t1 > fino) { if (avanza) avanza(fino); M.t = fino; break; }
+      if (avanza) avanza(t1); M.t = t1;
+      const ap = albero[L + c]; if (cambia) cambia(c);
+      // il canale scatta: il suo orologio interno arriva a P_c, e il prossimo scatto interno è un'esponenziale in più del suo flusso
+      Tint[c] = Pint[c]; tUlt[c] = M.t; Pint[c] += esp(c);
       for (let k = daI[c]; k < daI[c + 1]; k++) N[daP[k]] -= daM[k]; for (let k = aI[c]; k < aI[c + 1]; k++) N[aP[k]] += aM[k];
-      for (let k = daI[c]; k < daI[c + 1]; k++) { const p = daP[k]; for (let z = dipI[p]; z < dipI[p + 1]; z++) metti(dipC[z], prop(dipC[z])); }
-      for (let k = aI[c]; k < aI[c + 1]; k++) { const p = aP[k]; for (let z = dipI[p]; z < dipI[p + 1]; z++) metti(dipC[z], prop(dipC[z])); }
+      for (let k = daI[c]; k < daI[c + 1]; k++) { const p = daP[k]; for (let z = dipI[p]; z < dipI[p + 1]; z++) aggiorna(dipC[z]); }
+      for (let k = aI[c]; k < aI[c + 1]; k++) { const p = aP[k]; for (let z = dipI[p]; z < dipI[p + 1]; z++) aggiorna(dipC[z]); }
+      aggiorna(c); // (anche se la sua propensione non è cambiata — un ingresso —: il suo prossimo scatto interno sì)
       M.eventi++; fatti++;
       if (osserva) osserva(c, Math.log(ap) - Math.log(albero[L + (c ^ 1)])); // (il canale inverso è il vicino: andata 2j, ritorno 2j + 1)
       if (ferma && ferma(N)) break;

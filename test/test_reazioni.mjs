@@ -94,15 +94,16 @@ prova(`la scatola di Strecker lasciata andare (${AT.attive.length} reazioni, Ω 
 
 // =====================================================================================================================
 console.log('D. il determinismo per indirizzo');
-prova('lo stesso indirizzo dà la stessa storia bit per bit; un altro indirizzo un\'altra; i tiri sono due eventi del luogo, annotati', () => {
+prova('lo stesso indirizzo dà la stessa storia bit per bit; un altro indirizzo un\'altra; i tiri sono un evento del luogo per canale, annotati', () => {
   const a = X.storia(SUB, { V, tempo: 20, massimo: 3e4 }), b = X.storia(SUB, { V, tempo: 20, massimo: 3e4 }), c = X.storia(X.soltanto({ ...SS, luogo: { ...SS.luogo, indirizzo: 'prova/strecker bis' } }, AT.attive), { V, tempo: 20, massimo: 3e4 });
   assert.equal(a.t, b.t); assert.equal(a.eventi, b.eventi); assert.deepEqual([...a.N], [...b.N]); assert.deepEqual([...a.perCanale], [...b.perCanale]); assert.deepEqual([...a.N0], [...b.N0]);
   assert.ok(a.t !== c.t || a.eventi !== c.eventi || [...a.N].some((x, i) => x !== c.N[i]), 'un altro indirizzo, un\'altra storia');
   const reg = new Map(), leggi = new Map(), d = X.storia(SUB, { V, tempo: 20, massimo: 3e4, caso: conRegistro(sorgente('prova/strecker/chimica'), reg, leggi) });
   assert.equal(d.t, a.t); assert.deepEqual([...d.N], [...a.N]);
-  const quando = [...reg.keys()].filter((k) => k.includes('/quando')).length, quale = [...reg.keys()].filter((k) => k.includes('/quale')).length;
-  assert.ok(quando >= d.eventi && quale >= d.eventi && [...leggi.values()].every((v) => v.legge === 'uniforme'));
-  console.log(`      ${a.eventi} eventi uguali al bit; con il registro: ${quando} tiri «quando» e ${quale} «quale» (uniformi: le leggi esponenziale e discreta sono dichiarate in LEGGI_DEI_TIRI), ${reg.size - quando - quale} per la scatola`);
+  // (un flusso per canale, col nome della reazione: ogni scatto consuma un tiro del suo canale, più il primo di ognuno)
+  const tiri = [...reg.keys()].filter((k) => /\/(canale|bordo|uscita)\//.test(k)).length, canali = new Set([...reg.keys()].filter((k) => /\/(canale|bordo|uscita)\//.test(k)).map((k) => k.replace(/#\d+$/, ''))).size;
+  assert.ok(tiri >= d.eventi && canali === d.motore.C && [...leggi.values()].every((v) => v.legge === 'uniforme'));
+  console.log(`      ${a.eventi} eventi uguali al bit; con il registro: ${tiri} tiri in ${canali} flussi, uno per canale (uniformi: la legge esponenziale è dichiarata in LEGGI_DEI_TIRI), ${reg.size - tiri} per la scatola`);
 });
 
 // =====================================================================================================================
