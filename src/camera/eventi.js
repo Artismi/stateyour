@@ -236,3 +236,14 @@ export function conRegistro(c, registro, leggi = null) {
 }
 // l'esito di un evento del registro («indirizzo» o «indirizzo#k»), chiesto da capo a una sorgente
 export const rileggi = (voce, rami = null) => { const i = voce.lastIndexOf('#'), k = i < 0 ? 0 : Number(voce.slice(i + 1)), dove = i < 0 ? voce : voce.slice(0, i), j = dove.lastIndexOf('/'); return sorgente(dove.slice(0, j), rami).serie(dove.slice(j + 1))(k); };
+
+// UN RETICOLO DI NUMERI, IN COORDINATE ASSOLUTE: per i campi su una griglia globale (eredita.js). reticolo(indirizzo)
+// dà la funzione (i, j, k) → campana (media 0, scarto 1) del nodo (i, j, k): una chiamata a Threefry per nodo, con il
+// contatore (i, ramo, j, k) e i due numeri della campana presi dalle due metà dei 128 bit usciti. Il nodo non dipende da
+// chi lo chiede né dalla tessera che lo contiene: due tessere vicine leggono gli stessi numeri sul bordo comune.
+// (k entro 2²⁸: il byte più alto del contatore resta sotto 0xF0, quello dei blocchi di nome; i e j: interi a 32 bit)
+const frazione2 = () => ((X2 >>> 0) * 2097152 + (X3 >>> 11)) * DUE53;
+export function reticolo(indirizzo, ramo = 0) {
+  scendi(0, 0, 0, 0, String(indirizzo)); const k0 = X0, k1 = X1, k2 = X2, k3 = X3, r = ramo | 0;
+  return (i, j = 0, k = 0) => { tf(i | 0, r, j | 0, k & 0x0FFFFFFF, k0, k1, k2, k3); const a = frazione(); return campana(a, frazione2()); };
+}
