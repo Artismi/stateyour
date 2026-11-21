@@ -103,11 +103,15 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
       // (le stelle sono mete solo da vicino — entro quattro raggi della galassia, o una volta e mezzo quello con cui il cosmo
       // la conta, che arriva più in là —: da lontano la meta è la galassia)
       const mete = V.lungo(rel) < Math.max(4 * Rg, 1.5 * (strato.raggioCosmo || 0));
+      // (una stella è una meta grande quanto un sistema, 6·10¹² m, 40 UA: la rotella rallenta avvicinandosi a quella sfera. Ma
+      // quella il cui sistema è aperto (spenta: la disegna il sistema) non deve fare da muro: l'influenza del sistema è
+      // al minimo proprio 40 UA, e tornando dalla galassia lo zoom si fermava sulla sfera finta senza entrarvi mai. Per lei
+      // la meta è il punto: le cose vere che la circondano le dà il sistema)
       for (let i = 0; i < n; i++) { let x = P[3 * i] - eG[0], y = P[3 * i + 1] - eG[1], z = P[3 * i + 2] - eG[2], d2 = x * x + y * y + z * z;
         if (Vs) { const rit = Math.sqrt(d2) / 299792458; x -= Vs[3 * i] * rit; y -= Vs[3 * i + 1] * rit; z -= Vs[3 * i + 2] * rit; d2 = x * x + y * y + z * z; }
         pos[3 * i] = q[0] * x + q[1] * y + q[2] * z; pos[3 * i + 1] = q[3] * x + q[4] * y + q[5] * z; pos[3 * i + 2] = q[6] * x + q[7] * y + q[8] * z;
         if (conPolvere) { volume.trasparenza(eG, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], giroV, _tr); luceV[4 * i] = luce[4 * i] * _tr[0]; luceV[4 * i + 1] = luce[4 * i + 1] * _tr[1]; luceV[4 * i + 2] = luce[4 * i + 2] * _tr[2]; luceV[4 * i + 3] = luce[4 * i + 3]; }
-        if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } if (mete || i === spenta) S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: 6e12, stella: i, galassia: via.galassia, nodo }); } }
+        if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } if (mete || i === spenta) S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: i === spenta ? 0 : 6e12, stella: i, galassia: via.galassia, nodo }); } }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
       if (N.vista.splat) { if (!splat) strato.splat = splat = creaSplatNebulose(N, { cosmo: via.cosmo, galassia: via.galassia, nodo, volume, frazione: O.diffusa, giro: () => (volume && volume.pronto() ? omega * (N.tempo.t - volume.stato.meta.t) : 0) }); splat.aggiorna(S, eG); }
       stelle.metti(pos, conPolvere ? luceV : luce, n);
