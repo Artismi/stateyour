@@ -795,7 +795,12 @@ export function libroDeiConti(P, opz = {}) {
     if (dalVolatile) { const resta = acquaFuori[i] - chiesto; if (resta < -1e-9 * Math.max(acquaFuori[i], chiesto)) {
         if (s === 'O' || s === 'H') { mantello[i] += resta; } else scoperti.push({ elemento: s, serbatoio: 'acqua fuori', manca: -resta }); }
       else metti('ghiacci', s, Math.max(0, resta)); }
-    else mantello[i] -= chiesto;
+    else { mantello[i] -= chiesto;
+      // (ciò che l'aria e il mare prendono dalla roccia esce coi magmi, gli stessi che fanno la crosta: se nel mantello non c'è più,
+      // perché un elemento incompatibile come lo zolfo è finito tutto nella crosta — su un pianeta piccolo la crosta è una parte
+      // grande del silicato —, lo cedono i basalti quando eruttano: Gaillard e Scaillet 2014 [R], lo zolfo dei vulcani è quello che
+      // i magmi perdono degassando. Ogni serbatoio dà solo ciò che ha)
+      if (mantello[i] < 0 && conti[s]?.crosta > 0) { const da = Math.min(-mantello[i], conti[s].crosta); conti[s].crosta -= da; mantello[i] += da; } }
     if (mantello[i] < -1e-9 * Math.max(1, el.silicato[i])) scoperti.push({ elemento: s, serbatoio: 'mantello', manca: -mantello[i] });
     if (mantello[i]) metti('mantello', s, mantello[i]);
   }

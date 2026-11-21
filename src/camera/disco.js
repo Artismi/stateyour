@@ -666,7 +666,10 @@ export function formaPianeti(st, seme = 1) {
     let Mr = 0; for (let i = 0; i < SIMBOLI.length; i++) Mr += sol[i];
     // IL PIANETA SI SEPARA (elementi.js differenzia): metallo e silicato all'equilibrio sul fondo dell'oceano di magma; il
     // nucleo che ne esce è il «ferro» del pianeta (per i giganti la roccia resta il loro nucleo, senza separarsi)
-    const massa = b.m - perso, solidi = massa - b.gas, gas = b.gas / massa, ghiaccio = (b.h2o - persoGhiacci) / solidi;
+    // (la parte di ghiaccio è quella degli elementi dei ghiacci che restano: la stessa materia che il libro dei conti di elementi.js
+    // conta; prima era b.h2o, che con la crescita dal cibo e i frammenti degli urti non coincide più con la somma dei membri)
+    let Mg = 0; for (let i = 0; i < SIMBOLI.length; i++) Mg += ghi[i];
+    const massa = b.m - perso, solidi = massa - b.gas, gas = b.gas / massa, ghiaccio = Mg / solidi;
     const sep = gas > 0.5 || !(Mr > 0) ? null : differenzia(sol, { M: Mr, R: raggioPianeta({ massaKg: Mr, ferro: b.fe / solidi }), rhoNucleo: STORIA.rhoNucleo });
     let Mc = 0; if (sep) for (let i = 0; i < SIMBOLI.length; i++) Mc += sep.nucleo[i];
     // I VOLATILI DEI GHIACCI: la parte che il pianeta ha liberato in superficie (leggi.js PARTE_FUORI; nei mondi di ghiaccio

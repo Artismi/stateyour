@@ -388,7 +388,10 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
   // risultato. Prima arrotondava la temperatura a 5 K: l'aria che restava era quella di una temperatura vicina)
   const chiaveEq = memoria ? `${Tr}|${Pr}|${Object.values(el).join(',')}` : null;
   const eq = (memoria && memoria.get(chiaveEq)) || equilibrio({ T: Tr, P: Pr, elementi: el, dettagli: true }), x = { ...eq.gas }; if (memoria) memoria.set(chiaveEq, eq);
-  for (const f in x) if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f];
+  // (i gas troppo leggeri per restare se ne vanno, e con l'inventario si portano via la LORO massa: la colonna cala della loro
+  // parte. Prima la colonna restava intera e si spartiva tra i gas rimasti: su un pianeta piccolo, che tiene solo azoto e CO2,
+  // l'acqua fuggita diventava azoto, e il libro dei conti di elementi.js trovava nell'aria sette volte l'azoto portato fuori)
+  { let tutta = 0, resta = 0; for (const f in x) { const m = x[f] * MOLECOLE[f].massa; tutta += m; if (MOLECOLE[f].massa < massaMinima * 0.99) delete x[f]; else resta += m; } if (conInventario && tutta > 0) colonna *= resta / tutta; }
   // i tetti (Pa): ogni gas fino alla sua pressione di vapore (il resto piove, nevica o brina); con un
   // mare, la CO2 fino all'equilibrio di Urey e niente SO2
   // («co2»: la pressione di CO2 che il termostato del carbonio lascia nell'aria, se supera quella dell'equilibrio: vedi climaEAria)
