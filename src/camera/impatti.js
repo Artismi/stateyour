@@ -558,7 +558,7 @@ export function giganteDi(P, sistema, caso) {
 //   popolazione { diametroM, iniziale, oggi }: i corpi della nube del pianeta, per classe (la cascata li ha cambiati)
 //   bilancio   masse in kg: arrivataKg (e arrivataSuM), dei grandi e dei piccoli; fasce: le fasce di sassi orfani che
 //                arrivano fin qui ({ da, inizioKg, oggiKg, polvereKg, t }); della nube del pianeta: detritiKg,
-//                restiKg, sulPianetaKg, aiViciniKg, scagliataKg, polvereKg, rimastaKg, daRilasciareKg; energiaJ; stime
+//                restiKg, entrataKg, sulPianetaKg, aiViciniKg, scagliataKg, polvereKg, rimastaKg, daRilasciareKg; energiaJ; stime
 export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } = {}) {
   const cx = contesto(sistema, P), i = cx.pianeti.indexOf(P), me = cx.sk[i], eta = cx.eta;
   const form = formazioneDi(cx, i, caso), t0 = form.t0, c = luna ? caso.sotto(`luna ${luna.id ?? 0}`) : caso;
@@ -663,7 +663,7 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
     popolazione: mia ? { diametroM: Array.from({ length: NC }, (_, k) => dMed(k)), iniziale: Array.from(mia.primi), oggi: Array.from(mia.ultimi) } : null,
     bilancio: { arrivataKg: arrivata, arrivataSuM: arrivata / B.massaKg, grandiKg: arrivataGrandi, numeroGrandi: grandi.length, numeroPiccoli: piccoli.numero.reduce((x, y) => x + y, 0), energiaJ: energia, nubi: nubi.map((b) => b.da),
       fasce: nubi.filter((b) => b.nu.bilancio.orfaniKg > 0).map((b) => ({ da: b.da, inizioKg: b.nu.bilancio.entrataKg, oggiKg: b.nu.bilancio.rimastaKg, polvereKg: b.nu.bilancio.polvereKg, t: b.nu.ts })),
-      detritiKg: mb?.detritiKg ?? 0, restiKg: mb?.restiKg ?? 0, sulPianetaKg: mb ? mb.colpiti[i] : 0, aiViciniKg: altri, scagliataKg: mb?.scagliataKg ?? 0, polvereKg: mb?.polvereKg ?? 0, rimastaKg: mb?.rimastaKg ?? 0, daRilasciareKg: mb?.daRilasciareKg ?? 0, stime: form.stime },
+      detritiKg: mb?.detritiKg ?? 0, restiKg: mb?.restiKg ?? 0, entrataKg: mb?.entrataKg ?? 0, sulPianetaKg: mb ? mb.colpiti[i] : 0, aiViciniKg: altri, scagliataKg: mb?.scagliataKg ?? 0, polvereKg: mb?.polvereKg ?? 0, rimastaKg: mb?.rimastaKg ?? 0, daRilasciareKg: mb?.daRilasciareKg ?? 0, stime: form.stime },
   };
 }
 
