@@ -136,7 +136,9 @@ prova('le orbite: nessuna dentro 0,02 UA, in ordine, separate, senza incroci; i 
     assert.ok(P.reduce((m, p) => m + p.massaKg, 0) < D.massaKg, `più pianeti che disco: ${dove}`);
     for (let i = 0; i < P.length; i++) {
       const p = P[i]; n++;
-      assert.ok(p.aUA >= 0.02 && p.aUA <= D.rOut, `${p.aUA} UA: ${dove}`);
+      // (oltre il bordo del disco solo chi vi è stato spinto da una diffusione della fase degli urti: Kimura et al. 2025, la coppia
+      // che si diffonde si allarga, e il corpo di fuori va più fuori)
+      assert.ok(p.aUA >= 0.02 && (p.aUA <= D.rOut || p.formazione.diffusioni > 0), `${p.aUA} UA: ${dove}`);
       assert.ok(p.eccentricita >= 0 && p.eccentricita < 0.5 && p.massaKg >= DISCO.minimo * MTERRA && p.raggioM > 1e6 && p.raggioM < 1.5e8);
       if (!i) continue;
       const q = P[i - 1], d = hill(q, p, st.massa);

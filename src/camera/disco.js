@@ -511,7 +511,7 @@ export function formaPianeti(st, seme = 1) {
         const db = ep0 * p.a + eq0 * q.a, B2 = b + db, E0 = mp / p.a + mq / q.a; let lo = 1e-6 * p.a, hi = p.a;
         for (let k2 = 0; k2 < 60; k2++) { const x = Math.sqrt(lo * hi); if (mp / x + mq / (x + B2) > E0) lo = x; else hi = x; }
         p.a = Math.sqrt(lo * hi); q.a = p.a + B2;
-        p.zr = ep0 * Math.cos(fp); p.zi = ep0 * Math.sin(fp); q.zr = eq0 * Math.cos(fq); q.zi = eq0 * Math.sin(fq);
+        p.zr = ep0 * Math.cos(fp); p.zi = ep0 * Math.sin(fp); q.zr = eq0 * Math.cos(fq); q.zi = eq0 * Math.sin(fq); p.diffusioni = (p.diffusioni || 0) + 1; q.diffusioni = (q.diffusioni || 0) + 1;
       }
       const perso = slegato || (p.a < 0.5 * D.rIn ? p : null); // (scagliato fuori, o caduto sulla stella)
       if (perso) {
@@ -703,7 +703,7 @@ export function formaPianeti(st, seme = 1) {
       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`
         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
-    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto };
+    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto, diffusioni: b.diffusioni || 0 };
     return Object.defineProperty({ aUA: b.a, massaKg: massa, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
   });
   // (le perdite dell'accrescimento tolgono un poco di massa: chi scende sotto il minimo resta tra i detriti)
