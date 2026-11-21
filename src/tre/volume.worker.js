@@ -8,7 +8,9 @@
 //     vecchie (un corpo nero a 4300 K), dove il braccio addensa le stelle ne nascono di nuove (9500 K) — la parte
 //     giovane è l'eccesso sulla media dell'anello, e vale in luce `GIOVANI` volte la sua massa (LIBERO: 3; le stelle
 //     giovani rendono più luce per chilo). La somma su tutto il volume è la luminosità della galassia;
-//   · la POLVERE: A_V per metro = κ × densità di polvere, con κ letto da vuoto.js (`polvere.in`, una volta);
+//   · la POLVERE: A_V per metro = κ × densità di polvere, con κ letto da vuoto.js (`polvere.in`, una volta). Quella dello
+//     STRATO del disco non sta nella griglia: sta in una tabella a parte (angolo × raggio: la colonna A_V e la mezza
+//     altezza h dello strato sech²), perché chi guarda la integri esatta lungo il raggio (volumi.js);
 //   · le NEBULOSE e le NUBI di vuoto.js (`scenaGalassia().vuoto`) depositate nella cella dove stanno: la loro luce
 //     visibile col colore delle loro righe, la loro estinzione come colonna media della cella (secondo messaggio).
 //   Unità (perché stiano in 16 bit): lunghezze in raggi della galassia Rg; la luce di una cella è j·Rg³/L (L la luminosità
@@ -40,28 +42,41 @@ function volumeGalassia(d, manda) {
   // che ha gas; prima si provavano quattro raggi fissi e in una galassia col gas solo al centro κ restava zero: niente polvere)
   let kappa = 0; try { const pv = sg.vuoto({ centro: [0, 0, 0], raggio: 0.2 }).polvere; for (const r of D.colonne.r) { const q = pv.in(r * KPC, 0, 0); if (q.densita > 0) { kappa = q.AVperMetro / q.densita; break; } } } catch { kappa = 0; }
   // LO STRATO DELLA POLVERE. galassie.js dà al gas una mezza altezza fissa (LEGGI.spessoreGas, 0,1 kpc: quella del gas
-  // vicino al Sole); le stelle invece hanno quella dell'equilibrio, z₀ = σ_z²/(πGΣ). Dove il disco è denso (il centro, le
-  // galassie piccole) z₀ scende a pochi parsec e la polvere, dieci o cento volte più spessa delle stelle, le avvolgeva
-  // tutte: da fuori il disco diventava un muro scuro, da dentro un pavimento. Il gas sta nello stesso campo con la sua
-  // dispersione σ_g (LEGGI.sigmaGas): h_g = σ_g²/(πGΣ) = z₀·(σ_g/σ_z)² [D: il disco isotermo, Spitzer 1942], al più quella
-  // del modello (dove il disco è rado resta 0,1 kpc: niente svasatura). La colonna resta quella del modello (la densità sul
-  // piano per 2·0,1 kpc), distribuita come sech²(z/h_g) e MEDIATA sulla cella (∫sech² = h·tanh): uno strato più sottile
-  // della cella non si perde né si moltiplica.
+  // vicino al Sole); le stelle invece hanno quella dell'equilibrio, z₀ = σ_z²/(πGΣ). Il gas, freddo (σ_g, LEGGI.sigmaGas) e
+  // leggero, sta nella buca del disco delle stelle: vicino al piano la loro gravità cresce con la quota, g_z = 4πGρ₀·z con
+  // ρ₀ = Σ/(2z₀), e lo strato di prova ha la larghezza σ_g/√(4πGρ₀); come sech²(z/h_g) vale h_g = z₀·σ_g/σ_z [D: Ostriker,
+  // McKee & Leroy 2010, lo strato del gas nel potenziale delle stelle] — lineare in σ_g/σ_z. (Prima qui c'era h_g = z₀·(σ_g/σ_z)²,
+  // lo strato che si regge da solo: con σ_z = 120 km/s, al centro di un'ellittica, dieci volte troppo sottile.) Al più
+  // quella del modello (dove il disco è rado resta 0,1 kpc). La colonna resta quella del modello (la densità sul piano per
+  // 2·0,1 kpc), distribuita come sech²(z/h_g).
+  // Lo strato è spesso da una frazione di parsec a cento parsec, le celle in quota vicino al piano 12 pc e poi di più: nella
+  // griglia diventava uno strato spesso quanto la cella (di taglio una barra nera larga decine di parsec, che non c'è), e
+  // campionato a punti lungo il raggio una grana di righe. Perciò lo strato va a parte (`strato`: per angolo e raggio la
+  // colonna A_V e h in millesimi di Rg) e volumi.js lo integra esatto: lungo un tratto da z_a a z_b la sua A_V è
+  // colonna/2·|tanh(z_b/h) − tanh(z_a/h)|·(lunghezza del tratto/|z_b − z_a|).
   const Cm = cinematica(F), hM = LEGGI_GALASSIE.spessoreGas, bordi = D.colonne.bordo, NA = D.colonne.r.length, hStrato = new Float64Array(nr), colonna = new Float64Array(nr * nf);
-  for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk); let k = 0; while (k < NA - 1 && bordi[k + 1] < R) k++; hStrato[jr] = Math.min(hM, Cm.z0[k] * (LEGGI_GALASSIE.sigmaGas / Cm.sigZ[k]) ** 2) || hM;
+  for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk); let k = 0; while (k < NA - 1 && bordi[k + 1] < R) k++; hStrato[jr] = Math.min(hM, (Cm.z0[k] * LEGGI_GALASSIE.sigmaGas) / Cm.sigZ[k]) || hM;
     for (let jf = 0; jf < nf; jf++) colonna[jr * nf + jf] = D.in3d(R, 0, ((jf + 0.5) / nf) * 2 * Math.PI, tG).polvere * 2 * hM; }
-  const strato = (jr, jz) => { const h = hStrato[jr], z0 = zmax * Rk * ((jz / nz) * 2 - 1) * Math.abs((jz / nz) * 2 - 1), z1 = zmax * Rk * (((jz + 1) / nz) * 2 - 1) * Math.abs(((jz + 1) / nz) * 2 - 1); return (0.5 * (Math.tanh(z1 / h) - Math.tanh(z0 / h))) / (z1 - z0); }; // (per kpc: la parte della colonna nella cella, su quanto è alta)
+  // (la tabella dello strato: per anello e angolo la colonna A_V — κ·Σ_polvere — e h_g in millesimi di Rg; a chi la manda si dà
+  // colonna e colonna·h, perché tra due celle si interpoli h pesata con la polvere: tra un anello con lo strato sottile e uno
+  // senza polvere, dove h vale 0,1 kpc per niente, la polvere non deve prendere lo spessore di quello vuoto)
+  const tabStrato = new Float32Array(2 * nr * nf); for (let jr = 0; jr < nr; jr++) for (let jf = 0; jf < nf; jf++) { tabStrato[2 * (jr * nf + jf)] = kappa * colonna[jr * nf + jf] * (MSOLE / KPC ** 2); tabStrato[2 * (jr * nf + jf) + 1] = (1e3 * hStrato[jr]) / Rk; }
   const u = MSOLE / KPC ** 3, riga = new Float64Array(nf), volCella = (jr, jz) => { const r0 = (jr / nr) * Rmax, r1 = ((jr + 1) / nr) * Rmax, s0 = (jz / nz) * 2 - 1, s1 = ((jz + 1) / nz) * 2 - 1; return (Math.PI * (r1 * r1 - r0 * r0) / nf) * Math.abs(zmax * (s1 * Math.abs(s1) - s0 * Math.abs(s0))); };
   let somma = 0;
   for (let jz = 0; jz < nz; jz++) { const s = ((jz + 0.5) / nz) * 2 - 1, z = zmax * s * Math.abs(s) * Rk;
-    for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk), sfe = sferoide(R, z), fz = strato(jr, jz); let media = 0;
-      for (let jf = 0; jf < nf; jf++) { const q = D.in3d(R, z, ((jf + 0.5) / nf) * 2 * Math.PI, tG); riga[jf] = q.stelle - sfe; media += riga[jf]; const o = 4 * ((jz * nr + jr) * nf + jf); dati[o + 3] = kappa * colonna[jr * nf + jf] * fz * u * Rg; }
+    for (let jr = 0; jr < nr; jr++) { const R = Math.max(1e-3, ((jr + 0.5) / nr) * Rmax * Rk), sfe = sferoide(R, z); let media = 0;
+      for (let jf = 0; jf < nf; jf++) { const q = D.in3d(R, z, ((jf + 0.5) / nf) * 2 * Math.PI, tG); riga[jf] = q.stelle - sfe; media += riga[jf]; }
       media /= nf; const v = volCella(jr, jz);
       for (let jf = 0; jf < nf; jf++) { const disco = Math.max(0, riga[jf]), nuove = Math.max(0, disco - media), o = 4 * ((jz * nr + jr) * nf + jf), a = sfe + disco - nuove, b = GIOVANI * nuove;
         for (let c = 0; c < 3; c++) dati[o + c] = a * vecchio[c] + b * giovane[c]; somma += (a + b) * v; } } }
   // (galassie.js dà il disco ad anelli: la densità cambia a scalini da un anello all'altro, e di faccia si vedrebbero
   // cerchi che non ci sono: lungo il raggio si passa due volte una media 1-2-1, larga quanto un anello non è)
   for (let giro = 0; giro < 3; giro++) { const prima = dati.slice(); for (let jz = 0; jz < nz; jz++) for (let jr = 1; jr < nr - 1; jr++) for (let jf = 0; jf < nf; jf++) { const o = 4 * ((jz * nr + jr) * nf + jf), m = 4 * nf; for (let c = 0; c < 4; c++) dati[o + c] = 0.25 * prima[o - m + c] + 0.5 * prima[o + c] + 0.25 * prima[o + m + c]; } }
+  // (la stessa media lungo il raggio per la colonna dello strato; h va con la polvere che si sposta: la media di h pesata con
+  // la colonna — se no la polvere di un anello sottile, sparsa sul vicino, vi prenderebbe il suo spessore)
+  for (let giro = 0; giro < 3; giro++) { const prima = tabStrato.slice(), m = 2 * nf; for (let jr = 1; jr < nr - 1; jr++) for (let jf = 0; jf < nf; jf++) { const o = 2 * (jr * nf + jf), c0 = prima[o - m], c1 = prima[o], c2 = prima[o + m], c = 0.25 * c0 + 0.5 * c1 + 0.25 * c2;
+    if (c > 0) tabStrato[o + 1] = (0.25 * c0 * prima[o - m + 1] + 0.5 * c1 * prima[o + 1] + 0.25 * c2 * prima[o + m + 1]) / c; tabStrato[o] = c; } }
+  for (let o = 0; o < tabStrato.length; o += 2) tabStrato[o + 1] *= tabStrato[o];
   // (verso il bordo della griglia la luce sfuma a zero: lo sferoide vero continua, qui lo si taglia senza spigolo)
   for (let jz = 0; jz < nz; jz++) { const s = Math.abs(((jz + 0.5) / nz) * 2 - 1), fz = Math.min(1, (1 - s * s) / 0.35); for (let jr = 0; jr < nr; jr++) { const fr = Math.min(1, (1 - (jr + 0.5) / nr) / 0.2), f = fz * fr; if (f >= 1) continue; for (let jf = 0; jf < nf; jf++) { const o = 4 * ((jz * nr + jr) * nf + jf); dati[o] *= f; dati[o + 1] *= f; dati[o + 2] *= f; } } }
   // (la somma sul volume della luce deve fare 1)
@@ -69,14 +84,21 @@ function volumeGalassia(d, manda) {
   // (la griglia va alla scheda in mezza precisione: oltre 65504 diventerebbe infinito. Un tetto di 6·10⁴ A_V per Rg è
   // comunque una parete: la cella più sottile, sul piano, ne fa decine di magnitudini)
   const tetto = () => { for (let o = 3; o < dati.length; o += 4) if (dati[o] > 6e4) dati[o] = 6e4; }; tetto();
-  const meta = { nf, nr, nz, Rmax, zmax, raggioM: Rg, luce: sg.daLontano.luminosita, kappa, t: d.t };
+  const meta = { nf, nr, nz, Rmax, zmax, raggioM: Rg, luce: sg.daLontano.luminosita, kappa, t: d.t, strato: tabStrato };
   manda({ n: d.n, tipo: 'galassia', dati: dati.slice(), ...meta, nebulose: 0 });
   // secondo messaggio: con le nebulose e le nubi di vuoto.js depositate nelle loro celle
   try { const v = sg.vuoto({ centro: [0, 0, 0], raggio: Rk * 1.1 }); let messe = 0;
+    // (vicino all'asse una cella è uno spicchio stretto: una nebulosa più larga dello spicchio vi stava tutta dentro, e di
+    // faccia il centro si vedeva a raggi, spicchi chiari e scuri. La si stende sugli spicchi che il suo raggio copre a quella
+    // distanza dall'asse — 2·asin(r/R), tutto il giro se r ≥ R —, con la stessa somma)
     for (const x of v.volumi) { const R = Math.hypot(x.pos[0], x.pos[1]) / Rg, z = x.pos[2] / Rg; if (R >= Rmax || Math.abs(z) >= zmax) continue; let fi = Math.atan2(x.pos[1], x.pos[0]) / (2 * Math.PI); fi -= Math.floor(fi);
-      const jf = Math.min(nf - 1, Math.floor(fi * nf)), jr = Math.min(nr - 1, Math.floor((R / Rmax) * nr)), s = Math.sign(z) * Math.sqrt(Math.abs(z) / zmax), jz = Math.min(nz - 1, Math.floor(((s + 1) / 2) * nz)), o = 4 * ((jz * nr + jr) * nf + jf), vc = volCella(jr, jz);
-      if (x.brillanza > 0 && x.colore) { const L = (x.brillanza * 4 * Math.PI * Math.PI * x.raggio * x.raggio) / sg.daLontano.luminosita / vc, m = Math.max(lin(x.colore[0]), lin(x.colore[1]), lin(x.colore[2])) || 1; for (let c = 0; c < 3; c++) dati[o + c] += (L * lin(x.colore[c])) / m; messe++; }
-      if (x.estinzione > 0) { dati[o + 3] += (x.estinzione * (2 / 3) * Math.PI * (x.raggio / Rg) ** 2) / vc; messe++; } }
+      const jf = Math.min(nf - 1, Math.floor(fi * nf)), jr = Math.min(nr - 1, Math.floor((R / Rmax) * nr)), s = Math.sign(z) * Math.sqrt(Math.abs(z) / zmax), jz = Math.min(nz - 1, Math.floor(((s + 1) / 2) * nz)), vc = volCella(jr, jz);
+      const rr = x.raggio / Rg, largo = rr >= R ? 2 * Math.PI : 2 * Math.asin(rr / R), nc = Math.max(1, Math.min(nf, Math.ceil((largo * nf) / (2 * Math.PI)))), f0 = jf - Math.floor(nc / 2);
+      const L = x.brillanza > 0 && x.colore ? (x.brillanza * 4 * Math.PI * Math.PI * x.raggio * x.raggio) / sg.daLontano.luminosita / vc / nc : 0, m = x.colore ? Math.max(lin(x.colore[0]), lin(x.colore[1]), lin(x.colore[2])) || 1 : 1, A = x.estinzione > 0 ? (x.estinzione * (2 / 3) * Math.PI * rr * rr) / vc / nc : 0;
+      for (let q = 0; q < nc; q++) { const o = 4 * ((jz * nr + jr) * nf + ((((f0 + q) % nf) + nf) % nf));
+        if (L > 0) for (let c = 0; c < 3; c++) dati[o + c] += (L * lin(x.colore[c])) / m;
+        if (A > 0) dati[o + 3] += A; }
+      if (L > 0) messe++; if (A > 0) messe++; }
     tetto(); manda({ n: d.n, tipo: 'galassia', dati, ...meta, nebulose: messe });
   } catch (e) { /* senza vuoto.js resta il volume delle stelle e della polvere */ }
 }

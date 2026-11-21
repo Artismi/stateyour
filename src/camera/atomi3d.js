@@ -407,7 +407,12 @@ void main() {
   a = pDi(v_uv + vec2(0.0, u_px.y)) - P; b = P - pDi(v_uv - vec2(0.0, u_px.y));
   vec3 dy = abs(a.z) < abs(b.z) ? a : b;
   vec3 n = normalize(cross(dx, dy));
-  float rumore = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  // (la rotazione dei campioni cambia da un punto all'altro con la matrice di Bayer 4×4: le sedici rotazioni stanno in un
+  // quadrato di 4 punti, che la sfumatura dopo — ±4 punti, nei due versi — media tutte. Il rumore «interleaved gradient» di
+  // prima cambiava quasi solo lungo x: senza una media nel tempo, da vicino — raggio grande, otto campioni radi — restava a
+  // righe verticali sulle sfere)
+  vec2 qb = floor(gl_FragCoord.xy), qh = floor(0.5 * qb);
+  float rumore = 0.25 * fract(qh.x * 0.5 + qh.y * qh.y * 0.75) + fract(qb.x * 0.5 + qb.y * qb.y * 0.75) + 1.0 / 32.0;
   float k = u_px.z / z, r1 = min(u_ao.x * k, u_px.w), r2 = min(u_ao.y * k, u_px.w), R1 = r1 / k, R2 = r2 / k, s1 = 0.0, s2 = 0.0;
   for (int i = 0; i < 8; i++) {
     float f = (float(i) + 0.5) / 8.0, ang = 6.2832 * (rumore + f * 2.6);

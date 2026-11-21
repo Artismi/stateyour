@@ -56,6 +56,7 @@
 // jacobiano limitato a 1,3 volte il campo (3DGS); al più 24 splat «da dentro» per chi estingue (per chi emette: tutti).
 import { V, GLSL_PROFONDITA_V, GLSL_PROFONDITA_F } from './nucleo.js';
 import { occhio } from '../camera/vuoto_mezzo.js';
+import { avStrato } from './volumi.js';
 
 const PI = Math.PI, RT = 3.3, ET = Math.exp(-0.5 * RT * RT), PIX2 = 1 / 12; // il taglio della campana (σ); la varianza di un pixel quadrato
 const MAX_VICINI = 24, H_PLANCK = 6.62607e-34, C_LUCE = 2.99792458e8, K_B = 1.380649e-23;
@@ -440,10 +441,10 @@ export function creaSplatNebulose(N, { cosmo, galassia, nodo, volume = null, fra
     if (!L.tintaDavanti || L._tintaDi !== c) { let r = 0, g = 0, b2 = 0; for (let q = 0; q < c.dati.length; q += 4) { r += c.dati[q]; g += c.dati[q + 1]; b2 += c.dati[q + 2]; } L.tintaDavanti = [r / (g || 1), 1, b2 / (g || 1)]; L._tintaDi = c; }
     const m = volume.stato.meta, Rg = m.raggioM, k = PCm / Rg, o = [e[0] * k, e[1] * k, e[2] * k], b = [x * k, y * k, z * k], d = [b[0] - o[0], b[1] - o[1], b[2] - o[2]], h = 0.03 * m.zmax, u0 = Math.asinh(o[2] / h), u1 = Math.asinh(b[2] / h), piano = Math.abs(u1 - u0) < 0.5 || Math.abs(d[2]) < 1e-9, n = 48, g0 = giro();
     let prima = 0, C = 0; const T = [1, 1, 1], A = [0.79, 1, 1.31];
-    for (let i = 0; i < n; i++) { const f = (i + 1) / n, t = piano ? f : (h * Math.sinh(u0 + (u1 - u0) * f) - o[2]) / d[2], ds = (t - prima) * Math.hypot(d[0], d[1], d[2]), tm = prima + 0.5 * (t - prima); prima = t;
+    for (let i = 0; i < n; i++) { const f = (i + 1) / n, t = piano ? f : (h * Math.sinh(u0 + (u1 - u0) * f) - o[2]) / d[2], ds = (t - prima) * Math.hypot(d[0], d[1], d[2]), tm = prima + 0.5 * (t - prima), ta = prima; prima = t;
       const px = o[0] + d[0] * tm, py = o[1] + d[1] * tm, pz = o[2] + d[2] * tm, R = Math.hypot(px, py); if (R >= m.Rmax || Math.abs(pz) >= m.zmax || !(ds > 0)) continue;
       let fi = (Math.atan2(py, px) - g0) / (2 * Math.PI); fi -= Math.floor(fi); const jf = Math.min(c.nf - 1, Math.floor(fi * c.nf)), jr = Math.min(c.nr - 1, Math.floor((R / m.Rmax) * c.nr)), sz = Math.sign(pz) * Math.sqrt(Math.abs(pz) / m.zmax), jz = Math.min(c.nz - 1, Math.floor(((sz + 1) / 2) * c.nz)), q = 4 * ((jz * c.nr + jr) * c.nf + jf);
-      C += T[1] * c.dati[q + 1] * ds; for (let a = 0; a < 3; a++) T[a] *= Math.exp(-0.921 * c.dati[q + 3] * ds * A[a]); }
+      C += T[1] * c.dati[q + 1] * ds; const av = c.dati[q + 3] * ds + avStrato(c, R, fi, o[2] + d[2] * ta, o[2] + d[2] * t, ds); for (let a = 0; a < 3; a++) T[a] *= Math.exp(-0.921 * av * A[a]); }
     out4[0] = T[0]; out4[1] = T[1]; out4[2] = T[2]; out4[3] = (C * m.luce * frazione) / (4 * Rg * Rg * E0); return out4; };
   const L = creaSplat(N, { modo: 'mezzo' }), PC = 3.0857e16, stato = { pronto: false, ms: 0, oggetti: [], errore: null, richieste: 0, strato: L.stato };
   let w = null, inCorso = false, chiesto = null, tChiesto = NaN, vicino = Infinity;

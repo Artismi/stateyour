@@ -73,16 +73,35 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
   if (buco) { stella.raggio = 2.5 * buco.raggioGravitazionale; stella.influenza = 2000 * buco.raggioGravitazionale; }
   const punti = creaPunti(N), alone = punti.insieme(1), segni = punti.insieme(defs.length), posS = new Float32Array(3 * defs.length), luceS = new Float32Array(4 * defs.length), prgSfera = N.programma(V_SFERA, F_SFERA, { a_angolo: 0 });
   const quadrato = (() => { const vao = gl.createVertexArray(), b = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null); return { vao, b }; })();
-  // le orbite: 256 punti ciascuna, riferiti al corpo attorno a cui girano (gli elementi sono quelli di oggi)
+  // le orbite: 2048 lati ciascuna, riferite al corpo attorno a cui girano (gli elementi sono quelli di oggi). (Erano 256: la
+  // spezzata si staccava dalla curva vera di a·(1 − cos(π/256)) ≈ 7,5·10⁻⁵·a, 11 000 km a 1 UA, e accanto al pianeta la linea
+  // passava lontano da lui; con 2048 lati lo scarto è 1,2·10⁻⁶·a, e da mezzo centesimo di a — dove la linea comincia a vedersi,
+  // sotto — vale un quarto di milliradiante, meno di mezzo punto dello schermo)
   const orbite = (() => {
     if (!O.orbite) return []; const sc = scenaSistema(via.cosmo, via.galassia, via.stella, 0), out = []; let k = 0;
-    for (const q of sc.corpi) { const s = schede[k++]; if (!q.orbita || !s) continue; const { a, e, assi: [Pv, Qv] } = q.orbita, n = 257, v = new Float32Array(3 * n), b = a * Math.sqrt(1 - e * e);
+    for (const q of sc.corpi) { const s = schede[k++]; if (!q.orbita || !s) continue; const { a, e, assi: [Pv, Qv] } = q.orbita, n = 2049, v = new Float32Array(3 * n), b = a * Math.sqrt(1 - e * e);
       for (let i = 0; i < n; i++) { const E = (i / (n - 1)) * 2 * Math.PI, x = a * (Math.cos(E) - e), y = b * Math.sin(E); for (let d = 0; d < 3; d++) v[3 * i + d] = x * Pv[d] + y * Qv[d]; }
       const vao = gl.createVertexArray(), buf = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
-      out.push({ vao, buf, n, attorno: s.corpo.genitore, luna: s.c.cosa === 'luna', a }); }
+      out.push({ vao, buf, n, attorno: s.corpo.genitore, luna: s.c.cosa === 'luna', a, v: Float64Array.from(v), nrm: [Pv[1] * Qv[2] - Pv[2] * Qv[1], Pv[2] * Qv[0] - Pv[0] * Qv[2], Pv[0] * Qv[1] - Pv[1] * Qv[0]] }); }
     return out;
   })();
   let prgOrbita = null; const u9 = new Float32Array(9), pos1 = new Float32Array(3), luce1 = new Float32Array(4);
+  // QUANTO SI VEDE UN'ORBITA da dove sta l'occhio (c: il corpo attorno a cui gira, visto dall'occhio; q: gli assi del sistema
+  // per righe; l'occhio nel riferimento dell'orbita è qᵀ·(−c)). Un'orbita è un segno per chi la guarda DA FUORI o dall'alto:
+  // · se l'occhio sta dentro l'ellisse e vicino al suo piano, l'orbita gli gira attorno e sullo schermo è una retta che
+  //   attraversa tutta la vista (all'avvio, accanto al pianeta 1, le orbite degli altri pianeti e delle sue lune): si spegne
+  //   dentro metà del semiasse e sotto un decimo di semiasse dal piano, piena fuori dall'ellisse o a tre decimi sopra il piano;
+  // · se l'occhio sta quasi SULLA linea (accanto al corpo che la percorre: dentro la sua sfera di Hill e oltre) la vede di
+  //   taglio, una retta che passa accanto all'occhio: si spegne sotto mezzo centesimo di a, piena a due centesimi.
+  const rampa = (x, a, b) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function vistaOrbita(o, c, q) {
+    const x = -(q[0] * c[0] + q[3] * c[1] + q[6] * c[2]), y = -(q[1] * c[0] + q[4] * c[1] + q[7] * c[2]), z = -(q[2] * c[0] + q[5] * c[1] + q[8] * c[2]), v = o.v, nn = o.nrm;
+    const alto = Math.abs(x * nn[0] + y * nn[1] + z * nn[2]) / o.a, fuori = Math.hypot(x, y, z) / o.a, attorno = Math.max(rampa(fuori, 0.5, 1), rampa(alto, 0.1, 0.3)); if (attorno <= 0) return 0;
+    let m = Infinity;
+    for (let i = 0; i < o.n - 1; i++) { const ax = v[3 * i], ay = v[3 * i + 1], az = v[3 * i + 2], bx = v[3 * i + 3] - ax, by = v[3 * i + 4] - ay, bz = v[3 * i + 5] - az, px = x - ax, py = y - ay, pz = z - az, bb = bx * bx + by * by + bz * bz;
+      const f = bb > 0 ? Math.max(0, Math.min(1, (px * bx + py * by + pz * bz) / bb)) : 0, dx = px - f * bx, dy = py - f * by, dz = pz - f * bz, d2 = dx * dx + dy * dy + dz * dz; if (d2 < m) m = d2; }
+    return attorno * rampa(Math.sqrt(m) / o.a, 0.005, 0.02);
+  }
 
   const strato = {
     nome: 'sistema',
@@ -134,7 +153,8 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
         if (!prgOrbita) prgOrbita = N.programma(V_ORBITA, F_ORBITA, { a_p: 0 }); const u = prgOrbita.u, q = N.quadro(nodo, S.t) || V.identita(); gl.useProgram(prgOrbita.p);
         gl.uniformMatrix4fv(u.u_proj, false, S.proj); gl.uniformMatrix3fv(u.u_vista, false, S.vista); gl.uniform1f(u.u_fc, S.fc); for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = q[3 * r + c]; gl.uniformMatrix3fv(u.u_quadro, false, u9);
         const dS = V.lungo(schede[0].rel);
-        for (const o of orbite) { const c = S.versoCorpo(o.attorno), vista = Math.min(1, dS / (0.02 * o.a)) * (o.luna ? 0.5 : 1) * Math.min(1, (30 * nodo.influenza) / Math.max(dS, 1)); if (vista < 0.02) continue;
+        for (const o of orbite) { const c = S.versoCorpo(o.attorno); let vista = Math.min(1, dS / (0.02 * o.a)) * (o.luna ? 0.5 : 1) * Math.min(1, (30 * nodo.influenza) / Math.max(dS, 1)); if (vista < 0.02) continue;
+          vista *= vistaOrbita(o, c, q); if (vista < 0.02) continue;
           gl.uniform3f(u.u_C, c[0], c[1], c[2]); gl.uniform4f(u.u_tinta, 0.05 * vista, 0.065 * vista, 0.1 * vista, 1); gl.bindVertexArray(o.vao); gl.drawArrays(gl.LINE_STRIP, 0, o.n); }
         gl.bindVertexArray(null);
       }
