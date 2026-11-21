@@ -1,0 +1,136 @@
+{
+ "criterio": "avvio: l'indirizzo d'avvio (seme 15853643). terre/acqua: tra i primi N pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, la frazione di terre emerse (dopo l'erosione, pesata con l'area) più alta e più bassa; a pari merito il primo.",
+ "N": 12,
+ "candidati": [
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 2,
+   "pianeta": 0,
+   "terre": 0,
+   "massaTerre": 0.095
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 2,
+   "pianeta": 1,
+   "terre": 0,
+   "massaTerre": 0.127
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 2,
+   "pianeta": 2,
+   "terre": 0,
+   "massaTerre": 0.157
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 0,
+   "terre": 0.5152,
+   "massaTerre": 0.043
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 2,
+   "terre": 0.2079,
+   "massaTerre": 0.071
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 3,
+   "terre": 0.1283,
+   "massaTerre": 0.051
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 4,
+   "terre": 0.0424,
+   "massaTerre": 0.049
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 5,
+   "terre": 0,
+   "massaTerre": 0.114
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 6,
+   "terre": 0,
+   "massaTerre": 0.102
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 4,
+   "pianeta": 7,
+   "terre": 0,
+   "massaTerre": 0.103
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 5,
+   "pianeta": 0,
+   "terre": 0.1375,
+   "massaTerre": 0.484
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
+   "stella": 6,
+   "pianeta": 0,
+   "terre": 0,
+   "massaTerre": 0.201
+  }
+ ],
+ "indirizzi": [
+  {
+   "nome": "avvio",
+   "via": {
+    "cosmo": 1,
+    "galassia": 33,
+    "stella": 71,
+    "pianeta": 0
+   },
+   "mira": "centro"
+  },
+  {
+   "nome": "terre",
+   "via": {
+    "cosmo": 1,
+    "galassia": 0,
+    "stella": 4,
+    "pianeta": 0
+   },
+   "terre": 0.5152,
+   "mira": "terra"
+  },
+  {
+   "nome": "acqua",
+   "via": {
+    "cosmo": 1,
+    "galassia": 0,
+    "stella": 2,
+    "pianeta": 0
+   },
+   "terre": 0,
+   "mira": "centro"
+  }
+ ]
+}

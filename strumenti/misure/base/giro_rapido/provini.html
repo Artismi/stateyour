@@ -1,0 +1,1573 @@
+<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Provini del giro dello zoom</title><style>
+body{font:13px/1.35 system-ui,sans-serif;background:#16171a;color:#ddd;margin:16px}h1{font-size:18px}h2{font-size:15px;margin-top:22px}
+table{border-collapse:collapse}td,th{border:1px solid #444;padding:3px 8px;text-align:left}
+.fila{display:flex;flex-wrap:wrap;gap:6px}figure{margin:0;width:244px;background:#222;border:1px solid #333;padding:2px}figure.nonpronto{border-color:#a60}
+img{width:240px;height:150px;display:block;background:#000}figcaption{font-size:11px;padding:2px}
+.t{display:inline-block;padding:0 4px;border-radius:3px;margin:1px 1px 0 0;color:#111}.verde{background:#6c6}.giallo{background:#ec5}.rosso{background:#e55}.grigio{background:#888}
+small{color:#999}ul{margin:4px 0}</style></head><body>
+<h1>Il giro dello zoom — rapido, un fotogramma ogni 0.5 di decade</h1>
+<table><tr><th>indicatore</th><th>quanti</th><th>soglia</th></tr>
+<tr><td>scale vuote</td><td>72</td><td>≥ 95 % di blocchi vuoti</td></tr>
+<tr><td>salti oltre soglia</td><td>24 su 219</td><td>> 20 % della zona comune con ΔE > 15</td></tr>
+<tr><td>fotogrammi con macchie sature</td><td>13</td><td>area connessa satura ≥ 0.5 %</td></tr>
+<tr><td>fotogrammi con barre</td><td>25</td><td>retta uniforme (σ L* < 1.5) tra due lati diversi</td></tr>
+<tr><td>andata/ritorno oltre soglia</td><td>7 su 44</td><td>> 20 % cambiato</td></tr>
+<tr><td>fotogrammi non pronti</td><td>50</td><td>la vista non ha finito entro l'attesa</td></tr></table>
+<h2>Salti peggiori</h2><ul><li>avvio andata #5 a 3.0e+22 m [cosmo L0 3D tele3]: cambiata 100 %, ΔE 22.86</li><li>avvio andata #52 a 3.1e-11 m [cosmo L5 passo0 acqua +atomi tele5]: cambiata 100 %, ΔE 81.95</li><li>avvio andata #62 a 2.3e-6 m [pattern]: cambiata 100 %, ΔE 94.62</li><li>avvio ritorno #6 a 2.2e-6 m [cosmo L5 passo0 acqua tele3]: cambiata 100 %, ΔE 70.94</li><li>avvio ritorno #34 a 3.8e+8 m [cosmo L2 3D tele4]: cambiata 100 %, ΔE 65.06</li><li>avvio ritorno #25 a 1.2e+4 m [cosmo L3 3D tele4]: cambiata 100 %, ΔE 20.66</li><li>avvio ritorno #63 a 1.1e+23 m [cosmo L0 3D tele4]: cambiata 99 %, ΔE 21.69</li><li>avvio andata #24 a 2.9e+3 m [cosmo L3 3D tele3]: cambiata 99 %, ΔE 17.32</li></ul><h2>Scale vuote</h2><ul><li>avvio andata: 3.0e+22 m → 2.6e+20 m (5)</li><li>avvio andata: 1.1e+17 m → 1.1e+17 m (1)</li><li>avvio andata: 3.0e+5 m → 2.8e+1 m (9)</li><li>avvio andata: 3.0e+0 m → 2.8e-8 m (17)</li><li>avvio andata: 9.4e-11 m → 8.9e-15 m (9)</li><li>avvio andata: 1.1e-8 m → 2.3e-6 m (2)</li><li>avvio ritorno: 2.3e-6 m → 3.5e-5 m (3)</li><li>avvio ritorno: 6.6e-4 m → 1.0e+0 m (13)</li><li>avvio ritorno: 3.2e+1 m → 1.1e+5 m (8)</li><li>avvio ritorno: 3.6e+20 m → 3.7e+22 m (5)</li></ul><h2>Andata e ritorno peggiori</h2><ul><li>avvio andata #38 a 3.1e-4 m [cosmo L5 passo0 acqua tele3]: cambiata 100 % (ritorno: dettaglio)</li><li>avvio andata #42 a 2.9e-6 m [cosmo L5 passo0 acqua tele3]: cambiata 100 % (ritorno: pattern)</li><li>avvio andata #41 a 9.7e-6 m [cosmo L5 passo0 acqua tele3]: cambiata 99 % (ritorno: pattern)</li><li>avvio andata #17 a 1.2e+7 m [cosmo L3 3D tele3]: cambiata 64 % (ritorno: cosmo L3 3D tele4)</li><li>avvio andata #11 a 7.6e+18 m [cosmo L0 3D tele3]: cambiata 49 % (ritorno: cosmo L1 3D tele4)</li><li>avvio andata #18 a 2.8e+6 m [cosmo L3 3D tele3]: cambiata 37 % (ritorno: cosmo L3 3D tele4)</li><li>avvio andata #12 a 2.8e+18 m [cosmo L0 3D tele3]: cambiata 26 % (ritorno: cosmo L1 3D tele4)</li></ul>
+<h2>avvio — andata (63)</h2><div class="fila"><figure class="" id="avvio-andata-0"><img loading="lazy" src="foto/avvio_andata_000.jpg" alt=""><figcaption>
+<b>7.9·10^24 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 89%</span>
+<span class="t grigio" title="primo del tratto">salto –</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #132 (cosmo L0 3D tele4), ΔE 2.1">A/R 0%</span>
+<br><small>L* 25.0 · dettaglio 0.9 · 7205 ms · centro</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-1"><img loading="lazy" src="foto/avvio_andata_001.jpg" alt=""><figcaption>
+<b>2.7·10^24 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 91%</span>
+<span class="t verde" title="ΔE medio 3.33; fattore vero 1.75 contro 2.94 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #88 (cosmo L0 3D tele4), ΔE 2.17">A/R 0%</span>
+<br><small>L* 28.0 · dettaglio 0.9 · 7108 ms · NON PRONTO: immagine non ferma · galassia</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-2"><img loading="lazy" src="foto/avvio_andata_002.jpg" alt=""><figcaption>
+<b>8.8·10^23 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 2.02; fattore vero 3.65 contro 3.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #73 (cosmo L0 3D tele4), ΔE 2.81">A/R 0%</span>
+<br><small>L* 26.3 · dettaglio 0.8 · 7656 ms · NON PRONTO: immagine non ferma · galassia</small></figcaption></figure><figure class="" id="avvio-andata-3"><img loading="lazy" src="foto/avvio_andata_003.jpg" alt=""><figcaption>
+<b>2.9·10^23 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 1.42; fattore vero 1.53 contro 3.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #64 (cosmo L0 3D tele4), ΔE 1.9">A/R 0%</span>
+<br><small>L* 26.4 · dettaglio 0.9 · 7109 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-4"><img loading="lazy" src="foto/avvio_andata_004.jpg" alt=""><figcaption>
+<b>9.3·10^22 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 1.59; fattore vero 1.54 contro 3.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #63 (cosmo L0 3D tele4), ΔE 1.94">A/R 0%</span>
+<br><small>L* 26.4 · dettaglio 0.9 · 7940 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-5"><img loading="lazy" src="foto/avvio_andata_005.jpg" alt=""><figcaption>
+<b>3.0·10^22 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t rosso" title="ΔE medio 22.86; fattore vero 2.18 contro 3.08 dichiarato">salto 100%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #62 (cosmo L0 3D tele4), ΔE 1.25">A/R 0%</span>
+<br><small>L* 3.3 · dettaglio 0.7 · 5148 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-6"><img loading="lazy" src="foto/avvio_andata_006.jpg" alt=""><figcaption>
+<b>9.7·10^21 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 2.54; fattore vero 1.56 contro 3.12 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #61 (cosmo L0 3D tele4), ΔE 0.15">A/R 0%</span>
+<br><small>L* 0.9 · dettaglio 0.6 · 4408 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-7"><img loading="lazy" src="foto/avvio_andata_007.jpg" alt=""><figcaption>
+<b>3.0·10^21 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.88; fattore vero 1.61 contro 3.23 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #60 (cosmo L0 3D tele4), ΔE 0.08">A/R 0%</span>
+<br><small>L* 0.1 · dettaglio 0.6 · 2397 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-8"><img loading="lazy" src="foto/avvio_andata_008.jpg" alt=""><figcaption>
+<b>8.3·10^20 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 0.22; fattore vero 1.81 contro 3.62 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #59 (cosmo L0 3D tele4), ΔE 0.16">A/R 0%</span>
+<br><small>L* 0.4 · dettaglio 0.6 · 3291 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-9"><img loading="lazy" src="foto/avvio_andata_009.jpg" alt=""><figcaption>
+<b>2.6·10^20 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 97%</span>
+<span class="t verde" title="ΔE medio 0.31; fattore vero 1.88 contro 3.16 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #58 (cosmo L1 3D tele4), ΔE 0.4">A/R 0%</span>
+<br><small>L* 1.3 · dettaglio 0.6 · 7268 ms · galassia</small></figcaption></figure><figure class="" id="avvio-andata-10"><img loading="lazy" src="foto/avvio_andata_010.jpg" alt=""><figcaption>
+<b>8.6·10^19 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 95%</span>
+<span class="t verde" title="ΔE medio 0.31; fattore vero 1.52 contro 3.04 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #57 (cosmo L1 3D tele4), ΔE 0.96">A/R 1%</span>
+<br><small>L* 2.1 · dettaglio 0.7 · 6649 ms · stella</small></figcaption></figure><figure class="" id="avvio-andata-11"><img loading="lazy" src="foto/avvio_andata_011.jpg" alt=""><figcaption>
+<b>7.6·10^18 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 91%</span>
+<span class="t rosso" title="ΔE medio 14.27; fattore vero 5.66 contro 11.3 dichiarato">salto 38%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #55 (cosmo L1 3D tele4), ΔE 18.66">A/R 49%</span>
+<br><small>L* 3.5 · dettaglio 0.8 · 5545 ms · stella</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-12"><img loading="lazy" src="foto/avvio_andata_012.jpg" alt=""><figcaption>
+<b>2.8·10^18 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 73%</span>
+<span class="t rosso" title="ΔE medio 16.97; fattore vero 5.49 contro 2.74 dichiarato">salto 60%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #54 (cosmo L1 3D tele4), ΔE 10.51">A/R 26%</span>
+<br><small>L* 41.5 · dettaglio 2.1 · 7361 ms · NON PRONTO: immagine non ferma · stella</small></figcaption></figure><figure class="" id="avvio-andata-13"><img loading="lazy" src="foto/avvio_andata_013.jpg" alt=""><figcaption>
+<b>9.0·10^17 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 90%</span>
+<span class="t verde" title="ΔE medio 2.6; fattore vero 1.83 contro 3.08 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t giallo" title="col ritorno #53 (cosmo L1 3D tele4), ΔE 9.14">A/R 17%</span>
+<br><small>L* 45.4 · dettaglio 1.1 · 6715 ms · stella</small></figcaption></figure><figure class="" id="avvio-andata-14"><img loading="lazy" src="foto/avvio_andata_014.jpg" alt=""><figcaption>
+<b>3.4·10^17 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 90%</span>
+<span class="t verde" title="ΔE medio 2.27; fattore vero 1.34 contro 2.67 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t giallo" title="col ritorno #52 (cosmo L1 3D tele4), ΔE 9.24">A/R 18%</span>
+<br><small>L* 45.1 · dettaglio 1.0 · 5816 ms · stella</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-15"><img loading="lazy" src="foto/avvio_andata_015.jpg" alt=""><figcaption>
+<b>1.6·10^17 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 0%</span>
+<span class="t verde" title="ΔE medio 2.67; fattore vero 3.58 contro 2.13 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.01 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #51 (cosmo L1 3D tele4), ΔE 6.35">A/R 7%</span>
+<br><small>L* 38.7 · dettaglio 5.2 · 7767 ms · NON PRONTO: immagine non ferma · stella (perso)</small></figcaption></figure><figure class="" id="avvio-andata-16"><img loading="lazy" src="foto/avvio_andata_016.jpg" alt=""><figcaption>
+<b>1.1·10^17 m</b> <i>cosmo L0 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 4.84; fattore vero 0.701 contro 1.4 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #51 (cosmo L1 3D tele4), ΔE 2.63">A/R 1%</span>
+<br><small>L* 42.9 · dettaglio 0.8 · 10617 ms · stella (perso)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-17"><img loading="lazy" src="foto/avvio_andata_017.jpg" alt=""><figcaption>
+<b>1.2·10^7 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t grigio" title="primo del tratto">salto –</span>
+<span class="t rosso" title="area satura più grande 4.30 %">macchie 2</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #31 (cosmo L3 3D tele4), ΔE 26.98">A/R 64%</span>
+<br><small>L* 53.1 · dettaglio 5.3 · 19568 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-18"><img loading="lazy" src="foto/avvio_andata_018.jpg" alt=""><figcaption>
+<b>2.8·10^6 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 31%</span>
+<span class="t rosso" title="ΔE medio 10.1; fattore vero 3.55 contro 4.22 dichiarato">salto 31%</span>
+<span class="t rosso" title="area satura più grande 1.31 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #30 (cosmo L3 3D tele4), ΔE 15.17">A/R 37%</span>
+<br><small>L* 28.0 · dettaglio 4.3 · 35129 ms · NON PRONTO: gesto · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-19"><img loading="lazy" src="foto/avvio_andata_019.jpg" alt=""><figcaption>
+<b>9.3·10^5 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 87%</span>
+<span class="t verde" title="ΔE medio 3.37; fattore vero 2.17 contro 3.06 dichiarato">salto 4%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="111° a 199 px, L* 32.7; 153° a 135 px, L* 34.9">barre 2</span>
+<span class="t verde" title="col ritorno #29 (cosmo L3 3D tele4), ΔE 1.92">A/R 3%</span>
+<br><small>L* 34.7 · dettaglio 1.1 · 21861 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-20"><img loading="lazy" src="foto/avvio_andata_020.jpg" alt=""><figcaption>
+<b>3.0·10^5 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 95%</span>
+<span class="t verde" title="ΔE medio 1.49; fattore vero 1.53 contro 3.06 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #28 (cosmo L3 3D tele4), ΔE 0.81">A/R 0%</span>
+<br><small>L* 36.9 · dettaglio 0.7 · 22233 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-21"><img loading="lazy" src="foto/avvio_andata_021.jpg" alt=""><figcaption>
+<b>8.4·10^4 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 1.13; fattore vero 1.8 contro 3.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #27 (cosmo L3 3D tele4), ΔE 0.36">A/R 0%</span>
+<br><small>L* 38.4 · dettaglio 0.7 · 23768 ms · NON PRONTO: gesto, tessere 4 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-22"><img loading="lazy" src="foto/avvio_andata_022.jpg" alt=""><figcaption>
+<b>2.7·10^4 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 7.75; fattore vero 6.13 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #26 (cosmo L3 3D tele4), ΔE 2.39">A/R 0%</span>
+<br><small>L* 48.8 · dettaglio 0.8 · 21486 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-23"><img loading="lazy" src="foto/avvio_andata_023.jpg" alt=""><figcaption>
+<b>9.0·10^3 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 14.04; fattore vero 6.13 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #25 (cosmo L3 3D tele4), ΔE 3.05">A/R 0%</span>
+<br><small>L* 64.6 · dettaglio 1.1 · 20733 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-24"><img loading="lazy" src="foto/avvio_andata_024.jpg" alt=""><figcaption>
+<b>2.9·10^3 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t rosso" title="ΔE medio 17.32; fattore vero 1.53 contro 3.06 dichiarato">salto 99%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #24 (cosmo L3 3D tele4), ΔE 0.26">A/R 0%</span>
+<br><small>L* 81.9 · dettaglio 1.4 · 25425 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-25"><img loading="lazy" src="foto/avvio_andata_025.jpg" alt=""><figcaption>
+<b>9.6·10^2 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 1.71; fattore vero 2.15 contro 3.05 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #23 (cosmo L3 3D tele4), ΔE 0.24">A/R 0%</span>
+<br><small>L* 83.9 · dettaglio 1.4 · 15035 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-26"><img loading="lazy" src="foto/avvio_andata_026.jpg" alt=""><figcaption>
+<b>3.1·10^2 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.48; fattore vero 1.82 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #22 (cosmo L3 3D tele4), ΔE 0.15">A/R 0%</span>
+<br><small>L* 84.4 · dettaglio 1.4 · 16916 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-27"><img loading="lazy" src="foto/avvio_andata_027.jpg" alt=""><figcaption>
+<b>8.7·10^1 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.14; fattore vero 1.8 contro 3.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #21 (cosmo L3 3D tele4), ΔE 0.1">A/R 0%</span>
+<br><small>L* 84.4 · dettaglio 1.4 · 10020 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-28"><img loading="lazy" src="foto/avvio_andata_028.jpg" alt=""><figcaption>
+<b>2.8·10^1 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.14; fattore vero 1.53 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #20 (cosmo L3 3D tele4), ΔE 0.09">A/R 0%</span>
+<br><small>L* 84.4 · dettaglio 1.4 · 19106 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-29"><img loading="lazy" src="foto/avvio_andata_029.jpg" alt=""><figcaption>
+<b>9.3·10^0 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 49%</span>
+<span class="t rosso" title="ΔE medio 51; fattore vero 1.53 contro 3.06 dichiarato">salto 94%</span>
+<span class="t rosso" title="area satura più grande 1.10 %">macchie 1</span>
+<span class="t rosso" title="90° a -221 px, L* 68.6">barre 1</span>
+<span class="t verde" title="col ritorno #19 (cosmo L3 3D tele4), ΔE 0.61">A/R 1%</span>
+<br><small>L* 35.3 · dettaglio 1.5 · 18137 ms · NON PRONTO: finestre 0+2 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-30"><img loading="lazy" src="foto/avvio_andata_030.jpg" alt=""><figcaption>
+<b>3.0·10^0 m</b> <i>cosmo L3 3D tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 95%</span>
+<span class="t verde" title="ΔE medio 0.93; fattore vero 3.06 contro 3.06 dichiarato">salto 2%</span>
+<span class="t verde" title="area satura più grande 0.05 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #18 (cosmo L3 3D tele4), ΔE 0.82">A/R 2%</span>
+<br><small>L* 23.0 · dettaglio 0.8 · 19477 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-31"><img loading="lazy" src="foto/avvio_andata_031.jpg" alt=""><figcaption>
+<b>8.7·10^-1 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 1.38; fattore vero 3.49 contro 3.49 dichiarato">salto 1%</span>
+<span class="t giallo" title="area satura più grande 0.44 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #17 (cosmo L5 passo0 acqua tele3), ΔE 1.01">A/R 2%</span>
+<br><small>L* 22.5 · dettaglio 0.8 · 3999 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-32"><img loading="lazy" src="foto/avvio_andata_032.jpg" alt=""><figcaption>
+<b>3.0·10^-1 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 0.67; fattore vero 3.4 contro 2.86 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #16 (cosmo L5 passo0 acqua tele3), ΔE 0.53">A/R 1%</span>
+<br><small>L* 22.3 · dettaglio 0.6 · 1597 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-33"><img loading="lazy" src="foto/avvio_andata_033.jpg" alt=""><figcaption>
+<b>9.1·10^-2 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 1.01; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.23 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #15 (cosmo L5 passo0 acqua tele3), ΔE 0.69">A/R 1%</span>
+<br><small>L* 22.0 · dettaglio 0.7 · 1231 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-34"><img loading="lazy" src="foto/avvio_andata_034.jpg" alt=""><figcaption>
+<b>2.8·10^-2 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.17; fattore vero 4.7 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #14 (cosmo L5 passo0 acqua tele3), ΔE 0.17">A/R 0%</span>
+<br><small>L* 21.9 · dettaglio 0.6 · 1144 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-35"><img loading="lazy" src="foto/avvio_andata_035.jpg" alt=""><figcaption>
+<b>9.6·10^-3 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.74; fattore vero 2.86 contro 2.86 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.15 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #13 (cosmo L5 passo0 acqua tele3), ΔE 0.69">A/R 1%</span>
+<br><small>L* 21.9 · dettaglio 0.7 · 2000 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-36"><img loading="lazy" src="foto/avvio_andata_036.jpg" alt=""><figcaption>
+<b>2.9·10^-3 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.16; fattore vero 4.7 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #12 (cosmo L5 passo0 acqua tele3), ΔE 0.14">A/R 0%</span>
+<br><small>L* 21.9 · dettaglio 0.5 · 957 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-37"><img loading="lazy" src="foto/avvio_andata_037.jpg" alt=""><figcaption>
+<b>8.7·10^-4 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.94; fattore vero 2.79 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.14 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #11 (cosmo L5 passo0 acqua tele3), ΔE 0.65">A/R 1%</span>
+<br><small>L* 22.0 · dettaglio 0.8 · 1049 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-38"><img loading="lazy" src="foto/avvio_andata_038.jpg" alt=""><figcaption>
+<b>3.1·10^-4 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.24; fattore vero 3.4 contro 2.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #4 (dettaglio), ΔE 70.54">A/R 100%</span>
+<br><small>L* 21.9 · dettaglio 1.2 · 769 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-39"><img loading="lazy" src="foto/avvio_andata_039.jpg" alt=""><figcaption>
+<b>9.2·10^-5 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 1.01; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.15 %">macchie 0</span>
+<span class="t rosso" title="21° a 56 px, L* 21.6; 45° a 84 px, L* 21.9">barre 2</span>
+<span class="t verde" title="col ritorno #9 (cosmo L5 passo0 acqua tele3), ΔE 0.73">A/R 1%</span>
+<br><small>L* 22.0 · dettaglio 1.2 · 978 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-40"><img loading="lazy" src="foto/avvio_andata_040.jpg" alt=""><figcaption>
+<b>2.8·10^-5 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.37; fattore vero 5.58 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t verde" title="col ritorno #8 (cosmo L5 passo0 acqua tele3), ΔE 0.29">A/R 0%</span>
+<br><small>L* 22.1 · dettaglio 0.6 · 764 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-41"><img loading="lazy" src="foto/avvio_andata_041.jpg" alt=""><figcaption>
+<b>9.7·10^-6 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.84; fattore vero 2.86 contro 2.86 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.13 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #1 (pattern), ΔE 73.97">A/R 99%</span>
+<br><small>L* 21.9 · dettaglio 0.7 · 2339 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-42"><img loading="lazy" src="foto/avvio_andata_042.jpg" alt=""><figcaption>
+<b>2.9·10^-6 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.27; fattore vero 3.32 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t rosso" title="col ritorno #0 (pattern), ΔE 74">A/R 100%</span>
+<br><small>L* 21.9 · dettaglio 0.5 · 662 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-43"><img loading="lazy" src="foto/avvio_andata_043.jpg" alt=""><figcaption>
+<b>8.8·10^-7 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.88; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.16 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 22.0 · dettaglio 0.7 · 951 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-44"><img loading="lazy" src="foto/avvio_andata_044.jpg" alt=""><figcaption>
+<b>3.1·10^-7 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.14; fattore vero 2.86 contro 2.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.5 · 811 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-45"><img loading="lazy" src="foto/avvio_andata_045.jpg" alt=""><figcaption>
+<b>9.3·10^-8 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.9; fattore vero 1.66 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.15 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.8 · 1086 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-46"><img loading="lazy" src="foto/avvio_andata_046.jpg" alt=""><figcaption>
+<b>2.8·10^-8 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.25; fattore vero 3.32 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.6 · 927 ms · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-47"><img loading="lazy" src="foto/avvio_andata_047.jpg" alt=""><figcaption>
+<b>9.8·10^-9 m</b> <i>cosmo L5 passo0 acqua +atomi tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 4%</span>
+<span class="t verde" title="ΔE medio 5.67; fattore vero 2.86 contro 2.86 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 22.1 · dettaglio 3.1 · 9343 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-48"><img loading="lazy" src="foto/avvio_andata_048.jpg" alt=""><figcaption>
+<b>2.9·10^-9 m</b> <i>cosmo L5 passo0 acqua +atomi tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 0%</span>
+<span class="t rosso" title="ΔE medio 52.21; fattore vero 3.32 contro 3.32 dichiarato">salto 98%</span>
+<span class="t verde" title="area satura più grande 0.10 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 37.8 · dettaglio 10.8 · 10020 ms · NON PRONTO: finestre 1+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-49"><img loading="lazy" src="foto/avvio_andata_049.jpg" alt=""><figcaption>
+<b>8.9·10^-10 m</b> <i>cosmo L5 passo0 acqua +atomi tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 21%</span>
+<span class="t rosso" title="ΔE medio 38.77; fattore vero 3.32 contro 3.32 dichiarato">salto 79%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 42.6 · dettaglio 7.3 · 9562 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-50"><img loading="lazy" src="foto/avvio_andata_050.jpg" alt=""><figcaption>
+<b>3.1·10^-10 m</b> <i>cosmo L5 passo0 acqua +atomi tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 77%</span>
+<span class="t rosso" title="ΔE medio 25.23; fattore vero 4.81 contro 2.86 dichiarato">salto 51%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.5 · dettaglio 3.8 · 11623 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-51"><img loading="lazy" src="foto/avvio_andata_051.jpg" alt=""><figcaption>
+<b>9.4·10^-11 m</b> <i>cosmo L5 passo0 acqua +atomi tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 97%</span>
+<span class="t rosso" title="ΔE medio 75.07; fattore vero 1.66 contro 3.32 dichiarato">salto 87%</span>
+<span class="t rosso" title="area satura più grande 0.87 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 82.3 · dettaglio 1.5 · 10628 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-52"><img loading="lazy" src="foto/avvio_andata_052.jpg" alt=""><figcaption>
+<b>3.1·10^-11 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 96%</span>
+<span class="t rosso" title="ΔE medio 81.95; fattore vero 6.01 contro 3 dichiarato">salto 100%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.7 · dettaglio 0.4 · 11686 ms · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-53"><img loading="lazy" src="foto/avvio_andata_053.jpg" alt=""><figcaption>
+<b>8.7·10^-12 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.32; fattore vero 7.19 contro 3.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.2 · dettaglio 0.4 · 6838 ms · NON PRONTO: finestre 1+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-54"><img loading="lazy" src="foto/avvio_andata_054.jpg" alt=""><figcaption>
+<b>2.8·10^-12 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.24; fattore vero 4.33 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.2 · dettaglio 0.4 · 6743 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-55"><img loading="lazy" src="foto/avvio_andata_055.jpg" alt=""><figcaption>
+<b>9.2·10^-13 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.33; fattore vero 2.17 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.2 · dettaglio 0.4 · 7780 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-56"><img loading="lazy" src="foto/avvio_andata_056.jpg" alt=""><figcaption>
+<b>3.0·10^-13 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.32; fattore vero 2.17 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.2 · dettaglio 0.7 · 8118 ms · NON PRONTO: finestre 1+1 · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-57"><img loading="lazy" src="foto/avvio_andata_057.jpg" alt=""><figcaption>
+<b>8.4·10^-14 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.31; fattore vero 2.54 contro 3.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.3 · dettaglio 0.9 · 11466 ms · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-58"><img loading="lazy" src="foto/avvio_andata_058.jpg" alt=""><figcaption>
+<b>2.7·10^-14 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.45; fattore vero 3.06 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.4 · dettaglio 0.6 · 7584 ms · NON PRONTO: finestre 1+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-59"><img loading="lazy" src="foto/avvio_andata_059.jpg" alt=""><figcaption>
+<b>8.9·10^-15 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 1.57; fattore vero 2.57 contro 3.06 dichiarato">salto 2%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 1.4 · dettaglio 0.8 · 8671 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-60"><img loading="lazy" src="foto/avvio_andata_060.jpg" alt=""><figcaption>
+<b>2.9·10^-15 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 82%</span>
+<span class="t verde" title="ΔE medio 1.84; fattore vero 3.02 contro 3.02 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="120° a 102 px, L* 0.8; 123° a 102 px, L* 0.7; 129° a 102 px, L* 0.9; 132° a 101 px, L* 0.7">barre 15</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 10.0 · dettaglio 1.2 · 9165 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-andata-61"><img loading="lazy" src="foto/avvio_andata_061.jpg" alt=""><figcaption>
+<b>1.1·10^-8 m</b> <i>cosmo L5 passo0 acqua +atomi tele5</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t giallo" title="ΔE medio 13.52; fattore vero 1790000 contro 3590000 dichiarato">salto 17%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.0 · dettaglio 0.5 · 8163 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-andata-62"><img loading="lazy" src="foto/avvio_andata_062.jpg" alt=""><figcaption>
+<b>2.3·10^-6 m</b> <i>pattern</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 96%</span>
+<span class="t rosso" title="ΔE medio 94.62; fattore vero 111 contro 222 dichiarato">salto 100%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="18° a 84 px, L* 94.3; 42° a 170 px, L* 9.8; 57° a 137 px, L* 94.5; 132° a -57 px, L* 94.5">barre 6</span>
+<span class="t verde" title="col ritorno #0 (pattern), ΔE 0">A/R 0%</span>
+<br><small>L* 93.0 · dettaglio 4.6 · 573 ms · suolo (centro)</small></figcaption></figure></div>
+<h2>avvio — ritorno (159)</h2><div class="fila"><figure class="" id="avvio-ritorno-0"><img loading="lazy" src="foto/avvio_ritorno_000.jpg" alt=""><figcaption>
+<b>2.3·10^-6 m</b> <i>pattern</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 96%</span>
+<span class="t grigio" title="primo del tratto">salto –</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="18° a 84 px, L* 94.3; 42° a 170 px, L* 9.8; 57° a 137 px, L* 94.5; 132° a -57 px, L* 94.5">barre 6</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 93.0 · dettaglio 4.6 · 583 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-1"><img loading="lazy" src="foto/avvio_ritorno_001.jpg" alt=""><figcaption>
+<b>1.1·10^-5 m</b> <i>pattern</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 97%</span>
+<span class="t verde" title="ΔE medio 1.37; fattore vero 4.48 contro 4.48 dichiarato">salto 4%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="3° a -146 px, L* 94.5; 15° a 64 px, L* 94.4; 18° a 55 px, L* 94.4; 42° a -28 px, L* 94.3">barre 10</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 93.9 · dettaglio 4.7 · 532 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-2"><img loading="lazy" src="foto/avvio_ritorno_002.jpg" alt=""><figcaption>
+<b>3.5·10^-5 m</b> <i>pattern</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 0.63; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="117° a 127 px, L* 94.5; 144° a 0 px, L* 94.4; 177° a -145 px, L* 94">barre 3</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 94.3 · dettaglio 3.3 · 693 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-3"><img loading="lazy" src="foto/avvio_ritorno_003.jpg" alt=""><figcaption>
+<b>1.2·10^-4 m</b> <i>pattern</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 0.27; fattore vero 1.66 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 92.1 · dettaglio 1.9 · 569 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-4"><img loading="lazy" src="foto/avvio_ritorno_004.jpg" alt=""><figcaption>
+<b>2.8·10^-4 m</b> <i>dettaglio</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 80%</span>
+<span class="t verde" title="ΔE medio 3.95; fattore vero 1.2 contro 2.4 dichiarato">salto 4%</span>
+<span class="t verde" title="area satura più grande 0.02 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 89.4 · dettaglio 5.0 · 4203 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-5"><img loading="lazy" src="foto/avvio_ritorno_005.jpg" alt=""><figcaption>
+<b>6.6·10^-4 m</b> <i>dettaglio</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 96%</span>
+<span class="t rosso" title="ΔE medio 29.08; fattore vero 4.72 contro 2.36 dichiarato">salto 34%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 6.1 · dettaglio 4.2 · 584 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-6"><img loading="lazy" src="foto/avvio_ritorno_006.jpg" alt=""><figcaption>
+<b>2.2·10^-6 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t rosso" title="ΔE medio 70.94; fattore vero 152 contro 304 dichiarato">salto 100%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.6 · 718 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-7"><img loading="lazy" src="foto/avvio_ritorno_007.jpg" alt=""><figcaption>
+<b>1.1·10^-5 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.22; fattore vero 5.21 contro 5.21 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.09 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.8 · dettaglio 0.8 · 887 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-8"><img loading="lazy" src="foto/avvio_ritorno_008.jpg" alt=""><figcaption>
+<b>3.2·10^-5 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.7; fattore vero 2.86 contro 2.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.5 · 716 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-9"><img loading="lazy" src="foto/avvio_ritorno_009.jpg" alt=""><figcaption>
+<b>1.1·10^-4 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 0.17; fattore vero 3.32 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.11 %">macchie 0</span>
+<span class="t rosso" title="18° a 38 px, L* 21.8; 39° a 64 px, L* 21.9">barre 2</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 1.4 · 756 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-10"><img loading="lazy" src="foto/avvio_ritorno_010.jpg" alt=""><figcaption>
+<b>3.6·10^-4 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.81; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 1.2 · 618 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-11"><img loading="lazy" src="foto/avvio_ritorno_011.jpg" alt=""><figcaption>
+<b>1.0·10^-3 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.13; fattore vero 2.86 contro 2.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.10 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 1.0 · 975 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-12"><img loading="lazy" src="foto/avvio_ritorno_012.jpg" alt=""><figcaption>
+<b>3.4·10^-3 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.9; fattore vero 1.66 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.01 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 22.0 · dettaglio 0.6 · 1058 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-13"><img loading="lazy" src="foto/avvio_ritorno_013.jpg" alt=""><figcaption>
+<b>1.1·10^-2 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.28; fattore vero 3.32 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.08 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.8 · dettaglio 0.7 · 883 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-14"><img loading="lazy" src="foto/avvio_ritorno_014.jpg" alt=""><figcaption>
+<b>3.2·10^-2 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.65; fattore vero 2.86 contro 2.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.5 · 554 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-15"><img loading="lazy" src="foto/avvio_ritorno_015.jpg" alt=""><figcaption>
+<b>1.1·10^-1 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.22; fattore vero 3.95 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.13 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.9 · 736 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-16"><img loading="lazy" src="foto/avvio_ritorno_016.jpg" alt=""><figcaption>
+<b>3.5·10^-1 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 0.76; fattore vero 3.32 contro 3.32 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.04 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 22.5 · dettaglio 0.6 · 1857 ms · suolo (centro)</small></figcaption></figure><figure class="" id="avvio-ritorno-17"><img loading="lazy" src="foto/avvio_ritorno_017.jpg" alt=""><figcaption>
+<b>1.0·10^0 m</b> <i>cosmo L5 passo0 acqua tele3</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.62; fattore vero 2.4 contro 2.86 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.11 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 21.9 · dettaglio 0.8 · 670 ms · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-18"><img loading="lazy" src="foto/avvio_ritorno_018.jpg" alt=""><figcaption>
+<b>3.4·10^0 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 94%</span>
+<span class="t verde" title="ΔE medio 0.82; fattore vero 3.35 contro 3.35 dichiarato">salto 1%</span>
+<span class="t rosso" title="area satura più grande 0.80 %">macchie 1</span>
+<span class="t rosso" title="36° a 57 px, L* 22.4; 39° a 52 px, L* 22.2; 42° a 44 px, L* 22.1; 45° a 36 px, L* 22">barre 10</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.1 · dettaglio 0.8 · 25766 ms · NON PRONTO: finestre 0+1, tessere 1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-19"><img loading="lazy" src="foto/avvio_ritorno_019.jpg" alt=""><figcaption>
+<b>1.0·10^1 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 46%</span>
+<span class="t verde" title="ΔE medio 1.31; fattore vero 3.06 contro 3.06 dichiarato">salto 3%</span>
+<span class="t rosso" title="area satura più grande 0.83 %">macchie 1</span>
+<span class="t rosso" title="90° a -214 px, L* 79.5; 90° a 216 px, L* 79.9">barre 2</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.3 · dettaglio 1.6 · 12296 ms · NON PRONTO: finestre 0+2 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-20"><img loading="lazy" src="foto/avvio_ritorno_020.jpg" alt=""><figcaption>
+<b>3.2·10^1 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t rosso" title="ΔE medio 42.63; fattore vero 1.53 contro 3.06 dichiarato">salto 80%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 84.4 · dettaglio 1.4 · 15300 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-21"><img loading="lazy" src="foto/avvio_ritorno_021.jpg" alt=""><figcaption>
+<b>1.1·10^2 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.14; fattore vero 1.8 contro 3.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 84.4 · dettaglio 1.4 · 12316 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-22"><img loading="lazy" src="foto/avvio_ritorno_022.jpg" alt=""><figcaption>
+<b>3.5·10^2 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.14; fattore vero 1.53 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 84.3 · dettaglio 1.4 · 14464 ms · NON PRONTO: finestre 0+1 · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-23"><img loading="lazy" src="foto/avvio_ritorno_023.jpg" alt=""><figcaption>
+<b>1.1·10^3 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.36; fattore vero 6.13 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 83.7 · dettaglio 1.4 · 13661 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-24"><img loading="lazy" src="foto/avvio_ritorno_024.jpg" alt=""><figcaption>
+<b>3.3·10^3 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 1.19; fattore vero 2.17 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 82.3 · dettaglio 1.4 · 15907 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-25"><img loading="lazy" src="foto/avvio_ritorno_025.jpg" alt=""><figcaption>
+<b>1.2·10^4 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t rosso" title="ΔE medio 20.66; fattore vero 2.14 contro 3.6 dichiarato">salto 100%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 61.3 · dettaglio 1.0 · 13088 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-26"><img loading="lazy" src="foto/avvio_ritorno_026.jpg" alt=""><figcaption>
+<b>3.6·10^4 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 14.54; fattore vero 6.13 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 44.6 · dettaglio 0.8 · 13855 ms · NON PRONTO: gesto · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-27"><img loading="lazy" src="foto/avvio_ritorno_027.jpg" alt=""><figcaption>
+<b>1.1·10^5 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 98%</span>
+<span class="t verde" title="ΔE medio 4.41; fattore vero 5.15 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 37.6 · dettaglio 0.7 · 11022 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-28"><img loading="lazy" src="foto/avvio_ritorno_028.jpg" alt=""><figcaption>
+<b>3.4·10^5 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 94%</span>
+<span class="t verde" title="ΔE medio 1.34; fattore vero 1.53 contro 3.06 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 36.7 · dettaglio 0.7 · 10356 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-29"><img loading="lazy" src="foto/avvio_ritorno_029.jpg" alt=""><figcaption>
+<b>1.0·10^6 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 82%</span>
+<span class="t verde" title="ΔE medio 1.67; fattore vero 1.53 contro 3.06 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="129° a -167 px, L* 33.3">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 34.0 · dettaglio 1.3 · 8884 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-30"><img loading="lazy" src="foto/avvio_ritorno_030.jpg" alt=""><figcaption>
+<b>3.2·10^6 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 29%</span>
+<span class="t verde" title="ΔE medio 3.85; fattore vero 2.17 contro 3.06 dichiarato">salto 6%</span>
+<span class="t rosso" title="area satura più grande 2.26 %">macchie 2</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 31.5 · dettaglio 4.5 · 15852 ms · NON PRONTO: immagine non ferma · suolo (centro)</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-31"><img loading="lazy" src="foto/avvio_ritorno_031.jpg" alt=""><figcaption>
+<b>1.1·10^7 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 69%</span>
+<span class="t giallo" title="ΔE medio 8.32; fattore vero 3.6 contro 3.6 dichiarato">salto 15%</span>
+<span class="t rosso" title="area satura più grande 5.15 %">macchie 2</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 70.6 · dettaglio 5.6 · 7572 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-32"><img loading="lazy" src="foto/avvio_ritorno_032.jpg" alt=""><figcaption>
+<b>3.5·10^7 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 82%</span>
+<span class="t verde" title="ΔE medio 6.61; fattore vero 3.06 contro 3.06 dichiarato">salto 7%</span>
+<span class="t rosso" title="area satura più grande 1.72 %">macchie 2</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 75.9 · dettaglio 3.7 · 7130 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-33"><img loading="lazy" src="foto/avvio_ritorno_033.jpg" alt=""><figcaption>
+<b>1.1·10^8 m</b> <i>cosmo L3 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 70%</span>
+<span class="t giallo" title="ΔE medio 9.43; fattore vero 2.17 contro 3.06 dichiarato">salto 12%</span>
+<span class="t rosso" title="area satura più grande 1.19 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 67.0 · dettaglio 3.0 · 6872 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-34"><img loading="lazy" src="foto/avvio_ritorno_034.jpg" alt=""><figcaption>
+<b>3.8·10^8 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 80%</span>
+<span class="t rosso" title="ΔE medio 65.06; fattore vero 1.75 contro 3.5 dichiarato">salto 100%</span>
+<span class="t giallo" title="area satura più grande 0.34 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 7.5 · dettaglio 8.0 · 7133 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-35"><img loading="lazy" src="foto/avvio_ritorno_035.jpg" alt=""><figcaption>
+<b>1.0·10^9 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 72%</span>
+<span class="t rosso" title="ΔE medio 21.9; fattore vero 1.39 contro 2.78 dichiarato">salto 95%</span>
+<span class="t rosso" title="area satura più grande 0.65 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 28.0 · dettaglio 6.8 · 7076 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-36"><img loading="lazy" src="foto/avvio_ritorno_036.jpg" alt=""><figcaption>
+<b>4.4·10^9 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 67%</span>
+<span class="t rosso" title="ΔE medio 27.36; fattore vero 2.09 contro 4.17 dichiarato">salto 92%</span>
+<span class="t rosso" title="area satura più grande 1.12 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 53.1 · dettaglio 3.5 · 4363 ms · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-37"><img loading="lazy" src="foto/avvio_ritorno_037.jpg" alt=""><figcaption>
+<b>1.2·10^10 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.48; fattore vero 1.35 contro 2.7 dichiarato">salto 1%</span>
+<span class="t rosso" title="area satura più grande 0.85 %">macchie 1</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 51.8 · dettaglio 4.4 · 2508 ms · pianeta</small></figcaption></figure><figure class="nonpronto" id="avvio-ritorno-38"><img loading="lazy" src="foto/avvio_ritorno_038.jpg" alt=""><figcaption>
+<b>3.8·10^10 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t rosso" title="ΔE medio 15.45; fattore vero 6.4 contro 3.2 dichiarato">salto 46%</span>
+<span class="t giallo" title="area satura più grande 0.47 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 13.3 · dettaglio 7.6 · 6913 ms · NON PRONTO: immagine non ferma · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-39"><img loading="lazy" src="foto/avvio_ritorno_039.jpg" alt=""><figcaption>
+<b>1.1·10^11 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 79%</span>
+<span class="t giallo" title="ΔE medio 8.71; fattore vero 1.65 contro 2.78 dichiarato">salto 18%</span>
+<span class="t verde" title="area satura più grande 0.05 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 3.6 · dettaglio 8.3 · 7424 ms · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-40"><img loading="lazy" src="foto/avvio_ritorno_040.jpg" alt=""><figcaption>
+<b>3.7·10^11 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 3.9; fattore vero 1.75 contro 3.5 dichiarato">salto 7%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="0° a 11 px, L* 0.3">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.6 · dettaglio 8.1 · 7186 ms · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-41"><img loading="lazy" src="foto/avvio_ritorno_041.jpg" alt=""><figcaption>
+<b>1.2·10^12 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 1.79; fattore vero 1.64 contro 3.27 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="0° a -38 px, L* 0">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.6 · dettaglio 8.1 · 7632 ms · pianeta</small></figcaption></figure><figure class="" id="avvio-ritorno-42"><img loading="lazy" src="foto/avvio_ritorno_042.jpg" alt=""><figcaption>
+<b>3.7·10^12 m</b> <i>cosmo L2 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 78%</span>
+<span class="t rosso" title="ΔE medio 13.71; fattore vero 1.54 contro 3.07 dichiarato">salto 30%</span>
+<span class="t verde" title="area satura più grande 0.09 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 6.4 · dettaglio 3.9 · 6803 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-43"><img loading="lazy" src="foto/avvio_ritorno_043.jpg" alt=""><figcaption>
+<b>1.2·10^13 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 73%</span>
+<span class="t rosso" title="ΔE medio 18.33; fattore vero 1.55 contro 3.1 dichiarato">salto 44%</span>
+<span class="t verde" title="area satura più grande 0.14 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 14.9 · dettaglio 0.9 · 6544 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-44"><img loading="lazy" src="foto/avvio_ritorno_044.jpg" alt=""><figcaption>
+<b>3.8·10^13 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 77%</span>
+<span class="t rosso" title="ΔE medio 22.09; fattore vero 1.66 contro 3.32 dichiarato">salto 98%</span>
+<span class="t verde" title="area satura più grande 0.11 %">macchie 0</span>
+<span class="t rosso" title="132° a -154 px, L* 33.4; 144° a -150 px, L* 34.5; 156° a -131 px, L* 33.3">barre 3</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 31.4 · dettaglio 0.9 · 7246 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-45"><img loading="lazy" src="foto/avvio_ritorno_045.jpg" alt=""><figcaption>
+<b>1.1·10^14 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 89%</span>
+<span class="t verde" title="ΔE medio 10.94; fattore vero 1.42 contro 2.83 dichiarato">salto 2%</span>
+<span class="t verde" title="area satura più grande 0.03 %">macchie 0</span>
+<span class="t rosso" title="132° a -154 px, L* 46.6; 144° a -151 px, L* 47.9; 153° a -129 px, L* 46.6">barre 3</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 41.0 · dettaglio 1.0 · 6221 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-46"><img loading="lazy" src="foto/avvio_ritorno_046.jpg" alt=""><figcaption>
+<b>3.4·10^14 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 2.96; fattore vero 1.58 contro 3.16 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="153° a -129 px, L* 49.8">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.1 · dettaglio 1.0 · 6913 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-47"><img loading="lazy" src="foto/avvio_ritorno_047.jpg" alt=""><figcaption>
+<b>1.1·10^15 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 1.96; fattore vero 1.55 contro 3.09 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="153° a -129 px, L* 49.8">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 6228 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-48"><img loading="lazy" src="foto/avvio_ritorno_048.jpg" alt=""><figcaption>
+<b>3.2·10^15 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 1.9; fattore vero 1.54 contro 3.07 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="153° a -129 px, L* 49.8">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 7110 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-49"><img loading="lazy" src="foto/avvio_ritorno_049.jpg" alt=""><figcaption>
+<b>1.2·10^16 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 2.32; fattore vero 1.8 contro 3.59 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="153° a -129 px, L* 49.8">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 6098 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-50"><img loading="lazy" src="foto/avvio_ritorno_050.jpg" alt=""><figcaption>
+<b>3.6·10^16 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 1.87; fattore vero 1.53 contro 3.06 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="132° a -154 px, L* 49.8; 153° a -128 px, L* 49.8">barre 2</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 6650 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-51"><img loading="lazy" src="foto/avvio_ritorno_051.jpg" alt=""><figcaption>
+<b>1.1·10^17 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 1.87; fattore vero 1.53 contro 3.06 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="132° a -154 px, L* 49.8; 144° a -150 px, L* 51.2; 153° a -128 px, L* 49.9">barre 3</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 4042 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-52"><img loading="lazy" src="foto/avvio_ritorno_052.jpg" alt=""><figcaption>
+<b>3.3·10^17 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 1.82; fattore vero 1.52 contro 3.04 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="153° a -127 px, L* 50.3">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.0 · dettaglio 1.0 · 4245 ms · stella (perso)</small></figcaption></figure><figure class="" id="avvio-ritorno-53"><img loading="lazy" src="foto/avvio_ritorno_053.jpg" alt=""><figcaption>
+<b>1.2·10^18 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 93%</span>
+<span class="t verde" title="ΔE medio 2.18; fattore vero 1.8 contro 3.61 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t rosso" title="147° a -119 px, L* 50.5">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 43.7 · dettaglio 1.0 · 3637 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-54"><img loading="lazy" src="foto/avvio_ritorno_054.jpg" alt=""><figcaption>
+<b>3.4·10^18 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 86%</span>
+<span class="t verde" title="ΔE medio 3.56; fattore vero 4.75 contro 2.83 dichiarato">salto 3%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 30.7 · dettaglio 1.1 · 3482 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-55"><img loading="lazy" src="foto/avvio_ritorno_055.jpg" alt=""><figcaption>
+<b>1.3·10^19 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t giallo" title="ΔE medio 9.59; fattore vero 6.41 contro 3.81 dichiarato">salto 12%</span>
+<span class="t verde" title="area satura più grande 0.04 %">macchie 0</span>
+<span class="t rosso" title="165° a 132 px, L* 8.8">barre 1</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 22.6 · dettaglio 1.3 · 3964 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-56"><img loading="lazy" src="foto/avvio_ritorno_056.jpg" alt=""><figcaption>
+<b>3.6·10^19 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 84%</span>
+<span class="t verde" title="ΔE medio 2.05; fattore vero 2.76 contro 2.76 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 6.0 · dettaglio 0.9 · 3883 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-57"><img loading="lazy" src="foto/avvio_ritorno_057.jpg" alt=""><figcaption>
+<b>1.1·10^20 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 92%</span>
+<span class="t verde" title="ΔE medio 0.51; fattore vero 1.54 contro 3.09 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 3.1 · dettaglio 0.7 · 3640 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-58"><img loading="lazy" src="foto/avvio_ritorno_058.jpg" alt=""><figcaption>
+<b>3.6·10^20 m</b> <i>cosmo L1 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 97%</span>
+<span class="t verde" title="ΔE medio 0.36; fattore vero 1.93 contro 3.25 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 1.3 · dettaglio 0.6 · 3969 ms · stella</small></figcaption></figure><figure class="" id="avvio-ritorno-59"><img loading="lazy" src="foto/avvio_ritorno_059.jpg" alt=""><figcaption>
+<b>1.3·10^21 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.51; fattore vero 2.15 contro 3.61 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.3 · dettaglio 0.6 · 2114 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-60"><img loading="lazy" src="foto/avvio_ritorno_060.jpg" alt=""><figcaption>
+<b>3.8·10^21 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 0.15; fattore vero 1.73 contro 2.9 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 0.1 · dettaglio 0.6 · 1553 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-61"><img loading="lazy" src="foto/avvio_ritorno_061.jpg" alt=""><figcaption>
+<b>1.2·10^22 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 100%</span>
+<span class="t verde" title="ΔE medio 0.99; fattore vero 1.6 contro 3.2 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 1.0 · dettaglio 0.6 · 2937 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-62"><img loading="lazy" src="foto/avvio_ritorno_062.jpg" alt=""><figcaption>
+<b>3.7·10^22 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t rosso" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 99%</span>
+<span class="t verde" title="ΔE medio 3.7; fattore vero 1.55 contro 3.11 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 4.6 · dettaglio 0.8 · 2909 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-63"><img loading="lazy" src="foto/avvio_ritorno_063.jpg" alt=""><figcaption>
+<b>1.1·10^23 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t rosso" title="ΔE medio 21.69; fattore vero 3.08 contro 3.08 dichiarato">salto 99%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.2 · dettaglio 0.9 · 4249 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-64"><img loading="lazy" src="foto/avvio_ritorno_064.jpg" alt=""><figcaption>
+<b>3.5·10^23 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t verde" title="ΔE medio 2.32; fattore vero 1.53 contro 3.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.8 · 3001 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-65"><img loading="lazy" src="foto/avvio_ritorno_065.jpg" alt=""><figcaption>
+<b>1.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.3; fattore vero 1.53 contro 3.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.8 · 3024 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-66"><img loading="lazy" src="foto/avvio_ritorno_066.jpg" alt=""><figcaption>
+<b>3.3·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 51%</span>
+<span class="t verde" title="ΔE medio 2.67; fattore vero 1.52 contro 3.05 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.2 · dettaglio 0.8 · 3451 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-67"><img loading="lazy" src="foto/avvio_ritorno_067.jpg" alt=""><figcaption>
+<b>4.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 3.09; fattore vero 0.851 contro 1.2 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.9 · 3396 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-68"><img loading="lazy" src="foto/avvio_ritorno_068.jpg" alt=""><figcaption>
+<b>6.5·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.82; fattore vero 1.38 contro 1.64 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.9 · 2540 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-69"><img loading="lazy" src="foto/avvio_ritorno_069.jpg" alt=""><figcaption>
+<b>9.3·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.23; fattore vero 1.7 contro 1.43 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.9 · 2647 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-70"><img loading="lazy" src="foto/avvio_ritorno_070.jpg" alt=""><figcaption>
+<b>8.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.39; fattore vero 0.554 contro 1.11 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.4 · dettaglio 0.9 · 2314 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-71"><img loading="lazy" src="foto/avvio_ritorno_071.jpg" alt=""><figcaption>
+<b>5.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 61%</span>
+<span class="t verde" title="ΔE medio 2.6; fattore vero 2.03 contro 1.44 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.6 · dettaglio 0.8 · 2551 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-72"><img loading="lazy" src="foto/avvio_ritorno_072.jpg" alt=""><figcaption>
+<b>5.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 53%</span>
+<span class="t verde" title="ΔE medio 2.79; fattore vero 0.576 contro 1.15 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.0 · dettaglio 1.1 · 2691 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-73"><img loading="lazy" src="foto/avvio_ritorno_073.jpg" alt=""><figcaption>
+<b>7.5·10^23 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 3.64; fattore vero 3.37 contro 6.74 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.6 · dettaglio 0.9 · 2676 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-74"><img loading="lazy" src="foto/avvio_ritorno_074.jpg" alt=""><figcaption>
+<b>3.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 49%</span>
+<span class="t verde" title="ΔE medio 2.25; fattore vero 4.28 contro 5.09 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.5 · dettaglio 1.2 · 2598 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-75"><img loading="lazy" src="foto/avvio_ritorno_075.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 53%</span>
+<span class="t verde" title="ΔE medio 2.68; fattore vero 2.63 contro 2.63 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.9 · dettaglio 1.0 · 2714 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-76"><img loading="lazy" src="foto/avvio_ritorno_076.jpg" alt=""><figcaption>
+<b>8.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 40%</span>
+<span class="t verde" title="ΔE medio 3.63; fattore vero 1.14 contro 1.14 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.0 · dettaglio 1.0 · 3835 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-77"><img loading="lazy" src="foto/avvio_ritorno_077.jpg" alt=""><figcaption>
+<b>5.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 28%</span>
+<span class="t verde" title="ΔE medio 4.48; fattore vero 0.789 contro 1.58 dichiarato">salto 1%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.9 · dettaglio 1.4 · 2673 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-78"><img loading="lazy" src="foto/avvio_ritorno_078.jpg" alt=""><figcaption>
+<b>4.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 3.21; fattore vero 0.83 contro 1.17 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.9 · dettaglio 0.8 · 5985 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-79"><img loading="lazy" src="foto/avvio_ritorno_079.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 76%</span>
+<span class="t verde" title="ΔE medio 2.89; fattore vero 3.42 contro 2.42 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.6 · dettaglio 0.8 · 3112 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-80"><img loading="lazy" src="foto/avvio_ritorno_080.jpg" alt=""><figcaption>
+<b>6.2·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 61%</span>
+<span class="t verde" title="ΔE medio 2.92; fattore vero 3.09 contro 1.84 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.9 · dettaglio 0.9 · 2644 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-81"><img loading="lazy" src="foto/avvio_ritorno_081.jpg" alt=""><figcaption>
+<b>4.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.95; fattore vero 2.15 contro 1.28 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.0 · dettaglio 0.9 · 2355 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-82"><img loading="lazy" src="foto/avvio_ritorno_082.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 3.17; fattore vero 1.33 contro 2.23 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.8 · dettaglio 0.8 · 2592 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-83"><img loading="lazy" src="foto/avvio_ritorno_083.jpg" alt=""><figcaption>
+<b>4.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 40%</span>
+<span class="t verde" title="ΔE medio 2.82; fattore vero 1.97 contro 2.34 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.5 · dettaglio 1.2 · 2749 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-84"><img loading="lazy" src="foto/avvio_ritorno_084.jpg" alt=""><figcaption>
+<b>5.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 3.76; fattore vero 1.2 contro 1.2 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.6 · dettaglio 0.9 · 2761 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-85"><img loading="lazy" src="foto/avvio_ritorno_085.jpg" alt=""><figcaption>
+<b>6.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.87; fattore vero 0.535 contro 1.07 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.9 · 2707 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-86"><img loading="lazy" src="foto/avvio_ritorno_086.jpg" alt=""><figcaption>
+<b>4.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 52%</span>
+<span class="t verde" title="ΔE medio 2.64; fattore vero 2.05 contro 1.22 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.5 · dettaglio 1.1 · 2697 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-87"><img loading="lazy" src="foto/avvio_ritorno_087.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.71; fattore vero 4.09 contro 2.05 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.6 · dettaglio 0.9 · 2752 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-88"><img loading="lazy" src="foto/avvio_ritorno_088.jpg" alt=""><figcaption>
+<b>2.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.33; fattore vero 5.55 contro 3.92 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.2 · dettaglio 0.8 · 2552 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-89"><img loading="lazy" src="foto/avvio_ritorno_089.jpg" alt=""><figcaption>
+<b>3.5·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 67%</span>
+<span class="t verde" title="ΔE medio 2.64; fattore vero 2.25 contro 1.34 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.2 · dettaglio 0.8 · 2652 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-90"><img loading="lazy" src="foto/avvio_ritorno_090.jpg" alt=""><figcaption>
+<b>9.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t verde" title="ΔE medio 2.75; fattore vero 3.38 contro 2.85 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.6 · dettaglio 0.9 · 2610 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-91"><img loading="lazy" src="foto/avvio_ritorno_091.jpg" alt=""><figcaption>
+<b>6.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.99; fattore vero 0.884 contro 1.49 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.0 · dettaglio 0.9 · 2658 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-92"><img loading="lazy" src="foto/avvio_ritorno_092.jpg" alt=""><figcaption>
+<b>4.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.59; fattore vero 2.52 contro 1.5 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.6 · dettaglio 0.9 · 2448 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-93"><img loading="lazy" src="foto/avvio_ritorno_093.jpg" alt=""><figcaption>
+<b>3.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.36; fattore vero 1.42 contro 1.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.2 · dettaglio 0.8 · 2931 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-94"><img loading="lazy" src="foto/avvio_ritorno_094.jpg" alt=""><figcaption>
+<b>4.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 61%</span>
+<span class="t verde" title="ΔE medio 2.52; fattore vero 2.57 contro 1.29 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.9 · 2723 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-95"><img loading="lazy" src="foto/avvio_ritorno_095.jpg" alt=""><figcaption>
+<b>2.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 46%</span>
+<span class="t verde" title="ΔE medio 2.2; fattore vero 3.94 contro 1.97 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.7 · dettaglio 1.1 · 2749 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-96"><img loading="lazy" src="foto/avvio_ritorno_096.jpg" alt=""><figcaption>
+<b>4.3·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 3.17; fattore vero 1.77 contro 1.77 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.8 · 2588 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-97"><img loading="lazy" src="foto/avvio_ritorno_097.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.28; fattore vero 5.21 contro 2.6 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.9 · dettaglio 0.8 · 2680 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-98"><img loading="lazy" src="foto/avvio_ritorno_098.jpg" alt=""><figcaption>
+<b>3.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.24; fattore vero 3.54 contro 2.97 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.1 · dettaglio 0.8 · 2448 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-99"><img loading="lazy" src="foto/avvio_ritorno_099.jpg" alt=""><figcaption>
+<b>4.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 53%</span>
+<span class="t verde" title="ΔE medio 2.75; fattore vero 2.51 contro 1.25 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.5 · dettaglio 1.1 · 2819 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-100"><img loading="lazy" src="foto/avvio_ritorno_100.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.58; fattore vero 4.42 contro 2.21 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.6 · dettaglio 0.9 · 2768 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-101"><img loading="lazy" src="foto/avvio_ritorno_101.jpg" alt=""><figcaption>
+<b>4.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.53; fattore vero 5.13 contro 2.57 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.3 · dettaglio 0.9 · 2571 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-102"><img loading="lazy" src="foto/avvio_ritorno_102.jpg" alt=""><figcaption>
+<b>7.5·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.94; fattore vero 0.92 contro 1.84 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.4 · dettaglio 0.9 · 2451 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-103"><img loading="lazy" src="foto/avvio_ritorno_103.jpg" alt=""><figcaption>
+<b>4.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 2.85; fattore vero 0.906 contro 1.81 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.7 · dettaglio 0.9 · 2742 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-104"><img loading="lazy" src="foto/avvio_ritorno_104.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.08; fattore vero 4.26 contro 2.53 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.9 · 2603 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-105"><img loading="lazy" src="foto/avvio_ritorno_105.jpg" alt=""><figcaption>
+<b>4.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 59%</span>
+<span class="t verde" title="ΔE medio 2.78; fattore vero 3.65 contro 2.58 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.4 · dettaglio 0.9 · 2728 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-106"><img loading="lazy" src="foto/avvio_ritorno_106.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.15; fattore vero 3.74 contro 2.64 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.0 · dettaglio 0.9 · 2711 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-107"><img loading="lazy" src="foto/avvio_ritorno_107.jpg" alt=""><figcaption>
+<b>4.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 61%</span>
+<span class="t verde" title="ΔE medio 2.74; fattore vero 3.69 contro 2.61 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.0 · dettaglio 0.9 · 2639 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-108"><img loading="lazy" src="foto/avvio_ritorno_108.jpg" alt=""><figcaption>
+<b>4.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.51; fattore vero 2.3 contro 1.15 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.8 · dettaglio 0.9 · 2678 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-109"><img loading="lazy" src="foto/avvio_ritorno_109.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.25; fattore vero 1.11 contro 2.23 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.8 · 2572 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-110"><img loading="lazy" src="foto/avvio_ritorno_110.jpg" alt=""><figcaption>
+<b>6.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.9; fattore vero 3.11 contro 1.55 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.1 · dettaglio 0.8 · 2697 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-111"><img loading="lazy" src="foto/avvio_ritorno_111.jpg" alt=""><figcaption>
+<b>4.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 58%</span>
+<span class="t verde" title="ΔE medio 2.94; fattore vero 3.39 contro 1.7 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.4 · dettaglio 0.9 · 2658 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-112"><img loading="lazy" src="foto/avvio_ritorno_112.jpg" alt=""><figcaption>
+<b>5.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 57%</span>
+<span class="t verde" title="ΔE medio 2.49; fattore vero 0.642 contro 1.28 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.4 · dettaglio 0.9 · 2649 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-113"><img loading="lazy" src="foto/avvio_ritorno_113.jpg" alt=""><figcaption>
+<b>3.2·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 3.25; fattore vero 1.57 contro 1.57 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.6 · dettaglio 0.9 · 2609 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-114"><img loading="lazy" src="foto/avvio_ritorno_114.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.38; fattore vero 6.39 contro 3.2 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 28.2 · dettaglio 0.9 · 2684 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-115"><img loading="lazy" src="foto/avvio_ritorno_115.jpg" alt=""><figcaption>
+<b>6.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.36; fattore vero 3.12 contro 1.56 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.7 · dettaglio 0.8 · 2799 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-116"><img loading="lazy" src="foto/avvio_ritorno_116.jpg" alt=""><figcaption>
+<b>3.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.41; fattore vero 3.38 contro 1.69 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.9 · 2619 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-117"><img loading="lazy" src="foto/avvio_ritorno_117.jpg" alt=""><figcaption>
+<b>6.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 56%</span>
+<span class="t verde" title="ΔE medio 2.39; fattore vero 1.23 contro 1.73 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.3 · dettaglio 1.1 · 2654 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-118"><img loading="lazy" src="foto/avvio_ritorno_118.jpg" alt=""><figcaption>
+<b>3.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.06; fattore vero 3.37 contro 2 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.2 · dettaglio 0.9 · 2359 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-119"><img loading="lazy" src="foto/avvio_ritorno_119.jpg" alt=""><figcaption>
+<b>9.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.49; fattore vero 5.52 contro 2.76 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.7 · dettaglio 0.8 · 2554 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-120"><img loading="lazy" src="foto/avvio_ritorno_120.jpg" alt=""><figcaption>
+<b>7.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 2.41; fattore vero 1.03 contro 1.23 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.9 · dettaglio 1.0 · 2789 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-121"><img loading="lazy" src="foto/avvio_ritorno_121.jpg" alt=""><figcaption>
+<b>4.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 58%</span>
+<span class="t verde" title="ΔE medio 2.63; fattore vero 1.92 contro 1.92 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.8 · dettaglio 0.8 · 2616 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-122"><img loading="lazy" src="foto/avvio_ritorno_122.jpg" alt=""><figcaption>
+<b>2.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 67%</span>
+<span class="t verde" title="ΔE medio 2.68; fattore vero 3.93 contro 1.96 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.9 · dettaglio 0.9 · 2574 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-123"><img loading="lazy" src="foto/avvio_ritorno_123.jpg" alt=""><figcaption>
+<b>4.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t verde" title="ΔE medio 2.22; fattore vero 2.28 contro 2.28 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.4 · dettaglio 0.8 · 2699 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-124"><img loading="lazy" src="foto/avvio_ritorno_124.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 54%</span>
+<span class="t verde" title="ΔE medio 2.93; fattore vero 1.18 contro 2.35 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.1 · dettaglio 1.1 · 2806 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-125"><img loading="lazy" src="foto/avvio_ritorno_125.jpg" alt=""><figcaption>
+<b>6.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 2.58; fattore vero 0.852 contro 1.7 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.2 · dettaglio 0.9 · 2522 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-126"><img loading="lazy" src="foto/avvio_ritorno_126.jpg" alt=""><figcaption>
+<b>5.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 3.32; fattore vero 0.706 contro 1.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.2 · dettaglio 0.9 · 2906 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-127"><img loading="lazy" src="foto/avvio_ritorno_127.jpg" alt=""><figcaption>
+<b>2.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.82; fattore vero 0.952 contro 1.9 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.6 · dettaglio 0.9 · 2907 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-128"><img loading="lazy" src="foto/avvio_ritorno_128.jpg" alt=""><figcaption>
+<b>4.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.28; fattore vero 0.729 contro 1.46 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.9 · 2661 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-129"><img loading="lazy" src="foto/avvio_ritorno_129.jpg" alt=""><figcaption>
+<b>9.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.52; fattore vero 1.1 contro 2.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.8 · dettaglio 0.9 · 2809 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-130"><img loading="lazy" src="foto/avvio_ritorno_130.jpg" alt=""><figcaption>
+<b>3.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.77; fattore vero 1.43 contro 2.41 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.8 · dettaglio 0.8 · 2639 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-131"><img loading="lazy" src="foto/avvio_ritorno_131.jpg" alt=""><figcaption>
+<b>5.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.8; fattore vero 0.785 contro 1.57 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 24.6 · dettaglio 0.8 · 2545 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-132"><img loading="lazy" src="foto/avvio_ritorno_132.jpg" alt=""><figcaption>
+<b>7.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.35; fattore vero 2.67 contro 1.33 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.9 · 2627 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-133"><img loading="lazy" src="foto/avvio_ritorno_133.jpg" alt=""><figcaption>
+<b>5.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.43; fattore vero 0.779 contro 1.56 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.8 · 2986 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-134"><img loading="lazy" src="foto/avvio_ritorno_134.jpg" alt=""><figcaption>
+<b>9.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.31; fattore vero 1.65 contro 1.96 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.3 · dettaglio 0.8 · 2692 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-135"><img loading="lazy" src="foto/avvio_ritorno_135.jpg" alt=""><figcaption>
+<b>6.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.61; fattore vero 0.724 contro 1.45 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.0 · dettaglio 0.8 · 2547 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-136"><img loading="lazy" src="foto/avvio_ritorno_136.jpg" alt=""><figcaption>
+<b>4.6·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 58%</span>
+<span class="t verde" title="ΔE medio 2.41; fattore vero 0.881 contro 1.48 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.2 · dettaglio 1.0 · 2551 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-137"><img loading="lazy" src="foto/avvio_ritorno_137.jpg" alt=""><figcaption>
+<b>8.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t verde" title="ΔE medio 2.5; fattore vero 0.879 contro 1.76 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.5 · dettaglio 0.9 · 2602 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-138"><img loading="lazy" src="foto/avvio_ritorno_138.jpg" alt=""><figcaption>
+<b>4.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 68%</span>
+<span class="t verde" title="ΔE medio 2.11; fattore vero 1.54 contro 1.83 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.6 · dettaglio 0.8 · 2489 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-139"><img loading="lazy" src="foto/avvio_ritorno_139.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 56%</span>
+<span class="t verde" title="ΔE medio 3.16; fattore vero 4.55 contro 2.28 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.1 · dettaglio 0.9 · 2480 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-140"><img loading="lazy" src="foto/avvio_ritorno_140.jpg" alt=""><figcaption>
+<b>4.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.74; fattore vero 2.74 contro 2.31 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.9 · 2359 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-141"><img loading="lazy" src="foto/avvio_ritorno_141.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.84; fattore vero 1.75 contro 2.47 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.2 · dettaglio 0.9 · 2604 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-142"><img loading="lazy" src="foto/avvio_ritorno_142.jpg" alt=""><figcaption>
+<b>3.2·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 23%</span>
+<span class="t verde" title="ΔE medio 3.17; fattore vero 1.66 contro 3.32 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.8 · dettaglio 1.5 · 3724 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-143"><img loading="lazy" src="foto/avvio_ritorno_143.jpg" alt=""><figcaption>
+<b>1.0·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 37%</span>
+<span class="t verde" title="ΔE medio 3.44; fattore vero 2.68 contro 3.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.6 · dettaglio 1.1 · 2646 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-144"><img loading="lazy" src="foto/avvio_ritorno_144.jpg" alt=""><figcaption>
+<b>5.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 60%</span>
+<span class="t verde" title="ΔE medio 2.78; fattore vero 1.02 contro 2.04 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.2 · dettaglio 0.9 · 2647 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-145"><img loading="lazy" src="foto/avvio_ritorno_145.jpg" alt=""><figcaption>
+<b>2.5·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.96; fattore vero 1.03 contro 2.05 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.0 · dettaglio 0.9 · 2729 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-146"><img loading="lazy" src="foto/avvio_ritorno_146.jpg" alt=""><figcaption>
+<b>3.9·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.6; fattore vero 1.59 contro 1.59 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.5 · dettaglio 0.9 · 2662 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-147"><img loading="lazy" src="foto/avvio_ritorno_147.jpg" alt=""><figcaption>
+<b>5.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 63%</span>
+<span class="t verde" title="ΔE medio 2.73; fattore vero 0.757 contro 1.27 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 0.8 · 2607 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-148"><img loading="lazy" src="foto/avvio_ritorno_148.jpg" alt=""><figcaption>
+<b>9.3·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 65%</span>
+<span class="t verde" title="ΔE medio 2.57; fattore vero 2.63 contro 1.86 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.9 · 2853 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-149"><img loading="lazy" src="foto/avvio_ritorno_149.jpg" alt=""><figcaption>
+<b>8.1·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.84; fattore vero 2.29 contro 1.15 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 27.7 · dettaglio 0.9 · 2796 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-150"><img loading="lazy" src="foto/avvio_ritorno_150.jpg" alt=""><figcaption>
+<b>5.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.91; fattore vero 2.12 contro 1.5 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.0 · dettaglio 0.8 · 2837 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-151"><img loading="lazy" src="foto/avvio_ritorno_151.jpg" alt=""><figcaption>
+<b>2.4·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 57%</span>
+<span class="t verde" title="ΔE medio 2.73; fattore vero 1.15 contro 2.29 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.6 · dettaglio 1.1 · 2882 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-152"><img loading="lazy" src="foto/avvio_ritorno_152.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 66%</span>
+<span class="t verde" title="ΔE medio 2.13; fattore vero 9.13 contro 4.56 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.4 · dettaglio 0.8 · 2560 ms · galassia</small></figcaption></figure><figure class="" id="avvio-ritorno-153"><img loading="lazy" src="foto/avvio_ritorno_153.jpg" alt=""><figcaption>
+<b>8.0·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.19; fattore vero 2.69 contro 1.34 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.1 · dettaglio 0.8 · 2729 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-154"><img loading="lazy" src="foto/avvio_ritorno_154.jpg" alt=""><figcaption>
+<b>5.2·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t verde" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 33%</span>
+<span class="t verde" title="ΔE medio 2.64; fattore vero 1.53 contro 1.53 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.5 · dettaglio 1.3 · 2621 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-155"><img loading="lazy" src="foto/avvio_ritorno_155.jpg" alt=""><figcaption>
+<b>1.1·10^25 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 64%</span>
+<span class="t verde" title="ΔE medio 2.78; fattore vero 1.43 contro 2.03 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.3 · dettaglio 0.9 · 2603 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-156"><img loading="lazy" src="foto/avvio_ritorno_156.jpg" alt=""><figcaption>
+<b>4.8·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 62%</span>
+<span class="t verde" title="ΔE medio 2.53; fattore vero 2.19 contro 2.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 0.9 · 2912 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-157"><img loading="lazy" src="foto/avvio_ritorno_157.jpg" alt=""><figcaption>
+<b>3.5·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 51%</span>
+<span class="t verde" title="ΔE medio 2.57; fattore vero 1.16 contro 1.38 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 26.5 · dettaglio 1.1 · 3199 ms · centro</small></figcaption></figure><figure class="" id="avvio-ritorno-158"><img loading="lazy" src="foto/avvio_ritorno_158.jpg" alt=""><figcaption>
+<b>7.7·10^24 m</b> <i>cosmo L0 3D tele4</i><br>
+<span class="t giallo" title="frazione di blocchi 8×8 quasi neri o quasi uniformi">vuota 58%</span>
+<span class="t verde" title="ΔE medio 2.81; fattore vero 1.1 contro 2.19 dichiarato">salto 0%</span>
+<span class="t verde" title="area satura più grande 0.00 %">macchie 0</span>
+<span class="t verde" title="">barre 0</span>
+<span class="t grigio" title="senza confronto">A/R –</span>
+<br><small>L* 25.7 · dettaglio 1.0 · 2924 ms · galassia</small></figcaption></figure></div>
+</body></html>
