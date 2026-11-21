@@ -62,7 +62,9 @@ prova('il disco: la neve a 2,7 UA per il Sole, Σ ∝ r^(-3/2), più del doppio 
   // neve del Sole del modello (2,7 UA, la sua taratura sul Sistema Solare) tra 1,0 e 1,6 UA.
   const n03 = disco({ massa: 0.3, Z: 1 }, 1).neve;
   assert.ok(n03 > 2.7 * (0.5 / 1.35) && n03 < 2.7 * (0.8 / 1.35) && disco({ massa: 2, Z: 1 }, 1).neve > 5, `la neve segue la luce della stella giovane: 0,3 M☉ a ${n03} UA`);
-  assert.equal(new Set(SEMI.map((s) => disco(SOLE, s).frazione.toFixed(4))).size > 50, true, 'ogni seme ha il suo disco');
+  // (la massa da sola non basta più a distinguerli: con la larghezza misurata dei dischi di Classe 0 — Tychoniec et al. 2020 — uno su
+  // tre ha la massa del limite d'instabilità; la vita del gas cambia per tutti)
+  assert.equal(new Set(SEMI.map((s) => { const D = disco(SOLE, s); return `${D.frazione.toFixed(4)}|${D.vita.toFixed(0)}`; })).size > 50, true, 'ogni seme ha il suo disco');
 });
 
 // UNA PROVA SULLA POPOLAZIONE. Quanti rocciosi abbiano «una massa terrestre» è una statistica, non una legge: su 60 semi

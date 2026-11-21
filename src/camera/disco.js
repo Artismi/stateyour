@@ -289,7 +289,8 @@ export function formaPianeti(st, seme = 1) {
     // (la larghezza della striscia che comincia a lo: quella dell'embrione di lo, o — dopo il primo — quella della striscia di prima,
     // che cambia piano: serve solo a mettere il centro)
     let m = 0, w = wPrima; if (!(w > 0)) { m = massaIso(lo); w = 2 * P.C * hill(2 * m, lo); }
-    const r = lo + Math.min(w, 0.4 * lo) / 2, T = D.Tcond(r), sG = D.sigmaGas(r), sS = (D.solidi.roccia(T) + (r < D.neve ? 0 : D.solidi.ghiaccio)) * sG; // (D.sigmaSolidi(r), con T e Σ_gas che servono anche dopo) m = Math.pow(2 * Math.PI * (r * UA) ** 2 * sS * P.C, 1.5) * Math.sqrt(2 / (3 * Mst)); w = 2 * P.C * hill(2 * m, r); // (massaIso(r), con la Σ già letta)
+    const r = lo + Math.min(w, 0.4 * lo) / 2, T = D.Tcond(r), sG = D.sigmaGas(r), sS = (D.solidi.roccia(T) + (r < D.neve ? 0 : D.solidi.ghiaccio)) * sG; // (D.sigmaSolidi(r), con T e Σ_gas che servono anche dopo)
+    m = Math.pow(2 * Math.PI * (r * UA) ** 2 * sS * P.C, 1.5) * Math.sqrt(2 / (3 * Mst)); w = 2 * P.C * hill(2 * m, r); // (massaIso(r), con la Σ già letta)
     if (!(w > 0)) break;
     if (w > 0.4 * r) { w = 0.4 * r; m = Math.PI * r * UA * w * UA * sS; } // un disco enorme: la striscia non può essere più larga dell'orbita (e l'embrione ne ha metà)
     lo += w; wPrima = w; if (lo > D.rOut) break;
@@ -407,8 +408,10 @@ export function formaPianeti(st, seme = 1) {
   // pezzo si rifà solo quando uno dei suoi corpi cambia. Con più di 40 corpi — i dischi poveri di metalli fanno migliaia di
   // embrioni piccoli — non si fa, e ogni corpo tiene la sua eccentricità finché non ne restano 40. Scelte di calcolo.)
   // (fatti: gli eventi; al più 600 in tutto, come i giri di prima, e al più 150 mentre i corpi sono più di 40: i dischi poveri di
-  // metalli fanno migliaia di embrioni piccoli, e oltre quel bilancio la loro gara si ferma lì — una scelta di calcolo, dichiarata:
-  // su 60 dischi di una stella di 0,1 M☉ con Z = 0,01 dà 2 pianeti sopra il minimo invece di 4, il più grosso 0,022 Terre invece di 0,036)
+  // metalli fanno migliaia di embrioni piccoli, e oltre quel bilancio la loro gara si ferma lì — una scelta di calcolo, dichiarata.
+  // L'errore, misurato: con i piccolissimi seguiti come popolazione (qui sotto), su 300 sistemi della galassia 0 del cosmo 1 e 60
+  // dischi di una stella di 0,1 M☉ con Z = 0,01, i pianeti sono identici con 150 e con 600 eventi; prima della popolazione il
+  // tetto toglieva a quei 60 dischi 2 pianeti sopra il minimo su 4)
   let t = Math.min(eta, D.vita), terne = [], evento = 0, fatti = 0;
   for (const b of vivi) { b.tz = t; b.tocco = -1; b.blocco = null; b.ver = 0; b.terna = null; }
   // l'eccentricità di un corpo al tempo T (anni dalla nascita): quella secolare del suo pezzo, frenata dai planetesimi
