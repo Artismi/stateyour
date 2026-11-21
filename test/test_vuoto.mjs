@@ -38,7 +38,7 @@ const SOLE = 8; // kpc: dove si fanno i riscontri «vicino al Sole»
 console.log('\nA. IL MEZZO TRA LE STELLE');
 prova('la polvere: le taglie di MRN fissano grani ed estinzione; più metalli, più polvere; il blu è assorbito di più', () => {
   const p = V.polvere(1), p2 = V.polvere(0.5);
-  tra(p.suGas, 0.0070, 0.0072, 'polvere/gas a metalli solari (LEGGI.polvere × Z☉)'); tra(p2.AV / p.AV, 0.4999, 0.5001, 'estinzione ∝ metalli');
+  tra(p.suGas, 0.0061, 0.0062, 'polvere/gas a metalli solari (Rémy-Ruyer et al. 2014: G/D = 162, la stessa legge di galassie.js)'); tra(p2.AV / p.AV, 0.4999, 0.5001, 'estinzione ∝ metalli sopra la rottura'); tra(V.polvere(0.05).AV / V.polvere(0.1).AV, 0.115, 0.118, 'sotto 1/4 Z☉ la polvere cala come Z^3,1'); tra(V.neiGrani(1), 0.43, 0.44, 'la parte dei metalli nei grani, al Sole');
   assert.ok(p.estinzione(440e-9) > p.estinzione(550e-9) && p.estinzione(550e-9) > p.estinzione(700e-9) && p.estinzione(150e-9) > p.estinzione(440e-9), 'arrossamento');
   // la massa torna: ∫(4π/3)ρa³·A·a^−3,5 da = polvere/gas × 1,4 m_p
   const m = V.MEZZO.mrn, N = 4000, h = Math.log(m.aMax / m.aMin) / N; let massa = 0, grani = 0; for (let i = 0; i < N; i++) { const a = m.aMin * Math.exp((i + 0.5) * h); massa += (4 * Math.PI / 3) * V.MEZZO.grano.densita * a ** 3 * p.costante * Math.pow(a, -3.5) * a * h; grani += p.costante * Math.pow(a, -3.5) * a * h; }

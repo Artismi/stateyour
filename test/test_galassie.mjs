@@ -1,6 +1,6 @@
 // test_galassie.mjs — le galassie come conseguenza: la Via Lattea dai suoi numeri veri, e le galassie di cosmo(1)
 import assert from 'node:assert/strict';
-import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, velocitaPeculiare, coloreCorpoNero, colorePerTemperatura, luceGenerazione, luceNascite, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
+import { formaGalassia, formaDaAlone, aloneGalassia, stelleGalassia, motoStella, ritmoSupernove, metallicita, curvaRotazione, faseBraccio, massaAlone, popolazione, velocitaPeculiare, coloreCorpoNero, colorePerTemperatura, luceGenerazione, luceNascite, LEGGI, ANELLI, PASSI, RESTI, dentro } from '../src/camera/galassie.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, COSMO, etaUniverso, massaNascita } from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
@@ -192,6 +192,12 @@ prova('il tipo esce dalla storia: una fusione grande e tardiva fa un\'ellittica,
   tra(E.raggioSferoide, 0.5, 15, 'raggio di metà massa dello sferoide (kpc)'); assert.ok(E.buco.M > 30 * VL.buco.M, 'il buco nero cresce con lo sferoide'); tra(E.buco.M / E.massaSferoide, 5e-4, 2e-2, 'buco nero / sferoide (Kormendy & Ho: qualche millesimo)');
   assert.ok(E.perG.schiacciata < 1 && E.perG.schiacciata >= 0.35); assert.ok(E.tinta[2] <= VL.tinta[2], 'più rossa, o uguale');
   const cE = stelleGalassia(E, CASO); tra(cE.stelle.filter((s) => s.componente === 'sferoide').length / 2500, 0.7, 1, 'stelle del catalogo nello sferoide');
+  // LA FORMA DELLO SFEROIDE nel catalogo è quella di densitaGalassia: ellissoidi omotetici schiacciati lungo la normale (z = q·r·cosθ):
+  // visto dall'alto è tondo, e le z che motoStella ricostruisce sono q volte le x (entro il rumore di ~2000 stelle)
+  // (ogni coordinata di un punto a caso sulla sfera è uniforme tra −r e r, Archimede: le mediane dei valori assoluti si confrontano)
+  { const sf = cE.stelle.filter((s) => s.componente === 'sferoide'), q = E.schiacciata, m = (v) => mediana(v.map(Math.abs));
+    const x = sf.map((s) => s.pos[0]), y = sf.map((s) => s.pos[1]), z = sf.map((s) => motoStella(E, s, CASO.sotto(`stella ${s.id}`)).stato(0).pos[2] / E.unitaKpc);
+    tra(m(y) / m(x), 0.9, 1.1, 'lo sferoide visto dall\'alto è tondo (|y| / |x|, mediane)'); tra(m(z) / (q * m(x)), 0.85, 1.15, `lo sferoide è schiacciato lungo la normale di q = ${q.toFixed(2)} (|z| / q·|x|, mediane)`); }
   // la stessa fusione, ma presto (2 Ga): il disco ha il tempo di rifarsi
   const presto = formaDaAlone({ massa: 1e12, spin: 0.04, fusioni: [{ quando: 2, rapporto: 1 }] }, CASO); assert.equal(presto.tipo, 'spirale'); assert.ok(presto.frazioneSferoide < E.frazioneSferoide && presto.frazioneSferoide > 0.01);
   // un compagno piccolo (1:10 in alone): resta in orbita per l'attrito dinamico lento, o arriva e ingrossa appena lo sferoide

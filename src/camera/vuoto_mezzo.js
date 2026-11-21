@@ -10,7 +10,7 @@
 // Marche delle fonti: [V] letta sulla fonte ora · [R] ricordata (non riletta: da verificare) · [D] derivata qui.
 import { COSTANTI, MSOLE, LSOLE, ANNO } from './leggi.js';
 import * as ST from './stelle.js';
-import { LEGGI, ANELLI, PASSI, popolazione, cinematica, densitaGalassia, faseBraccioAlTempo, COSMOLOGIA, dentro as GAL } from './galassie.js';
+import { LEGGI, ANELLI, PASSI, popolazione, cinematica, densitaGalassia, faseBraccioAlTempo, COSMOLOGIA, polvereDelGas, dentro as GAL } from './galassie.js';
 import * as MAT from './materia.js';
 
 const K = COSTANTI, PI = Math.PI, PI4 = 4 * PI;
@@ -74,9 +74,12 @@ function qEstinzione(a, lambda) {
   if (rho < 1e-3) return (4 * rho * Math.tan(beta)) / 3 + rho * rho / 2; // (il limite per grani piccoli della stessa formula)
   return 2 - 4 * e * (cb / rho) * Math.sin(rho - beta) - 4 * e * (cb / rho) ** 2 * Math.cos(rho - 2 * beta) + 4 * (cb / rho) ** 2 * Math.cos(2 * beta);
 }
-// quanti grani e quanta sezione d'urto PER ATOMO DI IDROGENO, a metalli solari (la polvere è LEGGI.polvere dei metalli:
-// la stessa frazione di galassie.js). La costante A di dn/da = A·a^−3,5 è fissata dalla massa: [D]
-const POLVERE_SU_GAS = (Zr) => Zr * GAL.ZSOLE * LEGGI.polvere; // in massa, sul gas tutto (idrogeno, elio e metalli)
+// quanti grani e quanta sezione d'urto PER ATOMO DI IDROGENO (la polvere sul gas è quella di galassie.js, polvereDelGas: la
+// spezzata in Z di Rémy-Ruyer et al. 2014, tabella 1 [V]; al Sole 1/162, il 43% dei metalli, sotto 1/4 Z☉ cala come Z³).
+// La costante A di dn/da = A·a^−3,5 è fissata dalla massa: [D]
+const POLVERE_SU_GAS = (Zr) => polvereDelGas(Zr); // in massa, sul gas tutto (idrogeno, elio e metalli)
+// la parte dei metalli chiusa nei grani, con la stessa legge (per le abbondanze nel gas di C e O, qui e in vuoto_oggetti.js)
+export const neiGrani = (Zr) => (Zr > 0 ? Math.min(1, polvereDelGas(Zr) / (Zr * GAL.ZSOLE)) : 0);
 const MASSA_PER_H = (1 / ST.composizione(1).X) * K.mp; // la massa di gas per ogni atomo di idrogeno: 1,40 m_p (dalla composizione di stelle.js)
 const A_MRN = (() => { const m = Z.mrn, per = ((PI4 / 3) * Z.grano.densita * (Math.sqrt(m.aMax) - Math.sqrt(m.aMin))) / 0.5; return MASSA_PER_H / per; })(); // per unità di (polvere/gas): m^2,5 per H
 const estinzioni = new Map();
@@ -134,11 +137,11 @@ export function raggiCosmiciIn(forma) {
 // Wolfire et al. (1995, 2003): elettroni strappati ai grani dalla luce ultravioletta (G₀) più i raggi cosmici (ζ);
 // l'elettrone libero viene dall'equilibrio tra ionizzazione (raggi cosmici, carbonio) e ricombinazione (nel gas e sui grani).
 // Le abbondanze: C e O di stelle.js (DATI.metalli) per i metalli dell'anello, meno la parte chiusa nei grani
-// (LEGGI.polvere: la stessa metà di galassie.js; il carbonio vero nel gas è 1,4·10⁻⁴ per H: torna; l'ossigeno vero
-// è meno impoverito: 3,2·10⁻⁴ contro 2,4·10⁻⁴ di qui).
+// (neiGrani(Z): la stessa legge di Rémy-Ruyer di galassie.js, al Sole il 43%; il carbonio vero nel gas è 1,4·10⁻⁴ per H, qui
+// 1,5·10⁻⁴; l'ossigeno vero è meno impoverito: 3,2·10⁻⁴ contro 2,8·10⁻⁴ di qui).
 const ABB = (i) => 10 ** (ST.DATI.metalli[i][2] - 12); // C: indice 0, O: indice 2 (per atomo di H, Sole)
 function curvaTermica({ G0, zeta, Zr }) {
-  const f = Z.fotoelettrico, gas = 1 - LEGGI.polvere, xC = ABB(0) * Zr * gas, xO = ABB(2) * Zr * gas, kErg = K.kB * 1e7, EVerg = EV * 1e7;
+  const f = Z.fotoelettrico, gas = 1 - neiGrani(Zr), xC = ABB(0) * Zr * gas, xO = ABB(2) * Zr * gas, kErg = K.kB * 1e7, EVerg = EV * 1e7;
   const perT = (T) => { // ciò che dipende solo dalla temperatura, una volta
     const T2 = T / 100, lT2 = Math.log(T2), aR = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]), W = Z.graniRicombinano, lT = Math.log(T), sT = Math.sqrt(T), w3 = W[3] * Math.pow(T, W[4]), w5 = -W[5] - W[6] * lT;
     const kC = Z.CII.kH[0] * Math.pow(T2, Z.CII.kH[1] + Z.CII.kH[2] * lT2), kCe = (8.629e-6 * Z.CII.omega) / (4 * sT), kO = Z.OI.kH[0] * Math.pow(T2, Z.OI.kH[1] + Z.OI.kH[2] * lT2);

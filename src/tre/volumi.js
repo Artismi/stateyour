@@ -204,7 +204,7 @@ export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
 
 // ---------- la ragnatela: { cosmo, luce (W di tutta la nebbia), tinta, toroM } → { aggiorna(occhioCom, D), disegna(S, …), stato }
 export function creaVolumeRete(N, { cosmo, luce, tinta = [1, 0.9, 0.8], toroM, opzioni = {} } = {}) {
-  const gl = N.gl, O = { celle: 96, griglia: 128, celleFine: 64, grigliaFine: 96, latoFine: 0.2, kmaxFine: 72, media: 0.05, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, fine: false, ms: 0, msFine: 0, errore: null, D: 1 };
+  const gl = N.gl, O = { celle: 96, griglia: 128, celleSubito: 32, celleFine: 64, grigliaFine: 96, latoFine: 0.2, kmaxFine: 72, media: 0.05, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, fine: false, ms: 0, msFine: 0, errore: null, D: 1 };
   let prg = null, grossa = null, fine = null, fineReg = null, filo = null, inCorso = 0, n = 0, chiesta = null, vuota = null; const u9 = new Float32Array(9), tab = new Float32Array(NT);
   const chiedi = (m) => { inCorso++; filo.postMessage({ tipo: 'ragnatela', n: ++n, cosmo, t: N.tempo.t, ...m }); };
   try { filo = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
@@ -220,7 +220,10 @@ export function creaVolumeRete(N, { cosmo, luce, tinta = [1, 0.9, 0.8], toroM, o
     aggiorna(S, occhio, a, D, cono, chiMax) {
       if (!filo || stato.errore) return 0; this._occhio = occhio; this._a = a; this._chiMax = chiMax; for (let k = 0; k < NT; k++) tab[k] = cono((k * chiMax) / (NT - 1));
       // la grana grossa si rifà quando la crescita è cambiata del 2% (il tempo corre); la fine quando ci si è spostati di un quinto del suo lato
-      if (!inCorso && !(Math.abs(D - Dchiesta) < 0.02 * D)) { Dchiesta = D; chiedi({ regione: null, celle: O.celle, griglia: O.griglia, kmax: 0, D }); chiesta = null; fineReg = null; }
+      // (la prima volta prima una grana grossa, O.celleSubito³ elementi: la ragnatela di tutto il toro c'è in pochi secondi invece che
+      // in un paio di minuti — la grana piena, O.celle³, costa ~100 s su un processore —, poi quella piena: la luce è la stessa)
+      if (!inCorso && !stato.pronto && Dchiesta !== Dchiesta && O.celleSubito > 0 && O.celleSubito < O.celle) { Dchiesta = -1; chiedi({ regione: null, celle: O.celleSubito, griglia: Math.round((O.griglia * O.celleSubito) / O.celle), kmax: 0, D }); }
+      else if (!inCorso && !(Math.abs(D - Dchiesta) < 0.02 * D)) { Dchiesta = D; chiedi({ regione: null, celle: O.celle, griglia: O.griglia, kmax: 0, D }); chiesta = null; fineReg = null; }
       else if (!inCorso && stato.pronto && O.celleFine > 0) { const lato = O.latoFine * toroM; let lontano = Infinity; if (chiesta) { lontano = 0; for (let k = 0; k < 3; k++) { let x = occhio[k] - chiesta[k]; x -= Math.round(x / toroM) * toroM; lontano = Math.max(lontano, Math.abs(x)); } }
         if (lontano > lato / 5) { chiesta = occhio.slice(); chiedi({ regione: { centro: occhio.slice(), lato }, celle: O.celleFine, griglia: O.grigliaFine, kmax: O.kmaxFine, D }); } }
       // la luce che l'occhio chiede: la nebbia in media vale `media` (irradianza media = luce/volume × strada)

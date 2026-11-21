@@ -128,13 +128,16 @@ function volumeRagnatela(d, manda) {
   // LA LUCE VIENE DALLE GALASSIE, non dalla massa: ogni elemento di materia porta la luce degli aloni che fanno galassie
   // attesi in lui, e quanti sono lo dice ragnatela.js `aloniAttesi` (Press–Schechter condizionata all'ambiente: in un
   // vuoto gli aloni grandi spariscono, in un nodo abbondano — cresce molto più in fretta della densità). Gli aloni che
-  // contano sono quelli tra il più piccolo e il più grande alone delle galassie della biblioteca (galassie.js), e la
-  // luce va con la loro massa (luce su massa d'alone: una costante del campione, che qui si semplifica: conta il
-  // rapporto con la media). La legge dipende dall'ambiente solo attraverso la sovradensità lineare: la si calcola in 64
+  // contano sono quelli più grandi del più piccolo alone delle galassie della biblioteca (galassie.js), e la luce va con la
+  // loro massa (luce su massa d'alone: una costante del campione, che qui si semplifica: conta il rapporto con la media).
+  // Anche gli aloni più grandi del più grande della biblioteca, i gruppi e gli ammassi (fino a 10¹⁶ M☉, dove finisce la
+  // tabella di σ(M)): la loro luce è quella delle loro galassie, e va con la massa come quella di tutti gli altri [D]. (Prima
+  // la somma si fermava al più grande alone della biblioteca, 1,2·10¹³ M☉: dove la materia è crollata in ammassi la luce
+  // per unità di massa calava, e i nodi venivano più bui dei vuoti — a 96 celle 1,04·10¹⁰ contro 1,13·10¹⁰.) La legge dipende dall'ambiente solo attraverso la sovradensità lineare: la si calcola in 64
   // elementi sparsi e per gli altri si interpola su quella (dichiarato: `aloniAttesi` media su una sfera grande quanto
   // la cella, la griglia dà il valore nel nodo; con onde più lunghe di due celle la differenza è piccola).
   let peso = null;
-  try { const forme = cosmoDi(d.cosmo).galassie.map((x) => galassiaAlTempo(x.forma, ANNI_OGGI / 1e9 + (d.t || 0) / (1e9 * 3.15576e7))).filter((x) => x.esiste && x.massaAlone > 0), m0 = Math.min(...forme.map((x) => x.massaAlone)), m1 = Math.max(...forme.map((x) => x.massaAlone));
+  try { const forme = cosmoDi(d.cosmo).galassie.map((x) => galassiaAlTempo(x.forma, ANNI_OGGI / 1e9 + (d.t || 0) / (1e9 * 3.15576e7))).filter((x) => x.esiste && x.massaAlone > 0), m0 = Math.min(...forme.map((x) => x.massaAlone)), m1 = 1e16;
     const NB = 10, fasce = Array.from({ length: NB }, (_, b) => [m0 * (m1 / m0) ** (b / NB), m0 * (m1 / m0) ** ((b + 1) / NB)]), tab = [], passo = Math.max(1, Math.floor((n * n2) / 64));
     for (let a = Math.floor(passo / 2); a < n * n2; a += passo) { const i = a % n, j = Math.floor(a / n) % n, k = Math.floor(a / n2), r = aloniAttesi(campo, [(G.origine[0] + i * h) * TM, (G.origine[1] + j * h) * TM, (G.origine[2] + k * h) * TM], 0.62 * G.latoCellaM, { fasce, t: d.t || 0 });
       tab.push([G.delta[a], r.fasce.reduce((somma, f) => somma + f.perMpc3DiMateria * Math.sqrt(f.da * f.a), 0)]); }

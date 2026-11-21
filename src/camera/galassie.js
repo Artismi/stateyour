@@ -181,8 +181,23 @@
 //     scendono da 3,8 a 2,6 Z☉), ma il resto, nell'anello centrale, continua a fare stelle per 1–2 Ga e a riprendersi il gas
 //     che loro restituiscono: nel primo anello di 40 galassie del cosmo 1 la mediana è 4,2 Z☉ (prima 4,5; le più ricche vere:
 //     2–3). Le rese non c'entrano (0,77 Z☉ di metalli nuovi per M☉ nata, più bassa delle tabelle di Kroupa perché sopra 23 M☉
-//     il nucleo ricade in un buco nero). Mancano i flussi radiali del gas verso il centro (Lin & Pringle 1987) e la
-//     stabilità che lo sferoide dà al disco di gas al centro (Martig et al. 2009), che diluirebbero o fermerebbero quel resto;
+//     il nucleo ricade in un buco nero). TRE LEGGI PROVATE E TOLTE (21/11/2026; misure sul primo anello di 40 galassie del cosmo 1,
+//     mediana 4,23 Z☉): ognuna, scritta senza numeri scelti, rompe un riscontro che oggi torna, e nessuna porta il centro sotto 3,6.
+//     (a) i flussi viscosi di Lin & Pringle (1987, ApJ 320, L87; ν = r²/t★): nel cosmo la mediana scende a 3,6–3,8, ma la Via
+//     Lattea di prova va da 2,6 a 3,6 Z☉ al centro, da 1,0 a 0,4 a 8 kpc e la scala del disco da 2,4 a 1,3 kpc: il
+//     flusso porta verso il centro gas già arricchito e fa più ripido il gradiente, come in Lacey & Fall 1985 e Bilitewski &
+//     Schönrich 2012, e con t_ν = t★ corre a 2r/t★ (5 km/s a 8 kpc, sopra quel che si misura); (b) il calore delle Ia dello
+//     sferoide nel gas caldo (Ciotti et al. 1991; Ciotti & Ostriker 2007), con la legge del buco nero di Croton, L/(½V²): spegne
+//     il raffreddamento (le ellittiche del cosmo 1 passano da 35 a 39 su 59, oltre il 65% della prova) e la Z del centro non si
+//     muove (−0,01); (c) la marea della galassia di Martig et al. 2009 (ApJ 707, 250, eq. 5 [V]: una nube si stacca solo dove la
+//     densità del disco supera −(3Ωr/2πG)·dΩ/dr), con lo strato di gas isotermo di Spitzer: presa intera spegne a metà le nascite
+//     vicino al Sole (la densità media lì è appena sopra la marea), presa solo per la marea in più dello sferoide scende a 4,10,
+//     ma lascia anelli con 200 M☉/pc² di gas e nessuna nascita, mentre le ellittiche vere fanno stelle con un'efficienza 2–5 volte
+//     più bassa, non zero (Davis et al. 2014 [R]): il criterio sulla densità media è troppo netto per il gas a grumi. E il resto
+//     del centro non lo ferma: le stelle che il gas fa nel passo dopo lo scoppio sono un disco nucleare denso che lo tiene sopra
+//     la marea. Quello che manca
+//     davvero è, con ogni probabilità, l'uscita dei metalli delle supernove dal centro prima che si mescolino (Mac Low & Ferrara
+//     1999 [R]) o un buco nero che mangia e soffia via il gas restituito anche fuori dalle fusioni (Ciotti & Ostriker 2007 [R]);
 //   · le ellittiche fanno ancora troppe stelle: per massa, un quinto delle spirali (0,007 contro 0,034 per Ga; vere:
 //     meno di un decimo), tutte nell'anello centrale, dal gas restituito dalle stelle nate lì dopo l'ultima fusione;
 //   · la legge di Kennicutt torna sull'intervallo intero (pendenza 1,41 da 3 a 10⁵ M☉/pc²), ma tra i soli scoppi è più
@@ -936,7 +951,7 @@ export const faseBraccioAlTempo = (forma, r, t = 0) => { const c = cinematica(fo
 export function motoStella(forma, S, caso) {
   const U1 = forma.unitaKpc, x0 = S.pos[0] * U1, y0 = S.pos[1] * U1, m = forma.modello;
   if (S.componente === 'sferoide') {
-    const q = forma.schiacciata || 1, R = Math.hypot(x0, y0 / q), u = 2 * caso('inclinazione') - 1, z = (R * u) / Math.sqrt(Math.max(1e-9, 1 - u * u)), p = [x0, y0, z], r3 = Math.hypot(x0, y0, z) || 1e-6;
+    const q = forma.schiacciata || 1, R = Math.hypot(x0, y0), u = 2 * caso('inclinazione') - 1, z = (q * R * u) / Math.sqrt(Math.max(1e-9, 1 - u * u)), p = [x0, y0, z], r3 = Math.hypot(x0, y0, z) || 1e-6; // (z = q·r·cosθ: l'ellissoide di nelloSferoide)
     const sig = velocita(m, Math.max(r3, 1e-3)) / Math.SQRT2, v = [sig * caso.normale('moto/x'), sig * caso.normale('moto/y'), sig * caso.normale('moto/z')];
     // il moto: un cerchio nel piano di posizione e velocità, con la parte della velocità che non punta al centro
     const vr = (v[0] * p[0] + v[1] * p[1] + v[2] * p[2]) / r3, vt = [v[0] - (vr * p[0]) / r3, v[1] - (vr * p[1]) / r3, v[2] - (vr * p[2]) / r3], vtn = Math.hypot(...vt) || 1e-9, w = (vtn / r3) * KMS;
@@ -1020,7 +1035,10 @@ export function stelleGalassia(forma, caso = sorgente('galassia'), { quante = 25
     return [r * Math.cos(fi), r * Math.sin(fi)];
   };
   const uMax = (U1 / (U1 + forma.scalaSferoide)) ** 2; // lo sferoide (Hernquist) è tagliato al bordo della mappa
-  const nelloSferoide = (u, w, q) => { const s = Math.sqrt(u * uMax), r = (forma.scalaSferoide * s) / (1 - s), R = r * Math.sqrt(1 - (2 * q - 1) ** 2), fi = 2 * Math.PI * w; return [R * Math.cos(fi), R * Math.sin(fi) * forma.schiacciata]; };
+  // (la stessa forma di densitaGalassia e di tre/universo.js: un ellissoide omotetico schiacciato lungo la normale, m² = R² + (z/q)²,
+  // cioè un punto della sfera di Hernquist con z moltiplicata per q. Visto dall'alto è tondo; z la ricostruisce motoStella con lo
+  // stesso numero, «inclinazione». Prima qui si schiacciava y, sul piano della mappa, e motoStella rifaceva z da una sfera)
+  const nelloSferoide = (u, w, q) => { const s = Math.sqrt(u * uMax), r = (forma.scalaSferoide * s) / (1 - s), R = r * Math.sqrt(1 - (2 * q - 1) ** 2), fi = 2 * Math.PI * w; return [R * Math.cos(fi), R * Math.sin(fi)]; };
   // da quale generazione viene una Ia di oggi: in proporzione alla massa nata e al ritmo delle Ia a quel ritardo
   let pesiIa = null;
   const cellaIa = (u) => {

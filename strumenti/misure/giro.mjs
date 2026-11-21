@@ -7,7 +7,7 @@
 // uso:  npm run giro            (tre indirizzi, un quarto di decade, attese lunghe)
 //       npm run giro:rapido     (solo l'avvio, mezza decade, attese brevi, schermo di 480×300)
 //       node strumenti/misure/giro.mjs [--rapido] [--uscita cartella] [--indirizzi avvio,terre] [--passo 0.25]
-//                                      [--attesa ms] [--W 800 --H 500]
+//                                      [--attesa ms] [--W 800 --H 500] [--fino 20]
 //
 // LA STRADA. Si apre l'app (l'indirizzo d'avvio), si esce con la rotella al centro fino in cima (dove la larghezza non
 // cresce più: la «salita», senza foto). Poi per ogni indirizzo: ci si gira verso la sua galassia, e si scende (l'«andata»)
@@ -39,6 +39,7 @@ const TUTTI = JSON.parse(readFileSync(join(QUI, 'indirizzi.json'), 'utf8')).indi
 const QUALI = arg('indirizzi', RAPIDO ? 'avvio' : TUTTI.map((a) => a.nome).join(',')).split(',');
 const INDIRIZZI = QUALI.map((n) => TUTTI.find((a) => a.nome === n)).filter(Boolean);
 const TETTO_TRATTO = (RAPIDO ? 25 : 80) * 60e3; // ms per un tratto, al più
+const FINO = arg('fino', null) == null ? null : +arg('fino'); // (--fino 20: l'andata si ferma quando la larghezza scende a 10²⁰ m, poi il ritorno: per misurare solo le scale in cima)
 mkdirSync(FOTO, { recursive: true });
 const ora = () => new Date().toISOString().slice(11, 19), log = (...a) => console.log(ora(), ...a), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -160,6 +161,7 @@ async function tratto(ind, verso, cursori) {
     }
     if (!(w > 0) || Math.abs(Math.log10(w / w0)) < 0.02) { if (++fermi >= 3) { log(`${ind.nome} ${nome}: la larghezza non cambia più (${w?.toExponential(2)} m): fine del tratto`); break; } meta = Math.log10(w || w0); continue; }
     fermi = 0; meta = Math.log10(w); await salva(fe);
+    if (verso < 0 && FINO != null && meta <= FINO) { log(`${ind.nome} ${nome}: arrivati a 10^${FINO} m (--fino): fine del tratto`); break; }
   }
 }
 

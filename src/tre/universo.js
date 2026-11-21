@@ -5,7 +5,7 @@
 //   il cosmo (la radice: un toro che si richiude) → una galassia (dove sta e come è girata) → un sistema → la stella,
 //   i pianeti → le lune. La camera è una sola: entrando nell'influenza di una cosa si attacca a lei senza muoversi
 //   (nucleo.js: `influenza`, `riattacca`), e ciò che serve a quel livello si prepara quando ci si avvicina.
-// · IL COSMO: le galassie del campione sono punti con la loro luce e la loro tinta (luci.js); la rete di filamenti è
+// · IL COSMO: le galassie del campione sopra il pixel sono dischetti con la loro luce e la loro tinta (luci.js); la rete di filamenti è
 //   la densità della materia (il volume di volumi.js, che volume.worker.js fa dal campo del cosmo) resa come una nebbia,
 //   più chiara dove c'è più materia; col tempo tutto si allontana (il fattore di scala) e la rete cresce.
 // · LA GALASSIA: le stelle del campione sono punti con luminosità e colore veri (ognuna ne rappresenta milioni: la
@@ -27,6 +27,7 @@ import { sorgente } from '../camera/eventi.js';
 import { ramiCosmo, cosmoBase, cosmo as cosmoDi, galassia as galassiaDi } from '../camera/cosmo.js';
 import { bollaDi, viaDi, conoBolla, luogoDi, nomeFonte } from './bolla.js';
 import { creaSplatRete, creaSplatNebulose } from './splat.js'; // (N.vista.splat: accanto ai volumi, per confrontare)
+import { pesoDiscreto } from '../camera/eredita.js';
 
 // (i colori dei batuffoli, il ripiego finché il volume non c'è: gli stessi corpi neri delle stelle vecchie e giovani di
 // volume.worker.js, e la polvere che arrossa con la curva di Cardelli, Clayton & Mathis come in volumi.js — prima tre
@@ -34,6 +35,15 @@ import { creaSplatRete, creaSplatNebulose } from './splat.js'; // (N.vista.splat
 const VECCHIE = coloreCorpoNero(4300), GIOVANI_C = coloreCorpoNero(9500), ARROSSA = [0.79, 1, 1.31];
 const ANNO = 3.156e7, LUCE = 1e20; // (le luminosità passano alla scheda in unità di 10²⁰ W: una galassia vale 10¹⁷)
 const lineare = (c) => (c / 255) ** 2.2;
+// LA GALASSIA TRA IL COSMO E SÉ STESSA, per grandezza a schermo (eredita.js pesoDiscreto: la stessa rampa di separa). s è il diametro
+// apparente in pixel (2R·fuoco/d, con R il raggio con cui il cosmo la conta). Sotto il pixel la galassia è nella nebbia; da un
+// pixel è il dischetto del cosmo, che di lei sa solo la luce e la grandezza; da s₁ = 4 pixel (quanto basta perché il nucleo e il
+// disco siano due cose distinte sullo schermo [D]) si apre (creaUniverso, `governo`) e in un'ottava di grandezza, fino a 2·s₁, la
+// sua luce passa dal dischetto agli strati della galassia (stelle, luce diffusa, volume): la somma è sempre la luce della
+// galassia. Tornando indietro, lo stesso al contrario: la galassia aperta lontano non si disegna più, la porta il cosmo.
+// (Prima si apriva a 14 raggi, già larga 60 pixel, e il punto del cosmo spariva in un fotogramma.)
+const S_APERTURA = 4, distanzaApertura = (R, fuoco) => (2 * R * fuoco) / S_APERTURA;
+const pesoGalassia = (R, d, fuoco) => (d > 0 ? pesoDiscreto((2 * R * fuoco) / d / (Math.SQRT2 * S_APERTURA), 1) : 1);
 const tiri = (nome) => { let s = sorgente('mondo3d').seme(nome); return () => (s = (s * 16807) % 2147483647) / 2147483647; };
 
 // ---------- una galassia
@@ -113,6 +123,7 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         if (conPolvere) { volume.trasparenza(eG, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], giroV, _tr); luceV[4 * i] = luce[4 * i] * _tr[0]; luceV[4 * i + 1] = luce[4 * i + 1] * _tr[1]; luceV[4 * i + 2] = luce[4 * i + 2] * _tr[2]; luceV[4 * i + 3] = luce[4 * i + 3]; }
         if (luce[4 * i + 3] > 0 || i === spenta) { const f = sc.punti.luminosita[i] / (4 * Math.PI * d2); if (f > fMax && i !== spenta) fMax = f; if (d2 < dv) { dv = d2; vicina = i; } if (mete || i === spenta) S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: i === spenta ? 0 : 6e12, stella: i, galassia: via.galassia, nodo }); } }
       strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); strato.distanza = V.lungo(rel); if (mezzo) mezzo.aggiorna(S, strato.distanza);
+      strato.peso = pesoGalassia(strato.raggioCosmo || Rg, strato.distanza, S.fuoco); // (quanta della sua luce disegna lei: il resto il cosmo)
       if (N.vista.splat) { if (!splat) strato.splat = splat = creaSplatNebulose(N, { cosmo: via.cosmo, galassia: via.galassia, nodo, volume, frazione: O.diffusa, giro: () => (volume && volume.pronto() ? omega * (N.tempo.t - volume.stato.meta.t) : 0) }); splat.aggiorna(S, eG); }
       stelle.metti(pos, conPolvere ? luceV : luce, n);
       // la luce che l'occhio chiede tra le stelle: che la più brillante in cielo valga qualche unità al suo centro
@@ -135,16 +146,17 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
         if (strato.distanza < 60 * Rg) S.proponiLuce((Math.PI * E) / ((angolo > 6 ? 0.07 : 0.3) * angolo)); }
     },
     // (i buchi neri a cui dare il cielo: quello del centro, e quello del sistema aperto se è un buco nero)
-    chiarore: [0, 0, 0], buchi: new Set(bucoNero ? [bucoNero] : []),
+    chiarore: [0, 0, 0], buchi: new Set(bucoNero ? [bucoNero] : []), peso: 0,
     disegna(S, passata) {
-      if (passata === 'fondo' && volume && volume.pronto()) { volume.disegna(S, eG, N.quadro(nodo, S.t), omega * (S.t - volume.stato.meta.t), O.diffusa); return; }
+      const w = strato.peso; if (!(w > 0) && !(strato.chiarore[1] > 0)) return; // (lontana: la disegna il cosmo)
+      if (passata === 'fondo' && volume && volume.pronto()) { if (w > 0) volume.disegna(S, eG, N.quadro(nodo, S.t), omega * (S.t - volume.stato.meta.t), O.diffusa * w); return; }
       if (passata === 'fondo' && strato.chiarore[1] > 0) { // il chiarore di chi sta dentro la luce diffusa (W/m²/sr → rispetto al foglio bianco: π/E0)
         if (!prgChiaro) prgChiaro = N.programma(N.V_SCHERMO, 'uniform vec3 u_c; out vec4 o_col; void main() { o_col = vec4(u_c, 0.0); }'); const k = Math.PI / S.E0, gl = N.gl;
         gl.useProgram(prgChiaro.p); gl.uniform3f(prgChiaro.u.u_c, strato.chiarore[0] * k, strato.chiarore[1] * k, strato.chiarore[2] * k); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); S.schermo(); gl.disable(gl.BLEND); }
-      if (passata !== 'velato') return;
+      if (passata !== 'velato' || !(w > 0)) return;
       const q = N.quadro(nodo, S.t), g = V.mm(q, V.giro([0, 0, 1], omega * (S.t - tScena0))); // i batuffoli girano con i bracci
       if (N.vista.splat && splat) splat.disegna(S); // (prima delle stelle: la loro polvere la contano già, lungo la loro colonna)
-      const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1) * (sc.punti.normaLuce || 1), 0.004 * Rg, 0.25 * Rg]); // (da lontano le stelle portano puntiLuce della luce vera, la diffusa il resto: spazio3d.js normaLuce)
+      const peso = sc.punti.peso; if (!(volume && volume.pronto())) nube.disegna(S, rel, g, LUCE * O.diffusa * w, 1, 0, { lato: punti.massimo, quanti: strato.quanti, forza: nube.K / (strato.quanti || nube.K) }); stelle.disegna(S, LUCE * w, 1, [O.puntiLuce * (typeof peso === 'number' ? peso : peso?.[0] || 1) * (sc.punti.normaLuce || 1), 0.004 * Rg, 0.25 * Rg]); // (da lontano le stelle portano puntiLuce della luce vera, la diffusa il resto: spazio3d.js normaLuce)
       // ciò che sta tra le stelle (mezzo.js): le nubi oscure tolgono luce a ciò che è già disegnato, le nebulose aggiungono la loro
       if (mezzo) mezzo.disegna(S, rel, q);
     },
@@ -158,22 +170,33 @@ export function creaGalassia(N, punti, { via, genitore = null, posizione = null,
 }
 
 // ---------- il cosmo
-// Le galassie del campione sono punti; tutte le altre (ognuna del campione ne rappresenta `peso`, ~10⁵) sono la nebbia
-// che disegna rete.js lungo la ragnatela, con la luce vera che hanno. Da lontano un punto del campione porta, oltre
-// alla sua, la luce di una piccola parte di quelle che rappresenta (`puntiLuce`·peso: un centinaio; LIBERO, perché da
-// lontano si trovi: con la sola sua luce sparirebbe nella nebbia, che è ciò che è vero); da vicino torna una galassia sola.
+// DISCRETO SOPRA IL PIXEL, CONTINUO SOTTO (eredita.js `separa`). Le galassie del campione sono 59 in un toro di 1,2 Gpc;
+// tutte le altre (ognuna del campione ne rappresenta `peso`, ~1,7·10⁵) sono la nebbia della ragnatela (volumi.js, il volume
+// che volume.worker.js fa dal campo: la materia spostata alla Zel'dovich, con la luce degli aloni attesi in ogni elemento),
+// con la luce vera che hanno: 1,8·10⁸ L☉/Mpc³, la densità di luce misurata oggi (Driver et al. 2012 [R]); lungo 0,87 lati
+// (fin dove si cammina) fa 5,9 nW/m²/sr, la parte vicina del fondo di 24 nW/m²/sr (Driver et al. 2016 [V], in ragnatela.js).
+// Una galassia del campione più grande di un pixel è un dischetto grande quanto lei, con la sua luce; sotto il pixel la
+// sua luce va nella nebbia (separa: rampa di un'ottava sul pixel), e la nebbia ne toglie quanto i dischetti ne portano:
+// il totale è sempre la luce di tutte. (Prima un punto lontano portava cento volte la sua luce, `puntiLuce`·peso, libero,
+// perché si trovasse.) La galassia aperta passa dal suo dischetto ai suoi strati per grandezza a schermo (pesoGalassia).
+// CHE COSA MANCA: sotto le celle della nebbia fine (0,2 lati in 64 celle: 1,2·10²³ m) la nebbia è liscia. Gli aloni uno per uno
+// del campo ci sono (ragnatela.js aloniIn: attorno alla galassia 33, in 6 Mpc, due sopra 10¹¹ M☉), ma costano ~55 s per regione
+// su un processore: per ora restano nella nebbia, con la loro luce.
 // IL CONO DI LUCE (N.vista.cono): ogni galassia si vede com'era quando è partita la luce che arriva adesso — più
 // giovane (galassie.js `galassiaAlTempo`: meno stelle, un'altra tinta, o non ancora nata), e più debole di (1 + z)²;
 // la nebbia allo stesso modo (rete.js). Con N.vista.cono = false tutto è disegnato allo stesso istante.
 export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   // (senza la griglia 64³ della densità di scenaCosmo: tre secondi di trasformate sul filo dell'interfaccia all'avvio, e qui
   // non la legge nessuno — la nebbia è il volume di volumi.js, che si fa la sua in volume.worker.js)
-  const O = { rete: 1, puntiLuce: 6e-4, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t, { griglia: false }), tScena = N.tempo.t;
-  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: luogoDi({ cosmo }), raggio: 0 }), gal = punti.insieme(n), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
-  let lato = sc.riferimento.periodico[0]; radice.periodo = lato; const nascosta = new Set(), forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
+  const O = { rete: 1, ...opzioni }; let sc = scenaCosmo(cosmo, N.tempo.t, { griglia: false }), tScena = N.tempo.t;
+  const n = sc.punti.n, radice = N.corpo({ nome: `cosmo ${cosmo}`, luogo: luogoDi({ cosmo }), raggio: 0 }), pos = new Float32Array(3 * n), luce = new Float32Array(4 * n);
+  // (i dischetti: x, y, z rispetto all'occhio, diametro, luce r, g, b, 1 — la luce di un batuffolo di luci.js sta per un terzo nel suo
+  // disco (∫(1 − q²)²dA = πR²/3): per portarne tutta la si mette tre volte)
+  const dischi = new Float32Array(8 * n), gal = punti.nube(dischi, n), UN_DISCO = 3;
+  let lato = sc.riferimento.periodico[0]; radice.periodo = lato; const forme = cosmoDi(cosmo).galassie.map((g) => g.forma), peso = typeof sc.punti.peso === 'number' ? sc.punti.peso : 1;
   // la luce di ogni galassia come la si vede: [watt, r, g, b (0…255), c'è]; col cono, quella di quando la luce è partita
   const vista = new Float64Array(5 * n), stato = { cono: null, occhio: [NaN, 0, 0], t: NaN, msCono: 0, zMassimo: 0 };
-  function luci() { for (let i = 0; i < n; i++) { const L = vista[5 * i + 4] && !nascosta.has(i) ? vista[5 * i] / LUCE : 0; luce[4 * i] = L * lineare(vista[5 * i + 1]); luce[4 * i + 1] = L * lineare(vista[5 * i + 2]); luce[4 * i + 2] = L * lineare(vista[5 * i + 3]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
+  function luci() { for (let i = 0; i < n; i++) { const L = vista[5 * i + 4] ? vista[5 * i] / LUCE : 0; luce[4 * i] = L * lineare(vista[5 * i + 1]); luce[4 * i + 1] = L * lineare(vista[5 * i + 2]); luce[4 * i + 2] = L * lineare(vista[5 * i + 3]); luce[4 * i + 3] = L > 0 ? 1 : 0; } }
   function guarda(occhio, t) {
     const P = sc.punti, a = sc.riferimento.fattoreDiScala, t0 = performance.now(), tGa = sc.eta / 1e9; let zM = 0;
     for (let i = 0; i < n; i++) { vista[5 * i] = P.luminosita[i]; vista[5 * i + 1] = P.colore[3 * i]; vista[5 * i + 2] = P.colore[3 * i + 1]; vista[5 * i + 3] = P.colore[3 * i + 2]; vista[5 * i + 4] = P.esiste[i];
@@ -187,7 +210,7 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
   // la nebbia: la luce di tutte le galassie che il campione rappresenta, e la sua tinta (la media di quelle del campione)
   let reteDati = null, reteSplat = null; // (reteSplat: la ragnatela come splat, splat.js, con la stessa luce del volume)
   const rete = (() => { if (!O.rete) return null; let L = 0; const tinta = [0, 0, 0], P = sc.punti; for (let i = 0; i < n; i++) { if (!P.esiste[i]) continue; L += P.luminosita[i]; for (let k = 0; k < 3; k++) tinta[k] += P.luminosita[i] * lineare(P.colore[3 * i + k]); }
-    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; reteDati = { cosmo, luce: L * peso * (1 - O.puntiLuce), tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala }; try { return creaVolumeRete(N, { ...reteDati, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
+    const m = Math.max(tinta[0], tinta[1], tinta[2]) || 1; reteDati = { cosmo, luce: L * peso, tinta: tinta.map((x) => x / m), toroM: lato / sc.riferimento.fattoreDiScala }; try { return creaVolumeRete(N, { ...reteDati, opzioni: opzioni.ragnatela }); } catch (e) { console.warn('la ragnatela del cosmo non si è potuta fare:', e); return null; } })();
   // LUNGO IL CONO: a distanza comovente χ, quando è partita la luce (s da oggi), lo spostamento z, la crescita D di
   // allora. Dipende solo dall'istante: una tabella di 33 punti fino a metà diagonale del toro, rifatta quando la scena
   // si rifà (relativita.js `conoPassato` costa un integrale per punto; tra i punti si interpola).
@@ -209,29 +232,37 @@ export function creaCosmo(N, punti, { cosmo, opzioni = {} } = {}) {
       const cam = N.camera; if (cam.corpo === radice) for (let k = 0; k < 3; k++) { if (cam.pos[k] < 0) cam.pos[k] += lato; else if (cam.pos[k] >= lato) cam.pos[k] -= lato; }
       // come si vedono le galassie da qui: si rifà quando ci si è spostati di un centesimo del lato, o è cambiato l'istante o il modo
       if (stato.cono !== N.vista.cono || stato.t !== tScena || Math.hypot(occhio[0] - stato.occhio[0], occhio[1] - stato.occhio[1], occhio[2] - stato.occhio[2]) > 0.01 * lato) guarda(occhio, tScena);
-      const P = sc.punti.pos; let fMax = 0, vicina = -1, dv = Infinity;
+      const P = sc.punti.pos; let fMax = 0, vicina = -1, dv = Infinity, discreta = 0; const ap = strato.aperta ? strato.aperta() : null;
       for (let i = 0; i < n; i++) { let d2 = 0; for (let k = 0; k < 3; k++) { let x = P[3 * i + k] - occhio[k]; x -= Math.round(x / lato) * lato; pos[3 * i + k] = x; d2 += x * x; } // l'immagine più vicina
+        // il dischetto: grande quanto la galassia; il suo peso sopra il pixel (separa), e per la galassia aperta la parte che non
+        // disegna lei (pesoGalassia); ciò che il dischetto non porta resta nella nebbia
+        const R = sc.punti.raggio[i], w1 = pesoDiscreto((2 * R * S.fuoco) / Math.sqrt(d2 || 1), 1), pg = ap && ap.i === i ? ap.peso || 0 : 0, w = w1 * (1 - pg), o = 8 * i;
+        dischi[o] = pos[3 * i]; dischi[o + 1] = pos[3 * i + 1]; dischi[o + 2] = pos[3 * i + 2]; dischi[o + 3] = 2 * R; for (let c = 0; c < 3; c++) dischi[o + 4 + c] = UN_DISCO * w * luce[4 * i + c]; dischi[o + 7] = 1;
+        if (luce[4 * i + 3] > 0) discreta += (w + pg) * vista[5 * i]; // (il dischetto, e la parte che disegna la galassia aperta)
         if (!sc.punti.esiste[i]) continue; if (d2 < dv) { dv = d2; vicina = i; } if (luce[4 * i + 3] > 0) { const f = vista[5 * i] / (4 * Math.PI * d2); if (f > fMax) fMax = f; }
         S.bersaglio({ p: [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]], raggio: sc.punti.raggio[i], galassia: i, nodo: radice }); }
-      strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.metti(pos, luce, n);
+      strato.vicina = vicina; strato.distanzaVicina = Math.sqrt(dv); gal.aggiorna(dischi);
+      strato.forzaRete = reteDati ? Math.max(0, 1 - discreta / reteDati.luce) : 1; // (la nebbia senza la luce che portano i dischetti e la galassia aperta)
       S.proponiLuce((fMax * Math.PI * S.fuoco * S.fuoco) / 20 / 10);
+      // (la nebbia si legge nel toro: l'occhio ci si riporta qui, in doppia precisione — appeso a una galassia o a una stella la sua
+      // posizione nel cosmo può valere 10³⁰ m, e nella scheda, a 32 bit, la nebbia diventava un grigio uniforme)
+      const oT = occhio.map((x) => x - Math.floor(x / lato) * lato);
       if (rete) { const a = sc.riferimento.fattoreDiScala; lungoIlCono(0, tScena);
-        const E = rete.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); strato.reteE = E; if (E > 0) S.proponiLuce(E);
-        if (N.vista.splat) { if (!reteSplat) strato.reteSplat = reteSplat = creaSplatRete(N, { ...reteDati, corpo: radice, opzioni: opzioni.splat }); reteSplat.aggiorna(S, [occhio[0] / a, occhio[1] / a, occhio[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); } }
+        const E = rete.aggiorna(S, [oT[0] / a, oT[1] / a, oT[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); strato.reteE = E; if (E > 0) S.proponiLuce(E);
+        if (N.vista.splat) { if (!reteSplat) strato.reteSplat = reteSplat = creaSplatRete(N, { ...reteDati, corpo: radice, opzioni: opzioni.splat }); reteSplat.aggiorna(S, [oT[0] / a, oT[1] / a, oT[2] / a], a, sc.campi.densita.crescita, (chi) => { const c = lungoIlCono(chi, tScena); return c.visibile ? 1 / (1 + c.z) ** 2 : 0; }, chiMax); } }
     },
     disegna(S, passata) {
       // (con l'occhio chiuso quattrocento volte più di quanto la nebbia chiede — dentro una galassia, vicino a una stella —
       // la nebbia varrebbe un decimillesimo: non la si cammina nemmeno. Si confronta con la luce di tutto il campo, S.Ecampo,
       // se è minore dell'esposizione del centro: con una galassia al centro la nebbia attorno conta ancora, e l'amplificatore
       // di luce la mostra — prima spariva qui e ricompariva di colpo appena la galassia rimpiccioliva)
-      if (passata === 'fondo' && rete && !(Math.min(S.E0, S.Ecampo > 0 ? S.Ecampo : Infinity) > 400 * (strato.reteE || 0))) { if (N.vista.splat && reteSplat && reteSplat.pronto()) reteSplat.disegna(S); else rete.disegna(S, O.rete); }
+      if (passata === 'fondo' && rete && !(Math.min(S.E0, S.Ecampo > 0 ? S.Ecampo : Infinity) > 400 * (strato.reteE || 0))) { if (N.vista.splat && reteSplat && reteSplat.pronto()) reteSplat.disegna(S); else rete.disegna(S, O.rete * (strato.forzaRete ?? 1)); }
       if (passata !== 'velato') return;
-      // (da lontano — oltre un ventesimo del lato — ogni punto porta anche una piccola parte della luce di quelle che rappresenta)
-      gal.disegna(S, LUCE, 1.5, [1 + O.puntiLuce * peso, 0.002 * lato, 0.05 * lato]);
+      gal.disegna(S, [0, 0, 0], null, LUCE, 1, 0, { lato: punti.massimo }); // (già rispetto all'occhio, nell'immagine più vicina: in doppia precisione qui, non nella scheda)
     },
     // dove sta la galassia i (l'immagine più vicina all'occhio), nel riferimento del cosmo
     posGalassia: (i, o = [0, 0, 0]) => { const P = sc.punti.pos; for (let k = 0; k < 3; k++) { const x = P[3 * i + k] - occhio[k]; o[k] = P[3 * i + k] - Math.round(x / lato) * lato; } return o; },
-    nascondi(i, si) { if (si) nascosta.add(i); else nascosta.delete(i); luci(); }, scena: () => sc, lato: () => lato,
+    scena: () => sc, lato: () => lato, aperta: null, forzaRete: 1,
     libera() { N.togli(strato); gal.libera(); if (rete) rete.libera(); if (reteSplat) reteSplat.libera(); },
   };
   guarda([0, 0, 0], tScena); stato.t = NaN;
@@ -249,8 +280,9 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
   N.opzioni.attaccoDaSe = true;
   const punti = creaPunti(N), cosmo = creaCosmo(N, punti, { cosmo: via.cosmo, opzioni: opzioni.cosmo });
   let G = null, Sis = null;
-  function apriGalassia(i) { if (G && G.via.galassia === i) return G; chiudiSistema(); if (G) { cosmo.nascondi(G.via.galassia, false); G.libera(); } const v = { cosmo: via.cosmo, galassia: i };
-    G = creaGalassia(N, punti, { via: v, genitore: cosmo.radice, posizione: (t, o) => cosmo.posGalassia(i, o), opzioni: opzioni.galassia }); G.via = v; G.raggioCosmo = cosmo.scena().punti.raggio[i]; cosmo.nascondi(i, true); return G; }
+  function apriGalassia(i) { if (G && G.via.galassia === i) return G; chiudiSistema(); if (G) G.libera(); const v = { cosmo: via.cosmo, galassia: i };
+    G = creaGalassia(N, punti, { via: v, genitore: cosmo.radice, posizione: (t, o) => cosmo.posGalassia(i, o), opzioni: opzioni.galassia }); G.via = v; G.raggioCosmo = cosmo.scena().punti.raggio[i]; return G; }
+  cosmo.aperta = () => (G ? { i: G.via.galassia, peso: G.peso } : null); // (la galassia aperta e quanta della sua luce disegna lei: il resto il suo dischetto)
   function chiudiSistema() { if (!Sis) return; if (G) G.spegni(-1); const cam = N.camera; let c = cam.corpo, dentro = false; while (c) { if (c === Sis.nodo) dentro = true; c = c.genitore; } if (dentro) N.riattacca(G ? G.nodo : cosmo.radice); if (G && Sis.buco) G.buchi.delete(Sis.buco); Sis.libera(); Sis = null; }
   function apriSistema(i) { if (Sis && Sis.via.stella === i) return Sis; chiudiSistema(); const v = { cosmo: via.cosmo, galassia: G.via.galassia, stella: i }, sc = G.scena();
     if (!sc.punti.esiste[i]) return null; const A = scenaAssi(v);
@@ -266,7 +298,8 @@ export function creaUniverso(N, { via = null, livello = 'pianeta', bolla: bollaI
     if (fermoGoverno > 0) { fermoGoverno--; return; }
     // (la galassia aperta resta quella finché l'occhio non è uscito dalla sua zona, 14 raggi: uscendo da lei verso il cosmo e
     // tornando indietro non si rientra in un'altra solo perché il suo centro è passato più vicino)
-    if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina], tiene = G && G.via.galassia !== cosmo.vicina && G.distanza < 14 * G.raggio; if (cosmo.distanzaVicina < 14 * r && !tiene && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
+    // (si apre quando la galassia è grande a schermo s₁ = 4 pixel: distanzaApertura, vedi pesoGalassia in cima)
+    if (cosmo.vicina >= 0) { const r = cosmo.scena().punti.raggio[cosmo.vicina], tiene = G && G.via.galassia !== cosmo.vicina && G.distanza < Math.max(14 * G.raggio, distanzaApertura(G.raggioCosmo || G.raggio, S.fuoco)); if (cosmo.distanzaVicina < distanzaApertura(r, S.fuoco) && !tiene && (!G || G.via.galassia !== cosmo.vicina)) apriGalassia(cosmo.vicina); }
     cosmo.dentro = !!G && G.distanza < 2.5 * G.raggio;
     if (G && assiSistema) { if (G.vicina >= 0 && G.distanzaVicina < 4e15 && (!Sis || Sis.via.stella !== G.vicina)) apriSistema(G.vicina); else if (Sis && G.distanzaVicina > 1.2e16) chiudiSistema(); }
   } };

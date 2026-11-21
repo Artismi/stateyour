@@ -36,7 +36,7 @@ import { COSTANTI, MSOLE, LSOLE, ANNO, massaNascita } from './leggi.js';
 import * as ST from './stelle.js';
 import { LEGGI, ANELLI, popolazione, cinematica, faseBraccioAlTempo, dentro as GAL } from './galassie.js';
 import { sorgente, logEsatto } from './eventi.js';
-import { MEZZO, LARSON, KPC, PC, GA_S, quadro, contenuto, nubeDi, restoSupernova, fotoniSopra, parteDiLuce, coloreVero, dentroMezzo } from './vuoto_mezzo.js';
+import { MEZZO, LARSON, KPC, PC, GA_S, quadro, contenuto, nubeDi, restoSupernova, fotoniSopra, parteDiLuce, coloreVero, dentroMezzo, neiGrani } from './vuoto_mezzo.js';
 
 const K = COSTANTI, PI = Math.PI, PI4 = 4 * PI, PI2 = 2 * PI, Z = MEZZO, H_PLANCK = PI2 * K.hbar;
 const stringi = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -172,7 +172,7 @@ const ABB_O = 10 ** (ST.DATI.metalli[2][2] - 12);
 //      Più metalli → più righe → gas più FREDDO → la riga verde, che vuole 29000 K di salto, si spegne: per questo le
 //      regioni H II ricche di metalli sono rosse di Hα, e [O III] è forte attorno alle stelle calde con pochi metalli.
 // Abbondanze: O, N, Ne, S di stelle.js (DATI.metalli) per i metalli dell'anello; dell'ossigeno la parte fuori dai grani
-// (LEGGI.polvere, come nel mezzo); azoto, neon e zolfo non stanno nei grani. SEMPLIFICAZIONI: righe nel limite di bassa
+// (neiGrani(Z), la legge di Rémy-Ruyer come nel mezzo); azoto, neon e zolfo non stanno nei grani. SEMPLIFICAZIONI: righe nel limite di bassa
 // densità (le infrarosse si spengono sopra ~10³ atomi/cm³: nelle regioni compatte il gas vero è un po' più caldo); lo zolfo
 // è tutto S⁺⁺ dove c'è O⁺ e tutto S³⁺ dove c'è O⁺⁺, il carbonio C⁺⁺ dove c'è O⁺⁺ e C³⁺ dove c'è O³⁺; mancano Ar e l'elio
 // (gas un po' più caldo del vero), e le righe di N, Ne, S dove c'è O³⁺; stelle come corpi neri.
@@ -201,7 +201,7 @@ export function temperaturaNebulosa(Tstella, Zr, y, sottile = false, { y3 = 0, n
   const kT = K.kB * Tstella, x0 = (Z.ionizzazioni.H * K.e) / kT; let medio;
   if (sottile) { let s = 0; for (let n = 1; n < 40; n++) { const e = dentroMezzo.expint1(n * x0); s += e; if (e < 1e-12) break; } medio = (kT * -Math.log(-Math.expm1(-x0))) / s; } // ∫dx/(eˣ−1) / ∫dx/(x(eˣ−1))
   else medio = (kT * dentroMezzo.planck3(x0)) / dentroMezzo.planck2(x0);
-  const gas = 1 - LEGGI.polvere, avanza = Math.max(0, medio - Z.ionizzazioni.H * K.e) * 1e7, kErg = K.kB * 1e7, ab = { C: ABBONDANZA(0) * Zr * gas, O: ABBONDANZA(2) * Zr * gas, N: ABBONDANZA(1) * Zr, Ne: ABBONDANZA(3) * Zr, S: ABBONDANZA(6) * Zr };
+  const gas = 1 - neiGrani(Zr), avanza = Math.max(0, medio - Z.ionizzazioni.H * K.e) * 1e7, kErg = K.kB * 1e7, ab = { C: ABBONDANZA(0) * Zr * gas, O: ABBONDANZA(2) * Zr * gas, N: ABBONDANZA(1) * Zr, Ne: ABBONDANZA(3) * Zr, S: ABBONDANZA(6) * Zr };
   const righe = (zona, T) => { let s = 0; for (const el in zona) for (const [E, om, g] of zona[el]) s += (ab[el] * om * kErg * E * Math.exp(-E / T)) / g; return s; };
   const sbilancio = (T) => { const aB = Z.alfaB[0] * Math.pow(T / 1e4, Z.alfaB[1]); return aB * NEBULA.ricombinazione * kErg * T + NEBULA.frenamento * Math.sqrt(T) + (8.629e-6 / Math.sqrt(T)) * (y3 * righe(NEBULA.tre, T) + y * righe(NEBULA.due, T) + Math.max(0, 1 - y - y3) * righe(NEBULA.una, T))
     + (neutro * Z.lyAlfa[0] * Math.exp(-Z.lyAlfa[1] / T)) / (1 + Math.sqrt(T / 1e5)) - aB * avanza; };
@@ -215,7 +215,7 @@ function righeNebulosa({ st, Zr, n, raggio, limiteHalfa = Infinity }) {
   const neutro = Math.min(1, NEBULA.neutro / (n * ST.dentro.SIGMA_K * raggio)) * (sottile ? limiteHalfa / pieno : 1); // (la sezione d'urto dell'idrogeno alla soglia: quella di stelle.js; un guscio sottile è ancora più ionizzato)
   let Te = Z.ionizzato.T, y = 0, y3 = 0; for (let giro = 0; giro < 2; giro++) { const alto = parteIonizzata(Q0, st, NEBULA.Opiu, n, raggio, Te); y3 = Math.min(alto, parteIonizzata(Q0, st, NEBULA.Opp, n, raggio, Te)); y = alto - y3; Te = temperaturaNebulosa(st.T, Zr, y, sottile, { y3, neutro }); }
   const aB = Z.alfaB[0] * Math.pow(Te / 1e4, Z.alfaB[1]), o = Z.OIII5007, q = ((8.629e-6 * o.omega) / (o.g * Math.sqrt(Te))) * Math.exp(-o.E / Te);
-  return { righe: [riga('Halfa', Ha), riga('Hbeta', Ha / Z.balmer), riga('OIII', (ric / aB) * ABB_O * Zr * (1 - LEGGI.polvere) * y * q * o.ramo * HNU(Z.righe.OIII))], Te, y, y3, sottile, Q0 };
+  return { righe: [riga('Halfa', Ha), riga('Hbeta', Ha / Z.balmer), riga('OIII', (ric / aB) * ABB_O * Zr * (1 - neiGrani(Zr)) * y * q * o.ramo * HNU(Z.righe.OIII))], Te, y, y3, sottile, Q0 };
 }
 const emette = (righe, continuo = null) => { const c = coloreVero(righe, continuo); return { righe, continuo, colore: c.rgb, visibile: righe.reduce((s, r) => s + r.W, 0) + (continuo?.W || 0) }; };
 
