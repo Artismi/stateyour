@@ -31,7 +31,8 @@ import { stella as stellaVera, luceGiovane } from './stelle.js';
 import { comeSorgente } from './eventi.js';
 import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento, fusoDaAlluminio, FA_NEBULOSA, ELEMENTI } from './elementi.js';
 const MASSA_MG = ELEMENTI.Mg.massa, MASSA_FE = ELEMENTI.Fe.massa, MASSA_O = ELEMENTI.O.massa; // la catena degli elementi
-import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
+import { STORIA } from './storia.js';
+import { modiSecolari, tempoIncrocio, blocchiSecolari } from './secolare.js'; // (gli urti giganti: Laplace–Lagrange e il tempo di incrocio di Petit) // (la densità del nucleo: la stessa struttura a due strati della storia termica)
 
 export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
 const G = COSTANTI.G, IDX = Object.fromEntries(SIMBOLI.map((s, i) => [s, i]));
@@ -53,7 +54,11 @@ export const DISCO = Object.freeze({
   pendenza: 1.5, raggio: 30, // Σ ∝ r^(-3/2), fino a 30 UA·√M
   frazione: 0.055, sparpaglio: 0.5, // la massa del disco su quella della stella: mediana e larghezza (in logaritmo)
   vitaMinima: 1e6, vitaMedia: 3.5e6, // quanto dura il gas (anni): si osserva che metà dei dischi è sparita in 2–3 milioni di anni
-  C: 5, // mezza larghezza della striscia che un embrione mangia, in raggi di Hill (in tutto 10: come la distanza tra embrioni)
+  // mezza larghezza della striscia che un embrione mangia, in raggi di Hill RECIPROCI di due embrioni uguali, a(2m/3M*)^⅓: in
+  // tutto 10, la distanza tra embrioni della crescita oligarchica (Kokubo e Ida 1998, 2000 [R]; è la b_H = 10 delle condizioni
+  // iniziali di Kimura et al. 2025 e la loro massa di isolamento, eq. 30 [V]: 0,16 M⊕ con Σ = 10 g/cm² a 1 UA, che la formula
+  // qui sotto ridà). (Prima: 10 raggi di Hill del corpo SOLO, cioè 7,9 reciproci: le orbite nascevano troppo vicine.)
+  C: 5,
   mescola: 0.25, // la velocità a caso che gli incontri danno agli embrioni, come frazione della loro velocità di fuga
   eMax: 0.3, pari: 0.1, // l'eccentricità più grande che un corpo regge senza perdersi; sopra un decimo della massa dell'altro, due corpi sono «pari»
   presa: 0.05, // la parte del gas rimasto che un gigante riesce a intercettare
@@ -253,13 +258,13 @@ export function formaPianeti(st, seme = 1) {
   const acquaSistema = 0.5 + c('acqua portata da fuori'); // quanta acqua hanno portato dentro i corpi venuti da fuori: cambia da un sistema all'altro
 
   // 2. GLI EMBRIONI. Si riempie il disco di strisce, dal bordo interno all'esterno: ogni striscia è larga 2C raggi di
-  // Hill dell'embrione che ne mangia tutti i solidi. M = 2π·r·Σs·(2C·r_H) e r_H = r·(M/3M*)^(1/3) danno la formula nota
-  //   M_iso = (4π r² Σs C)^(3/2) / (3 M*)^(1/2)
-  const massaIso = (r) => Math.pow(4 * Math.PI * (r * UA) ** 2 * D.sigmaSolidi(r) * P.C, 1.5) / Math.sqrt(3 * Mst);
+  // Hill reciproci di due embrioni come quello che ne mangia tutti i solidi. M = 2π·r·Σs·(2C·r_H) e r_H = r·(2M/3M*)^(1/3)
+  // danno la formula nota   M_iso = (4π r² Σs C)^(3/2) · (2 / 3M*)^(1/2)
+  const massaIso = (r) => Math.pow(4 * Math.PI * (r * UA) ** 2 * D.sigmaSolidi(r) * P.C, 1.5) * Math.sqrt(2 / (3 * Mst));
   const corpi = [];
   for (let lo = D.rIn * (1 + 0.15 * c('bordo interno')); lo < D.rOut && corpi.length < 6000;) {
-    let m = massaIso(lo), w = 2 * P.C * hill(m, lo);
-    const r = lo + Math.min(w, 0.4 * lo) / 2; m = massaIso(r); w = 2 * P.C * hill(m, r);
+    let m = massaIso(lo), w = 2 * P.C * hill(2 * m, lo);
+    const r = lo + Math.min(w, 0.4 * lo) / 2; m = massaIso(r); w = 2 * P.C * hill(2 * m, r);
     if (!(w > 0)) break;
     if (w > 0.4 * r) { w = 0.4 * r; m = 2 * Math.PI * r * UA * w * UA * D.sigmaSolidi(r); } // un disco enorme: la striscia non può essere più larga dell'orbita
     lo += w; if (lo > D.rOut) break;
@@ -275,7 +280,11 @@ export function formaPianeti(st, seme = 1) {
     // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
     const T = D.Tcond(r), ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
     const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
-    corpi.push({ id: corpi.length, a: r, r0: r, m: mora, fe: mora * (1 - acqua) * ferroRoccia, fe0: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
+    // L'ORBITA ALLA FINE DEL GAS: l'eccentricità che gli incontri tra embrioni lasciano contro il freno del gas, con la legge di
+    // Rayleigh e lo scarto delle condizioni iniziali di Kimura et al. 2025 (eq. 31 [V], dalle N-corpi dell'accrescimento
+    // oligarchico): ⟨e²⟩^½ = 0,01·(Σs/10 g cm⁻²)^½, qui con la Σs del luogo; il perielio dove capita
+    const orb = c.serie(`embrione ${corpi.length}/orbita`), e0 = 0.01 * Math.sqrt(sS / 100) * Math.sqrt(-Math.log(1 - orb(0))), fi0 = 2 * Math.PI * orb(1);
+    corpi.push({ id: corpi.length, a: r, r0: r, m: mora, w, zr: e0 * Math.cos(fi0), zi: e0 * Math.sin(fi0), fe: mora * (1 - acqua) * ferroRoccia, fe0: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
       lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: m - mora, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
   }
 
@@ -292,7 +301,7 @@ export function formaPianeti(st, seme = 1) {
     b.nucleo = b.m; b.tGas = t0; b.gas = mGas; gasRimasto -= mGas;
     // gli embrioni dentro la sua nuova striscia (C raggi di Hill del gigante) gli cadono addosso
     const rh = P.C * hill(b.m + mGas, b.a);
-    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.alGas += o.alGas; o.morto = true; o.in = b.id; }
+    for (const o of corpi) if (o !== b && !o.morto && Math.abs(o.a - b.a) < rh) { b.m += o.m; b.gas += o.gas; b.fe += o.fe; b.h2o += o.h2o; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; o.morto = true; o.in = b.id; }
     b.m += mGas;
   }
   // i nuclei tardivi: l'involucro cresce piano (in proporzione al tempo che resta), e quando il disco svanisce resta
@@ -302,55 +311,185 @@ export function formaPianeti(st, seme = 1) {
     if (x > 0.01) { b.gas = b.m * x; b.m += b.gas; }
   }
 
-  // 4. GLI URTI GIGANTI. Sparito il gas (che teneva le orbite rotonde), due vicini reggono solo se la distanza tra le
-  // loro orbite supera K raggi di Hill reciproci (K ≈ 10, dal numero di giri fatti finora). Se no si incontrano:
-  //  · di solito si fondono: massa e momento angolare si sommano, e il nuovo corpo resta con un'orbita un po'
-  //    allungata (eccentricità ≈ una frazione di v_fuga / v_orbita): così spazza una fascia più larga e può toccare
-  //    altri vicini. Vicino alla stella v_orbita è grande e gli urti sono pochi; lontano sono tanti;
-  //  · accanto a un corpo molto più pesante, e dove la sua gravità vince quella della stella (v_fuga > v_orbita),
-  //    funziona la fionda: il piccolo che sta più dentro è lanciato sulla stella, quello che sta più fuori è scacciato
-  //    dal sistema, e il grande, che gli ha dato l'energia, scende un poco. Tra pari la fionda non basta: nessuno dei
-  //    due ha l'energia per scacciare l'altro, e prima o poi si urtano.
-  let vivi = corpi.filter((b) => !b.morto && b.m > 0); const fusioni = []; // (gli urti in ordine, per le perdite di elementi.js)
-  if (eta > D.vita) {
-    const raggio = (b) => raggioPianeta({ massaKg: b.m, ferro: b.fe / (b.m - b.gas), ghiaccio: b.h2o / (b.m - b.gas), gas: b.gas / b.m });
-    const stato = (p, q) => { // quanto è larga la distanza tra le due orbite rispetto a quella che serve (< 1: instabile)
-      const am = (p.a + q.a) / 2, K = raggiNecessari(((eta - D.vita) * Math.sqrt(D.massaStella)) / Math.pow(am, 1.5), (p.m + q.m) / (2 * Mst));
-      return (q.a * (1 - q.e) - p.a * (1 + p.e)) / (K * hill(p.m + q.m, am));
-    };
-    for (let giro = 0; giro < 600; giro++) {
-      const n = vivi.length, s = new Float64Array(n); let fatto = false;
-      for (let i = 0; i + 1 < n; i++) s[i] = stato(vivi[i], vivi[i + 1]);
-      for (let i = 0; i + 1 < n; i++) {
-        if (s[i] >= 1 || (i + 2 < n && s[i + 1] < s[i])) continue; // stabile, o la coppia accanto è messa peggio: tocca prima a lei
-        const p = vivi[i], q = vivi[i + 1], grande = p.m >= q.m ? p : q, piccolo = grande === p ? q : p, am = (p.a + q.a) / 2;
-        const vf = Math.sqrt((2 * G * (p.m + q.m)) / (raggio(p) + raggio(q))), v = vK(am), m = p.m + q.m;
-        const fionda = (vf * vf) / (2 * v * v); // quanto la gravità dei due corpi vince su quella della stella (numero di Safronov)
-        // l'incontro com'è stato (per «formazione»): a quale distanza le orbite hanno ceduto, e quando: i giri che quella
-        // distanza regge, contati da quando i due corpi sono così (l'ultimo urto di uno dei due, o la fine del gas)
-        const mu2 = (p.m + q.m) / (2 * Mst), anno = Math.pow(am, 1.5) / Math.sqrt(D.massaStella), delta = Math.max(0, s[i] * raggiNecessari((eta - D.vita) / anno, mu2));
-        const tIncrocio = Math.min(eta, Math.max(p.tUrto, q.tUrto) + giriCheRegge(delta, mu2) * anno);
-        if (piccolo.m > P.pari * grande.m || c(`embrione ${grande.id}/incontro con ${piccolo.id}`) * (1 + fionda * fionda) > fionda * fionda) { // si fondono
-          fusioni.push({ g: grande.id, p: piccolo.id, t: tIncrocio, Mg: grande.m - grande.gas, Mp: piccolo.m - piccolo.gas, Rg: raggio(grande), Rp: raggio(piccolo), a: am });
-          grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta, tIncrocio, aUA: am }];
-          grande.tUrto = tIncrocio; grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.alGas += piccolo.alGas; grande.orfani = [...grande.orfani, ...piccolo.orfani];
-          grande.a = ((p.m * Math.sqrt(p.a) + q.m * Math.sqrt(q.a)) / m) ** 2;
-          grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
-          if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; grande.e = Math.min(P.eMax, ((P.mescola * vf) / v) * (0.7 + 0.6 * c(`embrione ${grande.id}/fusione con ${piccolo.id}`))); } // l'urto strappa il velo di gas
-          else { grande.m = m; grande.gas += piccolo.gas; }
-          grande.fe += piccolo.fe; grande.h2o += piccolo.h2o; grande.urti += 1 + piccolo.urti; grande.misto ||= piccolo.misto || grande.freddo !== piccolo.freddo; piccolo.in = grande.id;
-        } else { // la fionda: chi parte verso l'infinito lo fa con energia nulla, e il grande paga il conto scendendo
-          if (piccolo.a > grande.a) grande.a = Math.max(D.rIn, 1 / (1 / grande.a + piccolo.m / grande.m / piccolo.a));
-          grande.e = Math.min(P.eMax, Math.hypot(grande.e, (0.4 * piccolo.m) / grande.m)); grande.scacciati++;
-          // (per «formazione») il corpo scacciato lascia ORFANI i sassi che gli giravano attorno: dov'era, quanto pesava, quando
-          { const sol = piccolo.m - piccolo.gas; grande.orfani = [...grande.orfani, ...piccolo.orfani, { aUA: piccolo.a, massaKg: sol, ciboKg: Math.max(0, piccolo.cibo), ghiaccio: piccolo.h2o / sol, t: tIncrocio, dentro: piccolo.a < grande.a }]; }
-        }
-        piccolo.morto = true; fatto = true; i++;
-      }
-      if (!fatto) break;
-      vivi = vivi.filter((b) => !b.morto).sort((p, q) => p.a - q.a);
+  // 4. GLI URTI GIGANTI: il modello a eventi di Kimura, Hoshino, Kokubo, Matsumoto e Ikoma 2025 (arXiv:2505.20548 [V: letto il
+  // testo]; secolare.js per le leggi). Sparito il gas (che teneva le orbite rotonde) il sistema passa da un evento all'altro:
+  //  a. LE ECCENTRICITÀ SECOLARI: tra un evento e l'altro i corpi si scambiano l'eccentricità con la teoria di Laplace e
+  //     Lagrange; per la stabilità conta la media sul ciclo, ⟨e²⟩ = Σ dei modi (Kimura, eq. 21);
+  //  b. QUANDO tre orbite vicine cedono: il tempo di incrocio di Petit et al. 2020 sulla distanza minima tra orbite eccentriche
+  //     (Kimura, eq. 4, 5, 22): tocca alla terna col tempo più breve, e nella terna alla coppia più stretta; con due corpi soli
+  //     l'energia di Jacobi (Kimura, eq. 28: Ẽ = ½(ẽ² + Ĩ²) − ⅜b̃² + 9/2 > 0, in unità di Hill, Ĩ = ẽ/2) dice se si incrociano;
+  //  c. ALL'INCROCIO gli incontri portano la velocità relativa a quella di fuga: e_ij con la legge di Rayleigh, ⟨e_ij²⟩^½ =
+  //     e_fuga, ripartita col peso √m dell'altro e mai sotto quella che serve a toccarsi né sotto quella secolare (eq. 6–7);
+  //     poi è una gara tra diffusione e urto: τ_diff = 4ba/(π(R_i+R_j)²·lnΛ)·(e/e_fuga)⁴·T_K, τ_urto = ba/(π(R_i+R_j)²)·
+  //     1/(1 + e_fuga²/e²)·T_K, lnΛ = 3; l'urto ha probabilità 1 − e^(−τ_diff/τ_urto) (eq. 9–14). L'orologio va avanti del
+  //     più breve dei due;
+  //  d. L'URTO fonde i due corpi: massa e baricentro (eq. 25), e l'eccentricità dal vettore di Laplace–Runge–Lenz con l'angolo
+  //     tra i perieli tra quelli in cui le orbite si toccano (eq. 26–27). LA DIFFUSIONE allarga la coppia di e_i·a_i + e_j·a_j
+  //     (eq. 23–24; qui conservando l'energia delle due orbite: vedi sotto). Fuori da Kimura (che non ha giganti): se nella diffusione il corpo più piccolo esce
+  //     con e ≥ 1 è slegato, scagliato fuori dal sistema (la fionda: il grande paga l'energia, 1/a' = 1/a + (m/M)/a_piccolo),
+  //     e se la diffusione lo porta dentro il bordo del disco cade sulla stella;
+  //  e. LO SMORZAMENTO da parte dei planetesimi rimasti (il «cibo» delle strisce, sparso sulla loro larghezza): non è in
+  //     Kimura. È la stessa frizione che dà il loro τ_diff (Chandrasekhar 1943 [R]: quella legge è la frizione tra due anelli),
+  //     con un anello di planetesimi piccoli al posto del secondo embrione (la massa (M_i+M_j)·M_j di Chandrasekhar diventa
+  //     M·M_p) [D]: τ_attrito/T_K = e⁴·M*²/(4π²·M·Σ_p·a²·lnΛ). Vale finché le velocità superano quella di Hill: e mai sotto
+  //     (M/3M*)^⅓ (dichiarato). Si applica corpo per corpo all'eccentricità secolare (dichiarato: ciò che un corpo perde non
+  //     lo toglie ai modi che ha in comune con gli altri; dentro i modi, al primo ordine, varrebbe solo per un attrito più lento
+  //     dei giri secolari, e qui spesso è più rapido); la Σ_p resta quella della fine del gas (dichiarato:
+  //     i planetesimi che il corpo intanto si mangia non sono tolti).
+  // L'eccentricità di oggi è quella secolare all'età della stella. (Prima: orbite a 10 raggi di Hill del corpo solo, cioè 7,9
+  // reciproci; dopo ogni fusione l'eccentricità piena subito, e la coppia accanto si incrociava senza attesa; nessun tempo tra
+  // l'incrocio e l'urto; e l'eccentricità di oggi un sorteggio.)
+  let vivi = corpi.filter((b) => !b.morto && b.m > 0).sort((p, q) => p.a - q.a); const fusioni = [];
+  const MS = D.massaStella, LN = 3, anno = (a) => Math.pow(a, 1.5) / Math.sqrt(MS), cache = new Map(), incontri = new Map(); // (incontri: quante volte si è incontrata ogni coppia)
+  const raggio = (b) => raggioPianeta({ massaKg: b.m, ferro: b.fe / (b.m - b.gas), ghiaccio: b.h2o / (b.m - b.gas), gas: b.gas / b.m });
+  // (e) l'attrito: de/dt = −e/τ con τ ∝ e⁴, cioè e⁴ cala di 4·dt/C, C = M*²·T_K/(4π²·M·Σ_p·a²·lnΛ); fermo alla velocità di Hill
+  const attrito = (b, e, dt) => { if (!(b.cibo > 0) || !(b.w > 0) || !(dt > 0)) return e; const eH = Math.cbrt(b.m / (3 * Mst)); if (!(e > eH)) return e;
+    const sp = b.cibo / (2 * Math.PI * b.a * b.w * UA * UA), C = (Mst * Mst * anno(b.a)) / (4 * Math.PI * Math.PI * b.m * sp * (b.a * UA) ** 2 * LN); return Math.max(eH, Math.pow(Math.max(0, e ** 4 - (4 * dt) / C), 0.25)); };
+  // (la teoria secolare costa come il cubo dei corpi: si fa a pezzi di al più 12 corpi, tagliando la catena dove i vicini si
+  // scambiano meno eccentricità (secolare.js blocchiSecolari; dichiarato: tra un pezzo e l'altro lo scambio è trascurato); un
+  // pezzo si rifà solo quando uno dei suoi corpi cambia. Con più di 40 corpi — i dischi poveri di metalli fanno migliaia di
+  // embrioni piccoli — non si fa, e ogni corpo tiene la sua eccentricità finché non ne restano 40. Scelte di calcolo.)
+  let t = Math.min(eta, D.vita), terne = [], evento = 0;
+  for (const b of vivi) { b.tz = t; b.tocco = -1; b.blocco = null; b.ver = 0; b.terna = null; }
+  // l'eccentricità di un corpo al tempo T (anni dalla nascita): quella secolare del suo pezzo, frenata dai planetesimi
+  const zA = (b, T) => { const B = b.blocco, [x, y] = B ? B.L.z(b.jb, T - B.t0) : [b.zr, b.zi], e = Math.hypot(x, y), f = e > 0 ? attrito(b, e, T - (B ? B.t0 : b.tz)) / e : 1; return [x * f, y * f]; };
+  const eA = (b, T) => { const B = b.blocco; return B ? attrito(b, Math.sqrt(B.L.e2(b.jb, T - B.t0)), T - B.t0) : attrito(b, Math.hypot(b.zr, b.zi), T - b.tz); };
+  // (c) l'incontro della coppia i (con i+1) cominciato a T: quanto si agitano, chi vince tra diffusione e urto, e quando finisce.
+  // Gli eventi della coppia: «embrione A/agitazione con B» (e_ij, una estrazione per incontro), «embrione A/incontro con B» (urto o
+  // diffusione; i ritorni dopo una diffusione: «…/ritorno k»), «embrione A/fusione con B» (l'angolo tra i perieli)
+  const esito = (p, q, T) => {
+    const k = incontri.get(p.id * 1e6 + q.id) || 0, z = [zA(p, T), zA(q, T)], m = p.m + q.m, mp = p.m, mq = q.m;
+    const ep = Math.hypot(...z[0]), eq = Math.hypot(...z[1]), fp = Math.atan2(z[0][1], z[0][0]), fq = Math.atan2(z[1][1], z[1][0]);
+    const am = 0.5 * (p.a + q.a), Rp = raggio(p), Rq = raggio(q), eFuga = Math.sqrt((2 * G * m) / (Rp + Rq)) / vK(am), b = q.a - p.a;
+    const eij = eFuga * Math.sqrt(-Math.log(1 - c.serie(`embrione ${p.id}/agitazione con ${q.id}`)(k))), x0 = Math.sqrt(mq) * p.a + Math.sqrt(mp) * q.a;
+    const ep0 = Math.max(Math.sqrt(mq / m) * eij, (Math.sqrt(mq) * b) / x0, ep), eq0 = Math.max(Math.sqrt(mp / m) * eij, (Math.sqrt(mp) * b) / x0, eq), er = Math.hypot(ep0, eq0);
+    const sezione = Math.PI * (Rp + Rq) ** 2, tDiff = ((4 * b * am * UA * UA) / (sezione * LN)) * (er / eFuga) ** 4 * anno(am), tUrto = ((b * am * UA * UA) / sezione / (1 + (eFuga / er) ** 2)) * anno(am);
+    const grande = mp >= mq ? p : q, piccolo = grande === p ? q : p, slegato = (piccolo === p ? ep0 : eq0) >= 1;
+    const urto = !slegato && c(`embrione ${p.id}/incontro con ${q.id}${k ? `/ritorno ${k}` : ''}`) < -Math.expm1(-tDiff / tUrto);
+    return { p, q, k, m, mp, mq, ep, eq, fp, fq, am, b, ep0, eq0, grande, piccolo, slegato, urto, tIncrocio: T, tEvento: T + (urto ? Math.min(tDiff, tUrto) : tDiff) };
+  };
+  // (b) quando cede la terna che comincia dal corpo i (o la coppia, se i corpi sono due), contando da t0: il tempo di incrocio con
+  // le eccentricità di QUEL momento; lo smorzamento le cala, e il tempo si allunga: si cerca il primo tempo che si regge da sé
+  // (cresce a ogni passo: ci si ferma quando non si muove più). Poi l'incontro della coppia che cede, e quando finisce.
+  const terna = (i, t0) => terna3(vivi[i], vivi[i + 1], vivi[i + 2], vivi.length, t0);
+  const terna3 = (p, q, r, n, t0) => {
+    const K = Math.min(0.5 * (n - 3) + 1, 3); let dt = 0, coppia = 0;
+    for (let passo = 0; passo < 20; passo++) {
+      const T = t0 + dt; let tau = Infinity;
+      if (n === 2) { const h = Math.cbrt((p.m + q.m) / (3 * Mst)), et = Math.hypot(eA(p, T), eA(q, T)) / h, bt = (q.a - p.a) / ((0.5 * (p.a + q.a)) * h);
+        if (0.5 * (et * et + 0.25 * et * et) - 0.375 * bt * bt + 4.5 > 0) tau = 0; }
+      else { const x = tempoIncrocio(p.a, q.a, r.a, p.m / Mst, q.m / Mst, r.m / Mst, eA(p, T), eA(q, T), eA(r, T), anno(p.a), K); tau = x.tau; coppia = x.coppia; }
+      const fermo = !(tau > dt * (1 + 1e-2)); dt = Math.max(dt, tau); if (fermo || t0 + dt > eta) break;
     }
+    return (p.terna = { T: t0 + dt, coppia, x: null, b: [p, q, r], ver: [p.ver, q.ver, r?.ver], K: n === 2 ? 0 : K });
+  };
+  // dopo ogni evento: i pezzi della teoria secolare (si rifanno quelli che hanno un corpo nuovo o toccato: i loro corpi passano
+  // prima all'ora di adesso), e le terne (si rifanno quelle con un corpo rifatto)
+  const rifai = () => {
+    const N = vivi.length, pezzi = [];
+    if (N <= 40) { const inizi = blocchiSecolari(vivi.map((b) => ({ a: b.a, m: b.m / Mst, chiave: b.id })), MS, 12, cache); for (let k = 0; k < inizi.length; k++) pezzi.push(vivi.slice(inizi[k], k + 1 < inizi.length ? inizi[k + 1] : N)); }
+    else for (const o of vivi) if (o.tocco === evento) pezzi.push([o]); // (senza teoria secolare: cambia solo chi è stato toccato)
+    const nuovi = pezzi.filter((P) => { const B = P[0].blocco; return P.length === 1 ? P[0].tocco === evento || B : !(B && B.membri.length === P.length && P.every((o, j) => o.blocco === B && o.jb === j && o.tocco !== evento)); });
+    for (const P of nuovi) for (const o of P) { const zz = zA(o, t); o.zn = zz; }
+    for (const P of nuovi) { for (const o of P) { [o.zr, o.zi] = o.zn; o.tz = t; o.ver++; o.blocco = null; }
+      if (P.length < 2) continue;
+      const B = { t0: t, membri: P, L: modiSecolari(P.map((o) => ({ a: o.a, m: o.m / Mst, zr: o.zr, zi: o.zi, chiave: o.id })), MS, cache) }; P.forEach((o, j) => { o.blocco = B; o.jb = j; }); }
+    const nT = N === 2 ? 1 : N - 2, KN = N === 2 ? 0 : Math.min(0.5 * (N - 3) + 1, 3); terne.length = nT;
+    for (let i = 0; i < nT; i++) { const v = vivi[i].terna, [o1, o2, o3] = v ? v.b : [];
+      terne[i] = v && v.K === KN && o2 === vivi[i + 1] && o3 === vivi[i + 2] && o1.ver === v.ver[0] && o2.ver === v.ver[1] && (!o3 || o3.ver === v.ver[2]) ? v : terna(i, t); }
+  };
+  // L'EVENTO: l'incontro x finisce (urto, diffusione, o il piccolo scagliato fuori)
+  const applica = (x) => {
+    const { p, q, m, mp, mq, ep, eq, fp, fq, am, b, ep0, eq0, grande, piccolo, slegato, urto, tIncrocio, tEvento } = x; incontri.set(p.id * 1e6 + q.id, x.k + 1);
+    evento++; p.tocco = q.tocco = evento; for (const o of [p, q]) { const zz = zA(o, tEvento); o.zr = zz[0]; o.zi = zz[1]; o.tz = tEvento; o.blocco = null; }
+    const distanza = Math.max(0, (q.a * (1 - eq) - p.a * (1 + ep)) / (am * Math.cbrt(m / (3 * Mst)))); // (per «formazione»: in raggi di Hill reciproci)
+    if (urto) {
+      // (d) si fondono: l'angolo tra i perieli tra quelli in cui le orbite si toccano
+      const cmin = (ep0 * ep0 * p.a * p.a + eq0 * eq0 * q.a * q.a - b * b) / (2 * ep0 * eq0 * p.a * q.a), dmin = Math.acos(limita(cmin, -1, 1)), dfi = dmin + (2 * Math.PI - 2 * dmin) * c(`embrione ${p.id}/fusione con ${q.id}`);
+      const zr = (mp * ep0 * Math.cos(fp) + mq * eq0 * Math.cos(fp + dfi)) / m, zi = (mp * ep0 * Math.sin(fp) + mq * eq0 * Math.sin(fp + dfi)) / m;
+      fusioni.push({ g: grande.id, p: piccolo.id, t: tEvento, Mg: grande.m - grande.gas, Mp: piccolo.m - piccolo.gas, Rg: raggio(grande), Rp: raggio(piccolo), a: am });
+      grande.lista = [...grande.lista, ...piccolo.lista.map((u) => ({ ...u, laterale: true })), { bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta: distanza, tIncrocio, t: tEvento, aUA: am }];
+      grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.w += piccolo.w; grande.alGas += piccolo.alGas; grande.orfani = [...grande.orfani, ...piccolo.orfani];
+      grande.a = (mp * p.a + mq * q.a) / m; grande.zr = zr; grande.zi = zi;
+      grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
+      if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; } // l'urto strappa il velo di gas
+      else { grande.m = m; grande.gas += piccolo.gas; }
+      grande.fe += piccolo.fe; grande.h2o += piccolo.h2o; grande.urti += 1 + piccolo.urti; grande.misto ||= piccolo.misto || grande.freddo !== piccolo.freddo; piccolo.in = grande.id; piccolo.morto = true;
+    } else {
+      if (slegato) {
+        // (d) fuori da Kimura: il più piccolo esce slegato (la fionda): parte con energia nulla, e il grande paga il conto
+        // (e il rinculo gli lascia un'eccentricità di qualche decimo della massa scagliata sulla sua: la regola di prima, 0,4·m/M,
+        // sommata in quadratura a quella secolare; e_ij qui è oltre la fuga dal sistema, e la ripartizione di Kimura non vale)
+        grande.a = Math.max(D.rIn, 1 / (1 / grande.a + piccolo.m / grande.m / piccolo.a)); const fg = grande === p ? fp : fq, eg = Math.hypot(grande === p ? ep : eq, (0.4 * piccolo.m) / grande.m);
+        grande.zr = eg * Math.cos(fg); grande.zi = eg * Math.sin(fg);
+      } else {
+        // (d) la diffusione: la coppia si allarga di Δb. Kimura la divide col baricentro, e nel loro regime (e ≪ 1) l'energia
+        // si conserva entro qualche per cento; con e vicine a 1 (embrioni pesanti lontano dalla stella, dove la fuga supera la
+        // velocità dell'orbita) quella divisione porterebbe il corpo di dentro a una frazione della sua orbita senza che l'altro
+        // possa pagarne l'energia: qui la coppia si allarga di Δb conservando l'energia delle due orbite, m_p/a_p + m_q/a_q [D]
+        const db = ep0 * p.a + eq0 * q.a, B2 = b + db, E0 = mp / p.a + mq / q.a; let lo = 1e-6 * p.a, hi = p.a;
+        for (let k2 = 0; k2 < 60; k2++) { const x = Math.sqrt(lo * hi); if (mp / x + mq / (x + B2) > E0) lo = x; else hi = x; }
+        p.a = Math.sqrt(lo * hi); q.a = p.a + B2;
+        p.zr = ep0 * Math.cos(fp); p.zi = ep0 * Math.sin(fp); q.zr = eq0 * Math.cos(fq); q.zi = eq0 * Math.sin(fq);
+      }
+      const perso = slegato ? piccolo : p.a < 0.5 * D.rIn ? p : null; // (scagliato fuori, o caduto sulla stella)
+      if (perso) {
+        const altro = perso === p ? q : p; altro.scacciati++;
+        // (per «formazione») il corpo perso lascia ORFANI i sassi che gli giravano attorno: dov'era, quanto pesava, quando
+        const sol = perso.m - perso.gas; altro.orfani = [...altro.orfani, ...perso.orfani, { aUA: perso.a, massaKg: sol, ciboKg: Math.max(0, perso.cibo), ghiaccio: perso.h2o / sol, t: tEvento, dentro: perso.a < altro.a }];
+        perso.morto = true;
+      }
+    }
+  };
+  // LA FASE DEI MOLTI (più di 40 corpi: niente teoria secolare, e ogni terna dipende solo dai suoi tre corpi): gli eventi in
+  // ordine con una coda di priorità e la catena dei vicini, così il costo di un evento non cresce col numero dei corpi. Le voci
+  // della coda: una terna col suo tempo di incrocio (che è un limite inferiore della fine del suo incontro), o col suo incontro
+  // calcolato; una voce è vecchia se uno dei suoi corpi è cambiato o non sono più vicini.
+  if (eta > D.vita && vivi.length > 40) {
+    vivi.forEach((o, j) => { o.prima = vivi[j - 1] || null; o.dopo = vivi[j + 1] || null; });
+    let N = vivi.length, giro = 0; const coda = [], su = (v) => { coda.push(v); let j = coda.length - 1; while (j > 0) { const h = (j - 1) >> 1; if (coda[h].k <= v.k) break; coda[j] = coda[h]; j = h; } coda[j] = v; };
+    const giu = () => { const top = coda[0], v = coda.pop(); if (coda.length) { let j = 0; for (;;) { const l = 2 * j + 1, r = l + 1; let m2 = j; const km = (x) => (x === j ? v.k : coda[x].k); if (l < coda.length && coda[l].k < km(m2)) m2 = l; if (r < coda.length && coda[r].k < km(m2)) m2 = r; if (m2 === j) break; coda[j] = coda[m2]; j = m2; } coda[j] = v; } return top; };
+    const metti = (p) => { const q = p?.dopo, r = q?.dopo; if (!r) return; const v = terna3(p, q, r, N, t); if (v.T <= eta) { v.k = v.T; su(v); } };
+    const vale = (v) => !v.b[0].morto && v.b[0].dopo === v.b[1] && v.b[1].dopo === v.b[2] && v.b.every((o, j) => o.ver === v.ver[j]);
+    for (const o of vivi) metti(o);
+    while (N > 40 && coda.length && giro < 600) {
+      const v = giu(); if (!vale(v)) continue;
+      if (!v.x) { v.x = esito(v.b[v.coppia], v.b[v.coppia + 1], v.T); if (v.x.tEvento <= eta) { v.k = v.x.tEvento; su(v); } continue; }
+      const x = v.x; giro++; applica(x); t = x.tEvento;
+      // la catena: chi è uscito se ne va; chi si è spostato torna al suo posto
+      const fuori = [x.p.prima, x.q.dopo].filter(Boolean); // (i vicini della coppia, prima di toccare la catena)
+      for (const o of [x.p, x.q]) { o.ver++; if (o.prima) o.prima.dopo = o.dopo; if (o.dopo) o.dopo.prima = o.prima; }
+      const vivo = [x.p, x.q].filter((o) => !o.morto); N -= 2 - vivo.length; let vicino = (x.p.prima && !x.p.prima.morto ? x.p.prima : null) || x.q.dopo || x.p.dopo;
+      if (vicino?.morto) vicino = null; if (!vicino) vicino = vivi.find((o) => !o.morto && !vivo.includes(o));
+      for (const o of vivo) { let w = vicino; while (w.prima && w.prima.a > o.a) w = w.prima; while (w.dopo && w.dopo.a < o.a) w = w.dopo;
+        if (w.a < o.a) { o.prima = w; o.dopo = w.dopo; if (w.dopo) w.dopo.prima = o; w.dopo = o; } else { o.dopo = w; o.prima = w.prima; if (w.prima) w.prima.dopo = o; w.prima = o; } vicino = o; }
+      // le terne nuove: quelle che hanno dentro un corpo toccato
+      const nuove = new Set(); for (const o of [...vivo, ...fuori]) { let w = o; for (let k = 0; k < 2 && w.prima; k++) w = w.prima; for (let k = 0; k < 3 && w; k++, w = w.dopo) nuove.add(w); }
+      for (const w of nuove) metti(w);
+    }
+    vivi = vivi.filter((o) => !o.morto).sort((x, y) => x.a - y.a); for (const o of vivi) o.terna = null;
   }
+  if (eta > D.vita && vivi.length >= 2) rifai();
+  for (let giro = 0; eta > D.vita && giro < 600 && vivi.length >= 2; giro++) {
+    // (il prossimo evento è l'incontro che finisce per primo: mentre una coppia si cerca, il resto del sistema va avanti. Kimura
+    // ha un orologio solo, che salta alla fine di ogni incontro: in un sistema lungo decine di UA un incontro lento fermerebbe
+    // tutti gli altri [D])
+    // (l'incontro si calcola solo per le terne che cedono prima della fine del migliore trovato: finisce sempre dopo l'incrocio)
+    let x = null; for (const v of terne) if (v.x && (!x || v.x.tEvento < x.tEvento)) x = v.x;
+    for (;;) { let pv = -1; for (let j = 0; j < terne.length; j++) { const v = terne[j]; if (!v.x && v.T <= eta && (pv < 0 || v.T < terne[pv].T)) pv = j; }
+      if (pv < 0 || (x && terne[pv].T >= x.tEvento)) break;
+      const v = terne[pv]; v.x = esito(v.b[v.coppia], v.b[v.coppia + 1], v.T); if (!x || v.x.tEvento < x.tEvento) x = v.x; }
+    if (!x || !(x.tEvento <= eta)) break; // (nessun incontro finisce prima di oggi: quelli in corso restano in corso)
+    applica(x); const { p, q, tEvento } = x;
+    t = tEvento; for (const o of [p, q]) if (o.morto) vivi.splice(vivi.indexOf(o), 1);
+    if (!vivi.every((o, j) => !j || vivi[j - 1].a <= o.a)) vivi.sort((x, y) => x.a - y.a); if (vivi.length >= 2) rifai();
+  }
+  // l'eccentricità di oggi: quella secolare, all'età della stella
+  if (eta > D.vita && vivi.length >= 2) rifai();
+  // (al primo ordine l'eccentricità secolare può passare 1: il perielio è sceso dentro la stella, e il corpo vi è caduto —
+  // dichiarato: lì la teoria di Laplace e Lagrange non vale più da tempo)
+  for (const b of vivi) { const zz = eta > D.vita ? zA(b, eta) : [b.zr, b.zi]; b.e = Math.hypot(zz[0], zz[1]); if (!(b.e < 1)) b.morto = true; }
+  vivi = vivi.filter((b) => !b.morto);
 
   // i pianeti: quelli abbastanza grandi; il resto sono detriti (fasce di asteroidi e di comete)
   const terre = (m) => { const x = m / MTERRA; return (x < 10 ? x.toFixed(x < 1 ? 2 : 1) : String(Math.round(x))).replace('.', ','); };
@@ -414,8 +553,7 @@ export function formaPianeti(st, seme = 1) {
       // (quanta parte della massa dei ghiacci è acqua: il resto è il CO e l'NH3 gelati con lei. leggi.js e chimica.js contano
       // l'acqua del pianeta con questa: prima la massa intera dei ghiacci passava per acqua, e il mare ne aveva un terzo di troppo)
       quotaAcqua: D.solidi.quotaAcqua, ghiaccioPerAcqua: D.solidi.perAcqua }), enumerable: false });
-    // l'eccentricità di oggi: quella presa negli urti, smorzata dai detriti rimasti (che frenano chi corre fuori dal coro)
-    const oggi = c.serie(`embrione ${b.id}/eccentricità`), eccentricita = tipo === 'gassoso' ? b.e + 0.01 + 0.05 * oggi(0) : b.e * (0.15 + 0.35 * oggi(0)) + 0.002 + 0.01 * oggi(1);
+    const eccentricita = b.e; // (quella secolare di oggi: vedi gli urti giganti)
     const dopo = b.scacciati ? `; ha scacciato ${b.scacciati === 1 ? 'un vicino' : `${b.scacciati} vicini`}` : '';
     const storia = tipo === 'gassoso' ? `un nucleo di ${terre(b.nucleo)} Terre, pronto in ${(b.tGas / 1e6).toFixed(1).replace('.', ',')} milioni di anni, ha catturato il gas a valanga prima che il disco svanisse${dopo}`
       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`

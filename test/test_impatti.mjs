@@ -250,9 +250,10 @@ prova('un embrione lento ha ancora il suo cibo in giro: è colpito senza sosta, 
 
 prova('se disco.js espone il disco, il cibo rimasto viene dalla densità dei solidi (la massa di isolamento)', () => {
   const P = { id: 0, tipo: 'roccioso', aM: UA, massaKg: 0.2 * MT, raggioM: 0.6 * RT, Mstella: MSOLE, composizione: { ferro: 0.3, roccia: 0.7, acqua: 0 }, storia: '', clima: { pressione: 0, T: 280 } };
-  // 100 kg/m² di solidi a 1 UA: la massa di isolamento, (4π·r²·Σ·C)^1,5 / (3·M*)^0,5 con C = 5, è 0,117 Terre... ma con 240 kg/m² è 0,43
+  // 100 kg/m² di solidi a 1 UA: la massa di isolamento, (4π·r²·Σ·C)^1,5·(2/(3·M*))^0,5 con C = 5 (la striscia di 10 raggi di Hill
+  // reciproci di disco.js), è 0,165 Terre... ma con 240 kg/m² è 0,608 (prima, con 10 raggi di Hill del corpo solo, 0,43)
   const s = storiaImpatti(P, { stella: { massa: 1, eta: 4.567e9, Z: 1 }, pianeti: [P], disco: { vita: 2e6, sigmaSolidi: () => 240 } }, sorgente('prova/disco'));
-  tra(s.bilancio.restiKg / MT, 0.2, 0.26, 'cibo rimasto (Terre: 0,43 − 0,2)'); assert.equal(s.formazione, 2e6);
+  tra(s.bilancio.restiKg / MT, 0.355, 0.461, 'cibo rimasto (Terre: 0,608 − 0,2; la stessa forchetta relativa di prima, ±13%)'); assert.equal(s.formazione, 2e6);
   assert.ok(!s.bilancio.stime.some((x) => x.includes('disco')));
 });
 
@@ -318,7 +319,8 @@ prova('con i numeri veri della formazione (formaPianeti: urti, masse, tempi) nie
       // l'urto gigante della storia è proprio l'ultimo di formaPianeti: stesse masse, e avviene poco dopo che le orbite si sono incrociate
       const u = F.urti.at(-1); giganti++;
       assert.ok(!u.laterale && g.bersaglioKg === u.bersaglioKg && g.massaKg === u.massaKg && g.urti === F.urti.length && g.t === s.formazione && g.t >= Math.min(u.tIncrocio, 0.9999 * eta) && g.t <= eta, `urto di ${n}/${P.id}`);
-      assert.ok(g.t - u.tIncrocio <= 0.5 * (eta - u.tIncrocio) + 1, `il tempo per trovarsi: ${g.t - u.tIncrocio} anni`);
+      // (il tempo per trovarsi dopo l'incrocio lo dà disco.js: l'urto è quando il modello a eventi lo fa avvenire)
+      assert.ok(u.t >= u.tIncrocio && u.t <= eta && g.t === Math.min(0.9999 * eta, u.t), `l'urto di ${n}/${P.id}: ${g.t} contro ${u.t}`);
       rapporti.push(g.massaKg / g.bersaglioKg); quando.push((g.t - F.tGas) / eta); giorni.push(g.giornoDopo / 3600); if (g.t > 1e9) tardi++; if (g.obliquita > 90) retro++; if (g.luna) dischi++;
       // le lune: con l'urto vero, la luna da urto c'è solo se l'urto l'ha fatta, e pesa quanto dice l'urto
       if (P.tipo !== 'roccioso') continue;

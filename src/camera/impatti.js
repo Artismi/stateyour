@@ -259,19 +259,19 @@ function formazioneDi(cx, i, caso) {
   }
   if (ult) {
     const { k, u, r } = ult, ev = (nome, medio) => (caso ? caso(`urto gigante ${k}/${nome}`) : medio);
-    // QUANDO. disco.js fonde due corpi se la loro distanza regge meno giri di quelli fatti finora: il momento in cui le
-    // orbite si incrociano è quello in cui quella distanza cede (Chambers), e disco.js lo dà (tIncrocio). Poi serve il
-    // tempo per trovarsi («cerca»: Öpik, con la velocità a caso degli embrioni di disco.js).
-    // Se disco.js non lo dà: due embrioni vicini stanno a C·2^⅔ raggi di Hill reciproci, e il primo giro di urti arriva
+    // QUANDO. disco.js lo dà (t): il modello a eventi di Kimura et al. 2025 ha il tempo dell'incrocio (Petit et al. 2020) e
+    // quello per trovarsi dopo (la gara tra urto e diffusione). Se dà solo il momento in cui le orbite si incrociano
+    // (tIncrocio), serve il tempo per trovarsi («cerca»: Öpik, con la velocità a caso degli embrioni di disco.js).
+    // Se non dà nemmeno quello: due embrioni vicini stanno a 2C raggi di Hill reciproci, e il primo giro di urti arriva
     // allora; se gli urti sono stati più d'uno, l'ultimo è tra corpi già fusi, con orbite allungate: la loro distanza
     // utile sta tra il limite di Hill (2√3: si incrociano subito) e il limite di oggi (oltre non si sarebbero fusi):
     // dove, è un evento
     const cerca = (DISCO.mescola * r.vFuga * me.T) / me.vK / ((3 / PI) * ((r.raggioM + raggio(u.bersaglioKg)) / me.a) ** 2 * (1 + 1 / DISCO.mescola ** 2));
-    let t0 = u.t;
+    let t0 = u.t == null ? null : Math.min(0.9999 * eta, u.t);
     if (t0 == null) {
       let incrocio = u.tIncrocio;
       if (incrocio == null) {
-        const d1 = DISCO.C * Math.pow(2, 2 / 3), dOggi = deltaChambers((eta - tGas) / me.T, muP), dMin = 2 * Math.sqrt(3);
+        const d1 = 2 * DISCO.C, dOggi = deltaChambers((eta - tGas) / me.T, muP), dMin = 2 * Math.sqrt(3);
         const delta = u.delta ?? Math.min(dOggi, Math.max(d1, N === 1 ? d1 : dMin + ev('quando', 0.5) * Math.max(0, dOggi - dMin)));
         incrocio = tGas + me.T * giriChambers(delta, muP);
         if (u.delta == null) out.stime.push('quando è avvenuto l\'ultimo urto gigante: dalla legge di Chambers');
@@ -303,10 +303,11 @@ function formazioneDi(cx, i, caso) {
       sigma = Math.sqrt(poco * tanto);
       out.stime.push('il cibo rimasto: dal disco che serve a un embrione lento per arrivare a questa massa');
     }
-    // (come in disco.js, la striscia non può essere più larga di 0,4 volte l'orbita)
-    if (sigma > 0) cibo = Math.max(0, Math.min(Math.pow(4 * PI * me.a * me.a * sigma * DISCO.C, 1.5) / Math.sqrt(3 * Mst), 0.8 * PI * me.a * me.a * sigma) - Ms);
+    // (come in disco.js: la massa di isolamento della striscia di 2C raggi di Hill reciproci, e la striscia non può essere più
+    // larga di 0,4 volte l'orbita)
+    if (sigma > 0) cibo = Math.max(0, Math.min(Math.pow(4 * PI * me.a * me.a * sigma * DISCO.C, 1.5) * Math.sqrt(2 / (3 * Mst)), 0.8 * PI * me.a * me.a * sigma) - Ms);
   }
-  if (cibo > 0) out.resti = { massaKg: cibo, larghezza: Math.min(DISCO.C * Math.cbrt((Ms + cibo) / Ms), (0.2 * me.a) / me.hill) }; // mezza larghezza della striscia, in raggi di Hill del pianeta di oggi
+  if (cibo > 0) out.resti = { massaKg: cibo, larghezza: Math.min(DISCO.C * Math.cbrt((2 * (Ms + cibo)) / Ms), (0.2 * me.a) / me.hill) }; // mezza larghezza della striscia, in raggi di Hill del pianeta di oggi (C reciproci di due corpi come lui a isolamento)
   return out;
 }
 

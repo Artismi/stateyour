@@ -74,10 +74,10 @@ prova('una stella come il Sole: quasi sempre pianeti rocciosi dentro la neve, di
     if (!r.length) continue;
     // i solidi che condensano dentro la neve: la somma di Σ_solidi·2πr·dr dal bordo interno alla neve
     // (fino al bordo esterno dell'ultima striscia che nasce dentro la neve: disco.js dà a ogni embrione la striscia di C raggi di Hill
-    // per parte attorno al suo centro, e quella dell'ultimo embrione di dentro passa la neve di C·r_H; lì conta solo la roccia,
+    // reciproci — di due embrioni come lui — per parte attorno al suo centro, e quella dell'ultimo embrione di dentro passa la neve di C·r_H; lì conta solo la roccia,
     // perché la massa dell'embrione è fatta con la densità del suo centro. Prima si contava fino alla neve: il seme 64 ne prende
     // l'1,5% di più, la mezza striscia oltre la neve)
-    const Mst = D.massaStella * 1.989e30, sRoccia = (x) => D.solidi.roccia(D.Tcond(x)) * D.sigmaGas(x), mN = Math.pow(4 * Math.PI * (neve * UA) ** 2 * sRoccia(neve) * DISCO.C, 1.5) / Math.sqrt(3 * Mst), fine = neve * (1 + DISCO.C * Math.cbrt(mN / (3 * Mst)));
+    const Mst = D.massaStella * 1.989e30, sRoccia = (x) => D.solidi.roccia(D.Tcond(x)) * D.sigmaGas(x), mN = Math.pow(4 * Math.PI * (neve * UA) ** 2 * sRoccia(neve) * DISCO.C, 1.5) * Math.sqrt(2 / (3 * Mst)), fine = neve * (1 + DISCO.C * Math.cbrt((2 * mN) / (3 * Mst)));
     let solidi = 0; const passi = 400; for (let i = 0; i < passi; i++) { const x = D.rIn + ((i + 0.5) / passi) * (fine - D.rIn); solidi += (x < neve ? D.sigmaSolidi(x) : sRoccia(x)) * 2 * Math.PI * x * ((fine - D.rIn) / passi) * UA * UA; }
     // (i rocciosi fatti anche di embrioni nati oltre la neve — «a cavallo della linea della neve» — portano dentro solidi di fuori:
     // la disuguaglianza vale per gli altri. Con la catena degli elementi il seme 2672 ne ha uno di 14 Terre a 2 UA, 1,27 volte i
@@ -231,23 +231,24 @@ const letto = (st, radice, rami = null) => { const R = new Map(), P = formaPiane
 // tra due mondi: quali eventi, letti in tutti e due, hanno dato un esito diverso
 const diversi = (A, B) => [...A.keys()].filter((k) => B.has(k) && B.get(k) !== A.get(k));
 
-prova('un ramo cambia una cosa sola: l\'eccentricità di un pianeta in un mondo parallelo, e tutti gli altri restano com\'erano', () => {
-  let casi = 0, vicini = 0;
+// (PRIMA: «un ramo cambia una cosa sola: l'eccentricità di un pianeta». L'eccentricità di oggi era un sorteggio per pianeta,
+// «embrione N/eccentricità», e un ramo la cambiava a lui solo. Ora è quella secolare (Laplace–Lagrange: i corpi se la
+// scambiano), e il suo evento non c'è più: l'orbita di nascita di un embrione la sentono anche i vicini. Resta la regola
+// degli indirizzi: un ramo non cambia ciò che viene prima, e degli eventi letti nei due mondi cambia solo il suo.)
+prova('un ramo cambia ciò che ne discende, non ciò che viene prima: l\'orbita di nascita di un embrione', () => {
+  let casi = 0, cambiati = 0;
   for (let n = 1; n <= 40; n++) {
-    const radice = `prova/stella ${n}/disco`, { R: R0, P: P0 } = letto(SOLE, radice); if (P0.length < 3) continue;
-    const k = 1 + (n % (P0.length - 2)), ev = `${radice}/embrione ${P0[k].formazione.embrione}/eccentricità`, { R: R1, P: P1 } = letto(SOLE, radice, { [ev]: 1 });
-    // gli eventi letti sono gli stessi, e l'unico andato diversamente è quello (le sue estrazioni: «…/eccentricità», «…/eccentricità#1»)
-    assert.deepEqual([...R1.keys()], [...R0.keys()]); const cambiati = diversi(R0, R1);
-    assert.ok(cambiati.length >= 1 && cambiati.every((x) => x === ev || x === `${ev}#1`), `seme ${n}: cambiati ${cambiati}`);
-    // i pianeti: stessi, con le stesse orbite, masse, storie; cambia l'eccentricità di quello (e, se le due orbite si
-    // toccavano, la parte che i detriti tolgono a lui e al vicino: ciò che ne discende)
-    assert.equal(P1.length, P0.length); assert.notEqual(P1[k].eccentricita, P0[k].eccentricita, `seme ${n}`);
-    assert.equal(foto(P1.map((p) => ({ ...p, eccentricita: 0 }))), foto(P0.map((p) => ({ ...p, eccentricita: 0 }))), `seme ${n}`);
-    P0.forEach((p, i) => { if (Math.abs(i - k) > 1) assert.equal(P1[i].eccentricita, p.eccentricita, `seme ${n}, pianeta ${i}`); else if (i !== k && P1[i].eccentricita !== p.eccentricita) vicini++; });
-    casi++;
+    const radice = `prova/stella ${n}/disco`, { R: R0, P: P0 } = letto(SOLE, radice); if (!P0.length) continue;
+    const ev = `${radice}/embrione ${P0[n % P0.length].formazione.embrione}/orbita`, { R: R1, P: P1 } = letto(SOLE, radice, { [ev]: 1 });
+    // gli eventi letti in tutti e due i mondi hanno lo stesso esito, salvo quello (le sue estrazioni: «…/orbita», «…/orbita#1»)
+    assert.ok(diversi(R0, R1).every((x) => x === ev || x === `${ev}#1`), `seme ${n}: ${diversi(R0, R1)}`);
+    // il disco è lo stesso (sta prima), e così i giganti, nati nel gas, prima degli urti
+    assert.equal(JSON.stringify(disco(SOLE, sorgente(radice, { [ev]: 1 }))), JSON.stringify(disco(SOLE, sorgente(radice))));
+    const nuclei = (P) => P.filter((p) => p.tipo === 'gassoso').map((p) => p.storia.split(';')[0]).join('|'); assert.equal(nuclei(P1), nuclei(P0), `seme ${n}`);
+    casi++; if (foto(P1) !== foto(P0)) cambiati++;
   }
-  assert.ok(casi >= 30, `solo ${casi} sistemi con almeno tre pianeti`);
-  console.log(`      (${casi} sistemi: cambia quel pianeta; in ${vicini} casi anche il vicino, perché le due orbite si toccavano)`);
+  assert.ok(casi >= 30 && cambiati >= 1, `${casi} sistemi, ${cambiati} cambiati`);
+  console.log(`      (${casi} sistemi: in ${cambiati} il ramo cambia i pianeti)`);
 });
 
 prova('un incontro tra embrioni andato diversamente: tutti gli altri eventi hanno lo stesso esito; cambia solo ciò che ne discende', () => {
@@ -285,7 +286,7 @@ prova('l\'ordine non conta: sistemi calcolati all\'indietro, eventi riletti all\
   // un numero al posto della sorgente è «disco numero»; e i nomi degli eventi sono quelli dichiarati
   assert.equal(foto(formaPianeti(SOLE, 7)), foto(formaPianeti(SOLE, sorgente('disco 7'))));
   const nomi = new Set(voci.map((v) => v.slice('prova/stella 3/disco/'.length).replace(/\d+/g, 'N').replace(/#N$/, '')));
-  for (const n of nomi) assert.ok(['massa', 'vita del gas', 'bordo interno', 'acqua portata da fuori', 'embrione N/incontro con N', 'embrione N/fusione con N', 'embrione N/eccentricità'].includes(n), `evento «${n}»`);
+  for (const n of nomi) assert.ok(['massa', 'vita del gas', 'bordo interno', 'acqua portata da fuori', 'embrione N/orbita', 'embrione N/agitazione con N', 'embrione N/incontro con N', 'embrione N/incontro con N/ritorno N', 'embrione N/fusione con N'].includes(n), `evento «${n}»`);
 });
 
 console.log(`disco: ${ok} prove, tutto ok`);
