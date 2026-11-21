@@ -1165,33 +1165,78 @@ function eventoNellAcqua(cam, S, k, u, v, profondo) {
 // la rampa di un'ottava attorno al pixel, la stessa regola di tutto lo zoom) compaiono, una per una, sopra la finestra:
 // sono LE STESSE della scena in 3D che si monta sotto i 10 nm (scenaNano, preparata da finestre.worker.js con gli stessi
 // argomenti), viste dall'alto come la vede il 3D (la x a destra, la y in su), con i colori della scena (l'acqua del colore
-// del mare): così il 3D, quando compare, ha sotto di sé già le sue molecole. La scena è periodica (come nel 3D): la tessera
-// si ripete. Il dettaglio sotto il pixel lo fa la piramide di immagini (ognuna la media di quattro pixel di quella sopra).
+// del mare): così il 3D, quando compare, ha sotto di sé già le sue molecole.
+// SENZA RIPETIZIONE. Il cubetto di 10 nm è periodico, ma ripetuto tale e quale si vedeva una griglia (gli ioni a 100 nm in
+// file). Ora il piano è fatto di CELLE di 10 nm, e ogni cella prende dal cubetto una sua variante, scelta con serie() per
+// cella (eredita.js, serie per nome): uno degli otto STRATI del cubetto (fette di 1,25 nm a profondità diverse: altre
+// molecole, altri ioni, e insieme tutto il cubetto, quindi le concentrazioni restano quelle) visto in una delle otto
+// SIMMETRIE del quadrato (rotazioni di 90° e ribaltamenti: il cubetto resta un campione dello stesso liquido). Le molecole
+// non si tagliano sul bordo della cella: ognuna appartiene alla cella del suo centro e si disegna intera, anche oltre il
+// bordo (il margine della tessera, trasparente), sopra il fondo del colore dell'acqua. Le nove celle attorno al punto sono
+// quelle del 3D (lo strato davanti, con le stesse simmetrie delle copie in atomi3d.js periodica: varianteCella).
+// Il dettaglio sotto il pixel lo fa la piramide di immagini (ognuna la media di quattro pixel di quella sopra).
 const tessereNano = new Map(), DIAMETRO_ACQUA = 2 * 0.152e-9; // (m: il diametro di van der Waals dell'ossigeno, Bondi 1964)
+const STRATI_NANO = 8;
 // (il totale si conserva, come vuole eredita.js separa: la media della tessera è il colore della finestra sotto, quello che le
 // molecole sotto il pixel già facevano; i colori delle molecole si scalano di k, e la scena in 3D con loro: scenaAtomi)
 const mediaTela = (cv) => { const c = telaN(16), x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingEnabled = true; x.drawImage(cv, 0, 0, 16, 16); const d = x.getImageData(0, 0, 16, 16).data, m = [0, 0, 0]; for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) m[k] += d[4 * i + k] / 256; return m; };
-function tesseraNano(sc, voluto = null) {
-  const A = sc.atomi, Lb = sc.latoNm || sc.scatola[0], N = 512, k = N / Lb, buf = new Uint8ClampedArray(N * N * 4), prof = new Float32Array(N * N).fill(-Infinity), c0 = sc.coloreAcqua || [40, 70, 100];
-  for (let i = 0; i < N * N; i++) { buf[4 * i] = c0[0]; buf[4 * i + 1] = c0[1]; buf[4 * i + 2] = c0[2]; buf[4 * i + 3] = 255; }
-  // (la fetta davanti, 1,2 nm: chi sta più dietro è coperto; ogni sfera col suo raggio, l'ombra dove si allontana dal centro)
-  const n = A.raggio.length, fetta = Lb - 1.2;
-  for (let a = 0; a < n; a++) { const z = A.pos[3 * a + 2]; if (z < fetta) continue; const r = A.raggio[a] * k, cx = A.pos[3 * a] * k, cy = (Lb - A.pos[3 * a + 1]) * k, col = A.colore ? [A.colore[3 * a], A.colore[3 * a + 1], A.colore[3 * a + 2]] : [200, 200, 200];
-    for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) { const X = cx + dx, Y = cy + dy; if (X + r < 0 || X - r > N || Y + r < 0 || Y - r > N) continue;
-      for (let y = Math.max(0, Math.floor(Y - r)); y <= Math.min(N - 1, Math.ceil(Y + r)); y++) for (let x = Math.max(0, Math.floor(X - r)); x <= Math.min(N - 1, Math.ceil(X + r)); x++) {
-        const d2 = ((x + 0.5 - X) ** 2 + (y + 0.5 - Y) ** 2) / (r * r); if (d2 > 1) continue; const zz = z + A.raggio[a] * Math.sqrt(1 - d2), o = y * N + x; if (zz <= prof[o]) continue; prof[o] = zz;
-        const lume = 0.62 + 0.38 * Math.sqrt(1 - d2); buf[4 * o] = col[0] * lume; buf[4 * o + 1] = col[1] * lume; buf[4 * o + 2] = col[2] * lume; } } }
-  let kc = [1, 1, 1]; if (voluto) { const m = [0, 0, 0]; for (let i = 0; i < N * N; i++) for (let c = 0; c < 3; c++) m[c] += buf[4 * i + c] / (N * N); kc = m.map((x, c) => (x > 0 ? voluto[c] / x : 1)); for (let i = 0; i < N * N; i++) for (let c = 0; c < 3; c++) buf[4 * i + c] *= kc[c]; }
-  const mip = [telaN(N)]; mip[0].getContext('2d').putImageData(new ImageData(buf, N, N), 0, 0);
-  for (let M = N / 2; M >= 8; M /= 2) { const c = telaN(M), x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.drawImage(mip[mip.length - 1], 0, 0, M, M); mip.push(c); }
-  return { mip, latoM: Lb * 1e-9, k: kc };
+// le otto simmetrie del quadrato, nelle coordinate della scena (x a destra, y in su), attorno al centro della cella:
+// d = 0…3 rotazioni di d·90°, 4…7 le stesse dopo il ribaltamento x → −x. → [a, b, c, e]: x' = a·x + b·y, y' = c·x + e·y
+export function simmetriaQuadrato(d) {
+  const R = [[1, 0, 0, 1], [0, -1, 1, 0], [-1, 0, 0, -1], [0, 1, -1, 0]][d & 3];
+  return d >= 4 ? [-R[0], R[1], -R[2], R[3]] : R;
 }
+// la variante della cella (i, j) (coordinate della scena, la cella del punto è 0, 0): { strato, simmetria }. Le nove
+// attorno al punto (|i|, |j| ≤ 1) hanno lo strato davanti, come nel 3D; quella del punto è il cubetto tale e quale
+const intero = (i) => (i >= 0 ? 2 * i : -2 * i - 1), coppia = (a, b) => ((a + b) * (a + b + 1)) / 2 + b;
+export function varianteCella(chiave, i, j) {
+  if (!i && !j) return { strato: 0, simmetria: 0 };
+  const u = serie(chiave, 'celle delle molecole'), n = coppia(intero(i), intero(j)), simmetria = Math.floor(u(2 * n) * 8) & 7;
+  return { strato: Math.abs(i) <= 1 && Math.abs(j) <= 1 ? 0 : Math.floor(u(2 * n + 1) * STRATI_NANO) % STRATI_NANO, simmetria };
+}
+function tesseraNano(sc, voluto = null) {
+  const A = sc.atomi, Lb = sc.latoNm || sc.scatola[0], N = 512, k = N / Lb, c0 = sc.coloreAcqua || [40, 70, 100];
+  let rm = 0; for (let a = 0; a < A.raggio.length; a++) if (A.raggio[a] > rm) rm = A.raggio[a];
+  const T = { latoM: Lb * 1e-9, Lb, N, k, margine: Math.ceil(rm * k + 0.2 * k) + 1, A, kc: [1, 1, 1], c0, strati: [] };
+  // i colori: la media dello strato davanti sul fondo dell'acqua è il colore della finestra (come prima della divisione in strati)
+  const s0 = stratoNano(T, 0, true);
+  if (voluto) { const m = [0, 0, 0], M = T.N + 2 * T.margine, b = s0.buf; for (let y = T.margine; y < T.margine + N; y++) for (let x = T.margine; x < T.margine + N; x++) { const o = 4 * (y * M + x), w = b[o + 3] / 255; for (let c = 0; c < 3; c++) m[c] += (b[o + c] * w + c0[c] * (1 - w)) / (N * N); } T.kc = m.map((x, c) => (x > 0 ? voluto[c] / x : 1)); }
+  T.strati[0] = stratoInMip(T, s0.buf); T.k = T.kc; T.fondo = `rgb(${c0.map((x, c) => Math.round(Math.min(255, x * T.kc[c]))).join(',')})`;
+  return T;
+}
+// uno strato del cubetto: gli atomi con la profondità nella fetta s (0: quella davanti, la z più alta), ognuno intero,
+// coperto da chi gli sta davanti, l'ombra dove la sfera si allontana dal centro; il resto trasparente
+function stratoNano(T, s) {
+  const { A, Lb, N, k, margine } = T, M = N + 2 * margine, buf = new Uint8ClampedArray(M * M * 4), prof = new Float32Array(M * M).fill(-Infinity), h = Lb / STRATI_NANO, n = A.raggio.length;
+  for (let a = 0; a < n; a++) { const z = A.pos[3 * a + 2], q = Math.min(STRATI_NANO - 1, Math.max(0, Math.floor((Lb - z) / h))); if (q !== s) continue;
+    const r = A.raggio[a] * k, X = A.pos[3 * a] * k + margine, Y = (Lb - A.pos[3 * a + 1]) * k + margine, col = A.colore ? [A.colore[3 * a], A.colore[3 * a + 1], A.colore[3 * a + 2]] : [200, 200, 200];
+    for (let y = Math.max(0, Math.floor(Y - r)); y <= Math.min(M - 1, Math.ceil(Y + r)); y++) for (let x = Math.max(0, Math.floor(X - r)); x <= Math.min(M - 1, Math.ceil(X + r)); x++) {
+      const d2 = ((x + 0.5 - X) ** 2 + (y + 0.5 - Y) ** 2) / (r * r); if (d2 > 1) continue; const zz = z + A.raggio[a] * Math.sqrt(1 - d2), o = y * M + x; if (zz <= prof[o]) continue; prof[o] = zz;
+      const lume = 0.62 + 0.38 * Math.sqrt(1 - d2); buf[4 * o] = col[0] * lume; buf[4 * o + 1] = col[1] * lume; buf[4 * o + 2] = col[2] * lume; buf[4 * o + 3] = 255; } }
+  return { buf, M };
+}
+function stratoInMip(T, buf) {
+  const M = T.N + 2 * T.margine, kc = T.kc; if (kc[0] !== 1 || kc[1] !== 1 || kc[2] !== 1) for (let i = 0; i < M * M; i++) for (let c = 0; c < 3; c++) buf[4 * i + c] *= kc[c];
+  const mip = [telaN(M)]; mip[0].getContext('2d').putImageData(new ImageData(buf, M, M), 0, 0);
+  for (let L = M >> 1; L >= 8; L >>= 1) { const c = telaN(L), x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.drawImage(mip[mip.length - 1], 0, 0, L, L); mip.push(c); }
+  return mip;
+}
+const stratoDi = (T, s) => (T.strati[s] ||= stratoInMip(T, stratoNano(T, s).buf));
+let telaMolecole = null;
 function molecoleInPiano(ctx, cam, r0, px, py, pxm, W, H) {
   const S = superficieDi(cam.via); if (!S || !r0.punto) return; const { u, v } = r0.punto, ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|1e-8`;
   const a = pesoDiscreto(DIAMETRO_ACQUA * pxm); if (!(a > 0)) return; // (eredita.js: la molecola contro il pixel, su un'ottava)
   let T = tessereNano.get(ch); if (!T) { const sc = scenePronte.get(ch); if (!sc) return; try { T = tesseraNano(sc, r0.cv ? mediaTela(r0.cv) : null); } catch (err) { console.warn(err); return; } tessereNano.set(ch, T); if (tessereNano.size > 3) tessereNano.delete(tessereNano.keys().next().value); }
-  const zt = T.latoM * pxm; let cv = T.mip[0]; for (const c of T.mip) if (c.width >= zt) cv = c;
-  ctx.globalAlpha = a; periodico(ctx, cv, px - zt / 2, py - zt / 2, zt, W, H, true); ctx.globalAlpha = 1;
+  // (sotto il peso pieno le molecole si disegnano a parte e si posano con il loro peso: a·molecole + (1 − a)·finestra)
+  let c = ctx; if (a < 1) { if (!telaMolecole || telaMolecole.width !== W || telaMolecole.height !== H) telaMolecole = Object.assign(document.createElement('canvas'), { width: W, height: H }); c = telaMolecole.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); }
+  const zt = T.latoM * pxm, Mt = T.N + 2 * T.margine, lato = (zt * Mt) / T.N; c.fillStyle = T.fondo; c.fillRect(0, 0, W, H); c.imageSmoothingEnabled = true;
+  const i0 = Math.ceil((-px - lato / 2) / zt), i1 = Math.floor((W - px + lato / 2) / zt), j0 = Math.ceil((-py - lato / 2) / zt), j1 = Math.floor((H - py + lato / 2) / zt);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const { strato, simmetria } = varianteCella(ch, i, -j), mip = stratoDi(T, strato); let cv = mip[0]; for (const q of mip) if (q.width >= lato) cv = q;
+    // (la simmetria nella scena, portata sullo schermo dove la y va in giù: G = Fy·M·Fy)
+    const [ma, mb, mc, me] = simmetriaQuadrato(simmetria); c.setTransform(ma, -mc, -mb, me, px + i * zt, py + j * zt); c.drawImage(cv, -lato / 2, -lato / 2, lato, lato);
+  }
+  c.setTransform(1, 0, 0, 1, 0, 0); if (c !== ctx) { ctx.globalAlpha = a; ctx.drawImage(telaMolecole, 0, 0); ctx.globalAlpha = 1; }
 }
 // ---------- GLI ATOMI IN TRE DIMENSIONI (atomi3d.js). Ai livelli più profondi la materia non è più un'immagine: chi monta
 // la vista (laboratorio.js) chiede qui se dove si sta guardando c'è una scena di atomi, e quale. Nell'acqua, sotto i dieci
@@ -1209,7 +1254,7 @@ export function scenaAtomi(cam, m = 0) { // (m: il lato corto dello schermo, in 
       crea: () => { const ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, pronta = scenePronte.get(ch); if (pronta && !tessereNano.has(ch)) { try { tessereNano.set(ch, tesseraNano(pronta, r.cv ? mediaTela(r.cv) : null)); } catch { /* resta senza */ } } if (pronta) scenePronte.delete(ch);
         const sc0 = pronta || scenaNano(S.mare, { lon: u * 360 - 180, lat: 90 - v * 180, profondita: 0, latoM: lato, fondoM: profondo }, sorgente(`${S.k}/acqua/${u.toFixed(6)}/${v.toFixed(6)}`)), T = tessereNano.get(ch);
         if (T && sc0.atomi.colore) { const c = Uint8Array.from(sc0.atomi.colore); for (let i = 0; i < c.length; i++) c[i] = Math.min(255, c[i] * T.k[i % 3]); sc0.atomi = { ...sc0.atomi, colore: c }; } // (i colori della tessera: la media è quella dell'acqua)
-        return periodica(conMoto(sc0), [3, 3, 1]); } };
+        return periodica(conMoto(sc0), [3, 3, 1], null, { simmetria: (i, j) => simmetriaQuadrato(varianteCella(`${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|${lato}`, i, j).simmetria) }); } };
   }
   if (cam.passoRoccia !== 3 || !r.minerale || !r.luogo || cam.z < 0.95 * m) return null;
   // (sul suolo: la superficie del minerale con sopra l'acqua dei pori a metà del suolo, ogni ione nel suo numero: suolo.js)

@@ -1243,14 +1243,20 @@ export function conMoto(scena, { T = scena.T || (scena.agitazione && scena.agita
 // copia (è la stessa materia: ciò che fa una molecola vicino al lato lo fa anche la sua immagine). Chi guarda non vede
 // mai più di quanto lo schermo regga: le copie lontane passano per la nebbia della vista (sferette che ne rappresentano
 // molte). Restituisce una scena nuova; scatola: [lx, ly, lz] del campione (se manca: quella della scena).
-export function periodica(scena, ripeti = [3, 3, 1], scatola = null) {
+// simmetria(i, j, k) (facoltativa; i, j, k: la copia, 0 quella del punto) → [a, b, c, e]: ogni copia girata o ribaltata nel
+// piano x–y attorno al centro della scatola (x' = a·x + b·y, y' = c·x + e·y; per una scatola quadrata le otto simmetrie del
+// quadrato: mappa.js varianteCella). Una copia così è ancora lo stesso liquido, ma le copie non sono più tutte uguali.
+export function periodica(scena, ripeti = [3, 3, 1], scatola = null, { simmetria = null } = {}) {
   const A = scena.atomi, N = Math.floor(A.pos.length / 3), box = scatola || scena.scatola, R = ripeti.map((n) => Math.max(1, n | 0)), copie = R[0] * R[1] * R[2];
   if (copie === 1 || !N || !box) return scena;
-  const spost = []; for (let k = 0; k < R[2]; k++) for (let j = 0; j < R[1]; j++) for (let i = 0; i < R[0]; i++) spost.push([(i - (R[0] - 1) / 2) * box[0], (j - (R[1] - 1) / 2) * box[1], (k - (R[2] - 1) / 2) * box[2]]);
+  const spost = []; for (let k = 0; k < R[2]; k++) for (let j = 0; j < R[1]; j++) for (let i = 0; i < R[0]; i++) { const ii = i - (R[0] - 1) / 2, jj = j - (R[1] - 1) / 2, kk = k - (R[2] - 1) / 2, d = [ii * box[0], jj * box[1], kk * box[2]]; if (simmetria && (ii || jj || kk)) d.m = simmetria(ii, jj, kk); spost.push(d); }
   // (la copia del punto, quella senza spostamento, resta la prima: i suoi atomi hanno gli stessi indici di prima)
   const zero = spost.findIndex((d) => !d[0] && !d[1] && !d[2]); if (zero > 0) [spost[0], spost[zero]] = [spost[zero], spost[0]];
   const pos = new Float32Array(3 * N * copie), rip = (a, n) => { if (!a) return a; const o = new a.constructor(a.length * copie); for (let c = 0; c < copie; c++) o.set(a, c * a.length); return o; };
-  const sposta = (src, dst) => { for (let c = 0; c < copie; c++) { const d = spost[c], b = 3 * N * c; for (let i = 0; i < 3 * N; i += 3) { dst[b + i] = src[i] + d[0]; dst[b + i + 1] = src[i + 1] + d[1]; dst[b + i + 2] = src[i + 2] + d[2]; } } };
+  const cx = box[0] / 2, cy = box[1] / 2;
+  const sposta = (src, dst) => { for (let c = 0; c < copie; c++) { const d = spost[c], b = 3 * N * c, m = d.m;
+    if (m) { for (let i = 0; i < 3 * N; i += 3) { const x = src[i] - cx, y = src[i + 1] - cy; dst[b + i] = cx + m[0] * x + m[1] * y + d[0]; dst[b + i + 1] = cy + m[2] * x + m[3] * y + d[1]; dst[b + i + 2] = src[i + 2] + d[2]; } continue; }
+    for (let i = 0; i < 3 * N; i += 3) { dst[b + i] = src[i] + d[0]; dst[b + i + 1] = src[i + 1] + d[1]; dst[b + i + 2] = src[i + 2] + d[2]; } } };
   sposta(A.pos, pos);
   let parte = A.parte; if (!parte && scena.parti?.length && scena.parti[0].da != null) { parte = new Uint16Array(N).fill(65535); scena.parti.forEach((p, k) => parte.fill(k, Math.max(0, p.da), Math.min(N, p.a))); }
   let gruppo = null; if (A.gruppo) { let g = 0; for (let i = 0; i < N; i++) if (A.gruppo[i] > g) g = A.gruppo[i]; gruppo = new Uint32Array(N * copie); for (let c = 0; c < copie; c++) for (let i = 0; i < N; i++) gruppo[c * N + i] = A.gruppo[i] + c * (g + 1); }

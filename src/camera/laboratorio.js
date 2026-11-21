@@ -15,6 +15,7 @@ import { sistema as sistemaDi, galassia as galassiaDi } from './cosmo.js';
 import { Z5_ROCCIA, LATI_SUOLO, disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, quandoFinestraPronta, preparaVolo, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto, finestreDelPunto, disegnaFinestre } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
+import { pesoDiscreto } from './eredita.js';
 import { creaUniverso } from '../tre/universo.js';
 import { scriviBolla, leggiBolla, viaDi as viaDellaBolla, passoSensato, scalaDi, bolla as bollaNuova } from '../tre/bolla.js';
 import { luogoDaAria } from './materia.js';
@@ -193,10 +194,16 @@ function smontaQuanti() {
   try { vistaQuanti?.libera?.(); nucleoQuanti?.libera?.(); } catch { /* già perso */ }
   cancelAnimationFrame(cicloDensita); cicloDensita = 0; telaDensita?.remove(); telaDensita = null;
   telaQuanti?.remove(); telaQuanti = null; vistaQuanti = null; nucleoQuanti = null; ultimaQuanti = 0;
+  if (telaAtomi) telaAtomi.style.transform = '';
 }
 // LA SCALA QUANTISTICA CONTINUA LO ZOOM: non è un'altra vista che prende il posto degli atomi, ma lo stesso atomo più da
-// vicino. (1) Si fonde con gli atomi secondo la scala, non col tempo, come gli atomi con l'immagine piatta: trasparente alla
-// grandezza a cui si entra, piena a un terzo di quella (A MANO, dichiarato: il fattore 3, lo stesso di fondiAtomi).
+// vicino. (1) Si fonde con gli atomi secondo la grandezza a schermo, non col tempo: il peso w = pesoDiscreto (eredita.js)
+// di quante volte l'atomo è più grande sullo schermo di quando si è entrati (alta / g), con la rampa larga FUSIONE_QUANTI:
+// w = 0 alla grandezza d'ingresso, 1 a un trentesimo di quella. Le due viste stanno alla stessa scala: gli atomi, fermi
+// alla loro camera più vicina, seguono lo zoom ingranditi di alta / g attorno al centro (da lì si è scesi), e la tela dei
+// quanti (opaca) sta sopra con opacità w: a schermo w·quanti + (1 − w)·atomi, la luce totale conservata. (Prima la
+// dissolvenza andava su un fattore 3, dentro un solo scatto di mezza decade, con gli atomi fermi sotto: un salto.)
+// (A MANO, dichiarato: la larghezza della rampa, una decade e mezza: sotto la decade una mezza decade di zoom cambia tutto.)
 // (2) Sotto gli eventi dello strumento c'è sempre il CAMPO, la densità di carica attorno al nucleo dell'atomo guardato, a
 // ogni decade (quanti.js): la densità elettronica di Slater, la cui superficie a 0,001 e/a₀³ è la sfera che si vedeva da fuori;
 // dentro, i gusci e poi, sotto il raggio dell'1s, la densità di contatto, uniforme; sotto ƛ = 386 fm la carica che il vuoto
@@ -205,6 +212,7 @@ function smontaQuanti() {
 // 0,9 fm. Ogni decade di densità è una fascia appena più chiara (le isolinee in log ρ): a ogni ingrandimento c'è una
 // superficie da vedere, come chiede la continuità (rapporto «Generatore multiscala», §5). Il colore lo dà la luce dello
 // strumento (il verde del fosforo per gli elettroni), non l'atomo.
+const FUSIONE_QUANTI = 10 ** 1.5;
 function densitaQuanti(Qc, atomo, alta) {
   telaDensita = document.createElement('canvas'); telaDensita.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen'; telaQuanti.parentNode.insertBefore(telaDensita, telaQuanti.nextSibling);
   const Z = atomo.Z, d = Qc.densitaAtomo(Z, atomo.carica || 0), a0 = Qc.AU.a0, nuc = Qc.nucleo(Z), iso = 0.001 / a0 ** 3;
@@ -215,7 +223,8 @@ function densitaQuanti(Qc, atomo, alta) {
   let ultima = 0;
   const disegna1 = () => {
     cicloDensita = requestAnimationFrame(disegna1); if (!telaDensita) return; const g = grandezzaQuanti(); if (!(g > 0)) return;
-    const a = Math.max(0, Math.min(1, Math.log(alta / g) / Math.log(3))); telaQuanti.style.opacity = String(a); telaDensita.style.opacity = String(a);
+    const a = pesoDiscreto(alta / g / Math.sqrt(FUSIONE_QUANTI), Math.log2(FUSIONE_QUANTI)); telaQuanti.style.opacity = String(a); telaDensita.style.opacity = String(a);
+    if (telaAtomi) { const k = a < 1 ? Math.max(1, alta / g) : 1; telaAtomi.style.transformOrigin = '50% 50%'; telaAtomi.style.transform = k > 1 ? `scale(${k})` : ''; }
     const W = telaDensita.clientWidth, H = telaDensita.clientHeight; if (!W || !H) return; if (telaDensita.width !== W || telaDensita.height !== H) { telaDensita.width = W; telaDensita.height = H; ultima = 0; } // (assegnare la misura svuota la tela: solo se cambia)
     if (Math.abs(g / ultima - 1) < 1e-3) return; ultima = g;
     const x = telaDensita.getContext('2d'), mpp = g / H, R = Math.hypot(W, H) / 2, grad = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R), n = 96;
@@ -242,10 +251,17 @@ async function montaQuanti() {
     // la camera parte alla grandezza a cui si era: lo schermo alto `alta` metri
     nucleoQuanti.attacca(vistaQuanti.corpo, { distanza: alta / (2 * Math.tan((nucleoQuanti.camera.fov || 0.75) / 2)) }); nucleoQuanti.avvia();
     try { densitaQuanti(Qc, atomo, alta); } catch (err) { console.warn('la densità sotto la scala quantistica:', err); }
-    // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi; avvicinandosi quando la camera non scende
-    // più (il più vicino possibile all'atomo) lo zoom è finito: è la scala più piccola, e lo si dice
-    let ultima = null, ferma = 0;
-    telaQuanti.addEventListener('wheel', (e) => { if (e.deltaY < 0) { const g = grandezzaQuanti(); ferma = g > 0 && ultima > 0 && g >= ultima * 0.995 ? ferma + 1 : 0; ultima = g; if (ferma >= 6) { ferma = 0; $('dove').textContent = 'La scala quantistica: le particelle e i campi dentro l\'atomo. È la scala più piccola: qui lo zoom finisce.'; } return; } ferma = 0; ultima = null; });
+    // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi. IL FONDO: la camera arriva al bordo del
+    // nucleo (quanti.js, distanzaMinima: il nucleo è l'ultimo bersaglio della rotella) e lì lo zoom finisce: è la scala più
+    // piccola, e lo si dice. Gli scatti in avanti oltre il fondo non arrivano più alla camera. (Prima, arrivata al nucleo, la
+    // rotella proseguiva «verso ciò che c'è dentro» senza più bersagli, a passi di un metro: la camera usciva di colpo a
+    // quaranta raggi dell'atomo, e lo schermo tornava largo 10⁻⁸ m.)
+    telaQuanti.addEventListener('wheel', (e) => {
+      if (!(e.deltaY < 0) || !vistaQuanti) return; const d = vistaQuanti.stato?.distanza, min = vistaQuanti.distanzaMinima;
+      if (!(d > 0 && min > 0 && d <= min * 1.02)) return;
+      e.stopImmediatePropagation(); e.preventDefault(); nucleoQuanti?.fermaZoom?.();
+      $('dove').textContent = 'La scala quantistica: le particelle e i campi dentro l\'atomo. È la scala più piccola: qui lo zoom finisce.';
+    }, { capture: true, passive: false });
     telaQuanti.addEventListener('wheel', (e) => { if (e.deltaY > 0 && !(grandezzaQuanti() < alta)) { e.stopImmediatePropagation(); e.preventDefault(); const img = istantanea(); smontaQuanti(); disegna(); dove(); avviaPassaggio(img); } }, { capture: true, passive: false });
   } catch (err) { console.warn('la scala quantistica non si è potuta montare', err); smontaQuanti(); quantiAssenti = true; }
 }
@@ -707,7 +723,7 @@ function barraDiScala(mpp) {
 }
 requestAnimationFrame(disegnaSopra);
 window.__camera = {
-  mpp: () => scalaASchermo(), roccia: (c) => rocciaDi(c), get passaggio() { return !!passaggio && passaggio.t0 == null; }, // (in attesa della vista nuova; a vista pronta la dissolvenza è un quadro fermo per ogni scala) cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; },
+  mpp: () => scalaASchermo(), roccia: (c) => rocciaDi(c), get passaggio() { return !!passaggio && passaggio.t0 == null; }, cosa: () => cosaSiGuarda(), get sopra() { return vociSopraOra.map((v) => ({ L: v.L, nome: v.nome, tracce: !!v.tracce })); }, get vistaAtomi() { return vistaAtomi; }, // (passaggio: in attesa della vista nuova; a vista pronta la dissolvenza è un quadro fermo per ogni scala)
   get camMappa() { return camMappa; }, get mondo3d() { return mondo3d; }, get universo3d() { return universo3d; }, get bolla() { return universo3d ? scriviBolla(universo3d.bolla()) : null; }, vaiAllaBolla(testo) { const b = leggiBolla(testo); if (b && universo3d) universo3d.vaiAllaBolla(b); return !!b; }, vaiA: (meta) => !!universo3d?.vaiA(meta), volaAlLivello,
   aggiorna: () => aggiornaVista(), // (dopo aver cambiato camMappa da fuori: il visore torna così nello spazio)
 };

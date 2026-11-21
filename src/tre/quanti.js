@@ -131,6 +131,8 @@ export function creaQuanti(N, opzioni = {}) {
   let kmin = 0, esposizione = 1e30, nScie = 0, jNow = -1;
   const strato = {
     nome: 'quanti', corpo, stato, opzioni: O, nucleo: nuc,
+    // il fondo dello zoom: la camera al bordo del nucleo, dove la rotella del nucleo si ferma (nucleo.js, ZOOM.bordo = 1,25 raggi)
+    distanzaMinima: 1.25 * (nuc.raggio || 1) * 1e-15,
     aggiorna(S) {
       S.versoCorpo(corpo, _v); const d = Math.hypot(_v[0], _v[1], _v[2]); stato.distanza = d;
       const kNow = Math.floor((S.t - t0) / tau); stato.kNow = kNow; chiedi(kNow);
@@ -143,8 +145,9 @@ export function creaQuanti(N, opzioni = {}) {
       // il nucleo: si calcola solo quando sullo schermo è più largo di mezzo pixel
       const rN = (nuc.raggio || 1) * 1e-15; stato.nucleoVisibile = d > 0 && (rN / d) * S.fuoco > 0.5;
       if (stato.nucleoVisibile) { jNow = kNow; if (istantanee(jNow)) { gl.bindBuffer(gl.ARRAY_BUFFER, bPN); gl.bufferSubData(gl.ARRAY_BUFFER, 0, datiN); gl.bindBuffer(gl.ARRAY_BUFFER, bQN); gl.bufferSubData(gl.ARRAY_BUFFER, 0, tipiN); } }
-      // i bersagli per la rotella: l'atomo da fuori, poi il nucleo
-      const rA = corpo.raggio * 0.25; if (d > 2 * rA) S.bersaglio({ p: _v.slice(), raggio: rA, corpo }); else if (d > 3 * rN) S.bersaglio({ p: _v.slice(), raggio: rN, corpo });
+      // i bersagli per la rotella: l'atomo da fuori, poi il nucleo fino in fondo (senza un bersaglio la rotella del nucleo
+      // andrebbe avanti a passi di un metro: qui non c'è un corpo padre che dia la scala)
+      const rA = corpo.raggio * 0.25; if (d > 2 * rA) S.bersaglio({ p: _v.slice(), raggio: rA, corpo }); else S.bersaglio({ p: _v.slice(), raggio: rN, corpo });
     },
     disegna(S, passata) {
       if (passata !== 'velato') return; const d = stato.distanza; if (!(d > 0)) return;

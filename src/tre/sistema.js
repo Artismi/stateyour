@@ -19,6 +19,7 @@ import { corpiSistema, scenaSistema } from '../camera/spazio3d.js';
 import { creaBucoNero } from './buconero.js';
 import { COSTANTI } from '../camera/leggi.js';
 import { creaMinori } from './minori.js';
+import { pesoDiscreto } from '../camera/eredita.js';
 
 // un buco nero nel mondo: lo strato di buconero.js (nel modo «scena»: piega ciò che gli altri hanno disegnato) più il
 // TEMPO PROPRIO di chi gli sta vicino: per chi sta fermo a r il suo secondo vale 1/√(1 − 2r_g/r) secondi di chi sta
@@ -122,9 +123,11 @@ export function creaSistema(N, { via, superficie = () => null, genitore = null, 
       const dS = V.lungo(schede[0].rel), suPianeta = schede.some((s) => s.vero && V.lungo(s.rel) < 400 * s.corpo.raggio);
       if (!suPianeta && dS < 30 * nodo.influenza) S.proponiLuce((0.6 * stella.luminosita) / (4 * Math.PI * Math.max(dS, stella.raggio * 3) ** 2));
       // i segnaposto: un pianeta lontano è molto più piccolo di un punto dello schermo e quasi buio; perché si veda dov'è gli si
-      // mette un puntino del suo colore, sempre della stessa forza (non è luce vera: è un segno)
+      // mette un puntino del suo colore, sempre della stessa forza (non è luce vera: è un segno). Compare secondo la grandezza
+      // a schermo, non di colpo: pieno per (1 − w), w = pesoDiscreto del raggio contro 0,7 pixel (eredita.js: la rampa di
+      // un'ottava), quando il pianeta sta per diventare più piccolo di un punto
       { let k = 0; const forza = (0.35 * 4 * Math.PI * S.E0 * 20) / (Math.PI * S.fuoco * S.fuoco) / 1e20, px = (2 * S.tanY) / S.H;
-        for (const s of schede) { if (s.corpo === stella || s.c.cosa === 'luna') continue; const d2 = V.scal(s.rel, s.rel); if (s.corpo.raggio / Math.sqrt(d2) > 0.7 * px) continue; const col = s.c.colore || [170, 170, 165]; posS.set(s.rel, 3 * k); luceS.set([(col[0] / 255) * forza * d2, (col[1] / 255) * forza * d2, (col[2] / 255) * forza * d2, 1], 4 * k); k++; }
+        for (const s of schede) { if (s.corpo === stella || s.c.cosa === 'luna') continue; const d2 = V.scal(s.rel, s.rel), segno = 1 - pesoDiscreto(s.corpo.raggio / Math.sqrt(d2) / (0.7 * px)); if (!(segno > 0)) continue; const col = s.c.colore || [170, 170, 165], f = forza * d2 * segno; posS.set(s.rel, 3 * k); luceS.set([(col[0] / 255) * f, (col[1] / 255) * f, (col[2] / 255) * f, 1], 4 * k); k++; }
         segni.metti(posS, luceS, k); }
       pos1.set(schede[0].rel); luce1.set([nero[0] * stella.luminosita * 1e-20, nero[1] * stella.luminosita * 1e-20, nero[2] * stella.luminosita * 1e-20, 1]); alone.metti(pos1, luce1, 1);
     },
