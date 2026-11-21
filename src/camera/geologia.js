@@ -34,7 +34,8 @@ export function statoDelMantello(P, int = P.interno) {
 
 // ---------- la superficie: una mappa equirettangolare (longitudine × latitudine) di quote in metri
 const memo = new Map();
-import { comeSorgente } from './eventi.js'; // il caso della superficie: dalla fonte unica («seme» è un numero o la sorgente del luogo)
+import { comeSorgente } from './eventi.js';
+import { discendi } from './eredita.js'; // l'ottava condizionata dal padre: il figlio è il padre più una correzione a media nulla // il caso della superficie: dalla fonte unica («seme» è un numero o la sorgente del luogo)
 export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {}) {
   if (memo.has(chiave)) return memo.get(chiave);
   const caso = comeSorgente(seme, 'superficie'); // gli eventi della superficie, ognuno con il suo nome («onda 3/fase», «vulcano 2/dove»): l'ordine non conta
@@ -60,14 +61,19 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   const gravita = P.massaKg > 0 ? (6.674e-11 * P.massaKg) / P.raggioM ** 2 : 9.81;
   const tt = aPlacche ? evolviTettonica({ W, H, raggioM: P.raggioM, nucleo: int.nucleo, q: int.q, eta: int.eta ?? 4.5e9, acqua: true, seme, placche: true, termico: mantello, acquaM3: acquaKg / 1000, gravita, impronta: storiaUrti ? (w, h) => improntaMantello(storiaUrti, w, h) : null }) : null;
   const cont = tt ? tt.cont : new Uint8Array(W * H), placche = tt ? tt.celle : 1;
-  // un rumore liscio (somma di onde sulla sfera) per le irregolarità del terreno
-  const onde = Array.from({ length: 24 }, (_, k) => ({ d: casuale(`onda ${k}/direzione`), f: 2 + k * 0.7, fi: caso(`onda ${k}/fase`) * 6.28, a: 1 / (1 + k * 0.35) }));
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const p = sfera(i, j), k = j * W + i;
-    let r = 0; for (const o of onde) r += o.a * Math.sin(o.f * dot(p, o.d) * 3 + o.fi);
-    alt[k] = tt ? tt.alt[k] + r * 180 : -1500 + r * 700;
-    if (tt) spinta[k] = tt.spinta[k]; // l'OROGENESI: dove oggi la crosta è compressa e i monti crescono
-  }
+  // IL RILIEVO. Con le placche è quello della tettonica (il galleggiamento della crosta, l'età dei fondali, le catene), e
+  // basta: il dettaglio sotto la cella lo aggiungono le tessere, con l'ottava condizionata dal padre (tessera, sotto). Prima
+  // vi si sommava un rumore di 24 sinusoidi a caso (±180 m), lo stesso su catene, cratoni e abissi.
+  // SENZA PLACCHE non c'è niente che faccia il rilievo grande (manca ancora la topografia dinamica del mantello sotto il
+  // coperchio): resta il campo di prima, −1500 m più un rilievo della stessa ampiezza (lo scarto della somma di sinusoidi
+  // di prima, 700·1,25 m, la radice di Σa²/2: AMPIEZZA EREDITATA, a mano), ma con lo spettro del terreno vero: le ottave di eredita.js con
+  // l'esponente di Hurst dei continenti (0,66: Gagnon e altri 2006), dalla cella di 1/4 del giro fino a quella della carta.
+  // (Il campo si richiude in longitudine: due campi, in x e in x − W, pesati cos e sin di πx/2W, che hanno la stessa varianza.)
+  let rilievo = null;
+  if (!tt) { const lv = Math.log2(W / 4), f = discendi({ base: () => 0, livello0: 0, livello: lv, I0: -W, J0: 0, nI: 2 * W, nJ: H, radice: `${chiave}/superficie`, nome: 'rilievo del pianeta', ampiezza: 1, hurst: HURST.continente, lato0: 1 });
+    rilievo = new Float64Array(W * H); let s2 = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const t = (Math.PI * i) / (2 * W), v = f[j * 2 * W + i + W] * Math.cos(t) + f[j * 2 * W + i] * Math.sin(t); rilievo[j * W + i] = v; s2 += v * v; }
+    const sc = (700 * 1.25) / Math.sqrt(s2 / (W * H)); for (let k = 0; k < W * H; k++) rilievo[k] *= sc; }
+  for (let k = 0; k < W * H; k++) { alt[k] = tt ? tt.alt[k] : -1500 + rilievo[k]; if (tt) spinta[k] = tt.spinta[k]; } // (spinta: l'OROGENESI, dove oggi la crosta è compressa e i monti crescono)
   // GLI IMPATTI. Per tutta la sua vita il pianeta è colpito: moltissimo da giovane, poi sempre meno; molti
   // crateri piccoli e pochi grandi; un'atmosfera densa brucia i corpi piccoli. Quanti se ne vedono ancora
   // dipende da quanto la superficie si rinnova: un mondo fermo e senz'aria li conserva tutti (la Luna), uno
@@ -630,8 +636,6 @@ export function erosione(chiave, sf, cl, { passi = 160, aperto = false, afflusso
 // l'erosione alla sua scala, con i bordi aperti e i fiumi della madre che entrano con la loro portata;
 // i laghi della madre restano al loro livello. Lo stesso posto dà sempre la stessa tessera.
 const memoTessere = new Map();
-const hashReticolo = (ix, iy, seme) => { let h = (ix * 374761393 + iy * 668265263 + seme * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-const rumore = (x, y, seme) => { const x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v); return (hashReticolo(x0, y0, seme) * (1 - su) + hashReticolo(x0 + 1, y0, seme) * su) * (1 - sv) + (hashReticolo(x0, y0 + 1, seme) * (1 - su) + hashReticolo(x0 + 1, y0 + 1, seme) * su) * sv - 0.5; };
 // LA COSTA È QUELLA DELLA MADRE (regola 4: il dettaglio è condizionato da ciò che c'è sopra). Una cella della madre è terra
 // o è mare, tutta: la figlia non può spostare la costa se non di ciò che da lontano non si vedeva. Interpolare le quote in
 // linea retta tra i centri non lo rispetta: tra una piana a +20 m e un fondale a −300 la quota zero cade a un sedicesimo
@@ -658,6 +662,17 @@ const rumore = (x, y, seme) => { const x0 = Math.floor(x), y0 = Math.floor(y), u
 // vede anche il terreno appena fuori, i fiumi non «sentono» il taglio, e due tessere vicine combaciano. Il bordo in
 // più non si mostra, ma resta alla tessera per fare da madre alle sue figlie (che così leggono oltre il loro lato).
 const BORDO = 1 / 8;
+// gli esponenti di Hurst del rilievo per luogo (Gagnon, Lovejoy e Schertzer 2006, NPG 13, 541)
+export const HURST = Object.freeze({ fondale: 0.46, continente: 0.66, margine: 0.77 });
+// κ(H): in un campo auto-affine di eredita.js con esponente H, lo scarto dell'ottava che viene dopo una griglia diviso per lo
+// scarto quadratico tra celle vicine di quella griglia (√S₁). Si misura una volta per esponente, su un campo di 128 × 128
+// fatto con sette ottave a legge di potenza (l'ottava dopo la settima ha scarto 2^(−8H) per ampiezza 1).
+const KAPPA = new Map();
+export function kappaHurst(H) {
+  let k = KAPPA.get(H); if (k) return k; const n = 128, f = discendi({ base: () => 0, livello0: 0, livello: 7, I0: 0, J0: 0, nI: n, nJ: n, radice: 'taratura del rilievo', nome: `hurst ${H}`, ampiezza: 1, hurst: H, lato0: 1 });
+  let s = 0, c = 0; for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) { s += (f[j * n + i] - f[j * n + i + 1]) ** 2 + (f[j * n + i] - f[(j + 1) * n + i]) ** 2; c += 2; }
+  k = 2 ** (-8 * H) / Math.sqrt(s / c); KAPPA.set(H, k); return k;
+}
 export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   if (L === 0) return radice.rett ? radice : Object.assign(radice, { rett: [0, 0, 1, 1], livello: 0 });
   const k = `${chiave}|${L}|${tx}|${ty}`; if (memoTessere.has(k)) return memoTessere.get(k);
@@ -665,17 +680,55 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   const Pw = Math.round(W * BORDO), Ph = Math.round(H * BORDO), Wl = W + 2 * Pw, Hl = H + 2 * Ph, N = Wl * Hl, du = 1 / n;
   const rett = [tx / n, ty / n, (tx + 1) / n, (ty + 1) / n], rettL = [rett[0] - BORDO * du, rett[1] - BORDO * du, rett[2] + BORDO * du, rett[3] + BORDO * du];
   // la madre con il suo bordo; la radice (il pianeta intero) si richiude in longitudine
-  const M = m.largo || { W: m.W, H: m.H, rett: m.rett, alt: m.alt, flusso: m.flusso, lago: m.lago, giro: true }, [mu0, mv0, mu1, mv1] = M.rett, MW = M.W, MH = M.H;
+  const M = m.largo || { W: m.W, H: m.H, rett: m.rett, alt: m.alt, flusso: m.flusso, lago: m.lago, versoValle: m.versoValle, giro: true }, [mu0, mv0, mu1, mv1] = M.rett, MW = M.W, MH = M.H;
   const ix = (x) => (M.giro ? ((x % MW) + MW) % MW : Math.max(0, Math.min(MW - 1, x))), iy = (y) => Math.max(0, Math.min(MH - 1, y));
   const bil = (arr, fx, fy) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0, a = iy(y0) * MW, b = iy(y0 + 1) * MW, p = ix(x0), q = ix(x0 + 1); return arr[a + p] * (1 - u) * (1 - v) + arr[a + q] * u * (1 - v) + arr[b + p] * (1 - u) * v + arr[b + q] * u * v; };
   const alt = new Float32Array(N), afflusso = new Float32Array(N), livelloLago = new Float32Array(N), cellaMadre = new Int32Array(N), pfx = new Float32Array(N), pfy = new Float32Array(N);
   // la roccia della madre (copertura, lave, basamento), cella per cella: la figlia scava la stessa roccia
   const copertura = m.copertura ? new Float32Array(N) : null, sciolto = m.sciolto ? new Float32Array(N) : null, lava = m.lava ? new Float32Array(N) : null, roccia = new Uint8Array(N), [nu0, nv0, nu1, nv1] = m.rett;
-  const amp = 260 * Math.pow(0.36, L), f1 = (W * n) / 9, f2 = (W * n) / 3.1, ampMax = 0.725 * amp; // (il rumore sta tra −0,5 e 0,5: la somma dei due tra ±0,725)
-  const dettaglio = (gu, gv) => amp * (rumore(gu * f1, gv * f1 * 0.5, seme + L) + 0.45 * rumore(gu * f2, gv * f2 * 0.5, seme + 31 * L));
-  // la quota condizionata alla costa della madre (vedi sopra), in metri SUL MARE, col dettaglio d
-  const conMare = Number.isFinite(mare), valore = (x, y) => M.alt[iy(y) * MW + ix(x)] - mare;
-  const sulMare = (fx, fy, d) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0;
+  // IL DETTAGLIO CHE DA LONTANO NON SI VEDEVA: le due ottave che la tessera aggiunge sotto la cella della madre (quattro
+  // volte più fine: due raddoppi), con l'ottava condizionata dal padre di eredita.js (Donoho 1993 per la predizione a media
+  // conservata, Cook e DeRose 2005 per il rumore a banda limitata in coordinate globali). La correzione ha media NULLA ESATTA
+  // su ogni cella della madre: riassunta, la figlia ridà la madre. QUANTO è grande lo dice il padre, cella per cella:
+  //   · l'ESPONENTE di Hurst del luogo: 0,46 sui fondali, 0,66 sui continenti, 0,77 sui margini continentali (Gagnon, Lovejoy
+  //     e Schertzer 2006, Nonlin. Processes Geophys. 13, 541: quattro modelli digitali del terreno dal pianeta a 50 cm). Il
+  //     margine: un mare sopra la crosta dei continenti (la piattaforma), o una cella con le due croste attorno; senza placche,
+  //     le celle a due celle dalla costa;
+  //   · l'AMPIEZZA: quella che il rilievo della madre ha alla sua grana, continuata con quell'esponente. Si misura lo scarto
+  //     quadratico tra celle vicine della madre (la funzione di struttura a un passo, S₁, sulle 5 × 5 celle attorno, solo tra
+  //     celle dalla stessa parte del mare della cella: la costa non è rilievo, e una piana non prende il rilievo del fondale), e l'ottava dopo vale κ(H)·√S₁, la seconda 2^(−H) volte
+  //     meno. κ(H) non è scelto: è il rapporto che un campo auto-affine di eredita.js con quell'esponente ha tra le due cose
+  //     (tarato una volta, qui sotto). Così il dettaglio porta da sé ciò che il padre sa: le catene sollevate, ancora ripide,
+  //     ne hanno molto; i cratoni vecchi e le piane che l'erosione ha spianato quasi niente; i fondali lo hanno delle loro colline.
+  // (Prima: un rumore di valore di ampiezza 260·0,36^L, la stessa sulle catene e sugli abissi, che non tornava alla media.)
+  // LA COSTA resta quella della madre: dove le celle attorno sono dalle due parti del mare la quota si interpola col segno
+  // (sulMare, vedi sopra) e il dettaglio la sposta solo di ciò che da lontano non si vedeva; lontano dalla costa (le 5 × 5
+  // celle tutte dalla stessa parte: quelle che la predizione di Donoho guarda) vale la predizione, che conserva la media.
+  // (Provato e non tenuto: metà e metà nell'anello tra le due; la predizione che guarda un fondale di −1000 m accanto a una
+  // piana a +1 m vi fa nascere colline di 150 m.)
+  const conMare = Number.isFinite(mare), valore = (x, y) => M.alt[iy(y) * MW + ix(x)] - (conMare ? mare : 0), nG = 4 ** (L - 1), WgM = W * nG, HgM = H * nG;
+  const oxM = Math.round(mu0 * WgM), oyM = Math.round(mv0 * HgM), lato = (2 * Math.PI * radice.raggioM) / (W * n); // (dove sta la madre larga nella griglia globale del suo livello; il lato della cella figlia, m)
+  const qM = (I, J) => iy(J - oyM) * MW + ix(I - oxM), latoM = (x) => conMare ? (x < 0 ? -1 : 1) : 1;
+  const crosta = radice.cont || null, sh0 = 2 * (L - 1), contM = (I, J) => (crosta ? crosta[Math.max(0, Math.min(radice.H - 1, J >> sh0)) * radice.W + (((I >> sh0) % radice.W) + radice.W) % radice.W] : 1); // (le croste: quelle del pianeta intero)
+  const sigmaCella = new Map(); // (per cella della madre: [σ della prima ottava, H])
+  const sigmaDi = (I, J) => { const c = qM(I, J); let v = sigmaCella.get(c); if (v) return v;
+    const z0 = M.alt[c] - (conMare ? mare : 0), terra = !conMare || z0 >= 0; let misto = false, contMisto = false; const c0 = contM(I, J);
+    let s2 = 0, nn = 0; for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) { const za = valore(I - oxM + a, J - oyM + b), zb = valore(I - oxM + a + 1, J - oyM + b), zc = valore(I - oxM + a, J - oyM + b + 1);
+      if (latoM(za) !== latoM(z0)) misto = true; if (contM(I + a, J + b) !== c0) contMisto = true;
+      const l0 = latoM(z0); if (latoM(za) === l0 && latoM(zb) === l0) { s2 += (za - zb) ** 2; nn++; } if (latoM(za) === l0 && latoM(zc) === l0) { s2 += (za - zc) ** 2; nn++; } }
+    const margine = crosta ? (!terra && c0) || contMisto : misto, H = margine ? HURST.margine : terra ? HURST.continente : HURST.fondale;
+    v = [nn ? kappaHurst(H) * Math.sqrt(s2 / nn) : 0, H]; sigmaCella.set(c, v); return v; };
+  // le due ottave (livelli della griglia globale: la madre è al raddoppio 2(L − 1), la figlia al 2L), dalla cella (I0, J0) della figlia larga
+  const I0 = Math.round(rettL[0] * W * n), J0 = Math.round(rettL[1] * H * n), radiceR = `${chiave}/superficie`;
+  const pred = discendi({ base: (I, J) => M.alt[qM(I, J)], livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', sigma: 0 });
+  const ottave = discendi({ base: () => 0, livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo',
+    sigma: (Lv) => (I, J) => { const sh = Lv - 2 * (L - 1) - 1, [s1, H] = sigmaDi(I >> sh, J >> sh); return s1 * 2 ** (-H * sh); } });
+  const lontano = new Map(); // (per cella della madre: 2 se le 5 × 5 attorno stanno dalla stessa parte del mare, se no meno)
+  const lontanoDi = (x, y) => { const c = iy(y) * MW + ix(x); let v = lontano.get(c); if (v !== undefined) return v; const z0 = latoM(valore(x, y)); v = 2;
+    for (let b = -2; b <= 2 && v; b++) for (let a = -2; a <= 2; a++) if (latoM(valore(x + a, y + b)) !== z0) { v = Math.abs(a) <= 1 && Math.abs(b) <= 1 ? 0 : Math.min(v, 1); if (!v) break; } lontano.set(c, v); return v; };
+  // la quota condizionata alla costa della madre (vedi sopra), in metri SUL MARE, col dettaglio d (dS: quanto vale il dettaglio
+  // al più, tre scarti: sotto, il dettaglio non porta un punto oltre il livello del mare)
+  const sulMare = (fx, fy, d, dS) => { const x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0;
     const z00 = valore(x0, y0), z10 = valore(x0 + 1, y0), z01 = valore(x0, y0 + 1), z11 = valore(x0 + 1, y0 + 1), w00 = (1 - u) * (1 - v), w10 = u * (1 - v), w01 = (1 - u) * v, w11 = u * v;
     let t = 0, A = 0, B = 0; // t: quanta parte dei pesi sta su celle di terra; A, B: le somme pesate delle quote di terra e dei fondali
     if (z00 >= 0) { t += w00; A += w00 * z00; } else B -= w00 * z00; if (z10 >= 0) { t += w10; A += w10 * z10; } else B -= w10 * z10;
@@ -683,17 +736,20 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
     let z; const tutta = z00 >= 0 && z10 >= 0 && z01 >= 0 && z11 >= 0, niente = z00 < 0 && z10 < 0 && z01 < 0 && z11 < 0;
     if (tutta) z = A; else if (niente) z = -B;
     else { if (t <= 0) z = -B; else if (t >= 1) z = A; else { A /= t; B /= 1 - t; const s0 = 2 * t - 1, lim = 1 - s0 * s0; let ds = A + B > 0 ? (2 * d) / (A + B) : d > 0 ? lim : d < 0 ? -lim : 0; if (ds > lim) ds = lim; else if (ds < -lim) ds = -lim; const s = s0 + ds; z = s >= 0 ? A * s : B * s; d *= s0 < 0 ? -s0 : s0; } }
-    const q = z < 0 ? -z : z; return z + (q < ampMax ? (d * q) / ampMax : d); };
+    const q = z < 0 ? -z : z; return z + (q < dS ? (d * q) / dS : d); };
   const mareSu = conMare ? f32NonSotto(mare) : 0; // (una terra a un millimetro dal mare resta terra anche scritta in un Float32)
   for (let j = 0; j < Hl; j++) for (let i = 0; i < Wl; i++) {
     const gu = rettL[0] + ((i + 0.5) / Wl) * (rettL[2] - rettL[0]), gv = rettL[1] + ((j + 0.5) / Hl) * (rettL[3] - rettL[1]), c = j * Wl + i;
     const fx = ((gu - mu0) / (mu1 - mu0)) * MW - 0.5, fy = ((gv - mv0) / (mv1 - mv0)) * MH - 0.5;
     pfx[c] = fx; pfy[c] = fy; cellaMadre[c] = iy(Math.round(fy)) * MW + ix(Math.round(fx));
-    if (conMare) { const z = sulMare(fx, fy, dettaglio(gu, gv)); alt[c] = mare + z; if (z >= 0 && alt[c] < mare) alt[c] = mareSu; else if (z < 0 && !(alt[c] < mare)) alt[c] = mare + z - Math.abs(mare) * 2 ** -23; }
-    else alt[c] = bil(M.alt, fx, fy) + dettaglio(gu, gv);
+    const d = ottave[c], dS = 3 * sigmaDi(((I0 + i) >> 2), ((J0 + j) >> 2))[0] + 1e-9;
+    if (conMare) { const xm = Math.round(fx), ym = Math.round(fy), zl = pred[c] - mare; let z;
+      // (la predizione, dove il fondale scende ripido, può passare il livello del mare: lì vale la quota col segno, come sulla costa)
+      if (lontanoDi(xm, ym) < 2 || latoM(zl) !== latoM(valore(xm, ym))) z = sulMare(fx, fy, d, dS); else { const q = zl < 0 ? -zl : zl; z = zl + (q < dS ? (d * q) / dS : d); }
+      alt[c] = mare + z; if (z >= 0 && alt[c] < mare) alt[c] = mareSu; else if (z < 0 && !(alt[c] < mare)) alt[c] = mare + z - Math.abs(mare) * 2 ** -23; }
+    else alt[c] = pred[c] + d;
     { const mi = Math.floor(((gu - nu0) / (nu1 - nu0)) * W), mj = Math.max(0, Math.min(H - 1, Math.floor(((gv - nv0) / (nv1 - nv0)) * H))), q = mj * W + (L === 1 ? ((mi % W) + W) % W : Math.max(0, Math.min(W - 1, mi)));
       if (copertura) copertura[c] = m.copertura[q]; if (sciolto) sciolto[c] = m.sciolto[q]; if (lava) lava[c] = m.lava[q]; roccia[c] = m.roccia ? m.roccia[q] : m.cont && !m.cont[q] ? 1 : 0; }
-    if (i === 0 || j === 0 || i === Wl - 1 || j === Hl - 1) afflusso[c] = M.flusso[iy(Math.round(fy)) * MW + ix(Math.round(fx))] * 4; // la portata dei fiumi che entrano
     if (M.lago) { // il lago della madre: la sua superficie è piatta, la riva la decide il terreno fine
       // (−∞ se nessuna delle quattro celle è lago: prima si partiva da 0 m, e dove il mare sta sotto lo zero delle quote — su
       // 33/11/0 a −320 m — ogni terra della figlia, più bassa di 0, diventava un lago profondo fino a 0: tutte le terre del
@@ -703,6 +759,19 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
       livelloLago[c] = lev;
     }
   }
+  // I FIUMI CHE ENTRANO: l'area che la madre ha drenato fin lì. Per ogni cella della madre fuori dalla tessera larga che versa
+  // in una cella dentro, la sua area drenata (nelle celle della madre, 16 volte quelle della figlia) entra nella cella di bordo
+  // della figlia dove la strada tra le due passa il bordo: una volta sola, dove il fiume passa davvero. (Prima: l'area della
+  // madre per 4 su OGNI cella del bordo, anche dove l'acqua esce o scorre lungo il bordo: i fiumi entravano da tutte le parti.)
+  if (M.versoValle && M.flusso) { const fx0 = ((rettL[0] - mu0) / (mu1 - mu0)) * MW, fy0 = ((rettL[1] - mv0) / (mv1 - mv0)) * MH, fxW = ((rettL[2] - rettL[0]) / (mu1 - mu0)) * MW, fyH = ((rettL[3] - rettL[1]) / (mv1 - mv0)) * MH;
+    const dentro = (x, y) => x >= 0 && y >= 0 && x < fxW && y < fyH; // (x, y: centro di una cella della madre, nelle celle della madre contate dall'angolo della figlia larga)
+    const i0 = Math.floor(fx0) - 2, i1 = Math.ceil(fx0 + fxW) + 2, j0 = Math.max(0, Math.floor(fy0) - 2), j1 = Math.min(MH - 1, Math.ceil(fy0 + fyH) + 2);
+    for (let y = j0; y <= j1; y++) for (let xx = i0; xx <= i1; xx++) { const x = ix(xx); if (!M.giro && x !== xx) continue; const p = y * MW + x, q = M.versoValle[p]; if (q < 0) continue;
+      const ax = xx + 0.5 - fx0, ay = y + 0.5 - fy0; if (dentro(ax, ay)) continue; let qx = (q % MW) + 0.5 - fx0; const qy = Math.floor(q / MW) + 0.5 - fy0; if (M.giro) qx -= MW * Math.round((qx - ax) / MW); if (!dentro(qx, qy)) continue;
+      // il punto dove la strada a → q passa il bordo
+      let tE = 0; for (const [num, den] of [[-ax, qx - ax], [fxW - ax, qx - ax], [-ay, qy - ay], [fyH - ay, qy - ay]]) if (den) { const tt = num / den; if (tt > 0 && tt < 1) { const bx = ax + tt * (qx - ax), by = ay + tt * (qy - ay); if (bx >= -1e-9 && by >= -1e-9 && bx <= fxW + 1e-9 && by <= fyH + 1e-9) tE = Math.max(tE, tt); } }
+      const bx = ax + tE * (qx - ax), by = ay + tE * (qy - ay), ci = Math.max(0, Math.min(Wl - 1, Math.floor((bx / fxW) * Wl))), cj = Math.max(0, Math.min(Hl - 1, Math.floor((by / fyH) * Hl)));
+      afflusso[cj * Wl + ci] += M.flusso[p] * 16; } }
   const alt0 = Float32Array.from(alt);
   const e = erosione(k, { W: Wl, H: Hl, raggioM: radice.raggioM, alt, mare, rett: rettL, vulcani: [], roccia, ...(copertura ? { copertura } : {}), ...(sciolto ? { sciolto } : {}), ...(lava ? { lava } : {}) }, cl, { passi: 26, aperto: true, afflusso, crescita: false, scala: 4 ** L, durata: radice.durataErosione });
   // L'EROSIONE FINE NON RIFÀ QUELLA DELLA MADRE. La madre è già stata erosa per la stessa durata (T_grossa): ciò che la sua
@@ -726,7 +795,7 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
   // (versoValle parla delle celle della tessera larga: qui diventa l'indice nella parte mostrata; −1 se l'acqua esce dal bordo)
   if (out.versoValle) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const q = e.versoValle[(j + Ph) * Wl + i + Pw], qi = q < 0 ? -1 : (q % Wl) - Pw, qj = q < 0 ? -1 : Math.floor(q / Wl) - Ph; out.versoValle[j * W + i] = qi >= 0 && qi < W && qj >= 0 && qj < H ? qj * W + qi : -1; }
   const qx = tx & 3, qy = ty & 3, cont = new Uint8Array(W * H); if (m.cont) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) cont[j * W + i] = m.cont[Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))];
-  out.cont = cont; out.largo = { W: Wl, H: Hl, rett: rettL, alt: e.alt, flusso: e.flusso, lago: e.lago };
+  out.cont = cont; out.largo = { W: Wl, H: Hl, rett: rettL, alt: e.alt, flusso: e.flusso, lago: e.lago, versoValle: e.versoValle };
   // l'età della crosta e le fosse della madre, ricampionate come i continenti
   for (const nome of ['etaCrosta', 'fosse']) if (m[nome]) { const r = new Float32Array(W * H); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) r[j * W + i] = m[nome][Math.min(H - 1, Math.floor((qy + j / H) * (H / 4))) * W + Math.min(W - 1, Math.floor((qx + i / W) * (W / 4)))]; out[nome] = r; }
   memoTessere.set(k, out); if (memoTessere.size > 48) memoTessere.delete(memoTessere.keys().next().value);

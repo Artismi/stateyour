@@ -86,8 +86,9 @@ import { EROSIONE, tessera } from './geologia.js';
 import { STORIA } from './storia.js';
 import { minerali as mineraliDi, MINERALI_ROCCIA, MOLECOLE, coloreRoccia, sciolto as scioltoIn, acidoDelSuolo } from './chimica.js';
 import { MATERIALI, atomi as atomiDelReticolo, RETICOLI } from './materia.js';
-import { sorgente } from './eventi.js';
-import { generatore, gaussiane, poisson, pesoTessera, scenaNano, tensioneSuperficiale } from './finestra.js';
+import { sorgente, reticolo } from './eventi.js';
+import { pesoDiscreto } from './eredita.js';
+import { generatore, gaussiane, poisson, pesoTessera, scenaNano, tensioneSuperficiale, soleDiMezzogiorno, normaleCumulata } from './finestra.js';
 import { viscosita, gibbsSpecie, IONI } from './mare.js';
 import { NUVOLE } from './leggi.js';
 import { cristallizza } from './rocce.js';
@@ -591,34 +592,45 @@ export function acquaDelPunto(padre, z) {
 // i granelli e i pori pieni d'acqua o d'aria, sotto il millimetro la superficie del grano con l'argilla e il velo d'acqua
 // ======================================================================================================================
 const GAMMA = (x) => Math.round(255 * Math.pow(limita(x, 0, 1), 1 / 2.2)), LIN = (c) => Math.pow(c / 255, 2.2);
-// («luce: false»: senza la luce da nord-ovest, la sola riflettanza — per la vista 3D, che mette sul rilievo la luce vera)
+// LA LUCE: quella della stella del luogo, [est, nord, su] (chi chiama la dà: la mappa col suo istante); se non la dà, la stella
+// a mezzogiorno dell'equinozio a quella latitudine (finestra.js soleDiMezzogiorno). Prima: sempre da nord-ovest a 45°, ovunque.
+// («luce: false»: la sola riflettanza — per la vista 3D, che mette sul rilievo la luce vera)
+// BAGNATO, il suolo è più scuro (Lekner e Dorf 1988, Appl. Opt. 27, 1278): la luce rimandata dai grani torna indietro dal velo
+// d'acqua per riflessione interna con probabilità x = 1 − (1 − ρ̄)/n² (ρ̄ = 0,066, n = 1,333): A_bagnato = (1 − ρ̄)·A·(1 − x)/(1 − x·A).
+// Quanta parte della superficie è bagnata: i pori che la capillarità tiene pieni alla quota della falda (saturazione: i pori
+// più stretti di 2σ/(ρ·g·z)), la stessa legge dei pori a millimetri; tutta, se la falda è in superficie. Prima: ×0,72 a mano.
+// I GRANELLI SOPRA O SOTTO IL PUNTO (eredita.js pesoDiscreto): ogni classe di grani ha il peso del discreto, una rampa di
+// un'ottava attorno a due punti dell'immagine; l'immagine dei grani uno per uno e quella del suolo ombreggiato si sommano con
+// la parte in massa dei grani che si vedono uno per uno. Prima: una soglia secca, la prima classe oltre due punti cambiava tutto.
+const RHO_E = 0.066, XI = 1 - (1 - RHO_E) / 1.333 ** 2, bagnata = (A) => ((1 - RHO_E) * A * (1 - XI)) / (1 - XI * A);
 export function immagineSuolo(fin, { luce = true } = {}) {
   const N = fin.N, px = new Uint8ClampedArray(N * N * 4), P = fin.padre, su = P.suolo, R = P.roccia;
   const cR = coloreRoccia(R.minerali.map((m) => ({ frazione: m.frazione, colore: m.colore || [150, 150, 150] }))).map(LIN), cS = coloreRoccia(su.gsd.classi.map((c) => ({ frazione: c.massa, colore: c.colore }))).map(LIN);
   const scrivi = (q, c, ombra = 1) => { px[4 * q] = GAMMA(c[0] * ombra); px[4 * q + 1] = GAMMA(c[1] * ombra); px[4 * q + 2] = GAMMA(c[2] * ombra); px[4 * q + 3] = 255; };
-  // la luce sul rilievo (Lambert, da nord-ovest a 45°: una scelta di resa), con la pendenza del padre e quella fine
-  const F = fin.campo, Z = F.Z, l = SUOLO.rugositaLuce, ln = Math.hypot(...l), sx = P.S / Math.SQRT2, lume = new Float32Array(N * N);
+  // la luce sul rilievo (Lambert), con la pendenza del padre e quella fine
+  const F = fin.campo, Z = F.Z, l = Array.isArray(luce) ? luce : soleDiMezzogiorno(P.lat ?? fin.tratto.lat).dir, ln = Math.hypot(...l), sx = P.S / Math.SQRT2, lume = new Float32Array(N * N);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * N + Math.max(0, i - 1), b = j * N + Math.min(N - 1, i + 1), c = Math.max(0, j - 1) * N + i, d = Math.min(N - 1, j + 1) * N + i;
     const gx = sx + (Z[b] - Z[a]) / ((Math.min(N - 1, i + 1) - Math.max(0, i - 1)) * fin.h), gy = sx + (Z[d] - Z[c]) / ((Math.min(N - 1, j + 1) - Math.max(0, j - 1)) * fin.h), nn = Math.hypot(gx, gy, 1);
     lume[j * N + i] = luce ? 0.25 + 0.95 * Math.max(0.08, (-gx * l[0] - gy * l[1] + l[2]) / (nn * ln)) : 1; }
-  const fluido = (dentro) => (dentro ? [LIN(38), LIN(66), LIN(92)] : [LIN(16), LIN(14), LIN(12)]), umido = fin.profonditaM >= su.falda || su.falda <= 0;
-  const grandi = su.gsd.classi.some((c) => c.d50 >= 2 * fin.h);
-  if (!grandi) { // ---- a metri: il suolo (o la roccia nuda dove il suolo è più sottile di qualche grano), ombreggiato; le crepe dove affiora
+  const umido = fin.profonditaM >= su.falda || su.falda <= 0, rcS = (2 * P.sigma) / (RHO_W * P.g * Math.max(1e-3, su.falda)), satS = su.falda <= 0 ? 1 : saturazione(su.gsd, rcS);
+  const vede = su.gsd.classi.reduce((a, c) => a + c.massa * pesoDiscreto(c.d50 / (2 * fin.h)), 0), suolo1 = vede < 1 ? new Uint8ClampedArray(N * N * 4) : null;
+  const fluido = (dentro) => (dentro ? [LIN(38), LIN(66), LIN(92)] : [LIN(16), LIN(14), LIN(12)]);
+  if (vede < 1) { // ---- a metri: il suolo (o la roccia nuda dove il suolo è più sottile di qualche grano), ombreggiato; le crepe dove affiora
     // (LA NEBBIA DEI GRANELLI: in ogni punto cadono N granelli, Poisson classe per classe con la densità del modello booleano;
     // il colore del punto è quello dei suoi granelli e dei pori, e ogni granello ha la sua faccia alla luce: lo scarto 0,3 di
     // Lambert su facce a caso, diviso √N. Un evento per punto, col suo indirizzo nel tratto: «grana h/gx,gy»)
-    const vol = su.gsd.classi.reduce((a, c) => a + c.massa / c.rho, 0), lam = -Math.log(Math.max(1e-6, su.phi)), base = fin.tratto.caso.seme(`grana ${fin.h.toExponential(3)}`) >>> 0;
+    const vol = su.gsd.classi.reduce((a, c) => a + c.massa / c.rho, 0), lam = -Math.log(Math.max(1e-6, su.phi)), grana = reticolo(`${fin.tratto.chiave}/grana ${fin.h.toExponential(3)}`);
     const cl = su.gsd.classi.map((c) => { const sl = c.sigma * Math.LN2, dN = c.d50 * Math.exp(-3 * sl * sl), r2 = 0.25 * dN * dN * Math.exp(2 * sl * sl), nA = ((lam * (c.massa / c.rho)) / vol) / (Math.PI * r2); return { mu: nA * fin.h * fin.h, area: r2, colore: c.colore }; });
     const muTot = cl.reduce((a, c) => a + c.mu, 0);
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i, fs = limita(F.h[j * N + i] / Math.max(4 * R.grano, 0.02), 0, 1), bagnato = su.falda <= 0 ? 0.72 : 1;
-      const r = generatore((base ^ Math.imul(fin.gx0 + i, 0x9e3779b1) ^ Math.imul(fin.gy0 + j, 0x85ebca77)) >>> 0), g = gaussiane(r)[0], lista = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i, fs = limita(F.h[j * N + i] / Math.max(4 * R.grano, 0.02), 0, 1);
+      let nT = 1; const gx = fin.gx0 + i, gy = fin.gy0 + j, r = () => normaleCumulata(grana(gx, gy, nT++)), g = grana(gx, gy, 0), lista = []; // (i numeri del punto: il nodo (gx, gy) della griglia della finestra, in coordinate del tratto)
       for (const c of cl) { const k = poisson(r, c.mu); if (k) lista.push({ frazione: k * c.area, colore: c.colore }); } // (i colori si mescolano come in una polvere: Kubelka-Munk, chimica.js)
       const suolo = lista.length ? coloreRoccia(lista).map(LIN) : cS, ombra = 1 + (0.3 * g) / Math.sqrt(Math.max(1, muTot));
-      scrivi(q, [0, 1, 2].map((k) => (cR[k] * (1 - fs) + suolo[k] * fs) * bagnato), lume[j * N + i] * ombra); }
+      scrivi(q, [0, 1, 2].map((k) => { const A = cR[k] * (1 - fs) + suolo[k] * fs; return A * (1 - satS) + bagnata(A) * satS; }), lume[j * N + i] * ombra); }
     // (si disegnano le crepe larghe almeno un centesimo di punto: le altre sono il colore della roccia, la nebbia)
     for (const f of fratture(fin, { lVis: (fin.h / (100 * R.c)) ** 2 })) { const n = Math.ceil(Math.hypot(f.x1 - f.x0, f.y1 - f.y0) / (0.5 * fin.h)); for (let s = 0; s <= n; s++) { const x = f.x0 + ((f.x1 - f.x0) * s) / n, y = f.y0 + ((f.y1 - f.y0) * s) / n, i = Math.floor((x - fin.x0) / fin.h), j = Math.floor((y - fin.y0) / fin.h); if (i < 0 || j < 0 || i >= N || j >= N) continue;
       if (F.h[j * N + i] > Math.max(f.b, 2 * R.grano)) continue; const q = (N - 1 - j) * N + i, w = limita(f.b / fin.h, 0, 1); for (let k = 0; k < 3; k++) px[4 * q + k] = Math.round(px[4 * q + k] * (1 - 0.75 * w)); } }
-    return px;
+    if (vede <= 0) return px; suolo1.set(px);
   }
   // ---- a millimetri e sotto: i granelli (modello booleano: chi arriva dopo sta sopra) e tra loro i pori; i grani più piccoli
   // di un punto colorano il poro in proporzione a quanto ne coprono; sotto la falda il poro è pieno d'acqua, sopra solo dove è
@@ -631,6 +643,8 @@ export function immagineSuolo(fin, { luce = true } = {}) {
       const dx = i + 0.5 - cx, dy = j + 0.5 - cy, u = (dx * ca + dy * sa) / rp, v = (-dx * sa + dy * ca) / (rp * g.schiaccia), dd = Math.hypot(u, v), q = (N - 1 - j) * N + i;
       if (dd <= 1) { scrivi(q, col, (0.62 + 0.38 * Math.sqrt(Math.max(0, 1 - dd * dd)) - 0.08 * (u + v)) * lume[j * N + i]); pieno[q] = 1; vuoto[q] = 0; } else if (!pieno[q]) vuoto[q] = Math.min(vuoto[q], (dd - 1) * r * Math.min(1, g.schiaccia)); } }
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i; if (pieno[q]) continue; const fl = fluido(umido || vuoto[q] < rc); scrivi(q, [0, 1, 2].map((k) => fl[k] * (1 - fFini) + cF[k] * fFini), lume[j * N + i]); }
+  // (la somma delle due immagini, in luce lineare, pesate con la parte dei grani che si vede uno per uno)
+  if (suolo1) for (let q = 0; q < N * N; q++) for (let k = 0; k < 3; k++) px[4 * q + k] = GAMMA(LIN(suolo1[4 * q + k]) * (1 - vede) + LIN(px[4 * q + k]) * vede);
   return px;
 }
 // ======================================================================================================================

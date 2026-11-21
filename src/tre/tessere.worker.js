@@ -22,28 +22,61 @@
 // Messaggi: { tipo: 'base', k, se, cl, mare, seme, T, raggioM } una volta; poi { tipo: 'tessera', n, L, tx, ty }; e
 // { tipo: 'campi', n, L, tx, ty }: i campi grezzi della tessera (quota, laghi, portata, litologia…) per il suolo fine.
 //
-// LE RIFLETTANZE DELLE ROCCE (albedo nel visibile; la tinta viene dai minerali veri della crosta di geologia.js, mescolati
-// da chimica.js `coloreRoccia` con Kubelka-Munk: qui se ne tiene solo la tinta, la luminosità è quella misurata della roccia
-// in massa, perché il colore di un minerale è quello della sua polvere, molto più chiara della roccia):
-//   basalto e lave 0,08 (USGS Spectral Library, Kokaly e altri 2017, splib07: basalti 0,05–0,10; i mari lunari 0,07);
-//   granito e rocce metamorfiche dei continenti 0,24 (splib07 / ASTER, Baldridge e altri 2009: graniti 0,2–0,3);
-//   copertura sedimentaria litificata 0,20 (arenarie e argilliti 0,15–0,30, stesse fonti);
-//   sedimento sciolto e depositato (sabbie, piane, delta) 0,32 (sabbie secche 0,3–0,4: Sahara ~0,35), con la tinta della
-//   sabbia di mare.js; NEVE E GHIACCIO: l'albedo del ghiaccio del clima (leggi.js CLIMA.albedoGhiaccio, la stessa che il
-//   clima ha usato), con la forma spettrale della neve a grani di qualche centinaio di micron (Warren 1982, Rev. Geophys.
-//   20, 67: qualche per cento in meno nel rosso che nel blu). MANCANO: la grana della neve, l'età della lava (quindi
-//   nessuna «lava fresca» distinta dalla vecchia), l'umidità del suolo.
+// LE RIFLETTANZE DELLE TERRE: vedi `materiali` qui sotto (la roccia nuda dai suoi minerali, il suolo dall'alterazione con gli
+// ossidi di ferro, l'acqua che lo bagna, i fiumi dalla portata) e, per la neve e il ghiaccio, l'albedo del ghiaccio del clima
+// (leggi.js CLIMA.albedoGhiaccio, la stessa che il clima ha usato) con la forma spettrale della neve a grani di qualche
+// centinaio di micron (Warren 1982, Rev. Geophys. 20, 67: qualche per cento in meno nel rosso che nel blu). MANCANO: la grana
+// della neve, l'età della lava (nessuna «lava fresca» distinta dalla vecchia), la vita.
 import { tessera } from '../camera/geologia.js';
 import { coloraMare } from '../camera/mare.js';
 import { CLIMA } from '../camera/leggi.js';
 import { ricorda } from '../camera/deposito.js';
 import { sistema } from '../camera/cosmo.js';
-import { finestraSuolo, immagineSuolo } from '../camera/suolo.js';
+import { finestraSuolo, immagineSuolo, rocciaDelPianeta, granulometria, porositaImpacchettata, SUOLO } from '../camera/suolo.js';
+import { EROSIONE } from '../camera/geologia.js';
+import { coloreRoccia } from '../camera/chimica.js';
+import { PARAMETRI } from '../camera/meteo.js';
 
 let B = null; // la superficie intera del pianeta (il livello 0) e ciò che serve per le tessere
 const W = 256, H = 128, WB = W + 2, HB = H + 2;
 const lin = (c) => Math.pow(c / 255, 2.2), srgb = (x) => Math.round(255 * Math.pow(Math.max(0, Math.min(1, x)), 1 / 2.2));
-const ALBEDO = { basalto: 0.08, granito: 0.24, copertura: 0.2, sabbia: 0.32 }, SABBIA = [214, 200, 172], FORMA_NEVE = [0.955, 1.0, 1.015];
+const FORMA_NEVE = [0.955, 1.0, 1.015];
+// LA ROCCIA NUDA: la tinta è quella dei suoi minerali (chimica.js coloreRoccia, Kubelka-Munk sulle polveri), la luminosità quella
+// della roccia in massa, che dipende da quanti minerali scuri porta: tra il granito (0,24, con ~10% di minerali femici) e il
+// basalto (0,08, con ~55%) delle misure della USGS Spectral Library (Kokaly e altri 2017, splib07; ASTER, Baldridge e altri
+// 2009), in linea retta sulla parte femica (olivina, pirosseno, biotite, ossidi di ferro, ferro) dei minerali di quel pianeta.
+// IL SUOLO: i minerali che restano dopo l'alterazione e l'argilla che lasciano (suolo.js granulometria, con le velocità di
+// chimica.js, per il tempo che il suolo passa sotto il cielo: h₀/(P₀·e⁻¹), il bilancio di Heimsath), più gli OSSIDI DI FERRO:
+// il ferro dei minerali femici sciolti diventa ferro ferrico dove l'aria ha ossigeno; ematite rossa dove il suolo si asciuga,
+// goethite gialla dove resta umido (Kämpf e Schwertmann 1983, Clays Clay Miner. 31, 359; Cornell e Schwertmann 2003, cap. 16:
+// il rapporto Hm/(Hm + Gt) scende con l'umidità del suolo), con la tinta della goethite in polvere (Munsell 10YR 6/8). Una
+// polvere è il suolo stesso: la sua riflettanza secca è quella della miscela (Kubelka-Munk). LA SOSTANZA ORGANICA: nessuna,
+// il modello non ha ancora la vita sulle terre (lavoro 10). BAGNATO, un suolo è più scuro (Lekner e Dorf 1988, Appl. Opt. 27,
+// 1278): la luce rimandata dai grani torna indietro dal velo d'acqua per riflessione interna con probabilità x = 1 − (1 − ρ̄)/n²
+// (ρ̄ = 0,066 per l'acqua, n = 1,333), quindi A_bagnato = (1 − ρ̄)·A·(1 − x)/(1 − x·A).
+const GOETHITE = [196, 142, 58], FEMICI = { olivina: 0.11, pirosseno: 0.1, biotite: 0.2, magnetite: 1.03, 'ferro metallico': 1.43, ematite: 1 }, RHO_E = 0.066, XI = 1 - (1 - RHO_E) / 1.333 ** 2;
+const bagnata = (A) => ((1 - RHO_E) * A * (1 - XI)) / (1 - XI * A);
+const ACQUA_FIUME = [10, 30, 60].map((c) => Math.pow(c / 255, 2.2) / 3.5); // (la riflettanza dell'acqua limpida e profonda di mare.js, senza la sua esposizione)
+const MATERIALI = new Map();
+function materiali(Tc, umido) {
+  const Tk = Math.round(Tc), chiave = `${B.k}|${Tk}|${umido}`; let M = MATERIALI.get(chiave); if (M) return M;
+  if (!B.P) { const v = JSON.parse(B.k); B.P = sistema(v.cosmo, v.galassia, v.stella).pianeti[v.pianeta]; }
+  const P = B.P, mt = B.se.materiali || {}, aria = P.atmosfera?.gas || {}, pCO2 = (aria.CO2 || 0) * ((P.clima?.pressione ?? 1e5) / 1e5), ossido = (aria.O2 || 0) > 1e-3 || mt.ossidato;
+  const anni = SUOLO.h0 / (EROSIONE.suolo * Math.exp(-1)), uno = (tipo, lista) => {
+    if (!lista || !lista.length) lista = [{ nome: 'plagioclasio', frazione: 1, colore: [150, 140, 124] }];
+    const R = rocciaDelPianeta(P, { tipo, minerali: lista, Tsup: Tk }), fem = lista.reduce((a, m) => a + (FEMICI[m.nome] !== undefined && m.nome !== 'ematite' ? m.frazione : 0), 0) / Math.max(1e-9, lista.reduce((a, m) => a + m.frazione, 0));
+    const A = 0.24 + (0.08 - 0.24) * Math.min(1, Math.max(0, (fem - 0.1) / 0.45)), tR = tinta(coloreRoccia(lista)), roccia = tR.map((x) => A * x);
+    const gsd = granulometria(R, { T: Tk, anni, pCO2 }), cls = gsd.classi.map((c) => ({ frazione: c.massa, colore: c.colore }));
+    let fe = 0; if (ossido) for (const c of gsd.classi) { const f = FEMICI[c.nome]; if (f && c.sciolto > 0) fe += (c.massa / Math.max(1e-6, 1 - c.sciolto)) * c.sciolto * f; } // (il ferro sciolto, come Fe₂O₃, per unità di massa del suolo)
+    if (fe > 1e-5) { cls.push({ frazione: fe * (1 - umido), colore: [152, 62, 42] }); cls.push({ frazione: fe * umido, colore: GOETHITE }); }
+    const suolo = coloreRoccia(cls).map((c) => Math.pow(c / 255, 2.2)), rS = (R.rho * (1 - R.phi0)) / (gsd.rhoSolido * (1 - porositaImpacchettata(gsd)));
+    return { roccia, suolo, r: rS };
+  };
+  M = { granito: uno('granito', mt.continente), basalto: uno('basalto', mt.basalto), sedimento: uno('sedimento', mt.continente) };
+  MATERIALI.set(chiave, M); if (MATERIALI.size > 64) MATERIALI.delete(MATERIALI.keys().next().value); return M;
+}
+// un campo di meteo.js (griglia m.W × m.H) nel punto (u, v) della carta, interpolato tra i centri delle celle
+const campoMeteo = (m, arr, u, v) => { const x = u * m.W - 0.5, y = Math.min(m.H - 1.001, Math.max(0, v * m.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), a = x - x0, b = y - y0, f = (xx, yy) => arr[yy * m.W + ((xx % m.W) + m.W) % m.W]; return f(x0, y0) * (1 - a) * (1 - b) + f(x0 + 1, y0) * a * (1 - b) + f(x0, y0 + 1) * (1 - a) * b + f(x0 + 1, y0 + 1) * a * b; };
 // la tinta di un colore (lineare, luminanza 1)
 const tinta = (c) => { const l = c.map(lin), y = 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]; return y > 0 ? l.map((x) => x / y) : [1, 1, 1]; };
 
@@ -112,9 +145,8 @@ function prepara(L, tx, ty) {
     for (let k = 0; k < GW * GH; k++) { let h = A[k]; if (haMare && h < mare) h = mare; if (Lg && Lg[k] > 0) h = Math.max(h, A[k] + Lg[k]); sup[k] = h; }
     var oriz = orizzonti(sup, GW, GH, lg ? (lg.W - W) / 2 : 0, lg ? (lg.H - H) / 2 : 0, !lg, passoLat, v0, v1); }
   for (let k = 0; k < W * H; k++) pend[4 * k + 2] = oriz.cielo[k];
-  // --- la riflettanza delle terre: roccia per classe, sedimento, neve e ghiaccio (vedi in testa)
-  const terra = new Uint8Array(4 * W * H), bagnato = new Uint8Array(W * H), cl = B.cl, mat = sf.materiali || {}, [ru0, , ru1] = sf.rett || [0, 0, 1, 1];
-  const tCont = tinta(mat.coloreContinente || [150, 140, 124]), tBas = tinta(mat.coloreBasalto || mat.coloreContinente || [84, 80, 76]), tSab = tinta(SABBIA), aGhiaccio = CLIMA.albedoGhiaccio;
+  // --- la riflettanza delle terre: la roccia e il suolo del punto, l'acqua che li bagna, i fiumi, la neve e il ghiaccio (vedi in testa)
+  const terra = new Uint8Array(4 * W * H), bagnato = new Uint8Array(W * H), cl = B.cl, mat = sf.materiali || {}, [ru0, , ru1] = sf.rett || [0, 0, 1, 1], aGhiaccio = CLIMA.albedoGhiaccio;
   const campo = (arr, i, j) => { const x = (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * cl.W - 0.5, y = Math.min(cl.H - 1.001, Math.max(0, (v0 + ((j + 0.5) / H) * (v1 - v0)) * cl.H - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => arr[yy * cl.W + ((xx % cl.W) + cl.W) % cl.W]; return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
   // LE CLASSI DI ROCCIA SENZA I BLOCCHI DEL LIVELLO 0. `tessera` dà alla figlia la roccia della cella madre che la contiene
   // (copertura, lave, sedimento sciolto, continenti: il valore della madre ripetuto su 4 × 4 punti, e così a ogni livello:
@@ -127,23 +159,48 @@ function prepara(L, tx, ty) {
   const r0 = B.se, x0Di = (i) => (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * r0.W - 0.5, y0Di = (j) => Math.max(0, Math.min(r0.H - 1.001, (v0 + ((j + 0.5) / H) * (v1 - v0)) * r0.H - 0.5));
   const bil0 = (f, i, j) => { const x = x0Di(i), y = y0Di(j), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, a = (xx, yy) => f(yy * r0.W + ((xx % r0.W) + r0.W) % r0.W); return a(x0, y0) * (1 - u) * (1 - v) + a(x0 + 1, y0) * u * (1 - v) + a(x0, y0 + 1) * (1 - u) * v + a(x0 + 1, y0 + 1) * u * v; };
   const lito = sf.litologia, lito0 = r0.litologia, cella0 = (i, j) => { const u = ru0 + ((i + 0.5) / W) * (ru1 - ru0), v = v0 + ((j + 0.5) / H) * (v1 - v0); return Math.min(r0.H - 1, Math.floor(v * r0.H)) * r0.W + ((Math.floor(u * r0.W) % r0.W) + r0.W) % r0.W; };
+  // i materiali al clima del centro della tessera (la temperatura, l'umidità del secchio di meteo.js) e l'umidità dal rilievo
+  const Tc = cl && cl.media ? campo(cl.media, W >> 1, H >> 1) : B.T, me = cl?.meteo, secchio = me?.suolo ? (i, j) => Math.min(1, Math.max(0, campoMeteo(me, me.suolo, ru0 + ((i + 0.5) / W) * (ru1 - ru0), v0 + ((j + 0.5) / H) * (v1 - v0)) / PARAMETRI.secchio)) : () => 0.5;
+  // (A^m·S della superficie intera, per cella; poi la parte coperta di suolo nel punto, interpolata tra i centri)
+  if (!B.AmS) { const { W: w, H: h, alt: a, flusso: f } = r0, out = new Float32Array(w * h), dy = (Math.PI * B.raggioM) / h;
+    for (let jj = 0; jj < h; jj++) { const dx = Math.max(0.05 * dy, (2 * Math.PI * B.raggioM * Math.cos((0.5 - (jj + 0.5) / h) * Math.PI)) / w); for (let ii = 0; ii < w; ii++) { const q = jj * w + ii, e = a[jj * w + ((ii + 1) % w)], o = a[jj * w + ((ii - 1 + w) % w)], n = a[Math.max(0, jj - 1) * w + ii], sd = a[Math.min(h - 1, jj + 1) * w + ii];
+      out[q] = Math.pow(Math.max(1, f ? f[q] : 1) * dx * dy, EROSIONE.m) * Math.hypot((e - o) / (2 * dx), (n - sd) / (2 * dy)); } } B.AmS = out; }
+  const suolo0 = (Rk, K, i, j) => { const E = K * bil0((q) => B.AmS[q], i, j); return E >= EROSIONE.suolo * Rk.r ? 0 : Math.min(1, Math.log((EROSIONE.suolo * Rk.r) / Math.max(E, 1e-12))); };
+  const M3 = materiali(Tc, Math.round(10 * secchio(W >> 1, H >> 1)) / 10), dxC = passoLat * Math.max(0.05, Math.cos((0.5 - (v0 + v1) / 2) * Math.PI)), aCella = dxC * passoLat;
+  // l'indice topografico di umidità (Beven e Kirkby 1979): ln(a/tan β), a l'area drenata per unità di larghezza; e^indice
+  // diviso per la sua media sulle terre della tessera: così la media dell'umidità resta quella del secchio a ogni livello
+  // (l'indice cresce con la grana della griglia: Wolock e Price 1994; la media lo toglie)
+  const twi = new Float32Array(W * H), fl = sf.flusso; let twiMed = 0; { let s = 0, n = 0; for (let k = 0; k < W * H; k++) { const a = (Math.max(1, fl ? fl[k] : 1) * aCella) / dxC, tb = Math.max(1e-4, Math.hypot(pend[4 * k], pend[4 * k + 1])); twi[k] = Math.log(a / tb); if (!(haMare && sf.alt[k] < mare)) { s += Math.exp(Math.min(30, twi[k])); n++; } } twiMed = n ? Math.log(s / n) : 0; }
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, h = sf.alt[k], suMare = !(haMare && h < mare); bagnato[k] = !suMare || (sf.lago && sf.lago[k] > 0) ? 1 : 0;
     // la roccia: la classe che l'erosione ha lasciato in superficie (basamento, lave, copertura), sulla crosta dei continenti
     // (il basamento è granito) o su quella dei fondali (basalto)
     const fc = r0.cont ? bil0((q) => (r0.cont[q] ? 1 : 0), i, j) : 1, cl0 = lito && lito0 ? lito0[cella0(i, j)] : -1;
     let f1, f2; if (lito && lito0 && L > 0 && lito[k] === cl0) { f1 = bil0((q) => (lito0[q] === 1 ? 1 : 0), i, j); f2 = bil0((q) => (lito0[q] === 2 ? 1 : 0), i, j); } else { f1 = lito && lito[k] === 1 ? 1 : 0; f2 = lito && lito[k] === 2 ? 1 : 0; }
-    const f0 = Math.max(0, 1 - f1 - f2);
-    const roccia = [0, 1, 2].map((q) => fc * (f1 * ALBEDO.basalto * tBas[q] + f2 * ALBEDO.copertura * tCont[q] + f0 * ALBEDO.granito * tCont[q]) + (1 - fc) * (f2 * ALBEDO.copertura * tCont[q] + (1 - f2) * ALBEDO.basalto * tBas[q]));
-    const dep = sf.depositato ? sf.depositato[k] : 0, fs = Math.min(1, Math.max(0, dep) / 3); // (tre metri di sedimento coprono la roccia)
-    let c = [0, 1, 2].map((q) => (1 - fs) * roccia[q] + fs * ALBEDO.sabbia * (0.5 * tSab[q] + 0.5 * tCont[q]));
-    if (mat.ghiacciato) c = FORMA_NEVE.map((f) => aGhiaccio * f); // una crosta di ghiaccio d'acqua (95% dei minerali di superficie)
+    const f0 = Math.max(0, 1 - f1 - f2), wG = fc * f0, wS = f2, wB = Math.max(0, 1 - wG - wS);
+    // IL SUOLO: lo spessore dal bilancio di Heimsath (suolo.js spessoreSuolo): la roccia diventa suolo al più P₀·e^(−h/h₀), il
+    // punto si abbassa di E = K·A^m·S (la legge dei fiumi di geologia.js): h = h₀·ln(P₀·r/E); dove E supera P₀·r la roccia è nuda
+    // (gli AFFIORAMENTI). La parte coperta: h/h₀ (sotto mezzo metro il suolo lascia vedere la roccia). A e S sono quelli della
+    // superficie intera (il livello 0), interpolati: la legge dipende dalla grana della griglia (A^m·S con la cella più fine
+    // cambia), e presa a ogni livello faceva cambiare colore alle terre entrando nella tessera figlia (ΔE fino a 14, padri.mjs)
+    const sG = suolo0(M3.granito, EROSIONE.K.granito, i, j), sB = suolo0(M3.basalto, EROSIONE.K.vulcanica, i, j), sS = suolo0(M3.sedimento, EROSIONE.K.sedimento, i, j);
+    // L'UMIDITÀ del punto: quella del secchio del suolo di meteo.js (Manabe 1969) lì, distribuita col rilievo come in TOPMODEL
+    // (Beven e Kirkby 1979: il deficit locale cresce con la differenza dall'indice medio, in forma esponenziale): più acqua nelle
+    // valli e nelle conche, meno sui crinali
+    const wet = Math.min(1, secchio(i, j) * Math.exp(Math.min(30, twi[k]) - twiMed)), dep = sf.depositato ? Math.min(1, Math.max(0, sf.depositato[k]) / SUOLO.h0) : 0;
+    const c = [0, 0, 0]; for (let q = 0; q < 3; q++) { const rG = M3.granito.roccia[q] * (1 - sG) + M3.granito.suolo[q] * sG, rB = M3.basalto.roccia[q] * (1 - sB) + M3.basalto.suolo[q] * sB, rS = M3.sedimento.roccia[q] * (1 - sS) + M3.sedimento.suolo[q] * sS;
+      const asciutta = (wG * rG + wB * rB + wS * rS) * (1 - dep) + dep * M3.sedimento.suolo[q]; c[q] = asciutta * (1 - wet) + bagnata(asciutta) * wet; }
+    // I FIUMI: la larghezza dalla portata (la geometria idraulica di Leopold e Maddock 1953, w ≈ 7,2·Q^0,5 m con Q in m³/s: Moody e
+    // Troutman 2002 sui fiumi del mondo); la parte della cella che il letto copre è acqua (riflettanza dell'acqua profonda
+    // vista da sopra, quella di mare.js per l'acqua limpida); i letti più larghi della cella li ha già la tessera come laghi o mare
+    if (suMare && fl) { const Q = (fl[k] * aCella) / 3.15576e7, fr = Math.min(1, (7.2 * Math.sqrt(Q)) / Math.max(dxC, passoLat)); if (fr > 0.002) for (let q = 0; q < 3; q++) c[q] = c[q] * (1 - fr) + ACQUA_FIUME[q] * fr; }
+    let cc = c; if (mat.ghiacciato) cc = FORMA_NEVE.map((f) => aGhiaccio * f); // una crosta di ghiaccio d'acqua (95% dei minerali di superficie)
     // il gelo: la parte dell'anno che il punto passa sotto lo zero (lo stesso conto della carta: clima e quota, 6,5 °C al km)
     let gelo;
     if (cl && cl.media) { const su = suMare ? (h - Math.max(campo(cl.quota, i, j), mare)) / 1000 : 0, Tloc = campo(cl.media, i, j) - 6.5 * su; gelo = Math.min(1, Math.max(0, campo(cl.freddo, i, j), suMare ? ((cl.neve ?? 1) * (268 - Tloc)) / 12 : 0)); }
     else gelo = B.T - 0.45 * Math.abs(90 - ((v0 + ((j + 0.5) / H) * (v1 - v0)) * 180)) - Math.max(0, h) * 0.0065 < 265 ? 1 : 0;
     if (gelato) gelo = 1; const g = Math.pow(gelo, 0.7);
-    for (let q = 0; q < 3; q++) terra[4 * k + q] = srgb(c[q] + (aGhiaccio * FORMA_NEVE[q] - c[q]) * g);
+    for (let q = 0; q < 3; q++) terra[4 * k + q] = srgb(cc[q] + (aGhiaccio * FORMA_NEVE[q] - cc[q]) * g);
     terra[4 * k + 3] = 255;
   }
   // --- l'acqua vista da sopra (mare.js), senza l'esposizione, la luce e il cielo che coloraMare ci mette: c = 255·(3,5·luce·
