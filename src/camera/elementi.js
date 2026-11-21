@@ -75,7 +75,9 @@
 // (2012, eq. 4.8 [V]) per quel disco (fd·ε 1,3, fg 1,9 a 0,67 UA), non un errore; e anche con la crescita 7 volte più lenta
 // (t_iso 4·10⁵ anni, provato) il sodio non cambia: l'evaporazione qui agisce solo a gas sparito, a 8,2 milioni di anni, quando
 // all'²⁶Al restano 2·10³ J/kg contro i 2·10⁶ che fondono la roccia); il mare di quel
-// pianeta resta una salamoia, ora di soda (il sodio dei fiumi non ha in mare.js un'uscita che lo pareggi); il nucleo
+// pianeta resta troppo salato (114 g/kg, quasi tutto NaCl: con le argille nuove che non tornano come sale e il cloro che le
+// placche riportano nel mantello, mare.js, la soda è sparita e il mare tiene un terzo del cloro, come la Terra; il resto è il
+// cloro del pianeta, 5,6 volte la Terra); il nucleo
 // all'equilibrio a quelle temperature prende più silicio del vero; gli elementi più siderofili (Pt, Au) all'equilibrio
 // restano nel mantello cento volte meno del vero (manca l'«ultima vernice» di Kimura 1974); le tracce pesanti senza rese
 // (oltre lo zinco) seguono l'ossigeno o il carbonio nella proporzione r/s del Sistema Solare [R]: è una taratura sul Sole,
