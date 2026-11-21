@@ -18,7 +18,9 @@
 //        δ_ij = ((1−e_j)a_j − (1+e_i)a_i)/a_j,  δ = δ₁₂δ₂₃/(δ₁₂ + δ₂₃),  η = ν₁₂(1−ν₂₃)/(1−ν₁₂ν₂₃) (ν i rapporti dei periodi),
 //        ε_M = √(m₁m₃ + m₂m₃η²α₁₂⁻² + m₁m₂α₂₃²(1−η)²)/M*,  δ_ov = (6,55·K·ε_M)^¼·(η(1−η))^⅜,  K = min(0,5(N−3) + 1, 3)
 //      (32√19/(3√π) è il 16√2·A/3 di Petit con A = √(38/π)). Oltre δ_ov le risonanze non si toccano più e il tempo è molto più
-//      lungo (Petit: «probabilmente molto più grande», non dato): qui infinito, dichiarato.
+//      lungo (Petit: «probabilmente molto più grande», non dato): lì il tempo è quello misurato nelle simulazioni di molti
+//      pianeti, la legge di Chambers, Wetherill e Boss 1996 (disco.js giriCheRegge, data da chi chiama), sulla coppia più stretta
+//      della terna, con la sua distanza minima in raggi di Hill reciproci.
 
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 
@@ -132,15 +134,20 @@ export function modiSecolari(corpi, Mst, cache = null) {
 
 // IL TEMPO DI INCROCIO di tre orbite vicine (Petit et al. 2020, eq. 81, con Kimura et al. 2025: vedi in cima), in anni.
 // a (UA), m (in masse della stella), e (⟨e²⟩^½), P1 il periodo del più interno (anni), K il fattore di densità.
-// → { tau (0: già incrociate; Infinity: oltre la sovrapposizione), coppia (0: la coppia 1–2, 1: la 2–3: quella più stretta), d12, d23 }
-export function tempoIncrocio(a1, a2, a3, m1, m2, m3, e1, e2, e3, P1, K) {
+// oltre (facoltativa): (Δ in raggi di Hill reciproci, μ = massa media sulla stella) → giri che la coppia regge, per le spaziature
+// oltre la sovrapposizione (senza: infinito).
+// → { tau (0: già incrociate; Infinity: oltre la sovrapposizione, se manca «oltre»), coppia (0: la coppia 1–2, 1: la 2–3: quella più stretta), d12, d23 }
+export function tempoIncrocio(a1, a2, a3, m1, m2, m3, e1, e2, e3, P1, K, oltre = null) {
   const d12 = ((1 - e2) * a2 - (1 + e1) * a1) / a2, d23 = ((1 - e3) * a3 - (1 + e2) * a2) / a3, coppia = d12 <= d23 ? 0 : 1;
   if (!(d12 > 0) || !(d23 > 0)) return { tau: 0, coppia, d12, d23 };
   const d = (d12 * d23) / (d12 + d23), al12 = a1 / a2, al23 = a2 / a3, n12 = Math.pow(al12, 1.5), n23 = Math.pow(al23, 1.5);
   const eta = (n12 * (1 - n23)) / (1 - n12 * n23), ee = eta * (1 - eta);
   const eM = Math.sqrt(m1 * m3 + (m2 * m3 * eta * eta) / (al12 * al12) + m1 * m2 * al23 * al23 * (1 - eta) * (1 - eta));
   const dov = Math.pow(6.55 * K * eM, 0.25) * Math.pow(ee, 0.375), x = Math.pow(d / dov, 4);
-  if (!(x < 1)) return { tau: Infinity, coppia, d12, d23 };
+  if (!(x < 1)) { if (!oltre) return { tau: Infinity, coppia, d12, d23 };
+    // (oltre la sovrapposizione: la coppia più stretta, la sua distanza minima in raggi di Hill reciproci, i giri di Chambers)
+    const [ai, aj, mi, mj, dd] = coppia === 0 ? [a1, a2, m1, m2, d12] : [a2, a3, m2, m3, d23], h = Math.cbrt((mi + mj) / 3) * 0.5 * (ai + aj);
+    return { tau: P1 * oltre((dd * aj) / h, 0.5 * (mi + mj)), coppia, d12, d23 }; }
   const lg = -Math.log10((32 * Math.sqrt(19) * eM * Math.sqrt(ee)) / (3 * Math.sqrt(Math.PI))) + Math.log10(Math.pow(x, 1.5) / (1 - x)) + Math.sqrt(-Math.log(1 - x));
   return { tau: P1 * Math.pow(10, lg), coppia, d12, d23 };
 }
