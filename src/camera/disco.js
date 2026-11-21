@@ -318,8 +318,6 @@ export function formaPianeti(st, seme = 1) {
   const legge = (b, lento) => { const area = 2 * Math.PI * b.a * b.w * UA * UA, ms = b.m - b.gas, sp = b.cibo / area, k0 = (lento * tempoCrescita(ms, b.a, sp, D.sigmaGas(b.a), D.massaStella) * sp) / Math.cbrt(ms);
     const aa = Math.cbrt(ms + b.cibo), F = (y) => { const x = aa - y; return (-Math.log(y) + 0.5 * Math.log(x * x + aa * x + aa * aa) + Math.sqrt(3) * Math.atan((2 * x + aa) / (aa * Math.sqrt(3)))) / (aa * aa); };
     return { ms, ka: k0 * area, aa, F }; };
-  // (quanto tempo serve perché il corpo arrivi a metà della sua striscia: m = cibo)
-  const tempoMeta = (b, lento) => { if (!(b.cibo > b.m - b.gas) || !(b.w > 0)) return 0; const { ms, ka, aa, F } = legge(b, lento); return ka * (F(aa - Math.cbrt(0.5 * (ms + b.cibo))) - F(aa - Math.cbrt(ms))); };
   const mangia = (b, dt, lento) => {
     if (!(dt > 0) || !(b.cibo > 1e-9 * b.m)) return;
     // (Newton sul logaritmo di ciò che manca, u = ln y: dF/du = −3y/(a³ − x³); F cresce quando y cala, e la radice è unica)
@@ -397,15 +395,6 @@ export function formaPianeti(st, seme = 1) {
   // volte più lentamente senza gas (DISCO.senzaGas). I giganti no: i planetesimi li scagliano.
   for (const b of vivi) b.tAcc = Math.min(eta, D.vita);
   const cresci = (b, T) => { const dt = T - b.tAcc; b.tAcc = Math.max(b.tAcc, T); if (!(dt > 0) || !(b.cibo > 0) || !(b.w > 0) || b.gas > 0.5 * b.m) return; mangia(b, dt, P.senzaGas); };
-  // CHI È ANCORA OLIGARCA. Finché un embrione ha meno massa dei planetesimi della sua striscia (Σ < σ), la loro frizione lo tiene
-  // rotondo più in fretta di quanto i vicini lo agitino (Goldreich, Lithwick e Sari 2004, eq. 14: il segno di Σ − σ): non entra
-  // nella fase degli urti, e cresce (cresci). Vi entra quando arriva a metà della striscia (tempoMeta, con la crescita esatta di
-  // mangia); chi non ci arriva prima di oggi resta fuori. (Così nei dischi poveri, dove gli embrioni sono migliaia e piccoli, la
-  // gara si fa solo tra quelli che ne hanno i numeri.)
-  const attesa = [];
-  if (eta > D.vita) { for (const b of vivi) if (b.gas < 0.5 * b.m && b.cibo > b.m - b.gas) { b.tEntra = D.vita + tempoMeta(b, P.senzaGas); b.fuori = true; if (b.tEntra < eta) attesa.push(b); }
-    vivi = vivi.filter((b) => !b.fuori); attesa.sort((x, y) => x.tEntra - y.tEntra); }
-  const tuttiQuelli = corpi.filter((b) => !b.morto && b.m > 0); // (per la fine: anche chi è rimasto oligarca)
   // (e) l'attrito: de/dt = −e/τ con τ ∝ e⁴, cioè e⁴ cala di 4·dt/C, C = M*²·T_K/(4π²·M·Σ_p·a²·lnΛ); fermo alla velocità di Hill
   const attrito = (b, e, dt) => { if (!(b.cibo > 0) || !(b.w > 0) || !(dt > 0)) return e;
     if (b._a !== b.a || b._m !== b.m || b._c !== b.cibo || b._w !== b.w) { b._a = b.a; b._m = b.m; b._c = b.cibo; b._w = b.w; b._eH = Math.cbrt(b.m / (3 * Mst)); const sp = b.cibo / (2 * Math.PI * b.a * b.w * UA * UA); b._C = (Mst * Mst * anno(b.a)) / (4 * Math.PI * Math.PI * b.m * sp * (b.a * UA) ** 2 * LN); } // (C: ricalcolato solo quando il corpo cambia)
@@ -538,16 +527,8 @@ export function formaPianeti(st, seme = 1) {
     const metti = (p) => { const q = p?.dopo, r = q?.dopo; if (!r) return; const v = terna3(p, q, r, N, t); if (v.T <= eta) { v.k = v.T; su(v); } };
     const vale = (v) => !v.b[0].morto && v.b[0].dopo === v.b[1] && v.b[1].dopo === v.b[2] && v.b.every((o, j) => o.ver === v.ver[j]);
     for (const o of vivi) metti(o);
-    for (const o of attesa) su({ k: o.tEntra, entra: o });
     while (N > 40 && coda.length && fatti < 150) {
       const v = giu();
-      if (v.entra) { // (un oligarca che arriva a metà della sua striscia entra nella gara: al suo posto nella catena)
-        const o = v.entra; o.fuori = false; t = o.tEntra; cresci(o, t); o.tz = t; o.ver = (o.ver || 0) + 1; o.tocco = -1; o.blocco = null; o.terna = null; N++;
-        let w = vivi.find((x) => !x.morto && !x.fuori && x !== o && (x.prima || x.dopo)) || null;
-        if (w) { while (w.prima && w.prima.a > o.a) w = w.prima; while (w.dopo && w.dopo.a < o.a) w = w.dopo;
-          if (w.a < o.a) { o.prima = w; o.dopo = w.dopo; if (w.dopo) w.dopo.prima = o; w.dopo = o; } else { o.dopo = w; o.prima = w.prima; if (w.prima) w.prima.dopo = o; w.prima = o; } }
-        vivi.push(o); let w2 = o; for (let k = 0; k < 2 && w2.prima; k++) w2 = w2.prima; for (let k = 0; k < 3 && w2; k++, w2 = w2.dopo) metti(w2); continue;
-      }
       if (!vale(v)) continue;
       // (qui, senza teoria secolare, ogni coppia ha il suo orologio: l'incontro che comincia per primo si risolve subito, alla sua
       // fine, e i due corpi ne escono a quell'ora — fino ad allora sono occupati tra loro —; le terne che non li toccano vanno avanti
@@ -568,11 +549,10 @@ export function formaPianeti(st, seme = 1) {
       if (sinistra && !sinistra.morto) { nuove.add(sinistra); if (sinistra.prima) nuove.add(sinistra.prima); }
       for (const w of nuove) metti(w);
     }
-    vivi = vivi.filter((o) => !o.morto && !o.fuori).sort((x, y) => x.a - y.a); for (const o of vivi) o.terna = null;
+    vivi = vivi.filter((o) => !o.morto).sort((x, y) => x.a - y.a); for (const o of vivi) o.terna = null;
   }
-  const inAttesa = attesa.filter((o) => o.fuori); let prossimo = 0; // (gli oligarchi che entrano dopo)
   if (eta > D.vita && vivi.length >= 2) rifai();
-  for (; eta > D.vita && fatti < 600 && vivi.length <= 40 && (vivi.length >= 2 || prossimo < inAttesa.length); fatti++) {
+  for (; eta > D.vita && fatti < 600 && vivi.length <= 40 && vivi.length >= 2; fatti++) {
     if (vivi.length < 2) terne = [];
     // (il prossimo evento è l'incontro che finisce per primo: mentre una coppia si cerca, il resto del sistema va avanti. Kimura
     // ha un orologio solo, che salta alla fine di ogni incontro: in un sistema lungo decine di UA un incontro lento fermerebbe
@@ -582,10 +562,6 @@ export function formaPianeti(st, seme = 1) {
     for (;;) { let pv = -1; for (let j = 0; j < terne.length; j++) { const v = terne[j]; if (!v.x && v.T <= eta && (pv < 0 || v.T < terne[pv].T)) pv = j; }
       if (pv < 0 || (x && terne[pv].T >= x.tEvento)) break;
       const v = terne[pv]; v.x = esito(v.b[v.coppia], v.b[v.coppia + 1], v.T); if (!x || v.x.tEvento < x.tEvento) x = v.x; }
-    const entra = inAttesa[prossimo];
-    if (entra && entra.tEntra <= eta && (!x || entra.tEntra < x.tEvento)) { // (prima dell'incontro, un oligarca entra nella gara)
-      prossimo++; entra.fuori = false; t = entra.tEntra; cresci(entra, t); evento++; entra.tocco = evento; entra.tz = t; entra.ver = (entra.ver || 0) + 1; entra.blocco = null; entra.terna = null;
-      vivi.push(entra); vivi.sort((a, b) => a.a - b.a); if (vivi.length >= 2) rifai(); continue; }
     if (!x || !(x.tEvento <= eta)) break; // (nessun incontro finisce prima di oggi: quelli in corso restano in corso)
     applica(x); const { p, q, tEvento } = x;
     t = tEvento; for (const o of [p, q]) if (o.morto) vivi.splice(vivi.indexOf(o), 1);
@@ -593,7 +569,6 @@ export function formaPianeti(st, seme = 1) {
   }
   // l'eccentricità di oggi: quella secolare, all'età della stella
   if (eta > D.vita && vivi.length >= 2 && vivi.length <= 40) rifai();
-  vivi = [...vivi, ...tuttiQuelli.filter((b) => b.fuori && !b.morto)].sort((x, y) => x.a - y.a); // (e gli oligarchi rimasti tali)
   for (const b of vivi) if (eta > D.vita) cresci(b, eta);
   // (al primo ordine l'eccentricità secolare può passare 1: il perielio è sceso dentro la stella, e il corpo vi è caduto —
   // dichiarato: lì la teoria di Laplace e Lagrange non vale più da tempo)
