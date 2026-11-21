@@ -17,7 +17,7 @@
 //   traslazione p1: la finestra copiata accanto a sé
 //   una:      la finestra da sola
 
-import { bellezza } from './sezione.js';
+import { bellezza } from '../../../src/camera/sezione.js';
 export const GRUPPI = {
   esagoni: { nome: 'caleidoscopio a sei', spiega: 'un triangolo della finestra, riflesso nei suoi lati: dodici copie fanno un esagono, e intorno ai vertici nascono stelle a sei punte' },
   quadrati: { nome: 'caleidoscopio a quattro', spiega: 'un triangolo della finestra, riflesso nei suoi lati: otto copie fanno un quadrato, con stelle a quattro e a otto punte' },

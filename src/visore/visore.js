@@ -1,7 +1,7 @@
 // visore.js — il visore del ricercatore, variante B (PROGETTO_VISORE.md; prototipo: prove/visore/visore.html?v=B).
 // Schermo pieno, cornice sottile bordeaux, la linguetta dei tasti in basso. La camera (laboratorio.js) resta com'è e fa
-// tutto: qui la si veste. All'avvio si costruisce il guscio e ci si spostano dentro le parti vive della pagina di prima:
-// la scena (.tele, con le sue tele), il pannello della cella (nella scheda del pattern), le forze, il tempo della cella.
+// tutto: qui la si veste. All'avvio si costruisce il guscio e ci si sposta dentro la parte viva della pagina di prima:
+// la scena (.tele, con le sue tele).
 // La barra in alto, la riga di stato e il pannello laterale spariscono (visore.css); ogni loro funzione ha un posto qui
 // (la tabella del § 11): i tasti, la catena, il righello, il mirino, le schede, il menu, il taccuino.
 //
@@ -21,7 +21,7 @@ const LIV3 = ['cosmo', 'galassia', 'stella', 'pianeta'];
 
 function costruisci() {
   metteSprite();
-  const tele = document.querySelector('.tele'), pannello = $('pannello'), sopra = document.querySelector('.sopra'), sotto = document.querySelector('.sotto');
+  const tele = document.querySelector('.tele');
   if (!tele || document.getElementById('visore')) return;
   const radice = document.createElement('div'); radice.id = 'visore'; radice.className = 'v-scocca';
   radice.innerHTML = `
@@ -30,10 +30,10 @@ function costruisci() {
       <section class="v-scheda" hidden aria-label="la scheda">
         <div class="testa"><div class="stemma"></div><div><h2></h2><p></p></div><button class="chiudi" title="chiudi (B, Esc)">${ico('g-chiudi')}<kbd>B</kbd></button></div>
         <nav class="v-linguette"></nav>
-        <div class="corpo"><div class="gen"></div><div class="vivo" data-vivo="leggi" hidden></div><div class="vivo" data-vivo="sezione" hidden></div></div>
+        <div class="corpo"><div class="gen"></div></div>
         <div class="piede"></div>
       </section>
-      <div class="v-pop" hidden><h4>Il tempo</h4><div class="riga v-pop-3d"></div><div class="v-pop-cella"></div></div>
+      <div class="v-pop" hidden><h4>Il tempo</h4><div class="riga v-pop-3d"></div></div>
       <div class="v-vetro"></div>
     </div>
     <div class="v-linguetta v-scocca">
@@ -55,10 +55,7 @@ function costruisci() {
   document.body.appendChild(radice);
   const schermo = radice.querySelector('.v-schermo'), elScheda = radice.querySelector('.v-scheda'), pop = radice.querySelector('.v-pop');
   schermo.prepend(tele);
-  const corpo = elScheda.querySelector('.corpo'), gen = corpo.querySelector('.gen'), vivoLeggi = corpo.querySelector('[data-vivo="leggi"]'), vivoSezione = corpo.querySelector('[data-vivo="sezione"]');
-  if (sopra) vivoLeggi.appendChild(sopra);
-  if (pannello) vivoSezione.appendChild(pannello);
-  if (sotto) radice.querySelector('.v-pop-cella').appendChild(sotto);
+  const corpo = elScheda.querySelector('.corpo'), gen = corpo.querySelector('.gen');
 
   // ---------- IL RAPPORTO DELLA CAMERA: ogni volta che la scena cambia misura (la scheda che si apre o si chiude, la
   // finestra ridimensionata, lo schermo pieno) le tele si rifanno alla misura nuova. La camera ascolta `resize` della
@@ -75,7 +72,7 @@ function costruisci() {
   const menu = creaMenu(schermo, { azioni, hud });
 
   // ---------- LA GHIERA: la rotella resa tasto (A e B, il righello). Si manda la rotella alla tela che sta sotto il mirino,
-  // così fa esattamente ciò che fa la rotella vera a ogni livello (lo spazio, il suolo, la roccia, gli atomi, la cella)
+  // così fa esattamente ciò che fa la rotella vera a ogni livello (lo spazio, il suolo, la roccia, gli atomi, i quanti)
   function ghiera(verso, n = 4) {
     const r = tele.getBoundingClientRect(), m = hud.mirino, x = r.left + (m && m.tipo !== 'anello' ? m.x : r.width / 2), y = r.top + (m && m.tipo !== 'anello' ? m.y : r.height / 2);
     let i = 0; const passo = () => {
@@ -109,23 +106,20 @@ function costruisci() {
       const cm = c.camMappa; if (!cm?.via) { hud.avvisa('Da qui non si torna nello spazio'); return; }
       const L = LIV3.indexOf(liv), m = Math.min(tele.clientWidth, tele.clientHeight) * (devicePixelRatio || 1);
       Object.assign(cm, { livello: L, cx: L === 0 ? 0.5 : 0, cy: L === 0 ? 0.5 : 0, z: L === 3 ? m / 3 : m / 2.4 }); delete cm.roccia; delete cm.quota3d;
-      c.vai('cosmo'); let n = 0; const aspetta = setInterval(() => { const x = C(); if (++n > 100) return clearInterval(aspetta); if (x?.universo3d?.pronto?.()) { clearInterval(aspetta); setTimeout(() => x.volaAlLivello?.(liv), 400); } }, 100);
+      c.aggiorna(); let n = 0; const aspetta = setInterval(() => { const x = C(); if (++n > 100) return clearInterval(aspetta); if (x?.universo3d?.pronto?.()) { clearInterval(aspetta); setTimeout(() => x.volaAlLivello?.(liv), 400); } }, 100);
       hud.avvisa(`Si torna nello spazio: ${liv === 'cosmo' ? 'il cosmo' : `la ${liv === 'pianeta' ? 'pianeta' : liv}`.replace('la pianeta', 'il pianeta')}`); return;
     }
-    const qi = ORDINE.indexOf(q.id === 'pattern' ? 'pattern' : q.id), li = ORDINE.indexOf(liv); ghiera(li > qi ? -1 : 1, 6);
+    const qi = ORDINE.indexOf(q.id), li = ORDINE.indexOf(liv); ghiera(li > qi ? -1 : 1, 6);
   };
-  // il tempo: nello spazio i bottoni del mondo (laboratorio.js, barra del mondo); nella cella il cursore del tempo e ▶
+  // il tempo: nello spazio i bottoni del mondo (laboratorio.js, barra del mondo); sotto la superficie è adesso
   azioni.tempo = (s) => {
     const b = tele.querySelector(`[data-t="${s}"]`); if (b) { b.click(); hud.aggiornaOra(); return; }
-    const c = C(); if (!c) return;
-    if (c.vista === 'pattern') { hud.avvisa('Il pattern è tutta la storia: entra nella finestra per il suo tempo'); return; }
-    if (c.vista === 'cosmo') { hud.avvisa("Qui il tempo è adesso: sotto la superficie lo stato c'è solo oggi"); return; }
-    if (s === 0) $('gioca')?.click(); else { const t = $('tempo'); if (t) { t.value = Math.max(0, Math.min(1, +t.value + s * 0.05)); t.dispatchEvent(new Event('input', { bubbles: true })); } }
-    hud.aggiornaOra();
+    if (!C()) return;
+    hud.avvisa("Qui il tempo è adesso: sotto la superficie lo stato c'è solo oggi");
   };
-  // F · INQUADRA: «una finestra bella a questa scala» (nello spazio e sulla mappa); nella cella una sezione più bella
+  // F · INQUADRA: «una finestra bella a questa scala» (nello spazio e sulla mappa)
   azioni.inquadra = () => {
-    const p = $('pannello'), b = p?.querySelector('[data-finestra-bella]') || p?.querySelector('[data-cerca="qui"]') || p?.querySelector('[data-cerca="ovunque"]');
+    const b = $('pannello')?.querySelector('[data-finestra-bella]');
     if (b) b.click(); else hud.avvisa('Qui non c\'è niente da inquadrare');
   };
   // R · A CASO: un punto a caso dell'universo (lingua.js); l'avviso dice dove
@@ -139,9 +133,8 @@ function costruisci() {
   azioni.taccuino = () => { if (menu.taccuinoAperto) menu.chiudiTaccuino(); else { menu.chiudi(); menu.taccuino(); } };
   azioni.popTempo = () => {
     pop.hidden = !pop.hidden; if (pop.hidden) return;
-    const c = C(), tre = !!tele.querySelector('[data-t="passo"]');
-    pop.querySelector('.v-pop-3d').innerHTML = tre ? `<button class="v-bottone" data-v-tempo="-1">${ico('g-indietro')}più lento</button><button class="v-bottone" data-v-tempo="0">${ico('g-pausa')}pausa</button><button class="v-bottone" data-v-tempo="1">${ico('g-avanti')}più veloce</button><button class="v-bottone" data-v-tempo="passo" title="ore per un pianeta, milioni di anni per una galassia">≈ il passo che ha senso qui</button>` : c?.vista === 'cosmo' ? '<p class="v-riga">Qui il tempo è adesso: sopra le particelle lo stato c\'è solo oggi.</p>' : '';
-    pop.querySelector('.v-pop-cella').hidden = tre || c?.vista === 'cosmo';
+    const tre = !!tele.querySelector('[data-t="passo"]');
+    pop.querySelector('.v-pop-3d').innerHTML = tre ? `<button class="v-bottone" data-v-tempo="-1">${ico('g-indietro')}più lento</button><button class="v-bottone" data-v-tempo="0">${ico('g-pausa')}pausa</button><button class="v-bottone" data-v-tempo="1">${ico('g-avanti')}più veloce</button><button class="v-bottone" data-v-tempo="passo" title="ore per un pianeta, milioni di anni per una galassia">≈ il passo che ha senso qui</button>` : '<p class="v-riga">Qui il tempo è adesso: sopra le particelle lo stato c\'è solo oggi.</p>';
   };
   pop.addEventListener('click', (e) => { const b = e.target.closest('[data-v-tempo]'); if (b) azioni.tempo(b.dataset.vTempo); });
 
@@ -160,16 +153,8 @@ function costruisci() {
     const nav = elScheda.querySelector('.v-linguette'); nav.style.setProperty('--n', lista.length);
     nav.innerHTML = lista.map((l) => `<button data-v-linguetta="${l.id}" class="${l.id === on ? 'on' : ''}" title="${l.nome}">${ico(l.ico)}${l.nome}</button>`).join('');
   }
-  const VISTE = { pattern: 'il pattern: la finestra ripetuta', finestra: 'la finestra: la sezione da sola', dettaglio: "l'universo della cella", spaziotempo: 'lo spaziotempo della finestra' };
   function disegnaScheda() {
-    if (elScheda.hidden) return; const q = hud.q, c = C();
-    if (q.id === 'pattern') {
-      const on = st.linguetta.pattern || 'sezione', k = `pattern|${on}|${c?.vista}|${c?.comp?.nome}`; if (k === st.chiave) return; st.chiave = k;
-      testa('pattern', (c?.comp?.nome || 'Il pattern').replace(/^./, (x) => x.toUpperCase()), VISTE[c?.vista] || '');
-      linguette([{ id: 'sezione', ico: 'mirino', nome: 'Sezione' }, { id: 'leggi', ico: 'campo', nome: 'Leggi' }], on);
-      gen.innerHTML = ''; gen.hidden = true; vivoSezione.hidden = on !== 'sezione'; vivoLeggi.hidden = on !== 'leggi'; elScheda.querySelector('.piede').innerHTML = ''; return;
-    }
-    vivoSezione.hidden = vivoLeggi.hidden = true; gen.hidden = false;
+    if (elScheda.hidden) return; const q = hud.q;
     const s = schedaDi(q), pozza = !!$('pannello')?.querySelector('img[alt="la convezione nella pozza"]');
     if (!s) { const k = `vuota|${q.id}`; if (k === st.chiave) return; st.chiave = k; testa(q.id, (q.id || '').replace(/^./, (x) => x.toUpperCase()), ''); linguette([], null); gen.innerHTML = '<p class="v-riga">Niente da mostrare qui.</p>'; return; }
     const on = s.linguette.some((l) => l.id === st.linguetta[s.liv]) ? st.linguetta[s.liv] : s.linguette[0].id, k = `${s.chiave}|${on}|${pozza}`; if (k === st.chiave) return; st.chiave = k;
@@ -180,7 +165,7 @@ function costruisci() {
   }
   elScheda.addEventListener('click', (e) => {
     if (e.target.closest('.chiudi')) { scheda(false); return; }
-    const t = e.target.closest('[data-v-linguetta]'); if (t) { const q = hud.q, s = q.id === 'pattern' ? { liv: 'pattern' } : schedaDi(q); st.linguetta[s?.liv || q.id] = t.dataset.vLinguetta; st.chiave = ''; disegnaScheda(); return; }
+    const t = e.target.closest('[data-v-linguetta]'); if (t) { const q = hud.q, s = schedaDi(q); st.linguetta[s?.liv || q.id] = t.dataset.vLinguetta; st.chiave = ''; disegnaScheda(); return; }
     const tc = e.target.closest('[data-v-taccuino]'); if (tc) { menu.taccuino(tc.dataset.vTaccuino); return; }
     const r = e.target.closest('[data-v-ramo]'); if (r) { $('pannello')?.querySelector(r.dataset.vRamo === '1' ? '[data-ramo-p]:not([data-ramo-p="|0"])' : '[data-ramo-p="|0"]')?.click(); hud.avvisa(r.dataset.vRamo === '1' ? 'Un pianeta parallelo: un solo evento è andato diversamente' : 'Di nuovo il cosmo di partenza'); return; }
     const vp = e.target.closest('[data-v-vola-pianeta]'), vg = e.target.closest('[data-v-vola-galassia]'), c = C(), v = hud.q.via;
@@ -199,7 +184,6 @@ function costruisci() {
     if (e.target?.matches?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
     if (e.key === 'Escape') { if (chiudiSopra()) { e.preventDefault(); e.stopImmediatePropagation(); } return; } // (altrimenti Esc resta alla camera)
     const k = TASTI[e.key.length === 1 ? e.key.toLowerCase() : '']; if (!k) return;
-    if (k === 'entra' && C()?.vista === 'spaziotempo') return; // (lì A riallinea lo spaziotempo: laboratorio.js)
     e.preventDefault(); e.stopImmediatePropagation();
     const b = radice.querySelector(`[data-v-tasto="${k}"]`); if (b) { b.classList.add('premuto'); setTimeout(() => b.classList.remove('premuto'), 140); }
     if (k === 'taccuino') azioni.taccuino(); else FA[k]?.();

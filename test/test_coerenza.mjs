@@ -701,7 +701,8 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
     tra(fmax / CO.FASCIA_MAX, 1 - 1e-5, 1 + 1e-5, `massimo vero ${fmax} a ${rmax} raggi contro FASCIA_MAX`); tra(rmax, 2.23, 2.25, 'dove sta il massimo (raggi)');
     assert.ok(!/0\.17\b/.test(readFileSync(new URL('../src/camera/nebbia.js', import.meta.url), 'utf8')) && !/FASCIA_MAX = 0\.17/.test(readFileSync(new URL('../src/camera/cosmo.js', import.meta.url), 'utf8')), 'un 0,17 scritto a mano in cosmo.js o nebbia.js');
   });
-  { const lab = readFileSync(new URL('../src/camera/laboratorio.js', import.meta.url), 'utf8'), resta = (lab.match(/fasciaDi\([^)]*\) \/ 0\.17/g) || []).length;
+  // (la nebbia della regione si disegna nella cella del pattern, che ora è un progetto a parte: pattern/src/camera/laboratorio.js)
+  { const lab = readFileSync(new URL('../pattern/src/camera/laboratorio.js', import.meta.url), 'utf8'), resta = (lab.match(/fasciaDi\([^)]*\) \/ 0\.17/g) || []).length;
     nota(3, 'laboratorio.js (disegnaNebbiaRegione) divide ancora la fascia per 0,17 scritto a mano invece che per FASCIA_MAX di cosmo.js', { casi: resta, su: 1, tipico: `massimo vero ${num(fmax)} = ${num(fmax / 0.17)} volte 0,17`, dove: 'laboratorio.js «fasciaDi(P, Pl, r) / 0.17» contro cosmo.js FASCIA_MAX' }); }
 }
 
@@ -853,7 +854,9 @@ sezione('IL CASO NASCOSTO (lettura del codice)');
     const leggi = (f) => readFileSync(new URL(f, cartella), 'utf8'), mappa = leggi('mappa.js'), pannello = leggi('laboratorio.js');
     assert.ok(/semeEvento\('roccia', cam\.via\.cosmo, cam\.via\.galassia, cam\.via\.stella, cam\.via\.pianeta,/.test(mappa), 'la roccia');
     assert.ok(/semeEvento\('pozza', v\.cosmo, v\.galassia, v\.stella, v\.pianeta\)/.test(pannello), 'la pozza');
-    assert.ok(/semeEvento\('nebbia della regione', a\.cosmo, a\.galassia, a\.stella, a\.pianeta, a\.regione, JSON\.stringify\(a\.zoom/.test(pannello), 'la nebbia della regione');
+    // (la nebbia della regione è della cella del pattern, progetto a parte: pattern/src/camera/laboratorio.js)
+    const cella = readFileSync(new URL('../pattern/src/camera/laboratorio.js', import.meta.url), 'utf8');
+    assert.ok(/semeEvento\('nebbia della regione', a\.cosmo, a\.galassia, a\.stella, a\.pianeta, a\.regione, JSON\.stringify\(a\.zoom/.test(cella), 'la nebbia della regione');
     // resta, dichiarato, solo lo sfondo di stelline della mappa (un seme fisso: è una decorazione, uguale ovunque)
     assert.deepEqual(aMano.filter((r) => !/^mappa\.js:\d+ {2}7$/.test(r)), []);
     // e il seme di un luogo cambia con ogni parte dell'indirizzo, anche nei cosmi paralleli (dove «cosmo» è una scritta)

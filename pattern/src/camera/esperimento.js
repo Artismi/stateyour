@@ -15,7 +15,7 @@
 // è uno pseudoscalare), e la traccia è esattamente la riflessione di quella
 // originale. Per questo basta simulare una cella sola.
 
-import { simulaMondo } from './mondo.js';
+import { simulaMondo } from '../../../src/camera/mondo.js';
 
 export const clona = (o) => JSON.parse(JSON.stringify(o));
 

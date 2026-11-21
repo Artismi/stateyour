@@ -14,8 +14,8 @@
 // madre, o il suo) e si passa al ramo in cui quell'evento è andato diversamente.
 // È la correzione minima: tutto il resto resta com'è.
 
-import { simulaMondo, generatore } from './mondo.js';
-import { segmentiSezione } from './sezione.js';
+import { simulaMondo, generatore } from '../../../src/camera/mondo.js';
+import { segmentiSezione } from '../../../src/camera/sezione.js';
 import { bellezzaFinestra, RIPETI_BASE } from './pattern.js';
 
 const gauss = (caso) => { let u = 0; for (let i = 0; i < 6; i++) u += caso(); return u - 3; };

@@ -24,7 +24,7 @@
 // mondo (il campo è uno solo per punto): si mettono in ESPOSIZIONI diverse
 // della stessa lastra, come nelle camere a bolle vere.
 
-import { simulaMondo } from './mondo.js';
+import { simulaMondo } from '../../../src/camera/mondo.js';
 
 let OPZ = {}; // le opzioni dell'ultima chiamata (per i campioni)
 const V = 10; // la velocità di tutte le cariche dei tratti

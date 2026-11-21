@@ -2,9 +2,9 @@
 // Sfoglia molti universi della biblioteca e, per ognuno, molte inquadrature
 // (dove, quanto larga, da che angolo, quale fetta di tempo); tiene quella che la
 // misura estetica giudica più bella.
-import { universo } from './biblioteca.js';
-import { simulaMondo, generatore } from './mondo.js';
-import { segmentiSezione } from './sezione.js';
+import { universo } from '../../../src/camera/biblioteca.js';
+import { simulaMondo, generatore } from '../../../src/camera/mondo.js';
+import { segmentiSezione } from '../../../src/camera/sezione.js';
 import { bellezzaFinestra } from './pattern.js';
 import { perfeziona } from './vicini.js';
 

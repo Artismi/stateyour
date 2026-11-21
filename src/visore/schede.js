@@ -1,10 +1,9 @@
 // schede.js — la scheda del bersaglio (PROGETTO_VISORE.md, § 5): lo stemma del livello, il nome, una riga d'identità e le
 // linguette a icone. Una scheda per livello: il pianeta (Sintesi, Aria, Clima, Mare, Interno, Origine), la stella, la
-// galassia, il cosmo, il suolo, la materia, gli atomi, i quanti. Il pattern (in fondo allo zoom) è una scheda a parte, viva:
-// la costruisce visore.js con i comandi della camera. Le schede mostrano grafica, non frasi: i testi lunghi stanno nel
-// taccuino. Ogni scheda è { chiave, liv, nome, identita, linguette: [{ id, ico, nome, html() }], piede }.
+// galassia, il cosmo, il suolo, la materia, gli atomi, i quanti (in fondo allo zoom). Le schede mostrano grafica, non frasi:
+// i testi lunghi stanno nel taccuino. Ogni scheda è { chiave, liv, nome, identita, linguette: [{ id, ico, nome, html() }], piede }.
 import { ico } from './icone.js';
-import { C, pianeta as datiPianeta, particelleDi, stella as datiStella, galassia as datiGalassia, cosmo as datiCosmo, materia as datiMateria, sorgentiDi, lunghezza } from './dati.js';
+import { C, pianeta as datiPianeta, particelleDi, stella as datiStella, galassia as datiGalassia, cosmo as datiCosmo, materia as datiMateria, lunghezza } from './dati.js';
 import { sezione, etichette, termometro, temperatura, bandaAcqua, anello, legendaGas, goccia, misurino, scalaPH, tessere, spettro, impilate, scalaLog, resa, spaccato, catenaCause, conteggi, hr, curva, mappaDensita, coloreCorpoNero, num, num1, sig, formula, segnoMeno } from './grafica.js';
 import { immagineSuperficie } from '../camera/geologia.js';
 import { scenaAtomi } from '../camera/mappa.js';
@@ -106,8 +105,6 @@ function originePianeta(d) {
     { ico: 'materia', titolo: 'Il disco', numero: P.tipo === 'roccioso' ? `ferro ${num(100 * (P.composizione?.ferro ?? 0))} %` : P.tipo === 'ghiacciato' ? 'roccia e ghiaccio' : 'un nucleo che cattura il gas' },
     { ico: 'pianeta', titolo: `Il pianeta ${v.pianeta + 1}`, numero: P.interno && P.tipo !== 'gassoso' ? `nucleo ${num(100 * P.interno.nucleo)} % · ${P.interno.dinamo ? 'dinamo' : 'niente campo'}` : 'gas attorno al nucleo' },
   ]));
-  const so = sorgentiDi(v);
-  if (so && Object.keys(so.conta).length) { const icona = (o) => (/getto|buco/.test(o) ? 'galassia' : /supernov/.test(o) ? 'stella' : /fondo|cosm/.test(o) ? 'cosmo' : /sol|stell/.test(o) ? 'stella' : 'particella'); h += sezione('particella', 'Da dove viene ciò che vedi', `la regione ${so.seme}`, conteggi(Object.entries(so.conta).map(([o, n]) => ({ ico: icona(o), n: `${n} ×`, testo: o })))); }
   const b = pannello()?.querySelector('[data-ramo-p]:not([data-ramo-p="|0"])');
   if (b) h += sezione('ramo', 'Il pianeta parallelo', 'un evento diverso', nota(una(b.parentNode?.textContent?.replace(b.textContent, '').replace('↩ il cosmo di partenza', '') || '', 120)));
   return h + aperto('perché è fatto così, per esteso');
@@ -185,9 +182,9 @@ function schedaAtomi(q) {
   return { chiave: `a|${sc?.chiave || ''}`, liv: 'atomo', nome: q.acqua ? 'Le molecole' : 'Gli atomi', identita: una(sc?.che || '', 60), linguette: [{ id: 'atomi', ico: 'atomo', nome: 'Atomi', html: atomi }], piede: () => '' };
 }
 function schedaQuanti() {
-  return { chiave: 'q', liv: 'particella', nome: 'I quanti', identita: "dentro l'atomo", linguette: [{ id: 'quanti', ico: 'particella', nome: 'Quanti', html: () => nota("La scala quantistica dell'atomo che si guardava. Avvicinati ancora: la finestra delle particelle di quel punto, e il pattern.") + aperto('la guida') }], piede: () => '' };
+  return { chiave: 'q', liv: 'particella', nome: 'I quanti', identita: "dentro l'atomo", linguette: [{ id: 'quanti', ico: 'particella', nome: 'Quanti', html: () => nota("La scala quantistica dell'atomo che si guardava: le particelle e i campi. È la scala più piccola: qui lo zoom finisce.") + aperto('la guida') }], piede: () => '' };
 }
-// la scheda del livello dove si è (null: il pattern, che è vivo e la fa visore.js)
+// la scheda del livello dove si è (null: niente da mostrare)
 export function schedaDi(q) {
   try {
     switch (q.id) {

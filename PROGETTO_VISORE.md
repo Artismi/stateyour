@@ -1,5 +1,7 @@
 # Il visore — progetto dell'interfaccia
 
+*Nota: il generatore di pattern non fa più parte dell'app, che ora finisce alla scala quantistica; è un progetto a parte in `pattern/` ([pattern/LEGGIMI.md](pattern/LEGGIMI.md)). Nel visore non ci sono più la scheda del pattern (Sezione, Leggi), la cella, il seme da file né la biblioteca: le righe di questo progetto che ne parlano restano come storia.*
+
 *Prototipo visivo: `prove/visore/visore.html` (`?v=A` palmare, `?v=B` schermo pieno). Schermate: `prove/visore/visore_A.png`, `visore_B.png`. La finestra 3D al centro è uno scatto vero dell'app (il pianeta 1 della stella 72).*
 
 ![A · palmare](prove/visore/visore_A.png)

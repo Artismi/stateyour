@@ -1,9 +1,9 @@
 // test_sezione.mjs — le sezioni da un angolo, e il dado che cerca quelle belle
 import assert from 'node:assert/strict';
-import { proiettore, segmentiSezione, bellezza } from '../src/camera/sezione.js';
+import { proiettore, segmentiSezione, bellezza } from '../../src/camera/sezione.js';
 import { cercaSezione } from '../src/camera/cercatore.js';
-import { universo } from '../src/camera/biblioteca.js';
-import { simulaMondo, generatore } from '../src/camera/mondo.js';
+import { universo } from '../../src/camera/biblioteca.js';
+import { simulaMondo, generatore } from '../../src/camera/mondo.js';
 import { ramo, perfeziona } from '../src/camera/vicini.js';
 import { geometria, motivo, bellezzaPattern, RIPETI_BASE } from '../src/camera/pattern.js';
 

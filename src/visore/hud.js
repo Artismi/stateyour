@@ -48,7 +48,7 @@ export function creaHud(schermo, { azioni }) {
   }
   function aggiornaRighello(q, sc) {
     costruisciRighello(); const ago = elRighello.querySelector('.ago'), let_ = elRighello.querySelector('.lettura'), banda = elRighello.querySelector('.vista'); if (!ago) return;
-    const qui = q.id === 'pattern' ? (q.materia ? 'particella' : null) : q.id;
+    const qui = q.id;
     for (const b of elRighello.querySelectorAll('.liv')) b.classList.toggle('qui', b.dataset.liv === qui);
     if (!sc) { ago.hidden = let_.hidden = banda.hidden = true; return; }
     ago.hidden = let_.hidden = banda.hidden = false;
@@ -83,7 +83,7 @@ export function creaHud(schermo, { azioni }) {
     return { x: W / 2 + (x / -z / S.tanX) * (W / 2), y: H / 2 - (yy / -z / S.tanY) * (H / 2), k: H / 2 / (Math.hypot(p[0], p[1], p[2]) * S.tanY) };
   }
   function bersaglio(W, H) {
-    const c = C(), q = stato.q; if (!c || q.id === 'pattern') return null;
+    const c = C(), q = stato.q; if (!c) return null;
     if (q.tre) {
       const seg = schermo.querySelector('.segni3d'), an = seg?.children[0], nm = seg?.children[1];
       if (an && !an.hidden && an.style.left) return { x: parseFloat(an.style.left), y: parseFloat(an.style.top), r: parseFloat(an.style.width) / 2 - 5, nome: nm?.textContent || '', tipo: 'anello', volo: an.classList.contains('fermo') };
@@ -114,6 +114,7 @@ export function creaHud(schermo, { azioni }) {
     const n = nomeDelBersaglio(b); stato.nomeMirino = n.nome;
     const e1 = elEtichetta.querySelector('.r1 span'), e2 = elEtichetta.querySelector('.r2'); if (e1.textContent !== n.nome) e1.textContent = n.nome; if (e2.textContent !== n.r2) e2.textContent = n.r2;
     const uso = elEtichetta.querySelector('.r1 use'); if (uso.getAttribute('href') !== `#i-${n.liv}`) uso.setAttribute('href', `#i-${n.liv}`);
+    elEtichetta.querySelector('.tasto-a').hidden = stato.q?.id === 'particella'; // (i quanti sono il fondo: lì non si entra più)
     elEtichetta.hidden = !n.nome; if (!n.nome) { guida.setAttribute('d', ''); punto.style.display = 'none'; return; }
     const lw = elEtichetta.offsetWidth || 160, lh = elEtichetta.offsetHeight || 60, x0 = b.x + k * 0.72, y0 = b.y - k * 0.72;
     let lx = b.x + k + 24, ly = b.y - k - lh + 6, destra = true;

@@ -3,7 +3,7 @@
 import { serve, prepara } from '../preparazione.js';
 import { decodifica, mascheraOriginale } from '../decodifica.js';
 import { tracciaFisica, fedelta } from './inversa.js';
-import { simulaMondo } from './mondo.js';
+import { simulaMondo } from '../../../src/camera/mondo.js';
 
 self.onmessage = (ev) => {
   const passo = (n, testo) => self.postMessage({ passo: n, testo });

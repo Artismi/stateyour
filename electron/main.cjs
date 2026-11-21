@@ -1,10 +1,10 @@
 // main.cjs — stateyour come applicazione da scrivania (Electron).
 //
-// Le pagine sono le stesse del sito: index.html (la camera), studio.html,
-// decodifica.html, spaziotempo.html, piastrelle.html, motore.html. Si servono
-// con un protocollo proprio, app://stateyour/, invece che da file://, perché i
-// moduli JavaScript e il processo di decodifica (un Worker) funzionano solo da
-// un'origine vera. Niente server, niente rete: tutto resta nella cartella.
+// La pagina è la stessa del sito: index.html, l'universo dal cosmo alla scala
+// quantistica (il generatore di pattern è un progetto a parte, in pattern/, e
+// non entra nel pacchetto). Si serve con un protocollo proprio, app://stateyour/,
+// invece che da file://, perché i moduli JavaScript e i loro Worker funzionano
+// solo da un'origine vera. Niente server, niente rete: tutto resta nella cartella.
 
 const { app, BrowserWindow, protocol, net, shell, Menu } = require('electron');
 const path = require('node:path');

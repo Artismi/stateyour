@@ -1,11 +1,11 @@
 // icone.js — le icone del visore (PROGETTO_VISORE.md, § 4): un solo tratto 1,6 su una griglia di 24, angoli tondi, nessun
 // riempimento salvo un punto. Un unico sprite SVG di <symbol>, messo una volta nella pagina; `ico(id)` ne fa un <svg>.
 // Le venti del progetto (livelli, azioni, schede, menu) più poche di servizio: le tessere (gravità, giorno, campo, calore,
-// massa, età), il pattern come livello in fondo allo zoom, e le voci del menu (seme, vista, taccuino, impostazioni,
+// massa, età), e le voci del menu (seme, vista, taccuino, impostazioni,
 // diagnostica). I glifi universali (chiudi, freccia, riproduci) non contano.
 
 const SIMBOLI = {
-  // i livelli della scala (8) e il pattern, in fondo
+  // i livelli della scala (8), fino alle particelle in fondo
   cosmo: '<circle cx="5" cy="6" r="1.7"/><circle cx="18.5" cy="5" r="1.7"/><circle cx="12" cy="12.5" r="2"/><circle cx="5.5" cy="18.5" r="1.7"/><circle cx="19" cy="18" r="1.7"/><path d="M6.4 7.1 10.4 11M17.2 6.2 13.5 11M10.3 13.7 6.8 17.3M13.8 13.6 17.6 17M6.7 6 16.8 5.1"/>',
   galassia: '<path d="M12 12.2c.9-.9 2.6-.6 3 .8.6 2-1.3 3.9-3.6 3.9-3 0-5-2.6-4.4-5.6.8-3.7 5-5.6 8.5-4.4"/><path d="M12 11.8c-.9.9-2.6.6-3-.8-.6-2 1.3-3.9 3.6-3.9 3 0 5 2.6 4.4 5.6-.8 3.7-5 5.6-8.5 4.4"/><circle cx="12" cy="12" r=".9" fill="currentColor"/>',
   stella: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
@@ -14,7 +14,6 @@ const SIMBOLI = {
   materia: '<path d="M12 2.8 19.8 7.3v9.4L12 21.2 4.2 16.7V7.3z"/><path d="M12 12.1 19.8 7.3M12 12.1 4.2 7.3M12 12.1v9.1" opacity=".6"/>',
   atomo: '<ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(30 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
   particella: '<path d="M3 20.5c3.6-1.2 6.8-3.8 8.6-7.6"/><path d="M11.6 12.9 19.2 8"/><path d="M11.6 12.9c1.2 2.4 3.6 4 6.4 4.4" stroke-dasharray="1.5 2.2"/><circle cx="20" cy="7.4" r="1.6" fill="currentColor"/>',
-  pattern: '<path d="M4 4h7v7H4zM13 13h7v7h-7z"/><path d="M13 4h7v7h-7zM4 13h7v7H4z" opacity=".45"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/>',
   // le azioni (6)
   mirino: '<path d="M3.5 8.5v-5h5M15.5 3.5h5v5M20.5 15.5v5h-5M8.5 20.5h-5v-5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
   entra: '<path d="M4 12.5a8 8 0 0 0 16 0"/><path d="M12 2.5v11M7.8 9.4 12 13.6l4.2-4.2"/>',
@@ -67,4 +66,4 @@ export function metteSprite() {
 // un'icona: <svg class="ico"> che usa il simbolo; `pieno` per i glifi del tempo (riempiti, non a tratto)
 export const ico = (id, cls = '') => `<svg class="ico${PIENI[id] ? ' pieno' : ''}${cls ? ` ${cls}` : ''}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 // le icone dei livelli, nell'ordine dello zoom
-export const LIVELLI = ['cosmo', 'galassia', 'stella', 'pianeta', 'terreno', 'materia', 'atomo', 'particella', 'pattern'];
+export const LIVELLI = ['cosmo', 'galassia', 'stella', 'pianeta', 'terreno', 'materia', 'atomo', 'particella'];

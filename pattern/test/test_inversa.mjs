@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { leggiPNG } from '../strumenti/png.mjs';
 import { decodifica, mascheraOriginale } from '../src/decodifica.js';
 import { tracciaFisica, fedelta, adattaTratto } from '../src/camera/inversa.js';
-import { simulaMondo } from '../src/camera/mondo.js';
+import { simulaMondo } from '../../src/camera/mondo.js';
 
 // 1. tratti sintetici (y verso l'alto, come la decodifica): una S, una spirale, una retta
 const H = 400, linee = [];

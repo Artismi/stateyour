@@ -1,6 +1,6 @@
 // test_camera.mjs — le cinque leggi della camera danno quello che la fisica prevede
 import assert from 'node:assert/strict';
-import { simulaMondo, raggio, gittata, deflessioneLuce, forze } from '../src/camera/mondo.js';
+import { simulaMondo, raggio, gittata, deflessioneLuce, forze } from '../../src/camera/mondo.js';
 import { PRESET, copie, storia, scalaCella, trasformaPosto, COMPOSIZIONI, centraCella } from '../src/camera/esperimento.js';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);

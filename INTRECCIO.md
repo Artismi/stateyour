@@ -59,7 +59,7 @@ resta identico. Così i mondi paralleli sono vicini quanto sono pochi e piccoli 
   «cosmo 1/campo/onda 2,-1,3»; il ramo di un'onda cambia quell'onda sola e lascia le galassie dove sono viste
   dall'alto); prove «un ramo cambia una cosa sola» (`test_eventi`, `test_disco`, `test_lune`, `test_bolle`).
 - Manca: meteo e clima non hanno eventi; restano fuori dalla fonte unica
-  le scene di `atomi3d.js`, il rumore delle tessere (`geologia.js`), le ricerche (`cercatore.js`, `vicini.js`) e
+  le scene di `atomi3d.js`, il rumore delle tessere (`geologia.js`), le ricerche del pattern (`pattern/src/camera/cercatore.js`, `vicini.js`) e
   ciò che l'interfaccia tira da un seme (`laboratorio.js`, `mappa.js`, `src/tre`); un evento piccolo risale per due vie sole
   (`risalita.js`, non ancora collegato): come flusso, sommato, o attraverso un amplificatore con il suo tempo; il «dopo» non è ancora controllato da una prova.
 
