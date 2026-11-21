@@ -1,0 +1,37 @@
+--- /home/user/sy-impatti/src/camera/disco.js	2026-11-21 19:00:35.542992358 +0000
++++ src/camera/disco.js	2026-11-21 18:56:17.323995231 +0000
+@@ -275,14 +275,7 @@
+   // il tempo con il gas (fino a che il disco svanisce); dopo, senza gas i sassi non sono più frenati, corrono, e gli embrioni
+   // li catturano centinaia di volte più lentamente (la crescita dopo il gas la fa la fase degli urti: cresci, qui sotto)
+   const colGas = Math.min(eta, D.vita);
+-  // L'ACQUA DELLA ROCCIA DI DENTRO: dentro la neve i solidi non hanno ghiaccio, ma la roccia ridotta del disco interno porta un
+-  // poco di idrogeno. Piani et al. 2020 (Science 369, 1110 [V: l'estratto]): le condriti enstatitiche, la roccia più ridotta e
+-  // la più simile alla Terra, hanno idrogeno abbastanza per «almeno tre volte» l'acqua degli oceani in una Terra fatta di loro;
+-  // l'oceano è 1,5·10²¹ kg (Raymond e Izidoro 2017, Icarus 297, 134, §8.1 [V]). Qui quel minimo, come ghiaccio della ricetta
+-  // della stella (dichiarato: il carbonio e l'azoto vengono con lui). (Prima: «la regola semplice», un decimo d'acqua al bordo
+-  // della neve che calava come (r/neve)^2,5, per un fattore a caso del sistema: l'acqua portata da fuori ora la fanno i corpi
+-  // diffusi da fuori, qui sotto, e gli embrioni nati oltre la neve che gli urti mescolano.)
+-  const acquaDentro = (3 * 1.5e21) / MTERRA / (D.solidi.quotaAcqua ?? 1);
++  const acquaSistema = 0.5 + c('acqua portata da fuori'); // quanta acqua hanno portato dentro i corpi venuti da fuori: cambia da un sistema all'altro
+ 
+   // 2. GLI EMBRIONI. Si riempie il disco di strisce, dal bordo interno all'esterno: ogni striscia è larga 2C raggi di
+   // Hill reciproci di due embrioni come quello che vi cresce. LA FINE DELLA CRESCITA OLIGARCHICA (Goldreich, Lithwick e Sari
+@@ -308,12 +301,15 @@
+     const tIso = 3 * tempoCrescita(m, r, sS, sG, D.massaStella);
+     // la massa cresce come il cubo del tempo (il tempo di raddoppio va come M^(1/3)) fino all'isolamento, finché c'è il gas
+     const mora = m * Math.min(1, (colGas / tIso) ** 3);
+-    // 6. LA MATERIA. L'acqua: oltre la neve i solidi sono in buona parte ghiaccio; dentro c'è solo quella della roccia ridotta
+-    // (acquaDentro, qui sopra): il resto lo portano i corpi venuti da fuori (LA CONSEGNA DA FUORI, dopo gli urti giganti)
++    // 6. LA MATERIA. Il ferro condensa prima della roccia: vicino alla stella, dove fa caldo, la polvere è più ricca di
++    // ferro (regola semplice: cresce col quadrato della temperatura del disco, 280 K·L^¼/√r), e ce n'è di più se la
++    // stella è metallica. L'acqua: oltre la neve i solidi sono per tre quarti ghiaccio; dentro sono asciutti, salvo
++    // quella portata dai corpi caduti da oltre la neve, sempre meno andando verso la stella (regola semplice,
++    // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
+     // (LA CATENA DEGLI ELEMENTI: la roccia è quella che lì condensa, alla temperatura del luogo; il suo metallo — ferro non
+     // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
+     const ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
+-    const acqua = r < D.neve ? acquaDentro : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
++    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
+     // L'ORBITA ALLA FINE DEL GAS: l'eccentricità che gli incontri tra embrioni lasciano contro il freno del gas, con la legge di
+     // Rayleigh e lo scarto delle condizioni iniziali di Kimura et al. 2025 (eq. 31 [V], dalle N-corpi dell'accrescimento
+     // oligarchico): ⟨e²⟩^½ = 0,01·(Σs/10 g cm⁻²)^½, qui con la Σs del luogo; il perielio dove capita

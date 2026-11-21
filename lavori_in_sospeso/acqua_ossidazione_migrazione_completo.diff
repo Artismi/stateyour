@@ -1,0 +1,242 @@
+diff --git a/src/camera/disco.js b/src/camera/disco.js
+index d0499c2..0372965 100644
+--- a/src/camera/disco.js
++++ b/src/camera/disco.js
+@@ -153,6 +153,9 @@ export function disco(st, seme = 1) {
+   const xFine = 1 + vita / ts, MdotMedio = (massaKg * (1 - 1 / Math.sqrt(xFine))) / (vita * ANNO);
+   const T4 = (9 * 0.1 * Z * sigma0 * G * M * MSOLE * MdotMedio) / (128 * Math.PI * COSTANTI.sigma * UA ** 3);
+   const rIn = Math.min(0.5 * rOut, Math.max(0.02, 0.034 * Math.sqrt(L), 0.05 * Math.cbrt(M), Math.pow(T4 / 1500 ** 4, 1 / 4.5)));
++  // il bordo interno del GAS: dove il campo magnetico della stella tronca il disco (lo stesso limite di qui sopra, senza quelli della
++  // polvere che evapora): più dentro non c'è gas, e la migrazione degli embrioni si ferma (LA MIGRAZIONE, in formaPianeti)
++  const rGas = Math.min(rIn, Math.max(0.02, 0.05 * Math.cbrt(M)));
+   // I SOLIDI (la catena degli elementi, elementi.js): la miscela del gas di QUESTA stella; ogni elemento condensa alla sua
+   // temperatura (Lodders 2003, con la curva di Clausius–Clapeyron). I SOLIDI CHE SI SEPARANO DAL GAS MENTRE IL DISCO SI
+   // RAFFREDDA tengono ciò che era condensato quando si sono separati (Cassen 1996 [R]): i planetesimi di un luogo nascono a ogni
+@@ -204,7 +207,7 @@ export function disco(st, seme = 1) {
+   const Tcond = (r) => laStoria().T(r);
+   const sigmaSolidi = (r) => (tab.roccia(Tcond(r)) + (r < neve ? 0 : tab.ghiaccio)) * sigmaGas(r);
+   const rocciaNata = (dove, kg, r) => laStoria().aggiungi(dove, kg, r), metalloNato = (r) => laStoria().metallo(r), rocciaFusa = (dove, kg, r, tDopo) => laStoria().fusa(dove, kg, r, tDopo);
+-  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rOut, frazione, massaKg, sigma0, vita, ts, Mdot0, sigmaGas, sigmaSolidi, Tcond, Tmezzo, Mdot, rocciaNata, metalloNato, rocciaFusa, miscela: X, solidi: tab };
++  return { massaStella: M, Z, L, Lstella, tDisco, neve, rIn, rGas, rOut, frazione, massaKg, sigma0, vita, ts, Mdot0, sigmaGas, sigmaSolidi, Tcond, Tmezzo, Mdot, rocciaNata, metalloNato, rocciaFusa, miscela: X, solidi: tab };
+ }
+ 
+ // ---------- 5. il raggio, dalla massa e da ciò di cui è fatto
+@@ -262,6 +265,7 @@ export const giriCheRegge = (delta, mu) => { if (delta <= 2 * Math.sqrt(3)) retu
+ //               il tempo di isolamento dell'embrione principale; nato (UA); scacciati: quanti vicini ha scacciato
+ //   massaAlGas  (kg) quanti solidi avevano già raccolto i suoi embrioni quando il gas è sparito
+ //   misto       vero se tra i suoi embrioni ce n'erano di qua e di là della linea della neve
++//   daFuori     (kg) i planetesimi scagliati dagli altri corpi che l'hanno colpito (LA CONSEGNA DA FUORI)
+ //   orfani      i corpi che ha scacciato (con la fionda): [{ aUA (dov'era), massaKg (i suoi solidi), ciboKg (la parte della
+ //               sua striscia non ancora mangiata), ghiaccio (frazione), t (anni: quando), dentro (stava più vicino alla stella) }]:
+ //               i sassi che gli giravano attorno restano lì, senza più chi li raccoglie (impatti.js ne fa una fascia)
+@@ -271,7 +275,14 @@ export function formaPianeti(st, seme = 1) {
+   // il tempo con il gas (fino a che il disco svanisce); dopo, senza gas i sassi non sono più frenati, corrono, e gli embrioni
+   // li catturano centinaia di volte più lentamente (la crescita dopo il gas la fa la fase degli urti: cresci, qui sotto)
+   const colGas = Math.min(eta, D.vita);
+-  const acquaSistema = 0.5 + c('acqua portata da fuori'); // quanta acqua hanno portato dentro i corpi venuti da fuori: cambia da un sistema all'altro
++  // L'ACQUA DELLA ROCCIA DI DENTRO: dentro la neve i solidi non hanno ghiaccio, ma la roccia ridotta del disco interno porta un
++  // poco di idrogeno. Piani et al. 2020 (Science 369, 1110 [V: l'estratto]): le condriti enstatitiche, la roccia più ridotta e
++  // la più simile alla Terra, hanno idrogeno abbastanza per «almeno tre volte» l'acqua degli oceani in una Terra fatta di loro;
++  // l'oceano è 1,5·10²¹ kg (Raymond e Izidoro 2017, Icarus 297, 134, §8.1 [V]). Qui quel minimo, come ghiaccio della ricetta
++  // della stella (dichiarato: il carbonio e l'azoto vengono con lui). (Prima: «la regola semplice», un decimo d'acqua al bordo
++  // della neve che calava come (r/neve)^2,5, per un fattore a caso del sistema: l'acqua portata da fuori ora la fanno i corpi
++  // diffusi da fuori, qui sotto, e gli embrioni nati oltre la neve che gli urti mescolano.)
++  const acquaDentro = (3 * 1.5e21) / MTERRA / (D.solidi.quotaAcqua ?? 1);
+ 
+   // 2. GLI EMBRIONI. Si riempie il disco di strisce, dal bordo interno all'esterno: ogni striscia è larga 2C raggi di
+   // Hill reciproci di due embrioni come quello che vi cresce. LA FINE DELLA CRESCITA OLIGARCHICA (Goldreich, Lithwick e Sari
+@@ -297,21 +308,18 @@ export function formaPianeti(st, seme = 1) {
+     const tIso = 3 * tempoCrescita(m, r, sS, sG, D.massaStella);
+     // la massa cresce come il cubo del tempo (il tempo di raddoppio va come M^(1/3)) fino all'isolamento, finché c'è il gas
+     const mora = m * Math.min(1, (colGas / tIso) ** 3);
+-    // 6. LA MATERIA. Il ferro condensa prima della roccia: vicino alla stella, dove fa caldo, la polvere è più ricca di
+-    // ferro (regola semplice: cresce col quadrato della temperatura del disco, 280 K·L^¼/√r), e ce n'è di più se la
+-    // stella è metallica. L'acqua: oltre la neve i solidi sono per tre quarti ghiaccio; dentro sono asciutti, salvo
+-    // quella portata dai corpi caduti da oltre la neve, sempre meno andando verso la stella (regola semplice,
+-    // suggerita dalle simulazioni: un decimo al bordo della neve, che cala come la distanza alla 2,5)
++    // 6. LA MATERIA. L'acqua: oltre la neve i solidi sono in buona parte ghiaccio; dentro c'è solo quella della roccia ridotta
++    // (acquaDentro, qui sopra): il resto lo portano i corpi venuti da fuori (LA CONSEGNA DA FUORI, dopo gli urti giganti)
+     // (LA CATENA DEGLI ELEMENTI: la roccia è quella che lì condensa, alla temperatura del luogo; il suo metallo — ferro non
+     // ossidato, nichel, cobalto, zolfo — è il «ferro» che il raggio vede finché il pianeta non si separa davvero, alla fine)
+     const ferroRoccia = D.metalloNato(r); // (il metallo della roccia nata lì, sulla roccia)
+-    const acqua = r < D.neve ? Math.min(0.1, 0.1 * acquaSistema * Math.pow(r / D.neve, 2.5)) : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
++    const acqua = r < D.neve ? acquaDentro : D.solidi.ghiaccio / (D.solidi.ghiaccio + D.solidi.roccia(T));
+     // L'ORBITA ALLA FINE DEL GAS: l'eccentricità che gli incontri tra embrioni lasciano contro il freno del gas, con la legge di
+     // Rayleigh e lo scarto delle condizioni iniziali di Kimura et al. 2025 (eq. 31 [V], dalle N-corpi dell'accrescimento
+     // oligarchico): ⟨e²⟩^½ = 0,01·(Σs/10 g cm⁻²)^½, qui con la Σs del luogo; il perielio dove capita
+     const orb = c.serie(`embrione ${corpi.length}/orbita`), e0 = 0.01 * Math.sqrt(sS / 100) * Math.sqrt(-Math.log(1 - orb(0))), fi0 = 2 * Math.PI * orb(1);
+     corpi.push({ id: corpi.length, a: r, r0: r, m: mora, w, zr: e0 * Math.cos(fi0), zi: e0 * Math.sin(fi0), fe: mora * (1 - acqua) * ferroRoccia, fe0: mora * (1 - acqua) * ferroRoccia, h2o: mora * acqua, gas: 0, e: 0, urti: 0, scacciati: 0, mIso: m, tIso, nato: r, nucleo: 0, tGas: 0, freddo: r >= D.neve, misto: false, T, m0: mora, acqua0: acqua,
+-      lista: [], orfani: [], tUrto: D.vita, iso: m, cibo: 2 * m - mora, cibo0: 2 * m - mora, accr: 0, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
++      lista: [], orfani: [], sparsi: [], tUrto: D.vita, iso: m, cibo: 2 * m - mora, cibo0: 2 * m - mora, accr: 0, alGas: m * Math.min(1, (colGas / tIso) ** 3) }); // (i numeri per «formazione»)
+   }
+ 
+   // LA CRESCITA DAI PLANETESIMI DELLA STRISCIA (il cibo, sparso sulla sua larghezza): dm/dt = m/τ con τ = tempoCrescita(m, Σ_p) ∝
+@@ -364,6 +372,46 @@ export function formaPianeti(st, seme = 1) {
+     if (x > 0.01) { b.gas = b.m * x; b.m += b.gas; }
+   }
+ 
++  // LA MIGRAZIONE DI TIPO I, nel gas. Un embrione scambia momento angolare con le onde che solleva nel gas: la coppia delle risonanze
++  // di Lindblad e di corotazione, per un disco localmente isotermo con Σ ∝ r^−α e T ∝ r^−β, è Γ = −(1,36 + 0,62α + 0,43β)·q²·(H/r)^−2·
++  // Σ·r⁴·Ω² (Tanaka, Okada, Takeuchi e Ward 2024, arXiv:2404.12521, eq. 1 e la loro formula per il caso localmente isotermo [V]; con
++  // β = 0 è quella di Tanaka, Takeuchi e Ward 2002), e ȧ = 2Γ/(m·a·Ω): verso dentro, in un tempo che cala con la massa (una Terra a
++  // 1 UA in qualche centinaio di migliaia di anni in un disco come quello di Hayashi). Qui per ogni embrione che non è un gigante, nel
++  // DISCO VISCOSO di disco() — quello che dà la temperatura: Σ = Ṁ(t)/(3πν), ν = α·c_s²/Ω, con la T a metà del disco di quel tempo e
++  // la luce di metà vita (dichiarato) —; H/r = c_s/(Ω·r), β la pendenza di T lì, α = 3/2 la pendenza di Σ del disco di sopra
++  // (dichiarato: quella del disco viscoso è un poco diversa); la massa cresce come t³ fino all'isolamento (come sopra). (Una prima
++  // prova con la Σ della nascita che cala come e^(−2t/vita) — quella dei giganti — faceva migrare tutto, 50 volte più in fretta.)
++  // LE TRAPPOLE: al bordo interno del gas (D.rGas) la migrazione si ferma (il gas finisce: Masset et al. 2006 [R, a memoria]); chi
++  // arriva addosso a un corpo già fermo si ferma a 2C = 10 raggi di Hill reciproci da lui, la distanza a cui la crescita oligarchica
++  // tiene gli embrioni (Kokubo e Ida 1998, 2000 [R]: la stessa delle strisce, qui sopra). Le catene così fatte sono compatte, come
++  // quelle di Izidoro et al. 2017 (MNRAS 470, 1750, §3–4 [V: il testo]: «resonant chains ... far more compact than the observed
++  // super-Earth systems»); qui la risonanza esatta non si segue (dichiarato: niente protezione dalle risonanze). I giganti non migrano
++  // (il tipo II non c'è: dichiarato) e chi arriva da fuori si ferma fuori, allo stesso modo. Dichiarato: chi è fermo non è spinto da
++  // chi arriva; il cibo (i planetesimi rimasti) va con il suo embrione. Sparito il gas, le catene sono quelle che la fase degli urti
++  // (qui sotto) mette alla prova: è lì che si rompono o reggono (Izidoro et al. 2017).
++  {
++    // (a passi in logaritmo del tempo, gli stessi per tutti, da un diecimillesimo della vita del gas alla fine; la parte del ritmo che
++    // non dipende dall'embrione — Σ·a²·Ω/(h²·M*) e la pendenza della temperatura — in una tabella sul raggio, per passo: scelta di calcolo)
++    const kT = COSTANTI.kB / (2.34 * COSTANTI.mp), C0 = 1.36 + 0.62 * P.pendenza, K = 24, NR = 48, lr0 = Math.log(D.rGas), lr1 = Math.log(D.rOut), dl = (lr1 - lr0) / (NR - 1);
++    const tt = Float64Array.from({ length: K + 1 }, (_, k) => colGas * Math.pow(1e-4, 1 - k / K)), tab = new Float64Array(K * NR);
++    for (let k = 0; k < K; k++) { const t = Math.sqrt(tt[k] * tt[k + 1]), Md = D.Mdot(t), Tr = Float64Array.from({ length: NR }, (_, i) => D.Tmezzo(Math.exp(lr0 + i * dl), Md, D.L));
++      for (let i = 0; i < NR; i++) { const a = Math.exp(lr0 + i * dl), W = Math.sqrt((G * Mst) / (a * UA) ** 3), h2 = (kT * Tr[i]) / (W * a * UA) ** 2, j0 = Math.max(0, i - 1), j1 = Math.min(NR - 1, i + 1);
++        const beta = -Math.log(Tr[j1] / Tr[j0]) / ((j1 - j0) * dl), sg = Md / (3 * Math.PI * ((P.alfa * kT * Tr[i]) / W));
++        tab[k * NR + i] = 2 * (C0 + 0.43 * beta) * ((sg * (a * UA) ** 2) / Mst / h2) * W * ANNO; } } // (|ȧ|/a all'anno, per massa uguale alla stella)
++    const ritmoMig = (b, a, k) => { const x = Math.max(0, Math.min(NR - 1.000001, (Math.log(a) - lr0) / dl)), i = Math.floor(x), u = x - i, t = Math.sqrt(tt[k] * tt[k + 1]);
++      return (tab[k * NR + i] * (1 - u) + tab[k * NR + i + 1] * u) * ((b.m * Math.min(1, (t / b.tIso) ** 3)) / Mst); };
++    const fermi = [];
++    for (const b of corpi.filter((o) => !o.morto && o.m > 0).sort((x, y) => x.a - y.a)) {
++      if (b.gas > 0.5 * b.m) { fermi.push(b); continue; }
++      let a = b.a;
++      for (let k = 0; k < K; k++) { a *= Math.exp(-ritmoMig(b, a, k) * (tt[k + 1] - tt[k])); if (a <= D.rGas) break; }
++      // (il più vicino già fermo, dentro di lui: o lui si è fermato prima, o si ferma a 2C raggi di Hill reciproci fuori di quello)
++      // (in quest'ordine chi si ferma resta in ordine: il più vicino è l'ultimo fermato)
++      let lim = D.rGas; const f = fermi.at(-1); if (f) { const x = Math.min(0.5, P.C * Math.cbrt((f.m + b.m) / (3 * Mst))); lim = Math.max(lim, (f.a * (1 + x)) / (1 - x)); }
++      b.migrato = b.a; b.a = Math.min(b.a, Math.max(a, lim)); fermi.push(b);
++    }
++  }
++
+   // 4. GLI URTI GIGANTI: il modello a eventi di Kimura, Hoshino, Kokubo, Matsumoto e Ikoma 2025 (arXiv:2505.20548 [V: letto il
+   // testo]; secolare.js per le leggi). Sparito il gas (che teneva le orbite rotonde) il sistema passa da un evento all'altro:
+   //  a. LE ECCENTRICITÀ SECOLARI: tra un evento e l'altro i corpi si scambiano l'eccentricità con la teoria di Laplace e
+@@ -414,13 +462,17 @@ export function formaPianeti(st, seme = 1) {
+   // corpo prende o scaglia, la popolazione cala da sola (risonanze, la stella, gli altri pianeti) al ritmo −d ln S/dt =
+   // β·t^(β−1)/t₀^β. Si integra a passi in logaritmo del tempo, ciascuno coi ritmi del suo mezzo.
+   const DIN = { t0: 1e7, beta: 0.5 };
+-  const evolvi = (b, t1, t2) => { const { ritmo, presa } = sciame(b); let c = b.cibo, dm = 0; const u1 = Math.max(1, t1 - D.vita), u2 = Math.max(u1, t2 - D.vita), passi = 8;
++  // («sparso»: la parte che il corpo stesso scaglia via — né presa né portata via dallo svuotamento dinamico —: LA CONSEGNA DA FUORI)
++  const evolvi = (b, t1, t2) => { const { ritmo, presa } = sciame(b); let c = b.cibo, dm = 0, sparso = 0; const u1 = Math.max(1, t1 - D.vita), u2 = Math.max(u1, t2 - D.vita), passi = 8;
+     for (let k = 0; k < passi && c > 0; k++) { const a = u1 * Math.pow(u2 / u1, k / passi), z = u1 * Math.pow(u2 / u1, (k + 1) / passi), dt = z - a; if (!(dt > 0)) continue;
+-      const din = Math.pow(z / DIN.t0, DIN.beta) - Math.pow(a / DIN.t0, DIN.beta), tot = ritmo * dt + din, via = c * -Math.expm1(-tot); dm += via * presa * (ritmo * dt) / tot; c -= via; }
+-    return { dm, via: b.cibo - c }; };
++      const din = Math.pow(z / DIN.t0, DIN.beta) - Math.pow(a / DIN.t0, DIN.beta), tot = ritmo * dt + din, via = c * -Math.expm1(-tot); dm += via * presa * (ritmo * dt) / tot; sparso += via * (1 - presa) * (ritmo * dt) / tot; c -= via; }
++    return { dm, via: b.cibo - c, sparso, ritmo }; };
+   const massaA = (b, T) => (T > b.tAcc && b.cibo > 0 && b.w > 0 ? b.m + evolvi(b, b.tAcc, T).dm : b.m);
+   const cresci = (b, T) => { const t1 = b.tAcc, dt = T - t1; b.tAcc = Math.max(b.tAcc, T); if (!(dt > 0) || !(b.cibo > 0) || !(b.w > 0)) return;
+-    const ms = b.m - b.gas, { dm, via } = evolvi(b, t1, T);
++    const ms = b.m - b.gas, { dm, via, sparso, ritmo } = evolvi(b, t1, T);
++    // (i planetesimi che il corpo scaglia: quando, quanti, di quale striscia — quella dove il corpo è nato: dichiarato —, da dove, con
++    // quale agitazione — la sua fuga, come sopra — e quanto in fretta il corpo li toglie di mezzo; LA CONSEGNA DA FUORI li divide)
++    if (sparso > 0) b.sparsi.push({ t: Math.sqrt(Math.max(1, t1) * T), kg: sparso, r0: b.r0, acqua: b.acqua0, a: b.a, U: Math.sqrt((2 * G * b.m) / raggio(b)) / vK(b.a), ritmo });
+     // (la «vernice tardiva» è la parte primitiva — i planetesimali mai fusi —, non i frammenti dell'urto, che sono il pianeta stesso
+     // già separato: Walker 2009 la misura con gli elementi siderofili, che i frammenti non riportano)
+     const qf = b.frantumi > 0 ? Math.min(1, b.frantumi / b.cibo) : 0; b.frantumi = (b.frantumi || 0) * (1 - via / b.cibo);
+@@ -502,7 +554,7 @@ export function formaPianeti(st, seme = 1) {
+       fusioni.push({ g: grande.id, p: piccolo.id, t: tEvento, Mg: grande.m - grande.gas, Mp: piccolo.m - piccolo.gas, Rg: raggio(grande), Rp: raggio(piccolo), a: am });
+       for (const u of piccolo.lista) { u.laterale = true; grande.lista.push(u); } // (gli urti del più piccolo: laterali per il grande; il piccolo non c'è più)
+       grande.lista.push({ bersaglioKg: Math.max(grande.m - grande.gas, piccolo.m - piccolo.gas), massaKg: Math.min(grande.m - grande.gas, piccolo.m - piccolo.gas), delta: distanza, tIncrocio, t: tEvento, aUA: am });
+-      grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.w += piccolo.w; grande.alGas += piccolo.alGas; for (const o of piccolo.orfani) grande.orfani.push(o);
++      grande.iso += piccolo.iso; grande.cibo += piccolo.cibo; grande.w += piccolo.w; grande.alGas += piccolo.alGas; for (const o of piccolo.orfani) grande.orfani.push(o); for (const o of piccolo.sparsi) grande.sparsi.push(o);
+       grande.a = (mp * p.a + mq * q.a) / m; grande.zr = zr; grande.zi = zi;
+       grande.nato = (grande.nato * grande.m + piccolo.nato * piccolo.m) / m;
+       if (grande.gas < 0.5 * grande.m) { grande.m = m - piccolo.gas - grande.gas; grande.gas = 0; } // l'urto strappa il velo di gas
+@@ -544,7 +596,7 @@ export function formaPianeti(st, seme = 1) {
+       if (perso) {
+         const altro = perso === p ? q : p; altro.scacciati++;
+         // (per «formazione») il corpo perso lascia ORFANI i sassi che gli giravano attorno: dov'era, quanto pesava, quando
+-        const sol = perso.m - perso.gas; for (const o of perso.orfani) altro.orfani.push(o); altro.orfani.push({ aUA: perso.a, massaKg: sol, ciboKg: Math.max(0, perso.cibo), ghiaccio: perso.h2o / sol, t: tEvento, dentro: perso.a < altro.a });
++        const sol = perso.m - perso.gas; for (const o of perso.orfani) altro.orfani.push(o); for (const o of perso.sparsi) altro.sparsi.push(o); altro.orfani.push({ aUA: perso.a, massaKg: sol, ciboKg: Math.max(0, perso.cibo), ghiaccio: perso.h2o / sol, t: tEvento, dentro: perso.a < altro.a });
+         perso.morto = true;
+       }
+     }
+@@ -592,7 +644,7 @@ export function formaPianeti(st, seme = 1) {
+       for (const g of gruppi) {
+         const b = g.capo;
+         if (g.membri.length > 1) {
+-          for (const o of g.membri) { if (o === b) continue; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; for (const x of o.orfani) b.orfani.push(x); b.misto ||= o.misto || o.freddo !== b.freddo; b.nato = (b.nato * b.m + o.nato * o.m) / (b.m + o.m); b.m += o.m; o.in = b.id; o.morto = true; }
++          for (const o of g.membri) { if (o === b) continue; b.iso += o.iso; b.cibo += o.cibo; b.w += o.w; b.alGas += o.alGas; for (const x of o.orfani) b.orfani.push(x); for (const x of o.sparsi) b.sparsi.push(x); b.misto ||= o.misto || o.freddo !== b.freddo; b.nato = (b.nato * b.m + o.nato * o.m) / (b.m + o.m); b.m += o.m; o.in = b.id; o.morto = true; }
+           b.m = g.m; b.fe = g.fe; b.h2o = g.h2o; b.a = g.a; b.zr = g.zr; b.zi = g.zi; b.tz = g.t; b.lista = g.lista; b.urti = g.urti;
+         }
+         if (g.m >= minimo || gruppi.length < 2) escono.push(b); else b.detrito = true; // (sotto il minimo a oggi: un detrito)
+@@ -667,6 +719,41 @@ export function formaPianeti(st, seme = 1) {
+   for (const b of vivi) { const zz = eta > D.vita ? zA(b, eta) : [b.zr, b.zi]; b.e = Math.hypot(zz[0], zz[1]); if (!(b.e < 1)) b.morto = true; }
+   vivi = vivi.filter((b) => !b.morto);
+ 
++  // LA CONSEGNA DA FUORI: i planetesimi che ogni corpo ha scagliato (sparsi, qui sopra) li dividono, tra chi li colpisce e chi li
++  // toglie di mezzo, le probabilità d'urto di Öpik (Öpik 1951, nella forma di Carusi et al. 1990 riportata da Kokaia e Davies 2021,
++  // arXiv:2110.02269, eq. 11–15 [V]): per un'orbita che incrocia quella circolare di un pianeta a a_p (in unità di a_p e della sua
++  // velocità), la probabilità d'urto per giro è P = σ²·U/(π·sin i·|U_x|), con U = √(3 − T) (T il parametro di Tisserand rispetto al
++  // pianeta), U_x² = 2 − 1/a − a(1 − e²) e σ = (R/a_p)·√(1 + v_fuga²/U²) la sezione allargata dalla gravità. È il quadro di Raymond
++  // e Izidoro 2017 (Icarus 297, 134 [V: il testo]): i corpi che un gigante agita sono scagliati in ogni direzione, e quelli spinti
++  // su orbite eccentriche che attraversano la regione dei pianeti rocciosi vi portano l'acqua; e di O'Brien et al. 2018 (Space Sci.
++  // Rev. 214, 47 [V: il testo]), che la vedono arrivare con gli embrioni e i planetesimi di oltre la neve. Qui [D]: chi scaglia lo fa
++  // con l'agitazione della fase degli urti (la sua velocità di fuga, U con la legge di Rayleigh e ⟨U²⟩ = e_fuga², come sopra; i = U/√5,
++  // cioè i = e/2); metà verso dentro (l'altra metà, verso fuori, non si segue: dichiarato), su un'orbita con l'afelio dove stava chi
++  // l'ha scagliata e la velocità tangente 1 − U (il perielio più vicino della sua famiglia di Tisserand: dichiarato, è il più
++  // generoso); lì ogni corpo grosso tra il perielio e l'afelio lo colpisce al ritmo di Öpik (P per giro di quell'orbita), e chi l'ha
++  // scagliato continua a toglierlo di mezzo al suo ritmo (quello della sua striscia: urti e diffusioni, come sopra). La parte che
++  // va a ciascuno è il suo ritmo sulla somma. Dichiarato: i bersagli sono i corpi di oggi; i giganti prendono la loro parte ma non
++  // si contano; ciò che arriva si aggiunge dopo le perdite dell'accrescimento (O'Brien et al. 2018, §5.2: l'acqua arriva tardi).
++  if (eta > D.vita) {
++    const bersagli = vivi.filter((o) => o.m >= P.minimo * MTERRA).sort((x, y) => x.a - y.a), NQ = 32;
++    for (const o of bersagli) { const R = raggio(o), vk = vK(o.a); o.portati = new Map(); o.portato = 0; o.tUltimo = o.lista.reduce((x, u) => Math.max(x, u.t), D.vita); o._s2 = (R / (o.a * UA)) ** 2; o._f = (2 * G * o.m) / R / (vk * vk); }
++    const quota = new Float64Array(bersagli.length);
++    // (U a fasce uguali tra 0 e 1, ciascuna col suo peso di Rayleigh; oltre 1 l'orbita è all'indietro o slegata: tolta di mezzo)
++    for (const S of vivi) for (const x of S.sparsi) for (let n = 0; n < NQ; n++) {
++      const U = (n + 0.5) / NQ, vt = 1 - U, peso = Math.exp(-((n / NQ) ** 2) / (x.U * x.U)) - Math.exp(-(((n + 1) / NQ) ** 2) / (x.U * x.U)); if (!(peso > 0)) continue;
++      const q = (x.a * vt * vt) / (2 - vt * vt), ac = 0.5 * (x.a + q), ec = (x.a - q) / (x.a + q), si = Math.min(1, U / Math.sqrt(5)), ci = Math.sqrt(1 - si * si), Tc = anno(ac);
++      let somma = x.ritmo; quota.fill(0);
++      for (let j = 0; j < bersagli.length && bersagli[j].a < x.a; j++) { const k = bersagli[j]; if (!(k.a > q) || !(si > 0)) continue;
++        const a1 = ac / k.a, ux2 = 2 - 1 / a1 - a1 * (1 - ec * ec), u2 = 3 - (1 / a1 + 2 * ci * Math.sqrt(a1 * (1 - ec * ec))); if (!(ux2 > 0) || !(u2 > 0)) continue;
++        const s2 = k._s2 * (1 + k._f / u2), Pg = (s2 * Math.sqrt(u2)) / (Math.PI * si * Math.sqrt(ux2));
++        quota[j] = Pg / Tc; somma += quota[j]; }
++      if (!(somma > x.ritmo)) continue;
++      for (let j = 0; j < bersagli.length && bersagli[j].a < x.a; j++) { if (!(quota[j] > 0)) continue; const k = bersagli[j], kg = (0.5 * x.kg * peso * quota[j]) / somma; if (k.gas > 0.5 * k.m) continue;
++        const v = k.portati.get(x.r0) || { kg: 0, acqua: x.acqua }; v.kg += kg; k.portati.set(x.r0, v); k.portato += kg; k.m += kg; k.fe += kg * (1 - x.acqua) * D.metalloNato(x.r0); k.h2o += kg * x.acqua;
++        if (x.t > k.tUltimo) k.vernice = (k.vernice || 0) + kg; } // (dopo l'ultimo urto gigante: è vernice tardiva, materia primitiva)
++    }
++  }
++
+   // i pianeti: quelli abbastanza grandi; il resto sono detriti (fasce di asteroidi e di comete)
+   const terre = (m) => { const x = m / MTERRA; return (x < 10 ? x.toFixed(x < 1 ? 2 : 1) : String(Math.round(x))).replace('.', ','); };
+   // la luce della stella OGGI (Sole di oggi = 1): il velo di gas di un pianeta si gonfia con il flusso che riceve adesso
+@@ -686,7 +773,7 @@ export function formaPianeti(st, seme = 1) {
+     let sol = vettore(), ghi = vettore(), aria = vettore(), Tm = 0, mm = 0; const tutti = [], gigante = b.gas > 0.5 * b.m;
+     // (il cibo mangiato dopo la nascita, diviso sulle strisce dei suoi embrioni; e i frammenti degli urti non ancora ripresi,
+     // tolti a tutti in proporzione: la somma è la massa solida del corpo)
+-    const chi = membri.get(b.id) || [b], quota = b.accr > 0 ? b.accr / chi.reduce((x, o) => x + Math.max(0, o.cibo0 || 0), 0) : 0, grezzo = chi.reduce((x, o) => x + o.m0 + quota * Math.max(0, o.cibo0 || 0), 0), scala = grezzo > 0 ? (b.m - b.gas) / grezzo : 1;
++    const chi = membri.get(b.id) || [b], quota = b.accr > 0 ? b.accr / chi.reduce((x, o) => x + Math.max(0, o.cibo0 || 0), 0) : 0, grezzo = chi.reduce((x, o) => x + o.m0 + quota * Math.max(0, o.cibo0 || 0), 0), scala = grezzo > 0 ? (b.m - b.gas - (b.portato || 0)) / grezzo : 1;
+     for (const o of chi) { const mo = (o.m0 + quota * Math.max(0, o.cibo0 || 0)) * scala, roccia = mo * (1 - o.acqua0), g = mo * o.acqua0, r = vettore(), gh = vettore(), fu = vettore(); D.rocciaNata(r, roccia, o.r0); for (const k in ricettaGhiaccio) gh[IDX[k]] += g * ricettaGhiaccio[k];
+       // (la parte della sua roccia nata dopo il suo isolamento e fusa dall'²⁶Al da sola: elementi.js EVAPORA_PLANETESIMI. Solo dentro la
+       // neve: in un planetesimo di ghiaccio il calore dell'²⁶Al scioglie il ghiaccio e l'acqua che circola lo porta via, e la roccia
+@@ -703,6 +790,12 @@ export function formaPianeti(st, seme = 1) {
+     const perdite = gigante ? null : perditeAccrescimento({ membri: tutti, fusioni, tGas: D.vita, eta, L: Lsequenza, Lt: luceAllora, radice: b.id, miscela: D.miscela });
+     let perso = 0, persoGhiacci = 0;
+     if (perdite) { sol = perdite.roccia; for (let i = 0; i < SIMBOLI.length; i++) { persoGhiacci += ghi[i] - perdite.ghiacci[i]; perso += perdite.spazio[i]; } ghi = perdite.ghiacci; }
++    // (la consegna da fuori: la roccia della striscia di chi l'ha scagliata, nata lì — oltre la neve ossidata, col ghiaccio —, e i suoi
++    // ghiacci; entra nella separazione del nucleo, e il suo FeO ossida il mantello: Rubie et al. 2015, Icarus 248, 89, §6 [V: il testo],
++    // il materiale ossidato di fuori che arriva tardi. Dichiarato: là l'acqua che si equilibra col metallo si dissocia e il suo ossigeno
++    // ossida anche lui; qui no, l'acqua resta acqua)
++    if (!gigante && b.portati) { if (!perdite) sol = Float64Array.from(sol), ghi = Float64Array.from(ghi);
++      for (const [r0, v] of b.portati) { D.rocciaNata(sol, v.kg * (1 - v.acqua), r0); for (const k in ricettaGhiaccio) ghi[IDX[k]] += v.kg * v.acqua * ricettaGhiaccio[k]; } }
+     if (b.gas > 0) for (let i = 0; i < SIMBOLI.length; i++) aria[i] = b.gas * (D.miscela[SIMBOLI[i]] || 0);
+     let Mr = 0; for (let i = 0; i < SIMBOLI.length; i++) Mr += sol[i];
+     // IL PIANETA SI SEPARA (elementi.js differenzia): metallo e silicato all'equilibrio sul fondo dell'oceano di magma; il
+@@ -741,7 +834,7 @@ export function formaPianeti(st, seme = 1) {
+       : involucro ? `un nucleo di ghiaccio di ${terre(solidi)} Terre arrivato tardi: il disco è svanito prima della valanga, gli è rimasto un velo di gas${dopo}`
+         : b.urti ? `${b.urti === 1 ? 'un urto gigante' : `${b.urti} urti giganti`} tra embrioni nati attorno a ${b.nato.toFixed(2).replace('.', ',')} UA${b.misto ? ', a cavallo della linea della neve: roccia e ghiaccio insieme' : ''}${dopo}`
+           : `un embrione ${b.freddo ? 'di ghiaccio' : 'di roccia'} rimasto solo${b.m < 0.99 * b.mIso ? ', cresciuto piano: il suo cibo è ancora in giro' : ', che ha mangiato tutta la sua striscia di disco'}${dopo}`;
+-    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto, diffusioni: b.diffusioni || 0, vernice: b.vernice || 0, cibiDiffusi: b.diffusi || 0 };
++    const formazione = { embrione: b.id, urti: b.lista.slice().sort((x, y) => x.tIncrocio - y.tIncrocio), cibo: Math.max(0, b.cibo), tGas: D.vita, mIso: b.iso, tIso: b.tIso, nato: b.nato, scacciati: b.scacciati, orfani: b.orfani, massaAlGas: b.alGas, misto: b.misto, diffusioni: b.diffusioni || 0, vernice: b.vernice || 0, cibiDiffusi: b.diffusi || 0, daFuori: b.portato || 0 };
+     return Object.defineProperty({ aUA: b.a, massaKg: massa, raggioM, tipo, composizione, eccentricita, storia, involucro }, 'formazione', { value: formazione, enumerable: false });
+   });
+   // (le perdite dell'accrescimento tolgono un poco di massa: chi scende sotto il minimo resta tra i detriti)
