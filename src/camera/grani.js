@@ -154,7 +154,7 @@ export function campoGrani(spec, caso) {
     // rimpicciolendo, la media dei grani converge al colore medio della roccia invece di annerire)
     const peso = Math.min(1, 1 / (12 * mezzo));
     if (tass) { if (r.secondo - r.primo < 2 * mezzo) lume *= 1 - 0.42 * peso; }
-    else if (-r.primo < g.r * g.r * 0.36 && g.r > 4 * mezzo) lume *= 1 - 0.34 * peso; // l'orlo del granello (la sua ombra)
+    else if (-r.primo < g.r * g.r * 0.36) lume *= 1 - 0.34 * peso * pesoDiscreto(g.r / (4 * mezzo)); // l'orlo del granello (la sua ombra), che compare per gradi quando il granello passa i due pixel (prima: di colpo)
     out[0] = c[0] * lume; out[1] = c[1] * lume; out[2] = c[2] * lume;
   }
   // ---- LA RESA: una tela fuori schermo che copre lo schermo (più un margine), rifatta solo quando la vista ne esce o

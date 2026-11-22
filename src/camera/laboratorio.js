@@ -215,16 +215,37 @@ function smontaQuanti() {
 // polarizzato mette attorno al nucleo (Uehling 1935, in magenta: negativa); il nucleo con la sua densità di carica misurata
 // (raggi di Angeli e Marinova 2013, forma di Fermi o dell'oscillatore); sotto, le istantanee dei nucleoni, mai più vicini di
 // 0,9 fm. Ogni decade di densità è una fascia appena più chiara (le isolinee in log ρ): a ogni ingrandimento c'è una
-// superficie da vedere, come chiede la continuità (rapporto «Generatore multiscala», §5). Il colore lo dà la luce dello
-// strumento (il verde del fosforo per gli elettroni), non l'atomo.
+// superficie da vedere, come chiede la continuità (rapporto «Generatore multiscala», §5).
+// (3) IL COLORE DEL CAMPO È QUELLO DELL'ATOMO: la densità elettronica è l'atomo stesso, la sfera vista da vicino. Il suo colore
+// è quello che lo schermo aveva entrando (la media dell'istantanea degli atomi, `media0`): il guadagno di ogni canale si
+// sceglie perché la media a schermo della densità, alla grandezza d'ingresso, sia proprio quella. Così nella fusione la media
+// del colore e la luminanza si conservano (w·densità + (1 − w)·atomi con le due medie uguali). Le misure dello strumento,
+// i punti, restano nel verde del suo fosforo: quello è lo strumento, non l'atomo. (Prima il campo era nel verde del
+// fosforo, scuro: dalla sfera colorata al verde un salto di ΔE ≈ 25 in un passo di mezza decade.)
 const FUSIONE_QUANTI = 10 ** 1.5;
-function densitaQuanti(Qc, atomo, alta) {
-  telaDensita = document.createElement('canvas'); telaDensita.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen'; telaQuanti.parentNode.insertBefore(telaDensita, telaQuanti.nextSibling);
+// la media del colore a schermo (sRGB, 0–255) di una tela: la si riduce a 16×16 col filtro del navigatore
+const mediaTela = (cv) => { if (!cv) return null; const c = document.createElement('canvas'); c.width = c.height = 16; const x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingEnabled = true; x.drawImage(cv, 0, 0, 16, 16); const d = x.getImageData(0, 0, 16, 16).data, m = [0, 0, 0]; for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) m[k] += d[4 * i + k] / 256; return m; };
+function densitaQuanti(Qc, atomo, alta, media0 = null) {
+  // (la densità sta sotto la tela dei quanti, a fusione normale sugli atomi: w·densità + (1 − w)·atomi; i punti dello strumento
+  // vi si sommano sopra, la tela dei quanti a fusione «screen», nera dove non c'è misura. Prima la densità stava sopra in
+  // «screen» con la stessa opacità: a metà fusione il prodotto atomi × densità toglieva luce, la media scendeva)
+  telaDensita = document.createElement('canvas'); telaDensita.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none'; telaQuanti.parentNode.insertBefore(telaDensita, telaQuanti); telaQuanti.style.mixBlendMode = 'screen';
   const Z = atomo.Z, d = Qc.densitaAtomo(Z, atomo.carica || 0), a0 = Qc.AU.a0, nuc = Qc.nucleo(Z), iso = 0.001 / a0 ** 3;
   // (la densità di carica del nucleo, e/m³: il profilo dei protoni normalizzato a Z)
   let norma = 0; if (nuc.protoni) { const top = 12, n = 600; for (let i = 0; i < n; i++) { const r = ((i + 0.5) / n) * top; norma += nuc.protoni.densita(r) * 4 * Math.PI * r * r * (top / n); } }
   const rhoN = (r) => (nuc.protoni && norma > 0 ? (Z * nuc.protoni.densita(r * 1e15)) / norma * 1e45 : 0), top = Math.log10(0.16e45), bassa = Math.log10(iso);
   const luce = (rho) => { if (!(rho > 0)) return 0; const L = Math.log10(rho), x = (L - bassa) / (top - bassa); if (x < -0.15) return 0; return Math.max(0, Math.min(1, 0.12 + 0.5 * x)) * (0.82 + 0.18 * Math.cos(2 * Math.PI * L)); };
+  const elettroni = (r) => { const rho = d.rho(r / a0) / a0 ** 3; return luce(rho) + Math.exp(-((rho / iso - 1) ** 2) / 0.02) * 0.35; }; // (la densità e la sua superficie)
+  // IL GUADAGNO DI OGNI CANALE (vedi sopra, 3): la media a schermo, alla grandezza d'ingresso, di min(1, 0,8·G·elettroni(r))
+  // deve dare media0; la si cerca per bisezione su un campione dei pixel (r dal centro). Senza media0: il verde del fosforo.
+  let G = [0.25, 1.0, 0.18];
+  if (media0 && telaDensita.clientWidth > 0) {
+    const W = telaDensita.clientWidth, H = telaDensita.clientHeight, mpp = alta / H, passo = Math.max(1, Math.sqrt((W * H) / 4096)), campione = [];
+    for (let y = passo / 2; y < H; y += passo) for (let x = passo / 2; x < W; x += passo) campione.push(elettroni(Math.max(Math.hypot(x - W / 2, y - H / 2), 0.25) * mpp));
+    // (oltre il guadagno che satura anche il punto più debole dello schermo non si guadagna più niente all'ingresso: è il tetto)
+    const media = (g) => campione.reduce((a, e) => a + Math.min(1, 0.8 * g * e), 0) / campione.length, debole = campione.reduce((a, e) => (e > 0 && e < a ? e : a), Infinity), tetto = 1 / (0.8 * debole);
+    if (Number.isFinite(tetto)) G = media0.map((m) => { const voluto = m / 255; if (!(voluto > 0)) return 0; if (media(tetto) <= voluto) return tetto; let lo = 0, hi = tetto; for (let it = 0; it < 40; it++) { const mm = 0.5 * (lo + hi); if (media(mm) < voluto) lo = mm; else hi = mm; } return 0.5 * (lo + hi); });
+  }
   let ultima = 0;
   const disegna1 = () => {
     cicloDensita = requestAnimationFrame(disegna1); if (!telaDensita) return; const g = grandezzaQuanti(); if (!(g > 0)) return;
@@ -233,8 +254,8 @@ function densitaQuanti(Qc, atomo, alta) {
     const W = telaDensita.clientWidth, H = telaDensita.clientHeight; if (!W || !H) return; if (telaDensita.width !== W || telaDensita.height !== H) { telaDensita.width = W; telaDensita.height = H; ultima = 0; } // (assegnare la misura svuota la tela: solo se cambia)
     if (Math.abs(g / ultima - 1) < 1e-3) return; ultima = g;
     const x = telaDensita.getContext('2d'), mpp = g / H, R = Math.hypot(W, H) / 2, grad = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R), n = 96;
-    for (let k = 0; k <= n; k++) { const rp = k === 0 ? 0 : 0.25 * Math.pow(R / 0.25, (k - 1) / (n - 1)), r = Math.max(rp, 0.25) * mpp, e = luce(d.rho(r / a0) / a0 ** 3), v = r < 4 * Qc.LAMBDA_E ? luce(Qc.caricaUehling(Z, r)) : 0, nN = luce(rhoN(r)), sup = Math.exp(-((d.rho(r / a0) / a0 ** 3 / iso - 1) ** 2) / 0.02) * 0.35;
-      const c = [0.25 * (e + sup) + 0.9 * v + 0.95 * nN, 1.0 * (e + sup) + 0.3 * v + 0.85 * nN, 0.18 * (e + sup) + 0.9 * v + 0.5 * nN].map((q) => Math.round(255 * Math.min(1, q * 0.8)));
+    for (let k = 0; k <= n; k++) { const rp = k === 0 ? 0 : 0.25 * Math.pow(R / 0.25, (k - 1) / (n - 1)), r = Math.max(rp, 0.25) * mpp, e = elettroni(r), v = r < 4 * Qc.LAMBDA_E ? luce(Qc.caricaUehling(Z, r)) : 0, nN = luce(rhoN(r));
+      const c = [G[0] * e + 0.9 * v + 0.95 * nN, G[1] * e + 0.3 * v + 0.85 * nN, G[2] * e + 0.9 * v + 0.5 * nN].map((q) => Math.round(255 * Math.min(1, q * 0.8)));
       grad.addColorStop(Math.min(1, rp / R), `rgb(${c[0]},${c[1]},${c[2]})`); }
     x.fillStyle = grad; x.fillRect(0, 0, W, H);
   };
@@ -243,6 +264,7 @@ function densitaQuanti(Qc, atomo, alta) {
 async function montaQuanti() {
   if (telaQuanti || quantiAssenti) { if (quantiAssenti) $('dove').textContent = 'Sotto gli atomi: la scala quantistica (src/tre/quanti.js) non si è potuta montare. Qui finisce, per ora, la scala.'; return; }
   const alta = (misura() || 0) * tela.clientHeight, r = camMappa ? rocciaDi(camMappa) : null, sc = scenaAtomiOra; if (!sc || !(alta > 0)) return;
+  let media0 = null; try { media0 = mediaTela(istantanea()); } catch { media0 = null; } // (il colore a schermo entrando: quello della densità, vedi densitaQuanti)
   let mod, Qc; try { [mod, Qc] = await Promise.all([import('../tre/quanti.js'), import('./quanti.js')]); } catch { quantiAssenti = true; return montaQuanti(); }
   if (!vistaAtomi || telaQuanti || typeof mod.creaQuanti !== 'function') return;
   try {
@@ -255,7 +277,7 @@ async function montaQuanti() {
     vistaQuanti = mod.creaQuanti(nucleoQuanti, { atomo, luogo: null, scala: atomo.scala });
     // la camera parte alla grandezza a cui si era: lo schermo alto `alta` metri
     nucleoQuanti.attacca(vistaQuanti.corpo, { distanza: alta / (2 * Math.tan((nucleoQuanti.camera.fov || 0.75) / 2)) }); nucleoQuanti.avvia();
-    try { densitaQuanti(Qc, atomo, alta); } catch (err) { console.warn('la densità sotto la scala quantistica:', err); }
+    try { densitaQuanti(Qc, atomo, alta, media0); } catch (err) { console.warn('la densità sotto la scala quantistica:', err); }
     // allontanandosi oltre la grandezza da cui si è entrati si torna agli atomi. IL FONDO: la camera arriva al bordo del
     // nucleo (quanti.js, distanzaMinima: il nucleo è l'ultimo bersaglio della rotella) e lì lo zoom finisce: è la scala più
     // piccola, e lo si dice. Gli scatti in avanti oltre il fondo non arrivano più alla camera. (Prima, arrivata al nucleo, la
@@ -493,9 +515,13 @@ tela.addEventListener('wheel', (e) => {
     // (in fondo, gli atomi: in tre dimensioni li monta montaAtomi quando il loro campione riempie lo schermo; le tracce delle
     // particelle non stanno in fondo ma alla loro scala, sovrapposte a ciò che c'è lì: disegnaSopra)
   }
+  // (una regione grande quanto lo schermo: lì un tempo si entrava nel pattern, poi lo zoom sulla mappa piatta vi si fermava.
+  // Ora la rotella prosegue verso la superficie: da lì lo sguardo scivola verso il pianeta, mappa.js passaggi, «versoSuolo»,
+  // finché si torna indietro o si cambia livello)
+  if (camMappa.versoSuolo && (k < 1 || camMappa.livello !== 3)) delete camMappa.versoSuolo;
   const esito = zoomMappa(camMappa, (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, k, tela.width, tela.height);
-  // (una regione grande quanto lo schermo: lì un tempo si entrava nel pattern; ora lo zoom sulla mappa piatta si ferma lì)
-  if (esito?.entra) camMappa.z = Math.min(camMappa.z, (1.1 * m) / LATO_REGIONE);
+  if (esito?.entra) { camMappa.z = Math.min(camMappa.z, (1.1 * m) / LATO_REGIONE); camMappa.versoSuolo = true; }
+  if (camMappa.versoSuolo && camMappa.livello !== 3) delete camMappa.versoSuolo;
   sopraMappa = null; montaAtomi(); montaMondo(); disegna(); dove(); mostraPannello(); if (!animazione) animazione = requestAnimationFrame(anima);
   if (in5 && chiave(camMappa) !== prima) avviaPassaggio(img);
 }, { passive: false });

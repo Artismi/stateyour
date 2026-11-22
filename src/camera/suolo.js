@@ -624,12 +624,16 @@ export function immagineSuolo(fin, { luce = true } = {}) {
     // Lambert su facce a caso, diviso √N. Un evento per punto, col suo indirizzo nel tratto: «grana h/gx,gy»)
     const vol = su.gsd.classi.reduce((a, c) => a + c.massa / c.rho, 0), lam = -Math.log(Math.max(1e-6, su.phi)), grana = reticolo(`${fin.tratto.chiave}/grana ${fin.h.toExponential(3)}`);
     const cl = su.gsd.classi.map((c) => { const sl = c.sigma * Math.LN2, dN = c.d50 * Math.exp(-3 * sl * sl), r2 = 0.25 * dN * dN * Math.exp(2 * sl * sl), nA = ((lam * (c.massa / c.rho)) / vol) / (Math.PI * r2); return { mu: nA * fin.h * fin.h, area: r2, colore: c.colore }; });
-    const muTot = cl.reduce((a, c) => a + c.mu, 0);
+    const muTot = cl.reduce((a, c) => a + c.mu, 0), nebbia = new Float32Array(3 * N * N), mF = [0, 0, 0];
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i, fs = limita(F.h[j * N + i] / Math.max(4 * R.grano, 0.02), 0, 1);
       let nT = 1; const gx = fin.gx0 + i, gy = fin.gy0 + j, r = () => normaleCumulata(grana(gx, gy, nT++)), g = grana(gx, gy, 0), lista = []; // (i numeri del punto: il nodo (gx, gy) della griglia della finestra, in coordinate del tratto)
       for (const c of cl) { const k = poisson(r, c.mu); if (k) lista.push({ frazione: k * c.area, colore: c.colore }); } // (i colori si mescolano come in una polvere: Kubelka-Munk, chimica.js)
       const suolo = lista.length ? coloreRoccia(lista).map(LIN) : cS, ombra = 1 + (0.3 * g) / Math.sqrt(Math.max(1, muTot));
-      scrivi(q, [0, 1, 2].map((k) => { const A = cR[k] * (1 - fs) + suolo[k] * fs; return A * (1 - satS) + bagnata(A) * satS; }), lume[j * N + i] * ombra); }
+      for (let k = 0; k < 3; k++) { const A = cR[k] * (1 - fs) + suolo[k] * fs, B = cR[k] * (1 - fs) + cS[k] * fs; nebbia[3 * q + k] = (A * (1 - satS) + bagnata(A) * satS) * lume[j * N + i] * ombra; mF[k] += (B * (1 - satS) + bagnata(B) * satS) * lume[j * N + i]; } }
+    // (la media, come per i grani qui sotto: quella del suolo visto da lontano, la polvere di tutti i grani. Con pochi grani
+    // per punto la polvere di ogni punto è quasi quella del suo grano, e la media dei punti scivolava verso la mescolanza lineare)
+    { const mN = [0, 0, 0]; for (let q = 0; q < N * N; q++) for (let k = 0; k < 3; k++) mN[k] += nebbia[3 * q + k]; const g = mN.map((x, k) => (x > 0 ? mF[k] / x : 1));
+      for (let q = 0; q < N * N; q++) { px[4 * q] = GAMMA(nebbia[3 * q] * g[0]); px[4 * q + 1] = GAMMA(nebbia[3 * q + 1] * g[1]); px[4 * q + 2] = GAMMA(nebbia[3 * q + 2] * g[2]); px[4 * q + 3] = 255; } }
     // (si disegnano le crepe larghe almeno un centesimo di punto: le altre sono il colore della roccia, la nebbia)
     for (const f of fratture(fin, { lVis: (fin.h / (100 * R.c)) ** 2 })) { const n = Math.ceil(Math.hypot(f.x1 - f.x0, f.y1 - f.y0) / (0.5 * fin.h)); for (let s = 0; s <= n; s++) { const x = f.x0 + ((f.x1 - f.x0) * s) / n, y = f.y0 + ((f.y1 - f.y0) * s) / n, i = Math.floor((x - fin.x0) / fin.h), j = Math.floor((y - fin.y0) / fin.h); if (i < 0 || j < 0 || i >= N || j >= N) continue;
       if (F.h[j * N + i] > Math.max(f.b, 2 * R.grano)) continue; const q = (N - 1 - j) * N + i, w = limita(f.b / fin.h, 0, 1); for (let k = 0; k < 3; k++) px[4 * q + k] = Math.round(px[4 * q + k] * (1 - 0.75 * w)); } }
@@ -638,14 +642,25 @@ export function immagineSuolo(fin, { luce = true } = {}) {
   // ---- a millimetri e sotto: i granelli (modello booleano: chi arriva dopo sta sopra) e tra loro i pori; i grani più piccoli
   // di un punto colorano il poro in proporzione a quanto ne coprono; sotto la falda il poro è pieno d'acqua, sopra solo dove è
   // più stretto del raggio che la capillarità tiene pieno (il velo che bagna i grani)
-  const gr = granelli(fin), vuoto = new Float32Array(N * N).fill(1e9), pieno = new Uint8Array(N * N), rc = (2 * P.sigma) / (RHO_W * P.g * Math.max(1e-3, su.falda / 2));
+  const gr = granelli(fin), vuoto = new Float32Array(N * N).fill(1e9), pieno = new Uint8Array(N * N), solido = new Float32Array(3 * N * N), liquido = new Float32Array(3 * N * N), rc = (2 * P.sigma) / (RHO_W * P.g * Math.max(1e-3, su.falda / 2));
   let fFini = 0; const cF = [0, 0, 0]; { let w = 0; for (const c of su.gsd.classi) { const v = c.massa / c.rho, s = gr.classi.find((x) => x.nome === c.nome)?.sottoIlPunto ?? 1; w += v; fFini += v * s; for (let k = 0; k < 3; k++) cF[k] += v * s * LIN(c.colore[k]); } for (let k = 0; k < 3; k++) cF[k] /= Math.max(fFini, 1e-30); fFini = Math.min(1, ((fFini / w) * (1 - su.phi)) / Math.max(1e-6, su.phi + (fFini / w) * (1 - su.phi))); }
   const orlo = Math.min(64, rc / fin.h) + 2; // (fin dove il velo d'acqua può arrivare attorno a un granello)
   for (const g of gr.lista) { const r = g.d / 2, cx = (g.x - fin.x0) / fin.h, cy = (g.y - fin.y0) / fin.h, rp = r / fin.h, ca = Math.cos(g.angolo), sa = Math.sin(g.angolo), col = g.colore.map(LIN);
     for (let j = Math.max(0, Math.floor(cy - rp - orlo)); j <= Math.min(N - 1, Math.ceil(cy + rp + orlo)); j++) for (let i = Math.max(0, Math.floor(cx - rp - orlo)); i <= Math.min(N - 1, Math.ceil(cx + rp + orlo)); i++) {
       const dx = i + 0.5 - cx, dy = j + 0.5 - cy, u = (dx * ca + dy * sa) / rp, v = (-dx * sa + dy * ca) / (rp * g.schiaccia), dd = Math.hypot(u, v), q = (N - 1 - j) * N + i;
-      if (dd <= 1) { scrivi(q, col, (0.62 + 0.38 * Math.sqrt(Math.max(0, 1 - dd * dd)) - 0.08 * (u + v)) * lume[j * N + i]); pieno[q] = 1; vuoto[q] = 0; } else if (!pieno[q]) vuoto[q] = Math.min(vuoto[q], (dd - 1) * r * Math.min(1, g.schiaccia)); } }
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i; if (pieno[q]) continue; const fl = fluido(umido || vuoto[q] < rc); scrivi(q, [0, 1, 2].map((k) => fl[k] * (1 - fFini) + cF[k] * fFini), lume[j * N + i]); }
+      if (dd <= 1) { const o = (0.62 + 0.38 * Math.sqrt(Math.max(0, 1 - dd * dd)) - 0.08 * (u + v)) * lume[j * N + i]; for (let k = 0; k < 3; k++) { solido[3 * q + k] = col[k] * o; liquido[3 * q + k] = 0; } pieno[q] = 1; vuoto[q] = 0; } else if (!pieno[q]) vuoto[q] = Math.min(vuoto[q], (dd - 1) * r * Math.min(1, g.schiaccia)); } }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i; if (pieno[q]) continue; const fl = fluido(umido || vuoto[q] < rc), o = lume[j * N + i]; for (let k = 0; k < 3; k++) { solido[3 * q + k] = cF[k] * fFini * o; liquido[3 * q + k] = fl[k] * (1 - fFini) * o; } }
+  // IL COLORE MEDIO SI CONSERVA (eredita.js, separa: il totale è lo stesso sopra e sotto il punto). Da lontano il suolo ha il
+  // colore della polvere dei suoi grani (Kubelka-Munk, chimica.js: la luce che rimbalza da un grano all'altro), qui sopra;
+  // i grani uno per uno, ciascuno col colore del suo minerale, darebbero in media la mescolanza lineare, più chiara: dalla
+  // finestra di un centimetro a quella di un millimetro il suolo passava dall'arancio al beige. Come le molecole dell'acqua
+  // (mappa.js, tesseraNano), i grani (e i fini nei pori) prendono per canale il fattore che rende la media dell'immagine
+  // uguale a quella del suolo visto da lontano, con la stessa luce; l'acqua e l'aria dei pori restano del loro colore.
+  { const mS = [0, 0, 0], mL = [0, 0, 0], mF = [0, 0, 0];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = (N - 1 - j) * N + i, fs = limita(F.h[j * N + i] / Math.max(4 * R.grano, 0.02), 0, 1), o = lume[j * N + i];
+      for (let k = 0; k < 3; k++) { const A = cR[k] * (1 - fs) + cS[k] * fs; mF[k] += (A * (1 - satS) + bagnata(A) * satS) * o; mS[k] += solido[3 * q + k]; mL[k] += liquido[3 * q + k]; } }
+    const g = [0, 1, 2].map((k) => (mS[k] > 0 ? Math.max(0, (mF[k] - mL[k]) / mS[k]) : 1));
+    for (let q = 0; q < N * N; q++) { px[4 * q] = GAMMA(solido[3 * q] * g[0] + liquido[3 * q]); px[4 * q + 1] = GAMMA(solido[3 * q + 1] * g[1] + liquido[3 * q + 1]); px[4 * q + 2] = GAMMA(solido[3 * q + 2] * g[2] + liquido[3 * q + 2]); px[4 * q + 3] = 255; } }
   // (la somma delle due immagini, in luce lineare, pesate con la parte dei grani che si vede uno per uno)
   if (suolo1) for (let q = 0; q < N * N; q++) for (let k = 0; k < 3; k++) px[4 * q + k] = GAMMA(LIN(suolo1[4 * q + k]) * (1 - vede) + LIN(px[4 * q + k]) * vede);
   return px;

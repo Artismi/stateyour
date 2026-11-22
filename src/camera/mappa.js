@@ -224,11 +224,15 @@ function passaggi(cam, W, H, dentro = false, fuoco = null) {
     } else {
       // una regione grande quanto lo schermo, al centro: si entra
       const P = pianeta(cam.via.cosmo, cam.via.galassia, cam.via.stella, cam.via.pianeta);
-      if (LATO_REGIONE * cam.z > 0.35 * m) { // vicino alle regioni: lo sguardo scivola verso la più vicina
+      // VERSO LA SUPERFICIE (laboratorio.js, la rotella che ha raggiunto una regione): le regioni non fermano più lo zoom; lo
+      // sguardo scivola verso il pianeta con la stessa legge dei figli degli altri livelli, e quando il centro è sul disco si
+      // scende sulla superficie (il ramo del livello 3 qui sopra). Le regioni restano un posto da cliccare.
+      if (cam.versoSuolo && Math.hypot(cam.cx, cam.cy) >= 0.95) { const k = Math.max(0.25, dentro && fuoco ? 1 - 0.8 / fuoco.k : 0); cam.cx -= cam.cx * k; cam.cy -= cam.cy * k; }
+      else if (!cam.versoSuolo && LATO_REGIONE * cam.z > 0.35 * m) { // vicino alle regioni: lo sguardo scivola verso la più vicina
         let b = null, d = Infinity; for (const R of P.regioni) { const e = Math.hypot(R.pos[0] - cam.cx, R.pos[1] - cam.cy); if (e < d) { d = e; b = R; } }
         if (b) { const k = 0.25 * Math.min(1, (LATO_REGIONE * cam.z) / (0.9 * m)); cam.cx += (b.pos[0] - cam.cx) * k; cam.cy += (b.pos[1] - cam.cy) * k; }
       }
-      for (const R of P.regioni) {
+      if (!cam.versoSuolo) for (const R of P.regioni) {
         if (LATO_REGIONE * cam.z < 0.9 * m) break;
         if (Math.abs(cam.cx - R.pos[0]) < LATO_REGIONE / 2 && Math.abs(cam.cy - R.pos[1]) < LATO_REGIONE / 2) return { entra: { ...cam.via, regione: R.id } };
       }
@@ -1223,6 +1227,13 @@ function eventoNellAcqua(cam, S, k, u, v, profondo) {
 // bordo (il margine della tessera, trasparente), sopra il fondo del colore dell'acqua. Le nove celle attorno al punto sono
 // quelle del 3D (lo strato davanti, con le stesse simmetrie delle copie in atomi3d.js periodica: varianteCella).
 // Il dettaglio sotto il pixel lo fa la piramide di immagini (ognuna la media di quattro pixel di quella sopra).
+// GLI IONI, FUORI DALLE NOVE CELLE DEL 3D, SONO UN CAMPO DI POISSON PER INDIRIZZO. Con le varianti del cubetto gli ioni di
+// una cella erano ancora quelli di uno degli otto strati, negli otto posti delle simmetrie: a 100 nm, dove le molecole
+// d'acqua sono un pixel e gli ioni le macchie che si vedono, le celle tornavano a righe. Ora, fuori dalle nove celle,
+// lo strato si disegna senza i suoi ioni, e gli ioni della cella si tirano per indirizzo («ioni della cella i j», serie per
+// nome): per ogni specie un numero di Poisson con la media del cubetto in uno strato (i suoi ioni / STRATI_NANO, lo stesso
+// volume: la concentrazione si conserva), ognuno uno ione vero del cubetto (gli stessi atomi), in un punto a caso della
+// cella e girato a caso. Il colore medio si conserva in media: gli atomi si disegnano col lume medio della sfera dello strato.
 const tessereNano = new Map(), DIAMETRO_ACQUA = 2 * 0.152e-9; // (m: il diametro di van der Waals dell'ossigeno, Bondi 1964)
 const STRATI_NANO = 8;
 // (il totale si conserva, come vuole eredita.js separa: la media della tessera è il colore della finestra sotto, quello che le
@@ -1245,18 +1256,31 @@ export function varianteCella(chiave, i, j) {
 function tesseraNano(sc, voluto = null) {
   const A = sc.atomi, Lb = sc.latoNm || sc.scatola[0], N = 512, k = N / Lb, c0 = sc.coloreAcqua || [40, 70, 100];
   let rm = 0; for (let a = 0; a < A.raggio.length; a++) if (A.raggio[a] > rm) rm = A.raggio[a];
-  const T = { latoM: Lb * 1e-9, Lb, N, k, margine: Math.ceil(rm * k + 0.2 * k) + 1, A, kc: [1, 1, 1], c0, strati: [] };
+  const T = { latoM: Lb * 1e-9, Lb, N, k, margine: Math.ceil(rm * k + 0.2 * k) + 1, A, kc: [1, 1, 1], c0, strati: [], senzaIoni: [], celle: new Map(), ioni: ioniDelCubetto(sc) };
   // i colori: la media dello strato davanti sul fondo dell'acqua è il colore della finestra (come prima della divisione in strati)
   const s0 = stratoNano(T, 0, true);
   if (voluto) { const m = [0, 0, 0], M = T.N + 2 * T.margine, b = s0.buf; for (let y = T.margine; y < T.margine + N; y++) for (let x = T.margine; x < T.margine + N; x++) { const o = 4 * (y * M + x), w = b[o + 3] / 255; for (let c = 0; c < 3; c++) m[c] += (b[o + c] * w + c0[c] * (1 - w)) / (N * N); } T.kc = m.map((x, c) => (x > 0 ? voluto[c] / x : 1)); }
   T.strati[0] = stratoInMip(T, s0.buf); T.k = T.kc; T.fondo = `rgb(${c0.map((x, c) => Math.round(Math.min(255, x * T.kc[c]))).join(',')})`;
   return T;
 }
+// gli ioni del cubetto (finestra.js scenaNano: le parti con la carica, e le coppie, con i loro conteggi): per specie, le unità
+// (gli atomi di uno ione, o di una coppia) col loro centro. → { specie: [{ nome, unita: [[indici]] }], ione: Uint8Array (1 se l'atomo è di uno ione) }
+function ioniDelCubetto(sc) {
+  const A = sc.atomi, n = A.raggio.length, ione = new Uint8Array(n), specie = [];
+  for (const p of sc.parti || []) {
+    if (!(p.carica || /^coppia /.test(p.nome)) || !(p.a > p.da)) continue;
+    const quante = sc.conteggi?.[p.nome.replace(/^coppia /, '')] || 0, passo = quante > 0 && (p.a - p.da) % quante === 0 ? (p.a - p.da) / quante : 1, unita = [];
+    for (let i = p.da; i < p.a; i += passo) { const u = []; for (let j = i; j < i + passo; j++) { u.push(j); ione[j] = 1; } unita.push(u); }
+    specie.push({ nome: p.nome, unita });
+  }
+  return { specie, ione };
+}
 // uno strato del cubetto: gli atomi con la profondità nella fetta s (0: quella davanti, la z più alta), ognuno intero,
-// coperto da chi gli sta davanti, l'ombra dove la sfera si allontana dal centro; il resto trasparente
-function stratoNano(T, s) {
+// coperto da chi gli sta davanti, l'ombra dove la sfera si allontana dal centro; il resto trasparente («senzaIoni»: solo
+// l'acqua e le altre molecole, per le celle i cui ioni sono il campo di Poisson)
+function stratoNano(T, s, _, senzaIoni = false) {
   const { A, Lb, N, k, margine } = T, M = N + 2 * margine, buf = new Uint8ClampedArray(M * M * 4), prof = new Float32Array(M * M).fill(-Infinity), h = Lb / STRATI_NANO, n = A.raggio.length;
-  for (let a = 0; a < n; a++) { const z = A.pos[3 * a + 2], q = Math.min(STRATI_NANO - 1, Math.max(0, Math.floor((Lb - z) / h))); if (q !== s) continue;
+  for (let a = 0; a < n; a++) { const z = A.pos[3 * a + 2], q = Math.min(STRATI_NANO - 1, Math.max(0, Math.floor((Lb - z) / h))); if (q !== s || (senzaIoni && T.ioni.ione[a])) continue;
     const r = A.raggio[a] * k, X = A.pos[3 * a] * k + margine, Y = (Lb - A.pos[3 * a + 1]) * k + margine, col = A.colore ? [A.colore[3 * a], A.colore[3 * a + 1], A.colore[3 * a + 2]] : [200, 200, 200];
     for (let y = Math.max(0, Math.floor(Y - r)); y <= Math.min(M - 1, Math.ceil(Y + r)); y++) for (let x = Math.max(0, Math.floor(X - r)); x <= Math.min(M - 1, Math.ceil(X + r)); x++) {
       const d2 = ((x + 0.5 - X) ** 2 + (y + 0.5 - Y) ** 2) / (r * r); if (d2 > 1) continue; const zz = z + A.raggio[a] * Math.sqrt(1 - d2), o = y * M + x; if (zz <= prof[o]) continue; prof[o] = zz;
@@ -1270,6 +1294,28 @@ function stratoInMip(T, buf) {
   return mip;
 }
 const stratoDi = (T, s) => (T.strati[s] ||= stratoInMip(T, stratoNano(T, s).buf));
+const stratoSenzaIoni = (T, s) => (T.senzaIoni[s] ||= stratoInMip(T, stratoNano(T, s, false, true).buf));
+// un numero di Poisson di media m dai numeri u(0), u(1), … (il prodotto delle uniformi; e^(−m) resta un numero per m < 700)
+const poissonDa = (m, u) => { if (!(m > 0)) return { n: 0, usati: 0 }; const L = Math.exp(-m); let n = 0, p = u(0); while (p > L && n < 10 * m + 50) { n++; p *= u(n); } return { n, usati: n + 1 }; };
+// la cella (i, j) fuori dalle nove: lo strato senza ioni, alla larghezza della piramide `w`, con sopra gli ioni di Poisson
+// della cella (vedi sopra). Si tiene in memoria (le ultime 600)
+function cellaConIoni(T, ch, i, j, strato, w) {
+  const chiave = `${i},${j}|${strato}|${w}`; let cv = T.celle.get(chiave); if (cv) return cv;
+  const mip = stratoSenzaIoni(T, strato), base = mip.find((q) => q.width === w) || mip[0], M = T.N + 2 * T.margine, f = base.width / M;
+  cv = telaN(base.width); const x = cv.getContext('2d'); x.drawImage(base, 0, 0);
+  const u = serie(ch, `ioni della cella ${i} ${j}`), A = T.A, kc = T.kc, LUME = 0.62 + 0.38 * (2 / 3); let o = 0; // (il lume medio della sfera disegnata in stratoNano)
+  for (const sp of T.ioni.specie) {
+    const { n } = poissonDa(sp.unita.length / STRATI_NANO, (q) => u(o + q)); o += n + 1;
+    for (let q = 0; q < n; q++) {
+      const un = sp.unita[Math.min(sp.unita.length - 1, Math.floor(u(o) * sp.unita.length))], X = u(o + 1) * T.Lb, Y = u(o + 2) * T.Lb, ang = 2 * Math.PI * u(o + 3), ca = Math.cos(ang), sa = Math.sin(ang); o += 4;
+      let cx = 0, cy = 0; for (const a of un) { cx += A.pos[3 * a] / un.length; cy += A.pos[3 * a + 1] / un.length; }
+      for (const a of un) { const dx = A.pos[3 * a] - cx, dy = A.pos[3 * a + 1] - cy, px = X + ca * dx - sa * dy, py = Y + sa * dx + ca * dy, col = A.colore ? [A.colore[3 * a], A.colore[3 * a + 1], A.colore[3 * a + 2]] : [200, 200, 200];
+        x.fillStyle = `rgb(${col.map((c, k) => Math.round(Math.min(255, c * LUME * kc[k]))).join(',')})`; x.beginPath(); x.arc((px * T.k + T.margine) * f, ((T.Lb - py) * T.k + T.margine) * f, Math.max(0.5, A.raggio[a] * T.k * f), 0, 2 * Math.PI); x.fill(); }
+    }
+  }
+  T.celle.set(chiave, cv); if (T.celle.size > 600) T.celle.delete(T.celle.keys().next().value);
+  return cv;
+}
 let telaMolecole = null;
 function molecoleInPiano(ctx, cam, r0, px, py, pxm, W, H) {
   const S = superficieDi(cam.via); if (!S || !r0.punto) return; const { u, v } = r0.punto, ch = `${S.k}|${u.toFixed(7)}|${v.toFixed(7)}|acqua3d|1e-8`;
@@ -1281,6 +1327,7 @@ function molecoleInPiano(ctx, cam, r0, px, py, pxm, W, H) {
   const i0 = Math.ceil((-px - lato / 2) / zt), i1 = Math.floor((W - px + lato / 2) / zt), j0 = Math.ceil((-py - lato / 2) / zt), j1 = Math.floor((H - py + lato / 2) / zt);
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
     const { strato, simmetria } = varianteCella(ch, i, -j), mip = stratoDi(T, strato); let cv = mip[0]; for (const q of mip) if (q.width >= lato) cv = q;
+    if (Math.abs(i) > 1 || Math.abs(j) > 1) cv = cellaConIoni(T, ch, i, -j, strato, cv.width); // (fuori dalle nove celle del 3D: gli ioni di Poisson)
     // (la simmetria nella scena, portata sullo schermo dove la y va in giù: G = Fy·M·Fy)
     const [ma, mb, mc, me] = simmetriaQuadrato(simmetria); c.setTransform(ma, -mc, -mb, me, px + i * zt, py + j * zt); c.drawImage(cv, -lato / 2, -lato / 2, lato, lato);
   }

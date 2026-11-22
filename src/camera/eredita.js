@@ -82,7 +82,10 @@ export const scartoOttava = (ampiezza, hurst, lato) => ampiezza * Math.pow(lato,
 // la varianza di tutte le ottave sotto una cella di lato «lato» (figli di lato/2, lato/4, …): Σ σ² 2^(−2Hm), m ≥ 1
 export const varianzaSotto = (ampiezza, hurst, lato) => { const s = scartoOttava(ampiezza, hurst, lato), q = 2 ** (-2 * hurst); return s * s * q / (1 - q); };
 
-export function ottava({ padre, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK = 0, radice, nome, sigma = 0, ramo = 0 }) {
+// (periodoI: il campo si richiude in I con quel periodo, in celle del padre: la longitudine di un pianeta. Il rumore dei figli
+// si prende allora all'indice ridotto modulo 2·periodoI, così le due parti della cucitura vedono le stesse campane; dentro il
+// periodo nulla cambia, al bit.)
+export function ottava({ padre, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK = 0, radice, nome, sigma = 0, ramo = 0, periodoI = 0 }) {
   const d = nK > 0 ? 3 : nJ > 0 ? 2 : 1;
   const nj = d >= 2 ? nJ : 1, nk = d === 3 ? nK : 1, dj = d >= 2 ? 1 : 0, dk = d === 3 ? 1 : 0;
   const P = d === 1 ? (I) => padre(I) : d === 2 ? (I, J) => padre(I, J) : padre;
@@ -93,7 +96,8 @@ export function ottava({ padre, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK 
   const ci = 2 * pi, cj = dj ? 2 * pj : 1, ck = dk ? 2 * pk : 1, R = new Float64Array(ci * cj * ck), M = new Float64Array(pi * pj * pk);
   const usaRumore = typeof sigma === 'function' || sigma !== 0;
   if (usaRumore) {
-    const g = reticolo(`${radice}/${nome}/ottava ${livello + 1}`, ramo), i0 = 2 * (I0 - A), j0 = 2 * (J0 - aj), k0 = 2 * (K0 - ak);
+    const g0 = reticolo(`${radice}/${nome}/ottava ${livello + 1}`, ramo), i0 = 2 * (I0 - A), j0 = 2 * (J0 - aj), k0 = 2 * (K0 - ak), Pf = 2 * periodoI;
+    const g = Pf > 0 ? (i, j, k) => g0(((i % Pf) + Pf) % Pf, j, k) : g0;
     for (let z = 0; z < ck; z++) for (let y = 0; y < cj; y++) for (let x = 0; x < ci; x++) {
       let v = 0; for (let ez = -dk; ez <= dk; ez++) for (let ey = -dj; ey <= dj; ey++) for (let ex = -1; ex <= 1; ex++) v += F[ex + 1] * (dj ? F[ey + 1] : 1) * (dk ? F[ez + 1] : 1) * g(i0 + x + ex, dj ? j0 + y + ey : 0, dk ? k0 + z + ez : 0);
       R[(z * cj + y) * ci + x] = v;
@@ -123,7 +127,8 @@ export function ottava({ padre, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK 
 }
 
 // le ottave una dopo l'altra, da base(I, J[, K]) al livello0 fino al blocco chiesto al «livello»
-export function discendi({ base, livello0, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK = 0, radice, nome, sigma, ampiezza, hurst, lato0 = 1, ramo = 0 }) {
+// (giroI: il periodo in I al livello0, in celle; a ogni livello sotto raddoppia: vedi ottava, periodoI)
+export function discendi({ base, livello0, livello, I0 = 0, J0 = 0, K0 = 0, nI, nJ = 0, nK = 0, radice, nome, sigma, ampiezza, hurst, lato0 = 1, ramo = 0, giroI = 0 }) {
   const d = nK > 0 ? 3 : nJ > 0 ? 2 : 1, dj = d >= 2 ? 1 : 0, dk = d === 3 ? 1 : 0;
   const sig = sigma !== undefined ? sigma : (L) => scartoOttava(ampiezza, hurst, lato0 * 2 ** (livello0 - L));
   const blocco = (L, i0, j0, k0, ni, nj, nk) => {
@@ -134,7 +139,7 @@ export function discendi({ base, livello0, livello, I0 = 0, J0 = 0, K0 = 0, nI, 
     const pi = a1 - a0 + 1 + 2 * A, pj = dj ? b1 - b0 + 1 + 2 * A : 1, pk = dk ? c1 - c0 + 1 + 2 * A : 1, p = blocco(L - 1, a0 - A, b0 - A * dj, c0 - A * dk, pi, pj, pk);
     const s = typeof sig === 'function' ? sig(L) : sig;
     const f = ottava({ padre: (I, J = 0, K = 0) => p[((K - c0 + A * dk) * pj + (J - b0 + A * dj)) * pi + (I - a0 + A)], livello: L - 1, I0: a0, J0: b0, K0: c0,
-      nI: a1 - a0 + 1, nJ: dj ? b1 - b0 + 1 : 0, nK: dk ? c1 - c0 + 1 : 0, radice, nome, sigma: s, ramo });
+      nI: a1 - a0 + 1, nJ: dj ? b1 - b0 + 1 : 0, nK: dk ? c1 - c0 + 1 : 0, radice, nome, sigma: s, ramo, periodoI: giroI * 2 ** (L - 1 - livello0) });
     const fi = 2 * (a1 - a0 + 1), fj = dj ? 2 * (b1 - b0 + 1) : 1, ox = i0 - 2 * a0, oy = dj ? j0 - 2 * b0 : 0, oz = dk ? k0 - 2 * c0 : 0;
     for (let z = 0; z < nk; z++) for (let y = 0; y < nj; y++) for (let x = 0; x < ni; x++) out[(z * nj + y) * ni + x] = f[((z + oz) * fj + y + oy) * fi + x + ox];
     return out;

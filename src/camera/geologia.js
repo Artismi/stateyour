@@ -831,8 +831,8 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
     v = [nn ? kappaHurst(H) * Math.sqrt(s2 / nn) : 0, H]; sigmaCella.set(c, v); return v; };
   // le due ottave (livelli della griglia globale: la madre è al raddoppio 2(L − 1), la figlia al 2L), dalla cella (I0, J0) della figlia larga
   const I0 = Math.round(rettL[0] * W * n), J0 = Math.round(rettL[1] * H * n), radiceR = `${chiave}/superficie`;
-  const pred = discendi({ base: (I, J) => M.alt[qM(I, J)], livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', sigma: 0 });
-  const ottave = discendi({ base: () => 0, livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo',
+  const pred = discendi({ base: (I, J) => M.alt[qM(I, J)], livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', sigma: 0, giroI: WgM });
+  const ottave = discendi({ base: () => 0, livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', giroI: WgM, // (la longitudine si richiude: le campane della cucitura sono le stesse dalle due parti)
     sigma: (Lv) => (I, J) => { const sh = Lv - 2 * (L - 1) - 1, [s1, H] = sigmaDi(I >> sh, J >> sh); return s1 * 2 ** (-H * sh); } });
   const lontano = new Map(); // (per cella della madre: 2 se le 5 × 5 attorno stanno dalla stessa parte del mare, se no meno)
   const lontanoDi = (x, y) => { const c = iy(y) * MW + ix(x); let v = lontano.get(c); if (v !== undefined) return v; const z0 = latoM(valore(x, y)); v = 2;
