@@ -76,8 +76,10 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // prima ottava sotto quella del mantello ha lo scarto del campo del coperchio per 2^(−H) (l'autoaffinità che continua). Prima
   // l'ampiezza era 700·1,25 m a mano, attorno a −1500 m; resta solo se la storia manca.
   // (Il campo si richiude in longitudine: due campi, in x e in x − W, pesati cos e sin di πx/2W, che hanno la stessa varianza.)
+  // (Il caso del rilievo è quello del LUOGO — la sorgente della superficie, dal seme —, non la chiave della memo: prima era
+  // «chiave/superficie», e lo stesso pianeta chiesto con due chiavi aveva due rilievi, e due mari: 339957 m contro 340069 m)
   let rilievo = null;
-  if (!tt) { const lv = Math.log2(W / 4), f = discendi({ base: () => 0, livello0: 0, livello: lv, I0: -W, J0: 0, nI: 2 * W, nJ: H, radice: `${chiave}/superficie`, nome: 'rilievo del pianeta', ampiezza: 1, hurst: HURST.continente, lato0: 1 });
+  if (!tt) { const lv = Math.log2(W / 4), f = discendi({ base: () => 0, livello0: 0, livello: lv, I0: -W, J0: 0, nI: 2 * W, nJ: H, radice: caso.radice, nome: 'rilievo del pianeta', ampiezza: 1, hurst: HURST.continente, lato0: 1 });
     rilievo = new Float64Array(W * H); let s2 = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const t = (Math.PI * i) / (2 * W), v = f[j * 2 * W + i + W] * Math.cos(t) + f[j * 2 * W + i] * Math.sin(t); rilievo[j * W + i] = v; s2 += v * v; }
     let sigma = 700 * 1.25; if (lid) { let m = 0, m2 = 0, a = 0; for (let j = 0; j < H; j++) { const c = Math.sin(((j + 0.5) / H) * Math.PI); for (let i = 0; i < W; i++) { const v = lid.alt[j * W + i]; m += c * v; m2 += c * v * v; a += c; } } sigma = (Math.sqrt(Math.max(0, m2 / a - (m / a) ** 2)) * 2 ** -HURST.continente) / Math.sqrt(1 - 4 ** -HURST.continente); } // (la prima ottava σ·2^(−H), e tutte quelle sotto: Σ 4^(−H·m))
     const sc = sigma / Math.sqrt(s2 / (W * H)); for (let k = 0; k < W * H; k++) rilievo[k] *= sc; }
@@ -184,7 +186,7 @@ export function superficiePianeta(chiave, P, int, seme, { W = 256, H = 128 } = {
   // nuova che nasce sopra le fosse (m/anno); sollevamento = di quanto la superficie sale oggi perché la crosta si
   // ispessisce (m/anno); tetto = la quota (m) oltre la quale la crosta, più spessa di quanto la spinta regge, cede
   const tetto = tt ? new Float32Array(W * H) : null; if (tt) for (let k = 0; k < W * H; k++) tetto[k] = alt[k] + tt.regge[k];
-  const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati,
+  const out = { W, H, raggioM: P.raggioM, alt, mare, flusso, vulcani, placche, quale, cont, materiali, spinta, lava, crateri: storiaUrti ? crateriVisti : nCrateri, crateriConservati: conservati, radiceRilievo: caso.radice, // (le tessere continuano lo stesso caso)
     ...(tt ? { etaCrosta: tt.etaCrosta, fosse: tt.fosse, copertura: tt.copertura, arco: tt.arco, sollevamento: tt.sollevamento, tetto, velEst: tt.velEst, velSud: tt.velSud, spessore: tt.spessore, copre: tt.copre, calore: tt.calore, termica: tt.termica,
       tettonica: { consumata: tt.consumata, posata: tt.posata, finestra: tt.storia.finestra, velocita: tt.storia.velocita, mare: tt.mare, litosfera: tt.litosfera, salite: tt.salite, stiramento: tt.stiramento, bilancio: tt.bilancio } } : {}),
     ...(lid ? { sollevamento: lid.sollevamento, basalto: lid.basalto, tettonica: { salite: lid.salite, mare: lid.mare, rilievo: lid.rilievo, regime: lid.regime } } : {}) };
@@ -830,7 +832,7 @@ export function tessera(chiave, radice, cl, L, tx, ty, seme = 1) {
     const margine = crosta ? (!terra && c0) || contMisto : misto, H = margine ? HURST.margine : terra ? HURST.continente : HURST.fondale;
     v = [nn ? kappaHurst(H) * Math.sqrt(s2 / nn) : 0, H]; sigmaCella.set(c, v); return v; };
   // le due ottave (livelli della griglia globale: la madre è al raddoppio 2(L − 1), la figlia al 2L), dalla cella (I0, J0) della figlia larga
-  const I0 = Math.round(rettL[0] * W * n), J0 = Math.round(rettL[1] * H * n), radiceR = `${chiave}/superficie`;
+  const I0 = Math.round(rettL[0] * W * n), J0 = Math.round(rettL[1] * H * n), radiceR = radice.radiceRilievo ?? `${chiave}/superficie`; // (il caso della superficie madre: quello del luogo)
   const pred = discendi({ base: (I, J) => M.alt[qM(I, J)], livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', sigma: 0, giroI: WgM });
   const ottave = discendi({ base: () => 0, livello0: 2 * (L - 1), livello: 2 * L, I0, J0, nI: Wl, nJ: Hl, radice: radiceR, nome: 'rilievo', giroI: WgM, // (la longitudine si richiude: le campane della cucitura sono le stesse dalle due parti)
     sigma: (Lv) => (I, J) => { const sh = Lv - 2 * (L - 1) - 1, [s1, H] = sigmaDi(I >> sh, J >> sh); return s1 * 2 ** (-H * sh); } });

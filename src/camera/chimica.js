@@ -81,7 +81,7 @@ export function delPianeta(comp) {
   const mol = (e) => kg(el.silicato, e) / ELEMENTI[e].massa, si = mol('Si');
   const mantello = si > 0 ? { Si: 1, Mg: mol('Mg') / si, Fe: mol('Fe') / si, Al: mol('Al') / si, Ca: mol('Ca') / si, Na: mol('Na') / si, K: mol('K') / si } : null;
   const rimasto = Msil > 0 ? { Cl: (1000 * mol('Cl')) / Msil, S: (1000 * mol('S')) / Msil, C: (1000 * kg(el.acquaDentro, 'C')) / ELEMENTI.C.massa / Msil } : null;
-  d = Object.freeze({ stella: Object.freeze(stella), mantello: mantello && Object.freeze(mantello), rimasto: rimasto && Object.freeze(rimasto), zolfoMoli: mol('S') }); DEL_PIANETA.set(el, d); return d;
+  d = Object.freeze({ stella: Object.freeze(stella), mantello: mantello && Object.freeze(mantello), rimasto: rimasto && Object.freeze(rimasto), zolfoMoli: mol('S'), silicatoKg: Msil }); DEL_PIANETA.set(el, d); return d;
 }
 // la crosta di QUEL pianeta (elementi.js crostaDelPianeta, che cosmo.js mette accanto alla composizione): basalto e granito in
 // atomi per atomo di silicio, come il mantello; null dove non c'è (e allora le rocce si fanno dal mantello, come prima)
@@ -342,7 +342,7 @@ export const SOLE = (() => {
   const acqua = (ab.O - Oroccia) * (ELEMENTI.O.massa + 2 * ELEMENTI.H.massa), altri = NEI_GHIACCI.C * ab.C * (ELEMENTI.C.massa + ELEMENTI.O.massa) + NEI_GHIACCI.N * ab.N * (ELEMENTI.N.massa + 3 * ELEMENTI.H.massa);
   return Object.freeze({ X: m('H') / tutto, Y: m('He') / tutto, Z: metalli / tutto, roccia: (sassi + ferro) / metalli, acqua: acqua / metalli, ghiacci: (acqua + altri) / metalli, ferro: ferro / (ferro + sassi), ghiaccio: (acqua + altri) / (acqua + altri + sassi + ferro) });
 })();
-export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, inerti = null } = {}) {
+export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, inerti = null, processato = 0 } = {}) {
   const cl = P.clima || {}, tenuti = cl.tenuti || [], gigante = P.tipo === 'gassoso', comp = P.composizione || {};
   const niente = { gas: {}, riducente: false, potere: 0, pressione: 0, pO2: 0, ferro: null, fuliggine: 0 };
   // CON L'INVENTARIO (è così che la chiama climaEAria, cioè ogni pianeta del cosmo) la pressione non è data: discende
@@ -369,11 +369,19 @@ export function atmosfera(P, { Z, inventario = false, co2 = 0, memoria = null, i
     // lo dice il pianeta; e lo zolfo che esce non supera quello del suo mantello)
     const W = (comp.acqua ?? comp.ghiaccio ?? 0) * (comp.elementi?.quotaAcqua ?? 1), Wm = dp ? Math.max(W, 1e-15) : Math.max(W, 0.001), sol = dp ? dp.stella : abbondanzeFisse(1), V = Wm / (sol.O - ossigenoNellaRoccia(sol)), pa = comp.elementi?.ghiaccioPerAcqua;
     const C = pa ? pa.C * Wm : NEI_GHIACCI.C * sol.C * V, N = pa ? pa.N * Wm : NEI_GHIACCI.N * sol.N * V, S = Math.min(ZOLFO_IN_ARIA * NEI_GHIACCI.S * sol.S * V, dp && P.massaKg > 0 ? (dp.zolfoMoli * 0.018015) / P.massaKg : Infinity), secco = String(cl.acqua || '').startsWith('vapore');
-    const O = secco ? Math.min(W + C, 2 * C + 2 * S) : W + C;
+    // IL CARBONIO DEL MANTELLO CHE I VULCANI HANNO PORTATO FUORI NELL'ETÀ DEL PIANETA («processato», kg: il mantello passato per la
+    // zona di fusione dalla nascita a oggi, ∫ Ṁ_fuso/φ dt della storia termica, storia.js; il carbonio, incompatibile, esce tutto con
+    // il fuso — la stessa legge del degassamento di storia.js e dei vulcani del ciclo —). Il mantello è un serbatoio ben mescolato:
+    // ciò che fonde se ne va, e quello che resta si impoverisce, dC/dt = −C·(Ṁ_fuso/φ)/M_mantello: ne esce C₀·(1 − e^(−processato/M)),
+    // mai più di quanto ne ha (Tajika e Matsui 1992; Sleep e Zahnle 2001). Esce come CO2, con il suo ossigeno. Dove c'è un mare la
+    // pioggia lo rimette nel calcare (il tetto di Urey e del ciclo, più sotto); dove l'acqua non c'è più niente lo toglie: è l'aria di
+    // Venere. Prima c'era solo il carbonio liberato con l'acqua alla nascita (PARTE_FUORI dei ghiacci)
+    let Cvulcani = 0; if (conInventario && processato > 0 && dp?.rimasto?.C > 0 && dp.silicatoKg > 0) Cvulcani = (dp.rimasto.C * dp.silicatoKg * -Math.expm1(-processato / dp.silicatoKg) * 18.015e-3) / (PARTE_FUORI * P.massaKg); // (in unità di W: moli·18 g / la massa d'acqua fuori)
+    const O = (secco ? Math.min(W + C, 2 * C + 2 * S) : W + C) + 2 * Cvulcani;
     // (chi trattiene l'idrogeno ma non ha un velo primordiale non perde l'idrogeno dei suoi ghiacci: l'aria resta riducente. Il
     // metano e l'ammoniaca che ne escono prendono idrogeno oltre a quello dell'acqua del mare: viene dall'acqua del mantello, che
     // il ferro dei magmi riduce a H2 — il libro dei conti di elementi.js lo prende da lì —)
-    el = conInventario && tieneH ? { H: 2 * W, C, N, O, S } : { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * C - 2 * S)), C, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
+    el = conInventario && tieneH ? { H: 2 * W, C: C + Cvulcani, N, O, S } : { H: secco ? 0 : Math.min(2 * W, 2 * Math.max(0, O - 2 * Cvulcani - 2 * C - 2 * S)), C: C + Cvulcani, N, O, S }; // il punto d'arrivo della fuga dell'idrogeno
     // la massa di quei volatili per ogni chilo d'acqua (acqua 18, e il resto contato come CO2, N2, SO2), e quanta ne sta fuori
     // (la massa è quella degli ATOMI che restano, elemento per elemento — el, nelle unità di W, cioè moli d'acqua per 18 g —: prima
     // si contavano il carbonio come CO2 e lo zolfo come SO2, con un ossigeno che l'inventario non ha, e la massa dell'idrogeno
@@ -476,7 +484,8 @@ export function gasDellAria(gas = {}) {
 // massa, raggio, tipo, acqua, anno, asse, placche…) più composizione e involucro del pianeta; e, se ci sono: «calore»
 // (W/m²: il calore dell'interno che alimenta i vulcani; accende il ciclo del carbonio), «magma» e «fusoMantello» (kg/anno:
 // il magma e il mantello che fonde, dalla storia termica: se ci sono, i vulcani sono quelli), «inerti» (Pa: argon ed elio
-// radiogenici saliti dall'interno, da risalita.js), «gas» (Pa: l'aria vera di un mondo vero, al posto dell'inventario).
+// radiogenici saliti dall'interno, da risalita.js), «processato» (kg: il mantello passato per la zona di fusione nell'età del
+// pianeta, dalla storia termica: il carbonio che i vulcani ne hanno portato fuori entra nell'inventario), «gas» (Pa: l'aria vera di un mondo vero, al posto dell'inventario).
 // IL TERMOSTATO DEL CARBONIO. Dove c'è un mare la pioggia porta l'anidride carbonica nel calcare (Urey) e l'aria ne
 // resta senza; ma se così il mare gela, la pioggia smette, i vulcani continuano, e la CO2 torna ad accumularsi
 // finché il ghiaccio non si scioglie (Walker, Hays e Kasting 1981). Nessuno dei due stati sta fermo: il pianeta si
@@ -505,7 +514,7 @@ export function climaEAria(dati, { Z } = {}) {
     if (stato === 'liquida') { p.H2O = pressioneVapore(T); p.CO2 = Math.min(p.CO2 ?? Infinity, Math.max(pressioneCO2Urey(T), co2)); } else for (const f in p) p[f] = Math.min(p[f], pressioneVapore(T, f));
     let pressione = 0; for (const f in p) pressione += p[f];
     return { gas: Object.fromEntries(Object.entries(p).filter(([, v]) => v > 0).map(([f, v]) => [f, v / pressione]).sort((a, b) => b[1] - a[1])), riducente: false, potere: 0, pressione, pO2: (p.O2 || 0) / 1e5, ferro: null, fuliggine: 0 }; };
-  const memoria = new Map(), ariaDi = dati.gas ? ariaData : (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria, inerti: dati.inerti || null });
+  const memoria = new Map(), ariaDi = dati.gas ? ariaData : (T, stato, co2 = 0) => atmosfera({ ...P, clima: { ...primo, T, acqua: stato } }, { Z, inventario: true, co2, memoria, inerti: dati.inerti || null, processato: dati.processato || 0 });
   // (Taria: la temperatura a cui quell'aria è stata calcolata; a giri fermi è quella del clima)
   // (all'aria vera si accompagnano la sua massa molare e il suo calore specifico: entrano nel calore che l'aria porta, leggi.js)
   const climaDi = (atm, T) => Object.assign(clima({ ...dati, aria: { pressione: atm.pressione, tau: serra(atm.gas, atm.pressione, primo.g, T), ...gasDellAria(atm.gas) } }), { Taria: T });
@@ -565,6 +574,13 @@ export function climaEAria(dati, { Z } = {}) {
     // capo senza mare, e chi chiama prosegue da «troppo caldo». Prima restava un mare con l'aria fatta sei gradi sotto il suo clima)
     if (sotto.d > 1 && sopra.c.acqua.startsWith('vapore')) return segna(sopra);
     const r = Math.abs(sotto.d) < Math.abs(sopra.d) ? sotto : sopra;
+    // (IN BILICO SENZA UNA COPPIA: il ciclo non ha un ghiaccio che torni uguale a sé stesso — più ghiaccio, meno rocce consumate,
+    // più CO2, niente ghiaccio — e i due capi della ricerca, a pochi centesimi di grado, restano uno più caldo e uno più freddo
+    // dell'aria di oltre un grado (la stessa misura di «cerca»: |T del clima − T dell'aria| < 1). Un mare fermo lì non c'è: è
+    // l'oscillazione tra il gelo e il disgelo del termostato (Walker, Hays e Kasting 1981; Menou 2015), e la CO2 che il pianeta
+    // tiene è la minima che riapre il mare: decide il punto 3. Prima restava il capo più vicino, un mare con l'aria fatta a 275 K
+    // e il clima a 282–286 K, che non era né l'uno né l'altro)
+    if ((sotto.bilico || sopra.bilico) && !(Math.abs(r.d) < 1)) { const s = segna(r); s.senzaCoppia = true; return s; }
     return segna(r);
   };
   const esce = (r, altro = {}) => ({ clima: Object.assign(r.c, altro), atmosfera: r.a });
@@ -575,7 +591,7 @@ export function climaEAria(dati, { Z } = {}) {
   if (dati.tipo === 'ghiacciato') { const gelo = cerca('ghiaccio', Math.min(primo.T, 150)); if (gelo.c.acqua === 'ghiaccio') return esce(gelo); }
   // 1. con il mare liquido (e quindi senza anidride carbonica nell'aria)
   const mare = conIlMare();
-  if (mare.c.acqua === 'liquida') return esce(mare);
+  if (mare.c.acqua === 'liquida' && !mare.senzaCoppia) return esce(mare);
   // 2. troppo caldo: il mare non c'è, l'acqua è persa, tutta la CO2 è nell'aria
   // (l'aria è quella di un mondo che l'acqua l'ha persa: lo stato resta «vapore» anche se poi, asciutto, si assesta a una
   // temperatura e a una pressione a cui l'acqua, se ci fosse ancora, sarebbe liquida)

@@ -792,8 +792,10 @@ export function libroDeiConti(P, opz = {}) {
     // magmi come H2 perché il ferro del fuso la riduce, 3FeO + H2O → Fe3O4 + H2, e ne tiene l'ossigeno (Holland 1984; Kasting et
     // al. 1993; Hirschmann 2012 [R]: i gas dei vulcani di un mantello ridotto sono ricchi di H2). Prima il libro lo cercava
     // nell'acqua fuori e andava scoperto: su un pianeta con l'aria all'80% di metano a 4,6 bar mancavano 2,7·10¹⁸ kg di H)
+    // (e il CARBONIO dell'aria oltre quello liberato con l'acqua è quello che i vulcani hanno portato fuori dal mantello nell'età del
+    // pianeta: chimica.js atmosfera, «processato»)
     if (dalVolatile) { const resta = acquaFuori[i] - chiesto; if (resta < -1e-9 * Math.max(acquaFuori[i], chiesto)) {
-        if (s === 'O' || s === 'H') { mantello[i] += resta; } else scoperti.push({ elemento: s, serbatoio: 'acqua fuori', manca: -resta }); }
+        if (s === 'O' || s === 'H' || s === 'C') { mantello[i] += resta; } else scoperti.push({ elemento: s, serbatoio: 'acqua fuori', manca: -resta }); }
       else metti('ghiacci', s, Math.max(0, resta)); }
     else { mantello[i] -= chiesto;
       // (ciò che l'aria e il mare prendono dalla roccia esce coi magmi, gli stessi che fanno la crosta: se nel mantello non c'è più,

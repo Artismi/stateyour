@@ -891,7 +891,7 @@ sezione('IL CASO NASCOSTO (lettura del codice)');
   prova('i semi della roccia, della pozza e della nebbia di una regione vengono dall\'indirizzo intero (semeEvento), non da un\'aritmetica sulle coordinate', () => {
     const leggi = (f) => readFileSync(new URL(f, cartella), 'utf8'), mappa = leggi('mappa.js'), pannello = leggi('laboratorio.js');
     assert.ok(/semeEvento\('roccia', cam\.via\.cosmo, cam\.via\.galassia, cam\.via\.stella, cam\.via\.pianeta,/.test(mappa), 'la roccia');
-    assert.ok(/semeEvento\('pozza', v\.cosmo, v\.galassia, v\.stella, v\.pianeta\)/.test(pannello), 'la pozza');
+    assert.ok(/(semeEvento|sorgenteEvento)\('pozza', v\.cosmo, v\.galassia, v\.stella, v\.pianeta\)/.test(pannello), 'la pozza'); // (sorgenteEvento: la sorgente dello stesso indirizzo intero, cosmo.js)
     // (la nebbia della regione è della cella del pattern, progetto a parte: pattern/src/camera/laboratorio.js)
     const cella = readFileSync(new URL('../pattern/src/camera/laboratorio.js', import.meta.url), 'utf8');
     assert.ok(/semeEvento\('nebbia della regione', a\.cosmo, a\.galassia, a\.stella, a\.pianeta, a\.regione, JSON\.stringify\(a\.zoom/.test(cella), 'la nebbia della regione');

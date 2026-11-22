@@ -23,7 +23,7 @@ import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js'
 import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie, gravitaDiSuperficie } from './leggi.js';
 import { stellaOggi } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
-import { storia } from './storia.js'; // la storia termica (per il magma dei vulcani: una stima sola)
+import { storia, tabellaStoria } from './storia.js'; // la storia termica (per il magma dei vulcani: una stima sola)
 import { formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, giganteDi } from './impatti.js';
 import { rotazione } from './rotazione.js';
@@ -169,33 +169,34 @@ export const raggioSistema = (n, gid) => LATO_SISTEMA_M / cosmo(n).galassie[gid]
 // il magma dei vulcani di un pianeta, dalla sua storia termica (storia.js: la stessa che interno() riassume, già in
 // memoria): il magma (kg/anno) e il mantello che fonde per farlo. Così i vulcani del ciclo del carbonio (chimica.js)
 // sono quelli della storia, non una seconda stima dal calore
+// il mantello passato per la zona di fusione dalla nascita a oggi (kg): ∫ Ṁ_fuso/φ dt lungo la stessa storia termica, fino
+// all'età della stella (le righe oltre, se qualcuno ha chiesto un tempo più tardi, non contano). È da lì che i vulcani hanno
+// portato fuori il carbonio del mantello (chimica.js atmosfera, «processato»)
+const processatoDi = (p, S) => { if (p.tipo === 'gassoso' || !p.composizione?.elementi) return 0; let tb; try { tb = tabellaStoria(p, { stella: S }); } catch { return 0; }
+  let m = 0; for (let i = 1; i < tb.t.length && tb.t[i - 1] < S.eta; i++) { const M = tb.Mfuso[i], f = tb.fi[i]; if (M > 0 && f > 0) m += (M / f) * (Math.min(tb.t[i], S.eta) - tb.t[i - 1]) * ANNO; } return m; };
 const magmaDi = (p, S) => { if (p.tipo === 'gassoso' || !(p.interno.vulcani > 0)) return {}; const f = storia(p, S.eta, { stella: S }).fuso; return f && f.kgAnno > 0 && f.frazione > 0 ? { magma: f.kgAnno, fusoMantello: f.kgAnno / f.frazione } : {}; };
 // ---------- (PRESTAZIONI) «SI CALCOLA SOLO CIÒ CHE SI GUARDA», anche dentro un sistema
-// Il clima e l'aria di un pianeta (chimica.js climaEAria: tre quarti del costo di un sistema) e ciò che ne discende NON si
-// calcolano più quando il sistema viene fatto: sono PIGRI. Due gruppi per pianeta, ognuno calcolato tutto insieme la prima
-// volta che se ne legge (o scrive) un campo qualunque, con gli stessi conti di prima sugli stessi numeri:
-//   · L'ARIA:   clima, atmosfera, prebiotica, magnetopausa, energiaChimica
-//   · L'ANELLO: anello, anelli (anelli.js legge il clima del pianeta — temperatura, pressione, gas tenuti, e sui rocciosi
-//               lo stato dell'acqua —: chiedere l'anello fa calcolare l'aria, se l'anello ha materia)
+// Niente di ciò che un pianeta ha oltre la sua nascita nel disco si calcola quando il sistema viene fatto: TUTTO È PIGRO.
+// Il sistema fatto subito è la stella e i pianeti con orbita, massa, raggio, composizione, l'urto gigante e i semi; il
+// resto, in tre gruppi per pianeta, ognuno calcolato tutto insieme la prima volta che se ne legge (o scrive) un campo
+// qualunque, con gli stessi conti di prima sugli stessi numeri e nello stesso ordine:
+//   · IL CORPO:  giro, giorno, bloccato, obliquita, retrogrado, risonanza, schiacciamento, interno, B0, campo, lune (e la
+//                crosta in composizione: geologia.interno è la storia termica, metà del costo di un sistema)
+//   · L'ARIA:    clima, atmosfera, prebiotica, magnetopausa, energiaChimica (chimica.js climaEAria: l'altra metà; chiede il
+//                corpo, perché i suoi dati sono il giorno, l'asse, il calore dell'interno, il magma, i gas radiogenici)
+//   · L'ANELLO:  anello, anelli (anelli.js legge le lune, e il clima del pianeta — temperatura, pressione, gas tenuti, e sui
+//                rocciosi lo stato dell'acqua —: chiedere l'anello fa calcolare l'aria, se l'anello ha materia)
 // Sono proprietà come le altre (enumerabili, nello stesso posto tra le chiavi, scrivibili); dopo la prima lettura sono
-// dati qualunque. Il risultato non dipende da quando né in che ordine le si legge: i dati dell'aria (giorno, asse, calore
-// dell'interno, magma, gas radiogenici) sono fotografati qui, nel momento in cui prima la si calcolava.
-// CIÒ CHE NON PUÒ ASPETTARE (il grafo delle letture dentro sistema(), misurato):
-//   urto, giro, interno, lune  non leggono l'aria — TRANNE la luna nata dall'urto di un roccioso: quanto si allontana
-//   dipende dal k₂/Q del pianeta, cioè dallo stato dell'acqua (lune.js k2QPianeta): lì l'aria si calcola subito, e poi,
-//   se la luna ha cambiato il giorno, si rifà (pigra) con il giorno nuovo. È l'unico ciclo vero: aria → luna → giorno → aria.
-// DUE PORTE, lo stesso sistema (la stessa memoria, gli stessi oggetti):
-//   sistemaPigro(n, gid, sid)  niente aria e niente anelli finché qualcuno non li legge: per chi ELENCA i sistemi
-//   sistema(n, gid, sid)       come sempre; in più prepara ciò che un anello può chiedere — l'anello di ogni pianeta, e
-//                              l'aria di ogni roccioso (dove ciò che anelli.js legge dipende dai suoi eventi) —, così chi poi
-//                              chiama anelli() su un pianeta non paga mai un clima. Resta pigra l'aria dei pianeti senza
-//                              materia per un anello.
-const DA_PREPARARE = new WeakMap();
-export function sistema(n, gid, sid) {
-  const Sis = sistemaPigro(n, gid, sid), prepara = DA_PREPARARE.get(Sis);
-  if (prepara) { prepara(); DA_PREPARARE.delete(Sis); }
-  return Sis;
-}
+// dati qualunque. Il risultato non dipende da quando né in che ordine le si legge (le impronte, bit per bit, sono le
+// stesse di quando si calcolava tutto subito): ogni gruppo legge solo dati fissati alla nascita del sistema o gruppi
+// che si calcolano prima di lui.
+// L'UNICO CICLO VERO, dentro il corpo: la luna nata dall'urto di un roccioso si allontana quanto vuole il k₂/Q del
+// pianeta, cioè lo stato dell'acqua (lune.js k2QPianeta): lì, mentre il corpo si fa, l'aria si calcola con il giro di
+// allora; poi, se la luna ha cambiato il giorno, si rifà (pigra) con il giorno nuovo. aria → luna → giorno → aria.
+// DUE PORTE, lo stesso sistema (la stessa memoria, gli stessi oggetti): sistema(n, gid, sid) e sistemaPigro(n, gid, sid).
+// (sistema() prima preparava l'anello di ogni pianeta e l'aria di ogni roccioso; ora non prepara niente: si calcola
+// solo ciò che si guarda. Il nome resta per chi lo chiama.)
+export function sistema(n, gid, sid) { return sistemaPigro(n, gid, sid); }
 export const sistemaPigro = memo((n, gid, sid) => {
   const S = galassia(n, gid).stelle[sid], { c, tra, intero } = casoDi('sistema', n, gid, sid);
   // I PIANETI NASCONO DAL DISCO della stella giovane (disco.js): la sua massa e i suoi metalli fanno il
@@ -229,10 +230,8 @@ export const sistemaPigro = memo((n, gid, sid) => {
   // il sistema com'è restituito: serve già qui, perché la storia degli impatti di un pianeta (impatti.js) guarda la
   // stella, il disco e gli altri pianeti
   const Sis = { stella: { ...S, r: oggiStella.R / (30 * UA) } /* il raggio vero, nelle unità del sistema */, pianeti, disco: morta ? null : discoDi(nascita, semeDisco) };
-  const daPreparare = [];
   for (const p of pianeti) {
     const massaKg = p.massaKg; // dal disco
-    // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
     // (la massa della stella è quella di oggi: una nana bianca pesa meno di quando è nata, e l'anno si è allungato)
     const Mst = S.massa * 1.989e30, aM = p.a * 30 * UA, anno = 2 * Math.PI * Math.sqrt(aM ** 3 / (6.674e-11 * Mst));
     const eta = S.eta;
@@ -243,32 +242,20 @@ export const sistemaPigro = memo((n, gid, sid) => {
     p.urto = p.tipo === 'gassoso' ? null : giganteDi(p, Sis, casoP);
     // il seme del tempo atmosferico: un evento alla sorgente del pianeta (risalita.js); un ramo su «…/pianeta k/meteo/seme/0» è un altro tempo, stesso clima
     p.semeMeteo = increspatura(casoP);
+    // (le proprietà pigre: «dato» la scrive come un dato qualunque, «pigro» la lascia da calcolare alla prima lettura o scrittura)
+    const dato = (k, v) => Object.defineProperty(p, k, { value: v, writable: true, enumerable: true, configurable: true });
+    const valore = (k) => { const d = Object.getOwnPropertyDescriptor(p, k); return d && 'value' in d ? d.value : undefined; };
+    const pigro = (k, risolvi) => Object.defineProperty(p, k, { enumerable: true, configurable: true, get: () => { risolvi(); return valore(k); }, set: (v) => { risolvi(); dato(k, v); } });
+    // l'acqua alla superficie: la stessa per il mare, per il clima e per l'interno (leggi.js)
+    const acqua = acquaInSuperficie(p);
+    // IL CORPO, PIGRO (vedi in cima a sistema()): il giro, la forma, l'interno, la crosta, le lune, tutti insieme alla prima
+    // lettura di uno dei loro campi, negli stessi passi di prima
+    let statoCorpo = 0, inerti = null, processato = 0, datiAria = null, aria = null, chiedeAria = null; // (l'aria con quei dati, quando è stata calcolata)
     // LA ROTAZIONE (rotazione.js): il giorno e l'asse sono una conseguenza, non un sorteggio. Il giro nasce dagli urti
     // giganti, o dal gas caduto attraverso un disco (giganti e mondi con involucro), o dalla crescita dell'embrione; poi
     // la marea della stella lo frena per tutta l'età del sistema (la legge di lune.js, tempoBlocco, integrata): fino a
     // mostrarle sempre la stessa faccia (bloccato) o a una risonanza, se l'orbita è allungata (p.risonanza: «3:2»)
     const giroDi = (luna) => { p.giro = rotazione(p, Sis, casoP, { urto: p.urto, luna }); Object.assign(p, { giorno: p.giro.giorno, bloccato: p.giro.bloccato, obliquita: p.giro.obliquita, retrogrado: p.giro.retrogrado, risonanza: p.giro.risonanza }); };
-    giroDi(null);
-    const omega = (2 * Math.PI) / p.giorno;
-    // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
-    // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
-    p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
-    p.massaKg = massaKg; p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
-    // LA CROSTA di questo pianeta (elementi.js: la fusione del SUO mantello con la frazione fusa della SUA storia), accanto alla
-    // composizione, non enumerabile come gli elementi: chimica.js ne fa le rocce che la pioggia consuma, mare.js le tracce
-    if (p.composizione?.elementi) Object.defineProperty(p.composizione, 'crosta', { value: crostaDelPianeta(p, { stella: S }), enumerable: false, configurable: true, writable: true });
-    // l'acqua alla superficie: la stessa per il mare, per il clima e per l'interno (leggi.js)
-    const acqua = acquaInSuperficie(p);
-    p.interno.acquaKg = acqua.kg;
-    // IL CLIMA E L'ARIA si cercano insieme (chimica.js, climaEAria): il clima è il bilancio di energia per fasce di
-    // latitudine (leggi.js: lo stesso che climaSuperficie risolve poi sulla mappa), con la serra dei gas veri; l'aria
-    // è ciò che il pianeta ha liberato o trattenuto (anche il velo di idrogeno del disco, se la gravità lo tiene),
-    // meno ciò che a quella temperatura gela, piove o finisce nel calcare
-    // I GAS RADIOGENICI (risalita.js): l'argon del potassio-40 e l'elio delle α usciti dall'interno nell'età del pianeta, se
-    // la gravità li tiene (in Pa: entrano nell'aria insieme agli altri, dentro climaEAria)
-    let inerti = null;
-    try { const gr = gasRadiogenici({ pianeta: { g: gravitaDiSuperficie(massaKg, p.raggioM), raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
-      inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
     // (PRESTAZIONI: i minerali della superficie servono due volte con gli stessi dati — qui sotto e più giù, con l'energia
     // vera per la chimica —: se temperatura, ossidazione e mare sono gli stessi (confronto esatto) vale la lista già fatta)
     let fatti = null;
@@ -278,7 +265,7 @@ export const sistemaPigro = memo((n, gid, sid) => {
     // (il ciclo del carbonio vuole i vulcani: dove interno() dice che non ce ne sono, la CO2 non ha una sorgente)
     const aAria = p.a * 30 * UA, Zs = { Z: S.Z ?? 1 };
     const fotoAria = () => ({ Lw, aM: p.a * 30 * UA, massaKg, raggioM: p.raggioM, tipo: p.tipo, acqua: acqua.frazione, acquaKg: acqua.kg, anno, giorno: p.giorno, obliquita: p.obliquita, bloccato: p.bloccato, placche: p.interno.tettonica === 'a placche', composizione: p.composizione, involucro: p.involucro,
-      calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti });
+      calore: p.interno.vulcani > 0 ? p.interno.q : 0, ...magmaDi(p, S), inerti, processato });
     const ariaCon = (dati) => {
       const r = climaEAria(dati, Zs), cl = r.clima; cl.giro = { obliquita: dati.obliquita, bloccato: dati.bloccato, giorno: dati.giorno }; // (con quale asse e quale giorno è stato calcolato: il giorno entra nel calore che l'aria porta, leggi.js)
       // L'ARIA e i MATTONI DELLA VITA (chimica.js): quali gas ha davvero, e quanto rendono lì le reazioni che fanno
@@ -288,23 +275,47 @@ export const sistemaPigro = memo((n, gid, sid) => {
         minerali: mineraliDi(cl.T, !atm.riducente, cl.acqua === 'liquida') }); } catch { atm = null; pre = null; }
       return { clima: cl, atmosfera: atm, prebiotica: pre };
     };
-    const dato = (k, v) => Object.defineProperty(p, k, { value: v, writable: true, enumerable: true, configurable: true });
-    const valore = (k) => { const d = Object.getOwnPropertyDescriptor(p, k); return d && 'value' in d ? d.value : undefined; };
-    const pigro = (k, risolvi) => Object.defineProperty(p, k, { enumerable: true, configurable: true, get: () => { risolvi(); return valore(k); }, set: (v) => { risolvi(); dato(k, v); } });
-    let datiAria = fotoAria(), aria = null; // (l'aria con quei dati, quando è stata calcolata)
     const posaAria = () => { if (!aria) aria = ariaCon(datiAria); dato('clima', aria.clima); dato('atmosfera', aria.atmosfera); dato('prebiotica', aria.prebiotica); };
-    // PRIMA DELLE LUNE: chi legge l'aria adesso (la luna dell'urto di un roccioso) la fa calcolare con il giro di adesso
-    let chiedeAria = posaAria; const leggeAria = () => chiedeAria();
+    const risolviCorpo = () => {
+      if (statoCorpo) return; statoCorpo = 1;
+      try {
+        giroDi(null);
+        const omega = (2 * Math.PI) / p.giorno;
+        // la FORMA: un corpo grande si arrotonda da solo (la gravità vince la roccia); ruotando si schiaccia ai poli
+        // (schiacciamento ≈ 5/4 · ω²R³/(GM), per un corpo fluido omogeneo)
+        p.schiacciamento = Math.min(0.3, 1.25 * (omega ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
+        // l'interno: nucleo, dinamo, tettonica; il campo magnetico ora EMERGE dall'interno
+        p.interno = interno(p, S); p.B0 = p.interno.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8)));
+        // LA CROSTA di questo pianeta (elementi.js: la fusione del SUO mantello con la frazione fusa della SUA storia), accanto alla
+        // composizione, non enumerabile come gli elementi: chimica.js ne fa le rocce che la pioggia consuma, mare.js le tracce
+        if (p.composizione?.elementi) Object.defineProperty(p.composizione, 'crosta', { value: crostaDelPianeta(p, { stella: S }), enumerable: false, configurable: true, writable: true });
+        p.interno.acquaKg = acqua.kg;
+        processato = processatoDi(p, S);
+        // I GAS RADIOGENICI (risalita.js): l'argon del potassio-40 e l'elio delle α usciti dall'interno nell'età del pianeta, se
+        // la gravità li tiene (in Pa: entrano nell'aria insieme agli altri, dentro climaEAria)
+        try { const gr = gasRadiogenici({ pianeta: { g: gravitaDiSuperficie(massaKg, p.raggioM), raggioM: p.raggioM, eta: p.interno.eta }, stella: { Lw, aM } }, { P: { tipo: p.tipo, massaKg, raggioM: p.raggioM, composizione: p.composizione, interno: p.interno, Lw, aM } });
+          inerti = { Ar: gr.argon40.trattenuto ? gr.perLAria.Ar : 0, He: gr.elio4.trattenuto ? gr.perLAria.He : 0 }; } catch { inerti = null; }
+        // PRIMA DELLE LUNE: chi legge l'aria adesso (la luna dell'urto di un roccioso) la fa calcolare con il giro di adesso
+        datiAria = fotoAria(); chiedeAria = posaAria;
+        // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
+        p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, casoLune(n, gid, sid, p.id));
+        // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
+        { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
+          // la dinamo sente il giorno (geologia.interno: il numero di Rossby): con il giorno di oggi il campo si rifà
+          const oggi = interno(p, S); Object.assign(p.interno, { B0: oggi.B0, ...(oggi.rossby != null ? { rossby: oggi.rossby, dipolo: oggi.dipolo } : {}) }); p.B0 = oggi.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8))); } }
+        // (se la luna dell'urto ha cambiato l'asse, il blocco o il giorno, l'aria di oggi è quella con il giro nuovo: i dati si
+        // rifotografano, e ciò che era stato calcolato per le lune non vale più)
+        if (datiAria.obliquita !== p.obliquita || datiAria.bloccato !== p.bloccato || datiAria.giorno !== p.giorno) { datiAria = fotoAria(); aria = null; }
+        chiedeAria = risolviAria;
+        pigro('clima', leggeAria); pigro('atmosfera', leggeAria); pigro('prebiotica', leggeAria); // (di nuovo pigri, anche se le lune li avevano letti: la prima lettura fa tutto il gruppo)
+        statoCorpo = 2;
+      } finally { if (statoCorpo === 1) statoCorpo = 0; }
+    };
+    // (l'aria chiede prima il corpo; mentre il corpo si fa — le lune — vale l'aria con il giro di allora, e prima ancora non c'è)
+    const leggeAria = () => { risolviCorpo(); if (chiedeAria) chiedeAria(); };
+    for (const k of ['giro', 'giorno', 'bloccato', 'obliquita', 'retrogrado', 'risonanza', 'schiacciamento', 'interno', 'B0', 'campo']) pigro(k, risolviCorpo);
     pigro('clima', leggeAria); pigro('atmosfera', leggeAria); pigro('prebiotica', leggeAria);
-    // LE LUNE (lune.js): dal disco attorno al pianeta, da un grande urto, o catturate; con le loro maree
-    p.lune = lune(p, { eta, Z: S.Z ?? 1, massa: S.massa, massaNascita: S.massaNascita, ...(p.tipo === 'roccioso' ? { urto: p.urto } : {}) }, casoLune(n, gid, sid, p.id));
-    // la luna nata dall'urto, allontanandosi, ha frenato il pianeta: il giorno di oggi è quello che resta (e con lui lo schiacciamento ai poli)
-    { const luna = p.lune.find((l) => l.origine === 'urto' && l.giornoPianeta); if (luna) { giroDi(luna); p.schiacciamento = Math.min(0.3, (1.25 * ((2 * Math.PI) / p.giorno) ** 2 * p.raggioM ** 3) / (6.674e-11 * massaKg));
-      // la dinamo sente il giorno (geologia.interno: il numero di Rossby): con il giorno di oggi il campo si rifà
-      const oggi = interno(p, S); Object.assign(p.interno, { B0: oggi.B0, ...(oggi.rossby != null ? { rossby: oggi.rossby, dipolo: oggi.dipolo } : {}) }); p.B0 = oggi.B0; p.campo = Math.min(1, Math.max(0, Math.log10(p.B0 / 1e-8) / Math.log10(4.5e-4 / 1e-8))); } }
-    // (se la luna dell'urto ha cambiato l'asse, il blocco o il giorno, l'aria di oggi è quella con il giro nuovo: i dati si
-    // rifotografano, e ciò che era stato calcolato per le lune non vale più)
-    if (datiAria.obliquita !== p.obliquita || datiAria.bloccato !== p.bloccato || datiAria.giorno !== p.giorno) { datiAria = fotoAria(); aria = null; }
+    pigro('lune', risolviCorpo);
     // DA QUI L'ARIA È QUELLA DI OGGI, e con lei CIÒ CHE IL PICCOLO FA AL GRANDE (risalita.js), con il campo, il giorno e l'aria
     // di oggi: il vento della stella ferma la magnetosfera a p.magnetopausa raggi (oltre, niente fascia: attorno a una stella
     // morta non c'è vento che la fermi); l'energia vera per la chimica dell'aria (ultravioletto sotto 200 nm, fulmini,
@@ -328,12 +339,10 @@ export const sistemaPigro = memo((n, gid, sid) => {
         statoAria = 2;
       } finally { if (statoAria === 1) statoAria = 0; }
     };
-    chiedeAria = risolviAria;
-    pigro('clima', leggeAria); pigro('atmosfera', leggeAria); pigro('prebiotica', leggeAria); // (di nuovo pigri, anche se le lune li avevano letti: la prima lettura fa tutto il gruppo)
     // GLI ANELLI (anelli.js): ciò che resta oggi della materia finita dentro il limite di Roche (una luna spezzata dalle
     // maree, i detriti di un urto); si allargano, piovono sul pianeta e spariscono: c'è un anello solo se la materia è
     // arrivata abbastanza di recente o era abbastanza tanta. Le divisioni vengono dalle risonanze con le lune vere.
-    // PIGRI anche loro (anello e anelli insieme): leggono l'aria del pianeta, se c'è materia per un anello
+    // PIGRI anche loro (anello e anelli insieme): leggono le lune, e l'aria del pianeta se c'è materia per un anello
     let statoAnello = 0;
     const risolviAnello = () => {
       if (statoAnello) return; statoAnello = 1;
@@ -343,15 +352,12 @@ export const sistemaPigro = memo((n, gid, sid) => {
     };
     pigro('anello', risolviAnello); pigro('anelli', risolviAnello);
     pigro('magnetopausa', leggeAria); pigro('energiaChimica', leggeAria);
-    // (ciò che sistema() prepara e sistemaPigro() lascia stare: l'anello, e sui rocciosi l'aria)
-    daPreparare.push(() => { void p.anello; if (p.tipo === 'roccioso') void p.clima; });
     // LA STORIA DEGLI IMPATTI (impatti.js), calcolata solo quando qualcuno la guarda: p.impatti
     Object.defineProperty(p, 'impatti', { configurable: true, enumerable: false, get() { const v = storiaImpatti(p, Sis, casoP); Object.defineProperty(p, 'impatti', { value: v, enumerable: false }); return v; } });
     // lo stato da cui parte il mantello: le irregolarità lasciate dalla formazione di QUESTO pianeta, in questa stella
     // di questa galassia di questo cosmo (per ora un numero legato all'indirizzo e alla massa, non ancora ai suoi urti veri)
     p.origine = hash(semeEvento('mantello', n, gid, sid, p.id), Math.round(Math.log(p.massaKg) * 1e6));
   }
-  DA_PREPARARE.set(Sis, () => { for (const f of daPreparare) f(); });
   return Sis;
 });
 
