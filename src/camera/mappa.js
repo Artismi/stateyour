@@ -592,6 +592,40 @@ export function superficieDi(v) {
   }
   return null;
 }
+// LE TESSERE IN SECONDO PIANO (tessere_mappa.worker.js): la stessa tessera, la stessa immagine e lo stesso mare di qui sotto,
+// calcolati in due fili invece che sul filo dell'interfaccia (ognuna costava da mezzo secondo a qualche secondo: la rotella si
+// fermava). Una tessera va sempre al filo della sua antenata del livello 1, che ha già in memoria le madri. Quando arriva si
+// mette tra le tessere fatte come prima; finché non c'è si vedono quelle più grosse. Senza fili (le prove) si resta qui.
+const FILI_TESSERE = 2, filiT = [], chiesteT = new Map(); let baseT = null, senzaFiliTessere = false;
+function filiTessere(S) {
+  if (senzaFiliTessere || typeof Worker === 'undefined' || typeof document === 'undefined') return null;
+  if (baseT === S.k) return filiT;
+  for (const f of filiT) f.w.terminate(); filiT.length = 0; chiesteT.clear(); baseT = S.k;
+  try {
+    for (let i = 0; i < FILI_TESSERE; i++) {
+      const w = new Worker(new URL('./tessere_mappa.worker.js', import.meta.url), { type: 'module' }), f = { w, inVolo: 0 };
+      w.onmessage = (e) => { f.inVolo--; arrivataTessera(e.data); };
+      w.onerror = (e) => { console.error('tessere_mappa.worker.js:', e.message); senzaFiliTessere = true; };
+      w.postMessage({ tipo: 'base', k: S.k, se: S.se, cl: S.cl, mare: S.mare, seme: S.seme, T: S.P.clima.T }); filiT.push(f);
+    }
+  } catch (err) { console.warn('le tessere restano sul filo principale:', err); senzaFiliTessere = true; return null; }
+  return filiT;
+}
+function chiediTessera(S, L, tx, ty) {
+  const k = `${S.k}|${L}|${tx}|${ty}`; if (chiesteT.has(k)) return;
+  const f = filiT[L === 0 ? 0 : ((tx >> (2 * (L - 1))) + (ty >> (2 * (L - 1)))) % filiT.length];
+  if (f.inVolo >= 2) return; // (al più due per filo: le altre si chiedono ai fotogrammi dopo, se si guardano ancora)
+  f.inVolo++; chiesteT.set(k, true); f.w.postMessage({ tipo: 'tessera', k: S.k, L, tx, ty, t: performance.now() / 1000 });
+}
+function arrivataTessera(d) {
+  const k = `${d.k}|${d.L}|${d.tx}|${d.ty}`; chiesteT.delete(k);
+  if (d.errore) { console.warn('tessere_mappa.worker.js, si torna al filo principale:', d.errore); senzaFiliTessere = true; return; }
+  const S = superfici.get(d.k); if (!S || d.k !== baseT) return;
+  const sf = d.L === 0 ? tessera(S.k, S.se, S.cl, 0, 0, 0, S.seme) : d.sf; // (la tessera 0 è la superficie stessa, come qui sotto)
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(sf.W, sf.H) : Object.assign(document.createElement('canvas'), { width: sf.W, height: sf.H });
+  cv.getContext('2d').putImageData(new ImageData(d.px, sf.W, sf.H), 0, 0);
+  tessereFatte.set(k, { cv, sf, base: d.base, mossa: d.mossa }); if (tessereFatte.size > 60) tessereFatte.delete(tessereFatte.keys().next().value);
+}
 const livelloTessere = (z) => Math.max(0, Math.min(7, Math.floor(Math.log(z / 420) / Math.log(4))));
 export let tessereInAttesa = 0;
 let giroMare = 1; // a ogni giro tutte le tessere con onde in vista vengono ridisegnate una volta
@@ -605,6 +639,7 @@ function disegnaSuperficie(ctx, W, H, cam, dpr) {
     const n = 4 ** L;
     for (let ty = Math.floor(y0 * 2 * n); ty <= Math.min(n - 1, Math.floor(y1 * 2 * n)); ty++) for (let txg = Math.floor(x0 * n); txg <= Math.floor(x1 * n); txg++) {
       const tx = ((txg % n) + n) % n, k = `${S.k}|${L}|${tx}|${ty}`; let t = tessereFatte.get(k);
+      if (!t && filiTessere(S)) { chiediTessera(S, L, tx, ty); tessereInAttesa++; continue; } // (in un filo: arriva a un fotogramma dopo)
       if (!t) {
         if (nuove >= 1 && L > 0) { tessereInAttesa++; continue; }
         const sf = tessera(S.k, S.se, S.cl, L, tx, ty, S.seme), px = immagineSuperficie(sf, S.P.clima.T, S.cl);

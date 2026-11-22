@@ -19,6 +19,9 @@ function pulito(o, visti = new Map()) {
   return r;
 }
 
+function buffers(o) { const visti = new Set(), out = new Set();
+  const giro = (x) => { if (x === null || typeof x !== 'object' || visti.has(x)) return; visti.add(x); if (ArrayBuffer.isView(x)) { if (x.buffer instanceof ArrayBuffer) out.add(x.buffer); return; } for (const k of Object.keys(x)) giro(x[k]); };
+  giro(o); return [...out]; }
 // LA MEMORIA (deposito.js): la superficie è funzione dell'indirizzo e del codice; calcolata una volta si tiene nel navigatore,
 // e alla visita dopo si legge (gli stessi bit: la memoria salva proprio ciò che il messaggio porterebbe)
 function calcola(k, v) {
@@ -35,6 +38,8 @@ self.onmessage = async (e) => {
   try {
     const t0 = performance.now(); let calcolata = false;
     const r = await ricorda('superficie', k, () => { calcolata = true; return calcola(k, v); }, { codice: import.meta.url });
-    self.postMessage({ k, ...r, ms: performance.now() - t0, dallaMemoria: !calcolata });
+    // (dalla memoria arriva un oggetto nuovo, solo di questo messaggio: i suoi array si passano invece di copiarli. Quelli appena
+    // calcolati no: geologia.js tiene in memoria il clima e la superficie che li contengono, e un array passato qui resta vuoto)
+    self.postMessage({ k, ...r, ms: performance.now() - t0, dallaMemoria: !calcolata }, calcolata ? [] : buffers(r));
   } catch (err) { self.postMessage({ k, errore: String((err && err.stack) || err) }); }
 };

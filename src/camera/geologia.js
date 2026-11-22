@@ -15,7 +15,7 @@ import { evolviTettonica, COSTANTI as TETTONICA } from './tettonica.js';
 import { meteoPianeta, pioggiaPerErosione } from './meteo.js';
 import { improntaMantello, crateriVisibili } from './impatti.js';
 import { internoDaStoria, storia, tabellaStoria, STORIA } from './storia.js'; // l'interno di oggi è la storia del pianeta letta alla sua età
-import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, bilancioPerFasce, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
+import { acquaInSuperficie, COSTANTI as COSTANTI_LEGGI, CLIMA, NUVOLE, riflette, riflessoNuvoleAtteso, coperturaDelCielo, acquaPerIlGhiaccio, nuvoleAttese, bilancioPerFasce, serraDaPressione, luceDelGiorno, frenaPasso, caloreDellaRoccia } from './leggi.js';
 // L'INTERNO DI OGGI: lo stato della storia del pianeta (storia.js) all'età della sua stella, nella forma di sempre:
 // { eta, nucleo (raggio del nucleo / raggio), crosta (spessore della crosta di basalto / raggio), q (W/m²), dinamo, B0 (T
 // all'equatore), tettonica ('a placche' | 'coperchio unico, con vulcani' | 'ferma'), vulcani, rossby e dipolo (se il
@@ -305,6 +305,25 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   // (le nuvole di meteo.js: quanta luce rimandano davvero, dall'acqua che tengono; senza meteo, quelle attese dalla stessa
   // legge, con il vento al suolo atteso per questo pianeta — clima().vento, dalla legge del trasporto)
   const albedo = (k, t, luce) => riflette(t, 1 - terra[k], acquaPerGhiaccio, nuvole, meteo ? (meteo.riflessoNuvole ? meteo.riflessoNuvole[k] : meteo.nuvole[k] * riflessoNuvoleAtteso(t, luce, ventoAtteso) / coperturaDelCielo) : null, albedoMare && albedoMare[k] >= 0 ? albedoMare[k] : null, luce, ventoAtteso);
+  // (LA STESSA albedo, scritta per il giro lungo dell'integrazione: riflette() di leggi.js con gli stessi conti nello stesso
+  // ordine, gli stessi bit. Cambia solo ciò che non entra nel risultato: il ghiaccio non si calcola dove la superficie del mare
+  // di mare.js lo dice già, né dove non c'è acqua per farlo (vale 0 esatto); le nuvole di meteo.js si leggono una volta;
+  // oltre 88 K dal gelo tanh vale ±1 esatto — fdlibm, che V8 usa, lo dà da |x| ≥ 22 — e non la si chiama)
+  const N = W * H, cap = new Float64Array(N), sottoK = new Float64Array(N).fill(NaN), riflK = new Float64Array(N).fill(NaN), geloK = new Float64Array(N), nudoK = new Float64Array(N);
+  for (let k = 0; k < N; k++) { cap[k] = C(k); const m = 1 - terra[k]; geloK[k] = m ? CLIMA.geloMare : CLIMA.geloTerra; nudoK[k] = m ? CLIMA.albedoMare : CLIMA.albedoTerra;
+    if (albedoMare && albedoMare[k] >= 0) sottoK[k] = albedoMare[k]; if (meteo && meteo.riflessoNuvole) riflK[k] = meteo.riflessoNuvole[k]; }
+  const nuvoleMeteo = meteo && !meteo.riflessoNuvole ? meteo.nuvole : null, conRifl = !!(meteo && meteo.riflessoNuvole && meteo.riflessoNuvole.length === N), conSotto = !!albedoMare;
+  const albedoGiro = (conRifl || !meteo || (nuvoleMeteo && nuvoleMeteo.length === N)) ? (k, t, luce) => {
+    let suolo = conSotto ? sottoK[k] : NaN;
+    if (suolo !== suolo) { if (acquaPerGhiaccio === 0 && t === t) suolo = nudoK[k]; else { const y = (t - geloK[k]) / 4, ghiaccio = acquaPerGhiaccio * 0.5 * (1 - (y >= 22 ? 1 : y <= -22 ? -1 : Math.tanh(y))); suolo = ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * nudoK[k]; } }
+    const cielo = conRifl ? riflK[k] : nuvoleMeteo ? (nuvoleMeteo[k] * riflessoNuvoleAtteso(t, luce, ventoAtteso)) / coperturaDelCielo : nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce, ventoAtteso) : 0;
+    return suolo + cielo * (1 - suolo);
+  } : albedo;
+  // dove non arriva luce (la notte polare; la faccia buia di un pianeta bloccato) la luce assorbita è 0·(1 − albedo) = 0 qualunque
+  // sia l'albedo, se è un numero: lì non la si calcola. Lo è se lo sono le nuvole di meteo.js e il vento atteso (si guarda qui)
+  // (e se il vento atteso non è negativo: con la luce a 0 la pioggia attesa è allora min(≥ 0, 0) = 0, e la nube un numero)
+  let albedoFinita = albedoGiro !== albedo && Number.isFinite(ventoAtteso ?? NUVOLE.ventoAtteso) && (ventoAtteso ?? NUVOLE.ventoAtteso) >= 0 && Number.isFinite(nuvole);
+  for (let k = 0; k < N && albedoFinita; k++) if ((conRifl && !Number.isFinite(riflK[k])) || (nuvoleMeteo && !Number.isFinite(nuvoleMeteo[k])) || !(sottoK[k] !== sottoK[k] || Number.isFinite(sottoK[k]))) albedoFinita = false;
   const luce = (j, i, f) => {
     const ph = lat(j);
     if (P.bloccato) { const lon = ((i + 0.5) / W) * 2 * Math.PI - Math.PI, cz = Math.cos(ph) * Math.cos(lon); return S0 * Math.max(0, cz); }
@@ -327,13 +346,28 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   for (let j = 0; j < H; j++) { cosLat[j] = Math.cos(lat(j)); cosN[j] = Math.max(0, Math.cos(lat(j) + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat(j) - dphi / 2)); }
   if (P.bloccato) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) sole[j * W + i] = luce(j, i, 0);
   // un sistema a tre diagonali (sotto·x[i−1] + diag·x[i] + sopra·x[i+1] = noto), anche chiuso ad anello
-  const M = Math.max(W, H), sotto = new Float64Array(M), diag = new Float64Array(M), sopra = new Float64Array(M), noto = new Float64Array(M), x = new Float64Array(M), z = new Float64Array(M), u = new Float64Array(M), cp = new Float64Array(M);
+  const M = Math.max(W, H), sotto = new Float64Array(M), diag = new Float64Array(M), sopra = new Float64Array(M), x = new Float64Array(M), z = new Float64Array(M), u = new Float64Array(M), cp = new Float64Array(M);
   const risolvi = (d, r, m, out) => { cp[0] = sopra[0] / d[0]; out[0] = r[0] / d[0]; for (let i = 1; i < m; i++) { const q = d[i] - sotto[i] * cp[i - 1]; cp[i] = sopra[i] / q; out[i] = (r[i] - sotto[i] * out[i - 1]) / q; } for (let i = m - 2; i >= 0; i--) out[i] -= cp[i] * out[i + 1]; };
-  const anello = (m) => { // (formula di Sherman-Morrison: l'anello è una catena più una correzione)
-    const g = -diag[0], al = sopra[m - 1], be = sotto[0]; diag[0] -= g; diag[m - 1] -= (al * be) / g;
-    risolvi(diag, noto, m, x); u.fill(0, 0, m); u[0] = g; u[m - 1] = al; risolvi(diag, u, m, z);
-    const fatt = (x[0] + (be * x[m - 1]) / g) / (1 + z[0] + (be * z[m - 1]) / g); for (let i = 0; i < m; i++) x[i] -= fatt * z[i];
-  };
+  // I DUE SISTEMI A TRE DIAGONALI non dipendono dalle temperature ma solo dal passo (lento o vero), dalle capacità e da D: la
+  // loro eliminazione (i rapporti cp e i pivot q di risolvi) e la correzione dell'anello (formula di Sherman-Morrison: l'anello
+  // è una catena più una correzione, z e il suo denominatore) si fanno una volta per passo, con gli stessi conti nello stesso
+  // ordine di prima; a ogni passo resta solo la sostituzione con il termine noto. Gli stessi bit, un terzo del lavoro
+  const fattori = new Map();
+  const fattoriDi = (dt) => { let F = fattori.get(dt); if (F) return F;
+    F = { sR: new Float64Array(N), cR: new Float64Array(N), qR: new Float64Array(N), zR: new Float64Array(N), g: new Float64Array(H), be: new Float64Array(H), den: new Float64Array(H), sC: new Float64Array(N), cC: new Float64Array(N), qC: new Float64Array(N) };
+    const fattorizza = (m, sOut, cOut, qOut, o) => { cp[0] = sopra[0] / diag[0]; qOut[o] = diag[0]; for (let i = 1; i < m; i++) { const q = diag[i] - sotto[i] * cp[i - 1]; cp[i] = sopra[i] / q; qOut[o + i] = q; sOut[o + i] = sotto[i]; } for (let i = 0; i < m; i++) cOut[o + i] = cp[i]; };
+    for (let j = 0; j < H; j++) {
+      const q = (dt * D) / (cosLat[j] * cosLat[j] * dlam * dlam);
+      for (let i = 0; i < W; i++) { const a = q / C(j * W + i); sotto[i] = -a; sopra[i] = -a; diag[i] = 1 + 2 * a; }
+      const g = -diag[0], al = sopra[W - 1], be = sotto[0]; diag[0] -= g; diag[W - 1] -= (al * be) / g;
+      fattorizza(W, F.sR, F.cR, F.qR, j * W); u.fill(0, 0, W); u[0] = g; u[W - 1] = al; risolvi(diag, u, W, z);
+      for (let i = 0; i < W; i++) F.zR[j * W + i] = z[i]; F.g[j] = g; F.be[j] = be; F.den[j] = 1 + z[0] + (be * z[W - 1]) / g;
+    }
+    for (let i = 0; i < W; i++) {
+      for (let j = 0; j < H; j++) { const q = (dt * D) / (C(j * W + i) * cosLat[j] * dphi * dphi), a = j > 0 ? q * cosN[j] : 0, b = j < H - 1 ? q * cosS[j] : 0; sotto[j] = -a; sopra[j] = -b; diag[j] = 1 + a + b; }
+      fattorizza(H, F.sC, F.cC, F.qC, i * H);
+    }
+    fattori.set(dt, F); return F; };
   let assorbita = 0, irradiata = 0, pesi = 0, riprese = 0; const stagioni = P.bloccato ? null : [0, 1, 2, 3].map(() => new Float32Array(W * H));
   const integra = () => {
   assorbita = 0; irradiata = 0; pesi = 0; media.fill(0); freddo.fill(0); if (stagioni) for (const q of stagioni) q.fill(0);
@@ -342,21 +376,23 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
     // 1. in ogni cella: la luce assorbita meno quella irradiata
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, t = T[k], arriva = P.bloccato ? sole[k] : soleJ[j], entra = arriva * (1 - albedo(k, t, arriva)) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
-      const dT = frenaPasso(t, (dt * (entra - esce)) / (C(k) + dt * molla));
+      const k = j * W + i, t = T[k], arriva = P.bloccato ? sole[k] : soleJ[j], entra = (arriva === 0 && albedoFinita && t === t ? 0 : arriva * (1 - albedoGiro(k, t, arriva))) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
+      const dT = frenaPasso(t, (dt * (entra - esce)) / (cap[k] + dt * molla));
       nuovo[k] = Math.max(3, t + dT);
       if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
     }
     // 2. il calore portato dai vicini: lungo i paralleli (un anello)…
+    const F = fattoriDi(dt);
     for (let j = 0; j < H; j++) {
-      const q = (dt * D) / (cosLat[j] * cosLat[j] * dlam * dlam);
-      for (let i = 0; i < W; i++) { const a = q / C(j * W + i); sotto[i] = -a; sopra[i] = -a; diag[i] = 1 + 2 * a; noto[i] = nuovo[j * W + i]; }
-      anello(W); for (let i = 0; i < W; i++) nuovo[j * W + i] = x[i];
+      const o = j * W, sR = F.sR, cR = F.cR, qR = F.qR, zR = F.zR;
+      x[0] = nuovo[o] / qR[o]; for (let i = 1; i < W; i++) x[i] = (nuovo[o + i] - sR[o + i] * x[i - 1]) / qR[o + i]; for (let i = W - 2; i >= 0; i--) x[i] -= cR[o + i] * x[i + 1];
+      const g = F.g[j], fatt = (x[0] + (F.be[j] * x[W - 1]) / g) / F.den[j]; for (let i = 0; i < W; i++) nuovo[o + i] = x[i] - fatt * zR[o + i];
     }
     // …e lungo i meridiani (da un polo all'altro: attraverso i poli non passa niente)
     for (let i = 0; i < W; i++) {
-      for (let j = 0; j < H; j++) { const q = (dt * D) / (C(j * W + i) * cosLat[j] * dphi * dphi), a = j > 0 ? q * cosN[j] : 0, b = j < H - 1 ? q * cosS[j] : 0; sotto[j] = -a; sopra[j] = -b; diag[j] = 1 + a + b; noto[j] = nuovo[j * W + i]; }
-      risolvi(diag, noto, H, x); for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
+      const o = i * H, sC = F.sC, cC = F.cC, qC = F.qC;
+      x[0] = nuovo[i] / qC[o]; for (let j = 1; j < H; j++) x[j] = (nuovo[j * W + i] - sC[o + j] * x[j - 1]) / qC[o + j]; for (let j = H - 2; j >= 0; j--) x[j] -= cC[o + j] * x[j + 1];
+      for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
     }
     if (ultimo) { const quarto = stagioni ? stagioni[Math.min(3, Math.floor((4 * (n % passiAnno)) / passiAnno))] : null; for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (quarto) quarto[k] += (4 * nuovo[k]) / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; } }
     T.set(nuovo);
