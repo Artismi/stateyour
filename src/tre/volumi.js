@@ -24,7 +24,8 @@
 // QUALITÀ (N.vista): `passi.galassia`, `passi.ragnatela` (quanti campioni per raggio, a ogni fotogramma), `riduzione` (il
 // volume si disegna su un'immagine più piccola di tanto per lato e si aggiunge al fondo), `accumulo` (accumulo.js: i
 // fotogrammi si sommano, ognuno coi passi sfasati in modo diverso; a camera ferma la media è quella di tanti più passi),
-// `vuoto` (il salto del vuoto, sotto). Sono il costo: sono regolabili.
+// `vuoto` (il salto del vuoto, sotto), `polvereFine` (i passi fini nella polvere delle nubi: la carta della polvere, più giù;
+// 0 li toglie). Sono il costo: sono regolabili.
 // IL SALTO DEL VUOTO (galassia). Dalla griglia si fa, una volta, una carta grossolana di dove c'è materia: per ogni anello
 // della griglia la quota oltre la quale (a qualunque angolo) la luce è sotto `vista.vuoto` volte la più forte di
 // quell'anello e la polvere sotto `vista.vuoto` per raggio della galassia (allargata di una cella: il campione è interpolato),
@@ -33,7 +34,7 @@
 // toccare materia: i tratti vuoti si saltano, e i passi si stendono solo tra il primo e l'ultimo tratto pieno. Un
 // raggio che non tocca niente costa 16 letture invece dei passi.
 import { creaStoria, accumuloAttivo, sfasatura } from './accumulo.js';
-const PASSI_MAX = 160, NSEG = 16;
+const PASSI_MAX = 160, NSEG = 16, PASSI_FINI = 16;
 const V_Q = `out vec2 v_uv; void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
 // (un numero a caso per punto dello schermo, senza trama: sposta l'inizio dei passi; quello «interlacciato» di prima, dove contavano pochi passi, lasciava un retino.
 // Con l'accumulo vi si somma lo sfasamento del fotogramma (u_sfasa.x) e lo spostamento copre tutto il passo (u_sfasa.y = 1); senza, resta vicino al mezzo come prima (0,3))
@@ -50,11 +51,23 @@ uniform vec4 u_k;          // L/(4·Rg²·E0) (da somma lungo il raggio a «fogl
 uniform sampler2D u_occ;   // il salto del vuoto: la quota (Rg) sotto cui può esserci materia, per intervallo di anelli [i, j] nel punto (j, i)
 uniform vec2 u_occN;       // quanti anelli; 1: il salto c'è
 uniform sampler2D u_strato; // lo strato di polvere: per angolo e raggio, colonna A_V e colonna·h (h in millesimi di Rg)
+uniform sampler3D u_pm;    // la carta della polvere: la A_V per Rg più forte in ogni blocco di celle e nei suoi vicini
+uniform vec4 u_pf;         // dalle coordinate della griglia a quelle della carta (x, y, z); quanta A_V in un passo lo fa tagliare
+uniform float u_pl;        // quanto è lungo un tratto fine (Rg)
 // (la A_V dello strato sech² su un tratto da za a zb lungo ds: la forma chiusa; se il tratto corre nel piano, la densità per ds)
 float avStrato(vec2 s, float za, float zb, float ds) { if (s.x <= 0.0) return 0.0; float h = max(s.y / s.x * 1e-3, 1e-7), dz = zb - za;
   if (abs(dz) > 1e-3 * h) return 0.5 * s.x * abs(tanh(clamp(zb / h, -9.0, 9.0)) - tanh(clamp(za / h, -9.0, 9.0))) * ds / abs(dz);
   float c = 1.0 / cosh(clamp(0.5 * (za + zb) / h, -40.0, 40.0)); return 0.5 * s.x / h * c * c * ds; }
 ${GLSL_CASO}
+// il punto p (Rg) nelle coordinate della griglia: angolo (giri), raggio, quota
+vec3 dove(vec3 p, float Rm, float zm) { return vec3((atan(p.y, p.x) - u_cam.w) * 0.15915494, length(p.xy) / Rm, 0.5 + 0.5 * sign(p.z) * sqrt(min(1.0, abs(p.z) / zm))); }
+// un tratto del raggio, da tA a tB, col campione in tm (q: le sue coordinate nella griglia)
+void tratto(float tA, float tB, float tm, vec3 q, vec3 o, vec3 d, inout vec3 C, inout vec3 T, inout float sw, inout float st) {
+  float ds = tB - tA; vec4 c = texture(u_vol, q); vec2 sS = texture(u_strato, q.xy).xy; float zA = o.z + d.z * tA, zM = o.z + d.z * tm;
+  float av = c.a * ds + avStrato(sS, zA, o.z + d.z * tB, ds), avM = c.a * (tm - tA) + avStrato(sS, zA, zM, tm - tA);
+  vec3 k = 0.921 * u_k.w * vec3(0.79, 1.0, 1.31), via = exp(-av * k);
+  vec3 dC = T * c.rgb * ds * exp(-avM * k); C += dC; T *= via;
+  float l = dC.r + dC.g + dC.b; sw += l; st += l * tm; } // (la distanza media pesata con la luce: per riportare la storia)
 void main() {
   vec3 d = normalize(u_raggi * vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0)), o = u_occhio; float Rm = u_k.y, zm = u_k.z;
   // dove il raggio sta dentro il cilindro (raggio Rmax, quota ±zmax)
@@ -76,15 +89,13 @@ void main() {
   bool piano = abs(d.z) < 0.04 || abs(u1 - u0) < 0.5; // il raggio corre (quasi) nel piano: passi fitti vicino all'inizio
   vec3 C = vec3(0.0), T = vec3(1.0); float prima = t0, sw = 0.0, st = 0.0;
   for (int i = 0; i < ${PASSI_MAX}; i++) { if (i >= n) break;
-    float f = (float(i) + 1.0) / float(n), t = piano ? t0 + (t1 - t0) * f * f : (h * sinh(mix(u0, u1, f)) - o.z) / d.z, ds = t - prima, tm = prima + ds * dentroPasso(g); prima = t;
+    float f = (float(i) + 1.0) / float(n), t = piano ? t0 + (t1 - t0) * f * f : (h * sinh(mix(u0, u1, f)) - o.z) / d.z, ds = t - prima, tA = prima, tm = prima + ds * dentroPasso(g); prima = t;
     if (((pieni >> uint(clamp(int((tm - tS) / dT), 0, ${NSEG - 1}))) & 1u) == 0u) continue;
-    vec3 p = o + d * tm; float R = length(p.xy), fi = atan(p.y, p.x) - u_cam.w;
-    vec4 c = texture(u_vol, vec3(fi * 0.15915494, R / Rm, 0.5 + 0.5 * sign(p.z) * sqrt(min(1.0, abs(p.z) / zm))));
-    vec2 sS = texture(u_strato, vec2(fi * 0.15915494, R / Rm)).xy; float tA = t - ds, zA = o.z + d.z * tA, zM = o.z + d.z * tm;
-    float av = c.a * ds + avStrato(sS, zA, o.z + d.z * t, ds), avM = c.a * (tm - tA) + avStrato(sS, zA, zM, tm - tA);
-    vec3 k = 0.921 * u_k.w * vec3(0.79, 1.0, 1.31), via = exp(-av * k);
-    vec3 dC = T * c.rgb * ds * exp(-avM * k); C += dC; T *= via;
-    float l = dC.r + dC.g + dC.b; sw += l; st += l * tm; // (la distanza media pesata con la luce: per riportare la storia)
+    vec3 q = dove(o + d * tm, Rm, zm); int m = 1;
+    // i passi fini: dove la carta della polvere dice che nel passo può starci più A_V di u_pf.w, lo si taglia in tratti lunghi u_pl
+    if (u_pf.w > 0.0 && texture(u_pm, vec3(fract(q.x), q.yz) * u_pf.xyz).r * ds > u_pf.w) m = clamp(int(ceil(ds / u_pl)), 1, ${PASSI_FINI});
+    if (m == 1) tratto(tA, t, tm, q, o, d, C, T, sw, st);
+    else for (int j = 0; j < ${PASSI_FINI}; j++) { if (j >= m) break; float a = tA + ds * float(j) / float(m), b = tA + ds * float(j + 1) / float(m), tj = a + (b - a) * dentroPasso(g); tratto(a, b, tj, dove(o + d * tj, Rm, zm), o, d, C, T, sw, st); }
     if (max(T.r, max(T.g, T.b)) < 0.003) break; }
   o_col = vec4(C * u_k.x, sw > 0.0 ? st / sw : 0.0);
 }`;
@@ -160,6 +171,23 @@ function cartaDelVuoto({ dati, nf, nr, nz, strato }, zmax, soglia) {
   let vuote = 0; for (const v of pieno) vuote += 1 - v; return { M, nr, vuote: vuote / pieno.length };
 }
 
+// LA CARTA DELLA POLVERE (i passi fini). La polvere della griglia sono le nubi e le nebulose (lo strato del disco è a parte):
+// compatte, larghe una o due celle (0,008–0,012 Rg), mentre un passo del raggio è lungo fino a qualche centesimo di Rg — da
+// dentro il disco i passi le saltavano o le prendevano per intero, e 48 e 96 passi davano immagini diverse (ΔE al 99° centile
+// 2,75). Per blocchi di celle (8 per angolo, 8 per raggio, 4 per quota) la A_V per Rg più forte nel blocco e nei blocchi
+// vicini (il campione è interpolato, e il passo esce dal blocco del suo punto di mezzo); vicino all'asse, dove un blocco per
+// angolo è più stretto di un passo, quella di tutto l'anello. Dove un passo può contenere più di `vista.polvereFine` A_V lo si
+// taglia in tratti lunghi mezza cella per raggio (al più PASSI_FINI): lì la polvere la si integra alla grana della griglia.
+// L'errore di ciò che non si taglia è sotto quella A_V per passo.
+function cartaDellaPolvere({ dati, nf, nr, nz, Rmax }) {
+  const bf = 8, br = 8, bz = 4, mf = Math.ceil(nf / bf), mr = Math.ceil(nr / br), mz = Math.ceil(nz / bz), M = new Float32Array(mf * mr * mz), D = new Float32Array(mf * mr * mz);
+  for (let jz = 0; jz < nz; jz++) for (let jr = 0; jr < nr; jr++) for (let jf = 0; jf < nf; jf++) { const a = dati[4 * ((jz * nr + jr) * nf + jf) + 3], k = ((jz / bz) | 0) * mr * mf + ((jr / br) | 0) * mf + ((jf / bf) | 0); if (a > M[k]) M[k] = a; }
+  for (let kz = 0; kz < mz; kz++) for (let kr = 0; kr < mr; kr++) for (let kf = 0; kf < mf; kf++) { let x = 0;
+    for (let az = Math.max(0, kz - 1); az <= Math.min(mz - 1, kz + 1); az++) for (let ar = Math.max(0, kr - 1); ar <= Math.min(mr - 1, kr + 1); ar++) for (let af = kf - 1; af <= kf + 1; af++) x = Math.max(x, M[az * mr * mf + ar * mf + ((af + mf) % mf)]);
+    D[kz * mr * mf + kr * mf + kf] = x; }
+  let piene = 0; for (let kz = 0; kz < mz; kz++) for (let kr = 0; kr < mr; kr++) { const b = kz * mr * mf + kr * mf; if ((((kr + 1) * br) / nr) * Rmax < 0.2) { let x = 0; for (let kf = 0; kf < mf; kf++) x = Math.max(x, D[b + kf]); D.fill(x, b, b + mf); } for (let kf = 0; kf < mf; kf++) if (D[b + kf] > 0) piene++; }
+  return { M: D, mf, mr, mz, scala: [nf / (bf * mf), nr / (br * mr), nz / (bz * mz)], lungo: (0.5 * Rmax) / nr, piene: piene / D.length };
+}
 // la A_V dello strato di polvere su un tratto (in Rg: da quota za a zb, lungo ds) al raggio R e all'angolo fi (in giri, 0…1),
 // dalla tabella che manda volume.worker.js (la cella più vicina): la stessa forma chiusa del programma qui sopra
 export function avStrato(c, R, fi, za, zb, ds) {
@@ -171,10 +199,10 @@ export function avStrato(c, R, fi, za, zb, ds) {
 // ---------- la galassia: { cosmo, galassia } → { pronto(), disegna(S, occhio (in Rg, nel riferimento della galassia), quadro, giro), stato }
 export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
   const gl = N.gl, O = { nf: 160, nr: 96, nz: 48, estinzione: 1, ...opzioni }, telo = teloPiccolo(N), stato = { pronto: false, ms: 0, nebulose: 0, errore: null, meta: null };
-  let prg = null, vol = null, senza = null, filo = null, copia = null, occ = null, occChiave = null, strato = null; const u9 = new Float32Array(9); // (senza: il volume senza nebulose e nubi, per N.vista.splat che le disegna a parte)
+  let prg = null, vol = null, senza = null, filo = null, copia = null, occ = null, occChiave = null, strato = null, pm = null, pmDi = null, pmC = null, senzaDati = null; const u9 = new Float32Array(9); // (senza: il volume senza nebulose e nubi, per N.vista.splat che le disegna a parte)
   try { filo = new Worker(new URL('./volume.worker.js', import.meta.url), { type: 'module' });
     filo.onmessage = (e) => { const d = e.data; if (d.errore) { stato.errore = d.errore; console.error('il volume della galassia non si è potuto calcolare:', d.errore); return; }
-      if (vol && vol !== senza) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); if (!d.nebulose) { if (senza) gl.deleteTexture(senza); senza = vol; } copia = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz, strato: d.strato, Rmax: d.Rmax };
+      if (vol && vol !== senza) gl.deleteTexture(vol); vol = immagine3d(gl, d.nf, d.nr, d.nz, 4, d.dati, true); if (!d.nebulose) { if (senza) gl.deleteTexture(senza); senza = vol; senzaDati = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz, Rmax: d.Rmax }; } copia = { dati: d.dati, nf: d.nf, nr: d.nr, nz: d.nz, strato: d.strato, Rmax: d.Rmax };
       if (strato) gl.deleteTexture(strato); strato = N.immagine(d.nf, d.nr, 'rg16f', d.strato, { ripeti: 'x' }); telo.storia.azzera(); stato.meta = { Rmax: d.Rmax, zmax: d.zmax, raggioM: d.raggioM, luce: d.luce, t: d.t }; stato.pronto = true; stato.ms = d.ms; stato.nebulose = d.nebulose; N.cambia(); };
     filo.onerror = (e) => { stato.errore = e.message; };
     filo.postMessage({ tipo: 'galassia', n: 1, cosmo, galassia, t: N.tempo.t, nf: O.nf, nr: O.nr, nz: O.nz });
@@ -200,12 +228,18 @@ export function creaVolumeGalassia(N, { cosmo, galassia, opzioni = {} } = {}) {
       if (np === null) return telo.tieni(S);
       telo.apri(S); gl.useProgram(prg.p); lega3d(gl, 0, N.vista.splat && senza ? senza : vol, u.u_vol); N.lega(2, strato, u.u_strato); gl.uniform3f(u.u_occhio, occhio[0] / Rg, occhio[1] / Rg, occhio[2] / Rg);
       if (chiave && occ) { N.lega(1, occ, u.u_occ); gl.uniform2f(u.u_occN, copia.nr, 1); } else { N.lega(1, occ || (occ = N.immagine(1, 1, 'rgba32f', new Float32Array(4), { filtro: gl.NEAREST })), u.u_occ); gl.uniform2f(u.u_occN, 1, 0); } telo.sfasa(S, u.u_sfasa);
+      // la carta della polvere, per i dati di adesso (del volume con le nebulose o di quello senza, quello che si disegna)
+      const usato = N.vista.splat && senza ? senza : vol, sp = N.vista.polvereFine ?? 0.01;
+      if (pmDi !== usato) { pmC = cartaDellaPolvere(usato === senza && senzaDati ? senzaDati : copia); if (pm) gl.deleteTexture(pm); pm = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, pm); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32F, pmC.mf, pmC.mr, pmC.mz, 0, gl.RED, gl.FLOAT, pmC.M); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_3D, k, v);
+        gl.bindTexture(gl.TEXTURE_3D, null); pmDi = usato; stato.polverePiena = pmC.piene; }
+      lega3d(gl, 3, pm, u.u_pm); gl.uniform4f(u.u_pf, pmC.scala[0], pmC.scala[1], pmC.scala[2], sp > 0 ? sp : 0); gl.uniform1f(u.u_pl, pmC.lungo);
       // dagli assi dell'occhio a quelli della galassia: quadroᵀ·assi (per colonne, come vuole WebGL)
       for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) u9[3 * c + r] = quadro[r] * A[c] + quadro[3 + r] * A[3 + c] + quadro[6 + r] * A[6 + c];
       gl.uniformMatrix3fv(u.u_raggi, false, u9); gl.uniform4f(u.u_cam, S.tanX, S.tanY, np, giro);
       gl.uniform4f(u.u_k, (m.luce * frazione) / (4 * Rg * Rg * S.E0), m.Rmax, m.zmax, O.estinzione); S.schermo(); telo.chiudi(S, [1, 1, 1], rif);
     },
-    libera() { if (filo) filo.terminate(); if (occ) gl.deleteTexture(occ); if (vol) gl.deleteTexture(vol); if (strato) gl.deleteTexture(strato); if (senza && senza !== vol) gl.deleteTexture(senza); telo.libera(); if (prg) gl.deleteProgram(prg.p); } };
+    libera() { if (filo) filo.terminate(); if (pm) gl.deleteTexture(pm); if (occ) gl.deleteTexture(occ); if (vol) gl.deleteTexture(vol); if (strato) gl.deleteTexture(strato); if (senza && senza !== vol) gl.deleteTexture(senza); telo.libera(); if (prg) gl.deleteProgram(prg.p); } };
 }
 
 // ---------- la ragnatela: { cosmo, luce (W di tutta la nebbia), tinta, toroM } → { aggiorna(occhioCom, D), disegna(S, …), stato }
