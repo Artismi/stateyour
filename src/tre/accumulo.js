@@ -10,7 +10,9 @@
 //    successione di Kronecker col rapporto aureo, `sfasatura(k)`: così i fotogrammi riempiono l'intervallo di ogni passo in
 //    modo uniforme, senza lasciare buchi né doppioni). La media su n fotogrammi è la stessa somma che si farebbe con n
 //    volte più passi: per la luce che nasce lungo il raggio la media è esatta (è la somma di Riemann stratificata
-//    dell'integrale); dove c'è anche la polvere che la toglie resta il piccolo errore del passo, misurato in prove.
+//    dell'integrale); dove c'è anche la polvere che la toglie, la luce di ogni campione è tolta dalla polvere che le sta davanti nel suo
+//    tratto (volumi.js), e la media è esatta anche lì per la luce e la polvere costanti nel tratto; resta l'errore del passo
+//    dove cambiano dentro il tratto, misurato in prove.
 //    La storia vale (n−1)/n, il nuovo 1/n; n cresce di uno a ogni fotogramma fino a `vista.accumulo.ferma` a camera
 //    ferma, e scende fino a `vista.accumulo.moto` quanto più l'immagine scorre (pixel per fotogramma).
 //  · 'intreccio' (il buco nero: un conto deterministico, ogni raggio una geodetica): ogni fotogramma si calcola un pixel

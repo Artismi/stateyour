@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { mareAl, aspettoMare, aspettoFermo, ondeNelPunto, scenaMolecolare, fluidoCaldo, bilancioSali, chiudiBacino, mare, campioneAcqua, coloreMare, coloraMare, luogo, muovi, disegnabili, immagineAcqua, acqua, costanti, coppia, evapora, browniano, stokes, omegaCritica, gasSciolti, ioniNelPunto, rocceDelPianeta, rilascio, congelamento, ebollizione, densita, distanza, DATI } from '../src/camera/mare.js';
 import { interno, superficiePianeta, climaSuperficie, erosione } from '../src/camera/geologia.js';
 import { sorgente } from '../src/camera/eventi.js';
+import { indirizzoDi, sistema } from '../src/camera/cosmo.js'; // (un pianeta vero del campione, per il mondo con poca acqua)
 
 let ok = 0;
 const inizio = performance.now();
@@ -459,19 +460,24 @@ prova('altri pianeti sullo stesso rilievo: giovane, senza vulcani, con poca acqu
   // fondo, che toglie il magnesio. Da solo il magnesio non dice niente: senza placche i sedimenti non tornano, e il mare si addolcisce tutto)
   assert.ok(fermo.bilancio.esce.Mg.fondo === 0 && T.bilancio.esce.Mg.fondo > 0 && fermo.ioni['Mg2+'] / fermo.ioni['Na+'] > 3 * (T.ioni['Mg2+'] / T.ioni['Na+']), 'senza la roccia calda il magnesio resta nel mare');
   confronta('anidride carbonica dei vulcani terrestri (mol/anno; misurata 6-10·10¹²)', T.flussi.CO2vulcani, 4e12, 1.5e13);
-  // poca acqua: lo stesso cloro in meno acqua
-  // (il livello a cui lo stesso rilievo tiene 5·10¹⁹ kg d'acqua: prima era il mare abbassato di 4200 m, che col rilievo della tettonica
-  // nel tempo — fosse e bacini più fondi — teneva ancora un quarto del mare)
-  const massaSotto = (liv) => { let m = 0; for (let j = 0; j < se.H; j++) { const a = (P.raggioM ** 2 * 2 * Math.PI * Math.PI * Math.cos(Math.PI / 2 - ((j + 0.5) / se.H) * Math.PI)) / (se.W * se.H); for (let i = 0; i < se.W; i++) { const h = se.alt[j * se.W + i]; if (h < liv) m += 1000 * (liv - h) * a; } } return m; };
-  let giu = 0, su = 12000; for (let n = 0; n < 40; n++) { const d = 0.5 * (giu + su); if (massaSotto(se.mare - d) > 5e19) giu = d; else su = d; }
-  const poca = mare({ ...P, interno: { ...it, acquaKg: 5e19 } }, { ...sf, mare: sf.mare - su }, cl, { ...se, mare: se.mare - su }, 'prova/poca');
+  // poca acqua: lo stesso cloro in meno acqua. (PRIMA: 5·10¹⁹ kg e il livello del mare abbassato a mano di 4200 m sul rilievo
+  // fatto per l'acqua di prima; poi il livello a cui lo stesso rilievo tiene 5·10¹⁹ kg: uno scenario costruito, sul rilievo fatto per
+  // un altro mare. Ora è un pianeta: lo stesso, con la parte d'acqua in superficie di un
+  // pianeta vero del campione — il primo roccioso, nel cammino degli indirizzi a passo 997, che ne ha meno di un decimo di
+  // questa Terra — e il rilievo, il clima e l'erosione rifatti da geologia.js per quell'acqua: il livello del mare è il suo)
+  const parteTerra = it.acquaKg / P.massaKg; let vero = null;
+  for (let n = 1; !vero && n < 2e6; n += 997) { const a = indirizzoDi(n); for (const q of sistema(a.cosmo, a.galassia, a.stella).pianeti) if (!vero && q.tipo === 'roccioso' && q.interno?.acquaKg > 0 && q.interno.acquaKg / q.massaKg < 0.1 * parteTerra) vero = { q, dove: `cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}/pianeta ${q.id}` }; }
+  assert.ok(vero, 'nel campione nessun roccioso con meno di un decimo dell\'acqua di questa Terra');
+  const itPoca = { ...it, acquaKg: (vero.q.interno.acquaKg / vero.q.massaKg) * P.massaKg }, Ppoca = { ...P, interno: itPoca };
+  const sfP = superficiePianeta('mare-poca', Ppoca, itPoca, 13), clP = climaSuperficie('mare-poca', Ppoca, sfP), seP = erosione('mare-poca', sfP, clP); // (lo stesso seme: gli stessi eventi della superficie)
+  const poca = mare(Ppoca, sfP, clP, seP, 'prova/poca');
   assert.ok(poca.esiste && poca.massaMare < 0.1 * T.massaMare, `massa del mare ${poca.massaMare}`); // (…o sepolto: del cloro uscito alla nascita, la parte ancora sciolta nel mare piccolo è meno di metà di quella che il mare grande tiene.
   // Prima: «il doppio del cloro nei sedimenti»; ma il mare grande ne ha già sepolto metà, e il doppio di metà non c'è)
   const sciolto = (x) => (x.totali.Cl * x.massaMare) / x.flussi.cloroAllaNascita;
   assert.ok(poca.salinitaMedia > 2 * T.salinitaMedia || poca.fondoDiSale?.salgemma > 0 || sciolto(poca) < 0.5 * sciolto(T), `salinità ${poca.salinitaMedia}, cloro ancora sciolto ${sciolto(poca)} contro ${sciolto(T)}`); // (il sale che un mare piccolo non tiene è sul fondo, o sepolto nei sedimenti e nei bacini che evaporano)
   // un'aria di cento bar: il magma non riesce a sfiatare il suo zolfo
   const densa = mare({ ...P, clima: { ...P.clima, pressione: 1.5e7 } }, sf, cl, se, 'prova/densa'); assert.equal(densa.flussi.parteBassa, 0); assert.ok(densa.flussi.sfiato.S === 0 && T.flussi.sfiato.S > 0 && T.flussi.parteBassa > 0.1 && T.flussi.parteBassa < 0.6);
-  console.log(`      giovane (30 Ma): ${n3(giovane.salinitaMedia)} g/kg, pH ${n3(giovane.pH)}, Na ${n3(giovane.ioni['Na+'])}, Ca ${n3(giovane.ioni['Ca2+'])}; interno fermo: ${n3(fermo.salinitaMedia)} g/kg, pH ${n3(fermo.pH)}, Mg ${n3(fermo.ioni['Mg2+'])}; poca acqua (${n3(poca.massaMare / T.massaMare * 100)}% del mare): ${n3(poca.salinitaMedia)} g/kg, cloro nei depositi ${n3(poca.flussi.sedimenti.Cl / (poca.flussi.sedimenti.Cl + poca.totali.Cl * poca.massaMare) * 100)}% (bacini che evaporano fino al sale: ${poca.bacini.filter((b) => b.saturo).length} di ${poca.bacini.length})${poca.fondoDiSale ? ', sul fondo ' + Object.keys(poca.fondoDiSale).join(' e ') : ''}; Terra: parte del pianeta dove il magma sfiata ${n3(T.flussi.parteBassa)}`);
+  console.log(`      giovane (30 Ma): ${n3(giovane.salinitaMedia)} g/kg, pH ${n3(giovane.pH)}, Na ${n3(giovane.ioni['Na+'])}, Ca ${n3(giovane.ioni['Ca2+'])}; interno fermo: ${n3(fermo.salinitaMedia)} g/kg, pH ${n3(fermo.pH)}, Mg ${n3(fermo.ioni['Mg2+'])}; poca acqua (quella di ${vero.dove}, ${n3(itPoca.acquaKg)} kg: ${n3(poca.massaMare / T.massaMare * 100)}% del mare): ${n3(poca.salinitaMedia)} g/kg, cloro nei depositi ${n3(poca.flussi.sedimenti.Cl / (poca.flussi.sedimenti.Cl + poca.totali.Cl * poca.massaMare) * 100)}% (bacini che evaporano fino al sale: ${poca.bacini.filter((b) => b.saturo).length} di ${poca.bacini.length})${poca.fondoDiSale ? ', sul fondo ' + Object.keys(poca.fondoDiSale).join(' e ') : ''}; Terra: parte del pianeta dove il magma sfiata ${n3(T.flussi.parteBassa)}`);
 });
 
 prova('senz\'acqua liquida non c\'è mare: risposta pulita', () => {

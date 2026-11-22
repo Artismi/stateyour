@@ -137,13 +137,17 @@ prova('i resti di supernova: mai sul posto di una stella viva; il resto di un co
 // =====================================================================================================
 sezione('LA MASSA');
 // =====================================================================================================
-prova('il disco è qualche centesimo della stella; i pianeti pesano meno del disco e i loro solidi meno dei solidi del disco', () => {
+prova('il disco ha la massa dei dischi osservati (Tychoniec et al. 2020, decisione dell\'utente); i pianeti pesano meno del disco e i loro solidi meno dei solidi del disco', () => {
   let n = 0;
   for (const s of SISTEMI) {
     if (s.S0.stato === 'stella di neutroni' || s.S0.stato === 'buco nero') { assert.equal(s.S.pianeti.length, 0); continue; }
     // (con la miscela del gas da cui la stella è nata, come in cosmo.js: la catena degli elementi la dà al disco)
     const mix = GA.miscelaDiNascita(CO.galassia(s.n, s.gid).forma, s.S0), st = { massa: s.S0.massaNascita || s.S0.massa, Z: s.S0.Z ?? 1, eta: s.eta, ...(mix ? { abbondanze: mix.abbondanze } : {}) }, seme = CO.casoDisco(s.n, s.gid, s.sid), D = DI.disco(st, seme), nati = DI.formaPianeti(st, seme);
-    tra(D.massaKg / (st.massa * MSOLE), 0.0099, 0.1201, 'massa del disco / massa della stella');
+    // (PRIMA: tra un centesimo e il 12% della stella. DECISIONE DELL'UTENTE: la stessa larghezza dei dischi osservati già adottata
+    // in test_disco — i dischi giovanissimi di Classe 0, ±0,66 dex tra il 16° e l'84° percentile, Tychoniec et al. 2020 (A&A 640,
+    // A19), tabella A.2 —, con la stessa formulazione: un disco su sei sta sotto un quinto della mediana, e sotto il centesimo ce
+    // ne sono. Il tetto resta il limite d'instabilità gravitazionale)
+    assert.ok(D.frazione > 0 && D.frazione <= DI.DISCO.instabile && Math.abs(D.massaKg - D.frazione * st.massa * MSOLE) < 1e-6 * st.massa * MSOLE, `massa del disco / massa della stella: ${D.massaKg / (st.massa * MSOLE)}`);
     if (!nati.length) continue; n++;
     // sono proprio i pianeti del sistema (nati con l'età della stella; poi il taglio a 16, e i vicini inghiottiti dalla gigante)
     const rimasti = nati.slice(0, CO.PIANETI_MAX).filter((q) => s.S0.stato === 'in vita' || q.aUA / 30 >= 0.05);
@@ -324,15 +328,43 @@ prova('la miscela del disco ha una fonte sola (elementi.js): roccia, ghiacci, fe
 });
 // (PRIMA: si leggeva nel sorgente di disco.js la legge del ferro, «ferroRoccia» ∝ T², e il ferro di ogni roccioso stava tra il
 // Sole oltre la neve e tre quarti. La catena degli elementi l'ha tolta: il ferro della roccia è quello che condensa (insieme ai
-// silicati) e il nucleo è ciò che la separazione mette nel metallo. Resta ciò che la prova chiedeva: il ferro non segue i metalli)
-prova('il ferro di un pianeta non dipende dai metalli della stella (ferro e roccia condensano insieme); il nucleo è ciò che la separazione mette nel metallo', () => {
-  const rocciosi = PIANETI.filter((x) => x.p.tipo === 'roccioso'), iFe = EL.SIMBOLI.indexOf('Fe');
-  const r = (x) => { const v = x.p.composizione.elementi.solidi; let t = 0; for (const y of v) t += y; return v[iFe] / t; }; // (il ferro della roccia, come elemento)
+// silicati) e il nucleo è ciò che la separazione mette nel metallo. Poi: «il ferro non segue i metalli della stella», ricche contro
+// povere tra 0,85 e 1,18.)
+// DECISIONE DELL'UTENTE: la regola si riscrive secondo l'osservazione. Adibekyan et al. 2021 (Science 374, 330; arXiv:2102.12444
+// [V: riletto il testo, tabelle S3 e S7]) misurano che il ferro dei rocciosi SEGUE quello della stella: per le super-Terre, con
+// il ferro nel nucleo e nel mantello (come qui: il FeO del mantello conta), in rapporto di atomi
+//   Fe/(Mg+Si)_pianeta = −1,35 (±0,36) + 4,84 (±0,92) · Fe/(Mg+Si)_stella   (regressione ODR; la covarianza non è data).
+// La prova: dove le stelle osservate stanno (i 21 ospiti della tabella S3, con il Sole a log ε 7,50, 7,60, 7,51), la mediana del
+// modello per ogni fascia di Fe/(Mg+Si) della stella sta dentro la relazione con le sue incertezze, cioè fra le rette con
+// intercetta e pendenza entro ±1σ ciascuna (senza la covarianza, l'inviluppo di quelle rette). La pendenza da sola si stampa
+// tra le note: il modello dà 1, l'osservazione 4,84 ± 0,92.
+const ADIBEKYAN = { a: -1.35, sa: 0.36, b: 4.84, sb: 0.92, sole: { Fe: 7.5, Mg: 7.6, Si: 7.51 },
+  // [Fe/H], [Mg/H], [Si/H] dei 21 ospiti (tabella S3)
+  stelle: [[0.26, 0.24, 0.27], [0.10, 0.07, 0.05], [-0.06, -0.07, -0.06], [0.42, 0.41, 0.37], [0.24, 0.23, 0.25], [0.09, 0.10, 0.04], [0.32, 0.42, 0.35], [0.15, 0.21, 0.17], [0.00, -0.01, -0.01], [-0.03, -0.03, 0.0], [0.04, 0.10, 0.03],
+    [-0.06, -0.16, -0.03], [-0.15, -0.23, -0.15], [0.09, 0.11, 0.05], [-0.14, -0.01, -0.1], [0.05, 0.07, 0.06], [-0.14, -0.15, -0.09], [-0.14, -0.14, -0.16], [0.03, 0.09, 0.06], [0.40, 0.46, 0.43], [-0.39, -0.18, -0.27]] };
+let PENDENZA_FERRO = null;
+prova('il ferro della roccia segue il Fe/(Mg+Si) della stella dentro la relazione osservata (Adibekyan et al. 2021, decisione dell\'utente); il nucleo è ciò che la separazione mette nel metallo', () => {
+  const rocciosi = PIANETI.filter((x) => x.p.tipo === 'roccioso'), E = EL.ELEMENTI, I = (s) => EL.SIMBOLI.indexOf(s), iFe = I('Fe'), iMg = I('Mg'), iSi = I('Si');
   for (const x of rocciosi) { const el = x.p.composizione.elementi; let mc = 0, ms = 0, ma = 0; for (const y of el.nucleo) mc += y; for (const y of el.solidi) ms += y; for (const y of el.acqua) ma += y;
     tra((x.p.composizione.ferro * (ms + ma)) / mc, 1 - 1e-9, 1 + 1e-9, 'il «ferro» è il nucleo della separazione'); assert.ok(mc <= (ms + ma) * (1 + 1e-12)); }
-  const povere = rocciosi.filter((x) => x.S0.Z < 0.5).map(r), ricche = rocciosi.filter((x) => x.S0.Z > 1).map(r);
-  if (povere.length > 20 && ricche.length > 20) tra(mediana(ricche) / mediana(povere), 0.85, 1.18, 'ferro mediano della roccia: stelle ricche / stelle povere');
+  // (in atomi: la stella dalla miscela con cui è nata — galassie.js miscelaDiNascita, come cosmo.js —; il pianeta da tutti i suoi solidi, nucleo e mantello)
+  const rapporto = (fe, mg, si) => fe / E.Fe.massa / (mg / E.Mg.massa + si / E.Si.massa);
+  const coppie = rocciosi.map((x) => { const mix = GA.miscelaDiNascita(CO.galassia(x.n, x.gid).forma, x.S0), X = mix ? mix.abbondanze : EL.miscelaSolare(x.S0.Z ?? 1), v = x.p.composizione.elementi.solidi;
+    return [rapporto(X.Fe, X.Mg, X.Si), rapporto(v[iFe], v[iMg], v[iSi])]; });
+  const os = ADIBEKYAN.stelle.map(([f, m, q]) => 10 ** (ADIBEKYAN.sole.Fe + f) / (10 ** (ADIBEKYAN.sole.Mg + m) + 10 ** (ADIBEKYAN.sole.Si + q))), x0 = Math.min(...os), x1 = Math.max(...os);
+  const A = ADIBEKYAN, basso = (x) => A.a - A.sa + (A.b - A.sb) * x, alto = (x) => A.a + A.sa + (A.b + A.sb) * x, NB = 6; let fasce = 0;
+  for (let k = 0; k < NB; k++) { const u = x0 + ((x1 - x0) * k) / NB, w = x0 + ((x1 - x0) * (k + 1)) / NB, dentro = coppie.filter(([xs]) => xs >= u && xs < w); if (dentro.length < 20) continue; fasce++;
+    const xm = mediana(dentro.map((c) => c[0])), ym = mediana(dentro.map((c) => c[1]));
+    tra(ym, basso(xm), alto(xm), `Fe/(Mg+Si) mediano dei rocciosi attorno a stelle con ${xm.toFixed(3)} (${dentro.length} pianeti; osservato ${(A.a + A.b * xm).toFixed(2)})`); }
+  assert.ok(fasce >= 3, `solo ${fasce} fasce di stelle con almeno 20 rocciosi tra ${x0.toFixed(3)} e ${x1.toFixed(3)}`);
+  // la pendenza del modello (minimi quadrati, sulle stelle nell'intervallo osservato), per la nota
+  const cc = coppie.filter(([xs]) => xs >= x0 && xs <= x1), mx = mediaDi(cc.map((c) => c[0])), my = mediaDi(cc.map((c) => c[1])); let sxx = 0, sxy = 0; for (const [p, q] of cc) { sxx += (p - mx) ** 2; sxy += (p - mx) * (q - my); }
+  PENDENZA_FERRO = { b: sxy / sxx, n: cc.length };
+  console.log(`      ${cc.length} rocciosi attorno a stelle con Fe/(Mg+Si) tra ${x0.toFixed(3)} e ${x1.toFixed(3)} (gli ospiti di Adibekyan et al.): pendenza del modello ${PENDENZA_FERRO.b.toFixed(2)}, osservata ${A.b} ± ${A.sb}`);
 });
+if (PENDENZA_FERRO && Math.abs(PENDENZA_FERRO.b - ADIBEKYAN.b) > ADIBEKYAN.sb)
+  nota(2, 'il ferro della roccia segue quello della stella uno a uno (ferro e silicati condensano insieme e nient\'altro li separa); Adibekyan et al. 2021 misurano una pendenza più ripida: il modello sta dentro la loro relazione con le sue incertezze, ma la pendenza no. Manca il processo che arricchisce di ferro i pianeti delle stelle già ricche di ferro (gli autori non lo identificano)',
+    { casi: 1, su: 1, tipico: `pendenza ${num(PENDENZA_FERRO.b)} contro ${num(ADIBEKYAN.b)} ± ${num(ADIBEKYAN.sb)} (${PENDENZA_FERRO.n} rocciosi)`, dove: 'disco.js (la condensazione) ed elementi.js' });
 {
   nota(3, 'le lune regolari nate oltre la neve sono «metà ghiaccio e metà roccia»; la miscela del Sole (chimica.js SOLE, che ora usa il disco) dà più ghiaccio',
     { casi: 1, su: 1, tipico: `lune.js 0,5 · chimica.js ${num(CH.SOLE.ghiaccio)}`, dove: 'lune.js regolari() «b.ghiaccio = 0.5 / (1 + …)»' });
@@ -341,9 +373,10 @@ prova('la metallicità discende dalle supernove avvenute prima: il bilancio dei 
   const rese = [];
   for (const { Gx } of GALASSIE) {
     const F = Gx.forma, b = F.bilancio, st = F.storia; let sn = 0; for (let j = 1; j <= GA.PASSI; j++) sn += (st.collasso[j] + st.Ia[j]) * st.dt * 1e9;
-    // i metalli che ci sono (nel gas, nelle stelle, soffiati via) sono quelli fatti dalle stelle morte più quelli entrati
-    tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, 'metalli presenti / prodotti');
-    tra((b.gas + b.stelle + b.vento + b.alCaldo) / b.entrato, 1 - 1e-9, 1 + 1e-9, 'massa presente / entrata');
+    // i metalli che ci sono (nel gas, nelle stelle, soffiati via, e nel buco nero del centro, che ha mangiato gas col suo Z:
+    // galassie.js B.buco, B.bucoZ — prima non si contavano, ed era lo 0,4–1,2% che mancava) sono quelli fatti dalle stelle morte più quelli entrati
+    tra((b.metalliGas + b.metalliStelle + b.metalliVento + b.metalliCaldo + b.metalliBuco) / (b.metalliProdotti + b.metalliEntrati), 1 - 1e-6, 1 + 1e-6, 'metalli presenti / prodotti');
+    tra((b.gas + b.stelle + b.vento + b.alCaldo + b.buco) / b.entrato, 1 - 1e-9, 1 + 1e-9, 'massa presente / entrata');
     rese.push(b.metalliProdotti / sn);
     // ogni stella ha la Z del gas da cui è nata: quella del suo anello nel suo passo (nel disco, dove il posto di oggi è quello di nascita)
     for (const s of Gx.stelle.filter((x, i) => x.componente === 'disco' && x.peso > 1 && i % 40 === 0)) tra(s.Z / Math.max(1e-4, GA.metallicitaDiNascita(F, nascitaDi(s), Math.hypot(...s.pos) * F.unitaKpc)), 0.999, 1.001, 'Z della stella / Z del gas del suo anello quando è nata');

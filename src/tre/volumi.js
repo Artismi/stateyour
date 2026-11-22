@@ -8,7 +8,12 @@
 //   raggio la colonna A_V e la mezza altezza h, distribuita come sech²(z/h)): lo si integra esatto su ogni tratto del raggio,
 //   da z_a a z_b, A_V = colonna/2·|tanh(z_b/h) − tanh(z_a/h)|·ds/|z_b − z_a| (o la densità per ds, se il tratto corre nel
 //   piano). Sottile anche una frazione di parsec, non diventa spesso quanto la cella e non si perde tra i passi.
-//   Lungo il raggio: C += T·j·ds, T ·= 10^(−0,4·A_λ·ds), con A_λ/A_V = 0,79 (rosso), 1 (verde),
+//   Lungo il raggio: C += T·j·ds·10^(−0,4·A_λ(dall'inizio del tratto al campione)), T ·= 10^(−0,4·A_λ(tutto il tratto)): la luce
+//   del campione è tolta dalla polvere che sta DAVANTI a lei nel tratto — lo strato con la sua forma chiusa fino alla quota del
+//   campione, la griglia per la sua parte di tratto —, così che la media sui campioni sfasati (accumulo.js) sia l'integrale
+//   esatto di T(s)·j sul tratto. (Prima: T·j·ds·(1 − e^−τ)/τ, la polvere mescolata uniforme alla luce nel tratto; con lo strato
+//   sottile, più sottile del tratto, la media dei fotogrammi restava lontana dal conto pieno: 4,7% dopo 64 fotogrammi, e da
+//   fuori il resto di Richardson del più fine era il 6,2%.) A_λ/A_V = 0,79 (rosso), 1 (verde),
 //   1,31 (blu) — la curva di estinzione media della Via Lattea (Cardelli, Clayton & Mathis 1989, R_V = 3,1 [R]): la
 //   polvere arrossa. I passi sono fitti dove il raggio attraversa il piano (uniformi in asinh(z/h)) o, se corre nel
 //   piano, fitti vicino all'occhio. I bracci girano col loro passo (l'angolo della griglia segue la fase di adesso).
@@ -75,9 +80,10 @@ void main() {
     if (((pieni >> uint(clamp(int((tm - tS) / dT), 0, ${NSEG - 1}))) & 1u) == 0u) continue;
     vec3 p = o + d * tm; float R = length(p.xy), fi = atan(p.y, p.x) - u_cam.w;
     vec4 c = texture(u_vol, vec3(fi * 0.15915494, R / Rm, 0.5 + 0.5 * sign(p.z) * sqrt(min(1.0, abs(p.z) / zm))));
-    float av = c.a * ds + avStrato(texture(u_strato, vec2(fi * 0.15915494, R / Rm)).xy, o.z + d.z * (t - ds), o.z + d.z * t, ds);
-    vec3 tau = av * 0.921 * u_k.w * vec3(0.79, 1.0, 1.31), via = exp(-tau);
-    vec3 dC = T * c.rgb * ds * mix(vec3(1.0), (1.0 - via) / max(tau, vec3(1e-5)), step(1e-4, tau)); C += dC; T *= via;
+    vec2 sS = texture(u_strato, vec2(fi * 0.15915494, R / Rm)).xy; float tA = t - ds, zA = o.z + d.z * tA, zM = o.z + d.z * tm;
+    float av = c.a * ds + avStrato(sS, zA, o.z + d.z * t, ds), avM = c.a * (tm - tA) + avStrato(sS, zA, zM, tm - tA);
+    vec3 k = 0.921 * u_k.w * vec3(0.79, 1.0, 1.31), via = exp(-av * k);
+    vec3 dC = T * c.rgb * ds * exp(-avM * k); C += dC; T *= via;
     float l = dC.r + dC.g + dC.b; sw += l; st += l * tm; // (la distanza media pesata con la luce: per riportare la storia)
     if (max(T.r, max(T.g, T.b)) < 0.003) break; }
   o_col = vec4(C * u_k.x, sw > 0.0 ? st / sw : 0.0);

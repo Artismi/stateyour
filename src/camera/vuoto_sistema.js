@@ -62,6 +62,12 @@ import { quadro, coloreVero, occhio, MEZZO, KPC, PC } from './vuoto_mezzo.js';
 const K = COSTANTI, G = K.G, PI = Math.PI, PI4 = 4 * PI, PI2 = 2 * PI;
 const stringi = (x, a, b) => Math.max(a, Math.min(b, x));
 export const SISTEMA = Object.freeze({
+  // [S] la parte dei planetesimi espulsi dai giganti che a 4 miliardi di anni sta nella nube: Dones et al. 2004 (ASP Conf. Ser. 323,
+  // 371), il modello di riferimento, 5% alla fine (2,5% nella nube esterna, oltre 20 000 UA); le simulazioni successive tra il 5 e il
+  // 7% (Kaib e Quinn 2008; Brasser e Morbidelli 2013, Icarus 225, 40: 7,1 ± 0,3%) [S: letti in Brasser e Morbidelli 2013, §1.2 e
+  // §4.1 — Dones et al. e Brasser 2008 (A&A 492, 251) non riletti sulla fonte]. Uno solo per ogni età e ogni stella (dichiarato:
+  // nelle simulazioni cresce fino a ~1 miliardo di anni e poi cala; e dipende dal gigante e dall'ammasso in cui il Sole è nato)
+  intrappolati: 0.05,
   calcio: 10, // [R] il calcio in energia (1/a) che un pianeta dà a ogni passaggio a una cometa che arriva fin da lui: ~10·(M_p/M★)/a_p (Duncan, Quinn & Tremaine 1987, AJ 94, 1330; Tremaine 1993)
   nube: -3.5, // [R] la densità della nube esterna cala come r^−3,5 (Duncan, Quinn & Tremaine 1987): dN/da ∝ a^−1,5
   densitaSole: (0.1 * MSOLE) / PC ** 3, // [R] la materia attorno al Sole, 0,10 M☉/pc³ (Holmberg & Flynn 2000): SOLO se non si dice in che punto di quale galassia sta il sistema
@@ -385,8 +391,14 @@ export function corpiMinori(Sis, t = 0, { caso = sorgente('sistema'), attorno = 
       f.superficie = superficieDi(f.materiale, f.taglie.D0); f.sigma = Math.max(1e-4, (ORBITE.ripartizione * (f.caldaKg != null ? f.eFredda : f.e)) / ORBITE.rayleigh); /* la larghezza in latitudine dei CORPI (rad) */ f.sopra1km = f.taglie.sopra(1e3); f.distanzaTraCorpi = f.sopra1km > 0 ? Math.cbrt(f.volume / f.sopra1km) : Infinity;
     }
     // LA NUBE ESTERNA E CIÒ CHE ESCE: ogni pianeta scaglia (impatti.js: scagliataKg); una parte resta nella nube, il resto è perso tra le stelle
-    let inNube = 0, fuori = 0, aIn = Infinity; const perPianeta = [];
-    sk.forEach((s, i) => { const m = imp[i]?.bilancio?.scagliataKg || 0; if (!(m > 0)) return; const n = nubeDa(s, Mst, rho, st.eta); inNube += m * n.resta; fuori += m * (1 - n.resta); aIn = Math.min(aIn, n.aIn); perPianeta.push({ pianeta: s.p.id, scagliataKg: m, resta: n.resta, aIn: n.aIn }); });
+    // E PRIMA ANCORA, finito il gas: i planetesimi che il pianeta ha diffuso senza mangiarli (disco.js formazione.cibiDiffusi:
+    // Ida e Lin 2004, urto o diffusione col numero di Safronov). Dove Θ = v_fuga²/(2v_K²) > 1 il pianeta li manda oltre la
+    // velocità di fuga dalla stella: sono espulsi. Di quelli una parte resta nella nube con l'efficienza delle simulazioni
+    // della sua formazione (SISTEMA.intrappolati); gli altri sono persi tra le stelle. (Prima la nube era la sola scagliataKg,
+    // ~10²² kg per il Sole dal disco di Kimura: i diffusi non arrivavano da nessuna parte)
+    let inNube = 0, fuori = 0, aIn = Infinity, diffusi = 0; const perPianeta = [];
+    sk.forEach((s, i) => { const m = imp[i]?.bilancio?.scagliataKg || 0, d = s.fionda > 1 ? s.p.formazione?.cibiDiffusi || 0 : 0; if (!(m > 0) && !(d > 0)) return; const n = nubeDa(s, Mst, rho, st.eta);
+      inNube += m * n.resta + d * SS.intrappolati; fuori += m * (1 - n.resta) + d * (1 - SS.intrappolati); diffusi += d; aIn = Math.min(aIn, n.aIn); perPianeta.push({ pianeta: s.p.id, scagliataKg: m, resta: n.resta, diffusiKg: d, aIn: n.aIn }); });
     const aOut = bordoNube(Mst, rho), nube = inNube > 0 && aIn < aOut ? { massaKg: inNube, aIn, aOut, taglie: taglie(inNube, 'ghiaccio'), profilo: SS.nube, perPianeta } : null;
     if (nube) nube.sopra1km = nube.taglie.sopra(1e3);
     // i corpi scacciati interi (pianeti vaganti): quelli che la fionda ha mandato fuori (formazione.orfani, non «dentro»)
@@ -400,7 +412,7 @@ export function corpiMinori(Sis, t = 0, { caso = sorgente('sistema'), attorno = 
       let perPassaggio = 0; const nq = 12, nr = 48; for (let iq = 0; iq < nq; iq++) { const qq = (entro * (iq + 0.5)) / nq, h = Math.log(entro / qq) / nr; for (let ir = 0; ir < nr; ir++) { const r = qq * Math.exp((ir + 0.5) * h), vr = Math.sqrt((2 * mu) / r) * Math.sqrt(Math.max(1e-9, 1 - qq / r)); perPassaggio += (2 * sublimaA(r, st.Lw).flusso * r * h) / vr / nq; } }
       return ((1 - DISCO.ghiaccio) / DISCO.ghiaccio) * perPassaggio * PI * (D2 / 4) * (ritmo / ANNO); };
     let rElenco = 0; if (st.Lw > 0) { let lo = 0.01 * UA, hi = 1e3 * UA; for (let k = 0; k < 50; k++) { const m = Math.sqrt(lo * hi); if (sublimaA(m, st.Lw).inVapore > 0.01) lo = m; else hi = m; } rElenco = Math.sqrt(lo * hi); }
-    F = { rho, sk, imp, fasce, esaurite, nube, polvere, polvereComete, rElenco, espulso: { planetesimiKg: fuori, nellaNubeKg: inNube, pianetiVaganti: vaganti, perPianeta, attornoDato: attorno != null }, rAttiva: st.Lw > 0 ? distanzaAttiva(st.Lw) : 0 };
+    F = { rho, sk, imp, fasce, esaurite, nube, polvere, polvereComete, rElenco, espulso: { planetesimiKg: fuori, nellaNubeKg: inNube, diffusiKg: diffusi, pianetiVaganti: vaganti, perPianeta, attornoDato: attorno != null }, rAttiva: st.Lw > 0 ? distanzaAttiva(st.Lw) : 0 };
     fatti.set(Sis, F);
   }
   // ---- I CORPI DI UNA FASCIA, dal più grande in giù (lo stesso corpo allo stesso indirizzo, quanti se ne chiedano)

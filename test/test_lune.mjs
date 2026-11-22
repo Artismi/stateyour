@@ -267,18 +267,17 @@ prova('l\'ordine non conta: pianeti calcolati all\'indietro, eventi riletti all\
   assert.equal(JSON.stringify(lune({ ...GIOVE, id: 2 }, SOLE, 7)), JSON.stringify(lune({ ...GIOVE, id: 2 }, SOLE, sorgente('lune 7/pianeta 2'))));
 });
 
-prova('nel cosmo: il ramo di un evento del disco o di una luna, scritto tra i rami del cosmo, cambia quella cosa sola e ciò che ne discende', () => {
+prova('nel cosmo: l\'eccentricità secolare di un pianeta è data dall\'indirizzo, in qualunque ordine la si chieda; il ramo di una luna, scritto tra i rami del cosmo, cambia quella cosa sola e ciò che ne discende', () => {
   const pianetiDi = (S) => S.pianeti.map((p) => JSON.stringify([p.aM, p.massaKg, p.raggioM, p.tipo, p.composizione])), luneDi = (p) => JSON.stringify(p.lune.map((l) => ({ ...l, id: 0 })));
-  let dischi = 0, catture = 0;
+  let dischi = 0, catture = 0; const visti = [];
   for (let n = 1; n < 60000 && (dischi < 6 || catture < 6); n += 191) {
     const a = indirizzoDi(n), S0 = sistema(a.cosmo, a.galassia, a.stella), stella = `cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}`; if (S0.pianeti.length < 3) continue;
     const accanto = (c) => JSON.stringify(sistema(c, a.galassia, (a.stella + 1) % 2500).pianeti.map((p) => [p.aM, p.massaKg, p.eccentricita, luneDi(p)]));
-    if (dischi < 6) { // l'eccentricità di oggi di un pianeta (un evento del disco): stessi pianeti, stesse orbite, stesse masse; un'altra eccentricità per lui
-      const k = 1, ev = `${stella}/disco/embrione ${S0.pianeti[k].formazione.embrione}/eccentricità`, c1 = cosmoCon(a.cosmo, { [ev]: 1 }), S1 = sistema(c1, a.galassia, a.stella);
-      assert.deepEqual(pianetiDi(S1), pianetiDi(S0), ev); assert.notEqual(S1.pianeti[k].eccentricita, S0.pianeti[k].eccentricita, ev);
-      S0.pianeti.forEach((p, i) => { if (Math.abs(i - k) > 1) { assert.equal(S1.pianeti[i].eccentricita, p.eccentricita); assert.equal(luneDi(S1.pianeti[i]), luneDi(p)); } });
-      assert.equal(accanto(c1), accanto(a.cosmo)); dischi++;
-    }
+    // (PRIMA: «disco/embrione N/eccentricità», un evento che dava a un pianeta un'altra eccentricità di oggi. Dal disco di Kimura
+    // l'eccentricità di oggi non è più un caso: è quella SECOLARE all'età della stella (disco.js, Laplace–Lagrange), e quell'evento
+    // non esiste più. Resta ciò che la prova chiedeva: l'eccentricità di un pianeta è sua, data dall'indirizzo e da nient'altro.
+    // Qui la si prende all'andata; sotto, svuotata la memoria dei sistemi, la si richiede in ordine inverso: deve tornare identica)
+    if (dischi < 6) { visti.push({ a, ecc: JSON.stringify(S0.pianeti.map((p) => [p.aM, p.eccentricita])) }); dischi++; }
     const q = S0.pianeti.find((p) => p.lune.some((l) => l.origine === 'cattura'));
     if (q && catture < 6) { // l'orbita di una luna catturata: gli stessi pianeti, le stesse altre lune
       const quella = q.lune.find((l) => l.origine === 'cattura'), ev = `${stella}/pianeta ${q.id}/lune/${quella.evento}/eccentricità`, c1 = cosmoCon(a.cosmo, { [ev]: 1 }), S1 = sistema(c1, a.galassia, a.stella);
@@ -292,7 +291,12 @@ prova('nel cosmo: il ramo di un evento del disco o di una luna, scritto tra i ra
     if (q && catture === 1) { const c2 = cosmoRamo(a.cosmo, `lune/${a.galassia}/${a.stella}/${q.id}`, 1), S2 = sistema(c2, a.galassia, a.stella); assert.notEqual(luneDi(S2.pianeti[q.id]), luneDi(q)); S0.pianeti.forEach((p, i) => { if (p !== q) assert.equal(luneDi(S2.pianeti[i]), luneDi(p)); }); }
   }
   assert.ok(dischi >= 6 && catture >= 6, `${dischi} sistemi, ${catture} lune catturate`);
-  console.log(`      (${dischi} sistemi con l'eccentricità di un pianeta andata diversamente, ${catture} con l'orbita di una luna catturata: il resto del sistema e la stella accanto identici)`);
+  // l'eccentricità secolare, all'indietro: prima si chiedono altri 80 sistemi (la memoria di cosmo.js ne tiene 64, così non ne
+  // resta nessuno di quelli visti), poi gli stessi indirizzi in ordine inverso; e non è una costante: i pianeti non l'hanno uguale
+  for (let j = 0; j < 80; j++) { const b = indirizzoDi(70001 + 37 * j); sistema(b.cosmo, b.galassia, b.stella); }
+  for (const { a, ecc } of visti.slice().reverse()) assert.equal(JSON.stringify(sistema(a.cosmo, a.galassia, a.stella).pianeti.map((p) => [p.aM, p.eccentricita])), ecc, `cosmo ${a.cosmo}/galassia ${a.galassia}/stella ${a.stella}: l'eccentricità secolare cambia con l'ordine delle richieste`);
+  assert.ok(new Set(visti.flatMap(({ ecc }) => JSON.parse(ecc).map((x) => x[1]))).size > 6, 'le eccentricità secolari sono tutte uguali');
+  console.log(`      (${dischi} sistemi con l'eccentricità secolare identica richiesta all'indietro, ${catture} con l'orbita di una luna catturata: il resto del sistema e la stella accanto identici)`);
 });
 
 console.log(`\n${ok} prove superate${nonTorna.length ? `; ${nonTorna.length} riscontri col vero NON TORNANO:` : ''}`); for (const r of nonTorna) console.log(`   ≠ ${r}`);

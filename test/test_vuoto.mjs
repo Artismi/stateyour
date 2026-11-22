@@ -359,7 +359,8 @@ const SISTEMI = [];
 prova('dodici sistemi attorno a stelle come il Sole: fasce, nube, comete, corpi — conservazione, determinismo, orbite vere', () => {
   for (let k = 0; k < 12; k++) { const caso = sorgente(`prova/sistema ${k}`), Sis = V.sistemaDi({ massa: 1, Z: 1, eta: 4.57e9 }, caso), t = performance.now(), m = V.corpiMinori(Sis, 0, { caso }), ms = performance.now() - t; SISTEMI.push({ caso, Sis, m, ms });
     // ciò che ogni pianeta ha scagliato (impatti.js) è finito nella nube o tra le stelle: niente si crea
-    const scagliata = Sis.pianeti.reduce((s, p) => s + (V.dentroSistema.storiaDi(Sis, p, caso)?.bilancio.scagliataKg || 0), 0); if (scagliata > 0) tra((m.espulso.planetesimiKg + m.espulso.nellaNubeKg) / scagliata, 1 - 1e-9, 1 + 1e-9, 'scagliati = nella nube + persi');
+    // (e così i planetesimi diffusi dai pianeti con il numero di Safronov sopra 1, che finito il gas li espellono: disco.js cibiDiffusi)
+    const scagliata = Sis.pianeti.reduce((s, p) => s + (V.dentroSistema.storiaDi(Sis, p, caso)?.bilancio.scagliataKg || 0) + (V.dentroSistema.schedaPianeta(p, MSOL_KG).fionda > 1 ? p.formazione?.cibiDiffusi || 0 : 0), 0); if (scagliata > 0) tra((m.espulso.planetesimiKg + m.espulso.nellaNubeKg) / scagliata, 1 - 1e-9, 1 + 1e-9, 'scagliati = nella nube + persi');
     if (m.nube) assert.ok(m.nube.aIn < m.nube.aOut && m.nube.aIn > Sis.pianeti[Sis.pianeti.length - 1].aM, 'la nube sta fuori dai pianeti');
     for (const f of m.fasce) { assert.ok(f.oggiKg > 0 && f.a1 < f.a2 && f.oggiKg <= f.inizioKg * (1 + 1e-9) && f.sopra1km >= 1, `${f.nome}`); for (const r of f.risonanze) assert.ok(r.aM >= f.a1 && r.aM <= f.a2); }
     for (const c of m.corpi) { const f = m.fasce.find((x) => x.nome === c.fascia), r = Math.hypot(...c.pos), el = c.elementi; assert.ok(el.a >= f.a1 && el.a <= f.a2, 'il semiasse sta nella fascia'); tra(r, el.a * (1 - el.e) * (1 - 1e-9), el.a * (1 + el.e) * (1 + 1e-9), 'tra perielio e afelio');
