@@ -145,7 +145,7 @@ let telaAtomi = null, vistaAtomi = null, chiaveAtomi = null, bottoneAtomi = null
 function smontaAtomi() {
   smontaQuanti();
   if (vistaAtomi) { try { vistaAtomi.libera(); } catch { /* già perso */ } }
-  telaAtomi?.remove(); bottoneAtomi?.remove(); telaAtomi = null; vistaAtomi = null; bottoneAtomi = null; chiaveAtomi = null;
+  telaAtomi?.remove(); bottoneAtomi?.remove(); telaAtomi = null; vistaAtomi = null; bottoneAtomi = null; chiaveAtomi = null; coloreAtomoVisto = null;
 }
 // allontanandosi oltre la scena degli atomi si torna all'immagine piatta, alla stessa grandezza a schermo (z dalla grandezza vera)
 // (liscio: ci si esce alla grandezza a cui si era entrati, dove gli atomi sono già sfumati del tutto: niente istantanea)
@@ -183,7 +183,7 @@ function montaAtomi() {
     { const c = vistaAtomi.camera; c.yaw = 0; c.pitch = 0; if (mppPrima > 0) c.dist = (mppPrima * tela.clientHeight) / (2 * Math.tan((c.fov || 0.6) / 2)) * 1e9; }
     mppAtomi0 = mppPrima > 0 ? mppPrima : 0; telaAtomi.style.opacity = mppAtomi0 > 0 ? '0' : '1';
     // (la rotella la usa prima la vista; poi qui: la dissolvenza, e oltre la grandezza d'ingresso si torna all'immagine piatta)
-    telaAtomi.addEventListener('wheel', (e) => { if (!vistaAtomi) return; if (e.deltaY > 0 && mppAtomi0 > 0 && misura() >= mppAtomi0 * 0.999) { esciDagliAtomi(true); return; } fondiAtomi(); });
+    telaAtomi.addEventListener('wheel', (e) => { if (!vistaAtomi) return; if (e.deltaY > 0 && mppAtomi0 > 0 && misura() >= mppAtomi0 * 0.999) { esciDagliAtomi(true); return; } fondiAtomi(); requestAnimationFrame(guardaAtomo); });
     // oltre il più vicino possibile (dentro l'atomo): la scala quantistica, alla sua grandezza (montaQuanti)
     telaAtomi.addEventListener('wheel', (e) => {
       if (!(e.deltaY < 0 && vistaAtomi && vistaAtomi.camera.dist <= 0.1)) return;
@@ -217,12 +217,24 @@ function smontaQuanti() {
 // 0,9 fm. Ogni decade di densità è una fascia appena più chiara (le isolinee in log ρ): a ogni ingrandimento c'è una
 // superficie da vedere, come chiede la continuità (rapporto «Generatore multiscala», §5).
 // (3) IL COLORE DEL CAMPO È QUELLO DELL'ATOMO: la densità elettronica è l'atomo stesso, la sfera vista da vicino. Il suo colore
-// è quello che lo schermo aveva entrando (la media dell'istantanea degli atomi, `media0`): il guadagno di ogni canale si
+// è quello della sfera vista da fuori, l'ultima volta che la camera degli atomi le stava fuori (guardaAtomo; se manca, lo
+// schermo entrando), `media0`: il guadagno di ogni canale si
 // sceglie perché la media a schermo della densità, alla grandezza d'ingresso, sia proprio quella. Così nella fusione la media
 // del colore e la luminanza si conservano (w·densità + (1 − w)·atomi con le due medie uguali). Le misure dello strumento,
 // i punti, restano nel verde del suo fosforo: quello è lo strumento, non l'atomo. (Prima il campo era nel verde del
 // fosforo, scuro: dalla sfera colorata al verde un salto di ΔE ≈ 25 in un passo di mezza decade.)
 const FUSIONE_QUANTI = 10 ** 1.5;
+// L'ATOMO VISTO DA FUORI: a ogni scatto della rotella sugli atomi, finché la camera sta fuori dalla sfera dell'atomo più
+// vicino al punto guardato, la media a schermo della tela degli atomi. L'ultima è la sfera vista da vicino: il colore che la
+// densità deve avere (densitaQuanti, 3). (Dentro la sfera la vista degli atomi non la disegna più: si vede ciò che c'è dietro.)
+let coloreAtomoVisto = null;
+function guardaAtomo() {
+  const sc = scenaAtomiOra; if (!vistaAtomi || !sc || !telaAtomi || telaQuanti) return;
+  const u = { m: 1, nm: 1e-9, A: 1e-10 }[sc.unita || 'nm'] || 1e-9, c = vistaAtomi.camera, b = c.bersaglio.map((x) => (x * 1e-9) / u), P = sc.atomi.pos; let i0 = -1, d0 = Infinity;
+  for (let i = 0; i < P.length / 3; i++) { const d = (P[3 * i] - b[0]) ** 2 + (P[3 * i + 1] - b[1]) ** 2 + (P[3 * i + 2] - b[2]) ** 2; if (d < d0) { d0 = d; i0 = i; } }
+  if (i0 < 0 || !((c.dist * 1e-9) / u > sc.atomi.raggio[i0] + Math.sqrt(d0))) return;
+  try { coloreAtomoVisto = mediaTela(telaAtomi); } catch { /* resta quello di prima */ }
+}
 // la media del colore a schermo (sRGB, 0–255) di una tela: la si riduce a 16×16 col filtro del navigatore
 const mediaTela = (cv) => { if (!cv) return null; const c = document.createElement('canvas'); c.width = c.height = 16; const x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingEnabled = true; x.drawImage(cv, 0, 0, 16, 16); const d = x.getImageData(0, 0, 16, 16).data, m = [0, 0, 0]; for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) m[k] += d[4 * i + k] / 256; return m; };
 function densitaQuanti(Qc, atomo, alta, media0 = null) {
@@ -264,7 +276,7 @@ function densitaQuanti(Qc, atomo, alta, media0 = null) {
 async function montaQuanti() {
   if (telaQuanti || quantiAssenti) { if (quantiAssenti) $('dove').textContent = 'Sotto gli atomi: la scala quantistica (src/tre/quanti.js) non si è potuta montare. Qui finisce, per ora, la scala.'; return; }
   const alta = (misura() || 0) * tela.clientHeight, r = camMappa ? rocciaDi(camMappa) : null, sc = scenaAtomiOra; if (!sc || !(alta > 0)) return;
-  let media0 = null; try { media0 = mediaTela(istantanea()); } catch { media0 = null; } // (il colore a schermo entrando: quello della densità, vedi densitaQuanti)
+  let media0 = coloreAtomoVisto; if (!media0) { try { media0 = mediaTela(istantanea()); } catch { media0 = null; } } // (il colore della sfera vista da fuori, o lo schermo entrando: quello della densità, vedi densitaQuanti)
   let mod, Qc; try { [mod, Qc] = await Promise.all([import('../tre/quanti.js'), import('./quanti.js')]); } catch { quantiAssenti = true; return montaQuanti(); }
   if (!vistaAtomi || telaQuanti || typeof mod.creaQuanti !== 'function') return;
   try {
