@@ -29,6 +29,7 @@
 // della neve, l'età della lava (nessuna «lava fresca» distinta dalla vecchia), la vita.
 import { tessera } from '../camera/geologia.js';
 import { coloraMare } from '../camera/mare.js';
+import { acquaNelPunto } from '../camera/colore_acqua.js';
 import { CLIMA } from '../camera/leggi.js';
 import { ricorda } from '../camera/deposito.js';
 import { sistema } from '../camera/cosmo.js';
@@ -296,8 +297,15 @@ function prepara(L, tx, ty) {
   let acqua = null;
   if (haAcqua && liquido) { acqua = new Uint8ClampedArray(4 * W * H); coloraMare(B.mare, sf, acqua); const luce = B.mare.luce || [1, 1, 1], CIELO = [0.008, 0.012, 0.018];
     for (let k = 0; k < W * H; k++) { if (!bagnato[k]) { acqua[4 * k + 3] = 0; continue; } if (!acqua[4 * k + 3]) { acqua.set([10, 30, 60, 255], 4 * k); }
-      const raw = [0, 1, 2].map((q) => lin(acqua[4 * k + q])), inv = raw.map((x, q) => 0.54 * Math.max(0, x / (3.5 * luce[q]) - CIELO[q])), f = Math.max(0, Math.min(1, (Math.min(...raw) - 0.35) / 0.25));
-      for (let q = 0; q < 3; q++) acqua[4 * k + q] = srgb(inv[q] + (raw[q] - inv[q]) * f); } }
+      const raw = [0, 1, 2].map((q) => lin(acqua[4 * k + q])), f = Math.max(0, Math.min(1, (Math.min(...raw) - 0.35) / 0.25));
+      // (l'acqua libera: la stessa ottica in 21 bande, colore_acqua.js, che sa dove coloraMare mette ghiaccio o sale — lì resta il
+      // suo colore, scelto come prima dalla sua chiarezza. Prima anche un fondo chiaro e basso, carbonato o sabbia, passava per
+      // ghiaccio: la riflettanza «com'è» di coloraMare, con la sua esposizione dentro, fino a 0,9)
+      const i = k % W, j = (k - i) / W, d = haMare && sf.alt[k] < mare ? mare - sf.alt[k] : sf.lago && sf.lago[k] > 0 ? sf.lago[k] : 1;
+      const ombra = d < 80 ? Math.max(0.55, Math.min(1.5, 1 + (sf.alt[j * W + (i > 0 ? i - 1 : i)] - sf.alt[k] + sf.alt[(j > 0 ? j - 1 : j) * W + i] - sf.alt[k]) / Math.max(2, 0.02 * passoLat))) : 1;
+      const [ru0, , ru1] = sf.rett || [0, 0, 1, 1], sp = acquaNelPunto(B.mare, (ru0 + ((i + 0.5) / W) * (ru1 - ru0)) * 360 - 180, 90 - (v0 + ((j + 0.5) / H) * (v1 - v0)) * 180, d, ombra);
+      const inv = sp || raw.map((x, q) => 0.54 * Math.max(0, x / (3.5 * luce[q]) - CIELO[q]));
+      for (let q = 0; q < 3; q++) acqua[4 * k + q] = srgb(sp ? inv[q] : inv[q] + (raw[q] - inv[q]) * f); } }
   // (perché sulla riva i due colori non si mescolino: quello dell'acqua si estende sulla terra vicina e viceversa)
   const estendi = (img, vale) => { let ok = new Uint8Array(W * H); for (let k = 0; k < W * H; k++) ok[k] = vale(k) ? 1 : 0;
     for (let giro = 0; giro < 3; giro++) { const dopo = ok.slice();

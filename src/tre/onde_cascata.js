@@ -76,16 +76,19 @@ export function creaCascata(radice) {
       // (la parte che frange, resa simmetrica in ±k perché l'accelerazione resti un campo reale) e le varianze della tessera
       for (const q of attivi) { const i = q % N, j = (q - i) / N, qm = ((N - j) % N) * N + ((N - i) % N); if (qm > q) { const x = 0.5 * (T.rompe[q] + T.rompe[qm]); T.rompe[q] = T.rompe[qm] = x; } }
       for (const q of attivi) { const F = Fq[q]; if (!(F > 0)) continue; mss += F * dk * dk * (T.kx[q] ** 2 + T.ky[q] ** 2); vh += F * dk * dk; va += F * dk * dk * T.om[q] ** 4 * T.rompe[q] ** 2; }
-      T.mss = mss; T.sH = Math.sqrt(vh) || 1e-9; T.sS = Math.sqrt(mss / 2) || 1e-9; T.sA = Math.sqrt(va) || 1e-12; T.memoria.fill(0);
+      T.mss = mss; T.sH = Math.sqrt(vh) || 1e-9; T.sS = Math.sqrt(mss / 2) || 1e-9; T.sA = Math.sqrt(va) || 1e-12; T.memoria.fill(0); T.tPrima = null;
     }
     // l'increspatura più corta dell'ultima banda: la pendenza quadratica media dello spettro oltre (fino a 40 numeri d'onda capillari)
     const kc = (DUE_PI / C[n - 1].L) * CASCATA.kMin * r; mssCoda = sp.mss(kc, Math.max(kc * 1e3, 40 * (sp.km || kc)));
     pronta = true; tPrima = null;
   }
-  // il campo all'istante t (s): riempie `dati` (RGBA8 per tessera: pendenza est, pendenza nord, quota, rango della schiuma)
-  function aggiorna(t) {
-    if (!pronta) return false; const dt = tPrima == null ? 0 : Math.max(0, Math.min(10, t - tPrima)); tPrima = t; const dec = Math.exp(-dt / CASCATA.tauB);
+  // il campo all'istante t (s): riempie `dati` (RGBA8 per tessera: pendenza est, pendenza nord, quota, rango della schiuma).
+  // «attive» (facoltativo): quali tessere rifare; le altre restano come erano (pianeta.js non le legge: sono sotto il punto
+  // dello schermo dappertutto). La memoria della schiuma di una tessera si disfa col tempo passato da quando è stata rifatta.
+  function aggiorna(t, attive = null) {
+    if (!pronta) return false; tPrima = t;
     for (const T of C) {
+      if (attive && !attive[T.c]) continue; const dt = T.tPrima == null ? 0 : Math.max(0, Math.min(10, t - T.tPrima)); T.tPrima = t; const dec = Math.exp(-dt / CASCATA.tauB);
       // ĥ(k,t) e il suo coniugato in −k: le due trasformate (pendenze; quota + i·accelerazione); fuori dalla banda zero
       reA.fill(0); imA.fill(0); reB.fill(0); imB.fill(0);
       for (const q of T.attivi) {

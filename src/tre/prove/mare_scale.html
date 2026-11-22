@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="it">
+<head><meta charset="utf-8"><title>prova: il mare aperto a ogni scala (pianeta.js)</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style></head>
+<body>
+<canvas id="tela" width="400" height="250"></canvas>
+<script type="module">
+// La pagina che strumenti/misure/foto_mare.mjs guida: un pianeta dell'indirizzo dato (la superficie, il clima, il mare come
+// superficieDi, senza fili), il 3D di pianeta.js sopra un punto di mare aperto, a una quota, con la stella a un'altezza data.
+//   carica(via)                  → { punto } il punto di mare aperto più profondo lontano dal ghiaccio, a metà tra equatore e polo
+//   foto({ larghezza, alza, falsi }) → { quota, msMediana, statistiche } (la camera guarda verso la stella)
+import { creaNucleo } from '../nucleo.js';
+import { creaPianeta } from '../pianeta.js';
+import { sistema } from '../../camera/cosmo.js';
+import * as GE from '../../camera/geologia.js';
+import * as MA from '../../camera/mare.js';
+
+let N = null, Pi = null, S = null, P = null, punto = null, via = null;
+const RAD = Math.PI / 180;
+const aspetta = (f, ms = 180000) => new Promise((ok, no) => { const t0 = performance.now(), p = () => { let v = false; try { v = f(); } catch { v = false; } if (v) ok(v); else if (performance.now() - t0 > ms) no(new Error('scaduto')); else { if (N) N.fotogramma(); setTimeout(p, 300); } }; p(); });
+const pulito = (o) => { if (!o || typeof o !== 'object' || ArrayBuffer.isView(o)) return o; if (Array.isArray(o)) return o.map(pulito); const r = {}; for (const q in o) if (typeof o[q] !== 'function') r[q] = pulito(o[q]); return r; };
+
+async function carica(v) {
+  via = v; const Sis = sistema(v.cosmo, v.galassia, v.stella); P = Sis.pianeti[v.pianeta]; const k = JSON.stringify(v);
+  const sf = GE.superficiePianeta(k, P, P.interno, P.origine), cl = GE.climaSuperficie(k, P, sf), se = GE.erosione(k, sf, cl), st = MA.mare(P, se, cl, se, `${k}/mare`);
+  S = { k, P, cl: pulito(cl), se: pulito(se), seme: P.origine, mare: pulito(st) };
+  // il punto: mare aperto (fondale ≥ 1000 m, niente ghiaccio) sotto un cielo coperto tra un decimo e metà (si vede il mare e
+  // l'ombra delle nuvole), col gradiente di temperatura più forte
+  let best = null; const me = cl.meteo, nuv = (lon, lat) => me && me.nuvole ? me.nuvole[Math.min(me.H - 1, Math.floor(((90 - lat) / 180) * me.H)) * me.W + Math.min(me.W - 1, Math.floor(((lon + 180) / 360) * me.W))] : 0.3;
+  for (let j = 0; j < st.H; j++) for (let i = 0; i < st.W; i++) {
+    const lat = 90 - ((j + 0.5) * 180) / st.H, lon = ((i + 0.5) * 360) / st.W - 180, q = MA.luogo(st, lon, lat); if (q.tipo !== 'mare' || q.ghiaccio > 0 || q.fondoM < 1000) continue;
+    const T = st.temperatura, W = st.W, g = Math.hypot(T[j * W + ((i + 1) % W)] - T[j * W + ((i + W - 1) % W)], T[Math.min(st.H - 1, j + 1) * W + i] - T[Math.max(0, j - 1) * W + i]);
+    const n = nuv(lon, lat); if (n < 0.1 || n > 0.5) continue; const sc = g - 1e-3 * Math.abs(Math.abs(lat) - 30); if (!best || sc > best.s) best = { s: sc, lon, lat, fondoM: q.fondoM, nuvole: n }; // (a pari gradiente, la più vicina a 30°)
+  }
+  punto = best;
+  N = creaNucleo(document.getElementById('tela'), { densita: 1, interazione: false, conserva: true }); N.tempo.pausa = false;
+  Pi = creaPianeta(N, { P, stella: Sis.stella, via: v, superficie: () => S, opzioni: { ondeTutte: location.search.includes('tutte') } }); N.attacca(Pi.corpo, { distanza: 3 * P.raggioM });
+  // l'istante in cui la stella sta a 50° sopra il punto, salendo
+  const lat = punto.lat * RAD, lon = punto.lon * RAD, cl2 = Math.cos(lat), q = [cl2 * Math.cos(lon), Math.sin(lat), -cl2 * Math.sin(lon)], g = P.bloccato ? P.anno : P.giorno;
+  const mu = (tt) => { const A = N.assettoDi(Pi.corpo, tt), s = N.V.norma(N.tra(Pi.corpo, Pi.stella, tt)), su = N.V.mv(A, q); return N.V.scal(su, s); };
+  let tm = 0, dm = Infinity; for (let k2 = 0; k2 < 1440; k2++) { const tt = (k2 / 1440) * g, m = mu(tt); if (mu(tt + g / 1440) > m && Math.abs(m - Math.sin(50 * RAD)) < dm) { dm = Math.abs(m - Math.sin(50 * RAD)); tm = tt; } }
+  N.tempo.t = tm; N.tempo.velocita = 1;
+  // la direzione della stella sull'orizzonte del punto (da nord verso est)
+  const A = N.assettoDi(Pi.corpo, tm), s = N.V.norma(N.tra(Pi.corpo, Pi.stella, tm)), su = N.V.mv(A, q), est = N.V.mv(A, [-Math.sin(lon), 0, -Math.cos(lon)]), nord = N.V.norma(N.V.vett(su, est));
+  punto.azStella = Math.atan2(N.V.scal(s, est), N.V.scal(s, nord));
+  return { punto, mare: { Rv: st.raggioVortici, termoclino: st.termoclino } };
+}
+async function foto({ larghezza = 2e4, alza = -1.2, falsi = null, fotogrammi = 3 } = {}) {
+  N.opzioni.falsiColori = falsi;
+  const quota = larghezza / (2 * Math.max(0.2, N.stato.tanX || 0.7)) * Math.abs(Math.sin(alza));
+  N.vai({ lon: punto.lon * RAD, lat: punto.lat * RAD, quota, direzione: punto.azStella, alza });
+  for (let i = 0; i < 4; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 30)); }
+  await aspetta(() => { const s = Pi.statistiche?.(); return s && s.inAttesa === 0 && s.tessere > 0; }).catch(() => null);
+  for (let i = 0; i < 4; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 15)); }
+  const gl = N.gl, px = new Uint8Array(4), ms = [];
+  for (let i = 0; i < fotogrammi; i++) { const t0 = performance.now(); N.fotogramma(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ms.push(performance.now() - t0); await new Promise((r) => setTimeout(r, 5)); }
+  ms.sort((a, b) => a - b); return { quota, msMediana: ms[ms.length >> 1], statistiche: Pi.statistiche?.() };
+}
+// LA MISURA DELLE TESSERE DELLE ONDE: lo stesso istante (il tempo fermo) disegnato saltando le tessere sotto il punto e
+// leggendole tutte → la differenza media e massima dei pixel (0…255) e i ms della CPU per fotogramma delle due maniere
+async function confronta({ fotogrammi = 24 } = {}) {
+  const gl = N.gl, W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, leggi = () => { const a = new Uint8Array(4 * W * H); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, a); return a; };
+  const cpu = async (tutte) => { N.opzioni.ondeTutte = tutte; N.tempo.pausa = false; await new Promise((r) => setTimeout(r, 50)); const s0 = Pi.statistiche().onde; for (let i = 0; i < fotogrammi; i++) { N.fotogramma(); await new Promise((r) => setTimeout(r, 20)); } const s1 = Pi.statistiche().onde; return { ms: (s1.msSomma - s0.msSomma) / Math.max(1, s1.n - s0.n), attive: s1.attive }; };
+  await cpu(true); const normale = await cpu(false), tutte = await cpu(true); // (il primo giro scalda il compilatore)
+  // (A prima e dopo B, e B contro la loro media: l'occhio che si adatta cambia la luce da un fotogramma all'altro anche a tempo fermo)
+  N.tempo.pausa = true; N.opzioni.ondeTutte = false; N.fotogramma(); const A1 = leggi(); N.opzioni.ondeTutte = true; N.fotogramma(); const B = leggi(); N.opzioni.ondeTutte = false; N.fotogramma(); const A2 = leggi(); N.tempo.pausa = false;
+  const A = A1.map((x, i) => 0.5 * (x + A2[i]));
+  let s = 0, m = 0; for (let i = 0; i < A.length; i += 4) for (let c = 0; c < 3; c++) { const d = Math.abs(A[i + c] - B[i + c]); s += d; if (d > m) m = d; }
+  return { diffMedia: s / (3 * W * H), diffMassima: m, normale, tutte };
+}
+window.prova = { carica, foto, confronta, caricata: true, get N() { return N; }, get Pi() { return Pi; } };
+</script>
+</body></html>

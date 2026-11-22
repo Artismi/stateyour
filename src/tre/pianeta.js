@@ -20,7 +20,13 @@
 //     incommensurabili (onde_cascata.js), come spostamento della superficie e come pendenza per i riflessi (il cielo riflesso
 //     nella direzione speculare: la forma di Rayleigh, la media della tabella del cielo); il vento della carta con le raffiche
 //     dello strato limite cambia punto per punto le onde corte, il riflesso (Cox e Munk) e la schiuma (Monahan, che dura e si
-//     raccoglie nelle righe di Langmuir): vedi il frammento.
+//     raccoglie nelle righe di Langmuir): vedi il frammento. I VORTICI di mesoscala (vortici.js: le statistiche di Chelton e
+//     altri 2011 come processo di punti per indirizzo) girano l'acqua: la temperatura del mare si avvolge in bracci e filamenti
+//     fino alla larghezza della sottomesoscala, il fango che l'acqua porta viene da dove l'acqua è venuta, e il vento che alza
+//     le onde corte è quello relativo alla corrente. Il colore dell'acqua libera è in 21 bande (colore_acqua.js, nel filo).
+//   · I FALSI COLORI DELLA TEMPERATURA (lo strumento del visore, strumenti.js: opzioni.falsiColori = 'temperatura'): la
+//     temperatura della superficie nella scala Turbo (falsi_colori.js), senza l'aria davanti, con la scala che si adatta a ciò
+//     che si guarda (scalaFalsi; in opzioni.scalaTemperatura).
 //   · I MATERIALI: le riflettanze delle rocce per classe, del sedimento, della neve e del ghiaccio (tessere.worker.js).
 //   · IL SUOLO FINE (suolo.js, PROGETTO.md lavoro 9): a pochi metri dal suolo, sotto l'occhio, la finestra del suolo di quel
 //     punto (20 m in 256 punti quando lo schermo è largo meno di 20 m sul suolo, 200 m fino a 200 m), calcolata solo lì con la legge di suolo.js e con lo stesso indirizzo
@@ -58,6 +64,8 @@ import { accumuloAttivo } from './accumulo.js';
 import { luogoDi } from './bolla.js';
 import { creaCascata, CASCATA } from './onde_cascata.js';
 import { mareLungo } from '../camera/mare_lungo.js';
+import { creaVortici } from '../camera/vortici.js';
+import { GLSL_TURBO } from './falsi_colori.js';
 
 const TW = 256, TH = 128, TWB = TW + 2, THB = TH + 2, MX = 32, MY = 16, LMAX = 7, DMAX = 2 * LMAX + 3;
 const RAD = Math.PI / 180, K_B = 1.380649e-23, R_GAS = 8.314;
@@ -184,6 +192,7 @@ uniform vec2 u_sfuma;     // tra queste due distanze dall'occhio i dati passano 
 uniform highp sampler2DArray u_ondeT;
 uniform vec4 u_cM[4]; uniform vec2 u_cO[4]; uniform vec4 u_cS[4];
 uniform float u_ondeSi;   // 1 se le onde ci sono
+uniform vec4 u_cAtt;      // 1 per le tessere rifatte in questo fotogramma (le altre sono sotto il punto dello schermo dappertutto: aggiornaTessereOnde)
 ${GLSL_ONDE}
 uniform vec4 u_fineG;     // IL SUOLO FINE: dove sta la pezza nelle coordinate della finestra (0…1, da sud-ovest): il suo centro e la sua ampiezza
 out vec3 v_su; out vec3 v_est; out vec3 v_rel; out vec4 v_dati; out vec2 v_uv; out vec3 v_uvM; out vec2 v_en; out float v_w; out vec2 v_fw;
@@ -211,7 +220,8 @@ void main() {
   vec2 en = vec2(R * (cf * dl - u_lon0 * 2.0 * sin(fi0 + 0.5 * df) * sf2), R * df); // X e Y delle onde, contati dal centro della pezza
   if (livello > terra && a_griglia.z < 0.5 && u_ondeSi > 0.5) { // l'acqua si muove: la quota delle quattro tessere, mediata sulla maglia della pezza
     float fondo = clamp((livello - terra) * 0.5, 0.0, 1.0), passo = u_geo.y * R / ${MY}.0;
-    for (int c = 0; c < 4; c++) { vec2 uv = vec2(dot(u_cM[c].xy, en), dot(u_cM[c].zw, en)) + u_cO[c]; float lod = log2(max(1.0, 2.0 * passo * ${CASC_N}.0 / u_cS[c].w));
+    for (int c = 0; c < 4; c++) { if (u_cAtt[c] < 0.5 || u_cS[c].w < 2.0 * passo) continue; // (una tessera più corta di due maglie si legge al suo ultimo livello: la sua media, zero)
+      vec2 uv = vec2(dot(u_cM[c].xy, en), dot(u_cM[c].zw, en)) + u_cO[c]; float lod = log2(max(1.0, 2.0 * passo * ${CASC_N}.0 / u_cS[c].w));
       vec2 g = vec2(exp2(lod) / ${CASC_N}.0, 0.0); h += fondo * ondaStoc(uv, c, g, g.yx, 1.0).b * u_cS[c].z; }
   }
   h -= a_griglia.z * u_orlo.x;
@@ -230,8 +240,15 @@ uniform sampler2D u_oriz1, u_oriz2, u_oriz1M, u_oriz2M; // gli orizzonti in otto
 uniform vec3 u_sole, u_luce;   // verso la stella (assi del mondo); il suo colore (1 = bianco in pieno sole)
 uniform float u_disco;         // il raggio angolare della stella (rad): la penombra delle ombre del rilievo
 uniform vec4 u_espo;           // esposizione; c'è l'immagine dell'acqua; c'è quella della madre; luce di notte
-uniform highp sampler2DArray u_ondeT; uniform vec4 u_cM[4]; uniform vec2 u_cO[4]; uniform vec4 u_cS[4]; uniform float u_ondeSi; // le tessere delle onde (vedi V_SUOLO)
+uniform highp sampler2DArray u_ondeT; uniform vec4 u_cM[4]; uniform vec2 u_cO[4]; uniform vec4 u_cS[4]; uniform float u_ondeSi; uniform vec4 u_cAtt; // le tessere delle onde (vedi V_SUOLO)
 ${GLSL_ONDE}
+uniform vec4 u_tess, u_tessM, u_geo; // (vedi V_SUOLO: per portare uno spostamento in metri nelle coordinate delle tessere)
+// I VORTICI (vortici.js), i più vicini all'occhio: A longitudine, latitudine (rad), L_s (m), peso; B velocità di rotazione U col
+// verso (m/s, antiorario positivo), angolo di cui hanno girato l'acqua al raggio L_s (rad), gradiente della temperatura del mare
+// (K/m, est e nord); C lo spostamento del nucleo da dove l'acqua è venuta (m, est e nord). u_Lm la larghezza della sottomesoscala.
+uniform vec4 u_vA[32], u_vB[32], u_vC[32]; uniform int u_nv; uniform float u_Lm;
+uniform vec3 u_falsi;  // I FALSI COLORI della temperatura (strumenti.js): x 1 se accesi; y, z la scala (K, rispetto alla temperatura di riferimento)
+${GLSL_TURBO}
 uniform vec4 u_mare;   // vento dove sta l'occhio (m/s, quello delle tessere), increspatura sotto l'ultima tessera (pendenza quadratica media), parte libera dal ghiaccio, (lon − lon_rif) × seno della latitudine (X dipende anche dal nord)
 uniform vec4 u_aria;   // lo strato limite dell'aria h (m) e quello rimescolato del mare h_m (m) dove sta l'occhio; lo spostamento della pezza nel rumore delle raffiche (in unità di 3h)
 uniform vec2 u_lang;   // lo spostamento della pezza nelle righe di Langmuir (in unità della loro spaziatura)
@@ -283,7 +300,7 @@ void main() {
   vec2 rv = riva(u_alt, v_uv); if (v_uvM.z > 0.002) rv = mix(rv, riva(u_altM, v_uvM.xy), v_uvM.z);
   // (la riva passa dentro il punto dello schermo: i due colori pesati per quanto ne copre)
   float asciutto = clamp(0.5 + rv.x / max(fwidth(rv.x), 1e-5), 0.0, 1.0);
-  vec3 colA = vec3(0.0), colT = vec3(0.0);
+  vec3 colA = vec3(0.0), colT = vec3(0.0); float TvF = 0.0;
   if (asciutto < 1.0) { // ACQUA
     float fondo = rv.y;
     // IL VENTO DEL PUNTO: quello della carta di meteo.js (il vento al suolo della stagione), più le RAFFICHE dello strato
@@ -297,7 +314,25 @@ void main() {
     float orma = length(v_rel) * u_orma / max(0.06, dot(suM, occhio));
     vec3 pq = normalize(u_tondo * (v_rel - u_centro)); float lonP = atan(-pq.z, pq.x), latP = asin(clamp(pq.y, -1.0, 1.0));
     vec4 mt = texture(u_meteo, vec2(lonP / 6.2831853 + 0.5, 0.5 - latP / 3.1415927));
-    vec2 vv = u_nuv.w > 0.0 ? mt.gb : vec2(u_mare.x, 0.0); float Ul = max(length(vv), 0.3); vec2 dv = vv / Ul, pv = vec2(-dv.y, dv.x);
+    // I VORTICI (vortici.js). Ognuno gira l'acqua attorno a sé con v(r) = U·(r/L_s)·e^((1 − r²/L_s²)/2): l'acqua che sta qui è
+    // venuta dal punto ruotato indietro di θ(r) = θ₀·e^((1 − r²/L_s²)/2) attorno al centro, e il nucleo l'ha portata da
+    // dove il vortice è passato (C·e^(−r²/2L_s²)). La temperatura è quella di là: T′ = ∇T̄·(x_orig − x) — il gradiente medio
+    // avvolto in bracci e filamenti. I bracci si stringono quanto più il vortice gira (la loro lunghezza d'onda è 2π/|dθ/dr|):
+    // sotto la larghezza della sottomesoscala (u_Lm: lì lo strato rimescolato instabile rimescola, Boccaletti e altri 2007) e
+    // sotto il punto dello schermo si confondono nella loro media, e il fondo del vortice resta alla temperatura del centro.
+    vec2 corr = vec2(0.0), xi = vec2(0.0);
+    for (int i = 0; i < 32; i++) { if (i >= u_nv) break; vec4 A = u_vA[i], B = u_vB[i];
+      float dl = lonP - A.x; dl -= 6.2831853 * floor(dl / 6.2831853 + 0.5); vec2 d = u_atm.x * vec2(cos(latP) * dl, latP - A.y); float q = dot(d, d) / (A.z * A.z); if (q > 36.0) continue;
+      float e = exp(0.5 * (1.0 - q)), th = B.y * e, kr = abs(th) * sqrt(q) / A.z, att = exp(-0.5 * (u_Lm * u_Lm + orma * orma) * kr * kr);
+      vec2 rd = vec2(cos(th) * d.x + sin(th) * d.y, -sin(th) * d.x + cos(th) * d.y), dis = A.w * ((att * rd - d) - u_vC[i].xy * exp(-0.5 * q));
+      corr += A.w * B.x * e * vec2(-d.y, d.x) / A.z; xi += dis; TvF += dot(B.zw, dis); }
+    // IL VENTO CHE ALZA LE ONDE CORTE (il riflesso, la schiuma) sente i vortici in due modi: è quello relativo alla
+    // corrente della superficie (Pacanowski 1987, JPO 17, 2085); e sull'acqua più calda l'aria è meno stabile e porta giù più
+    // vento: +0,3 m/s per grado di temperatura del mare in più (l'accoppiamento misurato dai satelliti sui vortici e sui
+    // fronti, tra 0,2 e 0,5 m/s per °C: Small e altri 2008, Dyn. Atmos. Oceans 45, 274; O'Neill, Chelton ed Esbensen 2012,
+    // J. Climate 25, 5916 — l'intervallo è dalla memoria delle rassegne, il testo non è stato letto: da verificare; si prende
+    // 0,3, dichiarato: dipende dallo strato limite, e qui è quello della Terra). Così i vortici si vedono nella rugosità.
+    vec2 v0 = u_nuv.w > 0.0 ? mt.gb : vec2(u_mare.x, 0.0), vv = v0 * max(0.1, 1.0 + 0.3 * TvF / max(length(v0), 0.3)) - corr; float Ul = max(length(vv), 0.3); vec2 dv = vv / Ul, pv = vec2(-dv.y, dv.x);
     float lr = 3.0 * u_aria.x; vec2 pr = v_en / lr + u_aria.zw;
     float nOtt = clamp(log2(lr / max(2.0 * orma, 1e-3)), 0.0, 7.0), G = 0.0, aO = 0.6086; // (0,6086² = 1 − 2^(−2/3): la parte della varianza nell'ottava più grande)
     G += aO * 1.4142 * cos(6.2831853 * dot(pr, pv) + 3.0 * (rum2(pr * 0.5) - 0.5)) * clamp(nOtt, 0.0, 1.0);
@@ -312,16 +347,22 @@ void main() {
     float vedeRighe = clamp(2.5 * u_aria.y / (6.0 * orma) - 0.5, 0.0, 1.0), Wr = W * mix(1.0, 0.4 + 2.2 * riga * riga * riga, 0.5 * vedeRighe), soglia = sqrt(max(1.0 - Wr, 0.0));
     vec2 pend = vec2(0.0); float s2 = u_mare.y * cmL / cmO, f0 = 0.0, f1 = 0.0, wRis = 0.0;
     if (u_ondeSi > 0.5) for (int c = 0; c < 4; c++) {
-      vec2 uv = vec2(dot(u_cM[c].xy, v_en), dot(u_cM[c].zw, v_en)) + u_cO[c]; vec4 tx = ondaStoc(uv, c, dFdx(uv), dFdy(uv), soglia);
       float a = c > 0 ? aU : 1.0, ris = clamp(log(u_cS[c].w / (8.0 * orma)) / 1.7, 0.0, 1.0); // (la parte della banda — da L/4 a L/21,9 — più lunga di due punti)
+      // (una tessera più corta di due punti dello schermo si legge al suo penultimo livello o oltre: la media di quasi tutto il
+      // periodo, zero; le sue onde stanno già tutte nella pendenza sotto il punto. Non la si legge: tre letture in meno)
+      if (u_cAtt[c] < 0.5 || u_cS[c].w < 2.0 * orma) { s2 += u_cS[c].x * a * a; continue; }
+      vec2 uv = vec2(dot(u_cM[c].xy, v_en), dot(u_cM[c].zw, v_en)) + u_cO[c]; vec4 tx = ondaStoc(uv, c, dFdx(uv), dFdy(uv), soglia);
       pend += tx.rg * u_cS[c].y * a; s2 += (1.0 - ris) * u_cS[c].x * a * a;
       if (c == 0) f0 = tx.a; if (c == 1) { f1 = tx.a; wRis = clamp(u_cS[c].w / ${CASC_N}.0 / orma - 0.5, 0.0, 1.0); }
     }
     pend.y -= u_mare.w * pend.x; pend *= clamp(fondo * 0.5, 0.0, 1.0);
     vec3 n = normalize(u_normali * (su + est * pend.x + nord * pend.y));
     // la riflettanza dell'acqua (mare.js, senza la sua esposizione: tessere.worker.js); la luce che entra è quella che arriva su un piano
-    vec3 base = u_espo.y > 0.5 ? lineare(texture(u_acqua, v_uv).rgb) : vec3(0.004, 0.012, 0.03);
-    if (v_uvM.z > 0.002) base = mix(base, u_espo.z > 0.5 ? lineare(texture(u_acquaM, v_uvM.xy).rgb) : vec3(0.004, 0.012, 0.03), v_uvM.z);
+    // (ciò che l'acqua porta — il fango — viene da dove l'acqua è venuta: lo spostamento dei vortici; non oltre l'orlo della tessera)
+    vec2 mx = xi / max(u_atm.x * vec2(u_geo.x * cos(latP), -u_geo.y), vec2(1.0, -1e30)), uvS = v_uv + mx * u_tess.zw, uvSM = v_uvM.xy + mx * u_tessM.zw;
+    uvS = mix(v_uv, uvS, clamp(64.0 * min(min(uvS.x, 1.0 - uvS.x), min(uvS.y, 1.0 - uvS.y)), 0.0, 1.0)); uvSM = mix(v_uvM.xy, uvSM, clamp(64.0 * min(min(uvSM.x, 1.0 - uvSM.x), min(uvSM.y, 1.0 - uvSM.y)), 0.0, 1.0));
+    vec3 base = u_espo.y > 0.5 ? lineare(texture(u_acqua, uvS).rgb) : vec3(0.004, 0.012, 0.03);
+    if (v_uvM.z > 0.002) base = mix(base, u_espo.z > 0.5 ? lineare(texture(u_acquaM, uvSM).rgb) : vec3(0.004, 0.012, 0.03), v_uvM.z);
     float nv = max(dot(n, occhio), 0.02), fres = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
     // IL RIFLESSO DELLA STELLA (Cox e Munk 1954): le pendenze che il punto non risolve hanno una distribuzione gaussiana di
     // varianza s² (per asse s²/2); la radianza riflessa è ρ·E·p(z)/(4·μ_occhio·cos⁴β), β l'inclinazione della faccetta che
@@ -356,7 +397,18 @@ void main() {
     // la stella sul pendio (se non è dietro l'orizzonte), e il cielo che il punto vede (p.z), su un pendio che ne guarda una parte
     colT = base * (arriva * max(dot(n, u_sole), 0.0) * rilievo(sLoc, o1, o2) + ambiente * p.z * (0.5 + 0.5 * dot(n, suM)));
   }
-  o_col = vec4(mix(colA, colT, asciutto) * u_espo.x, 1.0);${GLSL_PROFONDITA_F}
+  o_col = vec4(mix(colA, colT, asciutto) * u_espo.x, 1.0);
+  // I FALSI COLORI DELLA TEMPERATURA: la temperatura della superficie (la carta di preparaMeteo: il mare di mare.js, la terra di
+  // meteo.js), più quella che i vortici portano sul mare, nella scala Turbo tra il più freddo e il più caldo attorno all'occhio (scalaFalsi);
+  // come una superficie chiara sotto la stella alta, di giorno e di notte (è una mappa, non una vista)
+  if (u_falsi.x > 0.5) { vec3 pf = normalize(u_tondo * (v_rel - u_centro)); float lf = atan(-pf.z, pf.x), af = asin(clamp(pf.y, -1.0, 1.0));
+    // (la carta letta con la B-spline cubica, quattro letture bilineari: in linea retta tra le celle la pendenza salta sul
+    // loro bordo, e con la scala stretta della termocamera i bordi delle celle si vedevano come righe)
+    vec2 ts = vec2(textureSize(u_meteo, 0)), pc = vec2(lf / 6.2831853 + 0.5, 0.5 - af / 3.1415927) * ts - 0.5, fc = fract(pc), w0 = (1.0 - fc) * (1.0 - fc) * (1.0 - fc) / 6.0, w1 = (4.0 - 6.0 * fc * fc + 3.0 * fc * fc * fc) / 6.0, w3 = fc * fc * fc / 6.0, w2 = 1.0 - w0 - w1 - w3;
+    vec2 g0 = w0 + w1, g1 = w2 + w3, h0 = (floor(pc) - 0.5 + w1 / g0) / ts, h1 = (floor(pc) + 1.5 + w3 / g1) / ts;
+    float Tf = g0.y * (g0.x * texture(u_meteo, h0).a + g1.x * texture(u_meteo, vec2(h1.x, h0.y)).a) + g1.y * (g0.x * texture(u_meteo, vec2(h0.x, h1.y)).a + g1.x * texture(u_meteo, h1).a) + (1.0 - asciutto) * TvF;
+    o_col = vec4(lineare(turbo((Tf - u_falsi.y) / max(u_falsi.z - u_falsi.y, 1e-6))) * 0.6 * u_espo.x, 1.0); }
+${GLSL_PROFONDITA_F}
 }`;
 
 // ---------- l'aria e le nuvole: una passata sull'immagine intera
@@ -375,6 +427,7 @@ uniform vec3 u_soleC;    // verso la stella, in quello spazio
 uniform vec4 u_cam;      // tangenti di metà campo, costante della profondità, esposizione
 uniform vec3 u_E;        // l'irradianza della stella (π × il suo colore)
 uniform float u_orma;    // quanto è largo un punto dello schermo a distanza 1 (1 / fuoco)
+uniform float u_falsiA;  // 1 con i falsi colori della temperatura (strumenti.js)
 uniform float u_cima;    // dove il cammino entra nell'aria (m sopra il suolo): sopra, lo spessore ottico è sotto 10⁻³ anche di striscio (vedi impostaAria)
 ${GLSL_ARIA}
 ${GLSL_RUMORE}
@@ -424,6 +477,7 @@ void main() {
   vec3 scena = texture(u_col, v_uv).rgb; scena = any(isnan(scena)) ? vec3(65504.0) : min(scena, vec3(65504.0)); float prof = texture(u_prof, v_uv).r; // (Inf·0 farebbe NaN)
   vec3 dO = vec3((v_uv * 2.0 - 1.0) * u_cam.xy, -1.0), de = u_raggi * dO; float lung = length(de); vec3 d = de / lung, o = u_occhio;
   float wP = exp2(prof * 2.0 / u_cam.z) - 1.0, fino = prof < 1.0 ? wP * lung : 1e30, dist = prof < 1.0 ? wP * length(dO) : 0.0; // (dist: metri veri lungo il raggio; 0: il cielo)
+  if (u_falsiA > 0.5 && dist > 0.0) { esce(scena, vec3(1.0), vec3(0.0), dist); return; } // (i falsi colori: la superficie senza l'aria e le nuvole davanti)
   gPasso = 0.5 + (fract(fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) + u_sfasa.x) - 0.5) * u_sfasa.y;
   // (a camera ferma: Add e Tot già calcolati valgono solo se dietro il punto c'è ancora ciò che c'era — la stessa distanza
   // entro la precisione della profondità e dell'immagine che li tiene —; dove la scena è cambiata — una tessera arrivata,
@@ -634,7 +688,7 @@ export function tabelleAria(aria, R, albedoClima, { ND = 64, NC = 256, NS = 48 }
 }
 
 export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => null, opzioni = {}, corpi = null } = {}) {
-  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 48, nuvole: 1, onde: 1, rilievo: 1, suoloFine: 1, lune: true, anelli: true, ...opzioni };
+  const gl = N.gl, O = { magliePerPixel: 7, puntiPerPixel: 2.6, errorePixel: 1.0, massimoTessere: 110, fili: 0, passiAria: 48, nuvole: 1, onde: 1, vortici: 1, rilievo: 1, suoloFine: 1, lune: true, anelli: true, ...opzioni };
   const R = P.raggioM, schiaccia = 1 - Math.min(0.3, P.schiacciamento || 0), grav = P.clima?.g || (6.674e-11 * P.massaKg) / (R * R);
   // ---------- i corpi: la stella al centro, il pianeta che le gira attorno e gira su sé stesso, le lune
   const Tstella = stella.T || 5772, raggioStella = Math.sqrt((P.Lw || 3.8e26) / (4 * Math.PI * 5.670374e-8 * Tstella ** 4));
@@ -854,15 +908,20 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     const tutti = [spV, ...spL].filter((x) => x && x.parti.length); if (!tutti.length) { ondeQui = { P, treni, U: P.U, H: P.Hs, T: P.Tp }; return; }
     const sp = { F: (kx, ky) => { let v = 0; for (const x of tutti) v += x.F(kx, ky); return v; }, Frange: spV.parti.length ? spV.Frange : null, mss: (a, b) => { let v = 0; for (const x of tutti) v += x.mss(a, b); return v; }, km: P.km };
     const lam = 2 * Math.PI / Math.min(...tutti.map((x) => x.kp)), passo = Math.log2(CASCATA.picchi * lam) * 2; if (!L0passo || Math.abs(passo - L0passo) > 0.75) L0passo = Math.round(passo);
-    onde.prepara(sp, (k) => FI.omega({ ...P, d: Infinity }, k), 2 ** (L0passo / 2) / CASCATA.picchi);
+    onde.prepara(sp, (k) => FI.omega({ ...P, d: Infinity }, k), 2 ** (L0passo / 2) / CASCATA.picchi); msOnde = 0; nOnde = 0;
     ondeQui = { P, treni, U: P.U, H: P.Hs, T: P.Tp, L0: onde.L0, Hlungo: treni[0]?.H || 0, Tlungo: treni[0]?.T || 0 };
     const nuovo = Math.round(lon / 0.05) * 0.05; if (Math.abs(nuovo - lonRif) > 0.05) lonRif = nuovo;
   }
   // il campo delle tessere nel tempo delle onde (che corre col mondo, ma mai più di un quarto di secondo per fotogramma: oltre,
   // le onde corte farebbero più di un giro tra due fotogrammi e si vedrebbero ferme o all'indietro)
+  // LE TESSERE CHE SERVONO: una tessera più corta di due punti dello schermo, là dove i punti sono più piccoli (sotto l'occhio:
+  // quota/fuoco), non si legge in nessun punto (il frammento e i vertici la saltano: vedi u_cAtt), e non la si rifà. Il costo
+  // in ms della CPU per fotogramma (le trasformate e il rango della schiuma) è in statistiche().onde.ms.
+  const ondeAttive = new Float32Array(4).fill(1); let msOnde = 0, nOnde = 0;
   function aggiornaTessereOnde(S) {
     if (!onde || !onde.pronta || !ondeQui) return; tOndeAcc += Math.max(0, Math.min(0.25, S.dt || 0));
-    if (tOndePrima === tOndeAcc && ondeTex) return; tOndePrima = tOndeAcc; onde.aggiorna(tOndeAcc);
+    const ormaMin = Math.max(0.01, stato.quota) / S.fuoco; for (const T of onde.C) ondeAttive[T.c] = T.L >= 2 * ormaMin || O.ondeTutte || N.opzioni.ondeTutte ? 1 : 0; // (ondeTutte: per misurare quanto si risparmia)
+    if (tOndePrima === tOndeAcc && ondeTex) return; tOndePrima = tOndeAcc; const t0 = performance.now(); onde.aggiorna(tOndeAcc, ondeAttive); msOnde += performance.now() - t0; nOnde++;
     const n = CASCATA.N; gl.activeTexture(gl.TEXTURE15); if (!ondeTex) { ondeTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, ondeTex); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1 + Math.log2(n), gl.RGBA8, n, n, CASCATA.n);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR); }
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, ondeTex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, n, n, CASCATA.n, gl.RGBA, gl.UNSIGNED_BYTE, onde.dati); gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
@@ -872,13 +931,47 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   // u*·√(ρ_aria/ρ_acqua) nell'acqua; vicino all'equatore (f → 0) non più di 3 km nell'aria e 300 m nel mare
   function strati(U, lat) { const f = Math.max(1e-6, Math.abs(2 * (2 * Math.PI / Math.max(1, Math.abs(P.giorno || 86400))) * Math.sin(lat))), us = Math.sqrt(1.3e-3) * Math.max(U, 0.5), rr = ondeQui?.P ? Math.sqrt(ondeQui.P.rhoAria / ondeQui.P.rho) : 0.035;
     return [Math.min(3000, (0.3 * us) / f), Math.min(300, Math.max(2, (0.3 * us * rr) / f))]; }
+  // ---------- i vortici del mare (vortici.js): quelli vivi attorno all'occhio, rifatti quando ci si sposta di un ventesimo del
+  // raggio in cui si cercano o passa un'ora del mondo. Il raggio: quattro volte la quota, almeno una cella del processo, al più
+  // 3000 km; i 32 più vicini, col peso che sfuma verso il più lontano (oltre, lo schermo li mostra piccoli: il loro effetto
+  // è sotto il punto). Coordinate: longitudine e latitudine del pianeta.
+  let vort = null, vortDove = null; const vA = new Float32Array(128), vB = new Float32Array(128), vC = new Float32Array(128); let vN = 0, vLm = 0, msVortici = 0;
+  function aggiornaVortici(lon, lat, t) {
+    if (!S0?.mare?.esiste || !O.vortici) { vN = 0; return; } if (!vort) vort = creaVortici(S0.mare, { giorno: P.giorno }); if (!vort) { vN = 0; return; }
+    const D = Math.min(3e6, Math.max(4 * stato.quota, vort.lato));
+    if (vortDove && Math.hypot(R * Math.cos(lat) * (lon - vortDove[0]), R * (lat - vortDove[1])) < D / 20 && Math.abs(t - vortDove[2]) < 3600 && Math.abs(Math.log(D / vortDove[3])) < 0.2) return;
+    const t0 = performance.now(); vortDove = [lon, lat, t, D]; const L = vort.vicini(lon, lat, D, t, 32), lim = L.length === 32 ? L[31].dist : Infinity; vN = L.length;
+    L.forEach((e, i) => { const w = Number.isFinite(lim) ? Math.min(1, Math.max(0, (lim - e.dist) / (0.25 * lim))) : 1; vA.set([e.lon, e.lat, e.Ls, w], 4 * i); vB.set([e.U, e.theta, e.Gx, e.Gy], 4 * i); vC.set([e.De, e.Dn, 0, 0], 4 * i); });
+    vLm = vort.sottomesoscala(lat, strati(ondeQui ? ondeQui.U : 0, lat)[1]); msVortici = performance.now() - t0;
+  }
+  const falsiAccesi = () => N.opzioni.falsiColori === 'temperatura';
   // ---------- le nuvole: la copertura e i venti di meteo.js in un'immagine (rifatta quando la stagione cambia)
-  let meteoTex = null, meteoStagione = -9, nuvoleMedie = 0, meteoH = 32;
+  let meteoTex = null, meteoStagione = -9, nuvoleMedie = 0, meteoH = 32, scalaT = [0, 1], tSup = null; const Tref = P.clima?.T || 288;
+  // LA SCALA DEI FALSI COLORI si adatta a ciò che si guarda, come una termocamera: dal più freddo al più caldo della carta
+  // entro due quote dall'occhio (almeno una cella della carta), allargata di quanto i vortici lì vicino possono spostare la
+  // temperatura (|∇T̄|·(L_s·min(θ, 2) + |Δ|) per vortice): così si leggono i vortici sul mare e i continenti dall'orbita.
+  // La scala è scritta in opzioni.scalaTemperatura (K) per la legenda di strumenti.js.
+  function scalaFalsi(lon, lat) {
+    if (!tSup) return; const D = Math.max(2 * stato.quota, (Math.PI * R) / tSup.H), W = tSup.W, H = tSup.H; let a = Infinity, b = -Infinity;
+    for (let j = 0; j < H; j++) { const la = (0.5 - (j + 0.5) / H) * Math.PI; if (Math.abs(la - lat) * R > D + (Math.PI * R) / H) continue;
+      for (let i = 0; i < W; i++) { const lo = ((i + 0.5) / W - 0.5) * 2 * Math.PI, c = Math.sin(lat) * Math.sin(la) + Math.cos(lat) * Math.cos(la) * Math.cos(lo - lon); if (Math.acos(Math.max(-1, Math.min(1, c))) * R > D + (Math.PI * R) / H) continue; const x = tSup.T[j * W + i]; if (x < a) a = x; if (x > b) b = x; } }
+    if (!(a <= b)) { a = tSup.min; b = tSup.max; } let A = 0; for (let i = 0; i < vN; i++) A = Math.max(A, Math.hypot(vB[4 * i + 2], vB[4 * i + 3]) * (vA[4 * i + 2] * Math.min(Math.abs(vB[4 * i + 1]), 2) + Math.hypot(vC[4 * i], vC[4 * i + 1])));
+    scalaT = [a - A, b + A]; N.opzioni.scalaTemperatura = { min: Tref + scalaT[0], max: Tref + scalaT[1] };
+  }
   function preparaMeteo(t = 0) {
     const m = S0?.cl?.meteo; if (!m || !m.nuvole || !aria) return; const st = Array.isArray(m.stagioni) && m.stagioni.length > 1 ? m.stagioni : null;
     const x = st ? stagione(t) * st.length - 0.5 : 0; if (meteoTex && Math.abs(x - meteoStagione) < 0.04) return; meteoStagione = x;
     meteoH = m.H; const n = m.W * m.H, dati = new Float32Array(4 * n), i0 = st ? ((Math.floor(x) % st.length) + st.length) % st.length : 0, i1 = st ? (i0 + 1) % st.length : 0, f = st ? x - Math.floor(x) : 0, A = st ? st[i0] : m, B = st ? st[i1] : m; let somma = 0;
-    for (let k = 0; k < n; k++) { dati[4 * k] = A.nuvole[k] * (1 - f) + B.nuvole[k] * f; dati[4 * k + 1] = A.u[k] * (1 - f) + B.u[k] * f; dati[4 * k + 2] = A.v[k] * (1 - f) + B.v[k] * f; dati[4 * k + 3] = 1; somma += dati[4 * k]; }
+    // (in alfa la TEMPERATURA DELLA SUPERFICIE per i falsi colori, meno quella di riferimento del pianeta, perché i 16 bit bastino
+    // anche a un mare che varia di decimi di grado: sul mare quella di mare.js, sulla terra quella di meteo.js della stagione,
+    // pesate con la parte bagnata della cella)
+    const Tm = S0.mare?.esiste ? S0.mare.temperatura : null, mW = S0.mare?.W, mH = S0.mare?.H, TA = A.temperatura || m.temperatura, TB = B.temperatura || m.temperatura; let tMin = Infinity, tMax = -Infinity;
+    for (let k = 0; k < n; k++) { dati[4 * k] = A.nuvole[k] * (1 - f) + B.nuvole[k] * f; dati[4 * k + 1] = A.u[k] * (1 - f) + B.u[k] * f; dati[4 * k + 2] = A.v[k] * (1 - f) + B.v[k] * f; somma += dati[4 * k];
+      const i = k % m.W, j = (k - i) / m.W, Tl = TA ? TA[k] * (1 - f) + TB[k] * f : Tref, b = Tm ? Math.min(1, Math.max(0, m.bagnato ? m.bagnato[k] : 0)) : 0;
+      let Ts = Tl; if (b > 0) { const x = ((i + 0.5) / m.W) * mW - 0.5, y = Math.min(mH - 1.001, Math.max(0, ((j + 0.5) / m.H) * mH - 0.5)), x0 = Math.floor(x), y0 = Math.floor(y), u = x - x0, v = y - y0, q = (a, c) => Tm[c * mW + (((a % mW) + mW) % mW)];
+        Ts = b * ((q(x0, y0) * (1 - u) + q(x0 + 1, y0) * u) * (1 - v) + (q(x0, y0 + 1) * (1 - u) + q(x0 + 1, y0 + 1) * u) * v) + (1 - b) * Tl; }
+      dati[4 * k + 3] = Ts - Tref; tMin = Math.min(tMin, Ts - Tref); tMax = Math.max(tMax, Ts - Tref); }
+    tSup = { T: Float32Array.from({ length: n }, (_, k) => dati[4 * k + 3]), W: m.W, H: m.H, min: tMin, max: tMax };
     nuvoleMedie = somma / n; if (meteoTex) gl.deleteTexture(meteoTex); meteoTex = N.immagine(m.W, m.H, 'rgba16fDaFloat', dati, { ripeti: 'x' });
   }
 
@@ -946,7 +1039,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       stato.quota = V.lungo(stato.occhioCorpo) - quotaLungo(V.norma(stato.occhioCorpo));
       lista = []; visita(0, 0, 0, S); distribuisci();
       lista.sort((a, b) => (a.t.k || 0) - (b.t.k || 0) || a.dist - b.dist); pezze = lista.length; triangoli = pezze * (griglia.n / 3);
-      const [lon, lat] = lonLat(stato.occhioTondo); stato.lon = lon; stato.lat = lat; aggiornaOnde(lon, lat, S.t); aggiornaTessereOnde(S); aggiornaFine(S);
+      const [lon, lat] = lonLat(stato.occhioTondo); stato.lon = lon; stato.lat = lat; aggiornaOnde(lon, lat, S.t); aggiornaTessereOnde(S); aggiornaVortici(lon, lat, S.t); if (falsiAccesi()) scalaFalsi(lon, lat); aggiornaFine(S);
       const vs = N.tra(corpoPianeta, corpoStella, S.t); stato.dStella = V.lungo(vs); stato.sole = V.norma(vs); stato.E = Lstella() / (4 * Math.PI * stato.dStella ** 2);
       // quanta luce c'è dove si è: in orbita quella del giorno; vicino al suolo quella del posto (di notte l'occhio si apre)
       const sole = V.tv(A, stato.sole), mu = V.scal(V.norma(stato.occhioCorpo), sole), giorno = Math.max(0, Math.min(1, (mu + 0.12) / 0.3)), vicino = Math.max(0, Math.min(1, 1 - stato.quota / (0.25 * R)));
@@ -975,7 +1068,9 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
       const cM = new Float32Array(16), cS = new Float32Array(16), cO = new Float32Array(8);
       if (co) { gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D_ARRAY, ondeTex); gl.uniform1i(u.u_ondeT, 15); for (const T of co.C) { const c = Math.cos(T.angolo) / T.L, sn = Math.sin(T.angolo) / T.L; cM.set([c, sn, -sn, c], 4 * T.c); cS.set([T.mss, 4 * T.sS, 4 * T.sH, T.L], 4 * T.c); }
         gl.uniform4fv(u.u_cM, cM); gl.uniform4fv(u.u_cS, cS); }
-      gl.uniform1f(u.u_ondeSi, co ? 1 : 0); gl.uniform1i(u.u_ondeT, 15); // (sempre: lasciata a 0 leggerebbe l'unità delle quote, di un altro tipo)
+      gl.uniform1f(u.u_ondeSi, co ? 1 : 0); gl.uniform4fv(u.u_cAtt, ondeAttive); gl.uniform1i(u.u_ondeT, 15);
+      gl.uniform1i(u.u_nv, vN); if (vN) { gl.uniform4fv(u.u_vA, vA); gl.uniform4fv(u.u_vB, vB); gl.uniform4fv(u.u_vC, vC); } gl.uniform1f(u.u_Lm, vLm);
+      gl.uniform3f(u.u_falsi, falsiAccesi() ? 1 : 0, scalaT[0], scalaT[1]); // (sempre: lasciata a 0 leggerebbe l'unità delle quote, di un altro tipo)
       const [hAria, hMare] = strati(m ? m.U : 0, stato.lat || 0), coda = co ? co.mssCoda : 0, libero = m?.P ? m.P.calma : 1;
       // (il suolo fine: c'è, e c'è la tessera su cui sta? allora le pezze hanno il buco e la finestra si disegna dopo)
       const FF = fine.attiva && fine.tex && fine.fin?.fin ? fine.fin : null, FT = fine.tex; gl.uniform4f(u.u_fine, 0, 0, 0, 0); gl.uniform4f(u.u_fineG, -9, -9, 0, 0); let toccava = false; // («fine», nel giro qui sotto, è l'increspatura)
@@ -1024,6 +1119,7 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
   const cimaOttica = !aria ? 0 : Math.min(aria.cima, Math.max(...[[Math.max(...aria.betaR), aria.H], [1.1 * aria.betaM, aria.HM]].map(([b, Hs]) => Hs * Math.log(Math.max(1, (b * Hs * Math.sqrt((Math.PI * R) / (2 * Hs))) / 1e-3))), 0));
   function impostaAria(u) {
     if (u.u_cima) gl.uniform1f(u.u_cima, cimaOttica);
+    if (u.u_falsiA) gl.uniform1f(u.u_falsiA, falsiAccesi() ? 1 : 0);
     if (aria) { gl.uniform4f(u.u_atm, R, aria.H, aria.HM, aria.cima); gl.uniform3fv(u.u_betaR, aria.betaR); gl.uniform4f(u.u_betaM, aria.betaM, 0.76, 0, 0); }
     else { gl.uniform4f(u.u_atm, R, 1, 1, 0); gl.uniform3f(u.u_betaR, 0, 0, 0); gl.uniform4f(u.u_betaM, 0, 0, 0, 0); }
   }
@@ -1115,6 +1211,6 @@ export function creaPianeta(N, { P, stella = {}, via = null, superficie = () => 
     pronto: () => base.pronta && !!tessere.get(chiave(0, 0, 0))?.pronta,
     // il suolo fine che si vede ora (per le prove: la finestra di suolo.js con la sua griglia, e quanto è costata)
     suoloFine: () => { const F = fine.fin; if (!fine.attiva || !F?.fin) return null; const f = F.fin; return { lato: F.lato, N: f.N, h: f.h, gx0: f.gx0, gy0: f.gy0, livello: f.padre.livello, I: f.padre.I, J: f.padre.J, lon: F.lon, lat: F.lat, rms: F.rms, Z: Array.from(f.campo.Z), ms: fine.ms, msTinta: fine.msTinta, quante: fine.quante, chiaveTratto: f.tratto.chiave }; },
-    statistiche: () => { let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; const livelli = {}; for (const z of lista) { const k = `${z.t.L}`; livelli[k] = (livelli[k] || 0) + 1; } return { pezze, livelli, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, suoloFine: fine.attiva ? { lato: fine.fin?.lato, msCalcolo: fine.ms, msTinta: fine.msTinta, quante: fine.quante } : null, suoloFineStato: { quota: stato.quota, largo: fine.largo, campi: fine.campi.size, chiesti: fine.chiesti.size, inCorso: fine.inCorso, finestra: !!fine.fin?.fin, attiva: fine.attiva, tex: !!fine.tex, quante: fine.quante }, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U, L0: ondeQui.L0, Hlungo: ondeQui.Hlungo, Tlungo: ondeQui.Tlungo, tessere: !!(onde && onde.pronta && ondeTex) } : null }; },
+    statistiche: () => { let pronte = 0; for (const t of tessere.values()) if (t.pronta) pronte++; const livelli = {}; for (const z of lista) { const k = `${z.t.L}`; livelli[k] = (livelli[k] || 0) + 1; } return { pezze, livelli, triangoli, tessere: pronte, inAttesa: coda.length + fili.filter((f) => !f.libero).length, richieste, arrivate, msPerTessera: arrivate ? msTessere / arrivate : 0, memoriaMB: (pronte * (TWB * THB * 8 * 2 + TW * TH * (4 + 4 + 4 + 8))) / 1e6, nuvoleMedie, suoloFine: fine.attiva ? { lato: fine.fin?.lato, msCalcolo: fine.ms, msTinta: fine.msTinta, quante: fine.quante } : null, suoloFineStato: { quota: stato.quota, largo: fine.largo, campi: fine.campi.size, chiesti: fine.chiesti.size, inCorso: fine.inCorso, finestra: !!fine.fin?.fin, attiva: fine.attiva, tex: !!fine.tex, quante: fine.quante }, onde: ondeQui ? { H: ondeQui.H, T: ondeQui.T, vento: ondeQui.U, L0: ondeQui.L0, Hlungo: ondeQui.Hlungo, Tlungo: ondeQui.Tlungo, tessere: !!(onde && onde.pronta && ondeTex), ms: nOnde ? msOnde / nOnde : 0, msSomma: msOnde, n: nOnde, attive: Array.from(ondeAttive) } : null, vortici: vort ? { quanti: vN, ms: msVortici, Lm: vLm, c1: vort.c1, primo: vN ? { Ls: vA[2], U: vB[0], theta: vB[1] } : null } : null }; },
   };
 }

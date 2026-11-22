@@ -14,6 +14,8 @@
 // `creaStrumenti` (in fondo) è la parte del visore: l'indicatore nell'HUD, il suggerimento gentile, e l'aggancio al motore.
 
 // l'esponente scritto in apice: 6 → «⁶», −12 → «⁻¹²»
+import { turbo } from '../tre/falsi_colori.js';
+
 const APICI = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
 export const apice = (n) => String(n).split('').map((c) => APICI[c] ?? c).join('');
 // un fattore come lo si legge: ×1, ×30, ×3·10⁶
@@ -37,10 +39,15 @@ export const STRUMENTI = [
     misura(M) { const o = occhioDi(M); return o ? fattore(o.G) : ''; },
   },
   {
-    id: 'temperatura', nome: 'Falsi colori della temperatura', icona: 'clima', tasto: 'K', pronto: false,
-    fa: 'Colora ogni cosa secondo quanto è calda: blu il freddo, rosso il caldo.',
-    vedi: 'Non i colori veri, ma una mappa del caldo e del freddo.',
-    applica() {}, misura: () => '',
+    id: 'temperatura', nome: 'Falsi colori della temperatura', icona: 'clima', tasto: 'K', pronto: true,
+    fa: 'Colora la superficie del pianeta secondo quanto è calda: blu il freddo, rosso il caldo.',
+    vedi: 'Non i colori veri, ma una mappa del caldo e del freddo del suolo e del mare, senza l’aria e le nuvole davanti; la scala si adatta a ciò che guardi, come in una termocamera: i numeri accanto alla striscia dei colori dicono il più freddo e il più caldo che hai davanti.',
+    // (pianeta.js: la temperatura della superficie, del mare di mare.js con i vortici e della terra di meteo.js, nella scala Turbo
+    // di falsi_colori.js tra il più freddo e il più caldo attorno all'occhio, che pianeta.js scrive in opzioni.scalaTemperatura)
+    applica(M, acceso) { if (M && M.opzioni) M.opzioni.falsiColori = acceso ? 'temperatura' : null; },
+    misura(M) { const s = M && M.opzioni && M.opzioni.scalaTemperatura; if (!s) return ''; const d = s.max - s.min < 0.5 ? 2 : s.max - s.min < 5 ? 1 : 0, c = (T) => `${(T - 273.15).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d })} °C`;
+      const stri = [0, 0.25, 0.5, 0.75, 1].map((x) => `rgb(${turbo(x).map((v) => Math.round(255 * v)).join(',')}) ${x * 100}%`).join(', ');
+      return `${c(s.min)} <span style="display:inline-block;width:5em;height:0.7em;vertical-align:middle;border-radius:2px;background:linear-gradient(90deg, ${stri})"></span> ${c(s.max)}`; },
   },
   {
     id: 'infrarosso', nome: 'Infrarosso', icona: 'infrarosso', tasto: 'H', pronto: false,
