@@ -237,6 +237,67 @@ export function immagineSuperficie(sf, T, cl = null) {
 //   · il calore scorre dal caldo al freddo, tanto più quanto più l'atmosfera è densa.
 // Si parte caldo, come un pianeta appena nato, e si lascia evolvere per molti anni: quello che resta è il suo clima
 // (se il ghiaccio, riflettendo, prende il sopravvento, il pianeta scivola in una glaciazione totale).
+// ---------- I QUATTRO TEMPI DI UN PASSO DEL CLIMA (climaSuperficie, integra), come funzioni del modulo: le chiama il filo che
+// calcola, da solo, e le stesse le chiamano i fili che lo aiutano (clima.worker.js), ognuno sulle sue righe e colonne. Z porta
+// lo stato (W, H, gli array e i numeri del pianeta). Sono i conti di prima, nello stesso ordine: celle diverse, fili diversi,
+// gli stessi bit.
+//   A. celleClima: la luce assorbita meno quella irradiata, cella per cella (righe j0…j1); nell'ultimo anno scrive in E e I ciò
+//      che va nelle somme del bilancio (le somme le fa chi coordina, nell'ordine di sempre);
+//   B. righeClima: il calore portato lungo i paralleli (righe j0…j1); C. colonneClima: lungo i meridiani (colonne i0…i1);
+//   D. chiudiClima: le medie dell'ultimo anno e la temperatura nuova (righe j0…j1).
+export function albedoDelGiro(Z, k, t, luce) { // (riflette() di leggi.js scritta per esteso: vedi climaSuperficie)
+  let suolo = Z.conSotto ? Z.sottoK[k] : NaN;
+  if (suolo !== suolo) { if (Z.acquaPerGhiaccio === 0 && t === t) suolo = Z.nudoK[k]; else { const y = (t - Z.geloK[k]) / 4, ghiaccio = Z.acquaPerGhiaccio * 0.5 * (1 - (y >= 22 ? 1 : y <= -22 ? -1 : Math.tanh(y))); suolo = ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * Z.nudoK[k]; } }
+  const cielo = Z.conRifl ? Z.riflK[k] : Z.nuvoleMeteo ? (Z.nuvoleMeteo[k] * riflessoNuvoleAtteso(t, luce, Z.ventoAtteso)) / coperturaDelCielo : Z.nuvole > 0 ? Z.nuvole * riflessoNuvoleAtteso(t, luce, Z.ventoAtteso) : 0;
+  return suolo + cielo * (1 - suolo);
+}
+export function celleClima(Z, n, j0, j1) {
+  const { W, H, T, nuovo, sole, soleJ, cap, fonte, sigma, serra, passiAnno, totale, lenti, dtLento, dtVero, E, I } = Z, bl = Z.bloccato, alb = Z.alb, fin = Z.albedoFinita;
+  const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
+  if (!bl) { const d = Z.eps * Math.sin(2 * Math.PI * f); for (let j = j0; j < j1; j++) soleJ[j] = luceDelGiorno(Z.S0, Math.PI / 2 - ((j + 0.5) / H) * Math.PI, d); }
+  for (let j = j0; j < j1; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, t = T[k], arriva = bl ? sole[k] : soleJ[j], entra = (arriva === 0 && fin && t === t ? 0 : arriva * (1 - (alb ? alb(k, t, arriva) : albedoDelGiro(Z, k, t, arriva)))) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
+    const dT = frenaPasso(t, (dt * (entra - esce)) / (cap[k] + dt * molla));
+    nuovo[k] = Math.max(3, t + dT);
+    if (ultimo) { E[k] = entra; I[k] = esce + molla * dT; }
+  }
+}
+export function righeClima(Z, F, j0, j1, x) {
+  const { W, nuovo } = Z, sR = F.sR, cR = F.cR, qR = F.qR, zR = F.zR;
+  for (let j = j0; j < j1; j++) {
+    const o = j * W;
+    x[0] = nuovo[o] / qR[o]; for (let i = 1; i < W; i++) x[i] = (nuovo[o + i] - sR[o + i] * x[i - 1]) / qR[o + i]; for (let i = W - 2; i >= 0; i--) x[i] -= cR[o + i] * x[i + 1];
+    const g = F.g[j], fatt = (x[0] + (F.be[j] * x[W - 1]) / g) / F.den[j]; for (let i = 0; i < W; i++) nuovo[o + i] = x[i] - fatt * zR[o + i];
+  }
+}
+export function colonneClima(Z, F, i0, i1, x) {
+  const { W, H, nuovo } = Z, sC = F.sC, cC = F.cC, qC = F.qC;
+  for (let i = i0; i < i1; i++) {
+    const o = i * H;
+    x[0] = nuovo[i] / qC[o]; for (let j = 1; j < H; j++) x[j] = (nuovo[j * W + i] - sC[o + j] * x[j - 1]) / qC[o + j]; for (let j = H - 2; j >= 0; j--) x[j] -= cC[o + j] * x[j + 1];
+    for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
+  }
+}
+export function chiudiClima(Z, n, j0, j1) {
+  const { W, T, nuovo, media, freddo, stagioni, terra, passiAnno, totale, acquaPerGhiaccio } = Z, k0 = j0 * W, k1 = j1 * W;
+  if (n >= totale - passiAnno) { const quarto = stagioni ? stagioni[Math.min(3, Math.floor((4 * (n % passiAnno)) / passiAnno))] : null; for (let k = k0; k < k1; k++) { media[k] += nuovo[k] / passiAnno; if (quarto) quarto[k] += (4 * nuovo[k]) / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; } }
+  for (let k = k0; k < k1; k++) T[k] = nuovo[k];
+}
+// la barriera tra i fili del clima (un contatore e una generazione in un Int32Array condiviso: chi arriva ultimo apre)
+export function barrieraClima(B, P) { const g = Atomics.load(B, 1); if (Atomics.add(B, 0, 1) === P - 1) { Atomics.store(B, 0, 0); Atomics.add(B, 1, 1); Atomics.notify(B, 1); return; }
+  for (let s = 0; s < 400 && Atomics.load(B, 1) === g; s++); // (prima un poco di attesa attiva: di solito gli altri arrivano in pochi microsecondi)
+  let attese = 0; while (Atomics.load(B, 1) === g) { Atomics.wait(B, 1, g, 20); if (++attese > 3000) throw new Error('un filo del clima non risponde da un minuto'); } }
+// (il passo n per un filo: le sue righe j0…j1 e le sue colonne i0…i1; tra B e C e tra C e D si aspettano tutti; tra C e D chi
+// coordina somma il bilancio, se è l'ultimo anno)
+export function passoClimaFilo(Z, Fs, n, j0, j1, i0, i1, x, B, P, somma) {
+  celleClima(Z, n, j0, j1); const F = Fs[n < Z.lenti ? 0 : 1]; righeClima(Z, F, j0, j1, x); barrieraClima(B, P);
+  colonneClima(Z, F, i0, i1, x); if (somma) somma(n, Z); barrieraClima(B, P);
+  chiudiClima(Z, n, j0, j1);
+}
+// I FILI CHE AIUTANO IL CLIMA (clima.worker.js): li accende chi può aspettare (un filo, con la memoria condivisa: superficie.worker.js),
+// e qui si registrano; senza (node, la pagina, un navigatore senza isolamento delle origini) il clima si fa in un filo solo
+let aiutoClima = null;
+export function aiutiDelClima(a) { aiutoClima = a; }
 const memoClima = new Map();
 // L'ARIA CHE CIRCOLA (meteo.js). Il clima qui sopra tratta il calore portato dall'aria con un coefficiente (quello equivalente
 // alla legge dell'aria di leggi.js, che clima() ha calcolato per questo pianeta) e le nuvole con i loro valori attesi;
@@ -313,12 +374,7 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
   for (let k = 0; k < N; k++) { cap[k] = C(k); const m = 1 - terra[k]; geloK[k] = m ? CLIMA.geloMare : CLIMA.geloTerra; nudoK[k] = m ? CLIMA.albedoMare : CLIMA.albedoTerra;
     if (albedoMare && albedoMare[k] >= 0) sottoK[k] = albedoMare[k]; if (meteo && meteo.riflessoNuvole) riflK[k] = meteo.riflessoNuvole[k]; }
   const nuvoleMeteo = meteo && !meteo.riflessoNuvole ? meteo.nuvole : null, conRifl = !!(meteo && meteo.riflessoNuvole && meteo.riflessoNuvole.length === N), conSotto = !!albedoMare;
-  const albedoGiro = (conRifl || !meteo || (nuvoleMeteo && nuvoleMeteo.length === N)) ? (k, t, luce) => {
-    let suolo = conSotto ? sottoK[k] : NaN;
-    if (suolo !== suolo) { if (acquaPerGhiaccio === 0 && t === t) suolo = nudoK[k]; else { const y = (t - geloK[k]) / 4, ghiaccio = acquaPerGhiaccio * 0.5 * (1 - (y >= 22 ? 1 : y <= -22 ? -1 : Math.tanh(y))); suolo = ghiaccio * CLIMA.albedoGhiaccio + (1 - ghiaccio) * nudoK[k]; } }
-    const cielo = conRifl ? riflK[k] : nuvoleMeteo ? (nuvoleMeteo[k] * riflessoNuvoleAtteso(t, luce, ventoAtteso)) / coperturaDelCielo : nuvole > 0 ? nuvole * riflessoNuvoleAtteso(t, luce, ventoAtteso) : 0;
-    return suolo + cielo * (1 - suolo);
-  } : albedo;
+  const albedoGiro = (conRifl || !meteo || (nuvoleMeteo && nuvoleMeteo.length === N)) ? null : albedo; // (null: albedoDelGiro, qui sopra)
   // dove non arriva luce (la notte polare; la faccia buia di un pianeta bloccato) la luce assorbita è 0·(1 − albedo) = 0 qualunque
   // sia l'albedo, se è un numero: lì non la si calcola. Lo è se lo sono le nuvole di meteo.js e il vento atteso (si guarda qui)
   // (e se il vento atteso non è negativo: con la luce a 0 la pioggia attesa è allora min(≥ 0, 0) = 0, e la nube un numero)
@@ -369,33 +425,20 @@ export function climaSuperficie(chiave, P, sf, { W = 64, H = 32, anni = 14, pass
     }
     fattori.set(dt, F); return F; };
   let assorbita = 0, irradiata = 0, pesi = 0, riprese = 0; const stagioni = P.bloccato ? null : [0, 1, 2, 3].map(() => new Float32Array(W * H));
+  // (lo stato del passo per i quattro tempi: celleClima, righeClima, colonneClima, chiudiClima)
+  const Z = { W, H, T, nuovo, media, freddo, stagioni, terra, sole, soleJ, cap, fonte, sottoK, riflK, geloK, nudoK, nuvoleMeteo, conRifl, conSotto, acquaPerGhiaccio, nuvole, ventoAtteso, albedoFinita, alb: albedoGiro,
+    sigma, serra, S0, eps, bloccato: !!P.bloccato, passiAnno, totale, lenti, dtLento, dtVero, E: new Float64Array(W * H), I: new Float64Array(W * H) };
+  const bilancioDelPasso = (n, Zx = Z) => { if (n < totale - passiAnno) return; const { E, I } = Zx; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; assorbita += cosLat[j] * E[k]; irradiata += cosLat[j] * I[k]; pesi += cosLat[j]; } };
   const integra = () => {
   assorbita = 0; irradiata = 0; pesi = 0; media.fill(0); freddo.fill(0); if (stagioni) for (const q of stagioni) q.fill(0);
+  if (aiutoClima && !albedoGiro && aiutoClima(Z, [fattoriDi(dtLento), fattoriDi(dtVero)], bilancioDelPasso)) return; // (in più fili: gli stessi conti)
   for (let n = 0; n < totale; n++) {
-    const f = (n % passiAnno) / passiAnno, ultimo = n >= totale - passiAnno, dt = n < lenti ? dtLento : dtVero;
-    if (!P.bloccato) for (let j = 0; j < H; j++) soleJ[j] = luce(j, 0, f);
+    const dt = n < lenti ? dtLento : dtVero;
     // 1. in ogni cella: la luce assorbita meno quella irradiata
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, t = T[k], arriva = P.bloccato ? sole[k] : soleJ[j], entra = (arriva === 0 && albedoFinita && t === t ? 0 : arriva * (1 - albedoGiro(k, t, arriva))) + (fonte ? fonte[k] : 0), esce = (sigma * t ** 4) / serra, molla = (4 * esce) / t;
-      const dT = frenaPasso(t, (dt * (entra - esce)) / (cap[k] + dt * molla));
-      nuovo[k] = Math.max(3, t + dT);
-      if (ultimo) { assorbita += cosLat[j] * entra; irradiata += cosLat[j] * (esce + molla * dT); pesi += cosLat[j]; }
-    }
-    // 2. il calore portato dai vicini: lungo i paralleli (un anello)…
-    const F = fattoriDi(dt);
-    for (let j = 0; j < H; j++) {
-      const o = j * W, sR = F.sR, cR = F.cR, qR = F.qR, zR = F.zR;
-      x[0] = nuovo[o] / qR[o]; for (let i = 1; i < W; i++) x[i] = (nuovo[o + i] - sR[o + i] * x[i - 1]) / qR[o + i]; for (let i = W - 2; i >= 0; i--) x[i] -= cR[o + i] * x[i + 1];
-      const g = F.g[j], fatt = (x[0] + (F.be[j] * x[W - 1]) / g) / F.den[j]; for (let i = 0; i < W; i++) nuovo[o + i] = x[i] - fatt * zR[o + i];
-    }
-    // …e lungo i meridiani (da un polo all'altro: attraverso i poli non passa niente)
-    for (let i = 0; i < W; i++) {
-      const o = i * H, sC = F.sC, cC = F.cC, qC = F.qC;
-      x[0] = nuovo[i] / qC[o]; for (let j = 1; j < H; j++) x[j] = (nuovo[j * W + i] - sC[o + j] * x[j - 1]) / qC[o + j]; for (let j = H - 2; j >= 0; j--) x[j] -= cC[o + j] * x[j + 1];
-      for (let j = 0; j < H; j++) nuovo[j * W + i] = x[j];
-    }
-    if (ultimo) { const quarto = stagioni ? stagioni[Math.min(3, Math.floor((4 * (n % passiAnno)) / passiAnno))] : null; for (let k = 0; k < W * H; k++) { media[k] += nuovo[k] / passiAnno; if (quarto) quarto[k] += (4 * nuovo[k]) / passiAnno; if (nuovo[k] < (terra[k] ? 268 : 271)) freddo[k] += acquaPerGhiaccio / passiAnno; } }
-    T.set(nuovo);
+    celleClima(Z, n, 0, H); bilancioDelPasso(n);
+    // 2. il calore portato dai vicini: lungo i paralleli (un anello)… e lungo i meridiani (da un polo all'altro: attraverso i poli non passa niente)
+    const F = fattoriDi(dt); righeClima(Z, F, 0, H, x); colonneClima(Z, F, 0, W, x);
+    chiudiClima(Z, n, 0, H);
   } };
   // A REGIME il pianeta irradia quanta luce assorbe. Se alla fine il bilancio non chiude entro l'1% il clima sta ancora
   // cambiando (un mare che sta gelando sotto nuvole più fitte di quelle attese ci mette più delle otto «memorie» contate

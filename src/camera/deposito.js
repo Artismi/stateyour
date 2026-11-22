@@ -16,7 +16,9 @@
 //       → il valore salvato se c'è, se no calcola(), lo salva e lo restituisce (calcola può essere asincrona).
 // Senza IndexedDB (le prove in node) ricorda() calcola e basta. svuota() lo vuota (anche da DevTools: indexedDB.deleteDatabase('stateyour-deposito')).
 export const VERSIONE_MODELLO = 1;
-const NOME = 'stateyour-deposito', TAVOLA = 'nodi', MASSIMO = 3000; // (righe; le più vecchie si buttano)
+const NOME = 'stateyour-deposito', TAVOLA = 'nodi', USI = 'usi', MASSIMO = 3000; // (righe; le meno usate da tempo si buttano)
+// (DUE TAVOLE: «nodi» tiene i valori, «usi» quando ognuno è stato usato l'ultima volta. Prima il tempo stava con il valore, e ogni
+// lettura riscriveva il valore intero — per una superficie 7,6 MB clonati e scritti di nuovo — solo per cambiare un numero)
 
 export const disponibile = () => typeof indexedDB !== 'undefined';
 
@@ -43,7 +45,8 @@ export function improntaCodice(ingresso) {
 let db = null;
 function apri() {
   if (db) return db;
-  db = new Promise((ok, no) => { const q = indexedDB.open(NOME, 1); q.onupgradeneeded = () => { const s = q.result.createObjectStore(TAVOLA); s.createIndex('t', 't'); }; q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); q.onblocked = () => no(new Error('deposito bloccato')); });
+  db = new Promise((ok, no) => { const q = indexedDB.open(NOME, 2); q.onupgradeneeded = () => { const d = q.result; // (dalla versione 1, col tempo nel valore: si riparte vuoti)
+    for (const n of [TAVOLA, USI]) if (d.objectStoreNames.contains(n)) d.deleteObjectStore(n); d.createObjectStore(TAVOLA); d.createObjectStore(USI).createIndex('t', 't'); }; q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); q.onblocked = () => no(new Error('deposito bloccato')); });
   db.catch(() => { db = null; }); return db;
 }
 const fatto = (q) => new Promise((ok, no) => { q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
@@ -51,8 +54,8 @@ export async function chiaveDi(nodo, indirizzo, { codice = null } = {}) { return
 export async function leggi(chiave) {
   if (!disponibile()) return undefined;
   try { const d = await apri(), r = await fatto(d.transaction(TAVOLA, 'readonly').objectStore(TAVOLA).get(chiave)); if (!r) return undefined;
-    // (quando è stato usato l'ultima volta: per buttare i meno usati; non serve aspettarlo)
-    try { d.transaction(TAVOLA, 'readwrite').objectStore(TAVOLA).put({ ...r, t: Date.now() }, chiave); } catch { /* niente */ }
+    // (quando è stato usato l'ultima volta, nella sua tavola: per buttare i meno usati; non serve aspettarlo)
+    try { d.transaction(USI, 'readwrite').objectStore(USI).put({ t: Date.now() }, chiave); } catch { /* niente */ }
     statistiche.letti++; return r.v; } catch { return undefined; }
 }
 let scritture = 0;
@@ -60,16 +63,16 @@ let scritture = 0;
 // fili o cambiare; il salvataggio vero finisce dopo, in `fine`)
 export async function scrivi(chiave, valore) {
   if (!disponibile()) return { fine: Promise.resolve(false) };
-  try { const d = await apri(), tx = d.transaction(TAVOLA, 'readwrite'); tx.objectStore(TAVOLA).put({ v: valore, t: Date.now() }, chiave);
+  try { const d = await apri(), tx = d.transaction([TAVOLA, USI], 'readwrite'); tx.objectStore(TAVOLA).put({ v: valore }, chiave); tx.objectStore(USI).put({ t: Date.now() }, chiave);
     const fine = new Promise((ok) => { tx.oncomplete = () => { statistiche.scritti++; if (++scritture % 50 === 1) pota(d); ok(true); }; tx.onerror = tx.onabort = () => { statistiche.errori++; ok(false); }; });
     return { fine }; } catch { statistiche.errori++; return { fine: Promise.resolve(false) }; }
 }
 async function pota(d) {
-  try { const s = d.transaction(TAVOLA, 'readwrite').objectStore(TAVOLA), n = await fatto(s.count()); if (n <= MASSIMO) return; let via = n - MASSIMO * 0.9;
-    const c = s.index('t').openKeyCursor(); c.onsuccess = () => { const k = c.result; if (!k || via-- <= 0) return; s.delete(k.primaryKey); k.continue(); }; } catch { /* niente */ }
+  try { const tx = d.transaction([TAVOLA, USI], 'readwrite'), s = tx.objectStore(TAVOLA), u = tx.objectStore(USI), n = await fatto(u.count()); if (n <= MASSIMO) return; let via = n - MASSIMO * 0.9;
+    const c = u.index('t').openKeyCursor(); c.onsuccess = () => { const k = c.result; if (!k || via-- <= 0) return; s.delete(k.primaryKey); u.delete(k.primaryKey); k.continue(); }; } catch { /* niente */ }
 }
 export const statistiche = { letti: 0, scritti: 0, calcolati: 0, errori: 0 };
-export async function svuota() { if (!disponibile()) return; const d = await apri(); await fatto(d.transaction(TAVOLA, 'readwrite').objectStore(TAVOLA).clear()); }
+export async function svuota() { if (!disponibile()) return; const d = await apri(), tx = d.transaction([TAVOLA, USI], 'readwrite'); tx.objectStore(USI).clear(); await fatto(tx.objectStore(TAVOLA).clear()); }
 
 // il valore del nodo per quell'indirizzo: dalla memoria se c'è, se no calcolato (e salvato senza farlo aspettare)
 export async function ricorda(nodo, indirizzo, calcola, { codice = null } = {}) {

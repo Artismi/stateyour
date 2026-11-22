@@ -12,7 +12,7 @@ import { fmtGrande } from './nebbia.js';
 import { convezione, celle } from './fluidi.js';
 import { immagineSuperficie } from './geologia.js';
 import { sistema as sistemaDi, galassia as galassiaDi } from './cosmo.js';
-import { Z5_ROCCIA, LATI_SUOLO, disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, quandoSuperficiePronta, quandoFinestraPronta, preparaVolo, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto, finestreDelPunto, disegnaFinestre } from './mappa.js';
+import { Z5_ROCCIA, LATI_SUOLO, disegnaMappa, zoomMappa, colpisciMappa, camSuRegione, volaVerso, percorso, rocciaDi, superficieDi, preparaSuperficie, quandoSuperficiePronta, quandoFinestraPronta, preparaVolo, cercaFinestra, scenaAtomi, finestraDelPunto, campoDelPunto, popolazioneDelPunto, finestreDelPunto, disegnaFinestre } from './mappa.js';
 import { creaVista3D as creaVistaAtomi } from './atomi3d.js';
 import { creaNucleo } from '../tre/nucleo.js';
 import { pesoDiscreto } from './eredita.js';
@@ -618,6 +618,7 @@ addEventListener('resize', () => vistaAtomi?.ridimensiona());
 addEventListener('resize', () => mondo3d?.ridimensiona());
 // si apre lo spazio sopra il punto d'avvio (AVVIO)
 apriCosmo();
+{ const v = viaDellIndirizzo(AVVIO); preparaSuperficie({ cosmo: v.cosmo, galassia: v.galassia, stella: v.stella, pianeta: v.pianeta }); } // (la sua superficie, già in un filo: mappa.js)
 // quando una superficie calcolata in secondo piano è pronta: si ridisegna, e il pannello la mostra
 quandoSuperficiePronta(() => { disegna(); mostraPannello(); });
 // (le finestre del livello 5 si calcolano in secondo piano, mappa.js: quando una arriva la sua frase è nuova)

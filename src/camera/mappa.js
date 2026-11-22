@@ -578,19 +578,26 @@ export function superficieDi(v) {
     let cl = cl0; try { if (acque && acque.esiste) cl = climaConIlMare(k, P, sf0, cl0, acque); } catch { cl = cl0; }
     return tieni(k, { k, P, cl, se, seme, mare: acque });
   }
-  if (!inCalcolo.has(k)) {
-    if (!operaio) {
-      operaio = new Worker(new URL('./superficie.worker.js', import.meta.url), { type: 'module' });
-      operaio.onmessage = (e) => {
-        const d = e.data; inCalcolo.delete(d.k);
-        if (d.errore) { console.error('la superficie non si è potuta calcolare:', d.errore); return; }
-        const w = JSON.parse(d.k), Pw = sistema(w.cosmo, w.galassia, w.stella).pianeti[w.pianeta];
-        tieni(d.k, { k: d.k, P: Pw, cl: d.cl, se: d.se, seme: Pw.origine, mare: d.mare }); if (avvisa) avvisa(w);
-      };
-    }
-    inCalcolo.add(k); operaio.postMessage({ k, v });
-  }
+  if (!inCalcolo.has(k)) mandaAlFilo(k, v);
   return null;
+}
+function mandaAlFilo(k, v) {
+  if (!operaio) {
+    operaio = new Worker(new URL('./superficie.worker.js', import.meta.url), { type: 'module' });
+    operaio.onmessage = (e) => {
+      const d = e.data; inCalcolo.delete(d.k);
+      if (d.errore) { console.error('la superficie non si è potuta calcolare:', d.errore); return; }
+      const w = JSON.parse(d.k), Pw = sistema(w.cosmo, w.galassia, w.stella).pianeti[w.pianeta];
+      tieni(d.k, { k: d.k, P: Pw, cl: d.cl, se: d.se, seme: Pw.origine, mare: d.mare }); if (avvisa) avvisa(w);
+    };
+  }
+  inCalcolo.add(k); operaio.postMessage({ k, v });
+}
+// LA SUPERFICIE DI UN PIANETA CHE SI SA GIÀ DI VOLER VEDERE (il pianeta d'avvio): si comincia subito nel filo, senza chiedere qui
+// sistema() (costa secondi sul filo dell'interfaccia: lo fa il filo). Quando lo zoom ci arriva superficieDi la trova pronta, o in calcolo
+export function preparaSuperficie(v) {
+  const k = JSON.stringify(v); if (superfici.has(k) || inCalcolo.has(k) || typeof Worker === 'undefined' || typeof document === 'undefined') return;
+  mandaAlFilo(k, v);
 }
 // LE TESSERE IN SECONDO PIANO (tessere_mappa.worker.js): la stessa tessera, la stessa immagine e lo stesso mare di qui sotto,
 // calcolati in due fili invece che sul filo dell'interfaccia (ognuna costava da mezzo secondo a qualche secondo: la rotella si

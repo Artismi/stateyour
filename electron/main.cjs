@@ -42,12 +42,17 @@ for (const [nome, fa] of Object.entries(comandi)) {
 }
 
 app.whenReady().then(() => {
-  protocol.handle('app', (richiesta) => {
+  protocol.handle('app', async (richiesta) => {
     const { pathname } = new URL(richiesta.url);
     const file = path.normalize(path.join(RADICE, decodeURIComponent(pathname)));
     // solo i file della cartella del progetto
     if (!file.startsWith(RADICE + path.sep)) return new Response('vietato', { status: 403 });
-    return net.fetch(pathToFileURL(file).toString());
+    // LE ORIGINI ISOLATE (COOP e COEP): con loro la pagina e i suoi fili hanno la memoria condivisa (SharedArrayBuffer), e il
+    // clima di una superficie si fa in più fili (superficie.worker.js, clima.worker.js). Tutto viene da app://stateyour/ (i caratteri
+    // compresi, in src/visore/caratteri): niente da fuori che COEP fermerebbe
+    const r = await net.fetch(pathToFileURL(file).toString()), h = new Headers(r.headers);
+    h.set('Cross-Origin-Opener-Policy', 'same-origin'); h.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
