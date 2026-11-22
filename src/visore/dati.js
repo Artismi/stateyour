@@ -24,7 +24,10 @@ export function quiOra() {
     if (id === 'pianeta' && corpo?.punto && corpo.raggio > 0) { const d = prova(() => M.dove()); if (d && Number.isFinite(d.quota)) { quota = d.quota; if (d.quota < 0.25 * corpo.raggio) id = 'terreno'; } }
     return { id, via: v, tre: true, quota };
   }
-  if (cm) return { id: ['cosmo', 'galassia', 'stella', 'pianeta', 'terreno', 'materia'][Math.min(5, cm.livello)], via: cm.via, tre: false, acqua: !!cm.suAcqua };
+  // (sulla mappa piatta la via della camera è sempre intera: la si taglia al livello dove si è, perché la catena non
+  // mostri il pianeta quando si guarda la galassia o il cosmo)
+  if (cm) { const v = cm.via ? { ...cm.via } : cm.via; if (v && cm.livello < 3) { delete v.pianeta; if (cm.livello < 2) delete v.stella; if (cm.livello < 1) delete v.galassia; }
+    return { id: ['cosmo', 'galassia', 'stella', 'pianeta', 'terreno', 'materia'][Math.min(5, cm.livello)], via: v, tre: false, acqua: !!cm.suAcqua }; }
   return { id: 'cosmo', via: null };
 }
 export const ORDINE = ['cosmo', 'galassia', 'stella', 'pianeta', 'terreno', 'materia', 'atomo', 'particella'];

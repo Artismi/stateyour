@@ -24,7 +24,7 @@ function tessereVitali(d) {
   return tessere([
     { ico: 'gravita', v: `${num(cl.g / G0, 2)} g`, parola: 'gravità', p: cl.g / G0 / 3, titolo: `${num(cl.g, 1)} m/s²` },
     P.bloccato ? { ico: 'giorno', v: `${num(P.anno / 86400)} g`, parola: 'giorno = anno' } : { ico: 'giorno', v: P.giorno < 172800 ? `${num(P.giorno / 3600)} h` : `${num(P.giorno / 86400)} g`, parola: 'il giorno' },
-    { ico: 'campo', v: `${num((P.B0 || 0) * 1e9)} nT`, parola: `${(100 * (P.B0 || 0)) / B_TERRA < 1 ? num((100 * (P.B0 || 0)) / B_TERRA, 1) : num((100 * (P.B0 || 0)) / B_TERRA)} % della Terra`, p: (P.B0 || 0) / B_TERRA, titolo: 'il campo magnetico; la Terra: circa 50.000 nT' },
+    { ico: 'campo', v: `${num((P.B0 || 0) * 1e9)} nT`, parola: `${(100 * (P.B0 || 0)) / B_TERRA < 1 ? num((100 * (P.B0 || 0)) / B_TERRA, 1) : num((100 * (P.B0 || 0)) / B_TERRA)} % Terra`, p: (P.B0 || 0) / B_TERRA, titolo: 'il campo magnetico; la Terra: circa 50.000 nT' },
   ]);
 }
 const gasDi = (P, n = 3) => (P.atmosfera ? Object.entries(P.atmosfera.gas).sort((x, y) => y[1] - x[1]).filter(([, f]) => f > 0.001).slice(0, n) : []);

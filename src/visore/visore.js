@@ -24,6 +24,9 @@ const LIV3 = ['cosmo', 'galassia', 'stella', 'pianeta'];
 
 function costruisci() {
   metteSprite();
+  // i caratteri inclusi si caricano tutti subito: con font-display: block un peso usato per la prima volta (il numero grande
+  // della temperatura, Inter Display Light) restava invisibile per qualche secondo all'apertura della scheda
+  prova(() => document.fonts.forEach((f) => { if (f.status === 'unloaded') f.load().catch(() => {}); }));
   const tele = document.querySelector('.tele');
   if (!tele || document.getElementById('visore')) return;
   const radice = document.createElement('div'); radice.id = 'visore'; radice.className = 'v-scocca';
