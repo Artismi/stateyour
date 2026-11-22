@@ -35,11 +35,11 @@
 //
 // NIENTE È TARATO SUL MARE DELLA TERRA. Ogni numero è una conseguenza o un dato misurato in laboratorio o in natura,
 // citato dove sta (DATI, IONI, TERMO qui; ROCCE e MINERALI_ROCCIA in chimica.js §8). La Terra di prova esce a 32 g/kg, Na/Cl
-// 1,0, pH 8,4, magnesio 0,0038 mol/kg, i fiumi a 12 mg/kg (veri ~100). Il calcare della copertura c'è (sciogliCarbonati): torna quello
+// 1,0, pH 8,4, magnesio 0,0033 mol/kg, i fiumi a 16 mg/kg (veri ~100). Il calcare della copertura c'è (sciogliCarbonati): torna quello
 // posato sulla crosta dei continenti (un terzo), e senza vita nel suolo l'acqua lo scioglie con la CO2 dell'aria, fino a 0,6 mmol/kg di
 // calcio: se ne scioglie poco più di un terzo, il resto torna al mare in granelli. Sulla Terra vera la CO2 del suolo è 10–100 volte
-// quella dell'aria, e le piattaforme di calcare e la dolomite le fa la vita. I fiumi sono anche diluiti: la portata è tre volte la vera
-// (prima 14 mg/kg con il calcare che tornava tutto sciolto e la crosta senza delaminazione; 7 quando il sedimento ripreso non cedeva niente) (prima 55, Na/Cl 1,8 e pH 8,7: il sodio del solfato di sodio non aveva uscita; ora il fondo caldo lo lascia
+// quella dell'aria, e le piattaforme di calcare e la dolomite le fa la vita. I fiumi sono anche diluiti: la portata è il doppio della vera
+// (prima 19 mg/kg, con il calcare che tornava tutto sciolto; 7 quando il sedimento ripreso non cedeva niente) (prima 55, Na/Cl 1,8 e pH 8,7: il sodio del solfato di sodio non aveva uscita; ora il fondo caldo lo lascia
 // nell'albite, perché il calcio che l'albitizzazione libera cade come anidrite: fluidoCaldo; e prima ancora 71: il sodio delle
 // argille nuove tornava come sale, e il cloro non scendeva con le placche): il confronto, voce per voce, lo stampa
 // test/test_mare.mjs.

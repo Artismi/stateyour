@@ -41,12 +41,12 @@
 //   · l'erosione: i pendii si spianano (una catena larga 300 km in ~10 milioni di anni, se nulla la sostiene) e i
 //     fiumi portano alle coste ciò che sporge dal mare (lo riducono a 1/e in 130 milioni di anni);
 //   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
-// CON LA STORIA (test_tettonica): la Terra fa 12,3 km di spessore medio di crosta dei continenti (il vero 14,1) e continenti
-// sul 32% (il vero ~40); senza la delaminazione (COSTANTI.rhoEclogite) erano 21,7 km e il 52%. Gli archi e il riciclo sono rapporti
-// misurati oggi sulla Terra, usati per tutta la storia; manca il riciclo per erosione dove le fosse non toccano un continente. La
-// delaminazione dipende dalla gravità (la profondità dell'eclogite va come 1/g) e dalla geoterma: sulla Terra la base di una crosta di
-// 55 km sta appena sotto i 700 °C, e si stacca solo dove la litosfera è un po' calda; sul pianeta come la Terra della galassia 0
-// (0,67 masse terrestri) l'eclogite è a 64 km ma i 700 °C a 52, e la crosta passa da 23 a 4 km medi.
+// CON LA STORIA (test_tettonica): la Terra fa 19,6 km di spessore medio di crosta dei continenti (il vero 14,1) e continenti
+// sul 49% (il vero ~40). Gli archi e il riciclo sono rapporti misurati oggi sulla Terra, usati per tutta la storia; manca il riciclo per
+// erosione dove le fosse non toccano un continente. La delaminazione (COSTANTI.rhoEclogite) qui toglie poco: 1 km sulla Terra; sul
+// pianeta d'avvio (0,67 masse terrestri) 18 km, perché lì l'eclogite comincia a 64 km, sotto l'isoterma dei 700 °C (52 km), e una
+// radice che dura si scalda presto. La crosta che resta è la differenza di due flussi grandi (archi e fosse): un pozzo in più, anche
+// piccolo rispetto a loro, la cambia molto (con la radice sempre calda e la viscosità del granito fuso i continenti sparivano).
 // CHE COSA NON TORNA O MANCA (misurato su 8 Terre di prova, 2026-11: test_erosione, test_tettonica): le terre emerse sono
 // il 24% qui e il 20% dopo erosione() (vero 29); la crosta continentale sommersa è l'11% (vero 11) da quando il sedimento
 // dei fiumi si posa alla foce fino al pelo del mare (prima, in proporzione a quanto le celle erano fonde, era il 15%).
@@ -89,6 +89,7 @@ import { comeSorgente } from './eventi.js';
 import { STORIA } from './storia.js'; // (l'energia di attivazione della viscosità e la conducibilità del mantello: una fonte sola)
 import { R_GAS } from './leggi.js';
 import { F_GRANITO } from './chimica.js'; // (quanta parte della crosta degli archi è il fuso chiaro che sale: il resto è il residuo denso, una fonte sola)
+const RESIDUO = 1 - F_GRANITO;
 
 export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
@@ -129,6 +130,21 @@ export const COSTANTI = {
   // fatto eclogite, sì; la parte chiara no (alle stesse pressioni resta sotto i 3000 kg/m³), e resta. Del residuo si tiene il conto: lo
   // portano gli archi (1 − F_GRANITO della crosta nuova), lo tolgono la delaminazione e le fosse
   rhoEclogite: 3500, // (kg/m³) un'eclogite di basalto a 1,5 GPa (3400–3600: Jull e Kelemen 2001 [a memoria])
+  // IL RITMO (Molnar e Houseman 2004; Conrad e Molnar 1997 [a memoria]): uno strato denso spesso L e viscoso η sopra un mantello più
+  // debole cade come un'instabilità di Rayleigh-Taylor, con il ritmo q = q'·Δρ·g·L/η; q' è il ritmo adimensionale del modo più
+  // veloce (~0,1). La viscosità della radice è quella della crosta che scorre (viscositaFusa a Tfuso) con la legge di Arrhenius della
+  // roccia (storia.js STORIA.Enu), alla temperatura della geoterma della colonna a metà radice. LA GEOTERMA DI UNA CROSTA ISPESSITA:
+  // stretta di β = h/hNeutro la colonna porta giù anche la sua litosfera fredda (McKenzie 1978, all'inverso dello stiramento), e la
+  // temperatura a una profondità è quella di prima divisa per β; poi la colonna si riscalda col tempo della litosfera (τ, lo stesso
+  // dello stato termico x): β_eff = 1 + (β − 1)·exp(−t/τ), t il tempo da cui la crosta di quella cella è oltre zDel (un tracciante
+  // che viaggia con la crosta, come il residuo)
+  ritmoRT: 0.1,
+  // LA VISCOSITÀ DELLA RADICE: Jull e Kelemen 2001 [a memoria] trovano che una crosta inferiore densa cade in meno di 10 milioni di
+  // anni solo se alla sua base ci sono più di ~800 °C. Qui quel punto: a Tradice, una radice di Lradice cade (q = 1/e) in tRadice; la
+  // viscosità che ne esce (η = q'·Δρ·g⊕·L·t, ~5·10²⁰ Pa·s: quella delle radici dei loro conti, 10²⁰–10²¹) varia con la temperatura con
+  // la legge di Arrhenius della roccia. (La viscosità della crosta che fonde, viscositaFusa, 10¹⁹ a 700 °C, è di un granito parzialmente
+  // fuso, non di un'eclogite: con quella ogni radice cadeva in un milione di anni e i continenti sparivano nelle catene)
+  Tradice: 1073, Lradice: 10e3, tRadice: 1e7,
   // SOTTO UN COPERCHIO (con la storia, vedi coperchio()): la scala di temperatura dello strato che convette sotto il coperchio,
   // ΔT_rh = 2,4·R·T²/E (Solomatov e Moresi 2000 [R])
   reologico: 2.4,
@@ -391,7 +407,7 @@ export function passoCrosta(st, ca, { dtMa = 1, kappa = 0, apporto = 0, fiumi = 
   if (!st.passa) { st.m ??= new Float64Array(N).fill(hM); st.x ??= new Float64Array(N); st.im ??= Float64Array.from(st.m, (v) => 1 / v); st.hb = new Float64Array(N).fill(L.base(Number.isFinite(st.mare) ? st.mare : 0, 0));
     for (const nome of ['dh', 'dw', 'dq', 'vten', 'vin', 'vout', 'numM', 'numX', 'entra', 'esce', 'sete']) st[nome] ??= new Float64Array(N);
     st.tira = new Float64Array(N).fill(1); st.passa = new Float64Array(N).fill(1); st.tiene = new Uint8Array(2 * N); st.piena = Uint8Array.from(st.h, (v, k) => (v > 0 && v * st.im[k] >= 1 ? 1 : 0)); st.asciutta = Uint8Array.from(st.h, (v, k) => (v > 0 && v >= st.hb[k] ? 1 : 0)); st.FF = new Float64Array(2 * N); st.geo = vicine(W, H);
-    if (st.cop) { st.dc ??= new Float64Array(N); st.via ??= new Float64Array(N); } st.verso = false; st.xMax ??= 1; }
+    if (st.cop) { st.dc ??= new Float64Array(N); st.via ??= new Float64Array(N); } if (st.res) { st.dr ??= new Float64Array(N); st.de ??= new Float64Array(N); } st.verso = false; st.xMax ??= 1; }
   scambi(st, ca); ingorgo(st, ca, L); sposta(st, ca, L, kappa, cede); bilancio(st, ca, L, dtMa, apporto, fiumi);
   return st;
 }
@@ -474,7 +490,7 @@ function ingorgo(st, ca, L) {
 function sposta(st, ca, L, kappa, cede) {
   const { W, H, h, m, x, hb, dh, tira, numM, numX, geo, FF, passa } = st, N = W * H, hM = C.hMargine, zFuso = L.zFuso;
   const zMin = cede > 0 ? zFuso * (1 - (st.xMax ?? 0)) : Infinity; // (sotto zMin nessuna crosta fonde: xMax è lo stato termico più caldo del passo prima)
-  const cop = st.cop || null, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null;
+  const cop = st.cop || null, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null, res = st.res || null, dr = res ? st.dr : null, er = res ? st.etaRad : null, de = res ? st.de : null;
   for (let verso = 0; verso < 2; verso++) { const vv = geo.v[verso], fine = verso ? N - W : N, o = verso * N;
     for (let k = 0; k < fine; k++) { const v = vv[k], hk = h[k], hv = h[v]; if (hk <= 0 && hv <= 0) continue;
       // ciò che le placche spostano davvero (dopo l'ingorgo e la tenuta); con la crosta vanno lo stiramento e lo stato termico
@@ -488,6 +504,8 @@ function sposta(st, ca, L, kappa, cede) {
       // …e la crosta che fonde in basso cede sotto il proprio peso: scorre dalla cella più spessa a quella più sottile
       if ((hk > zMin || hv > zMin) && hk !== hv) { const su = hk > hv ? k : v, c = h[su] - zFuso * (1 - x[su]); if (c > 0) { let D = cede * c * c * c; if (D > 0.125) D = 0.125; Fc = D * (hk - hv); F += Fc; Ft += Fc; if (conto) { conto.stretta[k] -= Fc; conto.stretta[v] += Fc; } } }
       if (F !== 0) { dh[k] -= F; dh[v] += F; }
+      // (il residuo denso, in fondo alla colonna, va con la crosta che le placche e il cedimento spostano, come la copertura; l'erosione toglie da sopra)
+      if (res && Ft !== 0) { const hd = Ft > 0 ? hk : hv, d = Ft > 0 ? k : v, q = hd > 0 ? (Ft * res[d]) / hd : 0, qe = hd > 0 ? (Ft * er[d]) / hd : 0; dr[k] -= q; dr[v] += q; de[k] -= qe; de[v] += qe; }
       if (cop) {
         // la copertura va con la crosta che si sposta (in proporzione a quanta ne ha la cella che cede)…
         if (Ft !== 0) { const hd = Ft > 0 ? hk : hv, q = hd > 0 ? (Ft * cop[Ft > 0 ? k : v]) / hd : 0; dc[k] -= q; dc[v] += q; }
@@ -500,7 +518,7 @@ function bilancio(st, ca, L, dtMa, apporto, fiumi) {
   const { W, H, h, a, sub, m, x, im, hb, dh, dw, dq, tira, vten, piena, vin, vout, numM, numX, entra, esce, passa, sete, asciutta } = st, N = W * H, vE = st.geo.v[0], mW = st.geo.m[0];
   const mare = Number.isFinite(st.mare) ? st.mare : 0 /* (senza mare: lo zero delle quote, come prima) */, hM = C.hMargine, h0 = L.base(mare, 0), mMin = Math.min(hM, L.basalto), spegne = Math.exp((-dtMa * 1e6) / L.tau); let xMax = 0;
   const X0 = 0.05, dHb = (L.base(mare, X0) - h0) / X0; // (lo spessore di base di una colonna poco calda: in linea retta fino a x = X0; oltre, la formula intera)
-  const cop = st.cop || null, copMax = st.copMax ?? Infinity, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null;
+  const cop = st.cop || null, copMax = st.copMax ?? Infinity, dc = cop ? st.dc : null, via = cop ? st.via : null, conto = st.conto || null, res = st.res || null, dr = res ? st.dr : null, er = res ? st.etaRad : null, de = res ? st.de : null;
   // il bilancio di ogni cella. Se dopo il trasporto la crosta oceanica non basta a coprire il fondo, lo spazio
   // si riempie di crosta nuova, di età zero (una dorsale, o il mare che si apre dietro un continente che si
   // spacca); se è troppa, la parte in più affonda nel mantello (una fossa).
@@ -541,6 +559,7 @@ function bilancio(st, ca, L, dtMa, apporto, fiumi) {
     if (hn > hbk) { e = fiumi * (hn - hbk); hn -= e; fango += e; sete[k] = 0; asciutta[k] = 1; }
     else { let w = asciutta[vE[k]] + asciutta[mW[k]]; if (k >= W) w += asciutta[k - W]; if (k < N - W) w += asciutta[k + W]; sete[k] = w; sete2 += w; asciutta[k] = hn > 0 && hn >= hbk - 1e-3 ? 1 : 0; } // …fino alle coste
     h[k] = hn; totale += hn; piena[k] = hn > 0 && hn * imk >= 1 ? 1 : 0;
+    if (res) { let r = res[k] + dr[k] + RESIDUO * nuova; if (r > hn) r = hn; if (!(r > 0)) r = 0; res[k] = r; dr[k] = 0; const e2 = er[k] + de[k]; er[k] = hn > 0 && e2 > 0 ? e2 : 0; de[k] = 0; } // (la crosta nuova degli archi è residuo per 1 − F_GRANITO)
     if (cop) { // il bilancio della copertura: quella che c'era e che è arrivata, più ciò che si è posato, meno ciò che è stato tolto
       let c = cop[k] + dc[k] + posa - via[k] - e; if (c > hn) c = hn; if (c > copMax) c = copMax; if (!(c > 0)) c = 0; cop[k] = c;
       if (conto) { conto.arco[k] += nuova; conto.tolto[k] += via[k] + e; conto.posato[k] += posa; }
@@ -780,13 +799,11 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // curva della Terra, crostaAttesa
   const crostaSaltata = () => (T ? 0 : crostaAttesa(saltati) * C.hMisura);
   // (la profondità dell'eclogite sotto una colonna di crosta dei continenti, e se la radice che vi passa pesa più del mantello)
-  const zDel = STORIA.eclogite / (C.rhoCrosta * gravita), radiceAffonda = C.rhoEclogite > C.rhoMantello; let delaminata = 0, residuo = 0;
-  // (quanta parte della crosta dei continenti è ancora residuo denso: quello degli archi meno quello staccato; le fosse ne portano via in proporzione)
-  const parteResiduo = () => { const c = prodotta - riciclata - delaminata; return c > 0 ? Math.min(1, Math.max(0, residuo / c)) : 0; };
+  const zDel = STORIA.eclogite / (C.rhoCrosta * gravita), radiceAffonda = C.rhoEclogite > C.rhoMantello, etaRadice = C.ritmoRT * (C.rhoEclogite - C.rhoMantello) * C.gTerra * C.Lradice * C.tRadice * 3.156e7, Ts = (termico || {}).Ts > 0 ? termico.Ts : 273; let delaminata = 0;
   let t = saltati, prodotta = crostaSaltata(), riciclata = 0, debito = 0, st = null, ca = null, nPassi = 0, c0 = C_PASSO, finestra = 0, strada = orologio ? orologio.stradaDi(saltati) : 0, tFinestra = null, dtUltimo = 0;
   for (let l = 0; l < liv.length; l++) {
     const { W: w, H: hh, dt, n } = liv[l], Nl = w * hh;
-    st = st ? { W: w, H: hh, h: raffina(st.h, w / 2, hh / 2), a: raffina(st.a, w / 2, hh / 2), sub: raffina(st.sub, w / 2, hh / 2), sommaSub: st.sommaSub * 4, sommaSub1: (st.sommaSub1 ?? 0) * 4, sommaMare: (st.sommaMare ?? 0) * 4, fango: (st.fango ?? 0) * 4, cop: raffina(st.cop, w / 2, hh / 2), copMax, m: raffina(st.m, w / 2, hh / 2), x: raffina(st.x, w / 2, hh / 2), lit: L, mare: st.mare } : { W: w, H: hh, h: new Float64Array(Nl).fill(prodotta), a: new Float64Array(Nl), sub: new Float64Array(Nl), sommaSub: 0, cop: new Float64Array(Nl), copMax, m: new Float64Array(Nl).fill(C.hMargine), x: new Float64Array(Nl), lit: L, mare: 0 };
+    st = st ? { W: w, H: hh, h: raffina(st.h, w / 2, hh / 2), a: raffina(st.a, w / 2, hh / 2), sub: raffina(st.sub, w / 2, hh / 2), sommaSub: st.sommaSub * 4, sommaSub1: (st.sommaSub1 ?? 0) * 4, sommaMare: (st.sommaMare ?? 0) * 4, fango: (st.fango ?? 0) * 4, cop: raffina(st.cop, w / 2, hh / 2), res: T ? raffina(st.res, w / 2, hh / 2) : null, etaRad: T ? raffina(st.etaRad, w / 2, hh / 2) : null, copMax, m: raffina(st.m, w / 2, hh / 2), x: raffina(st.x, w / 2, hh / 2), lit: L, mare: st.mare } : { W: w, H: hh, h: new Float64Array(Nl).fill(prodotta), a: new Float64Array(Nl), sub: new Float64Array(Nl), sommaSub: 0, cop: new Float64Array(Nl), res: T ? new Float64Array(Nl) : null, etaRad: T ? new Float64Array(Nl) : null, copMax, m: new Float64Array(Nl).fill(C.hMargine), x: new Float64Array(Nl), lit: L, mare: 0 };
     st.im = Float64Array.from(st.m, (v) => 1 / v); const ea = new Float64Array(Nl), lato = (2 * Math.PI * raggioM) / w;
     st.hNeutro = L.hN; st.xMax = 1;
     ca = null; if (!n && l < liv.length - 1) continue;
@@ -819,7 +836,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       const dtp = orologio ? Math.max(1, (p === n - 1 && l === liv.length - 1 ? eta : orologio.tempoDi(strada + dt)) - t) : dt, kappa = orologio ? Math.min(0.04, (C.erosione * dtp) / ((2 * Math.PI * raggioM) / w) ** 2) : kappa0;
       // la crosta nuova di questo passo (se non c'è ancora nessuna fossa dove farla nascere, resta in debito)
       let apporto = 0;
-      if (T) { const nuova = C.archi * T.di(t + 0.5 * dtp).basalto * (st.sommaSub1 ?? 0); if (st.sommaSub > 0 && nuova > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; residuo += (1 - F_GRANITO) * nuova / Nl; } }
+      if (T) { const nuova = C.archi * T.di(t + 0.5 * dtp).basalto * (st.sommaSub1 ?? 0); if (st.sommaSub > 0 && nuova > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; } }
       else { const nuova = (crostaAttesa(t + dt) - crostaAttesa(t)) * C.hMisura * Nl + debito; if (st.sommaSub > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; debito = 0; } else debito = nuova; }
       passoCrosta(st, ca, { dtMa: dtp / 1e6, kappa, apporto, fiumi: 1 - Math.exp(-dtp / C.fiumi), cede: (L.cede * dtp * 3.156e7) / (lato * lato) }); t += dtp; strada += orologio ? dt : 0; nPassi++; dtUltimo = dtp;
       // il riciclo: dove il fondale affonda sotto un continente (la cella, o una delle quattro accanto, è tutta crosta leggera: non i
@@ -827,14 +844,17 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       // di continente più spessa
       if (T) { const b = C.riciclo * T.di(t).basalto, { h: hh2, sub: sb, piena: pn } = st, vE = st.geo.v[0], mW = st.geo.m[0];
         for (let k = 0; k < Nl; k++) { const sk = sb[k]; if (!(sk > 0)) continue; let q = pn[k] ? k : -1; const vic = [vE[k], mW[k], k >= w ? k - w : -1, k < Nl - w ? k + w : -1]; for (const v of vic) if (v >= 0 && pn[v] && (q < 0 || hh2[v] > hh2[q])) q = v;
-          if (q < 0) continue; const via = Math.min(hh2[q], b * sk); hh2[q] -= via; riciclata += via / Nl; residuo -= parteResiduo() * via / Nl; if (st.cop) st.cop[q] = Math.min(st.cop[q], hh2[q]); } }
-      // la delaminazione: dove la colonna intera di crosta (la cella tutta coperta) scende oltre zDel e la sua base è più calda di
-      // Tfuso (la geoterma della colonna: zFuso·(1 − x), come per il cedimento), la radice oltre zDel affonda nel mantello; ma solo il
-      // residuo, e non più di quanto la colonna ne ha (la parte di residuo della crosta: quella media del pianeta, parteResiduo); la
-      // parte chiara resta, e la crosta che ha già perso la radice si fa più chiara e smette di staccarsi
-      if (T && radiceAffonda && residuo > 0) { const { h: hd, x: xd, im: imd } = st, zF = L.zFuso, r = parteResiduo(); let tolta = 0, resta = residuo * Nl;
-        for (let k = 0; k < Nl && resta > 0; k++) { const hk = hd[k]; if (hk > zDel && hk * imd[k] >= 1 && zDel > zF * (1 - xd[k])) { const via = Math.min(hk - zDel, r * hk, resta); tolta += via; resta -= via; hd[k] = hk - via; if (st.cop) st.cop[k] = Math.min(st.cop[k], hd[k]); } }
-        delaminata += tolta / Nl; residuo = Math.max(0, residuo - tolta / Nl); }
+          if (q < 0) continue; const via = Math.min(hh2[q], b * sk); hh2[q] -= via; riciclata += via / Nl; if (st.res) st.res[q] *= hh2[q] + via > 0 ? hh2[q] / (hh2[q] + via) : 0; if (st.cop) st.cop[q] = Math.min(st.cop[q], hh2[q]); } }
+      // LA DELAMINAZIONE, cella per cella: dove la colonna intera di crosta (la cella tutta coperta) scende oltre zDel, la parte del suo
+      // residuo che sta sotto zDel è eclogite (solo quella: il residuo sopra la transizione e la crosta chiara restano), e cade col
+      // ritmo di Rayleigh-Taylor alla temperatura della radice (la geoterma ispessita, che si rilassa): in questo passo ne cade la
+      // parte 1 − exp(−q·dt). eta_ è il tempo della radice per lo spessore (si somma e viaggia come una quantità)
+      if (T && radiceAffonda) { const { h: hd, x: xd, im: imd, res, etaRad: eta_ } = st, zF = L.zFuso, hN = st.hNeutro || L.hN, dts = dtp * 3.156e7; let tolta = 0;
+        for (let k = 0; k < Nl; k++) { const hk = hd[k], rk = res[k]; if (hk > zDel && hk * imd[k] >= 1) eta_[k] += hk * dtp; else { eta_[k] = 0; continue; } if (!(rk > 0)) continue;
+          const Lr = Math.min(hk - zDel, rk), z = zDel + 0.5 * Lr, beta = 1 + (Math.max(1, hk / hN) - 1) * Math.exp(-(eta_[k] / hk) / L.tau), Tr = Math.min(Ts + C.Tastenosfera, Ts + ((C.Tfuso - Ts) * z) / (zF * (1 - xd[k]) * beta)),
+            eta = etaRadice * Math.exp((STORIA.Enu / R_GAS) * (1 / Tr - 1 / C.Tradice)), q = (C.ritmoRT * (C.rhoEclogite - C.rhoMantello) * gravita * Lr) / eta, via = -Lr * Math.expm1(-q * dts);
+          if (via > 0) { tolta += via; hd[k] = hk - via; res[k] = rk - via; if (st.cop) st.cop[k] = Math.min(st.cop[k], hd[k]); } }
+        delaminata += tolta / Nl; }
     }
     debito *= 4; // (alla griglia successiva le celle sono quattro volte tante)
     if (!ca) aggiorna(false);
