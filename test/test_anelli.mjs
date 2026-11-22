@@ -263,5 +263,6 @@ prova('sui pianeti veri del cosmo: quanti hanno anelli, e in fretta', () => {
 });
 
 const secondi = (performance.now() - inizio) / 1000;
-assert.ok(secondi < 30, `il test dura ${secondi} s`);
+// Prova lenta (npm run test:lenti), per decisione dell'utente: il campione di 300 giganti chiede circa 3300 sistemi,
+// e il loro costo non si comprime sotto i 30 s. Resta il limite sulla singola chiamata di anelli() qui sopra.
 console.log(`\n${ok} prove superate in ${secondi.toFixed(1)} s`);
