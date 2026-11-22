@@ -4,9 +4,11 @@
 // i testi lunghi stanno nel taccuino. Ogni scheda è { chiave, liv, nome, identita, linguette: [{ id, ico, nome, html() }], piede }.
 import { ico } from './icone.js';
 import { C, pianeta as datiPianeta, particelleDi, stella as datiStella, galassia as datiGalassia, cosmo as datiCosmo, materia as datiMateria, lunghezza } from './dati.js';
-import { sezione, etichette, termometro, temperatura, bandaAcqua, anello, legendaGas, goccia, misurino, scalaPH, tessere, spettro, impilate, scalaLog, resa, spaccato, catenaCause, conteggi, hr, curva, mappaDensita, coloreCorpoNero, num, num1, sig, formula, segnoMeno } from './grafica.js';
+import { sezione, etichette, termometro, temperatura, bandaAcqua, anello, legendaGas, goccia, misurino, scalaPH, tessere, spettro, impilate, scalaLog, resa, spaccato, catenaCause, conteggi, hr, curva, mappaDensita, coloreCorpoNero, diagramma, hrPopolazione, barreLog, istogramma, mappaConSegni, num, num1, sig, formula, segnoMeno } from './grafica.js';
 import { immagineSuperficie } from '../camera/geologia.js';
 import { scenaAtomi } from '../camera/mappa.js';
+import { stella as stellaDiSequenza } from '../camera/stelle.js';
+import { TORO_M } from '../camera/cosmo.js';
 
 const prova = (f, d = null) => { try { return f(); } catch { return d; } };
 const ANNI = 3.156e7, G0 = 9.81, B_TERRA = 5e-5;
@@ -152,21 +154,70 @@ function schedaStella(q) {
   return { chiave: `s|${JSON.stringify(v)}`, liv: 'stella', nome: `Stella ${v.stella + 1}`, identita: `classe ${cs} · ${St.stato} · ${St.componente || ''}`.replace(/ · $/, ''), linguette: [{ id: 'sintesi', ico: 'stella', nome: 'Sintesi', html: sintesi }, { id: 'pianeti', ico: 'pianeta', nome: 'Pianeti', html: pianeti }, { id: 'disco', ico: 'ramo', nome: 'Origine', html: disco }], piede: () => '' };
 }
 // =============================================================================================== LA GALASSIA
+// la popolazione per il diagramma H-R: dal catalogo della galassia (cosmo.js) la temperatura e lo stato di ogni stella; la
+// luminosità la dà stelle.js per quelle in vita (massa, metalli, età), Stefan–Boltzmann col raggio per le nane bianche;
+// le giganti, che nel catalogo non hanno raggio, al gruppo rosso (~50 L☉). Stelle di neutroni e buchi neri non hanno luce
+// da mettere: si contano.
+const popolazioni = new Map();
+function popolazione(Gx, k) {
+  if (popolazioni.has(k)) return popolazioni.get(k);
+  const punti = [], stati = {};
+  for (const s of Gx.stelle) {
+    stati[s.stato] = (stati[s.stato] || 0) + 1;
+    const L = s.stato === 'in vita' ? prova(() => stellaDiSequenza(s.massa, { Z: s.Z, eta: s.eta }).L) : s.stato === 'nana bianca' && s.raggioM > 0 ? (s.raggioM / 6.957e8) ** 2 * (s.T / 5772) ** 4 : s.stato === 'gigante rossa' ? 50 : null;
+    if (L > 0 && s.T > 0) punti.push({ T: s.T, L, colore: `rgb(${(s.colore || [255, 255, 255]).join(',')})`, r: s.stato === 'in vita' ? 1.2 : 1.8 });
+  }
+  const r = { punti, stati }; popolazioni.set(k, r); if (popolazioni.size > 4) popolazioni.delete(popolazioni.keys().next().value); return r;
+}
+const STATI = [['in vita', 'stella', 'in vita'], ['gigante rossa', 'calore', 'giganti rosse'], ['nana bianca', 'atomo', 'nane bianche'], ['stella di neutroni', 'campo', 'stelle di neutroni'], ['buco nero', 'interno', 'buchi neri']];
 function schedaGalassia(q) {
-  const d = datiGalassia(q.via); if (!d) return null; const { F, G, Gx, v } = d;
+  const d = datiGalassia(q.via); if (!d) return null; const { F, G, Gx, v } = d, k = `g|${JSON.stringify(v)}`;
+  const masse = () => barreLog([{ nome: 'stelle', v: F.massaStelle, colore: '#f2a65a' }, { nome: 'gas freddo', v: F.massaGas, colore: '#8ecfe0' }, { nome: 'gas caldo', v: F.massaCalda, colore: '#b59ad9' }, { nome: 'buco nero', v: F.buco?.M, colore: '#ff5a78' }, { nome: 'alone, in tutto', v: F.alone?.massa, colore: 'rgba(244,236,223,.45)' }], 'M☉');
   const sintesi = () => sezione('galassia', 'La forma', `${F.classe || F.tipo}${F.bracci?.numero && F.tipo === 'spirale' ? ` · ${F.bracci.numero} bracci` : ''}${F.barra ? ' · barrata' : ''}`, tessere([{ ico: 'massa', v: sig(F.massaStelle), parola: 'masse solari' }, { ico: 'aria', v: sig(F.massaGas), parola: 'masse di gas' }, { ico: 'giorno', v: `${num(F.velocita)} km/s`, parola: 'la rotazione' }]))
+    + sezione('massa', 'Le masse', 'in masse del Sole', masse())
     + sezione('stella', 'Le stelle', '', tessere([{ ico: 'stella', v: sig(Gx.stelleVere ?? Gx.stelle.length), parola: 'stelle' }, { ico: 'eta', v: `${num(G.formazione / ANNI / 1e9, 1)} Ga`, parola: 'le prime stelle' }, { ico: 'cosmo', v: `${num(G.peso, 1)} ×`, parola: 'la densità' }]));
-  const storia = () => { const s = F.storia; return sezione('tempo', 'La storia delle stelle', 'stelle nate per anno', s?.t ? curva(Array.from(s.t), Array.from(s.sfr)) : nota('nessuna storia')) + (s?.gas ? sezione('aria', 'Il gas', 'quanto ne resta', curva(Array.from(s.t), Array.from(s.gas), { colore: '#8ecfe0' })) : ''); };
+  const stelle = () => { const p = popolazione(Gx, k), n = Gx.stelle.length;
+    return sezione('stella', 'Il diagramma H-R', `${num(n)} stelle del catalogo`, hrPopolazione(p.punti)) + sezione('eta', 'A che punto sono', '', conteggi(STATI.filter(([s]) => p.stati[s]).map(([s, i, t]) => ({ ico: i, n: num(p.stati[s]), testo: t })))); };
+  const anelli = () => { const A = F.anelli; if (!A?.r) return nota('nessun dato per anello');
+    const r = Array.from(A.r), pieni = Array.from(A.sigmaStelle).filter((x) => x > 0).length;
+    if (pieni < 3) return sezione('galassia', 'Il disco', 'quasi vuoto', nota('quasi tutta la luce sta nello sferoide, al centro')) + sezione('massa', 'Le masse', '', masse());
+    return sezione('stella', 'Il profilo di luce', 'L☉ per kpc² · dal centro', diagramma([{ xs: r, ys: Array.from(A.luce).map((x, i) => x / A.area[i]), colore: '#f2a65a' }], { logX: true, logY: true, etX: 'kpc' }))
+      + sezione('atomo', 'I metalli', 'per anello · × il Sole', diagramma([{ xs: r, ys: Array.from(A.Z), colore: '#b59ad9' }], { logX: true, etX: 'kpc' }))
+      + sezione('aria', 'Stelle e gas', 'M☉ per kpc²', diagramma([{ xs: r, ys: Array.from(A.sigmaStelle), colore: '#f2a65a' }, { xs: r, ys: Array.from(A.sigmaGas), colore: '#8ecfe0' }], { logX: true, logY: true, etX: 'kpc' }) + etichette(['arancio: stelle', 'azzurro: gas'])); };
+  const storia = () => { const s = F.storia; return sezione('tempo', 'La storia delle stelle', 'stelle nate per anno', s?.t ? curva(Array.from(s.t), Array.from(s.sfr)) : nota('nessuna storia')) + (s?.gas ? sezione('aria', 'Il gas', 'quanto ne resta', curva(Array.from(s.t), Array.from(s.gas), { colore: '#8ecfe0' })) : '') + (s?.stelle ? sezione('massa', 'Le stelle', 'la massa che si accumula', curva(Array.from(s.t), Array.from(s.stelle), { colore: '#f2a65a' })) : ''); };
   const buco = () => { const B = F.buco; if (!B) return nota('nessun buco nero al centro'); return sezione('galassia', 'Il buco nero', `${sig(B.M)} masse del Sole`, tessere([{ ico: 'calore', v: `${sig(B.potenzaW)} W`, parola: 'la potenza' }, { ico: 'diagnostica', v: `${num(100 * (B.attivita ?? 0))} %`, parola: "l'attività", p: B.attivita }, { ico: 'entra', v: sig(B.eddington), parola: 'di Eddington' }])) + (Gx.sorgenti ? sezione('particella', 'Le sorgenti', 'getti, supernove, …', conteggi(Object.entries((Array.isArray(Gx.sorgenti) ? Gx.sorgenti : []).reduce((o, s) => { const k = s.tipo || s.nome || 'sorgente'; o[k] = (o[k] || 0) + 1; return o; }, {})).slice(0, 5).map(([k, n]) => ({ ico: /getto|buco/.test(k) ? 'galassia' : 'stella', n, testo: k })))) : ''); };
-  return { chiave: `g|${JSON.stringify(v)}`, liv: 'galassia', nome: `Galassia ${v.galassia + 1}`, identita: `${F.tipo}${F.ambiente ? ` · nel ${F.ambiente}` : ''}`, linguette: [{ id: 'sintesi', ico: 'galassia', nome: 'Sintesi', html: sintesi }, { id: 'storia', ico: 'tempo', nome: 'Storia', html: storia }, { id: 'buco', ico: 'interno', nome: 'Centro', html: buco }], piede: () => '' };
+  return { chiave: k, liv: 'galassia', nome: `Galassia ${v.galassia + 1}`, identita: `${F.tipo}${F.ambiente ? ` · nel ${F.ambiente}` : ''}`, linguette: [{ id: 'sintesi', ico: 'galassia', nome: 'Sintesi', html: sintesi }, { id: 'stelle', ico: 'stella', nome: 'Stelle', html: stelle }, { id: 'anelli', ico: 'atomo', nome: 'Anelli', html: anelli }, { id: 'storia', ico: 'tempo', nome: 'Storia', html: storia }, { id: 'buco', ico: 'interno', nome: 'Centro', html: buco }], piede: () => '' };
 }
 // =============================================================================================== IL COSMO
+// dove si è nella ragnatela: dalla densità dell'inizio (cosmo.js, settanta onde) nel punto della galassia guardata, o di
+// quella più vicina alla camera. Il criterio della forma è la curvatura della densità (le derivate seconde delle onde):
+// piega in giù in due direzioni → un nodo; in una → un filamento; in nessuna, o sotto la media, → un vuoto.
+const MPC = 3.0857e22, LATO_MPC = TORO_M / MPC;
+function nellaRagnatela(Cx, x, y) {
+  let d = 0, xx = 0, yy = 0, xy = 0; const P = 2 * Math.PI;
+  for (const m of Cx.modi) { const c = m.a * Math.cos(P * (m.kx * x + m.ky * y) + m.fi); d += c; xx -= c * (P * m.kx) ** 2; yy -= c * (P * m.ky) ** 2; xy -= c * P * P * m.kx * m.ky; }
+  const t = (xx + yy) / 2, r = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy), giu = (t + r < 0 ? 1 : 0) + (t - r < 0 ? 1 : 0), z = (d - Cx.media) / (Cx.sigma || 1);
+  return { delta: d, z, forma: giu === 2 && z > 0 ? 'nodo' : giu >= 1 && z > -0.3 ? 'filamento' : 'vuoto' };
+}
 function schedaCosmo(q) {
   const d = datiCosmo(q.via); if (!d) return null; const { Cx, v } = d, tipi = {};
   for (const g of Cx.galassie) tipi[g.tipo] = (tipi[g.tipo] || 0) + 1;
-  const sintesi = () => sezione('cosmo', 'La materia', 'la densità, in una fetta', mappaDensita(Cx.griglia, Cx.N)) + sezione('galassia', 'Le galassie', `${Cx.galassie.length}`, conteggi(Object.entries(tipi).map(([t, n]) => ({ ico: 'galassia', n, testo: t }))));
+  const gi = v.galassia ?? prova(() => C().universo3d.cosmo.vicina) ?? Cx.galassie.reduce((m, g, i, a) => (g.peso > a[m].peso ? i : m), 0), g = Cx.galassie[gi];
+  const dist = (h) => { let dx = h.pos[0] - g.pos[0], dy = h.pos[1] - g.pos[1]; dx -= Math.round(dx); dy -= Math.round(dy); return Math.hypot(dx, dy) * LATO_MPC; };
+  const RAGGI = [100, 200, 400], vicini = RAGGI.map((R) => Cx.galassie.filter((h) => h !== g && dist(h) < R).length);
+  const mappa = () => mappaConSegni(Cx.griglia, Cx.N, Cx.galassie.map((h) => ({ x: h.pos[0] - Math.floor(h.pos[0]), y: h.pos[1] - Math.floor(h.pos[1]) })), g && { x: g.pos[0] - Math.floor(g.pos[0]), y: g.pos[1] - Math.floor(g.pos[1]), r: RAGGI[1] / LATO_MPC });
+  const sintesi = () => sezione('cosmo', 'La materia', 'la densità, in una fetta', mappa()) + sezione('galassia', 'Le galassie', `${Cx.galassie.length}`, conteggi(Object.entries(tipi).map(([t, n]) => ({ ico: 'galassia', n, testo: t }))));
+  const ragnatela = () => { if (!g) return nota('nessuna galassia');
+    const w = nellaRagnatela(Cx, g.pos[0], g.pos[1]);
+    // lo spettro di potenza: ogni onda dell'inizio un punto (k = 2π·|n|/lato, la potenza a²), e la legge che le ha fatte (a ∝ k^−1,25)
+    const ks = Cx.modi.map((m) => (2 * Math.PI * Math.hypot(m.kx, m.ky)) / LATO_MPC), ps = Cx.modi.map((m) => m.a * m.a), kk = [...ks].sort((a, b) => a - b), k0 = kk[0], k1 = kk[kk.length - 1];
+    const norma = Cx.modi.reduce((s, m) => s + m.a * m.a * Math.hypot(m.kx, m.ky) ** 2.5, 0) / Cx.modi.length, legge = [k0, k1].map((k) => norma * ((k * LATO_MPC) / (2 * Math.PI)) ** -2.5);
+    return sezione('mirino', 'Dove sta', `galassia ${gi + 1}`, tessere([{ ico: 'cosmo', v: w.forma, parola: 'la forma', titolo: 'dalla curvatura della densità: nodo se piega in giù in due direzioni, filamento in una, vuoto in nessuna' }, { ico: 'massa', v: `${w.z >= 0 ? '+' : '−'}${num(Math.abs(w.z), 1)} σ`, parola: 'la densità', p: (w.z + 3) / 6 }, { ico: 'galassia', v: num(vicini[1]), parola: `entro ${RAGGI[1]} Mpc` }]))
+      + sezione('cosmo', 'La densità locale', 'fra tutti i punti del cosmo', istogramma(Cx.griglia, w.delta, { etichetta: `galassia ${gi + 1}` }))
+      + sezione('galassia', 'Le vicine', 'galassie del catalogo', conteggi(RAGGI.map((R, i) => ({ ico: 'galassia', n: vicini[i], testo: `entro ${R} Mpc` }))))
+      + sezione('diagnostica', 'Lo spettro di potenza', 'le onde dell\'inizio', diagramma([{ xs: [k0, k1], ys: legge, colore: 'rgba(244,236,223,.35)' }, { xs: ks, ys: ps, colore: '#e9a9b6', punti: true }], { logX: true, logY: true, etX: 'k · 1/Mpc' }) + etichette(['punti: le 70 onde', 'linea: la legge del modello'])); };
   const elenco = () => sezione('galassia', 'Le più grandi', 'clic: vola lì', `<div class="v-pianeti">${Cx.galassie.map((g, i) => [g, i]).sort((a, b) => b[0].peso - a[0].peso).slice(0, 10).map(([g, i]) => `<button data-v-vola-galassia="${i}" class="${v.galassia === i ? 'qui' : ''}">${ico('galassia')}<b>${i + 1}</b><span>${g.tipo}</span><em>${num(g.peso, 1)} ×</em><small>densità</small></button>`).join('')}</div>`);
-  return { chiave: `c|${v.cosmo}`, liv: 'cosmo', nome: `Cosmo ${v.cosmo}`, identita: `${Cx.galassie.length} galassie · lo spazio si richiude su sé stesso`, linguette: [{ id: 'sintesi', ico: 'cosmo', nome: 'Sintesi', html: sintesi }, { id: 'galassie', ico: 'galassia', nome: 'Galassie', html: elenco }], piede: () => '' };
+  return { chiave: `c|${v.cosmo}|${gi}`, liv: 'cosmo', nome: `Cosmo ${v.cosmo}`, identita: `${Cx.galassie.length} galassie · lo spazio si richiude su sé stesso`, linguette: [{ id: 'sintesi', ico: 'cosmo', nome: 'Sintesi', html: sintesi }, { id: 'ragnatela', ico: 'mirino', nome: 'Ragnatela', html: ragnatela }, { id: 'galassie', ico: 'galassia', nome: 'Galassie', html: elenco }], piede: () => '' };
 }
 // =============================================================================================== LA MATERIA, GLI ATOMI, I QUANTI
 function schedaMateria(q) {

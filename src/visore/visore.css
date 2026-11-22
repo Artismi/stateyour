@@ -52,6 +52,21 @@ svg.ico.pieno { fill: currentColor; stroke: none; }
 .v-finestrella { position: absolute; top: 3px; right: 30px; z-index: 80; display: flex; gap: 7px; padding: 1px 4px; border: 0; background: none; }
 .v-finestrella i { width: 6px; height: 6px; border-radius: 50%; background: rgba(248,223,227,.28); box-shadow: inset 0 1px 1px rgba(0,0,0,.5); }
 .v-finestrella:hover i { background: rgba(248,223,227,.6); }
+/* la finestra dell'app (Electron, senza bordi): la cornice in alto si fa un po' più alta e diventa la barra della finestra.
+   Tutta la scocca si trascina; lo schermo, la linguetta e i pulsanti no. I pulsanti: tre bottoncini incassati nella
+   plastica, come i tre puntini; a destra (a sinistra su macOS), e i tre puntini dello schermo pieno accanto. */
+body.v-app #visore { -webkit-app-region: drag; }
+body.v-app .v-schermo, body.v-app .v-linguetta .fila, body.v-app .v-comandi button, body.v-app .v-finestrella { -webkit-app-region: no-drag; }
+body.v-app .v-schermo { top: 26px; }
+body.v-app .v-finestrella { top: 9px; right: 106px; }
+.v-comandi { position: absolute; top: 4px; right: 18px; z-index: 81; display: flex; gap: 6px; }
+.v-comandi button { width: 22px; height: 18px; border-radius: 9px; display: grid; place-items: center; color: rgba(248,223,227,.55);
+  background: linear-gradient(180deg, rgba(20,2,8,.28), rgba(255,214,222,.06)); box-shadow: inset 0 1px 2px rgba(0,0,0,.5), 0 1px 0 rgba(255,214,222,.12); }
+.v-comandi button svg.ico { width: 12px; height: 12px; stroke-width: 2; }
+.v-comandi button:hover { color: var(--avorio); background: rgba(255,214,222,.14); }
+.v-comandi button.rosso:hover { color: #fff; background: var(--v-accento); box-shadow: 0 0 8px var(--v-accento-glow); }
+body.v-mac .v-comandi { right: auto; left: 18px; flex-direction: row-reverse; }
+body.v-mac.v-app .v-finestrella { right: 30px; }
 
 /* ───────────── lo schermo: vetro incassato ───────────── */
 .v-schermo { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 18px; overflow: hidden; background: #000; isolation: isolate;
@@ -254,6 +269,13 @@ input[type=range] { accent-color: var(--v-accento); }
 .v-ioni b { text-align: right; font-weight: 500; color: var(--avorio); }
 .v-mappa { display: block; width: 100%; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(244,236,223,.1); image-rendering: auto; }
 .v-mappa.quadra { aspect-ratio: 1; object-fit: cover; } .v-mappa.piccola { width: 60%; }
+.v-barre { display: flex; flex-direction: column; gap: 7px; }
+.v-barre > div { display: grid; grid-template-columns: 92px 1fr 96px; gap: 10px; align-items: center; font: 400 11.5px/1.1 var(--ui); color: var(--avorio-70); }
+.v-barre em { height: 7px; border-radius: 4px; background: rgba(244,236,223,.07); position: relative; overflow: hidden; }
+.v-barre em::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--c); border-radius: 4px; }
+.v-barre b { text-align: right; font: 500 11.5px/1 var(--cifre); color: var(--avorio); white-space: nowrap; }
+.v-barre > .scala { display: flex; justify-content: space-between; margin: -2px 106px 0 102px; font: 500 8.5px var(--cifre); color: var(--avorio-30); }
+.v-mappa-segni { position: relative; } .v-mappa-segni svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .v-curva text.s { font: 500 8.5px var(--cifre); fill: rgba(244,236,223,.4); }
 .v-pianeti { display: flex; flex-direction: column; gap: 4px; }
 .v-pianeti button { display: grid; grid-template-columns: 30px 26px 1fr 64px 64px; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border-radius: 12px; border: 0; background: rgba(244,236,223,.035); color: var(--avorio-70); font: 400 12px/1 var(--ui); text-align: left; }

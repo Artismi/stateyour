@@ -53,6 +53,9 @@ const SIMBOLI = {
   // glifi universali
   'g-chiudi': '<path d="M6 6l12 12M18 6 6 18"/>',
   'g-sep': '<path d="M9 5l7 7-7 7"/>',
+  // (i pulsanti della finestra dell'app: riduci, ingrandisci)
+  'g-riduci': '<path d="M6 12.5h12"/>',
+  'g-ingrandisci': '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/>',
 };
 const PIENI = {
   'g-indietro': '<path d="M11.5 5v14L2.5 12zM21.5 5v14l-9-7z"/>',

@@ -165,3 +165,59 @@ export function mappaDensita(griglia, N) {
   for (let i = 0; i < N * N; i++) { const t = Math.pow(cl((griglia[i] - lo) / (hi - lo || 1), 0, 1), 1.6); im.data[4 * i] = 30 + 225 * t; im.data[4 * i + 1] = 8 + 180 * t * t; im.data[4 * i + 2] = 20 + 170 * t * t; im.data[4 * i + 3] = 255; }
   x.putImageData(im, 0, 0); return `<img class="v-mappa quadra" src="${cv.toDataURL()}" alt="la densità della materia del cosmo">`;
 }
+
+// ---------------------------------------------------------------------------------------------- LE GALASSIE E IL COSMO
+// UN DIAGRAMMA a punti o a linea, con gli assi in scala logaritmica o lineare (il profilo di luce, i metalli per anello,
+// lo spettro di potenza). serie: [{ xs, ys, colore, punti (true: solo punti), r }]; tacche: le potenze di dieci sugli assi
+// logaritmici. Ciò che non è finito (o ≤ 0 su un asse logaritmico) non si disegna.
+export function diagramma(serie, { W = L, H = 96, logX = false, logY = false, etX = '', etY = '', ora = null } = {}) {
+  const buono = (v, lg) => Number.isFinite(v) && (!lg || v > 0), tx = (v) => (logX ? Math.log10(v) : v), ty = (v) => (logY ? Math.log10(v) : v);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const s of serie) for (let i = 0; i < Math.min(s.xs.length, s.ys.length); i++) { if (!buono(s.xs[i], logX) || !buono(s.ys[i], logY)) continue; const x = tx(s.xs[i]), y = ty(s.ys[i]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  if (!(x1 > x0)) return '';
+  if (!(y1 > y0)) { y0 -= 1; y1 += 1; } else if (!logY) { y0 = Math.min(0, y0); y1 *= 1.08; } else { y0 -= 0.1; y1 += 0.1; }
+  const sx = 30, dx = W - 8, sy = 6, gy = H - 16, px = (v) => sx + ((tx(v) - x0) / (x1 - x0)) * (dx - sx), py = (v) => gy - ((ty(v) - y0) / (y1 - y0)) * (gy - sy);
+  let tac = '';
+  if (logY) { const p = Math.max(1, Math.ceil((y1 - y0) / 4)); for (let e = Math.ceil(y0); e <= y1; e += p) tac += `<line x1="${sx}" x2="${dx}" y1="${py(10 ** e).toFixed(1)}" y2="${py(10 ** e).toFixed(1)}" stroke="rgba(244,236,223,.07)"/><text x="${sx - 3}" y="${(py(10 ** e) + 3).toFixed(1)}" text-anchor="end" class="s">10${apice(e)}</text>`; }
+  else for (const f of [0.5, 1]) { const v = y0 + f * (y1 - y0) / 1.08; tac += `<line x1="${sx}" x2="${dx}" y1="${py(v).toFixed(1)}" y2="${py(v).toFixed(1)}" stroke="rgba(244,236,223,.07)"/><text x="${sx - 3}" y="${(py(v) + 3).toFixed(1)}" text-anchor="end" class="s">${sig(v, 1)}</text>`; }
+  if (logX) { const p = Math.max(1, Math.ceil((x1 - x0) / 4)); for (let e = Math.ceil(x0); e <= x1; e += p) tac += `<text x="${px(10 ** e).toFixed(1)}" y="${H - 4}" text-anchor="middle" class="s">10${apice(e)}</text>`; }
+  else tac += `<text x="${sx}" y="${H - 4}" class="s">${sig(x0, 2)}</text><text x="${dx}" y="${H - 4}" text-anchor="end" class="s">${sig(x1, 2)}</text>`;
+  const tracce = serie.map((s) => {
+    const pts = []; for (let i = 0; i < Math.min(s.xs.length, s.ys.length); i++) if (buono(s.xs[i], logX) && buono(s.ys[i], logY)) pts.push([px(s.xs[i]), py(s.ys[i])]);
+    if (s.punti) return pts.map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s.r ?? 1.8}" fill="${s.colore}" fill-opacity=".8"/>`).join('');
+    return pts.length > 1 ? `<path d="${pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join('')}" fill="none" stroke="${s.colore}" stroke-width="1.5" stroke-linejoin="round"/>${pts.map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.6" fill="${s.colore}"/>`).join('')}` : '';
+  }).join('');
+  const linea = ora != null && buono(ora, logX) ? `<line x1="${px(ora).toFixed(1)}" x2="${px(ora).toFixed(1)}" y1="${sy}" y2="${gy}" stroke="#ff5a78" stroke-dasharray="2 2"/>` : '';
+  return `<svg class="v-curva" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect x="${sx}" y="${sy}" width="${dx - sx}" height="${gy - sy}" rx="4" fill="rgba(244,236,223,.03)"/>${tac}${linea}${tracce}${etX ? `<text x="${dx - 4}" y="${sy + 9}" text-anchor="end" class="s">${etX}</text>` : ''}${etY ? `<text x="${sx + 4}" y="${sy + 9}" class="s">${etY}</text>` : ''}</svg>`;
+}
+// IL DIAGRAMMA H-R DI UNA POPOLAZIONE: ogni stella del catalogo un punto del suo colore (la temperatura, calda a
+// sinistra, e la luminosità in L☉), sulla striscia della sequenza principale; i riferimenti: il Sole.
+export function hrPopolazione(stelle, { W = L, H = 150 } = {}) {
+  const lt0 = Math.log10(40000), lt1 = Math.log10(2300), x = (t) => 30 + ((lt0 - Math.log10(cl(t, 2300, 40000))) / (lt0 - lt1)) * (W - 38), y = (l) => H - 16 - ((Math.log10(cl(l, 1e-5, 1e6)) + 5) / 11) * (H - 22);
+  let d = ''; for (let t = 2400; t <= 38000; t *= 1.15) d += `${d ? 'L' : 'M'}${x(t).toFixed(1)} ${y((t / 5772) ** 6.5).toFixed(1)}`;
+  let tac = ''; for (const e of [-4, -2, 0, 2, 4, 6]) tac += `<line x1="30" x2="${W - 8}" y1="${y(10 ** e).toFixed(1)}" y2="${y(10 ** e).toFixed(1)}" stroke="rgba(244,236,223,.06)"/><text x="27" y="${(y(10 ** e) + 3).toFixed(1)}" text-anchor="end" class="s">10${apice(e)}</text>`;
+  const pt = stelle.filter((s) => s.T > 0 && s.L > 0).map((s) => `<circle cx="${x(s.T).toFixed(1)}" cy="${y(s.L).toFixed(1)}" r="${s.r ?? 1.3}" fill="${s.colore}" fill-opacity=".75"/>`).join('');
+  return `<svg class="v-hr v-curva" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect x="30" y="4" width="${W - 38}" height="${H - 20}" rx="6" fill="rgba(244,236,223,.03)"/>${tac}<path d="${d}" fill="none" stroke="rgba(244,236,223,.12)" stroke-width="9" stroke-linecap="round"/>${pt}<circle cx="${x(5772)}" cy="${y(1)}" r="3.5" fill="none" stroke="#ff5a78" stroke-width="1.3"/><text x="${x(5772) + 6}" y="${y(1) - 4}" class="s">il Sole</text><text x="30" y="${H - 4}" class="s">40.000 K · caldo</text><text x="${W - 8}" y="${H - 4}" text-anchor="end" class="s">freddo · 2.300 K</text><text x="34" y="13" class="s">L☉</text></svg>`;
+}
+// BARRE SU SCALA LOGARITMICA (le masse di una galassia: stelle, gas, gas caldo, buco nero, che stanno tra loro come 1 a 1000)
+export function barreLog(lista, unita = '') {
+  const v = lista.filter((x) => x.v > 0); if (!v.length) return '';
+  const hi = Math.ceil(Math.log10(Math.max(...v.map((x) => x.v)))), lo = Math.min(hi - 3, Math.floor(Math.log10(Math.min(...v.map((x) => x.v)))));
+  return `<div class="v-barre">${v.map((x, i) => `<div><span>${x.nome}</span><em style="--p:${(100 * cl((Math.log10(x.v) - lo) / (hi - lo), 0.02, 1)).toFixed(1)}%;--c:${x.colore || COLORI_PARTI[i % COLORI_PARTI.length]}"></em><b>${sig(x.v)}${unita ? ` ${unita}` : ''}</b></div>`).join('')}<div class="scala"><span>10${apice(lo)}</span><span>10${apice(hi)}</span></div></div>`;
+}
+// UN ISTOGRAMMA (quanto spesso ogni valore, sul campo intero) con il valore di un punto segnato
+export function istogramma(valori, segno = null, { W = L, H = 64, n = 32, etichetta = '' } = {}) {
+  let lo = Infinity, hi = -Infinity; for (const v of valori) { if (v < lo) lo = v; if (v > hi) hi = v; } if (!(hi > lo)) return '';
+  const c = new Array(n).fill(0); for (const v of valori) c[Math.min(n - 1, Math.floor(((v - lo) / (hi - lo)) * n))]++;
+  const m = Math.max(...c), bw = (W - 8) / n, x = (v) => 4 + ((cl(v, lo, hi) - lo) / (hi - lo)) * (W - 8);
+  const barre = c.map((k, i) => { const h = ((H - 18) * k) / m, t = i / (n - 1); return `<rect x="${(4 + i * bw + 0.5).toFixed(1)}" y="${(H - 14 - h).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="rgb(${Math.round(60 + 180 * t)},${Math.round(30 + 140 * t * t)},${Math.round(50 + 130 * t * t)})"/>`; }).join('');
+  return `<svg class="v-curva" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${barre}${segno != null ? `<line x1="${x(segno).toFixed(1)}" x2="${x(segno).toFixed(1)}" y1="2" y2="${H - 14}" stroke="#ff5a78" stroke-width="1.6"/><text x="${cl(x(segno), 30, W - 30).toFixed(1)}" y="9" text-anchor="middle" class="s">${etichetta || 'qui'}</text>` : ''}<text x="4" y="${H - 3}" class="s">vuoti</text><text x="${W - 4}" y="${H - 3}" text-anchor="end" class="s">nodi</text></svg>`;
+}
+// LA MAPPA DI DENSITÀ CON I SEGNI: le galassie (puntini) e il punto dove si è (l'anello rosa), con il cerchio dei vicini.
+// punti: [{ x, y } in frazioni del lato]; qui: { x, y, r (il raggio del cerchio, in frazioni) }
+export function mappaConSegni(griglia, N, punti = [], qui = null) {
+  const img = mappaDensita(griglia, N); if (!img) return '';
+  const p = punti.map((q) => `<circle cx="${(100 * q.x).toFixed(2)}" cy="${(100 * q.y).toFixed(2)}" r=".7" fill="rgba(244,236,223,.75)"/>`).join('');
+  const s = qui ? `<circle cx="${(100 * qui.x).toFixed(2)}" cy="${(100 * qui.y).toFixed(2)}" r="${(100 * (qui.r || 0)).toFixed(2)}" fill="none" stroke="rgba(255,90,120,.6)" stroke-dasharray="1.5 1.5" stroke-width=".5"/><circle cx="${(100 * qui.x).toFixed(2)}" cy="${(100 * qui.y).toFixed(2)}" r="2.2" fill="none" stroke="#ff5a78" stroke-width=".9"/>` : '';
+  return `<div class="v-mappa-segni">${img}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${p}${s}</svg></div>`;
+}

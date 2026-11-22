@@ -6,7 +6,7 @@
 // invece che da file://, perché i moduli JavaScript e i loro Worker funzionano
 // solo da un'origine vera. Niente server, niente rete: tutto resta nella cartella.
 
-const { app, BrowserWindow, protocol, net, shell, Menu } = require('electron');
+const { app, BrowserWindow, protocol, net, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -20,7 +20,9 @@ function finestra() {
   const w = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
     title: 'stateyour', backgroundColor: '#521221', // (la cornice del visore: niente lampo chiaro all'apertura)
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+    frame: false, // (senza bordi: la cornice del visore fa da bordo, con i suoi pulsanti e la sua zona da trascinare)
+    // la pagina è isolata: niente Node; il preload le dà solo i tre comandi della finestra (preload.cjs)
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   // i link verso l'esterno si aprono nel browser
   w.webContents.setWindowOpenHandler(({ url }) => {
@@ -30,6 +32,13 @@ function finestra() {
   w.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://')) { e.preventDefault(); shell.openExternal(url); } });
   w.loadURL('app://stateyour/index.html');
   return w;
+}
+
+// I TRE COMANDI DELLA FINESTRA (dal preload): valgono solo se vengono dalla pagina del progetto, app://stateyour/
+const daNoi = (e) => (e.senderFrame?.url || '').startsWith('app://stateyour/');
+const comandi = { riduci: (w) => w.minimize(), ingrandisci: (w) => (w.isMaximized() ? w.unmaximize() : w.maximize()), chiudi: (w) => w.close() };
+for (const [nome, fa] of Object.entries(comandi)) {
+  ipcMain.on(`finestra:${nome}`, (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && daNoi(e)) fa(w); });
 }
 
 app.whenReady().then(() => {

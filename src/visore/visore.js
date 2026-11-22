@@ -16,6 +16,7 @@ import { creaHud } from './hud.js';
 import { creaMenu } from './menu.js';
 import { schedaDi } from './schede.js';
 import { creaStrumenti, STRUMENTI, accendi, strumento } from './strumenti.js';
+import { finestraIn3D } from './finestra3d.js';
 
 const $ = (id) => document.getElementById(id);
 const prova = (f, d = null) => { try { return f(); } catch { return d; } };
@@ -50,11 +51,22 @@ function costruisci() {
         <button class="v-tasto tondo primario" data-v-tasto="entra" title="entra (A)">${ico('entra')}<kbd>A</kbd></button>
         <div class="divisore"></div>
         <button class="v-tasto quadro" data-v-tasto="scheda" title="la scheda (I)">${ico('mirino')}<kbd>I</kbd></button>
-        <button class="v-tasto quadro" data-v-tasto="inquadra" title="inquadra: una finestra bella a questa scala (F)">${ico('inquadra')}<kbd>F</kbd></button>
+        <button class="v-tasto quadro" data-v-tasto="inquadra" title="una finestra bella a questa scala (F): nello spazio un punto notevole, col criterio detto nell'avviso">${ico('inquadra')}<kbd>F</kbd></button>
         <button class="v-tasto quadro" data-v-tasto="caso" title="un punto a caso (R)">${ico('dado')}<kbd>R</kbd></button>
       </div>
     </div>`;
   document.body.appendChild(radice);
+  // ---------- LA FINESTRA DELL'APP (Electron, senza bordi): la cornice diventa la barra della finestra. Il preload
+  // (electron/preload.cjs) dà solo tre comandi; la scocca si trascina, i controlli no (visore.css, .v-app). Nel sito non c'è.
+  const fa = window.finestraApp;
+  if (fa && typeof fa.chiudi === 'function') {
+    document.body.classList.add('v-app'); if (fa.mac) document.body.classList.add('v-mac');
+    const c = document.createElement('div'); c.className = 'v-comandi';
+    c.innerHTML = `<button data-v-finestra="riduci" title="riduci">${ico('g-riduci')}</button><button data-v-finestra="ingrandisci" title="ingrandisci, o la misura di prima">${ico('g-ingrandisci')}</button><button data-v-finestra="chiudi" class="rosso" title="chiudi la finestra">${ico('g-chiudi')}</button>`;
+    c.addEventListener('click', (e) => { const b = e.target.closest('[data-v-finestra]'); if (b) fa[b.dataset.vFinestra]?.(); });
+    c.addEventListener('dblclick', (e) => e.stopPropagation());
+    radice.prepend(c);
+  }
   const schermo = radice.querySelector('.v-schermo'), elScheda = radice.querySelector('.v-scheda'), pop = radice.querySelector('.v-pop');
   schermo.prepend(tele);
   const corpo = elScheda.querySelector('.corpo'), gen = corpo.querySelector('.gen');
@@ -120,8 +132,11 @@ function costruisci() {
     if (!C()) return;
     hud.avvisa("Qui il tempo è adesso: sotto la superficie lo stato c'è solo oggi");
   };
-  // F · INQUADRA: «una finestra bella a questa scala» (nello spazio e sulla mappa)
+  // F · INQUADRA: «una finestra bella a questa scala». Nello spazio un punto notevole della scala, scelto con un criterio
+  // scritto (finestra3d.js) e detto nell'avviso; sulla mappa piatta la ricerca della camera (molte inquadrature, la più ricca)
   azioni.inquadra = () => {
+    const c = C(), q = hud.q;
+    if (q.tre) { const r = prova(() => finestraIn3D(c, q)); if (r) { hud.avvisa(r.frase, { durata: 8000 }); return; } }
     const b = $('pannello')?.querySelector('[data-finestra-bella]');
     if (b) b.click(); else hud.avvisa('Qui non c\'è niente da inquadrare');
   };

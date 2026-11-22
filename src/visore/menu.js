@@ -23,7 +23,7 @@ const GUIDA = `
 <tr><td><kbd>I</kbd></td><td>la scheda di ciò che guardi (si chiude con <kbd>B</kbd>, <kbd>Esc</kbd> o ×)</td></tr>
 <tr><td><kbd>M</kbd></td><td>il menu: seme, vista, taccuino, impostazioni, diagnostica</td></tr>
 <tr><td><kbd>,</kbd> <kbd>P</kbd> <kbd>.</kbd></td><td>il tempo: più lento, pausa, più veloce</td></tr>
-<tr><td><kbd>F</kbd></td><td>inquadra: una finestra bella a questa scala</td></tr>
+<tr><td><kbd>F</kbd></td><td>una finestra bella a questa scala: nello spazio vola a un punto notevole, scelto con un criterio che l'avviso dice (la galassia più densa, la stella più calda, il pianeta più temperato, la costa o la catena più ripida); premuto ancora, il successivo</td></tr>
 <tr><td><kbd>R</kbd></td><td>a caso: un punto a caso dell'universo, scelto con la misura della lingua</td></tr>
 <tr><td><kbd>T</kbd></td><td>questo taccuino</td></tr>
 <tr><td><kbd>O</kbd></td><td>gli strumenti: ciò che si mette davanti agli occhi per vedere di più · <kbd>L</kbd> accende e spegne l'amplificatore di luce</td></tr>
