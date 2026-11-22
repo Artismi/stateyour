@@ -717,7 +717,17 @@ export function mare(P, sf, cl, se = null, caso = null) {
   let Tfondo = tMin, Sfondo = salinitaMedia; const Tm = Float32Array.from(Tclima, (t) => Math.max(out.congela, t)), Sm = new Float32Array(N).fill(salinitaMedia), dense = [];
   for (let giro = 0; giro < 2 && celleMare; giro++) {
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, A = righe.A[j]; sorg[k] = ((A * h) / tauT) * Math.max(out.congela, Tclima[k]); perd[k] = (A * h) / tauT; }
-    porta(Tm, Tfondo); for (let k = 0; k < N; k++) if (Tm[k] < out.congela) Tm[k] = out.congela;
+    // L'ACQUA CHE RISALE NON È UN POZZO DI CALORE. Il fondo freddo (Tfondo, l'acqua più densa che affonda) riceve dall'alto il calore che
+    // il rimescolamento e le risalite gli danno, e a regime lo rende: l'acqua che torna su è più calda di quella che è scesa, tanto da
+    // pareggiare il conto (Munk 1966: la risalita è bilanciata dal calore che scende per diffusione). Qui: la temperatura dell'acqua che
+    // torna in superficie è quella per cui ciò che il fondo prende e ciò che rende sono uguali, la media delle temperature di superficie
+    // pesata con quanto ogni cella scambia col fondo. Prima l'acqua tornava su alla temperatura dell'acqua che affonda: il fondo era un
+    // pozzo senza fine, il mare toglieva in media 40 W/m² all'aria sulla Terra di prova (test_fili: «un'incoerenza di mare.js») e
+    // nessuna corrente arrivava a scaldare l'aria. La temperatura del fondo (Tfondo) resta quella dell'acqua che affonda
+    const Tsu = (() => { const daSotto = 1 - Math.exp((-2 * h) / co.termoclino); let sT = 0, sC = 0;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!co.mare[k]) continue; const kw = j * W + ((i + W - 1) % W), div = co.FE[k] - co.FE[kw] + (j > 0 ? co.FS[k - W] : 0) - co.FS[k], c = wMescola * righe.A[j] + (div > 0 ? div * daSotto : 0); sT += c * Tm[k]; sC += c; }
+      return sC > 0 ? sT / sC : Tfondo; })();
+    porta(Tm, Tsu); for (let k = 0; k < N; k++) if (Tm[k] < out.congela) Tm[k] = out.congela;
     // la salinità: l'evaporazione concentra, la pioggia e i fiumi diluiscono; la corrente e il fondo rimescolano
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, A = righe.A[j]; sorg[k] = (A * evap[k] * Sm[k]) / 1000 / ANNO; perd[k] = (A * piove[k]) / 1000 / ANNO + dolce[k]; }
     for (let r = 0; r < 2; r++) { porta(Sm, Sfondo); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; sorg[k] = (righe.A[j] * evap[k] * Sm[k]) / 1000 / ANNO; } }
