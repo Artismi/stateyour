@@ -82,8 +82,9 @@ import { campioneAcqua } from './mare.js';
 import { crostaDelPianeta, comeOggetto } from './elementi.js';
 import { STORIA } from './storia.js';
 import { colonnaDelPianeta } from './suolo.js'; // la porosità di Athy e il tempo di residenza dell'acqua nei pori: dal suolo
+import { ANNO, COSTANTI, GIORNO, PESI_ATOMICI } from './leggi.js'; // le costanti e le unità: un posto solo
 
-export const NA = 6.02214076e23;
+export const NA = COSTANTI.NA;
 export const SCALA_PREBIOTICA = 1e-3, DIFFUSIONE = 1e-9, BRONSTED_PKA = 1.5;
 // le leggi dei tiri di una storia (misura.js le pesa): un evento del luogo per canale, estrazione n-esima per l'n-esimo scatto
 export const LEGGI_DEI_TIRI = Object.freeze({
@@ -510,13 +511,13 @@ export const SERPENTINO = Object.freeze({ k300: 3e-8, Ea: 80, parte: 1 / 3 });
 export function luogoDellaCrosta(pianeta, { profonditaM = 1000, latoM = 1e-6, roccia = null, stella = null, mare = null, kRoccia = STORIA.kSu, eta = null, colonna = null } = {}) {
   const P = pianeta, q = P?.interno?.q, crosta = P ? crostaDelPianeta(P, { stella }) : null; if (!(q > 0) || !crosta) return null;
   const tipo = roccia || (crosta.Mbasalto > 0 ? 'basalto' : 'granito'), ogg = comeOggetto(crosta[tipo]), frazioni = {}; let tot = 0; for (const s in ogg) if (Number.isFinite(ogg[s]) && ogg[s] > 0) tot += ogg[s];
-  const z = profonditaM, col = colonna || colonnaDelPianeta(P, { tipo, kRoccia, eta: eta ?? P.interno?.eta }), phi = col.porosita(z), residenza = Math.max(1, col.residenza(z) * 3.156e7), Ts = P.clima?.T ?? 288, T = Ts + (q / kRoccia) * z, rhoR = 2900, rhoW = 1000;
+  const z = profonditaM, col = colonna || colonnaDelPianeta(P, { tipo, kRoccia, eta: eta ?? P.interno?.eta }), phi = col.porosita(z), residenza = Math.max(1, col.residenza(z) * ANNO), Ts = P.clima?.T ?? 288, T = Ts + (q / kRoccia) * z, rhoR = 2900, rhoW = 1000;
   for (const s of ['Fe', 'U', 'Th', 'K', 'Mg', 'Si']) { const v = ogg[s]; frazioni[s] = Number.isFinite(v) && tot > 0 ? v / tot : null; }
   const anni = eta ?? P.interno?.eta ?? 4.5e9, ora = (s) => RADIOGENICO[s][0] * Math.pow(2, (4.5e9 - anni) / 1e9 / RADIOGENICO[s][1]); // (U e Th all'età del pianeta: più giovane, più caldo)
   let A = 0; const mancano = []; for (const s of ['U', 'Th', 'K']) { if (frazioni[s] == null) { mancano.push(s); continue; } A += frazioni[s] * ora(s); } // W per kg di roccia
   const wAcqua = (phi * rhoW) / (phi * rhoW + (1 - phi) * rhoR), Lpori = phi * 1000; // (litri d'acqua per m³ di roccia)
-  const radiolisi = ((A * rhoR * (1 - phi) * wAcqua) / (100 * 1.602176634e-19)) * G_H2 / NA / Lpori; // mol di H2 per litro d'acqua al secondo
-  const kSerp = SERPENTINO.k300 * Math.exp((-SERPENTINO.Ea / R) * (1 / T - 1 / 573.15)), FeMol = (frazioni.Fe ?? 0) / 0.055845; // mol di ferro per kg di roccia
+  const radiolisi = ((A * rhoR * (1 - phi) * wAcqua) / (100 * COSTANTI.e)) * G_H2 / NA / Lpori; // mol di H2 per litro d'acqua al secondo
+  const kSerp = SERPENTINO.k300 * Math.exp((-SERPENTINO.Ea / R) * (1 / T - 1 / 573.15)), FeMol = (frazioni.Fe ?? 0) / (PESI_ATOMICI.Fe / 1000); // mol di ferro per kg di roccia
   const serpentinizzazione = ((kSerp * FeMol * SERPENTINO.parte * rhoR * (1 - phi)) / 3) / Lpori; // mol H2 / L / s
   const H2 = (radiolisi + serpentinizzazione) * residenza;
   // il carbonio inorganico: dal mare sopra, o dall'aria con Henry
@@ -526,7 +527,7 @@ export function luogoDellaCrosta(pianeta, { profonditaM = 1000, latoM = 1e-6, ro
   const minerali = ['magnetite', ...(tipo === 'basalto' ? ['olivina', 'pirosseno', 'plagioclasio'] : ['feldspato potassico', 'quarzo'])];
   return { indirizzo: `${P.id ?? 'pianeta'}/crosta/${tipo}/${z.toFixed(0)} m/${latoM.toExponential(2)}`, tipo: 'pori della crosta', T, pH, attivitaAcqua: 1, molecole, spettatori: {}, ioni: {}, minerali, cibo: Object.keys(molecole),
     flussi: { tenute: { ...molecole }, ricambio: 1 / residenza }, latoM, V: latoM ** 3,
-    padre: { profonditaM: z, porosita: phi, phi0: col.roccia.phi0, L: col.roccia.L, confrontoAthy: col.roccia.confronto, residenzaAnni: residenza / 3.156e7, ricarica: col.ricarica, ricaricaDa: col.ricaricaDa, roccia: tipo, gradienteKkm: (q / kRoccia) * 1000, q, radiolisi, serpentinizzazione, H2, CO2, pCO2, frazioni, mancano, profondita122: ((395.15 - Ts) * kRoccia) / q },
+    padre: { profonditaM: z, porosita: phi, phi0: col.roccia.phi0, L: col.roccia.L, confrontoAthy: col.roccia.confronto, residenzaAnni: residenza / ANNO, ricarica: col.ricarica, ricaricaDa: col.ricaricaDa, roccia: tipo, gradienteKkm: (q / kRoccia) * 1000, q, radiolisi, serpentinizzazione, H2, CO2, pCO2, frazioni, mancano, profondita122: ((395.15 - Ts) * kRoccia) / q },
     manca: [...mancano.map((s) => `${s} della crosta non è un numero in elementi.js: la radiolisi non lo conta`), 'la pressione dei pori nelle energie', 'il calore prodotto dentro la crosta nel gradiente'] };
 }
 
@@ -544,4 +545,4 @@ export function chimicaDellaFinestra(stato, { lon = 0, lat = 0, latoM = 1e-6, fo
     `${ril.emerso.raf ? `un RAF (${ril.rafProprio.reazioni} reazioni catalizzate da ciò che la rete fa)` : 'nessun RAF'}${ril.cicli.length ? `, ${ril.cicli.length} cicli autocatalitici possibili` : ''}${ril.emerso.membrane ? ', anfifiliche sopra la CMC' : ''}`;
   return { riga, ms: performance.now() - t0, sistema: S, storia: st, rilevati: ril, luogo: L };
 }
-const fmtT = (s) => (s >= 3.156e7 ? `${(s / 3.156e7).toPrecision(2)} anni` : s >= 86400 ? `${(s / 86400).toPrecision(2)} giorni` : s >= 1 ? `${s.toPrecision(2)} s` : s >= 1e-3 ? `${(s * 1e3).toPrecision(2)} ms` : s >= 1e-6 ? `${(s * 1e6).toPrecision(2)} µs` : `${(s * 1e9).toPrecision(2)} ns`);
+const fmtT = (s) => (s >= ANNO ? `${(s / ANNO).toPrecision(2)} anni` : s >= GIORNO ? `${(s / GIORNO).toPrecision(2)} giorni` : s >= 1 ? `${s.toPrecision(2)} s` : s >= 1e-3 ? `${(s * 1e3).toPrecision(2)} ms` : s >= 1e-6 ? `${(s * 1e6).toPrecision(2)} µs` : `${(s * 1e9).toPrecision(2)} ns`);

@@ -21,6 +21,7 @@
 // Le LEGGI EMPIRICHE (misurate, non derivate qui) sono dichiarate dove si usano.
 
 import { comeSorgente } from './eventi.js';
+import { MOLARE_ACQUA, R_GAS, ZERO_CELSIUS } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
 // una campana a caso (Box-Muller: le estrazioni k e k+1 di un evento) e un conteggio a caso (Poisson: le sue estrazioni, una dopo l'altra)
@@ -204,8 +205,8 @@ export function cristallizzaChiusa({ N = 192, raffreddamento = 0.01, minerali = 
 // formule di Magnus per le due pressioni di saturazione (fit EMPIRICI, WMO). È massimo
 // proprio fra −12 e −15 °C (0,22 g/m³): metà della ragione per cui le stelle vengono lì.
 export function nakaya(T, umidita) {
-  const t = T - 273.15, eAcqua = 611.2 * Math.exp((17.62 * t) / (243.12 + t)), eGhiaccio = 611.2 * Math.exp((22.46 * t) / (272.62 + t));
-  const eccesso = (1000 * (umidita * eAcqua - eGhiaccio)) / (461.5 * T); // g/m³ di vapore oltre l'equilibrio col ghiaccio
+  const t = T - ZERO_CELSIUS, eAcqua = 611.2 * Math.exp((17.62 * t) / (243.12 + t)), eGhiaccio = 611.2 * Math.exp((22.46 * t) / (272.62 + t));
+  const eccesso = (1000 * (umidita * eAcqua - eGhiaccio)) / ((R_GAS / MOLARE_ACQUA) * T); // g/m³ di vapore oltre l'equilibrio col ghiaccio
   // la finestra delle forme piatte e ramificate: attorno a −15 °C (e una stretta, più debole, vicino a −2 °C)
   const finestra = Math.exp(-(((t + 15) / 5.5) ** 2)) + 0.45 * Math.exp(-(((t + 2) / 1.5) ** 2));
   const b = limita((eccesso / 0.2) * finestra, 0, 1);

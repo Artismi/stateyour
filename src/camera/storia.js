@@ -124,21 +124,21 @@
 //     distingue); con il ciclo del carbonio di chimica.js la Terra di 3,5 miliardi di anni fa non gela ma bolle (i
 //     vulcani di allora, 3,7 volte oggi, emettono più CO2 di quanta la roccia fresca esposta possa consumare).
 
-import { COSTANTI, MSOLE, LSOLE, UA, R_GAS, caloreDellaRoccia, temperaturaEquilibrio, acquaInSuperficie, mareAtteso, LIMITE_VAPORE } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, UA, R_GAS, ANNO, ZERO_CELSIUS, PESI_ATOMICI, MTERRA, RTERRA, caloreDellaRoccia, temperaturaEquilibrio, acquaInSuperficie, mareAtteso, LIMITE_VAPORE } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { MAREE, epsilonFuso, dissipazioneIn, coefficienteDelCorpo, forzanteMareale, motoMedio } from './maree.js'; // la marea e la viscosità della roccia: una fonte sola
 import { ROCCE, climaEAria } from './chimica.js'; // il carbonio del mantello e il ciclo del carbonio: una fonte sola (§8)
 
-const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, MU0 = 4e-7 * PI;
+const G = COSTANTI.G, PI = Math.PI, ANNO_S = ANNO, MU0 = 4e-7 * PI;
 
 // ---------- le costanti, ognuna con la sua fonte
 export const STORIA = Object.freeze({
-  // il mantello (ThermInt [V] dove non è detto altro)
+  // il mantello (ThermInt [V] dove non è detto altro: Driscoll e Bercovici 2014, PEPI 236, 36, come sta in thermint.c di VPLanet)
   nuRif: MAREE.roccia.nuRif, Enu: MAREE.roccia.Enu, // (m²/s, J/mol) viscosità cinematica: ν_rif·exp(E_ν/RT): la stessa che maree.js usa per la dissipazione
-  saltoViscosita: 2.4, // la viscosità del mantello inferiore su quella del superiore
+  saltoViscosita: 2.4, // la viscosità del mantello inferiore su quella del superiore: ν_LM = 2,40·ν_UM (Driscoll e Bercovici 2014, in thermint.c [V]; è un rapporto, non un logaritmo)
   RaC: 660, // il numero di Rayleigh critico dello strato limite
   alfa: 3e-5, cp: 1265, // (1/K, J/kg/K)
-  kSu: 4.2, kGiu: 10, // (W/m/K) conducibilità in alto e in basso
+  kSu: 4.2, kGiu: 10, // (W/m/K) conducibilità in alto e in basso: k_UM = 4,2, k_LM = 10 (Driscoll e Bercovici 2014, in thermint.c [V]; la peridotite misurata sta tra 3 e 5)
   rhoSu: 3300, // (kg/m³) la roccia del mantello non compressa (κ = k/(ρ·c_p) = 10⁻⁶ m²/s)
   // l'adiabatica del mantello: T ∝ ρ^γ, con la densità della roccia sotto pressione di Seager e altri 2007 (tab. 3 [V]):
   // ρ = 4100 + 0,00161·P^0,541. L'esponente e il livello a cui la temperatura è quella media sono i due numeri che sulla
@@ -146,16 +146,23 @@ export const STORIA = Object.freeze({
   eosRoccia: Object.freeze([4100, 0.00161, 0.541]), gruneisenMantello: 1.805, livelloMedio: 0.314,
   costa: MAREE.costa, // la viscosità con il fuso (forma di Costa): in maree.js (epsilonFuso)
   erutta: 0.1, portataFuso: 1.16, // la parte del fuso che erutta; Ṁ = 1,16·κ·A·ρ·φ/δ
-  latenteMantello: 3.2e5, fusoPerKelvin: 8e17 / 9.06e20, // (J/kg; 1/K) calore latente; quanta parte del mantello fonde per kelvin: dV_liq/dT = 8·10¹⁷ m³/K di ThermInt [V] sul volume del mantello terrestre [D]
+  // (J/kg; m³/K) il calore latente del mantello, L_m = 3,2·10⁵ J/kg, e il volume che fonde per kelvin, dV_liq/dT = 8·10¹⁷ m³/K
+  // (Driscoll e Bercovici 2014, tabella 2, e thermint.c [V]): due misure della Terra. Quanta parte del mantello fonde per kelvin
+  // (struttura().dFdT) è dV_liq/dT sul volume del mantello della Terra DEL MODELLO, (4/3)π(R⊕³ − R_c³) con la sua struttura a
+  // due strati (VM_TERRA, 9,10·10²⁰ m³; prima il numero scritto a mano 9,06·10²⁰). NON sul mantello del pianeta: il dV_liq/dT
+  // di ThermInt è della Terra, e diviso per il mantello di un corpo piccolo fa fondere tutto in pochi kelvin (Io senza marea
+  // fonderebbe 3000 volte di più e non gelerebbe: test_maree). Il rapporto giusto per ogni pianeta viene dal suo solidus e dalla
+  // sua gravità (lo spessore che fonde per kelvin, ∝ 1/(ρ·g·(dT_sol/dP − dT_ad/dP))): è il passo che resta
+  latenteMantello: 3.2e5, volumeFusoPerKelvin: 8e17,
   // la fusione (Katz e altri 2003, letti nel sorgente di pyMelt [V]; T in K, P in Pa); i polinomi valgono fino a ~8 GPa
-  solidus: Object.freeze([1085.7 + 273.15, 132.9e-9, -5.1e-18]), liquidus: Object.freeze([1780 + 273.15, 45e-9, -2.0e-18]), pMaxFusione: 8e9,
+  solidus: Object.freeze([1085.7 + ZERO_CELSIUS, 132.9e-9, -5.1e-18]), liquidus: Object.freeze([1780 + ZERO_CELSIUS, 45e-9, -2.0e-18]), pMaxFusione: 8e9,
   adiabaticaSolida: 1e-8, // (K/Pa) Foley 2019 [V]
   // LA FUSIONE LUNGO LA RISALITA (Katz e altri 2003, tab. 2, letti nel sorgente di pyMelt [V]): la frazione fusa della
   // lherzolite F(T, P) = ((T − T_s)/(T_lherz − T_s))^β₁ fino all'esaurimento del clinopirosseno (F_cpx = M_cpx/(r₀ + r₁·P)),
   // poi verso il liquidus con β₂; la risalita è isoentropica (c_p·dT/T − α/ρ·dP + ΔS·dF = 0, con il c_p e il ΔS di Katz):
   // il calore latente raffredda la colonna, e vicino al solidus la produttività è piccola (F ∝ ΔT^1,5). Prima era lineare,
   // dF/dP = 1,5·10⁻¹⁰ Pa⁻¹ costante (Foley 2019): la crosta degli oceani veniva di 14 km e il magma il doppio del vero
-  lherzolite: Object.freeze([1475 + 273.15, 80e-9, -3.2e-18]), katz: Object.freeze({ beta1: 1.5, beta2: 1.5, Mcpx: 0.17, r0: 0.5, r1: 0.08e-9, cp: 1000, dS: 300 }),
+  lherzolite: Object.freeze([1475 + ZERO_CELSIUS, 80e-9, -3.2e-18]), katz: Object.freeze({ beta1: 1.5, beta2: 1.5, Mcpx: 0.17, r0: 0.5, r1: 0.08e-9, cp: 1000, dS: 300 }),
   // il coperchio fermo (Foley 2019 [V]) e il criterio delle placche (Korenaga 2010 [V])
   c1Fermo: 0.5, c2Fermo: 0.05, foleyFuso: 17.8, rhoFuso: 2800, korenagaA: 0.327, korenagaN: 0.647, korenagaCrit: 0.25, raccordo: 1,
   attritoSecco: 0.65, // Byerlee: 0,6–0,7 [V]
@@ -168,7 +175,7 @@ export const STORIA = Object.freeze({
   alfaNucleo: 1e-5, cNucleo: 840, latenteFerro: 7.5e5, gravitazionale: 3e5, saltoLeggeri: 700, // (1/K, J/kg/K, J/kg, J/kg, kg/m³)
   lorenz: 2.5e-8, Tconducibilita: 4000, // (W·Ω/K²; K) Wiedemann–Franz: k ∝ T; la conducibilità dichiarata è a 4000 K
   simonFerro: Object.freeze([1900, 31.3e9, 1 / 1.99]), simonSilicato: Object.freeze([1831, 4.6e9, 0.33]),
-  massaFerro: 0.055845, massaLeggero: 0.03206, leggeriMassimo: 0.36, // (kg/mol) ferro e zolfo; oltre il 36% (FeS puro) la legge non vale
+  massaFerro: PESI_ATOMICI.Fe / 1000, massaLeggero: PESI_ATOMICI.S / 1000, leggeriMassimo: 0.36, // (kg/mol) ferro e zolfo; oltre il 36% (FeS puro) la legge non vale
   reynoldsMagnetico: 50, // la soglia della dinamo (Zhang e Rogers [V])
   rossby: Object.freeze({ soglia: 0.12, terra: 0.09, senzaDipolo: 0.1 }), // Olson e Christensen 2006: soglia [V], Terra [R], «almeno dieci volte»
   campoSenzaDinamo: 1e-9, // (T) il fondo che interno() ha sempre dato a chi non ha dinamo (convenzione rimasta)
@@ -192,7 +199,9 @@ export const APERTI = Object.freeze({
 // (la luce è quella che stelle.js dà al Sole di 4,5 miliardi di anni, come per ogni altro pianeta: prima era L☉, l'8% in più, e la
 // Terra di riferimento girava attorno a un Sole diverso da quello del modello; con la fusione di Katz la differenza spostava Ro_l
 // della Terra delle prove di 1,2·10⁻⁴)
-const TERRA_RIF = Object.freeze({ tipo: 'roccioso', massaKg: 5.972e24, raggioM: 6.371e6, composizione: Object.freeze({ ferro: 0.32, roccia: 0.674, acqua: 0.006 }), aM: UA, Mstella: MSOLE, giorno: 86164 });
+const TERRA_RIF = Object.freeze({ tipo: 'roccioso', massaKg: MTERRA, raggioM: RTERRA, composizione: Object.freeze({ ferro: 0.32, roccia: 0.674, acqua: 0.006 }), aM: UA, Mstella: MSOLE, giorno: 86164 });
+// il mantello della Terra del modello (la stessa struttura a due strati di struttura(): il nucleo di ferro a densità uniforme)
+const VM_TERRA = (4 / 3) * PI * (RTERRA ** 3 - (3 * MTERRA * TERRA_RIF.composizione.ferro) / (4 * PI * STORIA.rhoNucleo)), FUSO_PER_KELVIN = STORIA.volumeFusoPerKelvin / VM_TERRA;
 
 // ---------- piccoli attrezzi
 const simon = ([T0, P0, n], P) => T0 * Math.pow(Math.max(0, P) / P0 + 1, n);
@@ -296,7 +305,7 @@ function struttura(P, stella, rami) {
   const forzante = orbita ? forzanteMareale(orbita) : 0, omegaMarea = orbita ? motoMedio(orbita.Mospite, orbita.aM) : 0;
   // la partenza calda
   const Taccr = (0.6 * G * M) / (R * S.cp), TumZero = Math.min(poli(S.liquidus, Ptop), 300 + Taccr), TcmbZero = Math.max((TumZero / eSu) * eGiu, Math.min(simon(S.simonSilicato, Pcmb), 300 + Taccr));
-  return { M, R, Ri, Rc, D, Mi, Mc, Mm, rhoM, g, gc, A, Ac, Ptop, Pcmb, Pcentro, Kp, PD, DN2, eSu, eGiu, ac, rr, Gr, nBuoni, neve: nBuoni < 2, bagnato, forzante, omegaMarea, parteMantello: 1 - (Rc / Ri) ** 3, Mrad: Mi, TumZero, TcmbZero,
+  return { M, R, Ri, Rc, D, Mi, Mc, Mm, rhoM, g, gc, A, Ac, Ptop, Pcmb, Pcentro, Kp, PD, DN2, eSu, eGiu, ac, rr, Gr, nBuoni, neve: nBuoni < 2, bagnato, forzante, omegaMarea, parteMantello: 1 - (Rc / Ri) ** 3, dFdT: FUSO_PER_KELVIN, Mrad: Mi, TumZero, TcmbZero,
     kappaSu: S.kSu / (S.rhoSu * S.cp), kappaGiu: S.kGiu / (rhoM * S.cp), nucleo: Rc / R, ghiacciato, haNucleo: Mc > 1e-4 * M && Rc > 1e3 };
 }
 // il raggio del nucleo interno (m) e la sua derivata rispetto a T_cmb (m/K, negativa), dalla tabella della struttura
@@ -370,7 +379,7 @@ function flussi(st, piu, amb, rami, Tm, Tcmb, o) {
   if (st.forzante > 0) { const dz = dissipazioneIn(piu.cMarea, MAREE.roccia.rigidita / eps, MAREE.roccia.densita * nu, st.omegaMarea, rami.reologia, DZ); imK2 = dz.imK2; k2re = dz.k2Reale; Qmarea = st.forzante * imK2 * st.parteMantello; }
   const Qrad = amb.Qrad;
   // il calore latente del mantello che gela: una capacità in più finché è in parte fuso
-  const capM = st.Mm * (S.cp + (Fv > 0 ? S.latenteMantello * S.fusoPerKelvin : 0));
+  const capM = st.Mm * (S.cp + (Fv > 0 ? S.latenteMantello * st.dFdT : 0));
   o.dTm = ((Qrad + Qmarea + Qcmb - Qconv - Qfuso) / capM) * ANNO_S; // (K per anno)
   // il nucleo
   nucleoInterno(st, Tcmb, o);

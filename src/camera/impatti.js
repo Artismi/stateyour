@@ -100,14 +100,14 @@
 //   «urto gigante k/angolo|piano|verso|dove|quando», «classe c/nube p/quanti», «impatto k/quando|corpo|angolo|dove|sorte».
 // L'impatto k è sempre lo stesso evento: un ramo che ne cambia uno lascia identici tutti gli altri.
 
-import { COSTANTI, MSOLE } from './leggi.js';
+import { COSTANTI, MSOLE, ANNO, MTERRA, RTERRA, UA } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
-import { DISCO, MTERRA, URTI, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
+import { DISCO, URTI, raggioPianeta, raggiNecessari, giriCheRegge, tempoCrescita } from './disco.js';
 import { MATERIALI, densitaCorpo, limiteRoche } from './lune.js';
 import { MOLECOLE } from './chimica.js';
 import { COSTANTI as TETTONICA } from './tettonica.js';
 
-const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, UA_M = 1.496e11;
+const G = COSTANTI.G, PI = Math.PI, ANNO_S = ANNO, UA_M = UA;
 
 // ---------- i numeri del modello, tutti qui
 export const IMPATTI = Object.freeze({
@@ -651,7 +651,7 @@ export function storiaImpatti(P, sistema, caso, { massimo = 2000, luna = null } 
   const piccoli = taglia(cS, NC);
   if (taglio) { let n = 0; for (let z = 0; z < nE; z++) { piccoli.perEpoca[z] *= limita((taglio.t - epoche[z]) / (epoche[z + 1] - epoche[z]), 0, 1); n += piccoli.perEpoca[z]; } piccoli.numero[0] = n; }
   // LA QUIETE: finché gli urti portano più calore di quello che esce dall'interno, il mantello è comandato da loro
-  const qInterno = P.interno?.q ?? TETTONICA.qTerra * (P.massaKg / 5.972e24) / (P.raggioM / 6.371e6) ** 2, soglia = qInterno * 4 * PI * B.raggioM ** 2;
+  const qInterno = P.interno?.q ?? TETTONICA.qTerra * (P.massaKg / MTERRA) / (P.raggioM / RTERRA) ** 2, soglia = qInterno * 4 * PI * B.raggioM ** 2;
   let zQ = -1; for (let z = 0; z < nE; z++) if (potenza[z] > soglia) zQ = z;
   // il rimescolamento del mantello (la legge di tettonica.js: un giro di cella dura spessore / velocità delle placche)
   const mescola = P.interno?.q > TETTONICA.qVivo ? (P.raggioM * (1 - (P.interno.nucleo ?? 0.5))) / (TETTONICA.vTerra * (P.interno.q / TETTONICA.qTerra) ** 2) : Infinity;

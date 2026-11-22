@@ -112,7 +112,7 @@ import { massaAlone } from './galassie.js';
 import { campoCosmo, ANNI_OGGI } from './spazio3d.js';
 import { campoPigro } from './campo_pigro.js';
 import { indirizzo, scrivi, leggiAncheVecchia } from './intreccio.js';
-import { statoAcqua, ebollizione, ACQUA } from './leggi.js';
+import { statoAcqua, ebollizione, ACQUA, MPC, ZERO_CELSIUS } from './leggi.js';
 import { minerali } from './chimica.js';
 import { ventoStellare } from './risalita.js';
 import { luogoDaAria } from './materia.js';
@@ -146,7 +146,7 @@ const onde = (toroM, kmax) => { const k = `${toroM}|${kmax}`; if (!liste.has(k))
 // suo spettro e la sua periodicità). → { radice, toroM, kmax, N, KX, KY, KZ, PK, A, B, fissi: [] }
 export const LIVELLO_COSMO = 16;
 export function campoLibero(radice, { toroM = TORO_M, kmax = null, rami = null } = {}) {
-  if (kmax == null) return { tipo: 'pigro', radice: String(radice), toroM, campo: campoPigro(String(radice), { rami, lato0: (toroM / 3.0857e22) * 1024 }), livello: LIVELLO_COSMO, fissi: [] };
+  if (kmax == null) return { tipo: 'pigro', radice: String(radice), toroM, campo: campoPigro(String(radice), { rami, lato0: (toroM / MPC) * 1024 }), livello: LIVELLO_COSMO, fissi: [] };
   if (!(kmax >= 1 && kmax <= 512)) throw new Error(`kmax deve stare tra 1 e 512 (${kmax})`);
   const O = onde(toroM, kmax), { A, B } = ampiezzeLibere(String(radice), rami, O);
   return { radice: String(radice), toroM, kmax, N: O.N, KX: O.KX, KY: O.KY, KZ: O.KZ, PK: O.PK, A, B, fissi: [] };
@@ -349,13 +349,13 @@ export const CONTENUTI = {
   'acqua liquida': {
     perche: 'chiede una temperatura tra il gelo e l\'ebollizione a quella pressione, una pressione sopra il punto triplo, e che in superficie ci sia acqua',
     legge: 'leggi.js statoAcqua (il gelo a 273,15 K, l\'ebollizione dalla pressione, il punto triplo a 611 Pa)',
-    nelPunto: (c) => ({ T: [273.15, ebollizione(Math.max(c.pressione, 1e-300))], pressione: [ACQUA.tripla, Infinity] }),
+    nelPunto: (c) => ({ T: [ZERO_CELSIUS, ebollizione(Math.max(c.pressione, 1e-300))], pressione: [ACQUA.tripla, Infinity] }),
     pianeta: (M) => acquaInStato(M, 'liquida'),
   },
   ghiaccio: {
     perche: 'chiede una temperatura sotto il gelo e che in superficie ci sia acqua',
     legge: 'leggi.js statoAcqua (sotto 273,15 K; sotto il punto triplo, sotto 200 K)',
-    nelPunto: (c) => ({ T: [0, c.pressione < ACQUA.tripla ? 200 : 273.15] }),
+    nelPunto: (c) => ({ T: [0, c.pressione < ACQUA.tripla ? 200 : ZERO_CELSIUS] }),
     pianeta: (M) => acquaInStato(M, 'ghiaccio'),
   },
   'crosta di sale': {

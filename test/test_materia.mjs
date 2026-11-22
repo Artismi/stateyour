@@ -6,6 +6,7 @@ import { simulaMondo } from '../src/camera/mondo.js';
 import { segmentiSezione } from '../src/camera/sezione.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { caloreDellaRoccia, ANNO } from '../src/camera/leggi.js';
+import { KPC as LEGGI_KPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -299,7 +300,7 @@ prova('i luoghi: da ciò che la mappa ha in mano al luogo delle particelle', () 
   const el = M.radioelementi(r.minerali); tra(el.K / el.U, 1.5e4, 2e4, 'K/U'); tra(el.Th / el.U, 3.4, 3.9, 'Th/U'); assert.ok(M.sorgentiNaturali(r).totale.perKg > 2 * M.sorgentiNaturali(b).totale.perKg, 'il continente è più radioattivo del basalto');
   tra(M.sorgentiNaturali(a).totale.perM3 / 1000, 11, 14, 'il mare di S'); assert.equal(M.sorgentiNaturali(n).processi.filter((p) => p.tipo !== 'cosmico').length, 0, 'nel ghiaccio puro solo i raggi cosmici');
   for (const l of [r, b, a, n]) { const c = M.cellaMateria(l, {}, sorgente(l.indirizzo)); assert.ok(simulaMondo(c.cella).length >= 1 && c.nota.length > 100); }
-  tra(M.cieloRelativo({ ritmoSN: 0.02, forma: { unitaM: 15 * 3.0857e19 } }).relativo, 0.99, 1.01, 'il cielo della Via Lattea'); assert.ok(M.raggiCosmici({ ...r, raggi: { relativo: 10 } }).muoni > 9 * M.raggiCosmici(r).muoni);
+  tra(M.cieloRelativo({ ritmoSN: 0.02, forma: { unitaM: 15 * LEGGI_KPC } }).relativo, 0.99, 1.01, 'il cielo della Via Lattea'); assert.ok(M.raggiCosmici({ ...r, raggi: { relativo: 10 } }).muoni > 9 * M.raggiCosmici(r).muoni);
 });
 
 console.log(`\n${ok} prove superate`);

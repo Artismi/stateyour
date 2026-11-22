@@ -27,6 +27,7 @@ import * as FL from '../src/camera/fluidi.js';
 import * as TE from '../src/camera/tettonica.js';
 import * as UN from '../src/camera/unita.js';
 import { simulaMondo } from '../src/camera/mondo.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 const { MSOLE, RSOLE, LSOLE, UA, ANNO, COSTANTI: K, COSMO } = LG;
 const ADESSO = LG.etaUniverso() / ANNO; // l'età dell'universo, in anni
@@ -241,7 +242,7 @@ prova('ogni galassia ha meno barioni di quanti ne porta il suo alone (Ωb/Ωm), 
 prova('le stelle di tutte le galassie (il campione per il suo peso) sono qualche centesimo dei barioni del toro', () => {
   for (const n of [1]) {
     const C = CO.cosmo(n), F = campoCosmo(n), stelle = C.galassie.reduce((a, G) => a + G.forma.massaStelle, 0);
-    const H = (COSMO.H0 * 1000) / 3.086e22, rhoC = (3 * H * H) / (8 * Math.PI * K.G), barioni = (COSMO.Ob * rhoC * CO.TORO_M ** 3) / MSOLE, parte = (stelle * F.peso) / barioni;
+    const H = (COSMO.H0 * 1000) / LEGGI_MPC, rhoC = (3 * H * H) / (8 * Math.PI * K.G), barioni = (COSMO.Ob * rhoC * CO.TORO_M ** 3) / MSOLE, parte = (stelle * F.peso) / barioni;
     console.log(`      (${C.galassie.length} galassie segnate, ognuna per ${num(F.peso)} vere: ${num(stelle * F.peso)} Msol di stelle su ${num(barioni)} di barioni: ${num(100 * parte)}%; misurato ~6%. Mancano le galassie sotto ${num(F.massaMinima)} Msol di alone)`);
     tra(parte, 0.02, 0.15, 'la parte dei barioni che è in stelle');
   }

@@ -8,7 +8,7 @@
 // fasi ridà, punto per punto, la densità di galassie.js.
 //
 // Marche delle fonti: [V] letta sulla fonte ora · [R] ricordata (non riletta: da verificare) · [D] derivata qui.
-import { COSTANTI, MSOLE, LSOLE, ANNO } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, ANNO, COSMO } from './leggi.js';
 import * as ST from './stelle.js';
 import { LEGGI, ANELLI, PASSI, popolazione, cinematica, densitaGalassia, faseBraccioAlTempo, COSMOLOGIA, polvereDelGas, dentro as GAL } from './galassie.js';
 import * as MAT from './materia.js';
@@ -41,7 +41,7 @@ export const MEZZO = Object.freeze({
   molecolare: { P0: 4.3e4, esponente: 0.92, T: 15 }, // [R] Blitz & Rosolowsky 2006 (ApJ 650, 933): Σ_H₂/Σ_HI = (P/P₀)^0,92, P₀/k = 4,3·10⁴ K/cm³ (LEGGE MISURATA su 14 galassie); T delle nubi 10–20 K (misurata nel CO)
   ionizzato: { T: 8000, sfugge: 0.15, altezza: 1.0 }, // [R] il gas ionizzato diffuso (Reynolds 1984, 1989): 6000–10000 K; ne servono il 10–15% dei fotoni ionizzanti delle stelle O; scala d'altezza ~1 kpc (Gaensler et al. 2008: 1,8). Tre DATI MISURATI, non derivati
   // --- il fondo
-  Tfondo: 2.7255, // [R] (K) Fixsen 2009 (ApJ 707, 916)
+  Tfondo: COSMO.Tcmb, // [R] (K) Fixsen 2009 (ApJ 707, 916)
   // --- le righe (lunghezze d'onda in aria, nm) e i numeri dell'emissione
   righe: { Halfa: 656.28, Hbeta: 486.13, OIII: 500.68 },
   HalfaPerFotone: 0.45, balmer: 2.86, // [R] caso B a 10⁴ K: il 45% delle ricombinazioni dà un fotone Hα; Hα/Hβ = 2,86 (Osterbrock & Ferland 2006, tab. 4.2 e 4.4)

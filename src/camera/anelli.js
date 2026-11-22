@@ -68,12 +68,12 @@
 //   staccata dalle lune piccole (gli anelli tenui di Giove), la migrazione passata delle lune (la larghezza
 //   vera della divisione di Cassini: qui viene stretta, come la divisione di Huygens).
 
-import { COSTANTI, LSOLE, MSOLE, ANNO, clima } from './leggi.js';
+import { COSTANTI, LSOLE, MSOLE, ANNO, clima, ORA } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { MATERIALI, limiteRoche, raggioHill, periodoOrbita, raggioRotondo, densitaCorpo, orbitaDopoLeMaree } from './lune.js';
 import { sorgente } from './eventi.js';
 
-const { G, c: LUCE, sigma: SIGMA, kB, mp } = COSTANTI, EPS0 = 8.854e-12;
+const { G, c: LUCE, sigma: SIGMA, kB, mp } = COSTANTI, EPS0 = COSTANTI.eps0;
 export const LEGGI_ANELLI = {
   viscosita: 26, // Daisaka 2001
   pioggia: 1e-13, // kg/m²/s: O'Donoghue 2019, su Saturno
@@ -84,7 +84,7 @@ export const LEGGI_ANELLI = {
   esosfera: 3, soglia: 1e-8, restoUrto: 1, // PARAMETRI LIBERI
   ghiaccioMinimo: 0.005, hill: 0.4, urto: { capita: 0.45, massa: [-3, -1.6] }, // i numeri di lune.js (mantello di ghiaccio; orbita stabile; grande urto)
 };
-const L = LEGGI_ANELLI, GIORNO_GIOVANE = 10 * 3600, PIOVE = Math.cbrt(2 / 3);
+const L = LEGGI_ANELLI, GIORNO_GIOVANE = 10 * ORA, PIOVE = Math.cbrt(2 / 3);
 
 // ---------- la forma che si conserva. Con ν = K·Σ², ∂Σ/∂t = 3·∂²(νΣ)/∂r² ha la soluzione Σ = f(x)/√(SIM·K·t)·Δ,
 // con (f³)'' ∝ −f e f = 0 ai due bordi (lì la materia se ne va). Con f² = sen θ la forma si integra da sola:
@@ -163,7 +163,7 @@ export function storia(P, lune = [], stella = {}, caso = sorgente(`anelli/pianet
     else for (let k = 0; k < 8; k++) {
       const s = caso.sotto(`grande urto/storia ${k}`);
       if (s('capita') >= L.urto.capita) break;
-      const m = 10 ** s.tra('massa', ...L.urto.massa) * M, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0)), giorno = P.giorno || 24 * 3600;
+      const m = 10 ** s.tra('massa', ...L.urto.massa) * M, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0)), giorno = P.giorno || 24 * ORA;
       let a = orbitaDopoLeMaree(P, m, a0, eta);
       const I = 0.33 * M * P.raggioM ** 2, w = (2 * Math.PI) / giorno, wMax = Math.sqrt((G * M) / P.raggioM ** 3), mom = (x) => m * Math.sqrt(G * M * x);
       if (w + (mom(a) - mom(a0)) / I > wMax) a = Math.max(a0, ((mom(a0) + I * (wMax - w)) / m) ** 2 / (G * M));

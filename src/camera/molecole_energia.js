@@ -23,9 +23,10 @@
 import { atomo, raggioDiBorn, SIMBOLI, NUMERO } from './molecole_atomi.js';
 import { molecola, chiave, anelli, ranghi, speculare, grezzo, componenti as componentiDi, coppieSolitarie, viciniSigma, sommaLegami, carica as caricaDi, conta } from './molecole_grafo.js';
 import { forma, inerzia, numeroDiSimmetria, lunghezzaLegame, dominio } from './molecole_forma.js';
+import { COSTANTI, ZERO_CELSIUS } from './leggi.js'; // le costanti e le unità: un posto solo
 
 export const R = 8.314462618e-3; // kJ/(mol·K)
-const KB = 1.380649e-23, HP = 6.62607015e-34, NA = 6.02214076e23, UMA = 1.66053907e-27, HC_K = 1.438777; // (h·c/k in cm·K)
+const KB = COSTANTI.kB, HP = COSTANTI.h, NA = COSTANTI.NA, UMA = COSTANTI.u, HC_K = 1.438777; // (h·c/k in cm·K)
 const LN10 = Math.LN10;
 
 // ---------- DATI: le molecole di riferimento (ΔHf gas, 298 K, kJ/mol)
@@ -369,7 +370,7 @@ export function sitiAcidoBase(x) {
 }
 // FORZA IONICA: il coefficiente di attività di uno ione di carica z (legge di Debye e Hückel estesa da Davies 1962):
 // −log γ = A·z²·(√I/(1 + √I) − 0,3·I), A = 0,509 a 25 °C (∝ (εT)^−3/2). → −log γ (positivo: lo ione è stabilizzato)
-export const debyeHuckel = (z, I, T = 298.15) => { const eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), A = 0.509 * Math.pow((78.3 * 298.15) / (eps * T), 1.5), r = Math.sqrt(Math.max(I, 0)); return A * z * z * (r / (1 + r) - 0.3 * I); };
+export const debyeHuckel = (z, I, T = 298.15) => { const eps = 87.74 * Math.exp(-0.0046 * (T - ZERO_CELSIUS)), A = 0.509 * Math.pow((78.3 * 298.15) / (eps * T), 1.5), r = Math.sqrt(Math.max(I, 0)); return A * z * z * (r / (1 + r) - 0.3 * I); };
 // IL pKa CON LA TEMPERATURA (van 't Hoff): pKa(T) = pKa(25 °C) + ΔH/(R·ln 10)·(1/T − 1/298). ΔH di ionizzazione per classe
 // (kJ/mol; Christensen, Hansen e Izatt 1976 [ricordati]): acidi carbossilici ~0, ammonio 52, acqua 55,8, fenoli 23, tioli 26,
 // fosforico 4 (medio), imidazolio 36, HCN 44; le altre classi: 20.
@@ -438,7 +439,7 @@ export function energia(x, { T = 298.15, P = 1e5, solvente = null, pH = 7, attiv
   if (chiave(m) === 'O') { const g = condensaAcqua(T); return { H: H - EVAP(T), S: S - (1000 * (EVAP(T) + g)) / T, G: H - (T * S) / 1000 + g + R * T * Math.log(Math.max(attivitaAcqua, 1e-12)), fase: 'acqua (solvente)', stima: hf.stima, carica: 0, Hf298: hf.H, S298: t298.S }; }
   if (mono && !born && IONI_MISURATI[chiave(m)]) { const d = IONI_MISURATI[chiave(m)], q = m.atomi[0].q, gamma = forzaIonica > 0 ? -R * T * LN10 * debyeHuckel(q, forzaIonica, T) : 0; return { H: d[0], S: d[1], G: d[0] - (T * d[1]) / 1000 + gamma, fase: 'acqua', stima: 'misurato', carica: q, Hf298: d[0], S298: d[1] }; }
   if (mono) { // ione semplice senza dati: Born, nella convenzione H⁺(aq) = 0
-    const a = m.atomi[0], eps = 87.74 * Math.exp(-0.0046 * (T - 273.15)), born = (-694.65 * a.q * a.q * (1 - 1 / eps)) / (SHANNON[SIMBOLI[a.Z] + a.q] != null ? SHANNON[SIMBOLI[a.Z] + a.q] + (a.q > 0 ? 0.85 : 0.1) : raggioDiBorn(a.Z, a.q));
+    const a = m.atomi[0], eps = 87.74 * Math.exp(-0.0046 * (T - ZERO_CELSIUS)), born = (-694.65 * a.q * a.q * (1 - 1 / eps)) / (SHANNON[SIMBOLI[a.Z] + a.q] != null ? SHANNON[SIMBOLI[a.Z] + a.q] + (a.q > 0 ? 0.85 : 0.1) : raggioDiBorn(a.Z, a.q));
     // (la scala: ΔG di idratazione assoluta di H⁺ −1056 kJ/mol, Marcus 1991, la stessa su cui sono tarati i raggi di Latimer; S di H⁺ gas 108,9 J/mol/K)
     const G = H - (T * S) / 1000 + born - a.q * (HF_PROTONE - T * 0.1089 - 1056);
     return { H, S, G, fase: 'acqua', stima: 'ione semplice: Born', idratazione: born, carica: a.q, Hf298: hf.H, S298: t298.S }; }

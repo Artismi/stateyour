@@ -40,8 +40,9 @@ import * as RE from '../src/camera/reazioni.js';
 import { mareColVento } from './mare_col_vento.mjs';
 import * as SU from '../src/camera/suolo.js';
 import { terraAsciutta } from './terra_asciutta.mjs';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
-const T0 = performance.now(), EPS = 2 ** -52, MPC = 3.0857e22, { UA, MSOLE } = LG;
+const T0 = performance.now(), EPS = 2 ** -52, MPC = LEGGI_MPC, { UA, MSOLE } = LG;
 const P4 = probabilitaChi2(16, 1); // il livello di quattro scarti per un χ²: 6,3·10⁻⁵
 const num = (x, c = 4) => (x == null ? '—' : typeof x === 'string' ? x : !Number.isFinite(x) ? String(x) : x === 0 ? '0' : Math.abs(x) >= 1e5 || Math.abs(x) < 1e-3 ? x.toExponential(c - 1).replace('.', ',') : String(+x.toPrecision(c)).replace('.', ','));
 const somma = (v) => v.reduce((a, b) => a + b, 0);

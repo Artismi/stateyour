@@ -13,6 +13,7 @@ import * as ST from '../src/camera/stelle.js';
 import * as GA from '../src/camera/galassie.js';
 import * as CO from '../src/camera/cosmo.js';
 import * as S3 from '../src/camera/spazio3d.js';
+import { KPC as LEGGI_KPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], tabella = [];
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -21,7 +22,7 @@ const tra = (x, a, b, che) => assert.ok(x >= a && x <= b, `${che}: ${x} (atteso 
 const vicino = (x, y, rel, che) => assert.ok(Math.abs(x - y) <= rel * Math.abs(y), `${che}: ${x} contro ${y} (entro ${rel})`);
 // un riscontro col vero: stampa, registra per la tabella finale, non ferma
 const confronta = (che, x, a, b, vero, unita = '') => { const d = x >= a && x <= b; console.log(`      ${d ? '·' : '≠ NON TORNA:'} ${che}: ${n(x)}${unita ? ' ' + unita : ''} (vero: ${vero}; chiesto tra ${n(a)} e ${n(b)})`); tabella.push([che, `${n(x)}${unita ? ' ' + unita : ''}`, vero, d ? 'torna' : 'NON TORNA']); if (!d) nonTorna.push(`${che}: ${n(x)} (vero ${vero})`); return d; };
-const G = COSTANTI.G, C = COSTANTI.c, C2 = C * C, PI = Math.PI, GIORNO = 86400, SEC = 206264.806, MAS = SEC * 1e3, KPC = 3.0857e19, MPC = 1e3 * KPC, AL = C * ANNO;
+const G = COSTANTI.G, C = COSTANTI.c, C2 = C * C, PI = Math.PI, GIORNO = 86400, SEC = 206264.806, MAS = SEC * 1e3, KPC = LEGGI_KPC, MPC = 1e3 * KPC, AL = C * ANNO;
 const TERRA = { massa: 5.972e24, raggio: 6.371e6 }, rg = R.raggioGravitazionale;
 
 console.log('\n— 1. IL RITMO DEL TEMPO —');

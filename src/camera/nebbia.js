@@ -15,8 +15,9 @@
 // il disco: la stessa di tutti gli altri calcoli).
 
 import { sistema, pianeta, fascia, FASCIA_MAX, sorgenteEvento } from './cosmo.js';
+import { COSTANTI } from './leggi.js'; // le costanti e le unità: un posto solo
 
-const Q = 1.602e-19, MEV = 1.602e-13, G = 6.674e-11;
+const Q = COSTANTI.e, MEV = 1.602e-13, G = COSTANTI.G;
 export const ACCELERA = 40; // il tempo della mappa scorre 40 volte più in fretta
 const memo = new Map();
 

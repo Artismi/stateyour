@@ -52,7 +52,7 @@ prova('l\'acqua di mare misurata, messa in equilibrio con l\'aria: pH 8 e rotti,
   tra(e.coppie['Mg2+ SO4(2-)'] / MARE_VERO.Mg, 0.02, 0.2, 'la parte del magnesio appaiata al solfato (misurata ~0,1)');
   const pioggia = acqua({}, 288, { pCO2: 2.8e-4 }); tra(pioggia.pH, 5.5, 5.8, 'la pioggia in equilibrio con l\'aria (5,6)');
   // il salgemma satura attorno a 6 mol/kg; il gesso attorno a 0,015-0,03
-  let m = 4; while (acqua({ Na: m, Cl: m }, 298.15).omega.salgemma < 1) m += 0.1; tra(m, 5.5, 7.2, 'solubilità del salgemma (misurata 6,15 mol/kg)');
+  let m = 4; while (acqua({ Na: m, Cl: m }, 298.15, { pCO2: 2.8e-4 }).omega.salgemma < 1) m += 0.1; tra(m, 5.5, 7.2, 'solubilità del salgemma (misurata 6,15 mol/kg)');
   let c = 0.005; while (acqua({ Ca: c, S: c }, 298.15, { pCO2: 1e-9 }).omega.gesso < 1) c += 0.001; tra(c, 0.012, 0.035, 'solubilità del gesso (misurata 0,015 mol/kg)');
   console.log(`      pH ${n3(e.pH)}, Ω calcite ${n3(e.omega.calcite)}, gesso ${n3(e.omega.gesso)}, salgemma ${n3(e.omega.salgemma)}; il salgemma satura a ${n3(m)} mol/kg, il gesso a ${n3(c)}`);
 });
@@ -431,7 +431,7 @@ prova('un mare quasi chiuso che evapora: prima lascia il gesso, e solo se lo str
   // ogni kg che esce non può lasciare più calcio di quanto ne porta (qui il calcio è meno del solfato: finisce lui)
   assert.ok(medio.gessoAtteso <= medio.scambioSv * 1e6 * 1025 * fSale * mareVero.Ca * 36, 'il gesso non supera il calcio che passa');
   // nel bilancio: lo stesso mare con e senza l'uscita del gesso; il solfato cala, il cloro no, e il sodio rispetto al cloro cala con lui
-  const base = { P, rocce: rocceDelPianeta(P), massaMare: T.massaMare, areaMare: T.areaMare, fiumi: T.fiume.portataKgAnno, apporto: { Na: 5e12, K: 1.5e12, Mg: 6e11, Ca: 3e12, Si: 1e12 }, argilla: 1e12, sedimento: T.fiume.sedimentoKgAnno, riciclo: T.flussi.riciclo, pCO2: 2.8e-4, O2: 0.21, Tmare: 290, placche: true };
+  const base = { P, rocce: rocceDelPianeta(P), massaMare: T.massaMare, areaMare: T.areaMare, fiumi: T.fiume.portataKgAnno, apporto: { Na: 5e12, K: 1.5e12, Mg: 6e11, Ca: 3e12, Si: 1e12 }, argilla: 1e12, sedimento: T.fiume.sedimentoKgAnno, riciclo: T.flussi.riciclo, parteBassa: T.flussi.parteBassa, pCO2: 2.8e-4, O2: 0.21, Tmare: 290, placche: true };
   const a = bilancioSali(base), b = bilancioSali({ ...base, gesso: 2e-8 });
   // (se il mare senza l'uscita è già saturo di gesso — succede da quando il fluido caldo lascia nella roccia il sodio del solfato
   // di sodio, mare.js fluidoCaldo: l'anidrite — il solfato in più sta già sul fondo come gesso, fondoDiSale, e i bacini lo

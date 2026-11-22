@@ -59,6 +59,7 @@
 // il vuoto della QCD tra i quark (Leinweber 2000, hep-lat/0004025 [V]) non è simulato.
 import { contatore, campana, logEsatto, cosGiro } from './eventi.js';
 import { gusci, caricaEfficace, atomo as datiAtomo } from './molecole_atomi.js';
+import { COSMO, COSTANTI } from './leggi.js'; // le costanti e le unità: un posto solo
 
 // ---------- costanti (CODATA 2018 [R])
 export const AU = Object.freeze({ a0: 5.29177210903e-11, Eh: 27.211386245988, t: 2.4188843265857e-17, c: 137.035999084, eV: 27.211386245988 });
@@ -438,8 +439,8 @@ export function misureInFila(stato, indirizzo, k, sequenza, { t = 0, sigmaX = 0.
 //     di raggio a: Λ = (8/3ħ²)·n·√(2πm)·(k_BT)^(3/2)·a²; urti Γ = n·π(a + a_m)²·v̄, v̄ = √(8k_BT/πm);
 //   · fotoni termici a T: Λ = 8!·8ζ(9)·c·a⁶/(9π)·(k_BT/ħc)⁹.
 // → { tempo (s), ritmo (1/s), regime }. ambiente: { n (1/m³), massaKg, T, raggioM (di chi urta) } o { fotoni: T }.
-export function decoerenza({ ambiente = { fotoni: 2.7255 }, raggioM = 1e-10, separazioneM = 1e-10 } = {}) {
-  const hb = 1.054571817e-34, kB = 1.380649e-23, c = 2.99792458e8;
+export function decoerenza({ ambiente = { fotoni: COSMO.Tcmb }, raggioM = 1e-10, separazioneM = 1e-10 } = {}) {
+  const hb = COSTANTI.hbar, kB = COSTANTI.kB, c = COSTANTI.c;
   if (ambiente.fotoni != null) { const T = ambiente.fotoni, L = (40320 * 8 * 1.0020083928 * c * raggioM ** 6) / (9 * PI) * ((kB * T) / (hb * c)) ** 9, r = L * separazioneM ** 2; return { tempo: 1 / r, ritmo: r, regime: `fotoni termici a ${T} K`, Lambda: L }; }
   const { n, massaKg: m, T, raggioM: am = 1.4e-10 } = ambiente, L = (8 / (3 * hb * hb)) * n * Math.sqrt(2 * PI * m) * (kB * T) ** 1.5 * raggioM ** 2, urti = n * PI * (raggioM + am) ** 2 * Math.sqrt((8 * kB * T) / (PI * m)), r = Math.min(L * separazioneM ** 2, urti);
   return { tempo: 1 / r, ritmo: r, regime: r === urti ? 'ogni urto distingue (Δx più grande della lunghezza d\'onda di chi urta)' : 'Λ·Δx²', Lambda: L, urti };

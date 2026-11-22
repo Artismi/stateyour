@@ -14,12 +14,13 @@
 // oltre la soglia e g = quanto conta la superficie (g > 0 fa esagoni).
 
 import { comeSorgente } from './eventi.js';
+import { RTERRA } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const ACQUA = { nome: 'acqua', alfa: 2.1e-4, nu: 1.0e-6, kappa: 1.4e-7, k: 0.6, rho: 1000, sigmaT: 1.5e-4 };
 
 // il calore che esce dall'interno: il decadimento radioattivo nelle rocce, in proporzione alla massa
 // (la Terra: 0,09 W/m²)
-export const flussoInterno = (massaKg, raggioM) => (0.09 * (massaKg / 5.97e24)) / (raggioM / 6.371e6) ** 2;
+export const flussoInterno = (massaKg, raggioM) => (0.09 * (massaKg / 5.97e24)) / (raggioM / RTERRA) ** 2;
 
 export function convezione({ g, q, d, fluido = ACQUA }) {
   const dT = (q * d) / fluido.k;

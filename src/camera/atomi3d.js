@@ -81,6 +81,7 @@
 // preparaScena (dalla scena ai buffer) non ha bisogno della grafica e si prova da sola: test/test_atomi3d.mjs.
 
 import { sorgente } from './eventi.js';
+import { ZERO_CELSIUS } from './leggi.js'; // le costanti e le unità: un posto solo
 
 // ---------- gli elementi: colori convenzionali (Corey-Pauling-Koltun, nella versione di Jmol) e raggi in ångström
 // [simbolo, nome, colore, raggio di van der Waals (Bondi 1964; Mantina e altri 2009), covalente (Cordero e altri 2008),
@@ -1163,7 +1164,7 @@ export function scenaAcqua({ latoNm = 6, dimNm = null, salinita = 35, T = 298.15
   });
   const scena = { nome: 'acqua', unita: 'nm', colora: 'elemento', atomi: { pos, raggio, elemento, agitazione, gruppo }, legami: Uint32Array.from({ length: 4 * nO }, (_, q) => (q & 1 ? 3 * (q >> 2) + 1 + ((q >> 1) & 1) : 3 * (q >> 2))), scatola: L.slice(), origine: origine.slice(), parti, etichette: [],
     molecole: nO, legamiIdrogeno: legamiH, T, salinita, ioni: specie.map((s) => ({ nome: s.nome, quanti: s.messi })),
-    descrizione: `acqua a ${Math.round(T - 273.15)} °C, ${salinita} g/kg di sale: ${nO} molecole in ${L.map((x) => +x.toFixed(2)).join(' × ')} nm (${(nO / V).toFixed(1)} per nm³), ${specie.map((s) => `${s.messi} ${s.nome}`).join(', ')}` };
+    descrizione: `acqua a ${Math.round(T - ZERO_CELSIUS)} °C, ${salinita} g/kg di sale: ${nO} molecole in ${L.map((x) => +x.toFixed(2)).join(' × ')} nm (${(nO / V).toFixed(1)} per nm³), ${specie.map((s) => `${s.messi} ${s.nome}`).join(', ')}` };
   // etichette: per ogni specie lo ione più vicino al centro, col suo guscio (scena.ioniVicini: i loro indici)
   scena.ioniVicini = [];
   for (const p of parti.slice(1)) { let meglio = -1, dm = Infinity; const passo = 1 + (specie[parti.indexOf(p) - 1].intorno ? specie[parti.indexOf(p) - 1].intorno.n : 0);

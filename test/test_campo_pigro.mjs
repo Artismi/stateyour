@@ -8,6 +8,7 @@ import * as R from '../src/camera/ragnatela.js';
 import { COSMOLOGIA as U } from '../src/camera/galassie.js';
 import { COSMO } from '../src/camera/leggi.js';
 import { sorgente, campana } from '../src/camera/eventi.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], costi = [];
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -16,7 +17,7 @@ const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : Math.abs(x) >= 1e4 
 const riscontro = (che, x, a, b, vero) => { const torna = x >= a && x <= b; if (!torna) nonTorna.push(`${che}: ${num(x)} (chiesto ${num(a)}–${num(b)})`); console.log(`      ${torna ? '=' : '≠ NON TORNA '} ${che}: ${num(x)} (chiesto ${num(a)}–${num(b)}; vero ${vero})`); return torna; };
 const ms = (f) => { const t = performance.now(), r = f(); return [r, performance.now() - t]; };
 const costa = (che, t, quante = 1) => costi.push([che, t / quante]);
-const MPC = 3.0857e22, c = sorgente('prova/pigro'), GRANDE = 1e6 * MPC; // i punti delle prove stanno in un cubo di 2 milioni di Mpc: 140 volte l'orizzonte
+const MPC = LEGGI_MPC, c = sorgente('prova/pigro'), GRANDE = 1e6 * MPC; // i punti delle prove stanno in un cubo di 2 milioni di Mpc: 140 volte l'orizzonte
 const punto = (nome, lato = GRANDE) => [lato * (2 * c(`${nome}/x`) - 1), lato * (2 * c(`${nome}/y`) - 1), lato * (2 * c(`${nome}/z`) - 1)];
 const versore = (nome) => { const z = 2 * c(`${nome}/z`) - 1, f = 2 * Math.PI * c(`${nome}/fi`), r = Math.sqrt(1 - z * z); return [r * Math.cos(f), r * Math.sin(f), z]; };
 const media = (v) => v.reduce((a, b) => a + b, 0) / v.length, scarto = (v) => { const m = media(v); return Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1)); };

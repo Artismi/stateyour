@@ -80,7 +80,7 @@
 // (oltre lo zinco) seguono l'ossigeno o il carbonio nella proporzione r/s del Sistema Solare [R]: è una taratura sul Sole,
 // dichiarata. Il decadimento radioattivo (U, Th, K) non è nel libro: le masse sono quelle della nascita.
 
-import { ACQUA, PARTE_FUORI, R_GAS, COSTANTI } from './leggi.js';
+import { ACQUA, PARTE_FUORI, R_GAS, COSTANTI, ANNO, LSOLE, PESI_ATOMICI, UA } from './leggi.js';
 import { DATI as DATI_STELLE, composizione as composizioneStella } from './stelle.js';
 import { MOLECOLE, NEI_GHIACCI, D_MANTELLO, D_BASALTO, F_GRANITO, ROCCE } from './chimica.js';
 import { tabellaStoria, STORIA } from './storia.js';
@@ -93,14 +93,14 @@ const ZSOLE = DATI_STELLE.ZSOLE;
 //           ossigeni per atomo nel condensato (l'ossido o il metallo che lo porta), sede, parte r (per chi non ha rese)]
 // sede: 'lito' (resta nel silicato), 'sidero' (va col ferro), 'calco' (va con lo zolfo), 'atmo' (gas), 'ghiaccio'
 const TAVOLA = {
-  H: [1, 1.008, 12.00, 182, 0, 'ghiaccio'], He: [2, 4.0026, 10.98, 3, 0, 'atmo'], Li: [3, 6.94, 3.29, 1142, 0.5, 'lito', 'O'],
-  B: [5, 10.81, 2.82, 908, 1.5, 'lito', 'O'], C: [6, 12.011, 8.47, 40, 0, 'ghiaccio'], N: [7, 14.007, 7.87, 123, 0, 'ghiaccio'],
-  O: [8, 15.999, 8.73, 182, 0, 'ghiaccio'], F: [9, 18.998, 4.45, 734, 0, 'lito'], Ne: [10, 20.180, 7.97, 9, 0, 'atmo'],
-  Na: [11, 22.990, 6.28, 958, 0.5, 'lito'], Mg: [12, 24.305, 7.57, 1336, 1, 'lito'], Al: [13, 26.982, 6.46, 1653, 1.5, 'lito'],
-  Si: [14, 28.085, 7.55, 1310, 2, 'lito'], P: [15, 30.974, 5.46, 1229, 0, 'sidero'], S: [16, 32.06, 7.18, 664, 0, 'calco'],
-  Cl: [17, 35.45, 5.27, 948, 0, 'lito'], Ar: [18, 39.948, 6.44, 47, 0, 'atmo'], K: [19, 39.098, 5.10, 1006, 0.5, 'lito'],
-  Ca: [20, 40.078, 6.34, 1517, 1, 'lito'], Ti: [22, 47.867, 4.95, 1582, 2, 'lito'], V: [23, 50.942, 3.99, 1429, 1.5, 'lito'],
-  Cr: [24, 51.996, 5.67, 1296, 1.5, 'lito'], Mn: [25, 54.938, 5.50, 1158, 1, 'lito'], Fe: [26, 55.845, 7.50, 1334, 0, 'sidero'],
+  H: [1, PESI_ATOMICI.H, 12.00, 182, 0, 'ghiaccio'], He: [2, PESI_ATOMICI.He, 10.98, 3, 0, 'atmo'], Li: [3, 6.94, 3.29, 1142, 0.5, 'lito', 'O'],
+  B: [5, 10.81, 2.82, 908, 1.5, 'lito', 'O'], C: [6, PESI_ATOMICI.C, 8.47, 40, 0, 'ghiaccio'], N: [7, PESI_ATOMICI.N, 7.87, 123, 0, 'ghiaccio'],
+  O: [8, PESI_ATOMICI.O, 8.73, 182, 0, 'ghiaccio'], F: [9, 18.998, 4.45, 734, 0, 'lito'], Ne: [10, 20.180, 7.97, 9, 0, 'atmo'],
+  Na: [11, PESI_ATOMICI.Na, 6.28, 958, 0.5, 'lito'], Mg: [12, PESI_ATOMICI.Mg, 7.57, 1336, 1, 'lito'], Al: [13, 26.982, 6.46, 1653, 1.5, 'lito'],
+  Si: [14, PESI_ATOMICI.Si, 7.55, 1310, 2, 'lito'], P: [15, 30.974, 5.46, 1229, 0, 'sidero'], S: [16, PESI_ATOMICI.S, 7.18, 664, 0, 'calco'],
+  Cl: [17, PESI_ATOMICI.Cl, 5.27, 948, 0, 'lito'], Ar: [18, 39.948, 6.44, 47, 0, 'atmo'], K: [19, PESI_ATOMICI.K, 5.10, 1006, 0.5, 'lito'],
+  Ca: [20, PESI_ATOMICI.Ca, 6.34, 1517, 1, 'lito'], Ti: [22, 47.867, 4.95, 1582, 2, 'lito'], V: [23, 50.942, 3.99, 1429, 1.5, 'lito'],
+  Cr: [24, 51.996, 5.67, 1296, 1.5, 'lito'], Mn: [25, 54.938, 5.50, 1158, 1, 'lito'], Fe: [26, PESI_ATOMICI.Fe, 7.50, 1334, 0, 'sidero'],
   Co: [27, 58.933, 4.91, 1352, 0, 'sidero'], Ni: [28, 58.693, 6.24, 1353, 0, 'sidero'], Cu: [29, 63.546, 4.25, 1037, 0, 'calco'],
   Zn: [30, 65.38, 4.64, 726, 1, 'calco'], As: [33, 74.922, 2.34, 1065, 0, 'sidero', 0.8], Br: [35, 79.904, 2.58, 546, 0, 'lito', 0.9],
   Rb: [37, 85.468, 2.42, 800, 0.5, 'lito', 0.5], Sr: [38, 87.62, 2.91, 1464, 1, 'lito', 0.15], Mo: [42, 95.95, 1.96, 1590, 0, 'sidero', 0.4],
@@ -524,7 +524,7 @@ export const PERDITE = Object.freeze({
   OLR: 282, kappa: 0.01, albedo: 0.3, // il limite dell'aria di vapore (W/m²), l'opacità del vapore (m²/kg), l'albedo dell'aria di vapore [R]
   epsilon: 0.15, XUV1UA: 0.0297, saturaFino: 0.1, // efficienza della fuga; F_XUV a 1 UA e a 1 Ga (W/m²), saturata prima di 0,1 Ga [R]
 });
-const NA_AVO = 6.022e23, SIGMA = COSTANTI.sigma, ANNO_S = 3.156e7, LSOLE_W = 3.828e26, UA_M = 1.496e11;
+const NA_AVO = COSTANTI.NA, SIGMA = COSTANTI.sigma, ANNO_S = ANNO, LSOLE_W = LSOLE, UA_M = UA;
 const ALOGENI = ['Cl', 'Br', 'I'].map((s) => IDX[s]), DEI_GHIACCI = ['H', 'O', 'C', 'N'].map((s) => IDX[s]);
 // la parte di ogni elemento della roccia e dei ghiacci che la solidificazione manda fuori
 const U_ROCCIA = new Float64Array(NE), U_GHIACCI = new Float64Array(NE);

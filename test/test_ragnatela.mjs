@@ -16,6 +16,7 @@ import { campoCosmo } from '../src/camera/spazio3d.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { TORO_M } from '../src/camera/cosmo.js';
 import { FILTRI } from '../src/camera/campo_pigro.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], costi = [];
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -24,7 +25,7 @@ const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : Math.abs(x) >= 1e4 
 const riscontro = (che, x, a, b, vero) => { const torna = x >= a && x <= b; if (!torna) nonTorna.push(`${che}: ${num(x)} (chiesto ${num(a)}–${num(b)})`); console.log(`      ${torna ? '=' : '≠ NON TORNA '} ${che}: ${num(x)} (chiesto ${num(a)}–${num(b)}; vero ${vero})`); return torna; };
 const ms = (f) => { const t = performance.now(), r = f(); return [r, performance.now() - t]; };
 const costa = (che, t, quante = 1) => costi.push([che, t / quante]);
-const L = TORO_M, MPC = 3.0857e22, GLY = 9.4607e24, GA = 3.156e16, c = sorgente('prova/ragnatela');
+const L = TORO_M, MPC = LEGGI_MPC, GLY = 9.4607e24, GA = 3.156e16, c = sorgente('prova/ragnatela');
 // sei CAMPI DI ONDE SU UN TORO (kmax 24: il campo di prima): le prove della teoria (Doroshkevich, la massa che si conserva, il
 // cielo di un toro con i suoi cerchi). I cosmi della biblioteca sono il campo senza bordo: le loro prove sono quelle sul cosmo 1, 2, 3.
 const COSMI = [0, 1, 2, 3, 4, 5].map((i) => campoLibero(`prova/ragnatela/cosmo ${i}`, { kmax: 24 }));

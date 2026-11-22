@@ -70,9 +70,9 @@ import { campoPigro, PIGRO } from './campo_pigro.js';
 import { campoLibero, LIVELLO_COSMO, RANGO, probabilitaChi2 } from './bolle.js';
 import { dentro as RG } from './ragnatela.js';
 import { COSMOLOGIA as U } from './galassie.js';
-import { COSMO } from './leggi.js';
+import { COSMO, MPC } from './leggi.js';
 
-const MPC = 3.0857e22, PI2 = 2 * Math.PI, SQ2 = Math.SQRT2;
+const PI2 = 2 * Math.PI, SQ2 = Math.SQRT2;
 const H0s = (COSMO.H0 * 1e3) / MPC; // 1/s
 const lungo = (a) => Math.hypot(a[0], a[1], a[2]), cifre = (x) => String(+x.toPrecision(4)).replace('.', ',');
 

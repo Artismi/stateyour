@@ -17,7 +17,7 @@
 //
 // CHE COSA È VERO NEL TEMPO E CHE COSA RESTA FERMO A OGGI (regola 6), livello per livello: vedi le funzioni `stato…`.
 
-import { COSTANTI, ANNO, LSOLE, RSOLE, UA, etaUniverso } from './leggi.js';
+import { COSTANTI, ANNO, LSOLE, RSOLE, UA, MSOLE, KPC, etaUniverso } from './leggi.js';
 import { stella as stellaVera, fine } from './stelle.js';
 import { sorgente } from './eventi.js';
 import { sistema, galassia, cosmo, semeEvento, cosmoBase, ramiCosmo, LATO_SISTEMA_M, TORO_M } from './cosmo.js';
@@ -28,7 +28,7 @@ import { motoStella, faseBraccioAlTempo, cinematica, densitaGalassia, curvaRotaz
 import { scenaVuoto } from './vuoto.js';
 
 export const ANNI_OGGI = etaUniverso() / ANNO; // l'epoca: t = 0
-const PI2 = 2 * Math.PI, G = COSTANTI.G, MSOLE = 1.989e30;
+const PI2 = 2 * Math.PI, G = COSTANTI.G;
 const memo = (f, quante = 48) => { const m = new Map(); return (...a) => { const k = a.join('|'); if (!m.has(k)) { if (m.size > quante) m.delete(m.keys().next().value); m.set(k, f(...a)); } return m.get(k); }; };
 const radiceStella = (n, gid, sid) => `cosmo ${cosmoBase(n)}/galassia ${gid}/stella ${sid}`;
 // una direzione qualunque sulla sfera, e una terna qualunque, da tre eventi
@@ -110,7 +110,7 @@ export { periodo, daTerna };
 // =====================================================================================================
 // LA GALASSIA
 // =====================================================================================================
-const KPC = 3.0857e19, GA = 1e9 * ANNO;
+const GA = 1e9 * ANNO;
 const STATI = ['in vita', 'gigante rossa', 'nana bianca', 'stella di neutroni', 'buco nero', 'non nata'];
 // i moti (fissi) di tutte le stelle del campione: ognuna con i suoi eventi, all'indirizzo della stella
 const motiGalassia = memo((n, gid) => {

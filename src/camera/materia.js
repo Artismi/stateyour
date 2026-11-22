@@ -101,14 +101,14 @@
 //   · l'incanalamento è il modello continuo (le file come corde cariche), lungo gli assi a, b, c o c*, senza la perdita di
 //     energia lungo il canale; l'agitazione degli atomi è quella di Debye con la massa di ciascuno.
 
-import { ANNO, ISOTOPI } from './leggi.js';
+import { ANNO, ISOTOPI, ATMOSFERA, COSTANTI, GIORNO, KPC, ORA, PESI_ATOMICI, RTERRA, R_GAS, ZERO_CELSIUS } from './leggi.js';
 import { sorgente } from './eventi.js';
 import { casoEvento } from './mondo.js';
 import { unita, catalogoVero, fmtLunghezza, ME_MEV, C_LUCE, C_MOTORE } from './unita.js';
 import { ROCCE } from './chimica.js'; // la denudazione attesa (dove l'erosione vera non c'è): una fonte sola
 import { COSTANTI as TETTONICA } from './tettonica.js'; // la conducibilità della crosta: una fonte sola
 
-const K_BETHE = 0.307075, N_A = 6.02214e23, ALFA_FINE = 1 / 137.036, U_MEV = 931.494, MEV_J = 1.602177e-13;
+const K_BETHE = 0.307075, N_A = COSTANTI.NA, ALFA_FINE = 1 / 137.036, U_MEV = 931.494, MEV_J = 1.602177e-13;
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 
 // =====================================================================================
@@ -116,10 +116,10 @@ const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 // =====================================================================================
 // simbolo: [Z, massa atomica (u), I dell'elemento (eV), I nei composti condensati se diverso dalla regola 1,13·I, nome]
 const TAVOLA = {
-  H: [1, 1.008, 19.2, 19.2, 'idrogeno'], He: [2, 4.0026, 41.8, 41.8, 'elio'], C: [6, 12.011, 78, 81, 'carbonio'], N: [7, 14.007, 82, 82, 'azoto'], O: [8, 15.999, 95, 106, 'ossigeno'],
-  F: [9, 18.998, 115, 112, 'fluoro'], Na: [11, 22.99, 149, 0, 'sodio'], Mg: [12, 24.305, 156, 0, 'magnesio'], Al: [13, 26.982, 166, 0, 'alluminio'], Si: [14, 28.086, 173, 0, 'silicio'],
-  P: [15, 30.974, 173, 0, 'fosforo'], S: [16, 32.06, 180, 0, 'zolfo'], Cl: [17, 35.45, 174, 180, 'cloro'], Ar: [18, 39.948, 188, 188, 'argo'], K: [19, 39.098, 190, 0, 'potassio'],
-  Ca: [20, 40.078, 191, 0, 'calcio'], Ti: [22, 47.867, 233, 0, 'titanio'], Fe: [26, 55.845, 286, 0, 'ferro'], Rb: [37, 85.468, 363, 0, 'rubidio'], Zr: [40, 91.224, 393, 0, 'zirconio'],
+  H: [1, PESI_ATOMICI.H, 19.2, 19.2, 'idrogeno'], He: [2, PESI_ATOMICI.He, 41.8, 41.8, 'elio'], C: [6, PESI_ATOMICI.C, 78, 81, 'carbonio'], N: [7, PESI_ATOMICI.N, 82, 82, 'azoto'], O: [8, PESI_ATOMICI.O, 95, 106, 'ossigeno'],
+  F: [9, 18.998, 115, 112, 'fluoro'], Na: [11, PESI_ATOMICI.Na, 149, 0, 'sodio'], Mg: [12, PESI_ATOMICI.Mg, 156, 0, 'magnesio'], Al: [13, 26.982, 166, 0, 'alluminio'], Si: [14, 28.086, 173, 0, 'silicio'],
+  P: [15, 30.974, 173, 0, 'fosforo'], S: [16, PESI_ATOMICI.S, 180, 0, 'zolfo'], Cl: [17, PESI_ATOMICI.Cl, 174, 180, 'cloro'], Ar: [18, 39.948, 188, 188, 'argo'], K: [19, PESI_ATOMICI.K, 190, 0, 'potassio'],
+  Ca: [20, PESI_ATOMICI.Ca, 191, 0, 'calcio'], Ti: [22, 47.867, 233, 0, 'titanio'], Fe: [26, PESI_ATOMICI.Fe, 286, 0, 'ferro'], Rb: [37, 85.468, 363, 0, 'rubidio'], Zr: [40, 91.224, 393, 0, 'zirconio'],
   Ce: [58, 140.12, 523, 0, 'cerio'], Pb: [82, 207.2, 823, 0, 'piombo'], Th: [90, 232.04, 847, 0, 'torio'], U: [92, 238.03, 890, 0, 'uranio'],
 };
 export const ELEMENTI = Object.fromEntries(Object.entries(TAVOLA).map(([s, [Z, A, I, Ic, nome]]) => [s, { simbolo: s, nome, Z, A, I, Icomposto: Ic || 1.13 * I }]));
@@ -192,7 +192,7 @@ export function mezzo(luogo) {
     mu /= tot || 1;
     // la densità: dalla legge dei gas perfetti, alla pressione e alla temperatura del punto; l'indice di rifrazione
     // cresce con la densità (Gladstone e Dale: n − 1 = 2,93·10⁻⁴ per l'aria a 1,293 kg/m³)
-    rho = luogo.densita != null ? luogo.densita / 1000 : ((a.pressione ?? 101325) * mu * 1e-3) / (8.314 * (a.T ?? luogo.T ?? 288)) / 1000;
+    rho = luogo.densita != null ? luogo.densita / 1000 : ((a.pressione ?? ATMOSFERA) * mu * 1e-3) / (R_GAS * (a.T ?? luogo.T ?? 288)) / 1000;
     n = 1 + 2.93e-4 * (rho / 1.293e-3); nome = 'aria';
   } else if (tipo === 'acqua' || tipo === 'ghiaccio') {
     const M = tipo === 'acqua' ? MATERIALI.acqua : MATERIALI.ghiaccio; comp = inMassa(atomiDi(M.formula)); rho = luogo.densita != null ? luogo.densita / 1000 : M.densita; n = M.n; nome = tipo; debye = M.debye;
@@ -479,7 +479,7 @@ const primari = (E) => (fuori(E + PHI) * (E * (E + 2 * M_P))) / ((E + PHI) * (E 
 const RESA_MUONI = (0.14 / 1.8) * Math.pow(10, 2.7);
 // la soglia di Størmer (GV) in un punto della superficie: sotto questa rigidità un raggio che arriva dall'alto non passa.
 // La stessa legge di cosmo.js (Terra all'equatore: 14,9 GV), con la latitudine: cala come cos⁴ verso i poli del campo
-export const sogliaStormer = (pianeta = {}, latitudine = 0) => 14.9 * ((pianeta.B0 ?? 3.1e-5) / 3.1e-5) * ((pianeta.raggioM ?? 6.371e6) / 6.371e6) * Math.cos((latitudine * Math.PI) / 180) ** 4;
+export const sogliaStormer = (pianeta = {}, latitudine = 0) => 14.9 * ((pianeta.B0 ?? 3.1e-5) / 3.1e-5) * ((pianeta.raggioM ?? RTERRA) / RTERRA) * Math.cos((latitudine * Math.PI) / 180) ** 4;
 const energiaDaRigidita = (GV) => Math.sqrt(GV * GV + M_P * M_P) - M_P;
 // l'integrale di una funzione su una griglia logaritmica
 const integraLog = (f, a, b, n = 60) => { if (!(b > a)) return 0; const h = Math.log(b / a) / n; let s = 0; for (let i = 0; i <= n; i++) { const x = a * Math.exp(i * h); s += (i === 0 || i === n ? 0.5 : 1) * f(x) * x; } return s * h; };
@@ -504,7 +504,7 @@ export function raggiCosmici(luogo = {}) {
   // la scala d'altezza dell'aria alta, dove nascono gli sciami: più fredda di quella al suolo (aria.Talta: la temperatura
   // «di pelle» del pianeta, Teq/2^¼; se manca, 0,76 volte quella al suolo: sulla Terra 220 K contro 288)
   let mu = 0, tot = 0; const gas = aria.gas && Object.keys(aria.gas).length ? aria.gas : { N2: 0.781, O2: 0.209, Ar: 0.0093 }; for (const f in gas) { try { mu += gas[f] * MASSA_GAS(f); tot += gas[f]; } catch { /* un gas che la tavola non conosce */ } } mu /= tot || 1;
-  const H = (8.314 * (aria.Talta ?? 0.76 * (aria.T ?? luogo.T ?? 288))) / (mu * 1e-3 * g), epsPi = 115 * (H / 6400), epsK = 850 * (H / 6400), epsMu = (0.10566 * H) / 658.6;
+  const H = (R_GAS * (aria.Talta ?? 0.76 * (aria.T ?? luogo.T ?? 288))) / (mu * 1e-3 * g), epsPi = 115 * (H / 6400), epsK = 850 * (H / 6400), epsMu = (0.10566 * H) / 658.6;
   const aAria = frenata(particella('muone-'), 3000, mAria).elettronica * 1e-3; // GeV per g/cm²
   // i primari sopra la soglia, da tutto il cielo sopra l'orizzonte (π·I per una superficie orizzontale)
   const Ip = rel * integraLog(primari, Math.max(Ec, 0.02), 1e6, 80), attAria = Math.exp(-X0 / LamN);
@@ -547,7 +547,7 @@ export function raggiCosmici(luogo = {}) {
   // E il carbonio-14 che fanno con l'azoto dell'aria: 2 atomi per cm²·s in media sulla Terra, per la parte di neutroni che
   // l'azoto cattura; l'aria lo rimescola: conta la media dei primari su tutte le latitudini
   if (!luogo.__riferimento) {
-    const terra = { g: 9.81, B0: 3.1e-5, raggioM: 6.371e6 }, rif = raggiCosmici({ __riferimento: true, pianeta: terra, latitudine: 51, aria: { pressione: 101325, T: 288 } });
+    const terra = { g: 9.81, B0: 3.1e-5, raggioM: RTERRA }, rif = raggiCosmici({ __riferimento: true, pianeta: terra, latitudine: 51, aria: { pressione: ATMOSFERA, T: 288 } });
     out.neutroni = Math.min(130 * (nucleoni / rif.nucleoni), 3 * out.primari * attSotto);
     const at = {}; for (const f in gas) { try { const a = atomiDi(f); for (const e in a) at[e] = (at[e] || 0) + a[e] * gas[f]; } catch { /* un gas che la tavola non conosce */ } }
     let cat = 0; for (const e in at) cat += at[e] * (SIGMA_CATTURA[e] ?? 0.1); const suAzoto = cat > 0 ? ((at.N || 0) * SIGMA_CATTURA.N) / cat : 0;
@@ -564,7 +564,7 @@ const fmt = (x, d = 2) => (x === 0 ? '0' : Math.abs(x) >= 1e5 || Math.abs(x) < 1
 // un tempo detto a parole (secondi)
 export function fmtTempo(s) {
   if (!isFinite(s)) return 'mai';
-  const passi = [[1e-15, 1e-18, 'attosecondi'], [1e-12, 1e-15, 'femtosecondi'], [1e-9, 1e-12, 'picosecondi'], [1e-6, 1e-9, 'nanosecondi'], [1e-3, 1e-6, 'microsecondi'], [1, 1e-3, 'millisecondi'], [120, 1, 'secondi'], [7200, 60, 'minuti'], [172800, 3600, 'ore'], [2 * ANNO, 86400, 'giorni'], [2e3 * ANNO, ANNO, 'anni'], [2e6 * ANNO, 1e3 * ANNO, 'mila anni'], [2e9 * ANNO, 1e6 * ANNO, 'milioni di anni'], [Infinity, 1e9 * ANNO, 'miliardi di anni']];
+  const passi = [[1e-15, 1e-18, 'attosecondi'], [1e-12, 1e-15, 'femtosecondi'], [1e-9, 1e-12, 'picosecondi'], [1e-6, 1e-9, 'nanosecondi'], [1e-3, 1e-6, 'microsecondi'], [1, 1e-3, 'millisecondi'], [120, 1, 'secondi'], [7200, 60, 'minuti'], [172800, ORA, 'ore'], [2 * ANNO, GIORNO, 'giorni'], [2e3 * ANNO, ANNO, 'anni'], [2e6 * ANNO, 1e3 * ANNO, 'mila anni'], [2e9 * ANNO, 1e6 * ANNO, 'milioni di anni'], [Infinity, 1e9 * ANNO, 'miliardi di anni']];
   for (const [fino, unitaS, nome] of passi) if (s < fino) return `${fmt(s / unitaS, 1)} ${nome}`;
   return '';
 }
@@ -627,14 +627,14 @@ export function sorgentiNaturali(luogo) {
 // =====================================================================================
 // 6. I LUOGHI: dal punto della mappa (o dal campione d'acqua) al `luogo`
 // =====================================================================================
-const CONDUCIBILITA = TETTONICA.conducibilita, G_NEWTON = 6.674e-11; // (W/m/K, 3: sta in tettonica.js) della roccia della crosta: con il calore che esce dal pianeta dà di quanto la temperatura cresce scendendo
+const CONDUCIBILITA = TETTONICA.conducibilita, G_NEWTON = COSTANTI.G; // (W/m/K, 3: sta in tettonica.js) della roccia della crosta: con il calore che esce dal pianeta dà di quanto la temperatura cresce scendendo
 // ciò che del pianeta serve qui: gravità, campo, aria, stella, età. P è il pianeta di cosmo.js (sistema(…).pianeti[k])
 function delPianeta(P = {}, { lat = 45, quotaM = 0 } = {}) {
   const g = P.clima?.g ?? (P.massaKg && P.raggioM ? (G_NEWTON * P.massaKg) / P.raggioM ** 2 : 9.81), p0 = isFinite(P.clima?.pressione) ? P.clima.pressione : 0, T = P.clima?.T ?? 288;
   const gas = P.atmosfera?.gas && Object.keys(P.atmosfera.gas).length ? Object.fromEntries(Object.entries(P.atmosfera.gas).filter(([f, x]) => x > 1e-6 && (() => { try { MASSA_GAS(f); return true; } catch { return false; } })())) : null;
   let mu = 28.96; if (gas) { let s = 0, t = 0; for (const f in gas) { s += gas[f] * MASSA_GAS(f); t += gas[f]; } if (t > 0) mu = s / t; }
-  const H = (8.314 * T) / (mu * 1e-3 * g), B0 = P.B0 ?? P.interno?.B0 ?? 0, sl = Math.sin((lat * Math.PI) / 180);
-  return { pianeta: { g, raggioM: P.raggioM ?? 6.371e6, B0, eta: P.interno?.eta ?? ETA_RIFERIMENTO, q: P.interno?.q ?? 0.087 }, latitudine: lat,
+  const H = (R_GAS * T) / (mu * 1e-3 * g), B0 = P.B0 ?? P.interno?.B0 ?? 0, sl = Math.sin((lat * Math.PI) / 180);
+  return { pianeta: { g, raggioM: P.raggioM ?? RTERRA, B0, eta: P.interno?.eta ?? ETA_RIFERIMENTO, q: P.interno?.q ?? 0.087 }, latitudine: lat,
     aria: { pressione: p0 * Math.exp(-Math.max(0, quotaM) / H), T, Talta: P.clima?.Teq ? P.clima.Teq / Math.pow(2, 0.25) : undefined, ...(gas ? { gas } : {}) },
     B: B0 * Math.sqrt(1 + 3 * sl * sl), etaPianeta: P.interno?.eta ?? ETA_RIFERIMENTO, stella: P.Lw > 0 ? { Lw: P.Lw, aM: P.aM } : undefined, scalaAltezza: H };
 }
@@ -642,7 +642,7 @@ function delPianeta(P = {}, { lat = 45, quotaM = 0 } = {}) {
 function carbonioScambiato(P, mare) {
   const g = P.clima?.g ?? 9.81, p = isFinite(P.clima?.pressione) ? P.clima.pressione : 0, gas = P.atmosfera?.gas || {}; let mu = 0, c = 0, tot = 0;
   for (const f in gas) { let a; try { a = atomiDi(f); } catch { continue; } mu += gas[f] * MASSA_GAS(f); c += gas[f] * (a.C || 0); tot += gas[f]; }
-  let kg = mu > 0 ? (p / g) * ((c * 12.011) / mu) : 0;
+  let kg = mu > 0 ? (p / g) * ((c * PESI_ATOMICI.C) / mu) : 0;
   if (mare && P.interno?.acquaKg > 0 && P.raggioM) { const dic = typeof mare.carbonio === 'number' ? mare.carbonio : mare.carbonio?.totale ?? mare.carbonio?.DIC ?? 0; kg += (dic * 12.011e-3 * P.interno.acquaKg) / (4 * Math.PI * P.raggioM ** 2); }
   return kg;
 }
@@ -688,7 +688,7 @@ export function luogoDaAcqua({ S = null, P = S?.P || {}, stato = S?.mare || null
 export function luogoDaAria({ S = null, P = S?.P || {}, lat = 45, lon = 0, quotaM = 0, suMare = false, raggi = null, indirizzo = null, suolo = null } = {}) {
   const dp = delPianeta(P, { lat, quotaM }), cont = S?.se?.materiali?.continente, gas = dp.aria.gas || { N2: 0.781, O2: 0.209, Ar: 0.0093, CO2: 0.0004 }; let mu = 0, c = 0, t = 0;
   for (const f in gas) { mu += gas[f] * MASSA_GAS(f); c += gas[f] * (atomiDi(f).C || 0); t += gas[f]; }
-  return { ...dp, tipo: 'aria', nome: 'aria', T: dp.aria.T, quotaM, lon, sopra: {}, raggi: raggi || undefined, carbonio: mu > 0 ? (c * 12.011) / mu : 0, carbonioKgM2: carbonioScambiato(P, S?.mare) || undefined,
+  return { ...dp, tipo: 'aria', nome: 'aria', T: dp.aria.T, quotaM, lon, sopra: {}, raggi: raggi || undefined, carbonio: mu > 0 ? (c * PESI_ATOMICI.C) / mu : 0, carbonioKgM2: carbonioScambiato(P, S?.mare) || undefined,
     suolo: suMare ? null : suolo || { U: cont ? radioelementi(cont).U : 2.7e-6, densita: 1600 },
     indirizzo: indirizzo || (S?.k ? `${S.k}/aria/${lon.toFixed(4)}/${lat.toFixed(4)}/${quotaM}` : `aria/${lon.toFixed(4)}/${lat.toFixed(4)}/${quotaM}`) };
 }
@@ -698,7 +698,7 @@ export function luogoDaAria({ S = null, P = S?.P || {}, lat = 45, lon = 0, quota
 // dà cosmo.js (galassia(n, id): ritmoSN all'anno, forma.unitaM il raggio che tiene quasi tutte le stelle).
 export function cieloRelativo(galassia) {
   const ritmo = galassia?.ritmoSN, R = galassia?.forma?.unitaM; if (!(ritmo > 0) || !(R > 0)) return { relativo: 1 };
-  return { relativo: limita((ritmo / 0.02) / (R / (15 * 3.0857e19)) ** 2, 1e-3, 1e3) };
+  return { relativo: limita((ritmo / 0.02) / (R / (15 * KPC)) ** 2, 1e-3, 1e3) };
 }
 
 // =====================================================================================
@@ -788,12 +788,12 @@ function conta(c, nome, media) {
 export function ritenzione(luogo, minerale, tipo = 'fissione') {
   const Tc = MATERIALI[minerale]?.ricottura?.[tipo], eta = luogo.etaRoccia ?? luogo.etaPianeta ?? ETA_RIFERIMENTO;
   if (!Tc) return { anni: 0, registra: false, perche: `${minerale}: non tiene questo tipo di memoria` };
-  if ((luogo.T ?? 288) >= Tc) return { anni: 0, registra: true, Tc, perche: `qui la roccia è a ${Math.round(luogo.T - 273.15)} °C, più calda della ricottura (${Math.round(Tc - 273.15)} °C): ogni traccia si ripara` };
-  let anni = eta, perche = `la roccia ha ${fmtTempo(eta * ANNO)} e non è mai stata più calda di ${Math.round(Tc - 273.15)} °C`;
-  if (luogo.riscaldata && luogo.riscaldata.T >= Tc && luogo.riscaldata.anniFa < anni) { anni = luogo.riscaldata.anniFa; perche = `scaldata a ${Math.round(luogo.riscaldata.T - 273.15)} °C ${fmtTempo(anni * ANNO)} fa: le tracce di prima sono cancellate`; }
+  if ((luogo.T ?? 288) >= Tc) return { anni: 0, registra: true, Tc, perche: `qui la roccia è a ${Math.round(luogo.T - ZERO_CELSIUS)} °C, più calda della ricottura (${Math.round(Tc - ZERO_CELSIUS)} °C): ogni traccia si ripara` };
+  let anni = eta, perche = `la roccia ha ${fmtTempo(eta * ANNO)} e non è mai stata più calda di ${Math.round(Tc - ZERO_CELSIUS)} °C`;
+  if (luogo.riscaldata && luogo.riscaldata.T >= Tc && luogo.riscaldata.anniFa < anni) { anni = luogo.riscaldata.anniFa; perche = `scaldata a ${Math.round(luogo.riscaldata.T - ZERO_CELSIUS)} °C ${fmtTempo(anni * ANNO)} fa: le tracce di prima sono cancellate`; }
   if (luogo.continente !== false && luogo.denudazione > 0 && luogo.gradiente > 0) {
     const z = (Tc - (luogo.Tsuperficie ?? luogo.T ?? 288)) / luogo.gradiente - (luogo.profonditaM || 0), t = z / luogo.denudazione;
-    if (t < anni && z < 4e4) { /* (più giù di una crosta, 40 km, non è roccia che possa risalire per erosione) */ anni = Math.max(0, t); perche = `la roccia è salita: stava a ${fmtLunghezza(z + (luogo.profonditaM || 0))} di profondità, a ${Math.round(Tc - 273.15)} °C, ${fmtTempo(anni * ANNO)} fa (l'erosione toglie ${fmt(luogo.denudazione * 1e6)} m per milione di anni); prima era troppo calda per ricordare`; }
+    if (t < anni && z < 4e4) { /* (più giù di una crosta, 40 km, non è roccia che possa risalire per erosione) */ anni = Math.max(0, t); perche = `la roccia è salita: stava a ${fmtLunghezza(z + (luogo.profonditaM || 0))} di profondità, a ${Math.round(Tc - ZERO_CELSIUS)} °C, ${fmtTempo(anni * ANNO)} fa (l'erosione toglie ${fmt(luogo.denudazione * 1e6)} m per milione di anni); prima era troppo calda per ricordare`; }
   }
   return { anni, registra: true, Tc, perche };
 }
@@ -1102,7 +1102,7 @@ export function reticolo(minerale) {
 // A zero assoluto non è zero (moto di punto zero); cresce con la temperatura; gli atomi leggeri si agitano di più.
 export function agitazione(massaU, debye, T) {
   const x = debye / Math.max(T, 1e-3); let fi = 0; const n = 60; for (let i = 0; i < n; i++) { const t = ((i + 0.5) * x) / n; fi += t / Math.expm1(t); } fi /= n; // (1/x)·∫ = media sull'intervallo
-  return Math.sqrt(((3 * 1.0546e-34 ** 2) / (massaU * 1.66054e-27 * 1.381e-23 * debye)) * (fi / x + 0.25)) * 1e10;
+  return Math.sqrt(((3 * COSTANTI.hbar ** 2) / (massaU * COSTANTI.u * COSTANTI.kB * debye)) * (fi / x + 0.25)) * 1e10;
 }
 // l'asse lungo cui si guarda: i due spigoli che gli stanno di traverso (proiettati) e il periodo lungo di lui
 function vistaLungo(R, asse = R.asse) {

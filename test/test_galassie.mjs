@@ -5,6 +5,7 @@ import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, COSMO, etaUniverso, massaNascita } from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
 import { cosmo, galassia, sistema, indirizzoDi, motiDi, raggioSistema, metriPerUnita, TORO_M } from '../src/camera/cosmo.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -288,7 +289,7 @@ prova('i cataloghi delle galassie vere: coerenti con stelle.js, resti mai su ste
 prova('collegate al cosmo: le scale vere, i moti della stella nella galassia e della galassia nel cosmo', () => {
   const C = cosmo(1), H0 = COSMO.H0, f = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99); tra(f / Math.pow(COSMO.Om, 0.55), 0.97, 1.03, 'il ritmo di crescita f = dlnD/dlna (≈ Ωm^0,55)');
   // la teoria lineare: la divergenza della velocità è −H₀·f·δ (qui la si deriva a differenze sul campo, in un punto qualunque)
-  const L = TORO_M / 3.0857e22, sb = dentro.U.sigmaOnde((2 * Math.PI * 9) / L), delta = (x, y) => ((C.densita(x, y) - C.media) / C.sigma) * sb + 0;
+  const L = TORO_M / LEGGI_MPC, sb = dentro.U.sigmaOnde((2 * Math.PI * 9) / L), delta = (x, y) => ((C.densita(x, y) - C.media) / C.sigma) * sb + 0;
   for (const [x, y] of [[0.31, 0.62], [0.8, 0.15], C.galassie[5].pos]) {
     const h = 1e-5, v = (a, b) => velocitaPeculiare(C, [a, b]), div = (v(x + h, y)[0] - v(x - h, y)[0] + v(x, y + h)[1] - v(x, y - h)[1]) / (2 * h * L);
     // (la media del campo sulla griglia non è una delle onde: δ qui è la somma delle onde, a media nulla)

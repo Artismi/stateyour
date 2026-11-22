@@ -22,6 +22,7 @@ import { forma, inerzia, vettori } from './molecole_forma.js';
 import { campo, forze, minimizza, insieme, cariche, diedriPeptide } from './molecole_forze.js';
 import { logKComplesso, R } from './molecole_energia.js';
 import { numero } from './eventi.js';
+import { COSTANTI } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const { somma, meno, per, scalare, vettore, lungo, unita, ruotaAttorno, perpendicolare } = vettori;
 const p3 = (f, i) => [f.pos[3 * i], f.pos[3 * i + 1], f.pos[3 * i + 2]];
@@ -29,7 +30,7 @@ const baricentro = (f) => { const c = [0, 0, 0]; for (let i = 0; i < f.n; i++) f
 // la rotazione che porta il versore v su w, applicata a un punto attorno a un centro, poi un giro attorno a w
 const porta = (v, w) => { const ax = vettore(v, w), s = lungo(ax), ang = Math.atan2(s, scalare(v, w)), asse = s > 1e-9 ? per(ax, 1 / s) : perpendicolare(v); return (x) => ruotaAttorno(x, asse, ang); };
 const MEMO = new Map(), COSTO_LEGARSI = 15, RAGGIO_VICINANZA = 5;
-export const CONCENTRAZIONE_EFFICACE = 1 / (6.02214e23 * (4 / 3) * Math.PI * (RAGGIO_VICINANZA * 1e-9) ** 3); // mol/L (1e-9 dm per Å… 5 Å = 5·10⁻⁹ dm)
+export const CONCENTRAZIONE_EFFICACE = 1 / (COSTANTI.NA * (4 / 3) * Math.PI * (RAGGIO_VICINANZA * 1e-9) ** 3); // mol/L (1e-9 dm per Å… 5 Å = 5·10⁻⁹ dm)
 
 // interazione(a, b, { solvente }) → { dE (kJ/mol: insieme meno separati, il migliore degli accostamenti provati), dG (di legame, a 1 mol/L),
 //   K (L/mol), legamiH (idrogeni di una a meno di 2,4 Å da un N/O dell'altra), configurazione }

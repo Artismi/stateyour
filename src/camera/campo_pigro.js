@@ -66,13 +66,13 @@
 //   margine del nucleo più largo, 6·4 celle): non è ancora il secondo della scena; il passo successivo sarebbe tenere le
 //   trasformate dei nuclei (sono le stesse per ogni regione).
 // GLI ALONI UNO PER UNO: aloniIn() di ragnatela.js, su questo campo, con l'esclusione che dipende solo dal campo.
-import { COSMO } from './leggi.js';
+import { COSMO, MPC } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U } from './galassie.js';
 import { probabilitaChi2, RANGO } from './bolle.js';
 import { ricombinazione, dentro as RAGNATELA } from './ragnatela.js';
 
-const MPC = 3.0857e22, PI2 = 2 * Math.PI, LATO0 = 2 ** 20; // Mpc: il lato delle celle del livello 0
+const PI2 = 2 * Math.PI, LATO0 = 2 ** 20; // (MPC: leggi.js) Mpc: il lato delle celle del livello 0
 export const PIGRO = { lato0Mpc: LATO0, raggio: 6, raccordo: 0.8, puntiPerCella: 96, puntiK: 480, blocco: 8, memoria: 1500, livelloMassimo: 34 };
 const f0Crescita = Math.log(U.D(1.01) / U.D(0.99)) / Math.log(1.01 / 0.99); // f = dlnD/dlna oggi (come cosmo3d.js)
 export const latoDi = (j) => LATO0 / 2 ** j; // Mpc

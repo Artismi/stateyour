@@ -87,7 +87,7 @@
 
 import { comeSorgente } from './eventi.js';
 import { STORIA } from './storia.js'; // (l'energia di attivazione della viscosità e la conducibilità del mantello: una fonte sola)
-import { R_GAS } from './leggi.js';
+import { R_GAS, ANNO, RTERRA } from './leggi.js';
 import { F_GRANITO } from './chimica.js'; // (quanta parte della crosta degli archi è il fuso chiaro che sale: il resto è il residuo denso, una fonte sola)
 const RESIDUO = 1 - F_GRANITO;
 
@@ -619,7 +619,7 @@ function raffina(src, W, H) {
 // meno; quel terzo è la parte EMERSA più le piattaforme, non il volume.)
 // È UNA TARATURA SULLA TERRA: vale solo per chi chiama evolviTettonica senza la storia (le prove coi numeri sciolti) e per
 // elementi.js. Con la storia la crosta nasce agli archi e torna giù alle fosse (evolviTettonica, C.archi e C.riciclo).
-const CROSTA_TERRA = { volume: 7.177e18, eta: 4.5e9, superficie: 4 * Math.PI * 6.371e6 ** 2, tempo: 4e9 }; // (m³, anni, m², anni)
+const CROSTA_TERRA = { volume: 7.177e18, eta: 4.5e9, superficie: 4 * Math.PI * RTERRA ** 2, tempo: 4e9 }; // (m³, anni, m², anni)
 export const crostaAttesa = (t) => ((CROSTA_TERRA.volume / (CROSTA_TERRA.superficie * C.hMisura)) * (1 - Math.exp(-Math.max(0, t) / CROSTA_TERRA.tempo))) / (1 - Math.exp(-CROSTA_TERRA.eta / CROSTA_TERRA.tempo));
 
 // LA VELOCITÀ DI UNA PLACCA (m/anno) dal calore che porta [derivata]: una placca nasce calda alla dorsale e si raffredda
@@ -629,7 +629,7 @@ export const crostaAttesa = (t) => ((CROSTA_TERRA.volume / (CROSTA_TERRA.superfi
 // (storia.js), L la larghezza di una cella del mantello. Con i numeri della Terra della storia (q = 0,077 W/m², ΔT =
 // 1374 K, L = 8000 km) dà 3,6 cm/anno (misurati: 4 in media). q qui è il flusso medio del pianeta, non quello dei soli
 // fondali (sulla Terra 0,10): manca la parte che esce dai continenti senza passare dalle placche.
-export const velocitaPlacche = ({ q, dT, lunghezza, k = 4.2, kappa = 1e-6 }) => ((Math.PI * kappa * lunghezza * q * q) / (2 * k * dT) ** 2) * 3.156e7;
+export const velocitaPlacche = ({ q, dT, lunghezza, k = 4.2, kappa = 1e-6 }) => ((Math.PI * kappa * lunghezza * q * q) / (2 * k * dT) ** 2) * ANNO;
 
 // ---------- SENZA PLACCHE, CON LA STORIA: IL RILIEVO DI UN COPERCHIO. Tre sorgenti, tutte dallo stato termico nel tempo:
 //   1. LA CROSTA DI BASALTO ISPESSITA (isostasia di Airy): il fuso di ogni epoca (la portata di storia.js, Ṁ(t), che sotto un
@@ -652,7 +652,7 @@ function coperchio({ W, H, N, man, T, eta, raggioM, gravita, acquaM3, vigore, or
   const alt = new Float32Array(N), sollevamento = new Float32Array(N), basalto = new Float32Array(N), accumulo = new Float64Array(N), u = new Float64Array(N);
   campi.etaCrosta.fill(eta / 1e6);
   // l'orologio del mantello: giri di cella (∫v dt / D)
-  const anno = 3.156e7, giri = T.orologio((t) => T.di(t).vInterno * anno / T.D, eta), passi = Math.min(400, Math.ceil(giri.strada / 0.25)), dg = giri.strada / Math.max(1, passi);
+  const anno = ANNO, giri = T.orologio((t) => T.di(t).vInterno * anno / T.D, eta), passi = Math.min(400, Math.ceil(giri.strada / 0.25)), dg = giri.strada / Math.max(1, passi);
   const peso = (out) => { man.su(W, H, u); let m = 0; for (let k = 0; k < N; k++) { const v = u[k] > 0 ? u[k] : 0; out[k] = v; m += v; } return m / N; };
   const w = new Float64Array(N); let t = 0;
   // LA CROSTA NON CRESCE SENZA LIMITI, a ogni passo: dove supera la profondità dell'eclogite la parte sotto affonda (storia.js
@@ -736,7 +736,7 @@ function coperchio({ W, H, N, man, T, eta, raggioM, gravita, acquaM3, vigore, or
 // spinta = 0, spessore = 0, fosse = 0 (e così velocità, sollevamento, copertura), etaCrosta = l'età del pianeta ovunque; alt = solo i rigonfiamenti sopra i
 // pennacchi del mantello (fino a 1,5 km, come Tharsis o gli altopiani di Venere), o piatta (tutta 0) se anche il
 // mantello è fermo (q ≤ 0,02).
-export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null, impronta = null, termico = null, acquaM3 = null, gravita = 9.81, tempo = null } = {}) {
+export function evolviTettonica({ W = 256, H = 128, raggioM = RTERRA, nucleo = 0.546, q = C.qTerra, eta = 4.5e9, acqua = true, seme = 1, passi = 160, placche = null, impronta = null, termico = null, acquaM3 = null, gravita = 9.81, tempo = null } = {}) {
   if (W !== 2 * H || W < 32 || (W & (W - 1))) throw new Error('tettonica: serve W = 2H, potenza di 2, almeno 32');
   const N = W * H, alt = new Float32Array(N), cont = new Uint8Array(N), copre = new Float32Array(N), calore = new Float32Array(N), termica = new Float32Array(N), stiramento = new Float32Array(N).fill(1), spinta = new Float32Array(N), etaCrosta = new Float32Array(N), spessore = new Float32Array(N), fosse = new Float32Array(N), copertura = new Float32Array(N), sollevamento = new Float32Array(N), regge = new Float32Array(N), arco = new Float32Array(N), consumata = new Float32Array(N), posata = new Float32Array(N), velEst = new Float32Array(N), velSud = new Float32Array(N);
   // LA LUNGHEZZA D'ONDA DELLA CONVEZIONE: quella che cresce per prima in uno strato scaldato con i bordi liberi, 2√2 volte il suo
@@ -778,7 +778,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // LA LITOSFERA DEL PIANETA: dallo stato del mantello (salto di temperatura, dilatazione, densità, crosta di basalto: storia.js,
   // se chi chiama li dà) e dalla gravità; da lei lo spessore neutro, le quote, lo stiramento, il cedimento
   const tm = termico || {}, L = litosfera({ ...(tm.dT > 0 ? { dT: tm.dT } : {}), ...(tm.Ts > 0 ? { Ts: tm.Ts } : {}), ...(tm.alfa > 0 ? { alfa: tm.alfa } : {}), ...(tm.rho > 0 ? { rho0: tm.rho } : {}), ...(tm.basalto > 0 ? { basalto: tm.basalto } : {}), g: gravita });
-  const reggeP = { fermo: L.hN, massimo: L.hMassimo, normale: L.hN }, ihN = 1 / L.hN, volume = acquaM3 ?? C.acquaTerra * (raggioM / 6.371e6) ** 2;
+  const reggeP = { fermo: L.hN, massimo: L.hMassimo, normale: L.hN }, ihN = 1 / L.hN, volume = acquaM3 ?? C.acquaTerra * (raggioM / RTERRA) ** 2;
   // IL MARE: l'acqua del pianeta (quella di oggi, per tutta la storia) riempie i punti più bassi, e il suo peso li fa
   // affondare (una colonna sotto il mare scende ancora di ρa/(ρa − ρw) volte): la quota s a cui sta, sullo zero della
   // litosfera. Le celle pesano come sulla sfera (coseno della latitudine). Metodo di Newton sul volume (convesso, a tratti lineare)
@@ -799,7 +799,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // curva della Terra, crostaAttesa
   const crostaSaltata = () => (T ? 0 : crostaAttesa(saltati) * C.hMisura);
   // (la profondità dell'eclogite sotto una colonna di crosta dei continenti, e se la radice che vi passa pesa più del mantello)
-  const zDel = STORIA.eclogite / (C.rhoCrosta * gravita), radiceAffonda = C.rhoEclogite > C.rhoMantello, etaRadice = C.ritmoRT * (C.rhoEclogite - C.rhoMantello) * C.gTerra * C.Lradice * C.tRadice * 3.156e7, Ts = (termico || {}).Ts > 0 ? termico.Ts : 273; let delaminata = 0;
+  const zDel = STORIA.eclogite / (C.rhoCrosta * gravita), radiceAffonda = C.rhoEclogite > C.rhoMantello, etaRadice = C.ritmoRT * (C.rhoEclogite - C.rhoMantello) * C.gTerra * C.Lradice * C.tRadice * ANNO, Ts = (termico || {}).Ts > 0 ? termico.Ts : 273; let delaminata = 0;
   let t = saltati, prodotta = crostaSaltata(), riciclata = 0, debito = 0, st = null, ca = null, nPassi = 0, c0 = C_PASSO, finestra = 0, strada = orologio ? orologio.stradaDi(saltati) : 0, tFinestra = null, dtUltimo = 0;
   for (let l = 0; l < liv.length; l++) {
     const { W: w, H: hh, dt, n } = liv[l], Nl = w * hh;
@@ -838,7 +838,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       let apporto = 0;
       if (T) { const nuova = C.archi * T.di(t + 0.5 * dtp).basalto * (st.sommaSub1 ?? 0); if (st.sommaSub > 0 && nuova > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; } }
       else { const nuova = (crostaAttesa(t + dt) - crostaAttesa(t)) * C.hMisura * Nl + debito; if (st.sommaSub > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; debito = 0; } else debito = nuova; }
-      passoCrosta(st, ca, { dtMa: dtp / 1e6, kappa, apporto, fiumi: 1 - Math.exp(-dtp / C.fiumi), cede: (L.cede * dtp * 3.156e7) / (lato * lato) }); t += dtp; strada += orologio ? dt : 0; nPassi++; dtUltimo = dtp;
+      passoCrosta(st, ca, { dtMa: dtp / 1e6, kappa, apporto, fiumi: 1 - Math.exp(-dtp / C.fiumi), cede: (L.cede * dtp * ANNO) / (lato * lato) }); t += dtp; strada += orologio ? dt : 0; nPassi++; dtUltimo = dtp;
       // il riciclo: dove il fondale affonda sotto un continente (la cella, o una delle quattro accanto, è tutta crosta leggera: non i
       // veli degli archi, che nascono lì sopra) la fossa se ne porta via la parte «riciclo» del basalto che affonda, dalla cella
       // di continente più spessa
@@ -849,7 +849,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       // residuo che sta sotto zDel è eclogite (solo quella: il residuo sopra la transizione e la crosta chiara restano), e cade col
       // ritmo di Rayleigh-Taylor alla temperatura della radice (la geoterma ispessita, che si rilassa): in questo passo ne cade la
       // parte 1 − exp(−q·dt). eta_ è il tempo della radice per lo spessore (si somma e viaggia come una quantità)
-      if (T && radiceAffonda) { const { h: hd, x: xd, im: imd, res, etaRad: eta_ } = st, zF = L.zFuso, hN = st.hNeutro || L.hN, dts = dtp * 3.156e7; let tolta = 0;
+      if (T && radiceAffonda) { const { h: hd, x: xd, im: imd, res, etaRad: eta_ } = st, zF = L.zFuso, hN = st.hNeutro || L.hN, dts = dtp * ANNO; let tolta = 0;
         for (let k = 0; k < Nl; k++) { const hk = hd[k], rk = res[k]; if (hk > zDel && hk * imd[k] >= 1) eta_[k] += hk * dtp; else { eta_[k] = 0; continue; } if (!(rk > 0)) continue;
           const Lr = Math.min(hk - zDel, rk), z = zDel + 0.5 * Lr, beta = 1 + (Math.max(1, hk / hN) - 1) * Math.exp(-(eta_[k] / hk) / L.tau), Tr = Math.min(Ts + C.Tastenosfera, Ts + ((C.Tfuso - Ts) * z) / (zF * (1 - xd[k]) * beta)),
             eta = etaRadice * Math.exp((STORIA.Enu / R_GAS) * (1 / Tr - 1 / C.Tradice)), q = (C.ritmoRT * (C.rhoEclogite - C.rhoMantello) * gravita * Lr) / eta, via = -Lr * Math.expm1(-q * dts);

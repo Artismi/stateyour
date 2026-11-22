@@ -99,7 +99,7 @@
 //   fino a 25 Mpc ~0,25 s; la ricombinazione 25 ms e le tabelle del fondo 0,4 s (una volta); una direzione di cielo
 //   ~1,3 ms; 49 vincoli di cielo ~0,25 s; un filamento detto (8 vincoli) ~50 ms; la scena di una regione ~70 ms.
 
-import { COSTANTI, COSMO, ANNO, MSOLE } from './leggi.js';
+import { COSTANTI, COSMO, ANNO, MSOLE, PC, KPC, MPC, DELTA_C } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U, LEGGI as LEGGI_GALASSIE } from './galassie.js';
 import { ondeDelToro, ampiezzeLibere } from './cosmo3d.js';
@@ -109,7 +109,7 @@ import { cosmoBase, ramiCosmo, cosmo as cosmoDi, TORO_M } from './cosmo.js';
 import { DATI as DATI_STELLE } from './stelle.js';
 import { campoPigro, FILTRI, cieloPigro, fft3 } from './campo_pigro.js';
 
-const PI2 = 2 * Math.PI, KPC = 3.0857e19, MPC = 3.0857e22, GA = 1e9 * ANNO, C_LUCE = COSTANTI.c;
+const PI2 = 2 * Math.PI, GA = 1e9 * ANNO, C_LUCE = COSTANTI.c;
 export const CLASSI = ['vuoto', 'foglio', 'filamento', 'nodo']; // per numero di autovalori sopra la soglia
 // i dati misurati di questo modulo (vedi l'intestazione per le fonti e le marche)
 export const DATI = {
@@ -161,7 +161,7 @@ const scalaAl = (t) => (t === 0 ? 1 : U.scala(Math.max(U.tempo(1) + t / (GA), 1e
 //     tempoSenzaRadiazioneAnni (l'età secondo U.tempo di galassie.js, che la radiazione non ce l'ha), moduloDistanza }
 export function distanze(z) {
   const a = 1 / (1 + z), chi = (ETA0 - TAB.eta(a)) * MPC, t = TAB.tempo(a);
-  return { z, a, comoventeM: chi, luminositaM: chi * (1 + z), angolareM: chi * a, tempoDiRitornoAnni: (T_OGGI - t) * 1e9, etaAnni: t * 1e9, tempoSenzaRadiazioneAnni: U.tempo(a) * 1e9, moduloDistanza: chi > 0 ? 5 * Math.log10((chi * (1 + z)) / (10 * 3.0857e16)) : -Infinity };
+  return { z, a, comoventeM: chi, luminositaM: chi * (1 + z), angolareM: chi * a, tempoDiRitornoAnni: (T_OGGI - t) * 1e9, etaAnni: t * 1e9, tempoSenzaRadiazioneAnni: U.tempo(a) * 1e9, moduloDistanza: chi > 0 ? 5 * Math.log10((chi * (1 + z)) / (10 * PC)) : -Infinity };
 }
 // il redshift a cui si vede ciò che sta a una distanza comovente data (m); null oltre l'orizzonte delle particelle
 export const redshiftA = (comoventeM) => { const e = ETA0 - comoventeM / MPC; return e > TAB.eta(1e-9) ? 1 / TAB.aDaEta(e) - 1 : null; };
@@ -475,7 +475,7 @@ export const costoDelToro = (latoM, lambdaMinM, msPerOnda = 5e-5 /* misurato: 1,
 //     la regione stessa è crollata; si conta come a 0,9·δc, come massaAlone di galassie.js), fasce: [{ da, a, attesi (quanti
 //     nella sfera, oggi), perMpc3 (oggi), perMpc3DiMateria (per volume iniziale), senzaAmbiente (quanti nella sfera con la
 //     densità media del cosmo), probabilitaNessuno (e^(−attesi)) }], fonte }
-const linDaNonLin = (r) => 1.68647 - 1.35 * Math.pow(r, -2 / 3) - 1.12431 / Math.sqrt(r) + 0.78785 * Math.pow(r, -0.58661); // r = 1+δ
+const linDaNonLin = (r) => DELTA_C - 1.35 * Math.pow(r, -2 / 3) - 1.12431 / Math.sqrt(r) + 0.78785 * Math.pow(r, -0.58661); // r = 1+δ
 const nonLinDaLin = (d) => { let lo = 1e-3, hi = 1e4; for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi); if (linDaNonLin(m) < d) lo = m; else hi = m; } return Math.sqrt(lo * hi); };
 export function aloniAttesi(cosmo, punto, raggioM, { fasce = [[1e6, 1e8], [1e8, 1e10], [1e10, 1e12], [1e12, 1e16]], t = 0 } = {}) {
   const Cp = campoDi(cosmo); let d0 = 0, S0 = 0, dentroUnAlone = false;

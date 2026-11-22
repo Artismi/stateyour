@@ -21,6 +21,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import * as GZ from '../src/camera/grandezze.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 const { GRANDEZZE, FONTI, CICLI, SOGLIE, RISOLUTORI, NUMERI_CON_FONTE, FORMULE_CON_FONTE, grandezza, valore, conValore, salto } = GZ;
 const T0 = performance.now(), secondi = () => ((performance.now() - T0) / 1000).toFixed(0);
@@ -418,7 +419,7 @@ function sonda(f, x) { const k = `${f}|${x}`; if (sonde.has(k)) return sonde.get
   for (const a of ARCHI) if (a.attesa && !misure.has(`${a.da}→${a.a}`)) { R.staccati.push({ da: a.da, a: a.a, specie: 'atteso dalla fisica, assente nel codice', nota: a.nota || '', dove: doveFonte(a.fonte), mondi: 0, peso: 2 }); nonTorna(`FILO STACCATO ${a.da} → ${a.a}: ${a.nota} (l'ingresso non è tenuto in nessun oggetto: la fonte non può leggerlo) [${doveFonte(a.fonte)}]`); }
 }
 // C1 bis. LE DIPENDENZE MANCANTI SEGNALATE fuori dal campione (grandezze.js DIPENDENZE_MANCANTI), misurate una per una
-{ const misure2 = { radiazione: () => { const LG = GZ.MODULI['leggi.js'], U = GZ.MODULI['galassie.js'].COSMOLOGIA, K = LG.COSTANTI, c = LG.COSMO, a1 = 1 / 1091, MPC = 3.0857e22, H0 = (c.H0 * 1e3) / MPC;
+{ const misure2 = { radiazione: () => { const LG = GZ.MODULI['leggi.js'], U = GZ.MODULI['galassie.js'].COSMOLOGIA, K = LG.COSTANTI, c = LG.COSMO, a1 = 1 / 1091, MPC = LEGGI_MPC, H0 = (c.H0 * 1e3) / MPC;
     // Ω_r da Tcmb e Neff: u_γ = (π²/15)(kT)⁴/(ħc)³, più i neutrini a T_ν = (4/11)^⅓·T; poi t(a) = ∫ da/(a·H) con e senza
     const rhoC = (3 * H0 * H0) / (8 * Math.PI * K.G), Og = ((Math.PI ** 2 / 15) * (K.kB * c.Tcmb) ** 4) / (K.hbar * K.c) ** 3 / (rhoC * K.c ** 2), Or = Og * (1 + c.Neff * (7 / 8) * Math.pow(4 / 11, 4 / 3));
     const t = (or) => { let s = 0; const n = 20000; for (let i = 0; i < n; i++) { const a = (a1 * (i + 0.5)) / n; s += (a1 / n) / (a * H0 * Math.sqrt(c.Om / a ** 3 + or / a ** 4 + c.OL)); } return s / LG.ANNO; };

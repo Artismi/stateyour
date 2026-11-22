@@ -157,7 +157,7 @@
 //     due formule (cascata + Eady), gli altri da «N giri» dichiarati.
 //   · Il campo iniziale di cosmo.js: vedi `fluttuazioniDellInizio()`.
 import { ELEMENTI, atomiDi, mezzo, perdita, CATENE, SOLI, CONDRITI, VOLATILI_RIMASTI, ETA_RIFERIMENTO, radioelementi, concentrazioni, attivita, calore, raggiCosmici, energiaDeiPrimari, sogliaStormer, radonNellAria, fmtTempo, ritenzione, luogoDaAria, luogoDaRoccia } from './materia.js';
-import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio, gravitaDiSuperficie, LIVELLO_GIGANTI } from './leggi.js';
+import { COSTANTI, ANNO, MSOLE, RSOLE, LSOLE, UA, trattiene, temperaturaEquilibrio, gravitaDiSuperficie, LIVELLO_GIGANTI, R_GAS, ATMOSFERA, GIORNO, MTERRA, PC, PESI_ATOMICI, RTERRA, TSOLE, ZERO_CELSIUS } from './leggi.js';
 import { stella as stellaDiMassa } from './stelle.js'; // le stelle dalla loro struttura
 import { LEGGI as LEGGI_GALASSIE } from './galassie.js'; // lo spessore del disco di gas: una fonte
 import { raggiCosmiciIn } from './vuoto_mezzo.js'; // l'energia dei raggi cosmici di una galassia nota
@@ -165,8 +165,8 @@ import { rocceDelPianeta } from './chimica.js';
 import { sorgente } from './eventi.js';
 import { puoToccare } from './intreccio.js';
 
-const G_N = COSTANTI.G, K_B = COSTANTI.kB, E_C = COSTANTI.e, SIGMA = COSTANTI.sigma, R_GAS = 8.314, N_A = 6.02214e23, UMA = 1.66054e-27, MU0 = 4e-7 * Math.PI;
-const MEV_J = 1.602177e-13, PARSEC = 3.0857e16, MOLE_PER_J = 1.0364e-7; // (una molecola per 100 eV, in moli per joule)
+const G_N = COSTANTI.G, K_B = COSTANTI.kB, E_C = COSTANTI.e, SIGMA = COSTANTI.sigma, N_A = COSTANTI.NA, UMA = COSTANTI.u, MU0 = 4e-7 * Math.PI;
+const MEV_J = 1.602177e-13, PARSEC = PC, MOLE_PER_J = 1.0364e-7; // (una molecola per 100 eV, in moli per joule)
 export const DATI = Object.freeze({
   W_ARIA: 35, // eV per coppia di ioni
   MOBILITA: 1.4e-4, // m²/V/s a 2,55·10²⁵ molecole per m³
@@ -221,7 +221,7 @@ const mondi = new WeakMap();
 export function mondoDi(luogo = {}, opz = {}) {
   if (!opz.P && !opz.stella && mondi.has(luogo)) return mondi.get(luogo);
   const P = opz.P || luogo.P || null, pn = luogo.pianeta || {}, ar = luogo.aria || {}, I = P?.interno || {};
-  const R = pn.raggioM ?? P?.raggioM ?? 6.371e6, g = pn.g ?? P?.clima?.g ?? (P?.massaKg ? gravitaDiSuperficie(P.massaKg, R) : 9.81), M = P?.massaKg ?? (g * R * R) / G_N, area = 4 * Math.PI * R * R;
+  const R = pn.raggioM ?? P?.raggioM ?? RTERRA, g = pn.g ?? P?.clima?.g ?? (P?.massaKg ? gravitaDiSuperficie(P.massaKg, R) : 9.81), M = P?.massaKg ?? (g * R * R) / G_N, area = 4 * Math.PI * R * R;
   const gas = gasPuliti(ar.gas) || gasPuliti(P?.atmosfera?.gas) || ARIA_TERRA; let mu = 0, tot = 0, cp = 0;
   for (const f in gas) { mu += gas[f] * massaGas(f); cp += gas[f] * (CP_MOLARE[f] ?? 4) * R_GAS; tot += gas[f]; } mu = (mu / tot) * 1e-3; cp = cp / tot / mu;
   const Ts = luogo.Tsuperficie ?? ar.T ?? P?.clima?.T ?? 288, Talta = ar.Talta ?? 0.76 * Ts, Teq = P?.clima?.Teq ?? Talta * Math.pow(2, 0.25);
@@ -231,7 +231,7 @@ export function mondoDi(luogo = {}, opz = {}) {
   const eta = luogo.etaPianeta ?? pn.eta ?? I.eta ?? ETA_RIFERIMENTO, B0 = pn.B0 ?? P?.B0 ?? I.B0 ?? 0, lat = luogo.latitudine ?? 45;
   // la stella
   const s0 = luogo.stella || {}, Lw = s0.Lw ?? P?.Lw ?? 0, aM = s0.aM ?? P?.aM ?? 0, S = Lw > 0 && aM > 0 ? Lw / (4 * Math.PI * aM * aM) : 0;
-  const Ms = opz.stella?.massa ?? (P?.Mstella ? P.Mstella / MSOLE : null), Tst = opz.stella?.T ?? P?.Tstella ?? (Ms ? stellaDiMassa(Ms).T : Lw > 0 ? 5772 * Math.pow(Lw / LSOLE, 0.14) : 0);
+  const Ms = opz.stella?.massa ?? (P?.Mstella ? P.Mstella / MSOLE : null), Tst = opz.stella?.T ?? P?.Tstella ?? (Ms ? stellaDiMassa(Ms).T : Lw > 0 ? TSOLE * Math.pow(Lw / LSOLE, 0.14) : 0);
   // (il raggio della stella si LEGGE: da chi chiama, o dal pianeta, che lo porta in P.Rstella (cosmo.js, da stelle.js stellaOggi).
   // Solo se nessuno lo dà — un pianeta fatto a mano in una prova — lo si ricava da luce e temperatura, √(L/4πσT⁴))
   const Rst = opz.stella?.raggioM ?? s0.raggioM ?? P?.Rstella ?? (Tst > 0 && Lw > 0 ? Math.sqrt(Lw / (4 * Math.PI * SIGMA * Tst ** 4)) : RSOLE), etaStella = opz.stella?.eta ?? eta;
@@ -247,7 +247,7 @@ export function mondoDi(luogo = {}, opz = {}) {
   const Tfuga = S > 0 ? temperaturaEquilibrio(Lw, aM, 0.3) : Teq;
   const m = { P, R, g, M, area, gas, mu, cp, Ts, Talta, Teq, Tfuga, H, Hm, p0, colonna: p0 / g, massaAria: (p0 / g) * area, eta, B0, lat, q: pn.q ?? I.q ?? 0.087,
     Lw, aM, S, Tst, Rst, etaStella, Ms, assorbita, acqua, mare, tettonica, vulcani: I.vulcani ?? null, dinamo: B0 > 1e-9, nucleo: I.nucleo ?? 0.55, gassoso,
-    giorno: P?.bloccato ? P?.anno ?? 86400 : P?.giorno ?? 86400, dT, mantello: radioelementi([], { K: Kmantello }), silicati, vita: !!(opz.vita ?? P?.prebiotica?.autocatalisi) };
+    giorno: P?.bloccato ? P?.anno ?? GIORNO : P?.giorno ?? GIORNO, dT, mantello: radioelementi([], { K: Kmantello }), silicati, vita: !!(opz.vita ?? P?.prebiotica?.autocatalisi) };
   if (!opz.P && !opz.stella && typeof luogo === 'object') mondi.set(luogo, m);
   return m;
 }
@@ -268,14 +268,14 @@ function suoloDi(luogo, m) {
 }
 // l'energia che un decadimento del radon lascia nell'aria, con i figli a vita breve in equilibrio al 60% (MeV): da CATENE
 const ENERGIA_RADON = (() => { const p = CATENE['uranio-238'].passi.slice(6, 11); let e = 0; p.forEach(([, , , tipo, Q, , , x, y], i) => { e += (i === 0 ? 1 : 0.6) * (tipo === 'α' ? Q : (x || 0) + (y || 0)); }); return e; })();
-const SCALA_RADON = Math.sqrt(5 / (Math.LN2 / (3.8222 * 86400))); // m: quanto in alto l'aria lo porta prima che decada (√(K/λ), come in materia.js)
+const SCALA_RADON = Math.sqrt(5 / (Math.LN2 / (3.8222 * GIORNO))); // m: quanto in alto l'aria lo porta prima che decada (√(K/λ), come in materia.js)
 
 // =====================================================================================
 // A1. LA IONIZZAZIONE DELL'ARIA
 // =====================================================================================
 const ACQUA = mezzo({ tipo: 'acqua' });
 const mezziAria = new Map();
-const ariaMezzo = (m) => { const k = JSON.stringify(m.gas); if (!mezziAria.has(k)) mezziAria.set(k, mezzo({ tipo: 'aria', aria: { pressione: 101325, T: 288, gas: m.gas } })); return mezziAria.get(k); };
+const ariaMezzo = (m) => { const k = JSON.stringify(m.gas); if (!mezziAria.has(k)) mezziAria.set(k, mezzo({ tipo: 'aria', aria: { pressione: ATMOSFERA, T: 288, gas: m.gas } })); return mezziAria.get(k); };
 // la frenata media dei nucleoni primari in un mezzo (MeV·cm²/g): sui quantili del loro spettro in quel punto
 const frenatePrimari = new WeakMap();
 function frenataPrimari(rc, bersaglio) {
@@ -411,7 +411,7 @@ export function prodotti(luogo, opz = {}) {
     nuclei: { tetto: quota, sensibilita: D.SENSIBILITA_NUCLEI, frase: `ogni coppia di ioni può fare al più un nucleo: ${cifre(quota)} per cm³ al secondo tra le nubi. Ma raddoppiare i raggi cosmici cambierebbe i nuclei di condensazione del ${cifre(100 * (Math.pow(2, D.SENSIBILITA_NUCLEI) - 1), 1)}% al più (CLOUD): quasi tutte le gocce nascono su polveri e acidi già presenti.` } };
 }
 let rifCosmici = null;
-const TERRA = { massaKg: 5.972e24, raggioM: 6.371e6, B0: 3.1e-5, Lw: LSOLE, aM: UA, Mstella: MSOLE, Tstella: 5772, giorno: 86164, clima: { g: 9.81, pressione: 101325, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 }, atmosfera: { gas: ARIA_TERRA }, interno: { eta: 4.5e9, q: 0.087, B0: 3.1e-5, tettonica: 'a placche', vulcani: 1, nucleo: 0.546 }, composizione: { ferro: 0.32, roccia: 0.68 } };
+const TERRA = { massaKg: MTERRA, raggioM: RTERRA, B0: 3.1e-5, Lw: LSOLE, aM: UA, Mstella: MSOLE, Tstella: TSOLE, giorno: 86164, clima: { g: 9.81, pressione: ATMOSFERA, T: 288, Teq: 255, acqua: 'liquida', mare: 0.71, albedo: 0.3 }, atmosfera: { gas: ARIA_TERRA }, interno: { eta: 4.5e9, q: 0.087, B0: 3.1e-5, tettonica: 'a placche', vulcani: 1, nucleo: 0.546 }, composizione: { ferro: 0.32, roccia: 0.68 } };
 function cosmiciDiRiferimento() { if (!rifCosmici) { const L = luogoDaAria({ P: TERRA }); rifCosmici = { energia: energiaMedia(L, mondoDi(L, { P: TERRA })) }; } return rifCosmici; }
 
 // =====================================================================================
@@ -468,7 +468,7 @@ export function gasRadiogenici(luogo, opz = {}) {
   let ora = 0, sempre = 0;
   for (const c of Object.values(CATENE)) { const nAlfa = c.passi.reduce((s, p) => s + (p[3] === 'α' ? p[6] ?? 1 : 0), 0), n = ((el[c.elemento] || 0) / (ELEMENTI[c.elemento].A * 1e-3)) * N_A * c.abbondanza * resta(c.mezza, eta);
     ora += (n * Math.LN2 * nAlfa) / (c.mezza * ANNO); sempre += n * (Math.pow(2, eta / c.mezza) - 1) * nAlfa; }
-  const flusso = (ora * m.silicati * degassata) / m.area, tieneHe = !m.gassoso && trattiene(m.M, m.R, D.ECCESSO_ESOSFERA * m.Tfuga, 4.0026 * UMA);
+  const flusso = (ora * m.silicati * degassata) / m.area, tieneHe = !m.gassoso && trattiene(m.M, m.R, D.ECCESSO_ESOSFERA * m.Tfuga, PESI_ATOMICI.He * UMA);
   const atomiHe = m.gassoso ? 0 : tieneHe ? (sempre * m.silicati * degassata) / m.area : flusso * D.PERMANENZA_ELIO * ANNO, molHe = atomiHe / N_A, colHe = molHe * 4.0026e-3;
   const tot = moliAria + molAr + molHe || 1, conAria = moliAria + molAr > 1; // (meno di una mole per m²: non è un'aria, gli atomi non si urtano)
   return { degassata, potassio: el.K, argon40: { prodotto, nellAria: colAr * m.area, trattenuto: tieneAr, gelato: uscito > colAr ? (uscito - colAr) * m.area : 0, colonna: colAr, pressione: colAr * m.g, frazione: conAria ? molAr / tot : 0 },
@@ -603,7 +603,7 @@ export function tempoMeteo(luogo, opz = {}) {
   // i cicloni: vento termico dal salto di temperatura (al più quello che la spinta regge), crescita di Eady
   const f = (2 * Math.SQRT1_2 * 2 * Math.PI) / m.giorno, N = Math.sqrt(((m.g / m.Ts) * m.g) / m.cp / 2), Umax = Math.sqrt((m.g * m.H * m.dT) / m.Ts), U = Math.min((m.g * m.H * m.dT) / (f * m.Ts * m.R), Umax);
   const rossby = (N * m.H) / f, veloce = rossby < m.R, ritmo = veloce ? (0.31 * f * U) / (N * m.H) : U / m.R, vortici = Math.log(m.R / m.H) / ritmo, secondi = molecole + cascata + vortici;
-  return { secondi, giorni: secondi / 86400, molecole, cascata, vortici, lyapunov: 1 / ritmo, raddoppio: Math.LN2 / ritmo, vento: U, regime: veloce ? 'cicloni (il pianeta gira in fretta)' : 'una sola circolazione (il pianeta gira piano)' };
+  return { secondi, giorni: secondi / GIORNO, molecole, cascata, vortici, lyapunov: 1 / ritmo, raddoppio: Math.LN2 / ritmo, vento: U, regime: veloce ? 'cicloni (il pianeta gira in fretta)' : 'una sola circolazione (il pianeta gira piano)' };
 }
 // I TEMPI DEGLI ALTRI SISTEMI CAOTICI del pianeta (anni)
 export function tempiCaotici(luogo, opz = {}) {
@@ -655,7 +655,7 @@ export function finDoveRisale(evento, luogo, opz = {}) {
   const contenitori = { punto: luogo.indirizzo || scritto, pianeta, sistema };
   // quanto ci mette il disturbo a toccare un fluido: nell'aria o nell'acqua è già lì; nella roccia viaggia col suono
   const s = sopraDi(luogo), fluido = luogo.tipo === 'aria' || luogo.tipo === 'acqua', viaggio = fluido ? 0 : s.rocciaM / 5000 + s.ghiaccioM / 3500 + s.acquaM / 1500;
-  const urti = luogo.tipo === 'acqua' ? 1e-12 : m.p0 > 0 ? 1.5e-9 * (101325 / m.p0) : Infinity, livelli = [];
+  const urti = luogo.tipo === 'acqua' ? 1e-12 : m.p0 > 0 ? 1.5e-9 * (ATMOSFERA / m.p0) : Infinity, livelli = [];
   const metti = (livello, contenitore, da, via, cambia, nonCambia) => { if (isFinite(da)) livelli.push({ livello, contenitore, da, daTesto: da === 0 ? 'subito' : `dopo ${fmtTempo(da)}`, via, cambia, nonCambia }); };
   metti('il punto', 'punto', 0, "l'evento stesso", 'le tracce in quella finestra di materia: quale atomo è spostato, quale alone cresce, quale difetto resta', 'quante tracce ci sono in media, la dose, il calore');
   if (m.p0 > 1 || luogo.tipo === 'acqua') metti('i moti delle molecole attorno', 'punto', viaggio + 10 * urti, fluido ? 'gli urti tra molecole (ogni urto raddoppia la differenza)' : "un'onda elastica fino al fluido più vicino, poi gli urti tra molecole", 'dove sta ogni molecola del fluido', 'temperatura, pressione, composizione');
@@ -751,7 +751,7 @@ export function risalita(luogo, opz = {}) {
   r.push(`Energia per la chimica (W/m²): ultravioletto della stella ${cifre(E.ultravioletto)}, fulmini ${cifre(E.fulmini)}, aurore ${cifre(E.aurore)}, raggi cosmici ${cifre(E.cosmici)}; nel primo chilometro di roccia la radioattività ne dà ${cifre(E.radioattivita)}. ${en.qui ? `Qui sotto domina ${en.qui.domina === 'cosmici' ? 'ciò che resta dei raggi cosmici' : en.qui.domina === 'radioattivita' ? 'la radioattività' : "l'ultravioletto che ancora filtra"}.` : `In superficie domina ${E.domina === 'ultravioletto' ? "l'ultravioletto" : E.domina === 'radioattivita' ? 'la radioattività della roccia' : `${E.domina === 'fulmini' ? 'i fulmini' : E.domina === 'aurore' ? 'le aurore' : 'i raggi cosmici'}`}.`}`);
   if (m.p0 > 0 && (po.azoto.fulmini.kgAnno > 0 || po.azoto.cosmici.kgAnno > 0)) r.push(`Azoto fissato: ${cifre(po.azoto.fulmini.kgAnno / 1e9)} milioni di tonnellate all'anno dai fulmini, ${cifre(po.azoto.cosmici.kgAnno / 1e9)} dai raggi cosmici. Carbonio-14: ${cifre(po.carbonio14.atomiM2s / 1e4)} atomi per cm² al secondo.`);
   if (!m.gassoso) r.push(`Dalla roccia: il potassio-40 decaduto in ${anni(m.eta)} ha messo nell'aria ${!ga.argon40.trattenuto ? 'argon che la gravità non ha tenuto' : ga.argon40.gelato > ga.argon40.nellAria ? 'argon che a questo freddo è quasi tutto gelato al suolo' : `argon per ${cifre(ga.argon40.pressione)} Pa${m.p0 > 0 ? ` (${cifre(ga.argon40.frazione * 100)}% dell'aria)` : ''}`}; l'elio delle α ${ga.elio4.trattenuto ? `si accumula (${cifre(ga.elio4.frazione * 100)}%)` : `esce (${cifre(ga.elio4.flusso / 1e4)} atomi per cm² al secondo) e fugge nello spazio`}.${ra.H2 > 0 && luogo.tipo !== 'aria' ? ` L'acqua ${luogo.tipo === 'roccia' ? 'nei pori della roccia' : 'di qui'} è spezzata dalla radioattività: ${cifre(ra.H2 * 1e9)} nanomoli di idrogeno per chilo all'anno.` : ''}`);
-  r.push(`Dose in questo punto: ${mSv(ds.totale.Sv)} all'anno (${mSv(ds.cosmici.Sv)} dai raggi cosmici${ds.suolo.Gy > 0 ? `, ${mSv(ds.suolo.Gy)} dai γ del suolo` : ''}${ds.interna.Sv > 0 ? `, ${mSv(ds.interna.Sv)} dalla radioattività attorno${ds.interna.alfa > 0.2 * ds.interna.Gy ? `: quasi tutto dalle α, che arrivano solo a 30 µm da un grano; β e γ danno ${cifre((ds.interna.beta + ds.interna.gamma) * 1000)} mGy` : ''}` : ''}). Rompe ${cifre(ds.mutazioni.daRadiazione)} legami per base all'anno in una molecola che si copia: il calore, a ${Math.round(ds.mutazioni.T - 273.15)} °C, ne rompe ${cifre(ds.mutazioni.daCalore)}.`);
+  r.push(`Dose in questo punto: ${mSv(ds.totale.Sv)} all'anno (${mSv(ds.cosmici.Sv)} dai raggi cosmici${ds.suolo.Gy > 0 ? `, ${mSv(ds.suolo.Gy)} dai γ del suolo` : ''}${ds.interna.Sv > 0 ? `, ${mSv(ds.interna.Sv)} dalla radioattività attorno${ds.interna.alfa > 0.2 * ds.interna.Gy ? `: quasi tutto dalle α, che arrivano solo a 30 µm da un grano; β e γ danno ${cifre((ds.interna.beta + ds.interna.gamma) * 1000)} mGy` : ''}` : ''}). Rompe ${cifre(ds.mutazioni.daRadiazione)} legami per base all'anno in una molecola che si copia: il calore, a ${Math.round(ds.mutazioni.T - ZERO_CELSIUS)} °C, ne rompe ${cifre(ds.mutazioni.daCalore)}.`);
   if (ve && m.p0 > 0) r.push(`Il vento della stella preme ${cifre(ve.pressione * 1e9)} nPa: ${ve.scoperto ? "senza un campo che lo tenga lontano tocca l'aria alta" : `il campo lo ferma a ${cifre(ve.magnetopausa)} raggi e le aurore ricevono ${cifre(ve.aurora.potenza / 1e9)} GW`}; porta via ${cifre(ve.perditaAria)} kg d'aria al secondo (${cifre(ve.ariaPersa.pressione / 1e5)} bar in tutta la storia del pianeta).`);
   r.push(`Un solo evento risale così: ${tm ? `il tempo atmosferico è un altro dopo ${fmtTempo(tm.secondi)} (non il clima)` : "qui non c'è un'aria che lo amplifichi"}; ${isFinite(tc.corpiPiccoli) ? `gli impatti del sistema dopo ${anni(tc.corpiPiccoli)}` : 'niente porta il disturbo fino alle orbite'}. Una supernova entro 10 parsec capita ogni ${anni(sn.ogniQuanto(10))}: moltiplica i raggi cosmici per ${cifre(sn.effetto(10).cosmici)} per ${anni(sn.effetto(10).durata)} (o per ${cifre(sn.effetto(10).cosmiciLento)} per ${anni(sn.effetto(10).durataLento)}): in tutto, la dose di ${anni(sn.effetto(10).anniDiFondo)} normali.`);
   const breve = [

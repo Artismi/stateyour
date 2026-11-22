@@ -7,12 +7,13 @@ import { campoCondizionato, campoLibero, probabilitaChi2, RANGO, vincoliMassimo,
 import { sorgente } from '../src/camera/eventi.js';
 import * as CO from '../src/camera/cosmo.js';
 import { campoCosmo } from '../src/camera/spazio3d.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now();
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
 const tra = (x, a, b, che) => assert.ok(x > a && x < b, `${che}: ${x} (atteso tra ${a} e ${b})`);
 const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : Math.abs(x) >= 1e4 || (Math.abs(x) < 1e-2 && x !== 0) ? x.toExponential(c - 1).replace('.', ',') : String(+x.toPrecision(c)).replace('.', ','));
-const L = CO.TORO_M, MPC = 3.0857e22, c = sorgente('prova/bolle');
+const L = CO.TORO_M, MPC = LEGGI_MPC, c = sorgente('prova/bolle');
 // n punti a caso sul toro, con una scala; i valori chiesti sono quelli di UN ALTRO campo libero negli stessi punti:
 // vincoli presi da un mondo possibile, quindi tipici (χ² ≈ quanti sono)
 const punti = (n, nome, R) => Array.from({ length: n }, (_, i) => ({ posizione: [L * c(`${nome}/${i}/x`), L * c(`${nome}/${i}/y`), L * c(`${nome}/${i}/z`)], scala: R }));

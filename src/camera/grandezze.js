@@ -58,6 +58,7 @@ import * as mCosmo from './cosmo.js';
 import * as mBolle from './bolle.js';
 import * as mStoria from './storia.js';
 import { scrivi as scriviIndirizzo, daVia } from './lingua.js';
+import { ZERO_CELSIUS } from './leggi.js'; // le costanti e le unità: un posto solo
 
 // i moduli, per nome di file: una fonte dice «modulo: 'leggi.js', funzione: 'clima'» e la funzione si cerca qui al
 // momento della chiamata (se un modulo l'ha rinominata, `coerenza()` lo dice invece di far cadere tutto)
@@ -369,7 +370,7 @@ export const RISOLUTORI = {
 // trova cercando quel testo: se il codice si sposta la riga si aggiorna da sola; se sparisce, la prova lo dice).
 // fonti (se c'è): la soglia vale solo dentro quelle fonti.
 export const SOGLIE = [
-  { su: 'clima.temperatura', a: 273.15, specie: 'fisica', perche: 'l\'acqua gela (transizione di fase)', dove: { modulo: 'leggi.js', cerca: 'return T < 273.15 ?' } },
+  { su: 'clima.temperatura', a: ZERO_CELSIUS, specie: 'fisica', perche: 'l\'acqua gela (transizione di fase)', dove: { modulo: 'leggi.js', cerca: 'return T < 273.15 ?' } },
   { su: 'clima.temperatura', a: (M) => mLeggi.ebollizione(valore('aria.pressione', M)), specie: 'fisica', perche: 'l\'acqua bolle a quella pressione (transizione di fase)', dove: { modulo: 'leggi.js', cerca: 'T < ebollizione(P)' } },
   { su: 'clima.temperatura', a: 647, specie: 'fisica', perche: 'il punto critico dell\'acqua: liquido e vapore non si distinguono più', dove: { modulo: 'leggi.js', cerca: 'T >= ACQUA.critica' } },
   { su: 'aria.pressione', a: 611, specie: 'fisica', perche: 'il punto triplo dell\'acqua: sotto, niente liquido', dove: { modulo: 'leggi.js', cerca: 'P < ACQUA.tripla' } },

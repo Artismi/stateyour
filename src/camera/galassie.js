@@ -215,15 +215,15 @@
 //   · le pulsar vengono debolissime (il campo delle stelle alla nascita, conservando il flusso, dà 10⁵–10⁹ T ma il
 //     periodo di 0,3 s frena poco): nei raggi cosmici contano i resti e il getto.
 
-import { COSTANTI, COSMO, ANNO, MSOLE, LSOLE, etaUniverso, massaNascita, massaChandrasekhar } from './leggi.js';
+import { COSTANTI, COSMO, ANNO, MSOLE, LSOLE, TSOLE, KPC, MPC, DELTA_C, inversaNormale, etaUniverso, massaNascita, massaChandrasekhar } from './leggi.js';
 import * as ST from './stelle.js';
 import { sorgente } from './eventi.js';
 import { reseGigante, CANALI, abbondanzeDaCanali } from './elementi.js'; // (i canali dei metalli: chi li ha fatti, per la catena degli elementi)
 
 // ---------- LE LEGGI E I PARAMETRI (vedi l'intestazione)
 export const LEGGI = {
-  deltaC: 1.686, // la soglia del collasso sferico (in sovradensità lineare)
-  raro: 0.6745, // l'altezza, in scarti, della fluttuazione piccola che ha fatto l'alone: la MEDIANA della legge della prima traversata (|campana|: metà della materia di quella regione sta in aloni più grandi, metà in più piccoli). Non è tarato
+  deltaC: DELTA_C, // la soglia del collasso sferico (in sovradensità lineare): (3/20)(12π)^(2/3), calcolata in leggi.js
+  raro: inversaNormale(3 / 4), // (Φ⁻¹(¾) = 0,6745, calcolata) l'altezza, in scarti, della fluttuazione piccola che ha fatto l'alone: la MEDIANA della legge della prima traversata (|campana|: metà della materia di quella regione sta in aloni più grandi, metà in più piccoli). Non è tarato
   spin: [0.035, 0.5], // mediana e larghezza (in logaritmo naturale) del parametro di spin (Bullock et al. 2001)
   concentrazione: [4, 0.01], // Bullock et al. 2001: c = K·a/a_c, con a_c quando è crollata la frazione F della massa
   crescita: [46.1, 1.1, 1.11], // Fakhouri et al. 2010, eq. 2 (media): M☉/anno a 10¹² M☉, esponente, pendenza in z
@@ -262,14 +262,18 @@ export const LEGGI = {
 };
 export const ANELLI = 20, PASSI = 46, RESTI = 8;
 
-// ---------- le unità: masse solari, kpc, miliardi di anni (Ga), km/s
-const KPC = 3.0857e19, MPC = 1e3 * KPC, GA = 1e9 * ANNO, KMS = (1e3 * GA) / KPC; // 1 km/s in kpc/Ga
+// ---------- le unità: masse solari, kpc, miliardi di anni (Ga), km/s. Il kpc e il Mpc vengono da leggi.js (IAU). I numeri
+// scritti qui già in kpc o in pc sono misure in quelle unità, e lo dicono: LEGGI.spessoreGas (kpc), LEGGI.KS (per kpc²),
+// LEGGI.nascite[1] (M☉/pc², portato a kpc² con (KPC/PC)² = 10⁶), sigma8 (sfere di 8 Mpc/h), i bordi dello spettro (h/Mpc). Per
+// questo cambiare il kpc da solo sposta la luce (Δ = 4,9 nel rapporto «Numeri a mano»): non è una scala libera, è il metro
+const GA = 1e9 * ANNO, KMS = (1e3 * GA) / KPC; // 1 km/s in kpc/Ga
 const GK = (COSTANTI.G * MSOLE) / (KPC * 1e6); // G in kpc·(km/s)²/M☉
 const C_KMS = COSTANTI.c / 1e3, ZSOLE = ST.DATI?.ZSOLE ?? 0.0142, YPRIMO = ST.DATI?.YPRIMO ?? 0.247;
+// il raggio che contiene metà della massa di un disco esponenziale, in lunghezze di scala: 1 − (1 + x)·e^(−x) = ½ (1,678)
+const META_ESPONENZIALE = (() => { let x = 1.7; for (let k = 0; k < 6; k++) x -= (1 - (1 + x) * Math.exp(-x) - 0.5) / (x * Math.exp(-x)); return x; })();
 const T0 = etaUniverso() / GA, DT = T0 / PASSI, PI4 = 4 * Math.PI;
 const stringi = (x, a, b) => Math.max(a, Math.min(b, x));
-// l'inversa della distribuzione a campana (Winitzki: errore < 0,005)
-const campana = (p) => { const x = 2 * stringi(p, 1e-9, 1 - 1e-9) - 1, l = Math.log(1 - x * x), a = 0.147, b = 2 / (Math.PI * a) + l / 2; return Math.sign(x) * Math.SQRT2 * Math.sqrt(Math.sqrt(b * b - l / a) - b); };
+const campana = inversaNormale; // l'inversa della distribuzione a campana (leggi.js: esatta)
 
 // ---------- IL COSMO: tempo, espansione, crescita delle fluttuazioni, σ(M). Tutto da leggi.js COSMO.
 const U = (() => {
@@ -301,7 +305,7 @@ const U = (() => {
   // la potenza per unità di ln k, Δ²(k) = k³P(k)/2π² (k in 1/Mpc): lo spettro vero della materia, oggi
   const potenza = (kMpc) => { const k = kMpc / h; return norma * k ** (3 + ns) * Tk(k) ** 2; };
   // quanti aloni più pesanti di M per Mpc³ (Press & Schechter 1974: dn/dlnM = √(2/π)·(ρ̄/M)·(δc/σ)·|dlnσ/dlnM|·e^(−δc²/2σ²))
-  const aloni = (M) => { let n = 0; const l0 = Math.log(M), l1 = LM1, N = 80, dl = (l1 - l0) / N, rho = Om * rhoC * 1e9; for (let i = 0; i < N; i++) { const l = l0 + (i + 0.5) * dl, m = Math.exp(l), sg = sigma(m), p = -(Math.log(sigma(m * 1.05)) - Math.log(sigma(m / 1.05))) / (2 * Math.log(1.05)), nu = 1.686 / sg; n += Math.sqrt(2 / Math.PI) * (rho / m) * nu * p * Math.exp(-nu * nu / 2) * dl; } return n; };
+  const aloni = (M) => { let n = 0; const l0 = Math.log(M), l1 = LM1, N = 80, dl = (l1 - l0) / N, rho = Om * rhoC * 1e9; for (let i = 0; i < N; i++) { const l = l0 + (i + 0.5) * dl, m = Math.exp(l), sg = sigma(m), p = -(Math.log(sigma(m * 1.05)) - Math.log(sigma(m / 1.05))) / (2 * Math.log(1.05)), nu = LEGGI.deltaC / sg; n += Math.sqrt(2 / Math.PI) * (rho / m) * nu * p * Math.exp(-nu * nu / 2) * dl; } return n; };
   return { Om, OL, h, H0, E, tempo, scala, D, Dinv, rhoC, fb, delta, sigma, massaDi, sigmaOnde, potenza, aloni };
 })();
 const raggioViriale = (M, a) => Math.cbrt((3 * M) / (PI4 * U.delta(a) * U.rhoC * U.E(a) ** 2));
@@ -332,7 +336,7 @@ function fuga2(m, r) {
 }
 // il raffreddamento del gas caldo (W·m³, per n_e·n_H): vedi l'intestazione
 const lambda = (T, Z) => 1e-13 * (2.4e-27 * Math.sqrt(T) + 5e-23 * Math.pow(Math.max(T, 1e5) / 1e5, -1.5) + (T < 4e7 ? (1.6e-19 * Z) / Math.sqrt(Math.max(T, 1e5)) : 0));
-const MU_CALDO = 1 / (2 * (1 - YPRIMO) + 0.75 * YPRIMO), T_VIR = (MU_CALDO * COSTANTI.mp * 1e6) / (2 * COSTANTI.kB); // T = T_VIR·V² (K, V in km/s)
+const MU_CALDO = 1 / (2 * (1 - YPRIMO) + ((1 + 2) / 4) * YPRIMO), /* (le particelle per massa di protone del gas ionizzato del tutto: 2 per l'idrogeno, protone ed elettrone; 3 su 4 per l'elio, il nucleo e due elettroni) */ T_VIR = (MU_CALDO * COSTANTI.mp * 1e6) / (2 * COSTANTI.kB); // T = T_VIR·V² (K, V in km/s)
 // la pressione a metà dello strato di gas, in unità di P₀: P/P₀ = C_PRESS·Σg·(Σg + Σ★·σg/σ★), con Σ in M☉/kpc² (Elmegreen 1989)
 const C_PRESS = (0.5 * Math.PI * COSTANTI.G * (MSOLE / KPC ** 2) ** 2) / (LEGGI.molecole[0] * 1e6 * COSTANTI.kB);
 const K_COOL = (1.5 * COSTANTI.kB * COSTANTI.mp) / (MU_CALDO * (1 + YPRIMO / (2 * (1 - YPRIMO))) * (1 - YPRIMO) ** 2); // t = K·T/(ρ·Λ)
@@ -361,7 +365,7 @@ const xyzNero = (() => {
   }
   return (T) => { const x = ((stringi(Math.log(T), L0, L1) - L0) / (L1 - L0)) * N, j = Math.min(N - 1, Math.floor(x)), u = x - j; return [0, 1, 2].map((c) => Math.exp(tab[3 * j + c] * (1 - u) + tab[3 * j + 3 + c] * u)); };
 })();
-const Y_SOLE = xyzNero(5772)[1]; // la parte visibile (pesata con la curva dell'occhio) della luce di un corpo nero come il Sole
+const Y_SOLE = xyzNero(TSOLE)[1]; // la parte visibile (pesata con la curva dell'occhio) della luce di un corpo nero come il Sole
 // da rosso, verde e blu lineari (anche negativi: un colore fuori dal triangolo sRGB) a un colore che si può mostrare: si
 // stinge verso il grigio di pari luminanza finché entra nel triangolo (come coloreVero di vuoto_mezzo.js), poi il canale più forte a 1
 const nelTriangolo = (rgb) => { const Y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2], m0 = Math.min(rgb[0], rgb[1], rgb[2]), v = m0 < 0 && Y > m0 ? rgb.map((x) => x + (Y - x) * (m0 / (m0 - Y))) : rgb, mx = Math.max(v[0], v[1], v[2], 1e-300); return v.map((x) => Math.max(0, x) / mx); };
@@ -598,7 +602,7 @@ function evolvi(Mh, spin, nt, fusioni, scartoBuco, compagno = false) {
   // (zb: i metalli con cui era nata, in frazione di massa). R = [gas, metalli che porta, supernove da collasso, Ia, metalli NUOVI]
   const R = [0, 0, 0, 0, 0];
   const rende = (m, q, L0, L1, zb) => { const T = P.tab[q], ia = m * (T.cI[L1 + 1] - T.cI[L0 + 1]), mia = ia * P.MCH, nuovi = m * (T.cP[L1 + 1] - T.cP[L0 + 1]), g = m * (T.cR[L1 + 1] - T.cR[L0 + 1]); R[0] = g + mia; R[1] = zb * (g - nuovi) + nuovi + mia; R[2] = m * (T.cN[L1 + 1] - T.cN[L0 + 1]); R[3] = ia; R[4] = (nuovi + mia) * (1 - zb); };
-  const metaMassa = (dove) => { let tot = 0, s = 0; for (let k = 0; k < NR; k++) tot += dove[k]; if (!(tot > 0)) return Rd * 1.68; for (let k = 0; k < NR; k++) { if (s + dove[k] >= 0.5 * tot) return bordo[k] + ((0.5 * tot - s) / dove[k]) * (bordo[k + 1] - bordo[k]); s += dove[k]; } return bordo[NR]; };
+  const metaMassa = (dove) => { let tot = 0, s = 0; for (let k = 0; k < NR; k++) tot += dove[k]; if (!(tot > 0)) return Rd * META_ESPONENZIALE; for (let k = 0; k < NR; k++) { if (s + dove[k] >= 0.5 * tot) return bordo[k] + ((0.5 * tot - s) / dove[k]) * (bordo[k + 1] - bordo[k]); s += dove[k]; } return bordo[NR]; };
   for (let j = 1; j <= nt; j++) {
     const t = j * DT, a = U.scala(t), Rv = raggioViriale(Mh[j], a), Vv = Math.sqrt((GK * Mh[j]) / Rv), c = concentrazione(Mh[j], a);
     // 1. la materia che entra: liscia, oppure in un compagno (che porta il suo gas caldo all'alone e resta in orbita)

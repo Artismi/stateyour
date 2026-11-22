@@ -63,12 +63,12 @@
 // le bolle stanno solo sotto la schiuma; le onde non frangono davvero (il profilo resta quello lineare).
 
 import { DATI, IONI, luogo, ondeNelPunto, campioneAcqua, densita, viscosita, coloreMare, stokes, pennacchio, costanti, muovi, scenaMolecolare, polvereSospesa } from './mare.js';
-import { vaporeSaturo, COSTANTI } from './leggi.js';
+import { vaporeSaturo, COSTANTI, MOLARE_ACQUA, ZERO_CELSIUS, R_GAS, GRADO } from './leggi.js';
 import { sorgente } from './eventi.js';
 import { TEMPLATE_MW } from './acqua_mw.js';
 import { densitaAtomo } from './quanti.js';
 
-const RAD = Math.PI / 180, DUE_PI = 2 * Math.PI, NA = 6.02214076e23, KB = COSTANTI.kB, R_GAS = 8.314462618;
+const RAD = GRADO, DUE_PI = 2 * Math.PI, NA = COSTANTI.NA, KB = COSTANTI.kB;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
 
 // ======================================================================================================================
@@ -79,15 +79,15 @@ const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
 // a 40 °C e 40 g/kg: oltre è estrapolata)
 export function tensioneSuperficiale(T, S = 0) {
   const tau = Math.max(0, 1 - T / 647.096), w = 0.2358 * Math.pow(tau, 1.256) * (1 - 0.625 * tau);
-  return w * (1 + 3.766e-4 * S + 2.347e-6 * S * (T - 273.15));
+  return w * (1 + 3.766e-4 * S + 2.347e-6 * S * (T - ZERO_CELSIUS));
 }
 // indice di rifrazione dell'acqua di mare (Quan e Fry 1995: S in g/kg, t in °C, λ in nm; misurato 400–700 nm, 0–30 °C, 0–35 g/kg)
 export function rifrazione(T, S = 35, lambdaNm = 550) {
-  const t = T - 273.15, l = lambdaNm;
+  const t = T - ZERO_CELSIUS, l = lambdaNm;
   return 1.31405 + (1.779e-4 - 1.05e-6 * t + 1.6e-8 * t * t) * S - 2.02e-6 * t * t + (15.868 + 0.01155 * S - 0.00423 * t) / l - 4382 / (l * l) + 1.1455e6 / (l * l * l);
 }
 // la densità dell'aria sopra (kg/m³): gas perfetto con la massa molare dei gas di quell'aria
-const MOLARI = { N2: 0.028014, O2: 0.031998, CO2: 0.04401, H2O: 0.018015, Ar: 0.039948, CH4: 0.01604, H2: 0.002016, He: 0.004003, NH3: 0.017031, CO: 0.02801, SO2: 0.06406, H2S: 0.03408, Ne: 0.02018 };
+const MOLARI = { N2: 0.028014, O2: 0.031998, CO2: 0.04401, H2O: MOLARE_ACQUA, Ar: 0.039948, CH4: 0.01604, H2: 0.002016, He: 0.004003, NH3: 0.017031, CO: 0.02801, SO2: 0.06406, H2S: 0.03408, Ne: 0.02018 };
 export function massaMolareAria(aria = {}) { let m = 0, t = 0; for (const f in aria) if (MOLARI[f] && aria[f] > 0) { m += aria[f] * MOLARI[f]; t += aria[f]; } return t > 0 ? m / t : 0.029; }
 
 // ======================================================================================================================

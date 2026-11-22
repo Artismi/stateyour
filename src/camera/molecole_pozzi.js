@@ -36,8 +36,9 @@
 // prodotti degli zuccheri e dell'uracile non sono seguiti (escono dalla rete come «catrame»).
 
 import { molecola, chiave, anelli } from './molecole_grafo.js';
+import { ZERO_CELSIUS, R_GAS, ANNO } from './leggi.js'; // le costanti e le unità: un posto solo
 
-const R = 8.314462618e-3, ANNO = 3.15576e7, KCAL = 4.184, T0 = 298.15;
+const R = R_GAS / 1000, KCAL = 4.184, T0 = 298.15; // (kJ/mol/K; R e l'anno da leggi.js)
 const arr = (t12anni, EaKcal) => ({ k0: Math.LN2 / (t12anni * ANNO), Ea: EaKcal * KCAL, T0 });
 const base = (B, A) => ({ k0: Math.pow(10, -B / T0 + A), Ea: B * Math.LN10 * R, T0 });
 export const POZZI = {
@@ -49,7 +50,7 @@ export const POZZI = {
   adenina: { ...base(5902, 8.15), nome: 'deamminazione (anelli fusi)', fonte: 'Levy e Miller 1998, in Pearce e altri 2017', finestraPH: [4.5, 9] },
   guanina: { ...base(6330, 9.40), nome: 'deamminazione (anelli fusi con C=O)', fonte: 'Levy e Miller 1998, in Pearce e altri 2017', finestraPH: [4.5, 9] },
   uracile: { ...base(7649, 11.76), nome: 'apertura dell\'anello', fonte: 'Levy e Miller 1998, in Pearce e altri 2017', finestraPH: [4.5, 9] },
-  zucchero: { k0: Math.LN2 / (73 * 60), Ea: (R * Math.log((44 * ANNO) / (73 * 60))) / (1 / 273.15 - 1 / 373.15), T0: 373.15, nome: 'decomposizione dello zucchero', fonte: 'Larralde, Robertson e Miller 1995' },
+  zucchero: { k0: Math.LN2 / (73 * 60), Ea: (R * Math.log((44 * ANNO) / (73 * 60))) / (1 / ZERO_CELSIUS - 1 / 373.15), T0: 373.15, nome: 'decomposizione dello zucchero', fonte: 'Larralde, Robertson e Miller 1995' },
 };
 // ΔG°′ di condensazione in acqua a pH 7 (kJ/mol), misurati; «regola»: se le regole generali lo danno da sé
 export const CONDENSAZIONE_MISURATA = { peptide: { dG: 9.2, regola: true }, fosfodiestere: { dG: 13.8, regola: false }, glicosidico: { dG: 15.9, regola: false }, fonte: 'Ross e Deamer 2016' };

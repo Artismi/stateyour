@@ -7,6 +7,7 @@ import * as CO from '../src/camera/cosmo.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, UA, COSTANTI, LSOLE, COSMO } from '../src/camera/leggi.js';
 import * as GA from '../src/camera/galassie.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now();
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -205,7 +206,7 @@ prova('il cosmo in tre dimensioni (campo senza bordo): lo spettro vero, le galas
   tra(F.vere, 1e5, 1e9, 'aloni veri nel toro pesanti almeno quanto il più piccolo dei segnati'); tra(F.peso * C.galassie.length / F.vere, 1 - 1e-9, 1 + 1e-9, 'peso × campione');
   // un ramo: la profondità di una galassia cambia solo dove sta lei (e il campo che la tiene), non le galassie di cosmo.js
   const n2 = CO.cosmoCon(1, { 'cosmo 1/galassia 5/profondità': 1 }), F2 = S3.campoCosmo(n2); assert.notEqual(F2.pos[5][2], F.pos[5][2]); assert.equal(F2.pos[6][2], F.pos[6][2]); assert.equal(CO.cosmo(n2).galassie[5].forma.massaStelle, C.galassie[5].forma.massaStelle);
-  console.log(`      (campo senza bordo, celle fino a ${num(F.toroM / 3.0857e22 / 2 ** (F.livello - 10))} Mpc, vincolo a R_eq = ${num(F.scalaVincoli / 3.0857e22)} Mpc: campo vincolato in ${ms.toFixed(0)} ms, griglia ${n}³ in ${msG.toFixed(0)} ms, moti delle galassie in ${msV.toFixed(0)} ms; scarto del campo ${num(g.sigma)}; velocità: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}, quadratica media della materia ${num(Math.sqrt(q2 / N))}; ogni galassia ne rappresenta ${num(F.peso)})`);
+  console.log(`      (campo senza bordo, celle fino a ${num(F.toroM / LEGGI_MPC / 2 ** (F.livello - 10))} Mpc, vincolo a R_eq = ${num(F.scalaVincoli / LEGGI_MPC)} Mpc: campo vincolato in ${ms.toFixed(0)} ms, griglia ${n}³ in ${msG.toFixed(0)} ms, moti delle galassie in ${msV.toFixed(0)} ms; scarto del campo ${num(g.sigma)}; velocità: mediana ${num(mediana(vel))} km/s, massima ${num(Math.max(...vel))}, quadratica media della materia ${num(Math.sqrt(q2 / N))}; ogni galassia ne rappresenta ${num(F.peso)})`);
 });
 
 prova('l\'espansione: oggi a = 1 a 13,8 miliardi di anni; a metà grandezza l\'universo aveva 5,9 miliardi di anni; nel passato lo stesso cosmo, prima', () => {
@@ -222,7 +223,7 @@ prova('l\'espansione: oggi a = 1 a 13,8 miliardi di anni; a metà grandezza l\'u
   const inizio = S3.statoCosmo(1, (0.05 - o.tGa) * 1e9 * ANNO); assert.ok(inizio.a < 0.03 && inizio.esiste.reduce((x, y) => x + y, 0) < 0.2 * o.n);
   // la legge di Hubble: due galassie si allontanano di H·d (più i moti propri)
   const d01 = Math.hypot(...[0, 1, 2].map((q) => { let x = o.comoventi[3 + q] - o.comoventi[q]; x -= Math.round(x); return x * 1199; })); tra(o.H * d01, 100, 1.2e5, 'velocità di recessione tra le prime due galassie (km/s)');
-  console.log(`      (oggi: ${num(o.tGa)} Ga, H = ${num(o.H)} km/s/Mpc; a z = 1: ${num(p.tGa)} Ga, lato ${num(p.latoM / 3.0857e22)} Mpc, H = ${num(p.H)}, fluttuazioni ×${num(p.D)}; spostamento massimo delle galassie da allora ${num(spost)} Mpc)`);
+  console.log(`      (oggi: ${num(o.tGa)} Ga, H = ${num(o.H)} km/s/Mpc; a z = 1: ${num(p.tGa)} Ga, lato ${num(p.latoM / LEGGI_MPC)} Mpc, H = ${num(p.H)}, fluttuazioni ×${num(p.D)}; spostamento massimo delle galassie da allora ${num(spost)} Mpc)`);
 });
 
 // ---------- le scene e i moti

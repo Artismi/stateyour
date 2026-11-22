@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 const QUI = dirname(fileURLToPath(import.meta.url)), RADICE = join(QUI, '..', '..');
 const CO = await import(join(RADICE, 'src/camera/cosmo.js'));
 const GE = await import(join(RADICE, 'src/camera/geologia.js'));
+const { MTERRA } = await import(join(RADICE, 'src/camera/leggi.js'));
 const N = +process.argv[2] || 12;
 
 function frazioneTerre(se) {
@@ -39,7 +40,7 @@ fuori: for (let g = 0; g < C.galassie.length; g++) {
       let terre = NaN;
       try { const sf = GE.superficiePianeta(k, P, P.interno, P.origine), cl = GE.climaSuperficie(k, P, sf), se = GE.erosione(k, sf, cl); terre = frazioneTerre(se); }
       catch (e) { console.log('errore', k, e.message); continue; }
-      candidati.push({ ...v, terre: +terre.toFixed(4), massaTerre: +(P.massaKg / 5.972e24).toFixed(3) });
+      candidati.push({ ...v, terre: +terre.toFixed(4), massaTerre: +(P.massaKg / MTERRA).toFixed(3) });
       console.log(`${candidati.length}/${N}`, k, 'terre', terre.toFixed(3), `${((Date.now() - t0) / 1000).toFixed(0)} s`);
       if (candidati.length >= N) break fuori;
     }

@@ -40,6 +40,7 @@
 // c.discreta (nuove: la patch di eventi.js, e conMisura qui), c.intero, c.tra, c.normale.
 // Le funzioni trascendenti di Math sono usate liberamente: i pesi non decidono nessun esito (r. 1 vale per i tiri).
 import { campana, rileggi } from './eventi.js';
+import { ANNO, COSTANTI } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const DUE32 = 4294967296, SEMI = 2147483646;
 export const OPZIONI_MISURA = Object.freeze({ grana: 20 });
@@ -168,11 +169,11 @@ export function pesoDegliEventi(rami, leggiDegliEventi = null, opzioni = {}) {
 // misura (Carroll 2017), non un numero. Non contati: l'energia di legame e il calore che la fluttuazione deve restituire,
 // la radiazione, la struttura fine (molecole, ordine) oltre l'entropia per particella; ciascuno cambia ΔS di un fattore
 // d'ordine uno, non l'esponente.
-const K_B = 1.380649e-23, H_P = 6.62607015e-34, M_U = 1.66053907e-27;
+const K_B = COSTANTI.kB, H_P = COSTANTI.h, M_U = COSTANTI.u;
 export function sackurTetrode(n, T, m) { const l = H_P / Math.sqrt(2 * Math.PI * m * K_B * T); return Math.log(1 / n / l ** 3) + 2.5; }
 export function cervelliDiBoltzmann({ massaKg, massaParticella = 26 * M_U, entropiaPerParticella = 3, frazioneEvolutiva, oggettiNelMondo = 1, mezzo = { n: 1e6, T: 8000, nome: 'il mezzo interstellare tiepido' }, volumeMondoM3, etaAnni, deltaS = null } = {}) {
   const N = massaKg / massaParticella, sg = sackurTetrode(mezzo.n, mezzo.T, massaParticella), dS = deltaS ?? N * (sg - entropiaPerParticella); // ΔS/k
-  const Vogg = N / mezzo.n, cs = Math.sqrt((5 / 3) * K_B * mezzo.T / massaParticella), tau = Math.cbrt(Vogg) / cs, eta = etaAnni * 3.15576e7;
+  const Vogg = N / mezzo.n, cs = Math.sqrt((5 / 3) * K_B * mezzo.T / massaParticella), tau = Math.cbrt(Vogg) / cs, eta = etaAnni * ANNO;
   const bitTentativo = dS / Math.LN2, log2Tentativi = Math.log2(volumeMondoM3 / Vogg) + Math.log2(Math.max(1, eta / tau));
   const bitEvolutivaOggetto = -Math.log2(frazioneEvolutiva), log2Evolutivi = Math.log2(frazioneEvolutiva * oggettiNelMondo), log2Fluttuazioni = log2Tentativi - bitTentativo;
   return {

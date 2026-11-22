@@ -99,7 +99,7 @@
 // parte nevosa; vapore e suolo kg/m²; nuvole e umidità 0…1; trasportoCalore W/m² (positivo: calore che arriva).
 // Deterministico: nessun numero a caso.
 
-import { COSTANTI, R_GAS, ANNO, NUVOLE, ARIA, colonnaAria, adiabatica as adiabaticaDellAria, vaporeNellAria, pendenzaVapore, scambioConLAria } from './leggi.js';
+import { COSTANTI, R_GAS, ANNO, NUVOLE, ARIA, colonnaAria, adiabatica as adiabaticaDellAria, vaporeNellAria, pendenzaVapore, scambioConLAria, GIORNO, ORA } from './leggi.js';
 import { atmosfera, gasDellAria } from './chimica.js';
 
 // (l'attrito, lo scambio, le raffiche, la stabilità dell'aria secca e il tetto del vapore stanno in leggi.js, ARIA: sono gli
@@ -111,7 +111,7 @@ export const PARAMETRI = {
   secchio: 150, // (kg/m²) quanta acqua tiene il suolo
   stabilitaSecca: ARIA.stabilitaSecca, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco
   umiditaPioggia: NUVOLE.sogliaPioggia, // piove quando il vapore della colonna supera questa frazione della saturazione
-  tempoPioggia: 4 * 3600, // (s) in quanto tempo l'eccesso di vapore cade
+  tempoPioggia: 4 * ORA, // (s) in quanto tempo l'eccesso di vapore cade
   raggioGocce: NUVOLE.raggioGocce, // (m) il raggio efficace delle gocce di nube: 10 µm, MISURATO sulle nubi d'acqua terrestri (è l'incognita dichiarata delle nuvole)
   umiditaNuvole: NUVOLE.sereno, // sotto questa umidità (rispetto alla soglia della pioggia) il cielo è sereno
   vaporeMassimo: ARIA.vaporeMassimo, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
@@ -470,7 +470,7 @@ export function circolazione({ W = 64, H = 32, T = null, stagioni = null, alt = 
       sFT += (ris.trasportoCalore[p] - Fm) * (t - Tm) * c; sGG += (gx * gx) / c + gy * gy * cs; } }
     ris.diffusivita = sGG > 0 ? -sFT / sGG : 0; }
   ris.scambio = scambioConLAria(ar.colonna, Tm, 5); // (W/m² per K) quanto forte la superficie è legata all'aria bassa, con 5 m/s di vento (la formula è in leggi.js: è lo stesso scambio del clima a fasce)
-  return Object.assign(ris, { regime: 'aria', dt, giorniSimulati: ((nAvvio + nS * (nAdatta + nMedia)) * dt) / 86400, giorniPerStagione: (nMedia * dt) / 86400, tentativi });
+  return Object.assign(ris, { regime: 'aria', dt, giorniSimulati: ((nAvvio + nS * (nAdatta + nMedia)) * dt) / GIORNO, giorniPerStagione: (nMedia * dt) / GIORNO, tentativi });
 }
 
 // quanta della precipitazione cade come neve: tutta sotto zero, niente sopra +2 °C (misurato: a +1 °C metà e metà); e

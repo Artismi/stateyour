@@ -47,7 +47,7 @@
 //   · le comete periodiche (quelle che i giganti portano dentro dalla fascia esterna) non hanno orbite qui: sono nel
 //     flusso dei proiettili di impatti.js, non nell'elenco; la nube esterna non è erosa dalle stelle di passaggio;
 //   · le lacune delle risonanze sono tolte con la larghezza di librazione; nella fascia vera alcune risonanze (3:2) sono abitate.
-import { COSTANTI, MSOLE, LSOLE, ANNO, UA, massaNascita } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, ANNO, UA, massaNascita, GIORNO, RSOLE, TSOLE } from './leggi.js';
 import * as ST from './stelle.js';
 import { DISCO, MTERRA, formaPianeti, disco as discoDi } from './disco.js';
 import { storiaImpatti, IMPATTI } from './impatti.js';
@@ -78,7 +78,7 @@ export const SISTEMA = Object.freeze({
   righe: { C2: 516.5, COpiu: 426.0 }, // [R] (nm) la banda di Swan del C₂ (il verde della chioma) e la banda più forte del CO⁺ (l'azzurro della coda di ioni)
   granoTipico: 1e-4, pressioneLuce: 1, // (m) il grano che porta la luce zodiacale, ~100 µm (Grün et al. 1985) [R]; Q della pressione di radiazione per un grano grande = 1
   // --- le comete: che cosa brilla, e quanto. [R] tutti; i rapporti e le lunghezze di scala: A'Hearn et al. 1995 (Icarus 118, 223: comete «tipiche»)
-  Tsole: 5772, // (K) la temperatura del Sole a cui sono misurati i fattori di fluorescenza (valore nominale IAU 2015)
+  Tsole: TSOLE, // (K) la temperatura del Sole a cui sono misurati i fattori di fluorescenza (valore nominale IAU 2015)
   // le molecole figlie della chioma: lunghezza d'onda (nm), molecole per molecola d'acqua (log Q/Q_OH = −2,44, −2,50, −3,59, con 0,9 OH per H₂O),
   // vita a 1 UA dal Sole (s: le lunghezze di scala 6,6·10⁴, 2,1·10⁵, 2,7·10⁴ km a 1 km/s), fluorescenza g a 1 UA dal Sole (W per molecola: 4,5·10⁻¹³,
   // 3,3·10⁻¹³, 1,0·10⁻¹² erg/s; A'Hearn 1982; Schleicher 2010 per il CN, che cambia del 50% con la velocità verso il Sole)
@@ -208,7 +208,7 @@ export function luceZodiacale(polvere, st, { rOss = UA, elongazione = PI / 2, la
   const ce = Math.cos(elongazione), se = Math.sin(elongazione), n = 400, lMax = 60 * rOss, h = Math.log(lMax / (1e-4 * rOss)) / n; let I = 0;
   for (let i = 0; i < n; i++) { const l = 1e-4 * rOss * Math.exp((i + 0.5) * h), x = rOss - l * ce, y = l * se, r = Math.hypot(x, y), cosTheta = -((x * -ce + y * se) / r) /* tra (stella → grano) e (grano → chi guarda) */;
     I += polvere.sezioneA(r, lat) * (st.Lw / (PI4 * r * r)) * SS.polvere.albedo * fasePolvere(Math.acos(stringi(cosTheta, -1, 1))) * l * h; }
-  const Rst = st.T > 0 ? Math.sqrt(st.Lw / (PI4 * K.sigma * st.T ** 4)) : 6.957e8; return { brillanza: I, suStella: I / (st.Lw / (4 * PI * PI * Rst * Rst)) };
+  const Rst = st.T > 0 ? Math.sqrt(st.Lw / (PI4 * K.sigma * st.T ** 4)) : RSOLE; return { brillanza: I, suStella: I / (st.Lw / (4 * PI * PI * Rst * Rst)) };
 }
 
 // ---------- IL SISTEMA VISTO DA QUI
@@ -322,7 +322,7 @@ export function chiomaECode(D, stato, st, el = null, t = 0) {
   // la polvere
   const rhoG = MATERIALI.roccia.densita, gN = (PI4 / 3) * G * C.densita * Rn, aMax = Math.max(GC.aMin, (3 * GC.CD * s.flusso * vGas) / (8 * rhoG * gN)), p = esponenteCascata(IMPATTI.rottura.ghiaccio.a), suGas = (1 - DISCO.ghiaccio) / DISCO.ghiaccio, kgS = suGas * gas;
   const peso = (a1, a2) => (a2 > a1 ? Math.pow(a2, 4 - p) - Math.pow(a1, 4 - p) : 0), tutto = peso(GC.aMin, aMax), mu = G * st.M, F = st.Lw / (PI4 * r * r), uscitaDi = (a) => { const v2 = (3 * GC.CD * s.flusso * vGas * Rn) / (4 * rhoG * a); return Math.sqrt((v2 * vGas * vGas) / (v2 + vGas * vGas)); };
-  const eta = GC.giorni.map((g) => g * 86400), allora = el && s.flusso > 0 ? eta.map((tau) => { const prima = statoKeplero(el, t - tau), rr = Math.hypot(...prima.pos); return { prima, attivita: sublimaA(rr, st.Lw).flusso / s.flusso }; }) : null;
+  const eta = GC.giorni.map((g) => g * GIORNO), allora = el && s.flusso > 0 ? eta.map((tau) => { const prima = statoKeplero(el, t - tau), rr = Math.hypot(...prima.pos); return { prima, attivita: sublimaA(rr, st.Lw).flusso / s.flusso }; }) : null;
   let sezioneChioma = 0; const grani = GC.taglie.map((a, k) => { const lo = k === 0 ? GC.aMin : Math.sqrt(GC.taglie[k - 1] * a), hi = Math.min(aMax, k === GC.taglie.length - 1 ? Infinity : Math.sqrt(a * GC.taglie[k + 1])), parte = tutto > 0 ? peso(lo, Math.max(lo, hi)) / tutto : 0;
     const beta = st.Lw > 0 ? betaGrano(a, st.Lw, st.M) : 0, uscita = uscitaDi(a), massa = (PI4 / 3) * rhoG * a ** 3, perSecondo = (kgS * parte) / massa, punti = [];
     sezioneChioma += perSecondo * PI * a * a * (chiomaR / Math.max(uscita, 1e-9));

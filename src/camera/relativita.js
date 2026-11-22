@@ -86,7 +86,7 @@
 //   · l'interno dell'orizzonte: le formule ci sono (tempo proprio di caduta), ma nessuna misura può arrivarci, e la
 //     singolarità segna il punto dove la teoria smette di valere (STATO: «aperta»).
 
-import { COSTANTI, COSMO, ANNO, MSOLE, etaUniverso } from './leggi.js';
+import { COSTANTI, COSMO, ANNO, MSOLE, etaUniverso, KPC, MPC } from './leggi.js';
 import { dentro as STELLE } from './stelle.js'; // σ_T (Thomson), ricavata lì dalle costanti: una grandezza, una fonte
 
 const K = COSTANTI, C = K.c, C2 = C * C, G = K.G, PI = Math.PI;
@@ -179,7 +179,7 @@ export function scartoLungo(storia, { da = 0, a = 0, passi = 2000 } = {}) {
 // 2. LA SEZIONE E IL CONO
 // =====================================================================================================
 // ---------- la cosmologia di leggi.js (piatta: materia + Λ), quanto serve al cono
-const H0 = (COSMO.H0 * 1000) / 3.086e22, OM = COSMO.Om, OL = COSMO.OL; // s⁻¹ (lo stesso megaparsec di leggi.etaUniverso)
+const H0 = (COSMO.H0 * 1000) / MPC, OM = COSMO.Om, OL = COSMO.OL; // s⁻¹ (lo stesso megaparsec di leggi.etaUniverso)
 export const cosmo = {
   H0, H: (a) => H0 * Math.sqrt(OM / a ** 3 + OL),
   tempo: (a) => (2 / (3 * H0 * Math.sqrt(OL))) * Math.asinh(Math.sqrt(OL / OM) * a ** 1.5), // s dall'inizio
@@ -613,7 +613,7 @@ export const sigmaDisco = (M, Rd) => (R) => (M / (2 * PI * Rd * Rd)) * Math.exp(
 // rapporto d'assi cos i: è questo, con lo schiacciamento dello sferoide, a dare quattro immagini invece dell'anello) e lo
 // sferoide con il suo `schiacciata` (rapporto d'assi sul cielo). `angolo`: dove punta l'asse maggiore.
 // (Semplificazioni dichiarate: l'alone è sferico e va all'infinito; il disco è sottile, e non lo si inclina oltre q = 0,15.)
-const KPC_M = 3.0857e19;
+const KPC_M = KPC;
 export function massaDaModello(m, { z = null, distanza = null, inclinazione = 0, angolo = 0, schiacciata = 1 } = {}) {
   const componenti = [{ nome: 'alone', sigma: sigmaNFW(m.Mh * MSOLE, m.Rv * KPC_M, m.c), q: 1, angolo: 0 }];
   if (m.Md > 0 && m.Rd > 0) componenti.push({ nome: 'disco', sigma: sigmaDisco(m.Md * MSOLE, m.Rd * KPC_M), q: Math.max(0.15, Math.cos(inclinazione)), angolo });
@@ -758,7 +758,7 @@ export function passatiCompatibili(buco) {
 // fonte migliore e non la si duplica qui; senza, la cosmologia di qui (materia + Λ: 2% in più oggi, molto di più
 // all'inizio, dove comanda la radiazione). → { a, comovente (m di oggi), proprio (m di allora), fonte }
 export function orizzonteParticelle(t = 0, tabella = null) {
-  const a = cosmo.scala(T_OGGI + t), chi = tabella ? tabella.eta(a) * 3.0857e22 : cosmo.orizzonte(a);
+  const a = cosmo.scala(T_OGGI + t), chi = tabella ? tabella.eta(a) * MPC : cosmo.orizzonte(a);
   return { a, comovente: chi, proprio: a * chi, fonte: tabella ? 'ragnatela.js (con la radiazione)' : 'relativita.js (materia + Λ)' };
 }
 

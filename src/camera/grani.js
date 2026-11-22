@@ -31,6 +31,7 @@
 import { sorgente, logEsatto, cosGiro } from './eventi.js';
 import { pesoDiscreto } from './eredita.js';
 import { sorgentiNaturali, ritenzione, concentrazioni } from './materia.js';
+import { R_GAS, ANNO } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
 const SEN = (u) => cosGiro(u - 0.25); // sen(2πu)
@@ -38,7 +39,7 @@ const SEN = (u) => cosGiro(u - 0.25); // sen(2πu)
 export const AVRAMI_2D = 0.8929795115692493 * Math.cbrt(3 / Math.PI);
 // LA CRESCITA DEI GRANI DEL GHIACCIO (Gow 1969; Alley 1982): diametro medio (m) dopo `anni` a temperatura T (K),
 // partendo da un diametro D0 (m)
-export const GOW = { K0mm2: 6.75e7, E: 47.0e3, R: 8.314 };
+export const GOW = { K0mm2: 6.75e7, E: 47.0e3, R: R_GAS };
 export function granoGhiaccio(T, anni, D0) {
   const K = GOW.K0mm2 * 1e-6 * Math.exp(-GOW.E / (GOW.R * Math.max(1, T))), A = (Math.PI / 4) * D0 * D0 + K * Math.max(0, anni);
   return { D: 2 * Math.sqrt(A / Math.PI), K, A };
@@ -230,7 +231,6 @@ function tocca(p, W, H) {
 }
 const DISEGNABILI = (n) => n === 'alfa' || n.startsWith('frammento') || n.startsWith('muone') || n === 'elettrone' || n.startsWith('protone');
 export const COLORE_TRACCIA = (n) => (n === 'alfa' ? '255,190,90' : n.startsWith('frammento') || n === 'rinculo' ? '255,96,96' : n.startsWith('muone') ? '245,245,245' : n === 'elettrone' || n === 'positrone' ? '120,255,160' : n.startsWith('protone') ? '255,240,120' : '255,150,220');
-const ANNO = 3.156e7;
 export function popolazioneTracce(luogo, { minerale = null } = {}, caso) {
   const roccia = luogo.tipo === 'roccia', qui = roccia && minerale ? { ...luogo, elementi: concentrazioni(luogo, minerale) } : luogo;
   let src; try { src = sorgentiNaturali(qui); } catch { return null; }

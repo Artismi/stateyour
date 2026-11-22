@@ -39,12 +39,12 @@
 // campo; le posizioni della carta sono lette come posizioni di OGGI (aloniIn di ragnatela.js legge invece la materia
 // spostata con Ψ: le due letture differiscono di |Ψ| ≈ 13 Mpc).
 
-import { COSMO } from './leggi.js';
+import { COSMO, MPC } from './leggi.js';
 import { sorgente, campana } from './eventi.js';
 import { COSMOLOGIA as U, SIGMA_CAMPO } from './galassie.js';
 import { campoPigro } from './campo_pigro.js';
 
-const MPC = 3.0857e22, PI2 = 2 * Math.PI;
+const PI2 = 2 * Math.PI;
 // la trasformata di Fourier (potenze di 2), sul posto, lungo una riga di passo `s` che parte da `o`
 function fft(re, im, n, o, s, inversa) {
   for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { const a = o + i * s, c = o + j * s; let t = re[a]; re[a] = re[c]; re[c] = t; t = im[a]; im[a] = im[c]; im[c] = t; } }

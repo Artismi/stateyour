@@ -26,7 +26,7 @@
 // Che cosa manca: la migrazione delle orbite nel disco (niente «Giovi caldi»),
 // le risonanze, i sistemi con due stelle.
 
-import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI } from './leggi.js';
+import { COSTANTI, MSOLE, ANNO, UA, PARTE_FUORI, MTERRA, RTERRA, MGIOVE, RGIOVE } from './leggi.js';
 import { stella as stellaVera, luceGiovane } from './stelle.js';
 import { comeSorgente } from './eventi.js';
 import { PROTOSOLARE, miscelaSolare, tabellaSolidi, vettore, differenzia, SIMBOLI, D_MASSA, perditeAccrescimento, fusoDaAlluminio, FA_NEBULOSA, ELEMENTI } from './elementi.js';
@@ -34,7 +34,7 @@ const MASSA_MG = ELEMENTI.Mg.massa, MASSA_FE = ELEMENTI.Fe.massa, MASSA_O = ELEM
 import { STORIA } from './storia.js'; // (la densità del nucleo: la stessa struttura a due strati della storia termica)
 import { modiSecolari, tempoIncrocio, blocchiSecolari } from './secolare.js'; // (gli urti giganti: Laplace–Lagrange e il tempo di incrocio di Petit)
 
-export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
+export { MTERRA, RTERRA, MGIOVE, RGIOVE }; // (i corpi di riferimento: in leggi.js, un posto solo)
 const G = COSTANTI.G, IDX = Object.fromEntries(SIMBOLI.map((s, i) => [s, i]));
 const tipoDi = (gas, ghiaccio) => (gas > 0.5 ? 'gassoso' : ghiaccio > 0.2 ? 'ghiacciato' : 'roccioso'); // (i tre tipi: una soglia di comodo dichiarata in grandezze.js)
 
@@ -51,7 +51,9 @@ export const DISCO = Object.freeze({
   ghiaccio: SOLARE.ghiaccio / (SOLARE.ghiaccio + SOLARE.rocciaFredda), // la parte di ghiacci nei solidi oltre la neve: 0,58
   ferro: PROTOSOLARE.Fe / SOLARE.rocciaFredda, // il ferro (come elemento) sulla roccia fredda: 0,28
   idrogeno: PROTOSOLARE.H / (PROTOSOLARE.H + PROTOSOLARE.He), // il gas: idrogeno ed elio, 73 a 27
-  pendenza: 1.5, raggio: 30, // Σ ∝ r^(-3/2), fino a 30 UA·√M
+  // Σ ∝ r^(−3/2): la nebulosa solare di massa minima (Weidenschilling 1977, Ap&SS 51, 153; Hayashi 1981, PThPS 70, 35); i
+  // dischi misurati in millimetrico danno pendenze più dolci, γ ≈ 0,9 (Andrews et al. 2009, ApJ 700, 1502): l'alternativa, non usata
+  pendenza: 1.5, raggio: 30, // fino a 30 UA·√M
   // LA MASSA DEL DISCO ALLA NASCITA: mediana (per una stella come il Sole) e larghezza in logaritmo naturale, e come cresce con
   // la stella. Dai dischi più giovani, di Classe 0, quando i solidi non si sono ancora convertiti: Tychoniec et al. 2020 (A&A 640,
   // A19), Perseo, masse della polvere a 9 mm della loro tabella A.2 [V: letta]: mediana 158 M⊕, e tra il 16° e l'84° percentile

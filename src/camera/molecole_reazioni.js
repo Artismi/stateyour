@@ -26,6 +26,7 @@
 import { atomo } from './molecole_atomi.js';
 import { molecola, chiave, grezzo, unisci, componenti, valida, conta, carica, coppieSolitarie, anelli, stereoisomeri } from './molecole_grafo.js';
 import { energia, pKaSito, neutra, entalpiaGas, sitiAcidoBase, logKComplesso, statoRedox, R } from './molecole_energia.js';
+import { TSOLE } from './leggi.js'; // le costanti e le unità: un posto solo
 
 const KB_H = 2.083661912e10; // k/h (1/(s·K))
 const ETERO = new Set([7, 8, 16]), ALOGENI = new Set([9, 17, 35]);
@@ -295,7 +296,7 @@ const soglia = (m) => { let nm = 150, sez = 1e-18; const pi = m.legami.filter((l
   if (pi.some((l) => l.o === 2 && (m.atomi[l.a].Z === 8 || m.atomi[l.b].Z === 8) && !l.ar && (m.atomi[l.a].Z === 6 || m.atomi[l.b].Z === 6) && m.atomi.length > 3)) { if (nm < 320) sez = 1e-20; nm = Math.max(nm, 320); }
   return { nm, sez }; };
 // fotoni per cm² e per secondo sotto una lunghezza d'onda (corpo nero diluito)
-export function fotoni(luce, nmMax, nmMin = 90) { const T = luce.Tstella ?? 5772, dil = luce.diluizione ?? 2.16e-5; let n = 0; const passo = 2;
+export function fotoni(luce, nmMax, nmMin = 90) { const T = luce.Tstella ?? TSOLE, dil = luce.diluizione ?? 2.16e-5; let n = 0; const passo = 2;
   for (let l = nmMin; l < nmMax; l += passo) { const lam = (l + passo / 2) * 1e-7, x = 1.438777 / (lam * T); n += ((2 * Math.PI * 2.99792458e10) / lam ** 4 / Math.expm1(x)) * passo * 1e-7 * dil * (luce.trasmissione ? luce.trasmissione(l) : 1); } return n; }
 export function fotolisi(x, luce = {}) {
   const m = molecola(x), { nm, sez } = soglia(m), out = [];

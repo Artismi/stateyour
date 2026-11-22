@@ -8,19 +8,49 @@
 // distribuzione delle masse delle stelle che nascono, il legame tra una stella
 // e il Sole come unità), si usa la legge misurata, e qui lo si dice.
 
+// ---------- LE COSTANTI E LE UNITÀ: UN POSTO SOLO. Chi ne ha bisogno le prende da qui (o da unita.js, che le riesporta per
+// le unità del motore), invece di riscriverle. Le costanti della natura sono quelle del CODATA 2018 (Tiesinga et al. 2021,
+// Rev. Mod. Phys. 93, 025010), alle cifre con cui il progetto le ha sempre usate; NA è esatto dal 2019 (SI rivisto); h è 2π·ħ.
+const HBAR = 1.0546e-34;
 export const COSTANTI = {
-  c: 2.998e8, G: 6.674e-11, hbar: 1.0546e-34, kB: 1.381e-23, sigma: 5.670e-8,
+  c: 2.998e8, G: 6.674e-11, hbar: HBAR, h: 2 * Math.PI * HBAR, kB: 1.381e-23, sigma: 5.670e-8,
   me: 9.109e-31, mp: 1.6726e-27, mn: 1.6749e-27, e: 1.602e-19,
+  NA: 6.02214076e23, eps0: 8.8541878128e-12, u: 1.66053907e-27, // (1/mol, F/m, kg: l'unità di massa atomica) CODATA 2018
 };
+// LE UNITÀ. L'unità astronomica alle cifre di sempre, 1,496·10¹¹ m (esatta: 149 597 870 700 m, IAU 2012, risoluzione B2; il
+// passaggio al valore esatto sposta di 1,4·10⁻⁵ ogni orbita, e rimescola i sistemi: resta per un giro a parte); il parsec è
+// la sua definizione, 648 000/π UA esatte (IAU 2015, risoluzione B2): 3,0857·10¹⁶ m. L'anno luce è c per l'anno giuliano
+export const UA = 1.496e11, PC = (648000 / Math.PI) * 149597870700, KPC = 1e3 * PC, MPC = 1e6 * PC;
+export const GIORNO = 86400, ORA = 3600, ANNO_LUCE = COSTANTI.c * 365.25 * GIORNO; // (s, s, m)
+export const ZERO_CELSIUS = 273.15, ATMOSFERA = 101325, GRADO = Math.PI / 180; // (K; Pa; rad: un grado)
+// I PESI ATOMICI (g/mol), i valori convenzionali della IUPAC (Prohaska et al. 2022, Pure Appl. Chem. 94, 573), per gli
+// elementi che il progetto pesa in più di un posto; le molecole si sommano da qui (l'acqua: 2·1,008 + 15,999 = 18,015)
+export const PESI_ATOMICI = Object.freeze({ H: 1.008, He: 4.0026, C: 12.011, N: 14.007, O: 15.999, Na: 22.99, Mg: 24.305, Al: 26.982, Si: 28.085, S: 32.06, Cl: 35.45, K: 39.098, Ca: 40.078, Fe: 55.845 });
+export const MOLARE_ACQUA = (2 * PESI_ATOMICI.H + PESI_ATOMICI.O) / 1000; // (kg/mol)
+// I CORPI DI RIFERIMENTO del sistema solare (IAU 2015, risoluzione B3, valori nominali; la Terra col raggio medio)
+export const MTERRA = 5.972e24, RTERRA = 6.371e6, MGIOVE = 1.898e27, RGIOVE = 7.149e7;
 // (Tcmb: la temperatura del fondo cosmico oggi, 2,7255 K — Fixsen 2009, ApJ 707, 916 —; Neff: il numero efficace di specie di
 // neutrini, 3,046 — Mangano et al. 2005. Da questi due e dalle costanti viene la densità di radiazione Ω_r (fotoni più
 // neutrini): stanno qui perché Ω_r abbia una fonte sola. etaUniverso() qui sotto non la conta: oggi pesa 10⁻⁴)
 export const COSMO = { H0: 67.7, Om: 0.31, OL: 0.69, Ob: 0.049, sigma8: 0.81, ns: 0.965, Tcmb: 2.7255, Neff: 3.046 };
-export const ANNO = 3.156e7, MSOLE = 1.989e30, RSOLE = 6.957e8, LSOLE = 3.828e26;
+export const ANNO = 3.156e7, MSOLE = 1.989e30, RSOLE = 6.957e8, LSOLE = 3.828e26, TSOLE = 5772; // (s; kg, m, W, K: il Sole, IAU 2015 B3)
+
+// LA SOGLIA DEL COLLASSO SFERICO in sovradensità lineare, per un cosmo di sola materia: δc = (3/20)·(12π)^(2/3) = 1,68647
+// (Gunn e Gott 1972; Peebles 1980, §19). Con Ω_Λ cala di meno dell'1% (Kitayama e Suto 1996): non contato, dichiarato
+export const DELTA_C = (3 / 20) * Math.pow(12 * Math.PI, 2 / 3);
+// L'INVERSA DELLA DISTRIBUZIONE A CAMPANA (normale ridotta), esatta: Φ(x) = ½·[1 + erf(x/√2)], con erf dalla sua serie a
+// termini tutti positivi erf(y) = (2/√π)·e^(−y²)·Σ 2ⁿ·y^(2n+1)/(1·3·…·(2n+1)) (Abramowitz e Stegun 1964, 7.1.6), e tre passi
+// di Newton dalla partenza di Winitzki 2008 (errore < 0,005; il suo a = 8(π − 3)/(3π(4 − π)), esatto). p tra 10⁻⁹ e 1 − 10⁻⁹
+export const ripartizioneNormale = (x) => { const y = Math.abs(x) / Math.SQRT2, y2 = y * y; let t = y, s = y; for (let n = 1; t > 1e-17 * s; n++) { t *= (2 * y2) / (2 * n + 1); s += t; } const erf = (2 / Math.sqrt(Math.PI)) * Math.exp(-y2) * s; return x >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf); };
+const WINITZKI = (8 * (Math.PI - 3)) / (3 * Math.PI * (4 - Math.PI));
+export const inversaNormale = (p) => { const q = Math.max(1e-9, Math.min(1 - 1e-9, p)), x0 = 2 * q - 1, l = Math.log(1 - x0 * x0), b = 2 / (Math.PI * WINITZKI) + l / 2;
+  let x = Math.sign(x0) * Math.SQRT2 * Math.sqrt(Math.sqrt(b * b - l / WINITZKI) - b);
+  for (let k = 0; k < 3; k++) x -= (ripartizioneNormale(x) - q) / (Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI));
+  return x; };
 
 // l'età dell'universo, esatta per un cosmo piatto con materia e energia oscura
 export function etaUniverso(p = COSMO) {
-  const H = (p.H0 * 1000) / 3.086e22;
+  const H = (p.H0 * 1000) / MPC;
   return (2 / (3 * H * Math.sqrt(p.OL))) * Math.asinh(Math.sqrt(p.OL / p.Om));
 }
 
@@ -51,18 +81,23 @@ export function raggioNeutroni(M, k = COSTANTI) {
 export function stella(Msol) {
   const L = Msol < 0.43 ? 0.23 * Msol ** 2.3 : Msol < 2 ? Msol ** 4 : Msol < 55 ? 1.4 * Msol ** 3.5 : 32000 * Msol;
   const R = Msol < 1 ? Msol ** 0.8 : Msol ** 0.57;
-  const T = 5772 * Math.pow(L / (R * R), 0.25);
+  const T = TSOLE * Math.pow(L / (R * R), 0.25);
   // quanto vive: brucia circa il 10% del suo idrogeno, con un'efficienza di 0,7% (E = mc²)
   const vita = (0.1 * 0.007 * Msol * MSOLE * COSTANTI.c ** 2) / (L * LSOLE) / ANNO;
   return { L, R, T, vita };
 }
 
-// la distribuzione delle masse delle stelle che nascono (misurata: Kroupa); u tra 0 e 1
-export function massaNascita(u) {
-  // da 0,08 a 100 masse solari: pendenza 1,3 sotto mezza massa solare, 2,3 sopra
-  const a = 0.08, b = 0.5, c = 100, w1 = 2 * ((b ** -0.3 - a ** -0.3) / -0.3), w2 = (c ** -1.3 - b ** -1.3) / -1.3, f = w1 / (w1 + w2);
-  if (u < f) return (a ** -0.3 + (u / f) * (b ** -0.3 - a ** -0.3)) ** (1 / -0.3);
-  return (b ** -1.3 + ((u - f) / (1 - f)) * (c ** -1.3 - b ** -1.3)) ** (1 / -1.3);
+// LA DISTRIBUZIONE DELLE MASSE DELLE STELLE CHE NASCONO (misurata): Kroupa 2001 (MNRAS 322, 231), eq. 2, ξ(m) ∝ m^(−α_i),
+// continua ai bordi dei tratti: α₁ = 1,3 tra 0,08 e 0,5 M☉, α₂ = 2,3 sopra. Sotto 0,08 M☉ Kroupa passa alle nane brune
+// (α₀ = 0,3), che qui non nascono come stelle; il taglio in alto a 100 M☉ è dichiarato (Kroupa 2001 non lo fissa). UN OGGETTO
+// SOLO: chi vuole i limiti o le pendenze li legge qui (lingua.js, le classi di massa), e gli esponenti sono 1 − α
+export const KROUPA_2001 = Object.freeze({ fonte: 'Kroupa 2001, MNRAS 322, 231, eq. 2', masse: Object.freeze([0.08, 0.5, 100]), alfa: Object.freeze([1.3, 2.3]) });
+// la massa (M☉) che nasce con la ripartizione u (tra 0 e 1), contando le stelle (non la loro massa)
+export function massaNascita(u, imf = KROUPA_2001) {
+  const [a, b, c] = imf.masse, [a1, a2] = imf.alfa, e1 = 1 - a1, e2 = 1 - a2, k1 = b ** (a1 - a2); // (k1: la continuità in b)
+  const w1 = (k1 * (b ** e1 - a ** e1)) / e1, w2 = (c ** e2 - b ** e2) / e2, f = w1 / (w1 + w2);
+  if (u < f) return (a ** e1 + (u / f) * (b ** e1 - a ** e1)) ** (1 / e1);
+  return (b ** e2 + ((u - f) / (1 - f)) * (c ** e2 - b ** e2)) ** (1 / e2);
 }
 
 // ---------- LA RADIOATTIVITÀ DELLA ROCCIA: una legge sola per i pianeti (geologia.js, interno) e per le lune (lune.js).
@@ -76,7 +111,7 @@ export const ISOTOPI = [[0.7555e-12, 4.468], [0.0328e-12, 0.704], [0.7621e-12, 1
 export const caloreDellaRoccia = (etaAnni = 4.5e9) => { let s = 0; for (let i = 0; i < ISOTOPI.length; i++) { const q = ISOTOPI[i]; s = s + q[0] * Math.pow(2, (4.5 - etaAnni / 1e9) / q[1]); } return s; }; // (la stessa somma, nello stesso ordine, senza funzioni dentro)
 
 // ---------- i pianeti: calore, atmosfera, acqua. Ogni numero discende dalla stella e dal pianeta.
-export const UA = 1.496e11, R_GAS = 8.314;
+export const R_GAS = 8.314; // (UA: in testa, con le unità)
 // IL LIVELLO DI RIFERIMENTO DI UN GIGANTE DI GAS (Pa). Un gigante non ha un suolo: la sua «pressione al suolo» è
 // infinita (clima.pressione = ∞ vuol dire «nessun suolo»), e tutto ciò che di un'aria si calcola a una pressione (la
 // miscela dei gas, la chimica, i raggi cosmici, il vento) si calcola a questo livello, 1 bar. UNA CONVENZIONE SOLA: il
@@ -119,7 +154,7 @@ export const vaporeSaturo = (T) => { const g = 1000 * H_VAPORE - T * S_VAPORE, r
 export function statoAcqua(T, P) {
   if (T >= ACQUA.critica) return 'vapore'; // (sopra il punto critico, 647 K, liquido e vapore non si distinguono più: non c'è un mare)
   if (P < ACQUA.tripla) return T < 200 ? 'ghiaccio' : 'vapore (il ghiaccio sublima: troppo poca pressione per il liquido)';
-  return T < 273.15 ? 'ghiaccio' : T < ebollizione(P) ? 'liquida' : 'vapore';
+  return T < ZERO_CELSIUS ? 'ghiaccio' : T < ebollizione(P) ? 'liquida' : 'vapore';
 }
 // L'ACQUA ALLA SUPERFICIE: una fonte sola per il clima, per il mare e per l'interno. «frazione» è la parte della
 // massa del pianeta che è acqua (i rocciosi la chiamano «acqua», i ghiacciati «ghiaccio»: è la stessa cosa), «kg»
@@ -191,7 +226,7 @@ export const luceDellaNube = (acqua) => { const x = ((1 - NUVOLE.asimmetria) * 1
 // (2,5 MJ per chilo: il calore di evaporazione). «vento» (m/s) è quello al suolo, raffiche comprese: dalla legge del
 // trasporto, se chi chiama ha un pianeta; se manca, la riserva dichiarata
 export function riflessoNuvoleAtteso(T, luce = Infinity, vento = NUVOLE.ventoAtteso) {
-  const N = NUVOLE, pioggia = Math.min((N.ce * vento * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / 0.018015) * T), luce / 2.5e6);
+  const N = NUVOLE, pioggia = Math.min((N.ce * vento * vaporeSaturo(T) * (1 - N.sogliaPioggia)) / ((R_GAS / MOLARE_ACQUA) * T), luce / 2.5e6);
   return N.coperturaAttesa * luceDellaNube(pioggia / (N.coperturaAttesa * N.kessler)) + (1 - N.coperturaAttesa) * N.stratiAttesi * luceDellaNube(pioggia / N.kessler);
 }
 // quanto le nuvole attese ci sono (0…1), dove non c'è una circolazione calcolata: servono mare che evapora e un'aria di
@@ -287,7 +322,7 @@ export const ARIA = Object.freeze({
   raffica: 1, // (m/s) il vento minimo, quello delle raffiche della convezione, quando l'aria è ferma
   stabilitaSecca: 0.8, // un'aria senza vapore: il suo gradiente termico come frazione dell'adiabatico secco (Marte 0,55, Venere 0,8-0,9)
   vaporeMassimo: 0.1, // il vapore non supera questa frazione della pressione dell'aria (oltre, il modello non vale)
-  molareAcqua: 0.018015, massaMolare: 0.029, // (kg/mol) l'acqua; e l'aria di riserva (azoto e ossigeno), se i gas non sono dati
+  molareAcqua: MOLARE_ACQUA, massaMolare: 0.029, // (kg/mol) l'acqua; e l'aria di riserva (azoto e ossigeno), se i gas non sono dati
   vortici: Object.freeze({ c3: 2.0, cGamma: 0.113, gamma: 3.64, c1: 2.5 }), // Gallet e Ferrari 2020, 2021 (da simulazioni, non dalla Terra)
   giornoDiRiserva: 86164, // (s) il giorno, se chi chiama non lo dà: quello della Terra
 });
@@ -464,7 +499,7 @@ export function trasportoSuSuperficie({ T, pressione, gravita, raggioM, giorno, 
 //   latitudine (gradi) del più grande flusso verso il polo nell'emisfero nord, calore (W/m² dato a ogni fascia), aria (K) }
 const LUCI = { S0: NaN, eps: NaN, H: 0, passiAnno: 0, luci: null };
 export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, mare = 0, pressione = 0, tau = 0, D = null, giorno = null, raggioM = null, gravita = null, massaMolare = ARIA.massaMolare, cp = null, Tavvio = 288, fasce = 16, anni = 8, passiAnno = 16 }) {
-  const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = (obliquita * Math.PI) / 180;
+  const H = fasce, sigma = COSTANTI.sigma, serra = 1 + 0.75 * tau, dphi = Math.PI / H, eps = obliquita * GRADO;
   const lat = new Float64Array(H), cosLat = new Float64Array(H), cosN = new Float64Array(H), cosS = new Float64Array(H);
   for (let j = 0; j < H; j++) { lat[j] = Math.PI / 2 - (j + 0.5) * dphi; cosLat[j] = Math.cos(lat[j]); cosN[j] = Math.max(0, Math.cos(lat[j] + dphi / 2)); cosS[j] = Math.max(0, Math.cos(lat[j] - dphi / 2)); }
   const C = mare * CLIMA.capacitaMare + (1 - mare) * CLIMA.capacitaTerra, ghiaccioAcqua = acquaPerIlGhiaccio(mare), nuvole = nuvoleAttese(mare, pressione);
@@ -519,7 +554,7 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
       void esce;
     }
     let Tm = 0; for (let j = 0; j < H; j++) Tm += media[j] * cosLat[j]; Tm /= w;
-    return { T: Tm, ghiaccio: gh / w, assorbita: ass / w, irradiata: irr / w, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media),
+    return { T: Tm, ghiaccio: gh / w, assorbita: ass / w, irradiata: irr / w, arriva: S0 / 4, lat: Array.from(lat, (x) => x / GRADO), fasce: Array.from(media),
       giri: 1, D: fisso ? D : 0, vento: ARIA.raffica, scambio: 0, trasporto: { lat: misuraDelTrasporto(lat, media, calore, raggioM).lat, flusso: new Array(H - 1).fill(0), massimo: 0, latitudine: 0, calore: Array.from(calore), aria: Array.from(media) } };
   }
   for (let giro = 0; giro < 8; giro++) {
@@ -561,7 +596,7 @@ export function bilancioPerFasce({ S0, anno, obliquita = 0, bloccato = false, ma
   }
   let Tm = 0, w = 0; for (let j = 0; j < H; j++) { Tm += media[j] * cosLat[j]; w += cosLat[j]; } Tm /= w;
   const mis = misuraDelTrasporto(lat, media, calore, raggioM);
-  return { T: Tm, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => (x * 180) / Math.PI), fasce: Array.from(media),
+  return { T: Tm, ghiaccio: ghiaccio / w, assorbita: assorbita / pesi, irradiata: irradiata / pesi, arriva: S0 / 4, lat: Array.from(lat, (x) => x / GRADO), fasce: Array.from(media),
     giri, D: fisso ? D : somma.GG > 1e-12 ? Math.max(0, -somma.FT / somma.GG) : 0, vento: ventoMedio / w, scambio: scambioMedio / w, trasporto: { lat: mis.lat, flusso: mis.flusso, massimo: mis.massimo, latitudine: mis.latitudine, calore: Array.from(calore), aria: Array.from(ariaMedia) } };
 }
 // IL CLIMA DI UN PIANETA: dalla luce della stella, dalla distanza, dalla massa, dall'acqua che ha in superficie,

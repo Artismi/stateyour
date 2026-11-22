@@ -10,11 +10,12 @@ import assert from 'node:assert/strict';
 import * as B from '../src/camera/bordo.js';
 import { campoLibero } from '../src/camera/bolle.js';
 import { campoPigro } from '../src/camera/campo_pigro.js';
+import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], tempi = [];
 const prova = (nome, f) => { const t = performance.now(); f(); ok++; tempi.push([nome.slice(0, 40), performance.now() - t]); console.log('  ✓', nome); };
 const num = (x, c = 3) => (!Number.isFinite(x) ? String(x) : Math.abs(x) >= 1e4 || (Math.abs(x) < 1e-2 && x !== 0) ? x.toExponential(c - 1).replace('.', ',') : String(+x.toPrecision(c)).replace('.', ','));
-const MPC = 3.0857e22, J = 16, RADICE = 'prova/bordo/mondo';
+const MPC = LEGGI_MPC, J = 16, RADICE = 'prova/bordo/mondo';
 const F = campoLibero(RADICE).campo, h = B.latoCella(F, J);
 const piu = (a, b, k = 1) => [a[0] + k * b[0], a[1] + k * b[1], a[2] + k * b[2]];
 // due bolle che si sovrappongono (la domanda, non il mondo: posti e raggi qualunque, in Mpc)

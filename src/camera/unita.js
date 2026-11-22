@@ -6,9 +6,13 @@
 // restino quelli veri: il raggio di un protone in un campo, la vita di un muone
 // che corre, la distanza tra i pianeti.
 
-export const C_LUCE = 2.998e8; // m/s
-export const E_SU_MEC = 586.7; // e/(m_e·c), in 1/(T·m): lega il campo vero a quello del motore
-export const ME_MEV = 0.511; // la massa dell'elettrone, in MeV
+// LE COSTANTI E LE UNITÀ VERE stanno in un posto solo, leggi.js: qui si riesportano, per chi lavora con le unità del motore
+import { COSTANTI, UA, PC, KPC, MPC, ANNO_LUCE, GIORNO, ORA, ZERO_CELSIUS, ATMOSFERA, GRADO } from './leggi.js';
+export { COSTANTI, UA, PC, KPC, MPC, ANNO_LUCE, GIORNO, ORA, ZERO_CELSIUS, ATMOSFERA, GRADO };
+export const C_LUCE = COSTANTI.c; // m/s
+export const E_SU_MEC = COSTANTI.e / (COSTANTI.me * COSTANTI.c); // e/(m_e·c), in 1/(T·m): lega il campo vero a quello del motore (586,6)
+export const ME_MEV = (COSTANTI.me * COSTANTI.c ** 2) / COSTANTI.e / 1e6; // la massa dell'elettrone, in MeV (0,511)
+const MP_ME = COSTANTI.mp / COSTANTI.me, MN_ME = COSTANTI.mn / COSTANTI.me; // protone e neutrone, in masse dell'elettrone
 export const C_MOTORE = 40;
 
 // le unità di un pezzo di spazio largo «lato» metri (1000 unità del motore)
@@ -36,7 +40,7 @@ export const velocita = (pMeV, m) => { const pm = pMeV / (m * ME_MEV); return (C
 export function catalogoVero(u, { urtoProtone = Infinity, urtoFotone = Infinity } = {}) {
   const t = (s) => u.tempo(s), urtato = ['protone lento', 'neutrone'];
   return {
-    protone: { q: 1, m: 1836.15, camminoLibero: urtoProtone, bersaglio: 'neutrone',
+    protone: { q: 1, m: MP_ME, camminoLibero: urtoProtone, bersaglio: 'neutrone',
       canali: [[...urtato, 'pione+', 'pione-', 'pione0', 'pione0'], [...urtato, 'pione+', 'pione-', 'pione0'], [...urtato, 'pione+', 'pione-'], [...urtato, 'pione0'], urtato],
       figli: [
         { specie: 'protone lento', angolo: [-6, 6], quota: [0.45, 0.8] },
@@ -45,7 +49,7 @@ export function catalogoVero(u, { urtoProtone = Infinity, urtoFotone = Infinity 
         { specie: 'pione0', angolo: [-20, 20], quota: [0.03, 0.15] },
         { specie: 'pione0', angolo: [-30, 30], quota: [0.02, 0.1] },
       ] },
-    'protone lento': { q: 1, m: 1836.15 },
+    'protone lento': { q: 1, m: MP_ME },
     'pione+': { q: 1, m: 273.13, vitaMedia: t(2.603e-8), canali: [['muone+', 'neutrino']], figli: [{ specie: 'muone+', angolo: [-3, 3], quota: [0.6, 1] }] },
     'pione-': { q: -1, m: 273.13, vitaMedia: t(2.603e-8), canali: [['muone-', 'neutrino']], figli: [{ specie: 'muone-', angolo: [-3, 3], quota: [0.6, 1] }] },
     pione0: { q: 0, m: 264.14, vitaMedia: t(8.5e-17), visibile: false, canali: [['fotone', 'fotone']], figli: [{ specie: 'fotone', angolo: [1, 12], quota: [0.2, 0.8] }, { specie: 'fotone', angolo: [-12, -1], quota: [0.2, 0.8] }] },
@@ -57,7 +61,7 @@ export function catalogoVero(u, { urtoProtone = Infinity, urtoFotone = Infinity 
     positrone: { q: 1, m: 1 },
     // quelle che non si vedono e non si seguono
     neutrino: { luce: true, m: 1, visibile: false, persa: true },
-    neutrone: { q: 0, m: 1838.68, visibile: false, persa: true },
+    neutrone: { q: 0, m: MN_ME, visibile: false, persa: true },
     nucleo: { q: 8, m: 29156, visibile: false, persa: true },
   };
 }
@@ -70,8 +74,8 @@ export function fmtLunghezza(m) {
   if (m < 1) return `${n(m * 1e3, 1)} mm`;
   if (m < 1e3) return `${n(m, 1)} m`;
   if (m < 1e9) return `${n(m / 1e3)} km`;
-  if (m < 1e15) return `${n(m / 1.496e11, 2)} UA`;
-  if (m < 3.086e19) return `${n(m / 9.461e15, 1)} anni luce`;
-  if (m < 3.086e22) return `${n(m / 9.461e15)} anni luce`;
-  return `${n(m / 3.086e22, 1)} milioni di parsec`;
+  if (m < 1e15) return `${n(m / UA, 2)} UA`;
+  if (m < KPC) return `${n(m / ANNO_LUCE, 1)} anni luce`;
+  if (m < MPC) return `${n(m / ANNO_LUCE)} anni luce`;
+  return `${n(m / MPC, 1)} milioni di parsec`;
 }

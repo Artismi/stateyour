@@ -49,7 +49,7 @@ import { sorgente } from './eventi.js';
 import { cosmo, galassia, sistemaPigro, cosmoBase, ramiCosmo, cosmoCon, REGIONI, TORO_M } from './cosmo.js';
 import { ANNI_OGGI } from './spazio3d.js';
 import { COSMOLOGIA, dentro as GALASSIE } from './galassie.js';
-import { massaNascita } from './leggi.js';
+import { massaNascita, KROUPA_2001, MPC } from './leggi.js';
 import * as ST from './stelle.js';
 import { rapporto, pesoDegliEventi } from './misura.js';
 
@@ -231,7 +231,6 @@ const NUCLEI = {
 // Le galassie vere: gli aloni del toro pesanti almeno quanto il più piccolo del campione (Press–Schechter: COSMOLOGIA.aloni
 // di galassie.js), divisi tra le galassie del campione, ognuna lo stesso numero. È la convenzione di cosmo3d.js (`vere`,
 // `peso`), qui senza costruire il campo (la prova le confronta).
-const MPC = 3.0857e22;
 export function galassieVere(n) {
   return ricorda(`gv|${n}`, () => { const C = cosmo(n), ng = C.galassie.length, mMin = Math.min(...C.galassie.map((G) => G.forma.alone.massa)), vere = COSMOLOGIA.aloni(mMin) * (TORO_M / MPC) ** 3;
     return { vere, perGalassia: Math.max(1, Math.round(vere / ng)), massaMinima: mMin, campione: ng }; });
@@ -379,7 +378,7 @@ export function stellaVera(a0, opzioni = {}) {
   if (N === 1) return { indirizzo: testo, k: 0, N, campione: S, massaNascita: m0c, eta: S.eta, Z: S.Z, componente: S.componente, stato: S.stato, uguale: ['tutto: è una stella vera del catalogo'], varia: [], nota: 'una delle ultime supernove: il campione è la stella vera' };
   const c = sorgente(testo, d.rami), e = Gx.forma.interno, { T0, DT } = GALASSIE;
   // la classe di massa: [0,08·10^(j·g), 0,08·10^((j+1)·g)) dex, tagliata a 100 M☉ (i limiti di Kroupa in leggi.js)
-  const g = O.granaMassa, j = Math.min(Math.ceil(Math.log10(100 / 0.08) / g) - 1, Math.floor(Math.log10(m0c / 0.08) / g + 1e-12)), mDa = 0.08 * 10 ** (j * g), mA = Math.min(100, 0.08 * 10 ** ((j + 1) * g)), uDa = uDiMassa(mDa), uA = uDiMassa(mA);
+  const [mMin, , mMax] = KROUPA_2001.masse, g = O.granaMassa, j = Math.min(Math.ceil(Math.log10(mMax / mMin) / g) - 1, Math.floor(Math.log10(m0c / mMin) / g + 1e-12)), mDa = mMin * 10 ** (j * g), mA = Math.min(mMax, mMin * 10 ** ((j + 1) * g)), uDa = uDiMassa(mDa), uA = uDiMassa(mA);
   const m0 = massaNascita(uDa + (uA - uDa) * c('massa'));
   // il passo di nascita del campione (galassie.js: il passo i va da (i−1)·DT a i·DT Ga dall'inizio; il primo da e.inizio)
   const nascitaC = T0 - S.eta / 1e9, i = Math.max(1, Math.min(e.nt, Math.floor(nascitaC / DT) + 1)), pDa = i === 1 ? e.inizio : (i - 1) * DT, pA = i * DT;

@@ -30,7 +30,7 @@
 // precede; le perturbazioni tra pianeti non ci sono (ognuno gira attorno alla stella come se fosse solo; la stella
 // risponde a tutti: il baricentro è fermo).
 
-import { COSTANTI } from './leggi.js';
+import { COSTANTI, GIORNO } from './leggi.js';
 
 export const ORBITE = Object.freeze({
   ripartizione: 0.5, // ⟨i²⟩^½ / ⟨e²⟩^½ (Ida & Makino 1992)
@@ -128,7 +128,7 @@ export function asseStella(S, R, eta, caso) {
   const teta = Math.min(Math.PI, scarto * Math.sqrt(-2 * Math.log(1 - caso('asse/inclinazione')))), fi = PI2 * caso('asse/direzione');
   const asse = [Math.sin(teta) * Math.cos(fi), Math.sin(teta) * Math.sin(fi), Math.cos(teta)], viva = S.stato === 'in vita' || S.stato === 'gigante rossa';
   // il giro: Skumanich per chi ha un involucro convettivo (il vento magnetico la frena), svelta se è calda; un resto: non si sa (null)
-  const giro = !viva ? null : calda ? (PI2 * R) / ORBITE.kraft : Math.max(0.3, ORBITE.skumanich[0] * Math.sqrt(Math.max(eta, 1e6) / ORBITE.skumanich[1])) * 86400;
+  const giro = !viva ? null : calda ? (PI2 * R) / ORBITE.kraft : Math.max(0.3, ORBITE.skumanich[0] * Math.sqrt(Math.max(eta, 1e6) / ORBITE.skumanich[1])) * GIORNO;
   const meridiano0 = PI2 * caso('asse/meridiano');
   return { asse, terna: terna(asse), giro, meridiano0, angolo: (t = 0) => meridiano0 + (giro ? (PI2 * t) / giro : 0) };
 }

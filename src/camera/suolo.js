@@ -90,10 +90,10 @@ import { sorgente, reticolo } from './eventi.js';
 import { pesoDiscreto } from './eredita.js';
 import { generatore, gaussiane, poisson, pesoTessera, scenaNano, tensioneSuperficiale, soleDiMezzogiorno, normaleCumulata } from './finestra.js';
 import { viscosita, gibbsSpecie, IONI } from './mare.js';
-import { NUVOLE } from './leggi.js';
+import { NUVOLE, COSTANTI, MOLARE_ACQUA, RTERRA, ZERO_CELSIUS, R_GAS, ANNO, GRADO } from './leggi.js';
 import { cristallizza } from './rocce.js';
 
-const RAD = Math.PI / 180, DUE_PI = 2 * Math.PI, NA = 6.02214076e23, R_GAS = 8.314462618, ANNO = 3.156e7, RHO_W = 1000;
+const RAD = GRADO, DUE_PI = 2 * Math.PI, NA = COSTANTI.NA, RHO_W = 1000;
 const limita = (x, a, b) => (x < a ? a : x > b ? b : x);
 export const LIVELLO_PADRE = 6; // la tessera da cui si legge la cella (quella che lo zoom mostra quando si entra nella roccia)
 
@@ -118,7 +118,7 @@ export const SUOLO = Object.freeze({ h0: 0.5, eMin: 0.01, hMax: 20, poroGrano: 0
 // lunghezza della traccia più lunga (il lato della cella del padre), «grano» la taglia dei cristalli
 const ROCCE_FATTE = new Map();
 export function rocciaDelPianeta(P, { tipo = 'granito', minerali = null, Tsup = null, g = null, lMax = null, grano = null } = {}) {
-  const gg = g ?? P?.clima?.g ?? 9.81, Ts = Tsup ?? P?.clima?.T ?? 288, Lm = lMax ?? latoCella(P?.raggioM ?? 6.371e6), chiave = `${P?.id ?? '?'}|${P?.raggioM}|${tipo}|${Ts.toFixed(3)}|${gg}|${Lm}|${grano}|${minerali ? minerali.map((m) => m.nome + m.frazione.toFixed(6)).join(',') : ''}`;
+  const gg = g ?? P?.clima?.g ?? 9.81, Ts = Tsup ?? P?.clima?.T ?? 288, Lm = lMax ?? latoCella(P?.raggioM ?? RTERRA), chiave = `${P?.id ?? '?'}|${P?.raggioM}|${tipo}|${Ts.toFixed(3)}|${gg}|${Lm}|${grano}|${minerali ? minerali.map((m) => m.nome + m.frazione.toFixed(6)).join(',') : ''}`;
   let R = ROCCE_FATTE.get(chiave); if (R) return R;
   const base = tipo === 'sedimento' ? 'granito' : tipo, lista = minerali || mineraliDi({ composizione: P?.composizione || {}, T: Ts, ossidato: true, acqua: true, continente: base === 'granito' });
   // le frazioni in volume (massa/densità), le medie di Hill dei moduli, α_V e K_IC (sui silicati) in volume
@@ -183,7 +183,7 @@ export function colonna(roccia, suolo = null, { ricarica = 0, Tsup = roccia.Tsup
 // della legge del trasporto, non più di quanto la luce assorbita fa evaporare), tutta nel suolo: un tetto (dichiarato)
 export function colonnaDelPianeta(P, { tipo = 'basalto', ricarica = null, kRoccia = STORIA.kSu, eta = null } = {}) {
   const T = P?.clima?.T ?? 288, roccia = rocciaDelPianeta(P, { tipo }), V = P?.clima?.vento ?? NUVOLE.ventoAtteso, luce = P?.clima?.bilancio?.assorbita ?? 240;
-  const e = 610.94 * Math.exp((17.625 * (T - 273.15)) / (T - 273.15 + 243.04)), piove = Math.min((NUVOLE.ce * V * e * (1 - NUVOLE.sogliaPioggia)) / ((R_GAS / 0.018015) * T), luce / 2.5e6); // kg/m²/s (Magnus per e_s: una riserva qui)
+  const e = 610.94 * Math.exp((17.625 * (T - ZERO_CELSIUS)) / (T - ZERO_CELSIUS + 243.04)), piove = Math.min((NUVOLE.ce * V * e * (1 - NUVOLE.sogliaPioggia)) / ((R_GAS / MOLARE_ACQUA) * T), luce / 2.5e6); // kg/m²/s (Magnus per e_s: una riserva qui)
   const R = ricarica ?? (P?.clima?.acqua === 'liquida' ? (piove / RHO_W) * ANNO : 0);
   const c = colonna(roccia, null, { ricarica: R, Tsup: T, q: P?.interno?.q ?? 0.06, kRoccia, eta: eta ?? P?.interno?.eta ?? 4.5e9, g: P?.clima?.g ?? roccia.g });
   c.ricaricaDa = ricarica != null ? 'chi chiama' : 'la pioggia attesa di leggi.js, tutta nel suolo (un tetto: senza la superficie non si sa quanta evapora)'; return c;
@@ -545,7 +545,7 @@ const velocita = (nome, T, H) => { let v = 0; for (const [n, x] of MISCELE[nome]
 // (m² di minerale per kg d'acqua) } → la composizione (mol/kg), il pH, i solidi nati, il libro degli atomi
 // («aree»: m² per kg d'acqua minerale per minerale, se chi chiama le sa; se no «superficie» divisa per la parte in volume)
 export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto = true, superficie = 100, aree: areeDate = null, passi = 160 } = {}) {
-  const c = costantiDi(Math.min(Math.max(T, 273.15), 373)), mins = roccia.minerali.filter((m) => MISCELE[m.nome] && m.v > 0), xi = {}, tot = { Na: 0, K: 0, Ca: 0, Mg: 0, Fe: 0, Si: 0 };
+  const c = costantiDi(Math.min(Math.max(T, ZERO_CELSIUS), 373)), mins = roccia.minerali.filter((m) => MISCELE[m.nome] && m.v > 0), xi = {}, tot = { Na: 0, K: 0, Ca: 0, Mg: 0, Fe: 0, Si: 0 };
   for (const m of mins) xi[m.nome] = 0; let kao = 0, cc = 0, si = 0, acquaUsata = 0;
   const sp0 = specia(tot, c, { aperto: true, pCO2 }), CT0 = sp0.CO2 + sp0.HCO3 + sp0.CO3; let CT = CT0; // (la pioggia arriva in equilibrio con l'aria)
   const stato = () => specia(tot, c, { aperto, pCO2, CT }), aree = Object.fromEntries(mins.map((m) => [m.nome, areeDate ? areeDate[m.nome] || 0 : superficie * m.v]));
@@ -567,7 +567,7 @@ export function acquaDeiPori(roccia, { T = 288, pCO2 = 2.8e-4, anni = 1, aperto 
   // specie sciolte, i solidi nati). L'acqua consumata: le reazioni, l'idratazione della CO₂ (una per HCO₃⁻ e CO₃²⁻, e una per
   // ogni carbonio finito nella calcite: CO₂ + H₂O + Ca²⁺ → CaCO₃ + 2H⁺), un OH⁻ per ogni molecola che si divide; la silice che
   // precipita la restituisce. (La prova di test_suolo ha trovato la calcite: prima mancava)
-  const H2O0 = 1 / 0.018015, co2Presa = aperto ? CTfin + cc : CT0, acquaFin = H2O0 - acquaUsata - (sp.HCO3 + sp.CO3) - sp.OH - cc;
+  const H2O0 = 1 / MOLARE_ACQUA, co2Presa = aperto ? CTfin + cc : CT0, acquaFin = H2O0 - acquaUsata - (sp.HCO3 + sp.CO3) - sp.OH - cc;
   const entra = {}, esce = {}; somma(entra, 'H2O(l)', H2O0); somma(entra, 'CO2', co2Presa);
   for (const m of mins) { const M = MISCELE[m.nome]; for (const p in M.parti) somma(entra, Object.keys(REAZ[p].reag)[0], M.parti[p] * xi[m.nome]); }
   somma(esce, 'H2O(l)', acquaFin); somma(esce, 'H+', sp.H); somma(esce, 'OH-', sp.OH); somma(esce, 'CO2(aq)', sp.CO2); somma(esce, 'HCO3-', sp.HCO3); somma(esce, 'CO3(2-)', sp.CO3);
@@ -676,9 +676,9 @@ export function descriviSuolo(fin) {
   const P = fin.padre, su = P.suolo, R = P.roccia, col = P.colonna, A = fin.acquaPori, parti = [];
   parti.push(`Una finestra di ${lung(fin.L)} sul suolo (${fin.N}×${fin.N} punti, un punto ${lung(fin.h)}), nella cella di ${lung(P.D)} della mappa`);
   parti.push(`la pendenza della cella ${fmt(100 * P.S)}%; il rilievo sotto la cella è autoaffine con H = ${fmt(P.H)} (dalle pendenze della cella e della mappa) e liscio sotto ${lung(P.lc)} (i pendii contro i fiumi): scarto ${lung(Math.sqrt(P.spettro.sigma2))} sotto la cella, ${lung(Math.sqrt(fin.bande.filter((B) => 2 ** B.b <= fin.L).reduce((a, B) => a + B.varianza, 0)))} nelle onde più corte della finestra (le più lunghe la inclinano)`);
-  parti.push(`${NOMI_ROCCIA[P.tipo]} di questo pianeta (cristalli di ${lung(R.grano)}): φ₀ = ${fmt(R.phi0)} dalla contrazione col raffreddamento da ${fmt(R.Tfuso - 273.15)} °C, Athy L = ${lung(R.L)} dalla chiusura delle crepe (g = ${fmt(R.g)} m/s²); crepe a ogni scala, dal grano alla cella (${fmt(R.A2)} tracce per m² più lunghe di un metro, aperte ${lung(R.apertura(1))}: più sottili di un punto, si vedono solo dove sono larghe almeno un centesimo di punto)`);
+  parti.push(`${NOMI_ROCCIA[P.tipo]} di questo pianeta (cristalli di ${lung(R.grano)}): φ₀ = ${fmt(R.phi0)} dalla contrazione col raffreddamento da ${fmt(R.Tfuso - ZERO_CELSIUS)} °C, Athy L = ${lung(R.L)} dalla chiusura delle crepe (g = ${fmt(R.g)} m/s²); crepe a ogni scala, dal grano alla cella (${fmt(R.A2)} tracce per m² più lunghe di un metro, aperte ${lung(R.apertura(1))}: più sottili di un punto, si vedono solo dove sono larghe almeno un centesimo di punto)`);
   parti.push(`il suolo è spesso ${lung(su.h)} in media (Heimsath: la roccia si fa suolo al più ${fmt(EROSIONE.suolo * 1000)} mm/anno, la cella si abbassa di ${fmt(P.Ecella * 1e6)} m per milione di anni); granelli: ${su.gsd.classi.filter((c) => c.massa > 0.02).map((c) => `${c.nome} ${fmt(100 * c.massa)}% (${lung(c.d50)})`).join(', ')}; pori ${fmt(100 * su.phi)}%, permeabilità ${fmt(su.k)} m²`);
-  parti.push(`la pioggia ${fmt(P.pioggia * 1000)} mm/anno, ne scende ${fmt(P.ricarica * 1000)}: la falda è a ${lung(col.falda)}${col.falda > 0 ? `, sopra i pori sono pieni al ${fmt(100 * su.theta)}%` : ''}; l'acqua resta ${tempo(col.residenza(fin.profonditaM))} a ${lung(fin.profonditaM)}, ${tempo(col.residenza(100))} a 100 m, ${tempo(col.residenza(1000))} a 1 km; ${fmt(col.temperatura(1000) - 273.15)} °C a 1 km (${fmt(col.gradiente)} K/km)`);
+  parti.push(`la pioggia ${fmt(P.pioggia * 1000)} mm/anno, ne scende ${fmt(P.ricarica * 1000)}: la falda è a ${lung(col.falda)}${col.falda > 0 ? `, sopra i pori sono pieni al ${fmt(100 * su.theta)}%` : ''}; l'acqua resta ${tempo(col.residenza(fin.profonditaM))} a ${lung(fin.profonditaM)}, ${tempo(col.residenza(100))} a 100 m, ${tempo(col.residenza(1000))} a 1 km; ${fmt(col.temperatura(1000) - ZERO_CELSIUS)} °C a 1 km (${fmt(col.gradiente)} K/km)`);
   const io = Object.entries(A.ioni).filter(([f, x]) => x > 1e-9 && f !== 'H+' && f !== 'OH-').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([f, x]) => `${f} ${fmt(x * 1000)} mmol/L`);
   parti.push(`l'acqua dei pori a ${lung(fin.profonditaM)}: pH ${fmt(A.pH)}, ${io.join(', ') || 'quasi pura'}, silice ${fmt(A.neutri.H4SiO4 * 1000)} mmol/L (CO₂ dell'aria ${fmt(P.pCO2 * 1e5)} Pa${A.aperto ? '' : ', chiusa sotto la falda'}); ${A.solidi.caolinite > 1e-9 ? `nasce caolinite` : 'nessuna argilla nata'}${A.solidi.calcite > 1e-9 ? ', calcite' : ''}`);
   parti.push('vita: nessuna — il modello non ha ancora la vita (i microbi dei pori, la respirazione che alza la CO₂)');
@@ -692,7 +692,7 @@ export function descriviSuolo(fin) {
 export function campioneDeiPori(A) {
   const perM3 = (c) => c * RHO_W * NA, classi = [], ioni = {};
   for (const [f, c] of Object.entries(A.ioni)) { if (!(c > 0) || f === 'H+' || f === 'OH-' || !IONI[f]) continue; classi.push({ tipo: 'ione', materiale: f, perM3: perM3(c) }); ioni[f] = { perM3: perM3(c) }; }
-  return { classi, ioni, gas: A.neutri['CO2(aq)'] > 0 ? { CO2: { perM3: perM3(A.neutri['CO2(aq)']) } } : {}, acquaPerM3: (RHO_W / 0.018015) * NA, T: A.T, viscosita: viscosita(Math.max(A.T, 250), 0) };
+  return { classi, ioni, gas: A.neutri['CO2(aq)'] > 0 ? { CO2: { perM3: perM3(A.neutri['CO2(aq)']) } } : {}, acquaPerM3: (RHO_W / MOLARE_ACQUA) * NA, T: A.T, viscosita: viscosita(Math.max(A.T, 250), 0) };
 }
 export function scenaSuolo(padre, { z = null, latoM = 6e-9, minerale = null } = {}, caso = null) {
   const zz = z ?? padre.suolo.h / 2, A = acquaDelPunto(padre, zz), camp = campioneDeiPori(A), c = caso || sorgente(`${padre.radice}/nano/${padre.I},${padre.J}/${zz.toPrecision(3)}`);

@@ -7,7 +7,7 @@
    "galassia": 0,
    "stella": 0,
    "pianeta": 0,
-   "terre": 0.1661,
+   "terre": 0.1305,
    "massaTerre": 1.427
   },
   {
@@ -15,7 +15,7 @@
    "galassia": 0,
    "stella": 1,
    "pianeta": 2,
-   "terre": 0.242,
+   "terre": 0.2117,
    "massaTerre": 0.671
   },
   {
@@ -23,8 +23,8 @@
    "galassia": 0,
    "stella": 1,
    "pianeta": 3,
-   "terre": 0.1925,
-   "massaTerre": 1.13
+   "terre": 0.1761,
+   "massaTerre": 1.129
   },
   {
    "cosmo": 1,
@@ -37,9 +37,17 @@
   {
    "cosmo": 1,
    "galassia": 0,
+   "stella": 2,
+   "pianeta": 0,
+   "terre": 0.1518,
+   "massaTerre": 0.13
+  },
+  {
+   "cosmo": 1,
+   "galassia": 0,
    "stella": 4,
    "pianeta": 1,
-   "terre": 0.8402,
+   "terre": 0.8447,
    "massaTerre": 0.038
   },
   {
@@ -47,7 +55,7 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 2,
-   "terre": 0.7737,
+   "terre": 0.7746,
    "massaTerre": 0.043
   },
   {
@@ -55,7 +63,7 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 3,
-   "terre": 0.696,
+   "terre": 0.7032,
    "massaTerre": 0.048
   },
   {
@@ -63,7 +71,7 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 4,
-   "terre": 0.6435,
+   "terre": 0.6348,
    "massaTerre": 0.027
   },
   {
@@ -71,7 +79,7 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 5,
-   "terre": 0.3443,
+   "terre": 0.3465,
    "massaTerre": 0.049
   },
   {
@@ -79,7 +87,7 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 6,
-   "terre": 0.3705,
+   "terre": 0.3519,
    "massaTerre": 0.031
   },
   {
@@ -87,16 +95,8 @@
    "galassia": 0,
    "stella": 4,
    "pianeta": 7,
-   "terre": 0.1574,
+   "terre": 0.1612,
    "massaTerre": 0.033
-  },
-  {
-   "cosmo": 1,
-   "galassia": 0,
-   "stella": 4,
-   "pianeta": 8,
-   "terre": 0.0421,
-   "massaTerre": 0.036
   }
  ],
  "indirizzi": [
@@ -118,7 +118,7 @@
     "stella": 4,
     "pianeta": 1
    },
-   "terre": 0.8402,
+   "terre": 0.8447,
    "mira": "terra"
   },
   {

@@ -22,13 +22,13 @@
 //   · quanti e quanto grandi sono i corpi catturati (contati nel Sistema Solare);
 //   · lo scarto dalla risonanza esatta che fissa l'eccentricità forzata (misurato su Io ed Europa).
 
-import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia } from './leggi.js';
+import { COSTANTI, MSOLE, LSOLE, ANNO, UA, temperaturaEquilibrio, caloreDellaRoccia, ORA, R_GAS } from './leggi.js';
 import { stella as stellaVera } from './stelle.js';
 import { comeSorgente } from './eventi.js';
 import { forzanteMareale, motoMedio, dissipazioneIn, coefficienteDelCorpo, dissipazioneGuscio, rigiditaComplessaIn, viscositaGhiaccioA, MAREE } from './maree.js'; // la marea ha una fonte sola: la formula e la dissipazione stanno lì
 import { storia, tabellaStoria } from './storia.js'; // lo stato interno di una luna di roccia è la sua storia (le stesse equazioni dei pianeti)
 
-const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * 3600, NEVE = 170; // sotto 170 K il ghiaccio non evapora
+const GIOVE = { M: 1.898e27, R: 7.15e7 }, ETA = 4.5e9, GIORNO_GIOVANE = 10 * ORA, NEVE = 170; // sotto 170 K il ghiaccio non evapora
 const sfera = (R) => (4 / 3) * Math.PI * R ** 3;
 
 // i due materiali di cui sono fatte le lune (proprietà misurate in laboratorio e sui corpi veri):
@@ -223,7 +223,7 @@ export function internoGhiacciato(P, L, eta = ETA, rami = {}) {
   memoGhiaccio.set(chiave, v); if (memoGhiaccio.size > 3000) memoGhiaccio.delete(memoGhiaccio.keys().next().value);
   return v;
 }
-const R_GAS_ = 8.314, MU_ = [0, 0], DZ_ = { imK2: 0, k2Reale: 0 };
+const R_GAS_ = R_GAS, MU_ = [0, 0], DZ_ = { imK2: 0, k2Reale: 0 };
 export function k2QLuna(P, L, eta = ETA) {
   if (!dentro(L).ghiacciata) { // roccia: dalla storia del corpo (la parte del volume che dissipa è già dentro)
     if (!mareaConta(P, L, eta)) return k2QFreddo(L);
@@ -429,7 +429,7 @@ function daUrto(P, amb, c, urto) {
   const m = urto?.luna ? urto.luna.massaKg : muSorte * M, comp = { roccia: 0.98, ferro: 0.02 }, a0 = 1.2 * limiteRoche(P, densitaCorpo(m, 0));
   // ...e le maree la allontanano per tutto il tempo che hanno avuto (da/dt ∝ a^(-11/2))
   const I = 0.33 * M * P.raggioM ** 2, wMax = Math.sqrt((G * M) / P.raggioM ** 3), Lorb = (x) => m * Math.sqrt(G * M * x);
-  let a, giorno = P.giorno || 24 * 3600, wPrima;
+  let a, giorno = P.giorno || 24 * ORA, wPrima;
   if (urto?.luna) {
     // il momento angolare si conserva: quello che la luna guadagna allontanandosi lo perde la rotazione del pianeta.
     // Si parte dal giorno che l'urto ha lasciato e si va avanti: il giorno di oggi ne discende. La luna si allontana

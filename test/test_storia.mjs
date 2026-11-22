@@ -44,7 +44,7 @@ prova("l'energia torna: ciò che mantello e nucleo perdono è ciò che i flussi 
     for (let k = 1; k < tb.t.length; k++) { if (tb.t[k - 1] < 0.5 * Ga) continue; if (primo < 0) primo = k - 1; const dt = (tb.t[k] - tb.t[k - 1]) * s; // (dopo l'oceano di magma: lì il calore latente del mantello è una capacità in più)
       nucleo += 0.5 * (tb.Qcmb[k] + tb.Qcmb[k - 1]) * dt; mantello += 0.5 * (tb.Qrad[k] + tb.Qrad[k - 1] + tb.Qmarea[k] + tb.Qmarea[k - 1] + tb.Qcmb[k] + tb.Qcmb[k - 1] - tb.Qconv[k] - tb.Qconv[k - 1] - tb.Qfuso[k] - tb.Qfuso[k - 1]) * dt; }
     // (finché sotto il coperchio c'è fuso il mantello ha in più la capacità del calore latente: L_m·dφ/dT)
-    const u = tb.t.length - 1; let dEm = 0; for (let k = primo + 1; k <= u; k++) dEm += st.Mm * (S.cp + (tb.Fv[k - 1] > 0 ? S.latenteMantello * S.fusoPerKelvin : 0)) * (tb.Tm[k] - tb.Tm[k - 1]);
+    const u = tb.t.length - 1; let dEm = 0; for (let k = primo + 1; k <= u; k++) dEm += st.Mm * (S.cp + (tb.Fv[k - 1] > 0 ? S.latenteMantello * st.dFdT : 0)) * (tb.Tm[k] - tb.Tm[k - 1]);
     // il nucleo: calore sensibile più quello (latente e gravitazionale) del nucleo interno cresciuto
     const dEc = st.Mc * S.cNucleo * st.ac * (tb.Tcmb[primo] - tb.Tcmb[u]) + (S.latenteFerro + S.gravitazionale) * S.rhoNucleo * (4 / 3) * Math.PI * (tb.Ric[u] ** 3 - tb.Ric[primo] ** 3);
     tra(mantello / dEm, 0.99, 1.01, 'mantello: flussi integrati / calore perso'); tra(nucleo / dEc, 0.99, 1.01, 'nucleo: calore uscito / calore perso');

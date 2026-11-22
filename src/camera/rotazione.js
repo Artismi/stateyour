@@ -45,12 +45,12 @@
 //     involucro (Urano coricato): disco.js non ne dà dopo che il gas è arrivato; · il corpo oltre il limite perde
 //     il momento angolare in più, ma la massa che si stacca non è seguita.
 
-import { COSTANTI, MSOLE } from './leggi.js';
+import { COSTANTI, MSOLE, ANNO } from './leggi.js';
 import { DISCO, MGIOVE, RGIOVE } from './disco.js';
 import { IMPATTI, giganteDi } from './impatti.js';
 import { densitaCorpo, tempoBlocco } from './lune.js';
 
-const G = COSTANTI.G, PI = Math.PI, ANNO_S = 3.156e7, sfera = (R) => (4 / 3) * PI * R ** 3;
+const G = COSTANTI.G, PI = Math.PI, ANNO_S = ANNO, sfera = (R) => (4 / 3) * PI * R ** 3;
 const limita = (x, a, b) => Math.max(a, Math.min(b, x));
 
 export const ROTAZIONE = Object.freeze({
