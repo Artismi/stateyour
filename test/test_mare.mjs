@@ -68,6 +68,10 @@ const it = interno(P, { eta: 4.5e9, Z: 1 }); it.acquaKg = 1.4e21; P.interno = it
 const sf = superficiePianeta('mare-terra', P, it, 13), cl = climaSuperficie('mare-terra', P, sf), se = erosione('mare-terra', sf, cl);
 const tCostruita = performance.now();
 let t0 = performance.now(); const T = mare(P, sf, cl, se, sorgente('prova/terra/mare')); const tempoMare = performance.now() - t0;
+// (quanto evaporare il mare per il sale: dal mare di questo pianeta. Il mare vero satura di salgemma a circa 10,6 volte (McCaffrey e
+// altri 1987 [a memoria]) e le prove evaporavano 14 volte, un terzo oltre: qui lo stesso terzo oltre il punto in cui satura questo
+// mare, che con la crosta che si stacca da sotto è un po' meno salato e a 14 volte non ci arrivava)
+let fSale = 3; while (fSale < 60 && evapora(T.totali, fSale, 300, T.pCO2).precipitati.salgemma === 0) fSale *= 1.02;
 const { W, H } = T, latJ = (j) => 90 - ((j + 0.5) * 180) / H, lonI = (i) => ((i + 0.5) * 360) / W - 180, eMare = (k) => T.bagnato[k] >= 0.5;
 const fascia = (x, da, a, emisfero = 0) => { let s = 0, n = 0; for (let j = 0; j < H; j++) { const l = latJ(j), w = Math.cos((l * Math.PI) / 180); if (Math.abs(l) < da || Math.abs(l) >= a || (emisfero && Math.sign(l) !== emisfero)) continue; for (let i = 0; i < W; i++) if (eMare(j * W + i)) { s += x[j * W + i] * w; n += w; } } return s / n; };
 
@@ -115,10 +119,10 @@ prova('le rocce: che cosa cedono dipende dal minerale e dalla temperatura', () =
 });
 
 prova('una laguna che evapora: prima il calcare, poi il gesso, poi il salgemma (il Mar Morto è saturo di sale)', () => {
-  const poco = evapora(T.totali, 3, 300, T.pCO2), molto = evapora(T.totali, 14, 300, T.pCO2);
+  const poco = evapora(T.totali, 3, 300, T.pCO2), molto = evapora(T.totali, (14 / 10.6) * fSale, 300, T.pCO2);
   assert.ok(poco.precipitati.salgemma === 0 && poco.eq.omega.salgemma < 1, 'evaporata a un terzo non è ancora satura di sale');
   assert.ok(poco.precipitati.gesso > 0 || poco.eq.omega.gesso > 0.5, 'il gesso arriva prima del salgemma');
-  assert.ok(molto.precipitati.salgemma > 0, 'evaporata a un quattordicesimo lascia salgemma'); tra(molto.eq.omega.salgemma, 0.9, 1.15, 'e resta satura');
+  assert.ok(molto.precipitati.salgemma > 0, `evaporata un terzo oltre la saturazione (${fSale.toFixed(1)} volte) lascia salgemma`); tra(molto.eq.omega.salgemma, 0.9, 1.15, 'e resta satura');
   tra(molto.salinita, 200, 420, 'salamoia (g/kg; Mar Morto 340)');
   // un lago chiuso alimentato dai fiumi per centomila anni: i sali che i fiumi portano non escono più
   const chiuso = evapora(T.fiume, 3e4, 300, T.pCO2); assert.ok(chiuso.salinita > 100 * T.fiume.salinita && chiuso.precipitati.calcite > 0);
@@ -126,7 +130,7 @@ prova('una laguna che evapora: prima il calcare, poi il gesso, poi il salgemma (
   for (const l of aperti) assert.ok(l.salinita < 3, `un lago con emissario è dolce: ${l.salinita}`);
   for (const l of chiusi) assert.ok(l.salinita > 2 * T.fiume.salinita && l.concentrato > 1, 'un lago chiuso concentra i sali');
   if (chiusi.length && aperti.length) assert.ok(Math.max(...chiusi.map((l) => l.salinita)) > 10 * Math.max(...aperti.map((l) => l.salinita)));
-  console.log(`      laguna ×3: Ω gesso ${n3(poco.eq.omega.gesso)}, salgemma ${n3(poco.eq.omega.salgemma)}; ×14: ${n3(molto.salinita)} g/kg, salgemma deposto ${n3(molto.precipitati.salgemma)} mol/kg; laghi: ${aperti.length} con emissario (${n3(Math.max(0, ...aperti.map((l) => l.salinita)))} g/kg al più), ${chiusi.length} chiusi (${chiusi.map((l) => `${n3(l.salinita)} g/kg pH ${n3(l.pH)}`).join('; ')})`);
+  console.log(`      laguna ×3: Ω gesso ${n3(poco.eq.omega.gesso)}, salgemma ${n3(poco.eq.omega.salgemma)}; ×${n3((14 / 10.6) * fSale)}: ${n3(molto.salinita)} g/kg, salgemma deposto ${n3(molto.precipitati.salgemma)} mol/kg; laghi: ${aperti.length} con emissario (${n3(Math.max(0, ...aperti.map((l) => l.salinita)))} g/kg al più), ${chiusi.length} chiusi (${chiusi.map((l) => `${n3(l.salinita)} g/kg pH ${n3(l.pH)}`).join('; ')})`);
 });
 
 prova('le correnti: i grandi giri, con la corrente più forte sul bordo ovest dei bacini', () => {
@@ -285,11 +289,12 @@ prova('le reazioni sul posto: il fumo nero di un camino, la salamoia nel ghiacci
   const nel = polo ? campioneAcqua(T, { ...polo, profondita: 0.1, latoM: 0.005 }) : null, sotto = polo ? campioneAcqua(T, { ...polo, profondita: 5, latoM: 0.005 }) : null;
   if (polo) { attesa(nel.luogo.salamoia && nel.salinita > 1.5 * sotto.salinita && nel.T < sotto.T, `(8/12) salamoia a ${nel.salinita} g/kg contro ${sotto.salinita}`); assert.ok(nel.quanteDavvero.ghiaccio > 0); traAtteso(sotto.T - sotto.congelaA, -0.5, 1.5, '(10/12) sotto il ghiaccio l\'acqua è al punto di gelo'); }
   // una laguna satura (l'acqua del mare evaporata): crescono i cristalli; e il colore sono le croste di sale
-  const sal = evapora(T.totali, 14, 300, T.pCO2); assert.ok(sal.precipitati.salgemma > 0);
+  const sal = evapora(T.totali, (14 / 10.6) * fSale, 300, T.pCO2); assert.ok(sal.precipitati.salgemma > 0);
   for (const l of T.laghi.filter((x) => x.tipo !== 'aperto' && x.precipitati.salgemma + x.precipitati.gesso + x.precipitati.amari > 0 && x.salinita > 100)) { const c = campioneAcqua(T, { lon: l.lon, lat: l.lat, profondita: 0.1, latoM: 0.05 }); attesa(!c.asciutto && c.cristalli.length > 0, '(10/12) in un lago saturo crescono cristalli'); console.log(`      ${c.descrizione}`); }
   console.log(`      ${fumo.descrizione}`); console.log(`      ${nel ? nel.descrizione : '(su questo mondo nessun mare gela)'}`);
   console.log(`      sorgenti calde: ${cam.length}, da ${n3(ord[0].T - 273)} °C a ${n3(ord[0].profonditaM)} m fino a ${n3(s.T - 273)} °C a ${n3(s.profonditaM)} m; silice ${n3(s.fluido.H4SiO4 * 1000)} mmol/kg (misurata 15-20), H2S ${n3(s.fluido['H2S(aq)'] * 1000)}, ferro ${n3(s.fluido['Fe2+'] * 1000)}`);
-  const pb = T.prebiotica; assert.ok(pb.camini.length === cam.length && pb.camini[0].saltoDiPH > 2 && pb.camini[0].saltoDiTemperatura > 100 && isFinite(pb.camini[0].energiaKJmol));
+  // (il camino più caldo: il primo della lista può stare sotto un metro d'acqua, dove l'acqua bolle a 100 °C e il salto non arriva a 100 K)
+  const pb = T.prebiotica, c0 = pb.camini.reduce((a, b) => (b.saltoDiTemperatura > a.saltoDiTemperatura ? b : a), pb.camini[0]); assert.ok(pb.camini.length === cam.length && c0.saltoDiPH > 2 && c0.saltoDiTemperatura > 100 && isFinite(c0.energiaKJmol));
 });
 
 prova('l\'immagine del campione e il colore del mare visto da sopra', () => {
@@ -386,7 +391,7 @@ prova('le maree dalla luna e dalla stella, le stagioni, il calore portato dalle 
   attesa(Math.max(...nord) > 1.15 * Math.min(...nord) && sud[qInv] < sud[qEst], `(3/8) ghiaccio a nord ${nord.map(n3)}, a sud ${sud.map(n3)}`);
   const stratoDi = (q) => { let s2 = 0, n = 0; for (let j = 0; j < H; j++) { const l = latJ(j); if (l < 35 || l > 60) continue; for (let i = 0; i < W; i++) if (eMare(j * W + i)) { s2 += T.stagioni[q].strato[j * W + i]; n++; } } return s2 / n; }; attesa(stratoDi(qInv) > 1.2 * stratoDi(qEst), `(6/8) strato rimescolato a nord: inverno ${stratoDi(qInv)} m, estate ${stratoDi(qEst)} m`);
   const prima = mareAl(T, { fase: (qInv + 0.5) / 4, marea: 0 }), dopo = mareAl(T, { fase: (qEst + 0.5) / 4, marea: 0.5 }); assert.ok(prima.esiste && prima.livello.length === W * H && prima.salinitaMedia === T.salinitaMedia);
-  let kPolo = -1; for (let k = 0; k < W * H && kPolo < 0; k++) if (eMare(k) && latJ(Math.floor(k / W)) > 40 && T.stagioni[qInv].ghiaccio[k] > 0.9 && T.stagioni[qEst].ghiaccio[k] < 0.1) kPolo = k;
+  let kPolo = -1; for (let k = 0; k < W * H && kPolo < 0; k++) if (eMare(k) && latJ(Math.floor(k / W)) > 40 && T.stagioni[qInv].ghiaccio[k] > 0.9 && T.stagioni[qEst].ghiaccio[k] < 0.1 && coloreMare(prima, lonI(k % W), latJ(Math.floor(k / W)))) kPolo = k; // (e che nel suo centro sia mare anche sulla carta fine)
   if (kPolo >= 0) { const lo = lonI(kPolo % W), la = latJ(Math.floor(kPolo / W)), cI = coloreMare(prima, lo, la), cE = coloreMare(dopo, lo, la); assert.ok(cI[0] > cE[0] + 40, `lo stesso punto d'inverno è ghiaccio e d'estate è mare: ${cI} contro ${cE}`); assert.ok(campioneAcqua(prima, { lon: lo, lat: la, profondita: 3 }).T < campioneAcqua(dopo, { lon: lo, lat: la, profondita: 3 }).T); }
   let lMax = 0; for (let k = 0; k < W * H; k++) { tra(prima.livello[k] + dopo.livello[k], -1e-3, 1e-3, 'a mezzo ciclo la marea è rovesciata'); lMax = Math.max(lMax, prima.livello[k]); } assert.ok(lMax > 0.1);
   // il calore: nello stesso formato del trasporto dell'aria
@@ -455,7 +460,11 @@ prova('altri pianeti sullo stesso rilievo: giovane, senza vulcani, con poca acqu
   assert.ok(fermo.bilancio.esce.Mg.fondo === 0 && T.bilancio.esce.Mg.fondo > 0 && fermo.ioni['Mg2+'] / fermo.ioni['Na+'] > 3 * (T.ioni['Mg2+'] / T.ioni['Na+']), 'senza la roccia calda il magnesio resta nel mare');
   confronta('anidride carbonica dei vulcani terrestri (mol/anno; misurata 6-10·10¹²)', T.flussi.CO2vulcani, 4e12, 1.5e13);
   // poca acqua: lo stesso cloro in meno acqua
-  const poca = mare({ ...P, interno: { ...it, acquaKg: 5e19 } }, { ...sf, mare: sf.mare - 4200 }, cl, { ...se, mare: se.mare - 4200 }, 'prova/poca');
+  // (il livello a cui lo stesso rilievo tiene 5·10¹⁹ kg d'acqua: prima era il mare abbassato di 4200 m, che col rilievo della tettonica
+  // nel tempo — fosse e bacini più fondi — teneva ancora un quarto del mare)
+  const massaSotto = (liv) => { let m = 0; for (let j = 0; j < se.H; j++) { const a = (P.raggioM ** 2 * 2 * Math.PI * Math.PI * Math.cos(Math.PI / 2 - ((j + 0.5) / se.H) * Math.PI)) / (se.W * se.H); for (let i = 0; i < se.W; i++) { const h = se.alt[j * se.W + i]; if (h < liv) m += 1000 * (liv - h) * a; } } return m; };
+  let giu = 0, su = 12000; for (let n = 0; n < 40; n++) { const d = 0.5 * (giu + su); if (massaSotto(se.mare - d) > 5e19) giu = d; else su = d; }
+  const poca = mare({ ...P, interno: { ...it, acquaKg: 5e19 } }, { ...sf, mare: sf.mare - su }, cl, { ...se, mare: se.mare - su }, 'prova/poca');
   assert.ok(poca.esiste && poca.massaMare < 0.1 * T.massaMare, `massa del mare ${poca.massaMare}`); // (…o sepolto: del cloro uscito alla nascita, la parte ancora sciolta nel mare piccolo è meno di metà di quella che il mare grande tiene.
   // Prima: «il doppio del cloro nei sedimenti»; ma il mare grande ne ha già sepolto metà, e il doppio di metà non c'è)
   const sciolto = (x) => (x.totali.Cl * x.massaMare) / x.flussi.cloroAllaNascita;

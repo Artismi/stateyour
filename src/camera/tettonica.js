@@ -41,9 +41,12 @@
 //   · l'erosione: i pendii si spianano (una catena larga 300 km in ~10 milioni di anni, se nulla la sostiene) e i
 //     fiumi portano alle coste ciò che sporge dal mare (lo riducono a 1/e in 130 milioni di anni);
 //   · la fossa: il fondo si piega in giù, fino a 2500 m, dove la crosta oceanica affonda.
-// CON LA STORIA (test_tettonica): la Terra fa 19–22 km di spessore medio di crosta dei continenti (il vero 14,1) e continenti
-// sul 49–53% (il vero ~40): gli archi e il riciclo sono rapporti misurati oggi sulla Terra, usati per tutta la storia; manca la crosta che
-// si stacca da sotto (la delaminazione) e il riciclo per erosione dove le fosse non toccano un continente.
+// CON LA STORIA (test_tettonica): la Terra fa 12,3 km di spessore medio di crosta dei continenti (il vero 14,1) e continenti
+// sul 32% (il vero ~40); senza la delaminazione (COSTANTI.rhoEclogite) erano 21,7 km e il 52%. Gli archi e il riciclo sono rapporti
+// misurati oggi sulla Terra, usati per tutta la storia; manca il riciclo per erosione dove le fosse non toccano un continente. La
+// delaminazione dipende dalla gravità (la profondità dell'eclogite va come 1/g) e dalla geoterma: sulla Terra la base di una crosta di
+// 55 km sta appena sotto i 700 °C, e si stacca solo dove la litosfera è un po' calda; sul pianeta come la Terra della galassia 0
+// (0,67 masse terrestri) l'eclogite è a 64 km ma i 700 °C a 52, e la crosta passa da 23 a 4 km medi.
 // CHE COSA NON TORNA O MANCA (misurato su 8 Terre di prova, 2026-11: test_erosione, test_tettonica): le terre emerse sono
 // il 24% qui e il 20% dopo erosione() (vero 29); la crosta continentale sommersa è l'11% (vero 11) da quando il sedimento
 // dei fiumi si posa alla foce fino al pelo del mare (prima, in proporzione a quanto le celle erano fonde, era il 15%).
@@ -85,6 +88,7 @@
 import { comeSorgente } from './eventi.js';
 import { STORIA } from './storia.js'; // (l'energia di attivazione della viscosità e la conducibilità del mantello: una fonte sola)
 import { R_GAS } from './leggi.js';
+import { F_GRANITO } from './chimica.js'; // (quanta parte della crosta degli archi è il fuso chiaro che sale: il resto è il residuo denso, una fonte sola)
 
 export const COSTANTI = {
   hMisura: 38e3, // (m) lo spessore con cui si conta «quanta superficie» di continente c'è
@@ -117,6 +121,14 @@ export const COSTANTI = {
   // (Scholl e von Huene 2007 [R]), sullo stesso fondale che affonda (24,5 km³/anno, qui sopra): 0,13. Più degli archi: una
   // fossa sotto un continente ne toglie più di quanta ne fa; la crosta cresce agli archi in mezzo al mare
   riciclo: 0.13,
+  // LA DELAMINAZIONE (con la storia, vedi evolviTettonica): la crosta degli archi è basalto; rifondendo dà il fuso chiaro che sale
+  // (chimica.js F_GRANITO) e lascia in basso un residuo di pirosseno e granato. Dove la base della crosta passa la pressione
+  // dell'eclogite (storia.js STORIA.eclogite: la stessa soglia dei coperchi) il residuo diventa eclogite, più densa del mantello, e
+  // se è abbastanza calda da scorrere (oltre Tfuso, qui sotto) si stacca e affonda (Kay e Kay 1993; Jull e Kelemen 2001 [a memoria]:
+  // l'instabilità cresce in meno di 10 milioni di anni sopra i 700–800 °C). La radice affonda se pesa più del mantello: il residuo,
+  // fatto eclogite, sì; la parte chiara no (alle stesse pressioni resta sotto i 3000 kg/m³), e resta. Del residuo si tiene il conto: lo
+  // portano gli archi (1 − F_GRANITO della crosta nuova), lo tolgono la delaminazione e le fosse
+  rhoEclogite: 3500, // (kg/m³) un'eclogite di basalto a 1,5 GPa (3400–3600: Jull e Kelemen 2001 [a memoria])
   // SOTTO UN COPERCHIO (con la storia, vedi coperchio()): la scala di temperatura dello strato che convette sotto il coperchio,
   // ΔT_rh = 2,4·R·T²/E (Solomatov e Moresi 2000 [R])
   reologico: 2.4,
@@ -767,6 +779,10 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
   // gli archi vi avrebbero fatto, senza riciclo, il pianeta d'avvio partiva coperto da 110 km di crosta). Senza la storia resta la
   // curva della Terra, crostaAttesa
   const crostaSaltata = () => (T ? 0 : crostaAttesa(saltati) * C.hMisura);
+  // (la profondità dell'eclogite sotto una colonna di crosta dei continenti, e se la radice che vi passa pesa più del mantello)
+  const zDel = STORIA.eclogite / (C.rhoCrosta * gravita), radiceAffonda = C.rhoEclogite > C.rhoMantello; let delaminata = 0, residuo = 0;
+  // (quanta parte della crosta dei continenti è ancora residuo denso: quello degli archi meno quello staccato; le fosse ne portano via in proporzione)
+  const parteResiduo = () => { const c = prodotta - riciclata - delaminata; return c > 0 ? Math.min(1, Math.max(0, residuo / c)) : 0; };
   let t = saltati, prodotta = crostaSaltata(), riciclata = 0, debito = 0, st = null, ca = null, nPassi = 0, c0 = C_PASSO, finestra = 0, strada = orologio ? orologio.stradaDi(saltati) : 0, tFinestra = null, dtUltimo = 0;
   for (let l = 0; l < liv.length; l++) {
     const { W: w, H: hh, dt, n } = liv[l], Nl = w * hh;
@@ -803,7 +819,7 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       const dtp = orologio ? Math.max(1, (p === n - 1 && l === liv.length - 1 ? eta : orologio.tempoDi(strada + dt)) - t) : dt, kappa = orologio ? Math.min(0.04, (C.erosione * dtp) / ((2 * Math.PI * raggioM) / w) ** 2) : kappa0;
       // la crosta nuova di questo passo (se non c'è ancora nessuna fossa dove farla nascere, resta in debito)
       let apporto = 0;
-      if (T) { const nuova = C.archi * T.di(t + 0.5 * dtp).basalto * (st.sommaSub1 ?? 0); if (st.sommaSub > 0 && nuova > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; } }
+      if (T) { const nuova = C.archi * T.di(t + 0.5 * dtp).basalto * (st.sommaSub1 ?? 0); if (st.sommaSub > 0 && nuova > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; residuo += (1 - F_GRANITO) * nuova / Nl; } }
       else { const nuova = (crostaAttesa(t + dt) - crostaAttesa(t)) * C.hMisura * Nl + debito; if (st.sommaSub > 0) { apporto = nuova / st.sommaSub; prodotta += nuova / Nl; debito = 0; } else debito = nuova; }
       passoCrosta(st, ca, { dtMa: dtp / 1e6, kappa, apporto, fiumi: 1 - Math.exp(-dtp / C.fiumi), cede: (L.cede * dtp * 3.156e7) / (lato * lato) }); t += dtp; strada += orologio ? dt : 0; nPassi++; dtUltimo = dtp;
       // il riciclo: dove il fondale affonda sotto un continente (la cella, o una delle quattro accanto, è tutta crosta leggera: non i
@@ -811,7 +827,14 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
       // di continente più spessa
       if (T) { const b = C.riciclo * T.di(t).basalto, { h: hh2, sub: sb, piena: pn } = st, vE = st.geo.v[0], mW = st.geo.m[0];
         for (let k = 0; k < Nl; k++) { const sk = sb[k]; if (!(sk > 0)) continue; let q = pn[k] ? k : -1; const vic = [vE[k], mW[k], k >= w ? k - w : -1, k < Nl - w ? k + w : -1]; for (const v of vic) if (v >= 0 && pn[v] && (q < 0 || hh2[v] > hh2[q])) q = v;
-          if (q < 0) continue; const via = Math.min(hh2[q], b * sk); hh2[q] -= via; riciclata += via / Nl; if (st.cop) st.cop[q] = Math.min(st.cop[q], hh2[q]); } }
+          if (q < 0) continue; const via = Math.min(hh2[q], b * sk); hh2[q] -= via; riciclata += via / Nl; residuo -= parteResiduo() * via / Nl; if (st.cop) st.cop[q] = Math.min(st.cop[q], hh2[q]); } }
+      // la delaminazione: dove la colonna intera di crosta (la cella tutta coperta) scende oltre zDel e la sua base è più calda di
+      // Tfuso (la geoterma della colonna: zFuso·(1 − x), come per il cedimento), la radice oltre zDel affonda nel mantello; ma solo il
+      // residuo, e non più di quanto la colonna ne ha (la parte di residuo della crosta: quella media del pianeta, parteResiduo); la
+      // parte chiara resta, e la crosta che ha già perso la radice si fa più chiara e smette di staccarsi
+      if (T && radiceAffonda && residuo > 0) { const { h: hd, x: xd, im: imd } = st, zF = L.zFuso, r = parteResiduo(); let tolta = 0, resta = residuo * Nl;
+        for (let k = 0; k < Nl && resta > 0; k++) { const hk = hd[k]; if (hk > zDel && hk * imd[k] >= 1 && zDel > zF * (1 - xd[k])) { const via = Math.min(hk - zDel, r * hk, resta); tolta += via; resta -= via; hd[k] = hk - via; if (st.cop) st.cop[k] = Math.min(st.cop[k], hd[k]); } }
+        delaminata += tolta / Nl; residuo = Math.max(0, residuo - tolta / Nl); }
     }
     debito *= 4; // (alla griglia successiva le celle sono quattro volte tante)
     if (!ca) aggiorna(false);
@@ -835,5 +858,5 @@ export function evolviTettonica({ W = 256, H = 128, raggioM = 6.371e6, nucleo = 
     if (finestra > 0) { const cn = st.conto; arco[k] = cn.arco[k] / finestra; consumata[k] = cn.tolto[k] / finestra; posata[k] = Math.max(0, cn.posato[k]) / finestra; sollevamento[k] = (gN * (cn.stretta[k] + cn.arco[k]) + L.aTeta * cn.termico[k]) / finestra; }
     velEst[k] = ca.A[k] * metriAnno; velSud[k] = ca.B[k] * metriAnno;
   }
-  return { W, H, alt, cont, copre, calore, termica, stiramento, mare, litosfera: { a: L.a, tau: L.tau, aria: L.aria, hNeutro: st.hNeutro, hDorsale: L.hN, xDebole: L.xDebole, galleggia: gN, zFuso: L.zFuso, basalto: L.basalto, carica: L.carica }, spinta, etaCrosta, celle: man.celle(), salite: Float32Array.from(man.su(W, H)), spessore, fosse, copertura, sollevamento, regge, arco, consumata, posata, velEst, velSud, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N, riciclata }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, ...(orologio ? { strada: L.n * L.dt } : { anni: L.n * L.dt }) })), impronta: origine, finestra, conLaStoria: !!T } };
+  return { W, H, alt, cont, copre, calore, termica, stiramento, mare, litosfera: { a: L.a, tau: L.tau, aria: L.aria, hNeutro: st.hNeutro, hDorsale: L.hN, xDebole: L.xDebole, galleggia: gN, zFuso: L.zFuso, basalto: L.basalto, carica: L.carica }, spinta, etaCrosta, celle: man.celle(), salite: Float32Array.from(man.su(W, H)), spessore, fosse, copertura, sollevamento, regge, arco, consumata, posata, velEst, velSud, regime: 'a placche', bilancio: { prodotta, presente, inViaggio: (st.fango ?? 0) / N, riciclata, delaminata }, storia: { simulati: eta - saltati, saltati, passi: nPassi, velocita: V, livelli: liv.map((L) => ({ W: L.W, passi: L.n, ...(orologio ? { strada: L.n * L.dt } : { anni: L.n * L.dt }) })), impronta: origine, finestra, conLaStoria: !!T } };
 }
