@@ -16,6 +16,7 @@
 
 import { sistema, pianeta, fascia, FASCIA_MAX, sorgenteEvento } from './cosmo.js';
 import { COSTANTI } from './leggi.js'; // le costanti e le unità: un posto solo
+import { ME_MEV, MP_MEV } from './unita.js'; // le masse delle particelle in MeV, dal registro
 
 const Q = COSTANTI.e, MEV = 1.602e-13, G = COSTANTI.G;
 export const ACCELERA = 40; // il tempo della mappa scorre 40 volte più in fretta
@@ -30,7 +31,7 @@ export function nebbiaPianeta(n, gid, sid, pid) {
   const fascia_ = [], anello = [], fmax = FASCIA_MAX;
   for (let i = 0; i < 40000 && fascia_.length < 2600; i++) {
     const q = 8 * i, r = 1.15 + cf(q) * 4.85; if (cf(q + 1) > fascia(P, Pl, r) / fmax) continue;
-    const elettrone = cf(q + 2) < 0.5, E = elettrone ? 0.05 + 0.73 * cf(q + 3) : 10 * Math.pow(30, cf(q + 3)), m = elettrone ? 0.511 : 938.27;
+    const elettrone = cf(q + 2) < 0.5, E = elettrone ? 0.05 + 0.73 * cf(q + 3) : 10 * Math.pow(30, cf(q + 3)), m = elettrone ? ME_MEV : MP_MEV;
     const p = Math.sqrt(E * E + 2 * E * m), B = P.B0 / r ** 3;
     fascia_.push({ r, fi: cf(q + 4) * 2 * Math.PI, rg: (p * 3.336e-3) / B / P.raggioM, elettrone, omega: ((elettrone ? -1 : 1) * 3 * r * E * MEV) / (Q * P.B0 * P.raggioM ** 2) });
   }

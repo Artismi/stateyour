@@ -10,12 +10,14 @@
 
 // ---------- LE COSTANTI E LE UNITÀ: UN POSTO SOLO. Chi ne ha bisogno le prende da qui (o da unita.js, che le riesporta per
 // le unità del motore), invece di riscriverle. Le costanti della natura sono quelle del CODATA 2018 (Tiesinga et al. 2021,
-// Rev. Mod. Phys. 93, 025010), alle cifre con cui il progetto le ha sempre usate; NA è esatto dal 2019 (SI rivisto); h è 2π·ħ.
-const HBAR = 1.0546e-34;
+// Rev. Mod. Phys. 93, 025010), A PRECISIONE PIENA: c, h, e, kB e NA sono esatti dal SI rivisto del 2019; ħ è h/2π; G, σ,
+// le masse, ε₀ e u sono i valori raccomandati, con tutte le loro cifre. (Prima erano arrotondati a quattro o cinque cifre:
+// mp/me veniva 1836,206 invece di 1836,153, e chi scriveva a mano 1836,15 o 938,27 MeV non tornava col registro.)
+const H_PLANCK = 6.62607015e-34;
 export const COSTANTI = {
-  c: 2.998e8, G: 6.674e-11, hbar: HBAR, h: 2 * Math.PI * HBAR, kB: 1.381e-23, sigma: 5.670e-8,
-  me: 9.109e-31, mp: 1.6726e-27, mn: 1.6749e-27, e: 1.602e-19,
-  NA: 6.02214076e23, eps0: 8.8541878128e-12, u: 1.66053907e-27, // (1/mol, F/m, kg: l'unità di massa atomica) CODATA 2018
+  c: 299792458, G: 6.6743e-11, hbar: H_PLANCK / (2 * Math.PI), h: H_PLANCK, kB: 1.380649e-23, sigma: 5.670374419e-8,
+  me: 9.1093837015e-31, mp: 1.67262192369e-27, mn: 1.67492749804e-27, e: 1.602176634e-19,
+  NA: 6.02214076e23, eps0: 8.8541878128e-12, u: 1.6605390666e-27, // (1/mol, F/m, kg: l'unità di massa atomica)
 };
 // LE UNITÀ. L'unità astronomica alle cifre di sempre, 1,496·10¹¹ m (esatta: 149 597 870 700 m, IAU 2012, risoluzione B2; il
 // passaggio al valore esatto sposta di 1,4·10⁻⁵ ogni orbita, e rimescola i sistemi: resta per un giro a parte); il parsec è

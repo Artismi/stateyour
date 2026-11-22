@@ -5,7 +5,7 @@ import { sorgente } from '../src/camera/eventi.js';
 import { ANNO, COSMO, etaUniverso, massaNascita } from '../src/camera/leggi.js';
 import * as ST from '../src/camera/stelle.js';
 import { cosmo, galassia, sistema, indirizzoDi, motiDi, raggioSistema, metriPerUnita, TORO_M } from '../src/camera/cosmo.js';
-import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
+import { MPC as LEGGI_MPC, COSTANTI } from '../src/camera/leggi.js'; // il Mpc e il kpc (e c): un posto solo
 
 let ok = 0;
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -304,7 +304,7 @@ prova('collegate al cosmo: le scale vere, i moti della stella nella galassia e d
   for (let n = 5; n < 60000 && visti < 12; n += 4801) {
     const a = indirizzoDi(n), M = motiDi(a), Gx = galassia(a.cosmo, a.galassia), S = Gx.stelle[a.stella], P = sistema(a.cosmo, a.galassia, a.stella).pianeti[a.pianeta]; visti++;
     assert.deepEqual(M.map((m) => m.nome), ['ferma nella regione', 'sul pianeta che gira', 'ferma rispetto alla stella', 'ferma rispetto alla galassia', 'ferma rispetto al fondo cosmico']);
-    for (const m of M) assert.ok(Number.isFinite(m.kmS) && m.kmS >= 0 && Math.abs(m.velocita - (m.kmS * 1e3) / 2.998e8) < 1e-9 && m.direzione >= 0 && m.direzione < 360 && m.cosa.length > 10, JSON.stringify(m));
+    for (const m of M) assert.ok(Number.isFinite(m.kmS) && m.kmS >= 0 && Math.abs(m.velocita - (m.kmS * 1e3) / COSTANTI.c) < 1e-9 && m.direzione >= 0 && m.direzione < 360 && m.cosa.length > 10, JSON.stringify(m));
     const orbita = (2 * Math.PI * P.aM) / P.anno / 1e3; tra(M[2].kmS / orbita, 1 - 1e-9, 1 + 1e-9, 'la velocità lungo l\'orbita');
     const vc = curvaRotazione(Gx.forma, Math.max(1e-3, Math.hypot(...S.pos) * Gx.forma.unitaKpc)); if (S.componente === 'sferoide') sferoide++;
     assert.ok(M[3].kmS3d < 6 * vc + orbita + 50 && M[4].kmS3d < 6 * vc + orbita + 3000, `moti di ${M[3].kmS3d} e ${M[4].kmS3d} km/s con una curva di ${vc}`);

@@ -48,8 +48,8 @@ async function scena(quale) {
     U = creaUniverso(N, { via: { cosmo: 1 }, livello: 'cosmo' });
     await aspetta(() => U.pronto() && U.cosmo.rete && U.cosmo.rete.pronto() && U.cosmo.rete.stato.fine);
   } else if (quale === 'fuori') {
-    // il pianeta d'avvio dell'app (laboratorio.js AVVIO, il numero 217: cosmo 1, galassia 0, stella 1, pianeta 2), da fuori come all'avvio
-    const via = { cosmo: 1, galassia: 0, stella: 1, pianeta: 2 }, Sis = sistema(1, 0, 1), P = Sis.pianeti[2];
+    // il pianeta d'avvio dell'app (laboratorio.js AVVIO, il numero 5689: cosmo 1, galassia 0, stella 29, pianeta 10), da fuori come all'avvio
+    const via = { cosmo: 1, galassia: 0, stella: 29, pianeta: 10 }, Sis = sistema(1, 0, 29), P = Sis.pianeti[10];
     Pi = creaPianeta(N, { P, stella: Sis.stella, via, superficie: () => null, opzioni: { nuvole: 0, onde: 0 } });
     N.attacca(Pi.corpo, { distanza: 5.5 * P.raggioM, lat: 0.25 });
   } else if (quale === 'aria') {

@@ -728,7 +728,7 @@ for (const x of PIANETI.filter((_, i) => i % 103 === 0)) for (const regione of [
 { // i conteggi veri della nebbia contro lo schermo magnetico e contro il massimo della fascia
   let schermate = 0, pieneLoStesso = 0; const sogliaStormer = (p, r) => ((14.9 / (3.1e-5 * 6.371e6)) * p.B0 * p.raggioM) / (r * r);
   for (const { p, cella } of REGIONI) {
-    const GV = 0.3 * sogliaStormer(p, cella.scala.r), Emin = Math.max(500, Math.sqrt((GV * 1000) ** 2 + 938.27 ** 2) - 938.27), schermo = Math.min(1, (Emin / 500) ** -1.7), cv = NE.conteggioVero(cella);
+    const GV = 0.3 * sogliaStormer(p, cella.scala.r), Emin = Math.max(500, Math.sqrt((GV * 1000) ** 2 + UN.MP_MEV ** 2) - UN.MP_MEV), schermo = Math.min(1, (Emin / 500) ** -1.7), cv = NE.conteggioVero(cella);
     if (schermo < 0.9) { schermate++; if (cv.raggi >= 1.7e-4 * cella.scala.latoM ** 2 * 0.99) pieneLoStesso++; }
   }
   nota(3, 'il conteggio «vero» dei raggi cosmici di una regione è o tutto o niente: il flusso pieno (1,7·10⁻⁴ per m³) anche dove la magnetosfera ne lascia passare una parte (e la regione ne disegna in proporzione), zero solo dove non ne è disegnato nessuno',
@@ -804,7 +804,7 @@ sezione('LE PARTICELLE');
   for (const cella of [...anello.map((a) => CO.regione(a).cella), ...REGIONI.slice(0, 8).map((r) => r.cella)]) {
     const tr = simulaMondo(cella), perEvento = new Map(tr.filter((t) => t.evento).map((t) => [t.evento, t])), q = (nome) => { const sp = cella.specie[nome]; return sp.luce ? 0 : sp.q ?? 0; };
     // un raggio cosmico ha l'energia con cui è stato sorteggiato, anche sopra 5,7 GeV (γ = 1 + E/938 MeV)
-    for (const t of tr) if (t.madre == null && t.specie.nome === 'protone' && cella.sorgenti[t.sorgente].energia) { raggi++; if (t.gamma > 7.1) veloci++; gamme.push(Math.abs(t.gamma / (1 + cella.sorgenti[t.sorgente].energia / 938.27) - 1)); }
+    for (const t of tr) if (t.madre == null && t.specie.nome === 'protone' && cella.sorgenti[t.sorgente].energia) { raggi++; if (t.gamma > 7.1) veloci++; gamme.push(Math.abs(t.gamma / (1 + cella.sorgenti[t.sorgente].energia / UN.MP_MEV) - 1)); }
     for (const d of tr.decadimenti) {
       if (!d.prodotti) { senzaBilancio++; continue; } eventi++;
       const M = d.bersaglio ? cella.specie[d.bersaglio].m : 0, e0 = d.prima.e + M; let e = 0, px = 0, py = 0, carica = 0;

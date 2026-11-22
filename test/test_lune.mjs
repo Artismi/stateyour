@@ -1,7 +1,7 @@
 // test_lune.mjs — le lune e le maree: i numeri veri del Sistema Solare, e lune che emergono da un seme
 import assert from 'node:assert/strict';
 import { limiteRoche, raggioHill, raggioRotondo, lune, caloreMareale, stato, maree, tempoBlocco, orbitaDopoLeMaree, k2QFreddo, k2QLuna, MATERIALI } from '../src/camera/lune.js';
-import { MSOLE, UA, ANNO } from '../src/camera/leggi.js';
+import { MSOLE, UA, ANNO, COSTANTI } from '../src/camera/leggi.js'; // (G dal registro: le leggi lo prendono da lì)
 import { indirizzoDi, sistema, cosmoCon, cosmoRamo } from '../src/camera/cosmo.js';
 import { sorgente, conRegistro, rileggi } from '../src/camera/eventi.js';
 
@@ -75,7 +75,7 @@ prova('un gigante come Giove: più lune dal disco, tra Roche e Hill, in tutto ci
       assert.equal(l.id, i); assert.ok(STATI.includes(l.stato)); assert.ok(i === 0 || l.aM > tutte[i - 1].aM, 'dalla più vicina alla più lontana');
       for (const v of [l.massaKg, l.raggioM, l.densita, l.aM, l.periodo, l.eccentricita, l.caloreMareale, ...l.forma.assi]) assert.ok(Number.isFinite(v) && v >= 0);
       assert.ok(l.aM > limiteRoche(GIOVE, l.densita) && l.aM * (1 + l.eccentricita) < RH, `tra Roche e Hill (seme ${s}, luna ${i})`);
-      assert.ok(Math.abs(l.periodo - 2 * Math.PI * Math.sqrt(l.aM ** 3 / (6.674e-11 * (GIOVE.massaKg + l.massaKg)))) < 1e-6 * l.periodo, 'Keplero');
+      assert.ok(Math.abs(l.periodo - 2 * Math.PI * Math.sqrt(l.aM ** 3 / (COSTANTI.G * (GIOVE.massaKg + l.massaKg)))) < 1e-6 * l.periodo, 'Keplero');
       assert.ok(Math.abs(l.massaKg - (4 / 3) * Math.PI * l.raggioM ** 3 * l.densita) < 1e-9 * l.massaKg);
     });
     for (const l of reg) {

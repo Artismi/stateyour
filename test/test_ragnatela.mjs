@@ -16,7 +16,7 @@ import { campoCosmo } from '../src/camera/spazio3d.js';
 import { sorgente } from '../src/camera/eventi.js';
 import { TORO_M } from '../src/camera/cosmo.js';
 import { FILTRI } from '../src/camera/campo_pigro.js';
-import { MPC as LEGGI_MPC } from '../src/camera/leggi.js'; // il Mpc e il kpc: un posto solo
+import { MPC as LEGGI_MPC, COSTANTI } from '../src/camera/leggi.js'; // il Mpc e il kpc (e c): un posto solo
 
 let ok = 0; const T0 = performance.now(), nonTorna = [], costi = [];
 const prova = (nome, f) => { f(); ok++; console.log('  ✓', nome); };
@@ -262,18 +262,18 @@ prova('il cielo dalle stesse onde: lo scarto è quello atteso (su sei cosmi), ~1
     let s = 0; const N = 300, [, td] = ms(() => { for (let k = 0; k < N; k++) s += Fo.in(versore(`cielo ${i}/${k}`)) ** 2; }); if (!i) costa('una direzione di cielo (ΔT/T)', td, N);
     rapporti.push(Math.sqrt(s / N) / Fo.scartoAtteso); scartoCielo += Math.sqrt(s / N) / 6; atteso = Fo.scartoAtteso;
     // il dipolo: v/c, e la mappa col dipolo è la mappa più n·v/c; la velocità è quella lineare del campo lì
-    const n = versore(`dipolo ${i}`), w = R.doveSono(F, oss.posizione); assert.ok(Math.abs(Fo.in(n, { dipolo: true }) - Fo.in(n) - (sc(n, Fo.osservatore.velocita) * 1e3) / 2.998e8) < 1e-15);
-    assert.ok(Math.hypot(...w.velocita.map((v, d) => v - Fo.osservatore.velocita[d])) < 1e-9); assert.ok(Math.abs(Fo.dipolo.ampiezza - (Fo.dipolo.velocita * 1e3) / 2.998e8) < 1e-15); vel.push(Fo.dipolo.velocita);
+    const n = versore(`dipolo ${i}`), w = R.doveSono(F, oss.posizione); assert.ok(Math.abs(Fo.in(n, { dipolo: true }) - Fo.in(n) - (sc(n, Fo.osservatore.velocita) * 1e3) / COSTANTI.c) < 1e-15);
+    assert.ok(Math.hypot(...w.velocita.map((v, d) => v - Fo.osservatore.velocita[d])) < 1e-9); assert.ok(Math.abs(Fo.dipolo.ampiezza - (Fo.dipolo.velocita * 1e3) / COSTANTI.c) < 1e-15); vel.push(Fo.dipolo.velocita);
     for (let k = 0; k < 2; k++) vel.push(R.fondoCosmico(F, { posizione: punto(`osservatore ${i}/${k}`) }).dipolo.velocita); });
   // la soglia: 300 direzioni danno lo scarto entro il 4% per cosmo; la media di sei entro l'1,7%: quattro scarti = 7%
   tra(media(rapporti), 0.93, 1.07, 'scarto del cielo misurato su quello atteso, media su sei cosmi');
   const moto = { motoProprio: [100, 0, 0], posizione: F0.osservatore.posizione }, Fm = R.fondoCosmico(COSMI[0], moto); assert.ok(Math.abs(Fm.osservatore.velocita[0] - F0.osservatore.velocita[0] - 100) < 1e-9);
   vel.sort((a, b) => a - b); const mediana = vel[vel.length >> 1];
-  console.log(`      scarto del cielo: ${num(scartoCielo)} = ${num(scartoCielo * R.DATI.T0 * 1e6)} µK (atteso per questo toro ${num(atteso)}); velocità di ${vel.length} osservatori: da ${num(vel[0])} a ${num(vel[vel.length - 1])} km/s, mediana ${num(mediana)} → dipolo ${num((mediana * 1e3) / 2.998e8)}`);
+  console.log(`      scarto del cielo: ${num(scartoCielo)} = ${num(scartoCielo * R.DATI.T0 * 1e6)} µK (atteso per questo toro ${num(atteso)}); velocità di ${vel.length} osservatori: da ${num(vel[0])} a ${num(vel[vel.length - 1])} km/s, mediana ${num(mediana)} → dipolo ${num((mediana * 1e3) / COSTANTI.c)}`);
   riscontro('ampiezza delle fluttuazioni ΔT/T', scartoCielo, 1e-5, 1e-4, '~10⁻⁵ (COBE); scarto del cielo vero ~110 µK = 4·10⁻⁵ [R]');
   riscontro('scarto del cielo (µK)', scartoCielo * R.DATI.T0 * 1e6, 88, 132, '~110 [R]; qui mancano ℓ < 73 (il toro) e il Sachs–Wolfe integrato');
   riscontro('velocità tipica di un osservatore (km/s)', mediana, 370, 620, '370 il Sole, 620 il Gruppo Locale rispetto al fondo [R]');
-  riscontro('dipolo ΔT/T', (mediana * 1e3) / 2.998e8, 1e-3, 2.1e-3, '1,23·10⁻³ (il Sole) [R]');
+  riscontro('dipolo ΔT/T', (mediana * 1e3) / COSTANTI.c, 1e-3, 2.1e-3, '1,23·10⁻³ (il Sole) [R]');
 });
 
 prova('le armoniche sferiche del cielo: la somma ridà la mappa; lo spettro di un cielo è, in media, quello atteso per il toro', () => {

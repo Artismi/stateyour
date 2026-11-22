@@ -27,11 +27,12 @@ const tela = $('tela'), ctx = tela.getContext('2d'), pannello = $('pannello');
 // IL PUNTO D'AVVIO: un numero della biblioteca (biblioteca.js) è un indirizzo del cosmo. IL CRITERIO, scritto prima di
 // cercare (21/11/2026): il primo numero, in ordine (cosmo 1; galassia, stella, pianeta crescenti; regione 0), che dia un
 // pianeta roccioso con acqua liquida, aria tra 0,5 e 3 bar, terre emerse (dopo l'erosione, pesate con l'area) tra il 20% e
-// il 50%, temperatura media tra 0 e 25 °C, attorno a una stella tra 0,7 e 1,2 M☉. È il 217: la stella 2 della galassia 1
-// (in base 0: galassia 0, stella 1), il suo terzo pianeta (pianeta 2): 0,67 M⊕, 1,27 bar, 24% di terre, 6,9 °C, attorno a
-// una stella di 1,08 M☉ (rimisurato col motore dell'app, il V8 di Electron, novembre 2026: il criterio regge) (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
+// il 50%, temperatura media tra 0 e 25 °C, attorno a una stella tra 0,7 e 1,2 M☉. È il 5689: la stella 30 della galassia 1
+// (in base 0: galassia 0, stella 29), il suo undicesimo pianeta (pianeta 10): 0,12 M⊕, 2,03 bar, 42% di terre, 14,8 °C,
+// attorno a una stella di 0,73 M☉ (cercato col motore dell'app, il V8 di Electron, novembre 2026, dopo le costanti CODATA a
+// precisione piena: il 217, che era il primo, scendeva al 18% di terre) (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
 // un difetto nascosto: gli altri pianeti restano tutti raggiungibili. Da lì si apre lo spazio.
-const AVVIO = universo(217).cella.indirizzo;
+const AVVIO = universo(5689).cella.indirizzo;
 
 // ---------- il disegno: la mappa piatta (quando lo spazio in tre dimensioni non c'è, o in fondo, nella materia di un punto);
 // sopra ci sono le tele del mondo, degli atomi e dei quanti, ognuna col suo ciclo

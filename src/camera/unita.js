@@ -12,7 +12,8 @@ export { COSTANTI, UA, PC, KPC, MPC, ANNO_LUCE, GIORNO, ORA, ZERO_CELSIUS, ATMOS
 export const C_LUCE = COSTANTI.c; // m/s
 export const E_SU_MEC = COSTANTI.e / (COSTANTI.me * COSTANTI.c); // e/(m_e·c), in 1/(T·m): lega il campo vero a quello del motore (586,6)
 export const ME_MEV = (COSTANTI.me * COSTANTI.c ** 2) / COSTANTI.e / 1e6; // la massa dell'elettrone, in MeV (0,511)
-const MP_ME = COSTANTI.mp / COSTANTI.me, MN_ME = COSTANTI.mn / COSTANTI.me; // protone e neutrone, in masse dell'elettrone
+export const MP_ME = COSTANTI.mp / COSTANTI.me, MN_ME = COSTANTI.mn / COSTANTI.me; // protone e neutrone, in masse dell'elettrone (1836,15)
+export const MP_MEV = (COSTANTI.mp * COSTANTI.c ** 2) / COSTANTI.e / 1e6; // la massa del protone, in MeV (938,27)
 export const C_MOTORE = 40;
 
 // le unità di un pezzo di spazio largo «lato» metri (1000 unità del motore)

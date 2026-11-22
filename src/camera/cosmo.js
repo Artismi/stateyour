@@ -19,7 +19,7 @@
 // cifre: numeri vicini sono posti vicini dello stesso universo.
 
 import { simulaMondo } from './mondo.js';
-import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV } from './unita.js';
+import { unita, catalogoVero, velocita, fmtLunghezza, ME_MEV, MP_ME, MP_MEV } from './unita.js'; // (le masse delle particelle: dal registro, leggi.js)
 import { COSTANTI, etaUniverso, ANNO, LSOLE, UA, clima, acquaInSuperficie, gravitaDiSuperficie } from './leggi.js';
 import { stellaOggi } from './stelle.js'; // le stelle calcolate dalla loro struttura (non più le curve misurate sul Sole)
 import { interno } from './geologia.js';
@@ -391,8 +391,8 @@ const energiaRaggio = (x, Emin = 500) => { const a = Emin ** -1.7, b = 1e6 ** -1
 // la soglia di Størmer: sotto questa rigidità (GV) un raggio non arriva a quella distanza dal pianeta
 // (cresce con il campo e il raggio del pianeta, cala come il quadrato della distanza; Terra all'equatore: 14,9 GV)
 const sogliaStormer = (P, r) => (14.9 / (3.1e-5 * 6.371e6)) * P.B0 * P.raggioM / (r * r);
-const energiaDaRigidita = (GV) => Math.sqrt((GV * 1000) ** 2 + 938.27 ** 2) - 938.27;
-const impulsoProtone = (E) => Math.sqrt(E * E + 2 * E * 938.27);
+const energiaDaRigidita = (GV) => Math.sqrt((GV * 1000) ** 2 + MP_MEV ** 2) - MP_MEV;
+const impulsoProtone = (E) => Math.sqrt(E * E + 2 * E * MP_MEV);
 // da quali direzioni arrivano i raggi alla stella del pianeta: le sorgenti della galassia, sparpagliate dal suo campo
 function cieloDeiRaggi(a) {
   const Gx = galassia(a.cosmo, a.galassia), st = Gx.stelle[a.stella].pos;
@@ -415,9 +415,9 @@ export const magnetosfera = memo((n, gid, sid, pid) => {
     const b = (caso() - 0.5) * 2 * 12 * R_P, E = energiaRaggio(caso() * 0.9, Math.max(500, energiaDaRigidita(0.3 * sogliaStormer(P, 6))));
     const pos = [MONDO_P / 2 + Math.cos(fi) * 1950 - Math.sin(fi) * b, MONDO_P / 2 + Math.sin(fi) * 1950 + Math.cos(fi) * b];
     if (pos[0] < 0 || pos[1] < 0 || pos[0] > MONDO_P || pos[1] > MONDO_P) continue;
-    sorgenti.push({ pos, dir: fi + Math.PI, v: velocita(impulsoProtone(E), 1836.15), t0: 0, specie: 'protone' });
+    sorgenti.push({ pos, dir: fi + Math.PI, v: velocita(impulsoProtone(E), MP_ME), t0: 0, specie: 'protone' });
   }
-  const tracce = simulaMondo({ ...cella, specie: { protone: { q: 1, m: 1836.15 } }, sorgenti }, { passo: 6, maxPassi: 8000 });
+  const tracce = simulaMondo({ ...cella, specie: { protone: { q: 1, m: MP_ME } }, sorgenti }, { passo: 6, maxPassi: 8000 });
   // in raggi del pianeta, con l'origine al centro
   return tracce.map((t) => t.punti.filter((_, i) => i % 2 === 0 || i === t.punti.length - 1).map((p) => [(p[0] - MONDO_P / 2) / R_P, (p[1] - MONDO_P / 2) / R_P]));
 });
@@ -447,9 +447,9 @@ function particelleFascia(P, Pl, r, u, lato, quante, caso, prefisso, { fini = fa
     // i più fini (visibili solo da vicino): elettroni il cui giro è grande quanto un decimo della finestra
     let pMeV;
     if (fini) { const rg = (0.03 + 0.12 * caso()) * u.metri(lato); pMeV = (rg * B) / 3.336e-3; }
-    else if (protone) { const E = 10 * Math.pow(30, caso()); pMeV = Math.sqrt(E * E + 2 * E * 938.27); }
+    else if (protone) { const E = 10 * Math.pow(30, caso()); pMeV = Math.sqrt(E * E + 2 * E * MP_MEV); }
     else { const E = 0.05 + 0.73 * caso(); pMeV = Math.sqrt(E * E + 2 * E * ME_MEV); }
-    const m = protone ? 1836.15 : 1;
+    const m = protone ? MP_ME : 1;
     out.push({ pos: [caso() * lato, caso() * lato], dir: caso() * 2 * Math.PI, v: velocita(pMeV, m), t0: 0, specie: protone ? 'protone lento' : 'elettrone', ev: `${prefisso}${i}`,
       origine: "un neutrone uscito dal pianeta (colpito da un raggio cosmico) e decaduto qui: la fascia di radiazione lo tiene" });
   }
@@ -474,7 +474,7 @@ export function regione(a) {
   // (stessa strada, carica opposta, verso opposto) nel campo vero del pianeta. Se all'indietro
   // esce dalla magnetosfera, è arrivata davvero, dalla direzione da cui è uscita; se sbatte
   // contro il pianeta o resta intrappolata, quella traiettoria non esiste.
-  const cielo = cieloDeiRaggi(a), sorgenti = [], specieP = { indietro: { q: -1, m: 1836.15 } };
+  const cielo = cieloDeiRaggi(a), sorgenti = [], specieP = { indietro: { q: -1, m: MP_ME } };
   let prove = 0, vietate = 0;
   // sotto un terzo della soglia non arriva nessuno da nessuna direzione; e più alta è la soglia, meno
   // raggi ci sono (lo spettro cala): così una magnetosfera forte è davvero schermata
@@ -484,7 +484,7 @@ export function regione(a) {
     prove++;
     const lato = Math.floor(caso() * 4), t = caso(), nrm = [Math.PI / 2, Math.PI, -Math.PI / 2, 0][lato];
     const pe = [[x0 + t * lp, y0], [x0 + lp, y0 + t * lp], [x0 + t * lp, y0 + lp], [x0, y0 + t * lp]][lato];
-    const dir = nrm + Math.asin(2 * caso() - 1), E = energiaRaggio(caso(), Emin), v = velocita(impulsoProtone(E), 1836.15);
+    const dir = nrm + Math.asin(2 * caso() - 1), E = energiaRaggio(caso(), Emin), v = velocita(impulsoProtone(E), MP_ME);
     const tr = simulaMondo({ ...cp, tempo: 400, specie: specieP, sorgenti: [{ pos: pe, dir: dir + Math.PI, v, specie: 'indietro' }] }, { passo: 6, maxParticelle: 1, maxPassi: 5000 })[0];
     if (!tr || tr.fine !== 'fuori') { vietate++; continue; }
     const q = tr.punti, ult = q[q.length - 1], pen = q[Math.max(0, q.length - 3)], esce = Math.atan2(ult[1] - pen[1], ult[0] - pen[0]);

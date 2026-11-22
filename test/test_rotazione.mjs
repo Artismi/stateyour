@@ -4,7 +4,7 @@ import { rotazione, giroDaGas, giornoDiRottura, frenataMareale, equilibrioMareal
 import { giganteDi, urtoGigante, IMPATTI } from '../src/camera/impatti.js';
 import { lune, tempoBlocco } from '../src/camera/lune.js';
 import { sorgente } from '../src/camera/eventi.js';
-import { MSOLE, UA, ANNO } from '../src/camera/leggi.js';
+import { MSOLE, UA, ANNO, COSTANTI } from '../src/camera/leggi.js'; // (G dal registro: le leggi lo prendono da lì)
 import { indirizzoDi, sistema } from '../src/camera/cosmo.js';
 
 let ok = 0;
@@ -52,7 +52,7 @@ prova('Marte, un embrione senza urti giganti: gira come l\'ha lasciato la cresci
 });
 
 prova('Mercurio e Venere: il Sole li frena; Mercurio, su un\'orbita allungata, resta agganciato a tre giri ogni due anni', () => {
-  const m = giro(MERCURIO), v = giro(VENERE), anno = (P) => 2 * Math.PI * Math.sqrt(P.aM ** 3 / (6.674e-11 * MSOLE));
+  const m = giro(MERCURIO), v = giro(VENERE), anno = (P) => 2 * Math.PI * Math.sqrt(P.aM ** 3 / (COSTANTI.G * MSOLE));
   tra(equilibrioMareale(0.2056), 1.2, 1.3, 'la rotazione di equilibrio di Mercurio (giri per orbita: 1,26)'); assert.equal(equilibrioMareale(0), 1);
   assert.ok(m.tempoFreno < SOLE.eta && m.risonanza === '3:2' && !m.bloccato && m.obliquita === 0, `Mercurio: ${JSON.stringify(m)}`);
   tra(m.giorno / 86400, 58.4, 58.9, 'il giorno di Mercurio (giorni terrestri: 58,65)'); assert.ok(Math.abs(m.giorno / anno(MERCURIO) - 2 / 3) < 1e-9);
@@ -89,7 +89,7 @@ prova('gli urti giganti: il limite dei fluidi che ruotano, il mordi e fuggi, il 
   // due mezze Terre di striscio portano più momento angolare di quanto un corpo fuso possa tenere (0,53 della rottura):
   // una parte se ne va col disco e coi detriti, e ciò che resta non supera mai il limite
   const P = corpo('doppio', 'roccioso', 1, 1, 1, { formazione: { urti: [{ bersaglioKg: 0.5 * MT, massaKg: 0.5 * MT, angolo: 20, inclinazione: 0, t: 1e7 }] } }), g = giganteDi(P, S, sorgente('prova/doppio'));
-  const critico = 0.33 * P.massaKg * Math.sqrt(6.674e-11 * P.massaKg * P.raggioM);
+  const critico = 0.33 * P.massaKg * Math.sqrt(COSTANTI.G * P.massaKg * P.raggioM);
   assert.ok(g.momentoAngolare > IMPATTI.giroLimite * critico && g.giroSuRottura <= IMPATTI.giroLimite + 1e-9 && g.giroSuRottura > 0.3 && Math.abs(g.giornoDopo * g.giroSuRottura / giornoDiRottura(P) - 1) < 1e-9, `giro ${g.giroSuRottura}`);
   // gli urti minori della storia cambiano poco un pianeta che gira forte, molto uno fermo
   const finta = { grandi: [{ id: 0, massaKg: 1e21, vSuolo: 15000, angolo: 30 }] }, c = sorgente('prova/urti minori');

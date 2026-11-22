@@ -13,7 +13,7 @@ Nessuno strumento tocca l'app. Il segnale «pronto» del giro si ricava da quell
 
 Lo script `giro.mjs` usa Playwright con Chromium e la grafica emulata (swiftshader).
 
-- **La strada.** Si apre l'app sull'indirizzo d'avvio (numero 217, laboratorio.js AVVIO). Si esce con la rotella al centro fino in cima, nel
+- **La strada.** Si apre l'app sull'indirizzo d'avvio (numero 5689, laboratorio.js AVVIO). Si esce con la rotella al centro fino in cima, nel
   cosmo (la «salita», senza foto). Poi, per ogni indirizzo, ci si gira verso la sua galassia e si scende fino in fondo
   (l'«andata»). Il cursore sta sulla cosa del livello successivo dell'indirizzo: la galassia, poi la stella, poi il
   pianeta, come farebbe chi la cerca. Sul pianeta il cursore si ferma su un punto e resta lì: il centro del pianeta, oppure,
