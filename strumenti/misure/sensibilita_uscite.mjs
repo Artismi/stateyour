@@ -1,5 +1,5 @@
 // sensibilita_uscite.mjs — LE USCITE MISURABILI su cui sensibilita.mjs misura i numeri a mano: la luce della galassia 0 del cosmo 1 e delle prime 20
-// (forma.luce, in L☉); sul pianeta d'avvio (il numero 5689: cosmo 1, galassia 0, stella 29, pianeta 10; la fase e le uscite si chiamano ancora «217») la pressione, la temperatura (P.clima.T e
+// (forma.luce, in L☉); sul pianeta d'avvio (il numero 309721: cosmo 1, galassia 0, stella 1613, pianeta 2; la fase e le uscite si chiamano ancora «217») la pressione, la temperatura (P.clima.T e
 // la media della superficie), la frazione di terre (come indirizzi.mjs), la salinità e il pH del mare; sulla Terra di prova di
 // test_mare.mjs (seme 13) le stesse, più la parte coperta dal mare. Ogni numero esce in JSON su una riga.
 // uso: node strumenti/nodo.cjs strumenti/misure/sensibilita_uscite.mjs <cartella src> [gal|217|terra|tutte]
@@ -12,7 +12,7 @@ if (solo === 'tutte' || solo === 'gal' || solo === 'pian') prova('galassia', () 
 if (solo === 'pian') prova('p217', () => { const P = CO.sistema(1, 0, 1).pianeti[2]; out.p217_bar = P.clima.pressione / 1e5; out.p217_T = P.clima.T; out.p217_massa = P.massaKg / 5.972e24; }); // (il modo «pian»: solo il cosmo e il sistema, senza superficie: pochi secondi)
 if (solo === 'tutte' || solo === '217') {
   prova('p217', () => {
-    const P = CO.sistema(1, 0, 29).pianeti[10], k = JSON.stringify({ cosmo: 1, galassia: 0, stella: 29, pianeta: 10 });
+    const P = CO.sistema(1, 0, 1613).pianeti[2], k = JSON.stringify({ cosmo: 1, galassia: 0, stella: 1613, pianeta: 2 });
     out.p217_bar = P.clima.pressione / 1e5; out.p217_T = P.clima.T; out.p217_massa = P.massaKg / 5.972e24;
     const sf = GE.superficiePianeta(k, P, P.interno, P.origine), cl = GE.climaSuperficie(k, P, sf), se = GE.erosione(k, sf, cl);
     out.p217_terre = frazioneTerre(se); out.p217_Tsup = cl.Tglobale;
@@ -35,7 +35,7 @@ if (solo !== 'mare') console.log(JSON.stringify(out));
 if (solo === 'mare') {
   const { readFileSync, writeFileSync, rmSync } = await import('node:fs');
   const lista = JSON.parse(readFileSync(process.argv[4], 'utf8')), fonte = readFileSync(R + '/camera/mare.js', 'utf8');
-  const P1 = CO.sistema(1, 0, 29).pianeti[10], k1 = JSON.stringify({ cosmo: 1, galassia: 0, stella: 29, pianeta: 10 });
+  const P1 = CO.sistema(1, 0, 1613).pianeti[2], k1 = JSON.stringify({ cosmo: 1, galassia: 0, stella: 1613, pianeta: 2 });
   const sf1 = GE.superficiePianeta(k1, P1, P1.interno, P1.origine), cl1 = GE.climaSuperficie(k1, P1, sf1), se1 = GE.erosione(k1, sf1, cl1);
   const P2 = { tipo: 'roccioso', raggioM: 6.371e6, massaKg: 5.97e24, composizione: { ferro: 0.32, acqua: 0.02 }, Lw: 3.828e26, aM: 1.496e11, anno: 3.156e7, giorno: 86164, obliquita: 23.4, bloccato: false, clima: { Teq: 255, pressione: 1e5, T: 288, acqua: 'liquida' },
     atmosfera: { gas: { N2: 0.78, O2: 0.21, CO2: 2.8e-4 }, pressione: 1e5 }, Mstella: 1.989e30, lune: [{ id: 0, massaKg: 7.35e22, aM: 3.844e8, raggioM: 1.737e6 }] };

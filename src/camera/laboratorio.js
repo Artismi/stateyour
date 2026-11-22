@@ -25,14 +25,15 @@ import { puntoACaso, analizza as analizzaIndirizzo, viaDi as viaDellIndirizzo } 
 const $ = (id) => document.getElementById(id);
 const tela = $('tela'), ctx = tela.getContext('2d'), pannello = $('pannello');
 // IL PUNTO D'AVVIO: un numero della biblioteca (biblioteca.js) è un indirizzo del cosmo. IL CRITERIO, scritto prima di
-// cercare (21/11/2026): il primo numero, in ordine (cosmo 1; galassia, stella, pianeta crescenti; regione 0), che dia un
-// pianeta roccioso con acqua liquida, aria tra 0,5 e 3 bar, terre emerse (dopo l'erosione, pesate con l'area) tra il 20% e
-// il 50%, temperatura media tra 0 e 25 °C, attorno a una stella tra 0,7 e 1,2 M☉. È il 5689: la stella 30 della galassia 1
-// (in base 0: galassia 0, stella 29), il suo undicesimo pianeta (pianeta 10): 0,12 M⊕, 2,03 bar, 42% di terre, 14,8 °C,
-// attorno a una stella di 0,73 M☉ (cercato col motore dell'app, il V8 di Electron, novembre 2026, dopo le costanti CODATA a
-// precisione piena: il 217, che era il primo, scendeva al 18% di terre) (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
-// un difetto nascosto: gli altri pianeti restano tutti raggiungibili. Da lì si apre lo spazio.
-const AVVIO = universo(5689).cella.indirizzo;
+// cercare (21/11/2026, con la massa aggiunta dall'utente il 22/11/2026): il primo numero, in ordine (cosmo 1; galassia,
+// stella, pianeta crescenti; regione 0), che dia un pianeta roccioso di 0,5–2 masse terrestri con acqua liquida, aria tra
+// 0,5 e 3 bar, terre emerse (dopo l'erosione, pesate con l'area) tra il 20% e il 50%, temperatura media tra 0 e 25 °C,
+// attorno a una stella tra 0,7 e 1,2 M☉. È il 309721: galassia 0, stella 1613, pianeta 2 (in base 0): 0,90 M⊕, 2,34 bar,
+// 25% di terre, 2,8 °C, attorno a una stella di 0,98 M☉ (cercato col motore dell'app, il V8 di Electron, dopo le costanti
+// CODATA a precisione piena). Prima erano il 5689 (0,12 M⊕, senza il criterio della massa), il 217 e il 15853643: il modello
+// cambia e il primo pianeta che rispetta il criterio con lui. Non è un difetto nascosto: gli altri pianeti restano tutti
+// raggiungibili. Da lì si apre lo spazio.
+const AVVIO = universo(309721).cella.indirizzo;
 
 // ---------- il disegno: la mappa piatta (quando lo spazio in tre dimensioni non c'è, o in fondo, nella materia di un punto);
 // sopra ci sono le tele del mondo, degli atomi e dei quanti, ognuna col suo ciclo
