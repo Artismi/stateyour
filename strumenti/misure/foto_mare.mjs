@@ -1,5 +1,5 @@
 // foto_mare.mjs — le foto del mare aperto a ogni scala (src/tre/prove/mare_scale.html), con i ms per fotogramma.
-// uso: node strumenti/misure/foto_mare.mjs <cartella> <prefisso> [avvio|acqua] [larghezze in m, separate da virgole] [falsi]
+// uso: node strumenti/nodo.cjs strumenti/misure/foto_mare.mjs <cartella> <prefisso> [avvio|acqua] [larghezze in m, separate da virgole] [falsi]
 import { createServer } from 'node:http';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join, extname, dirname, resolve } from 'node:path';

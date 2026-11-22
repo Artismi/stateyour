@@ -10,7 +10,7 @@
 //  La frazione di terre emerse è pesata con l'area (cos della latitudine) sulla superficie dopo l'erosione, cioè quella
 //  che l'app mostra, con la stessa chiave che usa l'app (mappa.js, superficieDi: JSON dell'indirizzo).
 //
-// uso: node strumenti/misure/indirizzi.mjs [N]   → scrive strumenti/misure/indirizzi.json
+// uso: node strumenti/nodo.cjs strumenti/misure/indirizzi.mjs [N]   → scrive strumenti/misure/indirizzi.json
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

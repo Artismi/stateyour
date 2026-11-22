@@ -22,7 +22,7 @@ Lo script `giro.mjs` usa Playwright con Chromium e la grafica emulata (swiftshad
 - **La riserva.** Nel 3D a volte la meta dell'indirizzo sparisce dallo schermo, per esempio una stella troppo debole per
   essere un bersaglio, oppure lo zoom non avanza più. In quel caso si vola all'indirizzo con «vai a» dell'app e si
   riprende la discesa. Il fotogramma dopo il volo è segnato `volo` e non ha salto. Nel log la riga è «volo con «vai a»».
-- **I tre indirizzi** sono in `indirizzi.json`, scritti da `node strumenti/misure/indirizzi.mjs`. Il criterio è nel file:
+- **I tre indirizzi** sono in `indirizzi.json`, scritti da `node strumenti/nodo.cjs strumenti/misure/indirizzi.mjs`. Il criterio è nel file:
   l'avvio; poi, tra i primi 12 pianeti rocciosi con acqua liquida del cosmo 1 in ordine di indirizzo, quello con più terre
   emerse («terre») e quello con meno («acqua»).
 - **Un fotogramma** si prende ogni quarto di decade della larghezza dello schermo; nel modo rapido, ogni mezza decade. Lo
@@ -39,7 +39,7 @@ Lo script `giro.mjs` usa Playwright con Chromium e la grafica emulata (swiftshad
   - `provini.html`, il foglio di provini: una riga per tratto e, per ogni fotogramma, la foto con gli indicatori a colori;
   - `foto/*.jpg`, a 240×150.
 
-  Si rifà il foglio da un `giro.json` con `node strumenti/misure/provini.mjs <cartella>`.
+  Si rifà il foglio da un `giro.json` con `node strumenti/nodo.cjs strumenti/misure/provini.mjs <cartella>`.
 
 ### Come si leggono gli indicatori
 

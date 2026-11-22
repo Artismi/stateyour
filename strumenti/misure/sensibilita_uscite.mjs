@@ -2,7 +2,7 @@
 // (forma.luce, in L☉); sul pianeta d'avvio 217 (cosmo 1, galassia 0, stella 1, pianeta 2) la pressione, la temperatura (P.clima.T e
 // la media della superficie), la frazione di terre (come indirizzi.mjs), la salinità e il pH del mare; sulla Terra di prova di
 // test_mare.mjs (seme 13) le stesse, più la parte coperta dal mare. Ogni numero esce in JSON su una riga.
-// uso: node strumenti/misure/sensibilita_uscite.mjs <cartella src> [gal|217|terra|tutte]
+// uso: node strumenti/nodo.cjs strumenti/misure/sensibilita_uscite.mjs <cartella src> [gal|217|terra|tutte]
 const R = process.argv[2], solo = process.argv[3] || 'tutte';
 const out = {}; const t0 = Date.now();
 const prova = (n, f) => { try { f(); } catch (e) { out[n + '_errore'] = String(e.message).slice(0, 80); } };

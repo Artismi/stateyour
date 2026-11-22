@@ -6,16 +6,16 @@
   "private": true,
   "scripts": {
     "app": "electron .",
-    "test": "node test/test_eventi.mjs && node test/test_biblioteca.mjs && node test/test_lune.mjs && node test/test_disco.mjs && node test/test_chimica.mjs && node test/test_rocce.mjs && node test/test_materia.mjs && node test/test_risalita.mjs && node test/test_fili.mjs && node test/test_mare.mjs && node test/test_vortici.mjs && node test/test_atomi3d.mjs && node test/test_molecole.mjs && node test/test_tettonica.mjs && node test/test_erosione.mjs && node test/test_impatti.mjs && node test/test_rotazione.mjs && node test/test_intreccio.mjs && node test/test_coerenza.mjs && node test/test_storia.mjs && node test/test_maree.mjs && node test/test_grandezze.mjs && node test/test_stelle.mjs && node test/test_galassie.mjs && node test/test_spazio3d.mjs && node test/test_bolle.mjs && node test/test_ragnatela.mjs && node test/test_campo_pigro.mjs && node test/test_relativita.mjs && node test/test_quanti.mjs && node test/test_grani.mjs && node test/test_lingua_indirizzo.mjs && node test/test_vuoto.mjs && node test/test_albero_vita.mjs && node test/test_meteo.mjs && node test/test_coerenza_scale.mjs && node test/test_bordo.mjs && node test/test_finestre.mjs && node test/test_reazioni.mjs && node test/test_suolo.mjs && node test/test_elementi.mjs && node test/test_deposito.mjs && node test/test_strumenti.mjs",
-    "vista": "node test/test_vista.mjs",
-    "giro": "node strumenti/misure/giro.mjs",
-    "giro:rapido": "node strumenti/misure/giro.mjs --rapido",
-    "padri": "node strumenti/misure/padri.mjs",
-    "numeri": "node strumenti/misure/numeri.mjs",
+    "test": "node strumenti/nodo.cjs test/test_eventi.mjs && node strumenti/nodo.cjs test/test_biblioteca.mjs && node strumenti/nodo.cjs test/test_lune.mjs && node strumenti/nodo.cjs test/test_disco.mjs && node strumenti/nodo.cjs test/test_chimica.mjs && node strumenti/nodo.cjs test/test_rocce.mjs && node strumenti/nodo.cjs test/test_materia.mjs && node strumenti/nodo.cjs test/test_risalita.mjs && node strumenti/nodo.cjs test/test_fili.mjs && node strumenti/nodo.cjs test/test_mare.mjs && node strumenti/nodo.cjs test/test_vortici.mjs && node strumenti/nodo.cjs test/test_atomi3d.mjs && node strumenti/nodo.cjs test/test_molecole.mjs && node strumenti/nodo.cjs test/test_tettonica.mjs && node strumenti/nodo.cjs test/test_erosione.mjs && node strumenti/nodo.cjs test/test_impatti.mjs && node strumenti/nodo.cjs test/test_rotazione.mjs && node strumenti/nodo.cjs test/test_intreccio.mjs && node strumenti/nodo.cjs test/test_coerenza.mjs && node strumenti/nodo.cjs test/test_storia.mjs && node strumenti/nodo.cjs test/test_maree.mjs && node strumenti/nodo.cjs test/test_grandezze.mjs && node strumenti/nodo.cjs test/test_stelle.mjs && node strumenti/nodo.cjs test/test_galassie.mjs && node strumenti/nodo.cjs test/test_spazio3d.mjs && node strumenti/nodo.cjs test/test_bolle.mjs && node strumenti/nodo.cjs test/test_ragnatela.mjs && node strumenti/nodo.cjs test/test_campo_pigro.mjs && node strumenti/nodo.cjs test/test_relativita.mjs && node strumenti/nodo.cjs test/test_quanti.mjs && node strumenti/nodo.cjs test/test_grani.mjs && node strumenti/nodo.cjs test/test_lingua_indirizzo.mjs && node strumenti/nodo.cjs test/test_vuoto.mjs && node strumenti/nodo.cjs test/test_albero_vita.mjs && node strumenti/nodo.cjs test/test_meteo.mjs && node strumenti/nodo.cjs test/test_coerenza_scale.mjs && node strumenti/nodo.cjs test/test_bordo.mjs && node strumenti/nodo.cjs test/test_finestre.mjs && node strumenti/nodo.cjs test/test_reazioni.mjs && node strumenti/nodo.cjs test/test_suolo.mjs && node strumenti/nodo.cjs test/test_elementi.mjs && node strumenti/nodo.cjs test/test_deposito.mjs && node strumenti/nodo.cjs test/test_strumenti.mjs",
+    "vista": "node strumenti/nodo.cjs test/test_vista.mjs",
+    "giro": "node strumenti/nodo.cjs strumenti/misure/giro.mjs",
+    "giro:rapido": "node strumenti/nodo.cjs strumenti/misure/giro.mjs --rapido",
+    "padri": "node strumenti/nodo.cjs strumenti/misure/padri.mjs",
+    "numeri": "node strumenti/nodo.cjs strumenti/misure/numeri.mjs",
     "start": "python3 -m http.server 8000",
     "pacchetto": "electron-builder --dir",
     "installabile": "electron-builder",
-    "test:lenti": "node test/test_anelli.mjs"
+    "test:lenti": "node strumenti/nodo.cjs test/test_anelli.mjs"
   },
   "devDependencies": {
     "electron": "^45.2.3",

@@ -6,7 +6,7 @@
 //
 // uso:  npm run giro            (tre indirizzi, un quarto di decade, attese lunghe)
 //       npm run giro:rapido     (solo l'avvio, mezza decade, attese brevi, schermo di 480×300)
-//       node strumenti/misure/giro.mjs [--rapido] [--uscita cartella] [--indirizzi avvio,terre] [--passo 0.25]
+//       node strumenti/nodo.cjs strumenti/misure/giro.mjs [--rapido] [--uscita cartella] [--indirizzi avvio,terre] [--passo 0.25]
 //                                      [--attesa ms] [--W 800 --H 500] [--fino 20]
 //
 // LA STRADA. Si apre l'app (l'indirizzo d'avvio), si esce con la rotella al centro fino in cima (dove la larghezza non

@@ -1,5 +1,5 @@
 // misura_onde.mjs — quanto costano le tessere delle onde (pianeta.js, onde_cascata.js) saltando quelle sotto il punto dello
-// schermo, e quanto cambia l'immagine (src/tre/prove/mare_scale.html, confronta). uso: node strumenti/misure/misura_onde.mjs [avvio|acqua] [larghezze]
+// schermo, e quanto cambia l'immagine (src/tre/prove/mare_scale.html, confronta). uso: node strumenti/nodo.cjs strumenti/misure/misura_onde.mjs [avvio|acqua] [larghezze]
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';

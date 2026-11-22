@@ -16,7 +16,7 @@
 //   · «a mano»: il resto, cioè i veri parametri fisici scelti a mano (con o senza unità accanto: la colonna «unità» lo dice).
 // Le regole sono grezze e dichiarate: servono a ordinare il lavoro, non a dare un verdetto sul singolo numero. Ogni riga
 // del registro porta la regola che l'ha classificata, così un errore si trova e si corregge qui.
-// uso: node strumenti/misure/numeri_classi.mjs [--uscita cartella]   → numeri_classi.csv, numeri_classi.md
+// uso: node strumenti/nodo.cjs strumenti/misure/numeri_classi.mjs [--uscita cartella]   → numeri_classi.csv, numeri_classi.md
 //   (rifà prima numeri.mjs nella stessa cartella)
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

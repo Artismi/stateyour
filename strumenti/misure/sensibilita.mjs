@@ -11,7 +11,7 @@
 // si sposta quanto il numero). L'influenza di un numero è la più grande tra le uscite. Una corsa che si rompe (errore,
 // NaN, tempo scaduto) si segna «rompe» e conta come influenza massima.
 //
-// uso: node strumenti/misure/sensibilita.mjs [--uscita cartella] [--fili 3] [--copertura cartella] [--quanti 74] [--lati 1.2] [--riprendi]
+// uso: node strumenti/nodo.cjs strumenti/misure/sensibilita.mjs [--uscita cartella] [--fili 3] [--copertura cartella] [--quanti 74] [--lati 1.2] [--riprendi]
 //   → sensibilita.json, sensibilita.csv (una riga per numero: le Δ per uscita, l'influenza)
 //   (--copertura: una cartella con cov_gal, cov_217, cov_terra già fatte da NODE_V8_COVERAGE; senza, si rifanno)
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, cpSync, rmSync, existsSync } from 'node:fs';

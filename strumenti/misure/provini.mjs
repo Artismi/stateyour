@@ -1,6 +1,6 @@
 // provini.mjs — il foglio di provini del giro: una riga per tratto (andata, ritorno) di ogni indirizzo, un riquadro per
 // fotogramma con la foto e gli indicatori a colori (verde sotto metà soglia, giallo tra metà soglia e soglia, rosso oltre).
-// uso diretto (rifà riassunto e foglio da un giro.json): node strumenti/misure/provini.mjs <cartella con giro.json>
+// uso diretto (rifà riassunto e foglio da un giro.json): node strumenti/nodo.cjs strumenti/misure/provini.mjs <cartella con giro.json>
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { riassunto, riassuntoMd } from './riassunto.mjs';

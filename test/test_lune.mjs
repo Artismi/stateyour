@@ -149,6 +149,10 @@ prova('sui pianeti veri del cosmo: tutto finito, tutto legato al pianeta, e in f
   for (let n = 1; n < 3000; n += 53) {
     const a = indirizzoDi(n), S = sistema(a.cosmo, a.galassia, a.stella);
     for (const P of S.pianeti) {
+      // (i sistemi sono pigri: il corpo, l'aria e le lune di un pianeta si calcolano alla prima lettura, e lune() legge il clima
+      // — il mare decide quanto la marea dissipa —. Il tempo che si misura qui è quello di lune(), non del clima del pianeta:
+      // il pianeta si risolve prima, come quando sistema() lo calcolava tutto subito)
+      void P.clima;
       const t0 = performance.now(), tutte = lune(P, S.stella, n); peggio = Math.max(peggio, performance.now() - t0); pianeti++;
       for (const l of tutte) {
         trovate++;

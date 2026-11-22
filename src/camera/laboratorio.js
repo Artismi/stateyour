@@ -28,8 +28,8 @@ const tela = $('tela'), ctx = tela.getContext('2d'), pannello = $('pannello');
 // cercare (21/11/2026): il primo numero, in ordine (cosmo 1; galassia, stella, pianeta crescenti; regione 0), che dia un
 // pianeta roccioso con acqua liquida, aria tra 0,5 e 3 bar, terre emerse (dopo l'erosione, pesate con l'area) tra il 20% e
 // il 50%, temperatura media tra 0 e 25 °C, attorno a una stella tra 0,7 e 1,2 M☉. È il 217: la stella 2 della galassia 1
-// (in base 0: galassia 0, stella 1), il suo terzo pianeta (pianeta 2): 0,67 M⊕, 1,26 bar, 21% di terre, 5,4 °C, attorno a
-// una stella di 1,08 M☉ (21% dal giro delle costanti, novembre 2026: prima 24%; il criterio regge) (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
+// (in base 0: galassia 0, stella 1), il suo terzo pianeta (pianeta 2): 0,67 M⊕, 1,27 bar, 24% di terre, 6,9 °C, attorno a
+// una stella di 1,08 M☉ (rimisurato col motore dell'app, il V8 di Electron, novembre 2026: il criterio regge) (era il 15853643, che col modello di oggi apre su un mondo d'oceano di 2,16 M⊕ senza terre). Non è
 // un difetto nascosto: gli altri pianeti restano tutti raggiungibili. Da lì si apre lo spazio.
 const AVVIO = universo(217).cella.indirizzo;
 
