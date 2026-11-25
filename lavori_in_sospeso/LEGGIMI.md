@@ -19,3 +19,15 @@ Che cosa manca per ripartire:
 - gli involucri di gas dei nuclei interni, per avere i pianeti da 2–4 R⊕;
 - le coppie di corotazione (Paardekooper 2011);
 - la risonanza di cattura scelta con una fonte.
+
+## Navigazione e nitidezza (interrotti dal limite d'uso, 24/11/2026)
+
+Base: commit 6ace102.
+
+- `navigazione/rotella.js`: l'inizio del modulo comune della rotella. Lo stato della vista è (punto, scala logaritmica s, orientamento); la rotella cambia solo s, con un passo fisso verso il punto sotto il cursore. Niente bersagli scelti dall'app; N scatti avanti e N indietro tornano allo stato esatto. Non ancora collegato all'app.
+- `nitidezza/modifiche.diff`: le prime correzioni del rapporto dei pixel (tele e WebGL in pixel del dispositivo, con un tetto nelle impostazioni). Tocca atomi3d.js, laboratorio.js, nucleo.js, pianeta.js e menu.js. Si applica con `git apply lavori_in_sospeso/nitidezza/modifiche.diff`.
+- `nitidezza/nitidezza.mjs`: lo strumento che misura nitidezza e scintillio a più scale e a deviceScaleFactor 1, 1,5 e 2. Va in `strumenti/misure/`.
+
+Il compito completo di tutti e due è descritto nel messaggio di consegna più sotto nella conversazione; in breve:
+- **Navigazione:** come Google Earth. La rotella cambia solo la scala, ed è reversibile; si trascina col tasto sinistro, si orbita col destro, si sposta con WASD. Le stesse regole valgono in tutte le viste, senza porte né soglie diverse tra andata e ritorno.
+- **Nitidezza:** pixel del dispositivo; risoluzione di calcolo pari a quella dello schermo; mipmap e filtri; scintillio sotto il pixel filtrato per area; dissolvenze tra immagini alla risoluzione giusta.

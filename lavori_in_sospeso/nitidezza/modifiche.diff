@@ -1,0 +1,147 @@
+diff --git a/src/camera/atomi3d.js b/src/camera/atomi3d.js
+index 0d992a6..aea1255 100644
+--- a/src/camera/atomi3d.js
++++ b/src/camera/atomi3d.js
+@@ -82,6 +82,7 @@
+ 
+ import { sorgente } from './eventi.js';
+ import { ZERO_CELSIUS } from './leggi.js'; // le costanti e le unità: un posto solo
++import { densitaSchermo } from '../tre/nucleo.js'; // (la densità di pixel delle tele 3D, col tetto delle impostazioni)
+ 
+ // ---------- gli elementi: colori convenzionali (Corey-Pauling-Koltun, nella versione di Jmol) e raggi in ångström
+ // [simbolo, nome, colore, raggio di van der Waals (Bondi 1964; Mantina e altri 2009), covalente (Cordero e altri 2008),
+@@ -978,7 +979,7 @@ export function creaVista3D(tela, opzioni = {}) {
+   ascolta(tela, 'webglcontextlost', (e) => { e.preventDefault(); perso = true; });
+ 
+   function ridimensiona() {
+-    const d = O.densita || Math.min(2, (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1), w = Math.max(1, Math.round((tela.clientWidth || tela.width) * d)), h = Math.max(1, Math.round((tela.clientHeight || tela.height) * d));
++    const d = O.densita || densitaSchermo(), w = Math.max(1, Math.round((tela.clientWidth || tela.width) * d)), h = Math.max(1, Math.round((tela.clientHeight || tela.height) * d));
+     if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; if (scena && scritte.voci.length && Math.abs((scritte.dens || 1) - d) > 0.01) faiScritte(); }
+     cambia();
+   }
+diff --git a/src/camera/laboratorio.js b/src/camera/laboratorio.js
+index 54d96f6..9f2c5aa 100644
+--- a/src/camera/laboratorio.js
++++ b/src/camera/laboratorio.js
+@@ -39,7 +39,7 @@ const AVVIO = universo(309721).cella.indirizzo;
+ // sopra ci sono le tele del mondo, degli atomi e dei quanti, ognuna col suo ciclo
+ function disegna() {
+   const dpr = devicePixelRatio || 1;
+-  tela.width = tela.clientWidth * dpr; tela.height = tela.clientHeight * dpr;
++  tela.width = Math.round(tela.clientWidth * dpr); tela.height = Math.round(tela.clientHeight * dpr);
+   if (!mondo3d) disegnaMappa(ctx, tela.width, tela.height, camMappa, { sopra: sopraMappa, dpr });
+ }
+ 
+@@ -265,7 +265,7 @@ function densitaQuanti(Qc, atomo, alta, media0 = null) {
+     cicloDensita = requestAnimationFrame(disegna1); if (!telaDensita) return; const g = grandezzaQuanti(); if (!(g > 0)) return;
+     const a = pesoDiscreto(alta / g / Math.sqrt(FUSIONE_QUANTI), Math.log2(FUSIONE_QUANTI)); telaQuanti.style.opacity = String(a); telaDensita.style.opacity = String(a);
+     if (telaAtomi) { const k = a < 1 ? Math.max(1, alta / g) : 1; telaAtomi.style.transformOrigin = '50% 50%'; telaAtomi.style.transform = k > 1 ? `scale(${k})` : ''; }
+-    const W = telaDensita.clientWidth, H = telaDensita.clientHeight; if (!W || !H) return; if (telaDensita.width !== W || telaDensita.height !== H) { telaDensita.width = W; telaDensita.height = H; ultima = 0; } // (assegnare la misura svuota la tela: solo se cambia)
++    const dd = devicePixelRatio || 1, W = Math.round(telaDensita.clientWidth * dd), H = Math.round(telaDensita.clientHeight * dd); if (!W || !H) return; if (telaDensita.width !== W || telaDensita.height !== H) { telaDensita.width = W; telaDensita.height = H; ultima = 0; } // (assegnare la misura svuota la tela: solo se cambia)
+     if (Math.abs(g / ultima - 1) < 1e-3) return; ultima = g;
+     const x = telaDensita.getContext('2d'), mpp = g / H, R = Math.hypot(W, H) / 2, grad = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R), n = 96;
+     for (let k = 0; k <= n; k++) { const rp = k === 0 ? 0 : 0.25 * Math.pow(R / 0.25, (k - 1) / (n - 1)), r = Math.max(rp, 0.25) * mpp, e = elettroni(r), v = r < 4 * Qc.LAMBDA_E ? luce(Qc.caricaUehling(Z, r)) : 0, nN = luce(rhoN(r));
+diff --git a/src/tre/nucleo.js b/src/tre/nucleo.js
+index 7b97089..1c94175 100644
+--- a/src/tre/nucleo.js
++++ b/src/tre/nucleo.js
+@@ -188,10 +188,18 @@ export function passoOcchio(oc, Lscena, dt, amplifica, Lmedia = Lscena) {
+ // un colore lineare portato a luminanza 1 (Rec. 709)
+ export const luminanzaUno = (c) => { const y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] || 1; return c.map((x) => x / y); };
+ 
++// LA DENSITÀ DI PIXEL DELLE TELE 3D: si disegna in pixel del dispositivo (su Windows al 125–150%, o su un 4K al 200%,
++// una tela in pixel della pagina il navigatore la stira, e tutto è sfocato), fino a un TETTO per le prestazioni, che si
++// sceglie nelle impostazioni del visore (menu.js) e resta nel navigatore: 2 se non lo si è scelto (un 4K al 200% pieno;
++// oltre, per esempio un portatile al 300%, il costo cresce col quadrato e la differenza si vede poco).
++export const CHIAVE_TETTO_DENSITA = 'stateyour.tettoDensita', TETTI_DENSITA = [1, 1.5, 2, 3];
++export function tettoDensita() { let t = 2; try { const v = +localStorage.getItem(CHIAVE_TETTO_DENSITA); if (v > 0) t = v; } catch { /* senza localStorage */ } return t; }
++export function densitaSchermo() { return Math.max(0.25, Math.min(tettoDensita(), (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1)); }
++
+ export function creaNucleo(tela, opzioni = {}) {
+   const O = {
+     fov: 0.75, // l'angolo di campo verticale (radianti)
+-    densita: 0, // pixel veri per pixel della pagina (0: quella dello schermo, al più 2)
++    densita: 0, // pixel veri per pixel della pagina (0: quella dello schermo, fino al tetto delle impostazioni: densitaSchermo)
+     esposizione: 0, // 0: si regola da sé sulla luce che c'è; altrimenti il fattore fisso
+     quotaSolidale: 1.0, // sotto questa quota (in raggi del corpo) la camera gira col corpo; sopra, lo vede girare
+     quotaMinima: 1.8, // metri: la camera non scende sotto questa altezza dal suolo
+@@ -753,7 +761,7 @@ export function creaNucleo(tela, opzioni = {}) {
+   }
+   ascolta(tela, 'webglcontextlost', (e) => { e.preventDefault(); perso = true; });
+   function ridimensiona() {
+-    const d = O.densita || Math.min(2, (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1), w = Math.max(1, Math.round((tela.clientWidth || tela.width) * d)), h = Math.max(1, Math.round((tela.clientHeight || tela.height) * d));
++    const d = O.densita || densitaSchermo(), w = Math.max(1, Math.round((tela.clientWidth || tela.width) * d)), h = Math.max(1, Math.round((tela.clientHeight || tela.height) * d));
+     if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; } cambia();
+   }
+   function libera() {
+diff --git a/src/tre/pianeta.js b/src/tre/pianeta.js
+index 1c01f95..de1b885 100644
+--- a/src/tre/pianeta.js
++++ b/src/tre/pianeta.js
+@@ -196,6 +196,7 @@ uniform vec4 u_cAtt;      // 1 per le tessere rifatte in questo fotogramma (le a
+ ${GLSL_ONDE}
+ uniform vec4 u_fineG;     // IL SUOLO FINE: dove sta la pezza nelle coordinate della finestra (0…1, da sud-ovest): il suo centro e la sua ampiezza
+ out vec3 v_su; out vec3 v_est; out vec3 v_rel; out vec4 v_dati; out vec2 v_uv; out vec3 v_uvM; out vec2 v_en; out float v_w; out vec2 v_fw;
++uniform mat3 u_tondo; uniform vec3 u_centro; out float v_rt; // (il raggio del vertice nello spazio in cui il pianeta è tondo: per la profondità vera, vedi profVera)
+ vec2 quote(sampler2D u_img, vec2 f) { // interpolazione a mano tra i quattro punti vicini (le immagini a 32 bit non si interpolano da sole)
+   vec2 p = f * vec2(${TW}.0, ${TH}.0) + 0.5; ivec2 i = ivec2(floor(p)); vec2 w = p - vec2(i); ivec2 a = clamp(i, ivec2(0), ivec2(${TWB - 1}, ${THB - 1})), b = clamp(i + 1, ivec2(0), ivec2(${TWB - 1}, ${THB - 1}));
+   return mix(mix(texelFetch(u_img, a, 0).rg, texelFetch(u_img, ivec2(b.x, a.y), 0).rg, w.x), mix(texelFetch(u_img, ivec2(a.x, b.y), 0).rg, texelFetch(u_img, b, 0).rg, w.x), w.y);
+@@ -227,11 +228,13 @@ void main() {
+   h -= a_griglia.z * u_orlo.x;
+   vec3 loc = vec3((R + h) * su.x, (R + h) * su.y, (R + h) * (su.z - 1.0) + h);
+   vec3 rel = u_C + u_base * loc;
++  v_rt = length(u_tondo * (rel - u_centro));
+   v_su = su; v_est = est; v_rel = rel; v_dati = vec4(terra, livello, R + h, a_griglia.z); v_uv = f; v_uvM = vec3(fM, sfuma); v_en = en;
+   gl_Position = u_proj * vec4(u_vista * rel, 1.0);${GLSL_PROFONDITA_V}
+ }`;
+ const F_SUOLO = `
+ in vec3 v_su; in vec3 v_est; in vec3 v_rel; in vec4 v_dati; in vec2 v_uv; in vec3 v_uvM; in vec2 v_en; in float v_w; in vec2 v_fw;
++in float v_rt;
+ uniform vec4 u_fine; uniform vec3 u_fineMedia; // IL SUOLO FINE: x 1 se la pezza tocca la finestra (allora u_pendM è il pendio fine, u_terraM la tinta del suolo, u_fineMedia la sua media), y il suo N
+ uniform float u_fc; uniform mat3 u_normali; // dal riferimento della pezza agli assi del mondo, per le normali
+ uniform sampler2D u_alt, u_altM;               // quota e livello dell'acqua (per la riva, punto per punto)
+@@ -408,7 +411,15 @@ void main() {
+     vec2 g0 = w0 + w1, g1 = w2 + w3, h0 = (floor(pc) - 0.5 + w1 / g0) / ts, h1 = (floor(pc) + 1.5 + w3 / g1) / ts;
+     float Tf = g0.y * (g0.x * texture(u_meteo, h0).a + g1.x * texture(u_meteo, vec2(h1.x, h0.y)).a) + g1.y * (g0.x * texture(u_meteo, vec2(h0.x, h1.y)).a + g1.x * texture(u_meteo, h1).a) + (1.0 - asciutto) * TvF;
+     o_col = vec4(lineare(turbo((Tf - u_falsi.y) / max(u_falsi.z - u_falsi.y, 1e-6))) * 0.6 * u_espo.x, 1.0); }
+-${GLSL_PROFONDITA_F}
++  // LA PROFONDITÀ VERA: il punto del frammento sta sulla corda della maglia, che passa SOTTO la sfera (una maglia di 1000 km
++  // scende di R·(1 − cos) ≈ 20 km a metà). La passata dell'aria legge la distanza dalla profondità: con quella della corda
++  // il raggio attraversava 20 km di aria sotto il suolo, la più densa, e ogni maglia aveva al centro una macchia scura (il
++  // pianeta a scacchi visto da fuori). Qui la profondità è quella del punto in cui il raggio dell'occhio incontra la sfera
++  // del raggio del frammento (interpolato tra i vertici, nello spazio in cui il pianeta è tondo); da vicino (sotto i 2 km,
++  // dove le maglie sono di metri e la differenza non c'è) resta quella della corda.
++  { vec3 dr = u_tondo * v_rel, oc = -(u_tondo * u_centro); float a = dot(dr, dr), b = dot(oc, dr), lo = length(oc), c = (lo - v_rt) * (lo + v_rt), q = -b + sqrt(max(b * b - a * c, 0.0));
++    float s = (c > 0.0 && q > 0.0) ? clamp(c / q, 0.5, 1.0) : 1.0; s = mix(1.0, s, smoothstep(2e3, 2e4, length(v_rel)));
++    gl_FragDepth = log2(max(1e-6, 1.0 + (v_w - 1.0) * s)) * u_fc * 0.5; }
+ }`;
+ 
+ // ---------- l'aria e le nuvole: una passata sull'immagine intera
+diff --git a/src/visore/menu.js b/src/visore/menu.js
+index 8f33242..cd52a0e 100644
+--- a/src/visore/menu.js
++++ b/src/visore/menu.js
+@@ -3,6 +3,7 @@
+ // Diagnostica; e gli Strumenti (strumenti.js: l'amplificatore di luce e quelli che verranno). Ogni comando di prima ha qui il suo posto (§ 11): i comandi si eseguono premendo i bottoni della camera, che
+ // restano nella pagina (nascosti), così la logica resta una sola, quella di laboratorio.js.
+ import { ico } from './icone.js';
++import { CHIAVE_TETTO_DENSITA, TETTI_DENSITA, tettoDensita } from '../tre/nucleo.js';
+ import { C, catena, scala, lunghezza } from './dati.js';
+ import { STRUMENTI, acceso, accendi, ascolta } from './strumenti.js';
+ 
+@@ -72,6 +73,7 @@ export function creaMenu(schermo, { azioni, hud }) {
+       <h4>Il visore</h4>
+       <label class="inter">Le etichette nello spazio<input type="checkbox" data-v-imp="etichette" ${document.body.classList.contains('v-senza-etichette') ? '' : 'checked'}></label>
+       <label class="inter">Schermo pieno<input type="checkbox" data-v-imp="schermo" ${document.fullscreenElement ? 'checked' : ''}></label>
++      <label class="inter" title="le tele 3D si disegnano in pixel dello schermo fino a questo tetto: più alto è più nitido e costa di più alla scheda grafica">La nitidezza del 3D (pixel per pixel della pagina; lo schermo ne ha ${(+(devicePixelRatio || 1).toFixed(2)).toString().replace('.', ',')})<select data-v-imp="densita">${TETTI_DENSITA.map((t) => `<option value="${t}" ${t === tettoDensita() ? 'selected' : ''}>al più ${String(t).replace('.', ',')}</option>`).join('')}</select></label>
+       <div class="riga-d"><span>Le unità</span><b>metri (SI), anni luce, UA</b></div>`;
+   }
+   function paginaDiagnostica() {
+@@ -116,6 +118,7 @@ export function creaMenu(schermo, { azioni, hud }) {
+     const k = e.target.dataset.vImp; if (!k) return;
+     if (k === 'etichette') document.body.classList.toggle('v-senza-etichette', !e.target.checked);
+     if (k === 'schermo') azioni.schermoPieno();
++    if (k === 'densita') { try { localStorage.setItem(CHIAVE_TETTO_DENSITA, e.target.value); } catch { /* */ } window.dispatchEvent(new Event('resize')); }
+   });
+   menu.addEventListener('change', (e) => { const id = e.target.dataset.vStrumento; if (id) { accendi(id, e.target.checked); disegnaPagina(); } });
+   ascolta(() => { if (st.aperto && st.pagina === 'strumenti') disegnaPagina(); }); // (anche quando lo si accende col tasto)
